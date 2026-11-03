@@ -22,7 +22,7 @@ Xcode was operated through its normal Mac interface for native tests and builds.
 
 Before replacing the running app, 0.4.4 reported Receiving audio · System audio, 48000 Hz · 2ch · 32bit, with changing bass/mid/high meters during Music playback. Its wallpaper and lyrics were inspected on this Mac. That establishes real process-tap delivery on this machine; it does not verify every output route or permission scenario.
 
-The new visualisers use the same bounded tap/compatibility PCM path, with independent left/right FFT analysis, a smoothed spectrum and their own full-frame Metal renderer. The old audio deformation and global beat-response path have been removed. Live checks and final Release performance are recorded below once completed.
+The new visualisers use the same bounded tap/compatibility PCM path, with independent left/right FFT analysis, a smoothed spectrum and their own full-frame Metal renderer. The old audio deformation and global beat-response path have been removed. The final 0.4.5 Release build succeeded in Xcode at 04:10 Melbourne time. Its code signature, embedded Metal library, updater framework and third-party notices were checked. The launched Release app reported Receiving audio · System audio at 48 kHz stereo, and its Silk Ribbons preview was visually inspected. A controlled Release CPU/GPU profile remains outstanding; no performance reduction is claimed.
 
 ## What the rendering changes establish
 
@@ -36,7 +36,7 @@ Aurora/Spectrum Tunnel are adapted from Synesthia commit 05144bf0f03eea5cc4af813
 
 The publisher seed was generated outside Git, stored with restricted file permissions and backed up outside the checkout. Only its public key is embedded in source. The private seed was sent directly to the encrypted SPARKLE_PRIVATE_KEY Actions secret without printing it. Both required secret names were verified to exist.
 
-Sparkle 2.10.0 signed a local verification fixture with that seed. OpenSSL successfully verified the signature against its public key. The source feed/key configuration and Python packaging checks pass. These checks do not establish an installed upgrade between two published app versions.
+Sparkle 2.10.0 signed a local verification fixture with that seed. OpenSSL successfully verified the signature against its public key. The source feed/key configuration and Python packaging checks pass. The final Release ZIP was then signed with Sparkle and its signature verified. A matching appcast and ZIP were uploaded to a stable draft release. These checks do not establish an installed upgrade between two published app versions.
 
 The configured feed is the stable GitHub latest-release endpoint. Previews are manual downloads. No stable publication or successful end-to-end installed upgrade is claimed until the stable candidate has been reviewed and published.
 
