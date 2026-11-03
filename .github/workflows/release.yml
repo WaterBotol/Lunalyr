@@ -1,0 +1,42 @@
+name: Publish preview release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: publish-preview
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install build tools
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - name: Test and build
+        run: |
+          python3 -m unittest discover -s Tests/Python -v
+          bash Run-Tests.command
+          bash Build.command
+      - name: Publish downloadable preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Build/VersoCustom.app/Contents/Info.plist)"
+          TAG="v$VERSION-preview"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "This preview already exists. Bump the version before releasing again."
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent Build/VersoCustom.app "Build/Lunalyr-$VERSION-Mac.zip"
+          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open VersoCustom.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. Automatic updates require separate publisher setup; see UPDATE_SETUP.md.' > Build/release-notes.md
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title "Lunalyr $VERSION preview" --notes-file Build/release-notes.md "Build/Lunalyr-$VERSION-Mac.zip"

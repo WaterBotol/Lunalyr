@@ -1,6 +1,24 @@
-# Lunalyr / Verso Custom 0.4.4
+# Lunalyr
 
-An unofficial native macOS lyric and wallpaper app based on [AkkiCode06/verso](https://github.com/AkkiCode06/verso), pinned to commit 9354e2f6703fda43e819284563c257e9bb4b07f8. This is source code; a compiled app or DMG is not included. The app keeps the Verso Custom name and `local.verso.custom` identity so existing settings remain available.
+**Animated desktop lyrics and album-coloured wallpapers for macOS.**
+
+[![Mac build](https://github.com/WaterBotol/Lunalyr/actions/workflows/macos.yml/badge.svg)](https://github.com/WaterBotol/Lunalyr/actions/workflows/macos.yml)
+
+[Downloads](https://github.com/WaterBotol/Lunalyr/releases) · [Report a bug](https://github.com/WaterBotol/Lunalyr/issues/new/choose) · [Contributing](CONTRIBUTING.md)
+
+Eight lyric compositions, word-timed karaoke, optional next-word previews, romanisation, instrumental interludes and GPU wallpapers that follow the album palette and optional live system audio.
+
+## Install
+
+Download a compiled app from Releases when available. A successful Mac build is required before publishing an app download. Source archives require Xcode to build; friends using a compiled app do not need Xcode.
+
+Requires macOS 14 or later. The app currently appears as **Verso Custom** and retains its bundle identity to preserve existing preferences. Developer ID signing and notarisation are not configured.
+
+## Project status
+
+Early development. Live audio, visual polish and performance are still being improved. See [validation evidence](VALIDATION.md), [change history](CHANGES.md) and [update publishing](UPDATE_SETUP.md).
+
+Based on [Verso](https://github.com/AkkiCode06/verso). The original GPLv3 with Commons Clause licence is preserved in LICENSE; see THIRD_PARTY_NOTICES.md.
 
 ## Build fix in 0.4.4
 

@@ -1,4 +1,5 @@
 import AudioToolbox
+import Darwin
 import XCTest
 @testable import VersoCustom
 
@@ -38,7 +39,7 @@ final class AudioRecoveryTests: XCTestCase {
         physical.withUnsafeMutableBytes { input in
             tap.withUnsafeMutableBytes { output in
                 let list = AudioBufferList.allocate(maximumBuffers: 2)
-                defer { list.deallocate() }
+                defer { free(list.unsafeMutablePointer) }
                 list.unsafeMutablePointer.pointee.mNumberBuffers = 2
                 list[0] = AudioBuffer(mNumberChannels: 2, mDataByteSize: UInt32(input.count), mData: input.baseAddress)
                 list[1] = AudioBuffer(mNumberChannels: 2, mDataByteSize: UInt32(output.count), mData: output.baseAddress)
