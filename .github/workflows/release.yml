@@ -23,10 +23,25 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain
           fi
       - name: Test and build
+        env:
+          PUBLIC_UPDATE_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
         run: |
+          if [[ -n "$PUBLIC_UPDATE_KEY" ]]; then
+            python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"
+          fi
           python3 -m unittest discover -s Tests/Python -v
           bash Run-Tests.command
           bash Build.command
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-validation
+          path: |
+            Build/test.log
+            Build/build.log
+            Build/TestDerivedData/Logs/Test/*.xcresult
+          if-no-files-found: ignore
       - name: Publish downloadable preview
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,5 +53,5 @@ jobs:
             exit 1
           fi
           ditto -c -k --sequesterRsrc --keepParent Build/VersoCustom.app "Build/Lunalyr-$VERSION-Mac.zip"
-          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open VersoCustom.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. Automatic updates require separate publisher setup; see UPDATE_SETUP.md.' > Build/release-notes.md
+          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open VersoCustom.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. The updater uses the stable channel, which becomes available after the first stable release. Preview releases are installed manually. See UPDATE_SETUP.md and VALIDATION.md.' > Build/release-notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title "Lunalyr $VERSION preview" --notes-file Build/release-notes.md "Build/Lunalyr-$VERSION-Mac.zip"

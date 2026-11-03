@@ -5,8 +5,8 @@ import SwiftUI
 /// ballad; fast, angular ones for a club track.
 ///
 /// Stable style selection uses metadata, lyric cadence and cover colours.
-/// Optional live audio supplies the changing motion envelope separately; it
-/// does not continuously switch fonts or compositions.
+/// Live spectrum analysis belongs to the dedicated visualisers. Lyric motion
+/// follows vocal timestamps; ambient wallpaper clocks stay continuous.
 /// The Lyric Speaker switches between four faces of Morisawa's Role
 /// super-family depending on the music. Role itself is a commercial licence
 /// and cannot be shipped here, so each role is carried by a real named

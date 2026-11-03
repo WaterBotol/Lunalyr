@@ -73,17 +73,22 @@ struct CompositionPane: View {
                 )
                 Color.black.opacity(0.34)
 
-                LyricLineView(
+                GeometryReader { geometry in
+                  LyricLineView(
                     words: words,
                     time: looped,
-                    baseSize: 38,
+                    baseSize: 38 * settings.lyricScale,
                     mood: previewMood,
                     composition: composition,
                     seed: sample,
                     presence: fade(at: looped)
                 )
+                .modifier(FittedLyricStage(available: geometry.size))
+                .frame(maxWidth: geometry.size.width, maxHeight: geometry.size.height)
+                }
                 .opacity(fade(at: looped))
                 .padding(.horizontal, 30)
+                .padding(.vertical, 20)
 
                 VStack {
                     HStack {

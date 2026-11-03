@@ -141,12 +141,14 @@ final class NowPlayingMonitor: ObservableObject {
                     return
                 }
                 Task { @MainActor in
-                    let remote = await ArtworkProvider.shared.artwork(
+                    let remote = await ArtworkProvider.shared.artworkData(
                         title: track.title, artist: track.artist,
                         album: track.album, duration: track.duration
                     )
                     guard self.current == track else { return }
-                    self.artwork = remote
+                    // NSImage remains on the main actor; only immutable,
+                    // Sendable image bytes cross the provider's boundary.
+                    self.artwork = remote.flatMap { NSImage(data: $0) }
                 }
             }
         }

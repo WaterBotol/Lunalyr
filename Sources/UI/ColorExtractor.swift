@@ -89,18 +89,23 @@ enum ColorExtractor {
             brightnesses.append(b)
         }
 
-        // A cover that is essentially greyscale would produce nine identical
-        // swatches; fan the hues so the mesh still has somewhere to flow.
-        let saturationSpread = (saturations.max() ?? 0) - (saturations.min() ?? 0)
-        let needsHueFan = (saturations.reduce(0, +) / CGFloat(max(saturations.count, 1))) < 0.12
-            && saturationSpread < 0.1
+        // Detect clustered hues as well as greyscale. A vividly blue cover
+        // can be just as monochromatic as a grey one. Use a deliberate hue
+        // fan around its anchor so all wallpaper families get distinct ink.
+        let count = CGFloat(max(hues.count, 1))
+        let circularX = hues.reduce(CGFloat(0)) { $0 + cos($1 * 2 * .pi) } / count
+        let circularY = hues.reduce(CGFloat(0)) { $0 + sin($1 * 2 * .pi) } / count
+        let neutral = saturations.reduce(0, +) / count < 0.12
+        let needsHueFan = neutral || hypot(circularX, circularY) > 0.94
+        let anchor = neutral ? CGFloat(0.68) : hues[saturations.firstIndex(of: saturations.max() ?? 0) ?? 0]
+        let fan: [CGFloat] = [-0.12, -0.04, 0.10, 0.23, 0.18, -0.18, 0.28, 0.06, -0.02]
 
         return samples.indices.map { index in
             var hue = hues[index]
             if needsHueFan {
-                hue = (hue + CGFloat(index) * 0.035).truncatingRemainder(dividingBy: 1.0)
+                hue = (anchor + fan[index % fan.count] + 1).truncatingRemainder(dividingBy: 1.0)
             }
-            let saturation = min(1.0, saturations[index] * 1.75 + (needsHueFan ? 0.35 : 0.14))
+            let saturation = min(1.0, max(0.42, saturations[index] * 1.55 + (needsHueFan ? 0.28 : 0.14)))
             // Spread brightness a little around its original value so
             // neighbouring cells keep visible separation.
             let wobble = CGFloat((index % 3) - 1) * 0.05
@@ -111,8 +116,8 @@ enum ColorExtractor {
 
     /// Used before artwork resolves, and when a cover cannot be decoded.
     static let fallbackPalette: [Color] = [
-        Color(red: 0.20, green: 0.10, blue: 0.35), Color(red: 0.35, green: 0.12, blue: 0.40), Color(red: 0.45, green: 0.15, blue: 0.35),
-        Color(red: 0.12, green: 0.15, blue: 0.40), Color(red: 0.25, green: 0.18, blue: 0.45), Color(red: 0.40, green: 0.18, blue: 0.40),
-        Color(red: 0.10, green: 0.20, blue: 0.35), Color(red: 0.18, green: 0.22, blue: 0.42), Color(red: 0.30, green: 0.20, blue: 0.38),
+        Color(red: 0.23, green: 0.16, blue: 0.58), Color(red: 0.12, green: 0.40, blue: 0.44), Color(red: 0.65, green: 0.28, blue: 0.43),
+        Color(red: 0.15, green: 0.30, blue: 0.56), Color(red: 0.54, green: 0.25, blue: 0.16), Color(red: 0.43, green: 0.19, blue: 0.56),
+        Color(red: 0.10, green: 0.46, blue: 0.40), Color(red: 0.55, green: 0.34, blue: 0.16), Color(red: 0.30, green: 0.19, blue: 0.52),
     ]
 }

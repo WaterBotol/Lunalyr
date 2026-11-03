@@ -185,7 +185,7 @@ struct BackgroundPane: View {
                         selection: $settings.backgroundMode
                     )
                     styleGrid
-                    audioControls
+                    if settings.backgroundMode == .visualizer { audioControls }
                     advanced
                 }
                 .padding(.horizontal, 34)
@@ -196,6 +196,10 @@ struct BackgroundPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Verso.surface)
+        .onChange(of: settings.backgroundMode) { _, mode in
+            if mode == .visualizer { audio.start() }
+            else if audio.running || audio.starting { audio.stop() }
+        }
     }
 
     private var previewLabel: some View {
@@ -219,33 +223,20 @@ struct BackgroundPane: View {
     private var preview: some View {
         TimelineView(.animation(minimumInterval: settings.animationRate.interval)) { timeline in
             let t = timeline.date.timeIntervalSince(started)
-            let response = audio.reactivity(fallback: .idle)
             ZStack {
                 switch settings.backgroundMode {
+                case .visualizer:
+                    AudioVisualizerView(style: settings.audioVisualizerStyle, time: t * settings.effectSpeed * 0.70)
                 case .shader:
                     ShaderBackgroundView(
                         style: previewShader, time: t, flow: t,
-                        tintA: Color(hue: 0.74, saturation: 0.62, brightness: 0.85),
-                        tintB: Color(hue: 0.55, saturation: 0.66, brightness: 0.72),
-                        reactivity: .init(swell: response.swell * settings.beatResponse,
-                                          pulse: response.pulse * settings.beatResponse,
-                                          bass: response.bass * settings.beatResponse,
-                                          mid: response.mid * settings.beatResponse,
-                                          treble: response.treble * settings.beatResponse)
-                    )
+                        tintA: Color(hue: 0.76, saturation: 0.64, brightness: 0.85),
+                        tintB: Color(hue: 0.47, saturation: 0.68, brightness: 0.78))
                 case .pattern, .auto:
-                    LinearGradient(
-                        colors: [Color(hue: 0.72, saturation: 0.55, brightness: 0.45),
-                                 Color(hue: 0.56, saturation: 0.60, brightness: 0.30)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
+                    AnimatedGradientView(palette: ColorExtractor.fallbackHSBPalette, time: t)
                     FractalBackgroundView(seed: 7, phase: t, style: previewPattern)
                 case .colourOnly:
-                    LinearGradient(
-                        colors: [Color(hue: 0.74, saturation: 0.60, brightness: 0.55),
-                                 Color(hue: 0.55, saturation: 0.62, brightness: 0.33)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
+                    AnimatedGradientView(palette: ColorExtractor.fallbackHSBPalette, time: t)
                 }
             }
         }
@@ -254,7 +245,7 @@ struct BackgroundPane: View {
     private var audioControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("Live music response", systemImage: "waveform")
+                Label("System audio", systemImage: "waveform")
                     .font(AppFont.ui(12, .medium))
                 Spacer()
                 if audio.starting { ProgressView().controlSize(.small) }
@@ -280,12 +271,8 @@ struct BackgroundPane: View {
             }.font(AppFont.ui(10.5))
             Text("After granting access, click Reconnect. If you rebuilt the app, check permission for the copy you’re running.")
                 .font(AppFont.ui(10)).foregroundStyle(.white.opacity(0.4))
-            Text("Automatic uses a reactive GPU wallpaper while live audio is on. Album videos return when live audio is off.")
+            Text("Sound shapes the selected visualiser. Audio stays on this Mac.")
                 .font(AppFont.ui(10)).foregroundStyle(.white.opacity(0.4))
-            if settings.audioReactiveEnabled && (settings.beatResponse == 0 || settings.audioMotionStrength == 0) {
-                Text("Music response or Motion intensity is at zero. Raise it to see the wallpaper react.")
-                    .font(AppFont.ui(10)).foregroundStyle(.orange.opacity(0.85))
-            }
             if audio.running {
                 HStack(spacing: 10) {
                     audioMeter("Bass", value: audio.levels.bass)
@@ -294,8 +281,6 @@ struct BackgroundPane: View {
                 }
                 knob("Sensitivity", "How strongly quieter audio registers in the analyser.",
                      value: $settings.audioSensitivity, range: 0.3...3, format: multiplier)
-                knob("Motion intensity", "Music shapes the material and its flow. Lower values are more restrained.",
-                     value: $settings.audioMotionStrength, range: 0...1.5, format: multiplier)
             } else {
                 HStack {
                     Text("Automatic retries with compatibility capture if system audio fails or stays silent. Compatibility needs screen-recording access. Audio stays local.")
@@ -323,6 +308,15 @@ struct BackgroundPane: View {
     @ViewBuilder
     private var styleGrid: some View {
         switch settings.backgroundMode {
+        case .visualizer:
+            styleWrap(
+                names: AudioVisualizerStyle.allCases.map { ($0.title, Optional($0)) },
+                isSelected: { $0 == settings.audioVisualizerStyle },
+                locked: { _ in false },
+                select: { if let style = $0 { settings.audioVisualizerStyle = style } }
+            )
+            Text(settings.audioVisualizerStyle.detail)
+                .font(AppFont.ui(11)).foregroundStyle(.white.opacity(0.55))
         case .shader:
             styleWrap(
                 names: [("Match the music", nil)] + ShaderStyle.allCases.map { ($0.title, $0) },
@@ -354,8 +348,6 @@ struct BackgroundPane: View {
             VStack(alignment: .leading, spacing: 13) {
                 knob("Speed", "How fast everything moves.",
                      value: $settings.effectSpeed, range: 0.25...2.5, format: multiplier)
-                knob("Beat response", "How hard the music pushes the visuals. Zero leaves them ambient.",
-                     value: $settings.beatResponse, range: 0...2, format: multiplier)
                 knob("Pattern strength", "Weight of the line layer over the colour.",
                      value: $settings.patternOpacity, range: 0...1, format: percent)
                 knob("Backdrop shade", "Darkening behind the lyrics. Lower is bolder, harder to read.",
@@ -411,6 +403,7 @@ struct BackgroundPane: View {
     private var currentStyleName: String {
         switch settings.backgroundMode {
         case .shader: return previewShader.title
+        case .visualizer: return settings.audioVisualizerStyle.title
         case .pattern, .auto: return previewPattern.title
         case .colourOnly: return "Colour"
         }

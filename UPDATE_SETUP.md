@@ -8,6 +8,14 @@ The permanent feed URL is:
 
 This is the intended endpoint; it does not exist until the first stable release with that asset is published. No dummy feed or private signing key is installed in the source build. Without a feed/key pair, the button explains that this build’s update service is not configured.
 
+## Current publisher state
+
+The repository is already uploaded. Version **0.4.5 / build 12** embeds the stable feed and public Ed25519 key. Both SPARKLE_PUBLIC_KEY and SPARKLE_PRIVATE_KEY are configured as encrypted repository Actions secrets. A protected local seed backup is retained outside Git. Do not generate a replacement key for this existing publisher identity without planning a supported key rotation.
+
+The downloadable preview is a GitHub prerelease and is installed manually. The stable/latest feed remains unavailable until a stable release containing appcast.xml is published. A signed draft is a review candidate; preparing it does not publish the stable channel or prove an installed upgrade.
+
+The signing fixture was cryptographically verified with Sparkle 2.10.0 and OpenSSL. The installed old-to-new upgrade still requires a published stable candidate and a real installation test.
+
 ## Put the source in your repo
 
 Extract the latest source into a fresh folder on your Mac. Install GitHub CLI and sign in through its browser flow:
@@ -33,7 +41,7 @@ The GitHub connection used while preparing this version could read the empty rep
 
 After upload, open [Actions](https://github.com/WaterBotol/Lunalyr/actions). **Build Lunalyr for Mac** runs the Python helper tests, native Swift tests and a Release build. Download the VersoCustom-Mac artifact, extract it, then extract VersoCustom-Mac.zip for the app. Friends do not need Xcode to use this compiled app. These builds are locally/ad-hoc signed; Developer ID signing and notarization are not configured.
 
-## One-time signing setup
+## One-time signing setup for a new publisher
 
 Use the matching Sparkle 2.10.0 tools in the UpdateTools.zip artifact produced by the Mac workflow, or in Build/UpdateTools after a local build. If unavailable, use the tools from [Sparkle’s official 2.10.0 distribution](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0).
 
@@ -63,7 +71,7 @@ This synchronizes project.yml and Info.plist. Use --disable to remove the local 
 
 ## Publish an update
 
-1. Update both CFBundleShortVersionString and CFBundleVersion in project.yml and Sources/Info.plist. Increase the numeric build version every release. Version 0.4.2 is build 9.
+1. Update both CFBundleShortVersionString and CFBundleVersion in project.yml and Sources/Info.plist. Increase the numeric build version every release. The current version is 0.4.5, build 12.
 2. Commit and push the change.
 3. In Actions → Build Lunalyr for Mac → Run workflow, enable **Prepare a signed draft GitHub release**.
 4. The workflow runs tests, builds the app with the public key, packages it with ditto to preserve framework symlinks, signs the archive using Sparkle’s tooling and creates a draft release. The existing release/tag is never overwritten.

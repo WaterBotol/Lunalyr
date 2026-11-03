@@ -131,12 +131,14 @@ struct FlowLayout: Layout {
         let laid = rows(maxWidth: maxWidth, cache: &cache)
         let height = laid.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(laid.count - 1, 0))
         let width = laid.map(\.width).max() ?? 0
-        return CGSize(width: min(width, maxWidth), height: height)
+        // Report an oversized word honestly so the outer stage can fit it;
+        // claiming the proposed width hid overflow from the fitting pass.
+        return CGSize(width: width, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
         if cache.sizes.count != subviews.count { cache = makeCache(subviews: subviews) }
-        let laid = rows(maxWidth: bounds.width, cache: &cache)
+        let laid = rows(maxWidth: proposal.width ?? bounds.width, cache: &cache)
         var y = bounds.minY
         for row in laid {
             var x: CGFloat
@@ -264,7 +266,9 @@ struct ScatteredLyricText: View {
         let prepared = typography.value(for: key) { ScatteredTypography.prepare(key, settings: settings) }
         let fullness = min(Double(prepared.count) / 7, 1)
         let nextIndex = prepared.firstIndex { $0.source.start > time }
-        let activeIndex = prepared.firstIndex { time >= $0.source.start && time <= $0.source.end }
+        let frames = prepared.map {
+            ScatteredWordFrame.make($0, nextIndex: nextIndex, time: time, composition: composition, energy: energy)
+        }
         // Gaps come from a fixed inset on each word (below), not from
         // reserving a share of its width -- proportional reservation made a
         // wide word claim a wide margin and a narrow one almost none, so the
@@ -279,7 +283,7 @@ struct ScatteredLyricText: View {
             rowAlignment: style.rowAlignment
         ) {
             ForEach(prepared, id: \.index) { word in
-                wordView(word, nextIndex: nextIndex)
+                wordView(word, frame: frames[word.index])
             }
         }
         .backgroundPreferenceValue(WordAnchorKey.self) { anchors in
@@ -287,9 +291,9 @@ struct ScatteredLyricText: View {
                 ConstellationLines(
                     anchors: anchors,
                     count: prepared.count,
-                    activeIndex: activeIndex,
                     seed: seed,
-                    visibility: prepared.map { WordPresentation.make(word: $0.source, index: $0.index, nextIndex: nextIndex, time: time, composition: composition).opacity }
+                    visibility: frames.map { $0.presentation.opacity },
+                    emphasis: frames.map(\.heat)
                 )
             }
         }
@@ -300,9 +304,8 @@ struct ScatteredLyricText: View {
     /// Kept as its own builder rather than inline in the layout: with the
     /// composition branches folded in, the single expression exceeded what
     /// the type-checker will solve in reasonable time.
-    private func wordView(_ token: ScatteredTypography.Word, nextIndex: Int?) -> some View {
+    private func wordView(_ token: ScatteredTypography.Word, frame: ScatteredWordFrame) -> some View {
         let index = token.index
-        let frame = ScatteredWordFrame.make(token, nextIndex: nextIndex, time: time, composition: composition, energy: energy)
         return ScatteredWordInk(token: token, frame: frame,
             arrival: Settings.shared.arrival(in: composition).resolved(for: composition))
         .equatable()

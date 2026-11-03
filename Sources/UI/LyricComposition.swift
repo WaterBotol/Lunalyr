@@ -166,9 +166,9 @@ struct ConstellationLines: View {
     @StateObject private var connectionCache = ConnectionGeometryCache()
     let anchors: [Int: Anchor<CGRect>]
     let count: Int
-    let activeIndex: Int?
     let seed: Int
     var visibility: [Double] = []
+    var emphasis: [Double] = []
 
     var body: some View {
         let opacity = Settings.shared.constellationLinkOpacity
@@ -190,10 +190,13 @@ struct ConstellationLines: View {
                 let viewport = VCBox(x: 0, y: 0, width: Double(size.width), height: Double(size.height))
                 let links = connectionCache.segments(boxes: boxes, viewport: viewport)
                 for edge in links {
-                    let lit = keys[Int(edge.from)] == activeIndex || keys[Int(edge.to)] == activeIndex
                     let a = keys[Int(edge.from)], b = keys[Int(edge.to)]
                     let shown = visibility.isEmpty ? 1 : min(visibility[a], visibility[b])
-                    let alpha = min(opacity * (lit ? 1.45 : 1), 0.75) * shown
+                    // Use the same continuous vocal envelope as the glyphs.
+                    // A binary active-word switch made links flash at every
+                    // onset/end even though their geometry never changed.
+                    let heat = emphasis.isEmpty ? 0 : max(emphasis[a], emphasis[b])
+                    let alpha = min(opacity * (1 + 0.45 * heat), 0.75) * shown
                     var path = Path()
                     path.move(to: CGPoint(x: CGFloat(edge.ax), y: CGFloat(edge.ay)))
                     path.addLine(to: CGPoint(x: CGFloat(edge.bx), y: CGFloat(edge.by)))

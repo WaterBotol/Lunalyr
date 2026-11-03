@@ -7,5 +7,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 xcodegen generate --spec project.yml
+mkdir -p Build
 xcodebuild -project VersoCustom.xcodeproj -scheme VersoCustom -configuration Debug \
-  -destination "platform=macOS,arch=$(uname -m)" test
+  -destination "platform=macOS,arch=$(uname -m)" \
+  -derivedDataPath Build/TestDerivedData test 2>&1 | tee Build/test.log

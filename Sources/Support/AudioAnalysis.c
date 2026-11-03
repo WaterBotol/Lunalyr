@@ -62,30 +62,15 @@ VCAudioLevels vc_audio_process(VCAudioState *s,const float *pcm,int frames,int s
     if(frames<=0||frames>192000||stride<1||stride>32)return (VCAudioLevels){0};
     return vc_audio_process_pcm(s,pcm,((frames-1)*stride+1)*4,frames,stride*4,VC_PCM_FLOAT32,rate);
 }
-static double visual_follow(double old,double target,double dt,double rise,double fall) {
-    if(!isfinite(old))old=0;
-    if(!isfinite(target))target=0;
-    return old+(target-old)*(1-exp(-dt/(target>old?rise:fall)));
-}
-VCAudioVisualState vc_audio_visual(VCAudioVisualState *s,VCAudioLevels raw,double gain,double dt) {
-    if(!s)return (VCAudioVisualState){0};
-    if(!isfinite(gain))gain=1;
-    if(!isfinite(dt))dt=1.0/30;
-    gain=fmax(.1,fmin(4,gain));dt=fmax(0,fmin(.25,dt));
-    double level=fmax(0,isfinite(raw.rms)?raw.rms-.0001:0);
-    /* Compress actual energy instead of multiplying tiny device levels by
-       three. Quiet music still moves the material; loud masters are bounded.
-       Band weighting compensates for the lower energy of upper frequencies. */
-    double gate=fmin(1,level/.0012);
-    double swell=.9*(1-exp(-level*gain*14))*gate;
-    double bass=.9*(1-exp(-fmax(0,raw.bass)*gain*12))*gate;
-    double mid=.9*(1-exp(-fmax(0,raw.mid)*gain*18))*gate;
-    double treble=.9*(1-exp(-fmax(0,raw.treble)*gain*28))*gate;
-    double pulse=level>.0003?fmin(.75,fmax(0,raw.pulse)) : 0;
-    s->swell=visual_follow(s->swell,swell,dt,.12,.5);
-    s->bass=visual_follow(s->bass,bass,dt,.055,.30);
-    s->mid=visual_follow(s->mid,mid,dt,.08,.38);
-    s->treble=visual_follow(s->treble,treble,dt,.05,.24);
-    s->pulse=visual_follow(s->pulse,pulse,dt,.025,.19);
-    return *s;
+
+int vc_audio_decode_pcm(const void *data,int bytes,int frames,int stride,VCPCMFormat format,float *output,int capacity) {
+    int width=sample_size(format);
+    if(!data||!output||frames<=0||frames>192000||capacity<frames||width==0||stride<width||stride>512||
+       (int64_t)(frames-1)*stride+width>bytes)return 0;
+    const uint8_t *pcm=data;
+    for(int i=0;i<frames;i++) {
+        double x=sample(pcm+(size_t)i*stride,format);
+        output[i]=(float)(isfinite(x)?fmax(-1,fmin(1,x)):0);
+    }
+    return frames;
 }

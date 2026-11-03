@@ -5,14 +5,12 @@ import SwiftUI
 /// cover, each drifting along its own slow path, blurred together so they
 /// read as pigment suspended in water rather than distinct shapes.
 ///
-/// Smoothed audio currents move and expand the colour masses. Hue remains
-/// tied to the cover; the music changes the material's shape and transport.
+/// Colour masses drift continuously through a varied album-derived palette.
 struct AnimatedGradientView: View {
     /// Base palette as 3x3 hue/saturation/brightness triples.
     let palette: [SIMD3<Double>]
     /// Accumulated phase from `VisualClock`.
     let time: Double
-    var reactivity: MusicDynamics.Reactivity = .idle
 
     /// Corners and centre of the sampled grid -- spread across the artwork,
     /// so the blobs carry genuinely different colours.
@@ -63,19 +61,11 @@ struct AnimatedGradientView: View {
         // wander without ever retracing the same loop.
         let angleX = time / spec.periodX * turn + spec.phase
         let angleY = time / spec.periodY * turn + spec.phase * 1.3
-        let currentX = reactivity.bass * sin(angleY + Double(slot)) * 0.075
-        let currentY = reactivity.mid * cos(angleX - Double(slot)) * 0.065
-        let x = size.width / 2 + (CGFloat(cos(angleX)) * spec.orbitX + CGFloat(currentX)) * size.width
-        let y = size.height / 2 + (CGFloat(sin(angleY)) * spec.orbitY + CGFloat(currentY)) * size.height
+        let x = size.width / 2 + (CGFloat(cos(angleX)) * spec.orbitX) * size.width
+        let y = size.height / 2 + (CGFloat(sin(angleY)) * spec.orbitY) * size.height
 
-        // Driven by `swell`, not `pulse`. Swell is the slow-moving density of
-        // a passage, so the blobs gain and lose size over bars rather than
-        // snapping on each hit. Staggering by slot keeps them off lockstep,
-        // which would read as the whole screen breathing at once.
-        let stagger = 0.72 + 0.28 * sin(Double(slot) * 2.1)
-        let lean = reactivity.swell * stagger
         let breathe = 1 + 0.05 * sin(time / spec.periodRadius * turn + spec.phase)
-        let radius = shortest * spec.radius * CGFloat(breathe) * CGFloat(1 + 0.18 * lean)
+        let radius = shortest * spec.radius * CGFloat(breathe)
 
         let colour = colour(for: spec)
 

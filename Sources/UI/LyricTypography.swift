@@ -113,13 +113,13 @@ enum ScatteredTypography {
         // it clearly past all of them. A longer-held word sits larger still.
         var size = isHero
             ? baseSize * (0.58 + 0.30 * style.sizeContrast * CGFloat(held) + 0.05 * jitter)
-            : baseSize * (0.52 + 0.06 * jitter)
+            : baseSize * (0.64 + 0.06 * jitter)
 
         // Editorial widens the range hard: a spread gets its character from
         // real size contrast, not from a gentle wobble around one size.
         var alternate = false
         if composition.hasEditorialTypography {
-            size *= isHero ? 1.28 : (0.72 + 0.34 * jitter)
+            size *= isHero ? 1.10 : (1.00 + 0.10 * jitter)
             // Roughly every third word takes the second face. Driven by the
             // word's own hash, so the pairing is fixed for a given lyric.
             alternate = !isHero && (composition == .constellationEditorial ? index % 2 == 0 : (value / 10_000) % 3 == 0)
@@ -137,8 +137,7 @@ enum ScatteredTypography {
             offset += (spread * baseSize * 2.1 + CGFloat(sin(Double(index) * 2.3)) * baseSize * 0.42) * reach
             // Satellites shrink well back so the held words carry the figure,
             // the way the small linked fragments do on the real display.
-            size *= isHero ? (composition == .constellationEditorial ? 1.12 : 1.18) :
-                (composition == .constellationEditorial ? 0.78 : 0.60)
+            size *= isHero ? 1.06 : 0.96
         }
 
         return WordMetrics(
@@ -167,7 +166,6 @@ enum SpokenTypography {
         let hash: UInt64
         let hero: Bool
         let pointSize: CGFloat
-        let estimatedWidth: CGFloat
         let tile: Bool
         let font: Font
         var id: TimedWordKey { source.presentationID }
@@ -179,11 +177,9 @@ enum SpokenTypography {
             let filler = ["a", "an", "the", "i", "in", "of", "to", "and", "or", "it", "is", "my", "me", "you"].contains(voice)
             let hash = word.text.utf8.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1)) &* 1099511628211 }
             let hero = !filler && (word.text.count >= 5 || word.end - word.start > 0.65)
-            let columnSize = key.baseSize * (hero ? 0.86 : filler ? 0.40 : 0.61)
+            let columnSize = key.baseSize * (hero ? 0.88 : filler ? 0.62 : 0.74)
             let pointSize = key.composition == .spoken ? key.baseSize * 1.10 : columnSize
-            let widthUnits = word.text.unicodeScalars.reduce(0.0) { $0 + ($1.value > 0x2E80 ? 1.05 : 0.64) }
             return Word(index: index, source: word, hash: hash, hero: hero, pointSize: pointSize,
-                estimatedWidth: pointSize * CGFloat(max(1, widthUnits)),
                 tile: key.composition == .cutout && (hero || hash % 4 == 1),
                 font: settings.lyricFont(size: pointSize, hero: hero || key.composition == .spoken, mood: key.mood))
         }

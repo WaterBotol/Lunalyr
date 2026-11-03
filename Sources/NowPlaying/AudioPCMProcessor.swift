@@ -9,6 +9,7 @@ final class AudioPCMProcessor: @unchecked Sendable {
     private var left = VCAudioState(), right = VCAudioState()
     private var lastPublish = 0.0
     private var reportedProblem = false
+    private var decoded = [Float](repeating: 0, count: 4096)
     private let onLevels: (VCAudioLevels, String) -> Void
     private let onProblem: (String) -> Void
     init(onLevels: @escaping (VCAudioLevels, String) -> Void, onProblem: @escaping (String) -> Void) {
@@ -59,6 +60,19 @@ final class AudioPCMProcessor: @unchecked Sendable {
             for channel in skip..<min(skip + 2 - processed, channels) {
                 let offset = channel * sampleBytes
                 guard bytes > offset else { continue }
+                // Feed the imported FFT with the same tap-only channel view
+                // as the health meters. Keep stereo spectra independent so
+                // opposite-phase channels cannot cancel the picture.
+                let tail = max(0, frames - decoded.count)
+                let skipBytes = offset + tail * stride
+                let count = vc_audio_decode_pcm(data.advanced(by: skipBytes), Int32(bytes - skipBytes),
+                    Int32(frames - tail), Int32(stride), encoding, &decoded, Int32(decoded.count))
+                if count > 0 {
+                    decoded.withUnsafeBufferPointer {
+                        VisualizerAudio.shared.append($0.baseAddress!, count: Int(count),
+                            sampleRate: format.mSampleRate, channel: processed)
+                    }
+                }
                 if processed == 0 {
                     a = vc_audio_process_pcm(&left, data.advanced(by: offset), Int32(bytes - offset),
                                             Int32(frames), Int32(stride), encoding, format.mSampleRate)
@@ -71,6 +85,7 @@ final class AudioPCMProcessor: @unchecked Sendable {
             if processed == 2 { break }
         }
         guard processed > 0 else { return }
+        VisualizerAudio.shared.setChannelCount(processed)
         if processed == 1 { b = a }
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastPublish >= 1.0 / 30 else { return }

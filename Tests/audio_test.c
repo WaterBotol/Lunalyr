@@ -36,26 +36,14 @@ int main(void) {
     assert(vc_audio_process_pcm(&s32,f32,10,960,4,VC_PCM_FLOAT32,48000).rms==0);
     assert(vc_audio_process_pcm(&s32,f32,sizeof(f32),960,1,VC_PCM_FLOAT32,48000).rms==0);
     assert(vc_audio_process_pcm(&s32,f32,sizeof(f32),960,4,(VCPCMFormat)99,48000).rms==0);
-    /* Visual smoothing is frame-rate independent and sensitivity applies once. */
-    VCAudioLevels steady={.08,.08,.04,.02,.5};
-    VCAudioVisualState v30={0},v60={0},vGain={0};
-    for(int i=0;i<120;i++)vc_audio_visual(&v30,steady,1,1.0/30);
-    for(int i=0;i<240;i++)vc_audio_visual(&v60,steady,1,1.0/60);
-    for(int i=0;i<120;i++)vc_audio_visual(&vGain,steady,2,1.0/30);
-    assert(fabs(v30.swell-v60.swell)<1e-10&&fabs(v30.bass-v60.bass)<1e-10);
-    assert(vGain.bass>v30.bass&&vGain.bass<.9); /* gain once, compressed */
-    assert(v30.swell>.5&&v30.swell<.9&&v30.pulse<=.75);
-    VCAudioVisualState quiet={0},noise={0},loud={0};
-    for(int i=0;i<120;i++) {
-        vc_audio_visual(&quiet,(VCAudioLevels){.005,.004,.003,.001,.5},1,1.0/30);
-        vc_audio_visual(&noise,(VCAudioLevels){.00005,.00004,.00003,.00001,1},1,1.0/30);
-        vc_audio_visual(&loud,(VCAudioLevels){1,1,1,1,1},3,1.0/30);
-    }
-    assert(quiet.swell>.05&&quiet.bass>.03&&quiet.treble>.02);
-    assert(noise.swell==0&&noise.pulse==0);
-    assert(loud.swell<=.9&&loud.bass<=.9&&loud.treble<=.9);
-    for(int i=0;i<300;i++)vc_audio_visual(&v30,(VCAudioLevels){0},1,1.0/30);
-    assert(v30.swell<1e-5&&v30.bass<1e-5&&v30.pulse<1e-5);
+    /* The FFT decoder reads the same bounded, strided PCM view. */
+    float decoded[960];
+    assert(vc_audio_decode_pcm(f64,sizeof(f64),960,8,VC_PCM_FLOAT64,decoded,960)==960);
+    for(int i=0;i<960;i++)assert(fabs(decoded[i]-f32[i])<1e-7);
+    assert(vc_audio_decode_pcm(i24,sizeof(i24),960,3,VC_PCM_INT24,decoded,960)==960);
+    for(int i=0;i<960;i++)assert(fabs(decoded[i]-f32[i])<2e-7);
+    assert(vc_audio_decode_pcm(f32,10,960,4,VC_PCM_FLOAT32,decoded,960)==0);
+    assert(vc_audio_decode_pcm(f32,sizeof(f32),960,4,VC_PCM_FLOAT32,decoded,10)==0);
     VCAudioLevels low=tone(80),middle=tone(1000),high=tone(8000);
     assert(low.bass>low.mid*1.8&&low.bass>low.treble*8);
     assert(middle.mid>middle.bass*3&&middle.mid>middle.treble*1.5);

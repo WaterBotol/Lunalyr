@@ -22,34 +22,13 @@ static float hash21(float2 p) {
 }
 
 
-// A restrained material lift, driven by the smoothed music envelope.
-// The effect's own field does the moving; no global zoom or camera shake.
-static float beatLift(float pulse, float swell, float time) {
-    return 0.98 + 0.025 * sin(time * 0.21) + 0.18 * clamp(swell, 0.0, 1.0)
-                + 0.055 * clamp(pulse, 0.0, 1.0);
-}
-static half3 bloom(half3 colour, float intensity, float pulse) {
-    return colour * half(1.0 + 0.012 * clamp(pulse, 0.0, 1.0));
-}
+// Ambient light varies only with its own continuous clock.
+static float ambientLight(float time) { return 0.98 + 0.025 * sin(time * 0.21); }
+static half3 bloom(half3 colour, float intensity) { return colour; }
 
 /// Normalised, origin-centred coordinates with the aspect ratio preserved.
 static float2 uvCentered(float2 position, float2 size) {
     return (position - 0.5 * size) / min(size.x, size.y);
-}
-
-// A local displacement of the material domain, evaluated in this same
-// shader pass. Bass opens the current, mids fold it, highs add fine movement.
-static float2 musicPosition(float2 position, float2 size, float flow,
-                            float pulse, float bass, float mid, float treble) {
-    float shortSide = max(1.0, min(size.x, size.y));
-    float2 p = (position - size * 0.5) / shortSide;
-    float low = clamp(bass, 0.0, 1.0), middle = clamp(mid, 0.0, 1.0);
-    float high = clamp(treble, 0.0, 1.0), hit = clamp(pulse, 0.0, 1.0);
-    float2 current = float2(sin(p.y * 2.8 + flow * 0.23), cos(p.x * 2.4 - flow * 0.19));
-    float2 fold = float2(sin(p.y * 7.0 - flow * 0.52), cos(p.x * 6.0 + flow * 0.41));
-    float2 shift = current * (low * 0.095 + middle * 0.045)
-                 + fold * (high * 0.009 + hit * 0.016);
-    return position + shift * shortSide;
 }
 
 // ---------------------------------------------------------------- plasma
@@ -57,9 +36,7 @@ static float2 musicPosition(float2 position, float2 size, float flow,
 // quietly under text.
 [[ stitchable ]] half4 wlPlasma(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size) * 2.2;
     float v = 0.0;
     v += sin(uv.x * 1.7 + flow * 0.42);
@@ -71,17 +48,15 @@ static float2 musicPosition(float2 position, float2 size, float flow,
     float band = 0.5 + 0.5 * sin(v * 3.14159 + flow * 0.2);
     half3 colour = mix(tintA, tintB, half(band));
     float vignette = 1.0 - 0.35 * length(uvCentered(position, size));
-    float intensity = (0.55 + 0.45 * band) * vignette * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(intensity), intensity, pulse), 1.0h);
+    float intensity = (0.55 + 0.45 * band) * vignette * ambientLight(time);
+    return half4(bloom(colour * half(intensity), intensity), 1.0h);
 }
 
 // ----------------------------------------------------------- kaleidoscope
 // Polar folding over a drifting noise field, producing shifting symmetry.
 [[ stitchable ]] half4 wlKaleido(float2 position, half4 current,
                                  float2 size, float time, float flow,
-                                 half3 tintA, half3 tintB,
-                                 float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                 half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float radius = length(uv);
     float angle = atan2(uv.y, uv.x);
@@ -101,17 +76,15 @@ static float2 musicPosition(float2 position, float2 size, float flow,
     float intensity = clamp(0.5 + pattern * 1.6, 0.0, 1.0);
     half3 colour = mix(tintA, tintB, half(intensity));
     float falloff = smoothstep(1.05, 0.15, radius);
-    float lit = intensity * falloff * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = intensity * falloff * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ---------------------------------------------------------------- aurora
 // Layered vertical curtains sheared by noise, drifting like polar light.
 [[ stitchable ]] half4 wlAurora(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = position / size;
     float glow = 0.0;
 
@@ -127,18 +100,16 @@ static float2 musicPosition(float2 position, float2 size, float flow,
         glow += band * (0.35 + 0.25 * sin(phase));
     }
 
-    glow = clamp(glow * 0.28, 0.0, 1.4) * beatLift(pulse, swell, time);
+    glow = clamp(glow * 0.28, 0.0, 1.4) * ambientLight(time);
     half3 colour = mix(tintA, tintB, half(clamp(uv.y * 1.2, 0.0, 1.0)));
-    return half4(bloom(colour * half(glow), glow, pulse), 1.0h);
+    return half4(bloom(colour * half(glow), glow), 1.0h);
 }
 
 // --------------------------------------------------------------- fractal
 // Animated Julia set: escape-flow iteration with a slowly orbiting seed.
 [[ stitchable ]] half4 wlFractal(float2 position, half4 current,
                                  float2 size, float time, float flow,
-                                 half3 tintA, half3 tintB,
-                                 float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                 half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size) * 2.6;
     uv = rotate2(uv, flow * 0.05);
 
@@ -157,17 +128,15 @@ static float2 musicPosition(float2 position, float2 size, float flow,
     float t = clamp(smoothed / float(maxIterations), 0.0, 1.0);
     float shade = pow(t, 0.55);
     half3 colour = mix(tintA, tintB, half(shade));
-    float lit = shade * 1.15 * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = shade * 1.15 * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ---------------------------------------------------------------- liquid
 // Metaballs: overlapping fields summed into a single flowing surface.
 [[ stitchable ]] half4 wlLiquid(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float field = 0.0;
 
@@ -183,12 +152,12 @@ static float2 musicPosition(float2 position, float2 size, float flow,
 
     // Threshold the summed field so the blobs fuse and separate.
     // A hit lowers the threshold, so the blobs visibly expand and merge.
-    float threshold = 1.1 - 0.10 * pulse;
+    float threshold = 1.1;
     float surface = smoothstep(threshold, 3.4, field);
     float rim = smoothstep(3.4, 6.5, field);
     half3 colour = mix(tintA, tintB, half(rim));
-    float lit = surface * 0.95 * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = surface * 0.95 * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ---------------------------------------------------------------- warp
@@ -196,9 +165,7 @@ static float2 musicPosition(float2 position, float2 size, float flow,
 // slow marbled turbulence.
 [[ stitchable ]] half4 wlWarp(float2 position, half4 current,
                               float2 size, float time, float flow,
-                              half3 tintA, half3 tintB,
-                              float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                              half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size) * 1.8;
 
     float2 q = float2(
@@ -214,8 +181,8 @@ static float2 musicPosition(float2 position, float2 size, float flow,
 
     float grain = hash21(floor(position * 0.5)) * 0.03;
     half3 colour = mix(tintA, tintB, half(clamp(value, 0.0, 1.0)));
-    float lit = (0.45 + 0.65 * value + grain) * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = (0.45 + 0.65 * value + grain) * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ============================================================ additional
@@ -241,9 +208,7 @@ static float fbmNoise(float2 p) {
 // Layered fractal noise, drifting like interstellar cloud.
 [[ stitchable ]] half4 wlNebula(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size) * 2.6;
     // Warping the sample point by another noise field gives the billowing.
     float2 warp = float2(fbmNoise(uv + flow * 0.035), fbmNoise(uv.yx - flow * 0.028));
@@ -251,17 +216,15 @@ static float fbmNoise(float2 p) {
     float shaped = smoothstep(0.28, 0.86, density);
 
     half3 colour = mix(tintA, tintB, half(shaped));
-    float lit = (0.22 + shaped * 0.95) * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = (0.22 + shaped * 0.95) * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // --------------------------------------------------------------- voronoi
 // Drifting cell field; the seams between cells carry the light.
 [[ stitchable ]] half4 wlVoronoi(float2 position, half4 current,
                                  float2 size, float time, float flow,
-                                 half3 tintA, half3 tintB,
-                                 float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                 half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size) * 4.2;
     float2 cell = floor(uv);
     float nearest = 10.0, second = 10.0;
@@ -282,17 +245,15 @@ static float fbmNoise(float2 p) {
     float edge = smoothstep(0.0, 0.42, second - nearest);
     float glow = 1.0 - edge;
     half3 colour = mix(tintA, tintB, half(clamp(nearest * 0.9, 0.0, 1.0)));
-    float lit = (0.16 + glow * 0.95) * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = (0.16 + glow * 0.95) * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ------------------------------------------------------------------ orbs
 // Soft glowing spheres drifting at different depths.
 [[ stitchable ]] half4 wlOrbs(float2 position, half4 current,
                               float2 size, float time, float flow,
-                              half3 tintA, half3 tintB,
-                              float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                              half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float light = 0.0;
     float tintMix = 0.0;
@@ -314,17 +275,15 @@ static float fbmNoise(float2 p) {
 
     float shaped = clamp(light * 0.5, 0.0, 1.6);
     half3 colour = mix(tintA, tintB, half(clamp(tintMix / max(light, 0.001), 0.0, 1.0)));
-    float lit = shaped * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = shaped * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ------------------------------------------------------------------ silk
 // Stacked flowing ribbons, like light across folded fabric.
 [[ stitchable ]] half4 wlSilk(float2 position, half4 current,
                               float2 size, float time, float flow,
-                              half3 tintA, half3 tintB,
-                              float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                              half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float sheen = 0.0;
 
@@ -340,8 +299,8 @@ static float fbmNoise(float2 p) {
 
     float shaped = clamp(sheen * 0.30, 0.0, 1.5);
     half3 colour = mix(tintA, tintB, half(clamp(uv.y + 0.5, 0.0, 1.0)));
-    float lit = shaped * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(lit), lit, pulse), 1.0h);
+    float lit = shaped * ambientLight(time);
+    return half4(bloom(colour * half(lit), lit), 1.0h);
 }
 
 // ================================================== raymarched 3D effects
@@ -351,27 +310,17 @@ static float fbmNoise(float2 p) {
 // separates them from the 2D pieces above: there is real geometry with
 // depth, silhouettes and lighting rather than a pattern painted flat.
 
-static float3 estimateNormal(float3 p, float (*field)(float3, float), float flow) {
-    const float e = 0.0015;
-    return normalize(float3(
-        field(p + float3(e, 0, 0), flow) - field(p - float3(e, 0, 0), flow),
-        field(p + float3(0, e, 0), flow) - field(p - float3(0, e, 0), flow),
-        field(p + float3(0, 0, e), flow) - field(p - float3(0, 0, e), flow)
-    ));
-}
-
 /// Shared shading: a key light plus a rim, tinted by the album.
 static half4 shadeSurface(float3 normal, float3 rayDir, float depth,
-                          half3 tintA, half3 tintB,
-                          float pulse, float swell, float time) {
+                          half3 tintA, half3 tintB, float time) {
     float3 key = normalize(float3(0.6, 0.8, -0.5));
     float diffuse = max(dot(normal, key), 0.0);
     float rim = pow(1.0 - max(dot(normal, -rayDir), 0.0), 2.5);
     float fog = exp(-depth * 0.055);
 
     half3 colour = mix(tintA, tintB, half(clamp(diffuse, 0.0, 1.0)));
-    float intensity = (0.16 + diffuse * 0.75 + rim * 0.55) * fog * beatLift(pulse, swell, time);
-    return half4(bloom(colour * half(intensity), intensity, pulse), 1.0h);
+    float intensity = (0.16 + diffuse * 0.75 + rim * 0.55) * fog * ambientLight(time);
+    return half4(bloom(colour * half(intensity), intensity), 1.0h);
 }
 
 // ---------------------------------------------------------------- waves
@@ -385,9 +334,7 @@ static float waveField(float3 p, float flow) {
 
 [[ stitchable ]] half4 wlWaves(float2 position, half4 current,
                                float2 size, float time, float flow,
-                               half3 tintA, half3 tintB,
-                               float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                               half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float3 origin = float3(0, 1.5, -4.0 + flow * 0.6);
     float3 dir = normalize(float3(uv, 1.0));
@@ -407,7 +354,7 @@ static float waveField(float3 p, float flow) {
     float dx = cos(hit.x * 0.9 + flow * 0.7) * 0.9 * 0.34 + cross;
     float dz = cos(hit.z * 1.3 - flow * 0.5) * 1.3 * 0.26 + cross;
     float3 normal = normalize(float3(-dx, 1.0, -dz));
-    return shadeSurface(normal, dir, travelled, tintA, tintB, pulse, swell, time);
+    return shadeSurface(normal, dir, travelled, tintA, tintB, time);
 }
 
 // ---------------------------------------------------------------- helix
@@ -424,9 +371,7 @@ static float helixField(float3 p, float flow) {
 
 [[ stitchable ]] half4 wlHelix(float2 position, half4 current,
                                float2 size, float time, float flow,
-                               half3 tintA, half3 tintB,
-                               float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                               half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float3 origin = float3(0, 0, -4.2);
     float3 dir = normalize(float3(uv, 1.0));
@@ -450,7 +395,7 @@ static float helixField(float3 p, float flow) {
     float3 axis = normalize(float3(-centre.y * 0.9, centre.x * 0.9, 1.0));
     float3 radial = float3(hit.xy - centre, 0.0);
     float3 normal = normalize(radial - axis * dot(radial, axis));
-    return shadeSurface(normal, dir, travelled, tintA, tintB, pulse, swell, time);
+    return shadeSurface(normal, dir, travelled, tintA, tintB, time);
 }
 
 
@@ -515,17 +460,15 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // ---------------------------------------------------------------- ripple
 // A lit water surface. The plane is still one solve; all the interest is in
 // the height field laid over it -- three circular wave trains from separate
-// origins, plus a long directional swell underneath so the water has a set
+// origins, plus a long directional 0.0 underneath so the water has a set
 // rather than looking like a pond. Because the gradient of a sum of sines is
 // just the sum of the derivatives, the normal is exact and costs a handful
 // of cosines instead of a sampled estimate.
 [[ stitchable ]] half4 wlRipple(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float3 dir = normalize(float3(uv.x, uv.y + 0.30, 1.0));
     float3 origin = float3(0.0, 1.35, 0.0);
 
@@ -589,11 +532,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // second trace.
 [[ stitchable ]] half4 wlMirror(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float3 dir = normalize(float3(uv.x, uv.y + 0.05, 1.0));
     float3 origin = float3(0.0, 0.9, 0.0);
 
@@ -614,7 +555,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     float fresnel = pow(1.0 - max(-dir.y, 0.0), 4.0);
     colour = mix(colour * half(0.35), colour, half(fresnel));
     colour = haze(colour, sky, t, 0.05);
-    return half4(bloom(colour, rippled * fresnel, pulse), 1.0h);
+    return half4(bloom(colour, rippled * fresnel), 1.0h);
 }
 
 // -------------------------------------------------------------- wormhole
@@ -622,11 +563,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // walls appear to spiral away from the camera.
 [[ stitchable ]] half4 wlWormhole(float2 position, half4 current,
                                   float2 size, float time, float flow,
-                                  half3 tintA, half3 tintB,
-                                  float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                  half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size) * 2.0;
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float r = max(length(uv), 1e-3);
     float depth = 1.0 / r + flow * 0.6;
     float around = atan2(uv.y, uv.x) * 0.15915494 + depth * 0.10;
@@ -638,7 +577,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     half3 colour = mix(tintB, tintA, half(strands));
     float near = clamp(r * 1.5, 0.0, 1.0);
     float intensity = (0.08 + pattern * 0.95) * near * lift;
-    return half4(bloom(colour * half(intensity), intensity, pulse), 1.0h);
+    return half4(bloom(colour * half(intensity), intensity), 1.0h);
 }
 
 // ----------------------------------------------------------------- rings
@@ -646,11 +585,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // its true radius over its depth -- the projection is the whole effect.
 [[ stitchable ]] half4 wlRings(float2 position, half4 current,
                                float2 size, float time, float flow,
-                               half3 tintA, half3 tintB,
-                               float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                               half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float r = length(uv);
     float glow = 0.0;
 
@@ -664,18 +601,16 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 
     half3 colour = mix(tintB, tintA, half(clamp(r * 1.4, 0.0, 1.0)));
     float intensity = clamp(glow, 0.0, 1.6) * 0.7 * lift;
-    return half4(bloom(colour * half(intensity), intensity, pulse), 1.0h);
+    return half4(bloom(colour * half(intensity), intensity), 1.0h);
 }
 
 // ---------------------------------------------------------------- vortex
 // A spiral drain: radius and angle in one term, depth-faded toward the eye.
 [[ stitchable ]] half4 wlVortex(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float r = max(length(uv), 1e-3);
     float around = atan2(uv.y, uv.x);
     // log(r) makes the spiral self-similar, so it never visibly repeats.
@@ -685,7 +620,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     float core = exp(-r * 3.4);
     half3 colour = mix(tintB, tintA, half(arms));
     float intensity = (arms * 0.62 * smoothstep(0.0, 0.35, r) + core * 0.85) * lift;
-    return half4(bloom(colour * half(intensity), intensity, pulse), 1.0h);
+    return half4(bloom(colour * half(intensity), intensity), 1.0h);
 }
 
 // ----------------------------------------------------------------- orbit
@@ -693,11 +628,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // real normals, at five intersection tests per pixel instead of a march.
 [[ stitchable ]] half4 wlOrbit(float2 position, half4 current,
                                float2 size, float time, float flow,
-                               half3 tintA, half3 tintB,
-                               float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                               half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float3 dir = normalize(float3(uv, 1.3));
     float3 origin = float3(0.0, 0.0, -5.0);
     half3 sky = skyWash(dir, tintA, tintB, lift);
@@ -718,7 +651,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     if (nearest > 1e8) return half4(sky, 1.0h);
 
     half3 colour = haze(litSurface(normal, dir, tintA, tintB, lift), sky, nearest, 0.045);
-    return half4(bloom(colour, 0.6, pulse), 1.0h);
+    return half4(bloom(colour, 0.6), 1.0h);
 }
 
 // --------------------------------------------------------------- bubbles
@@ -727,11 +660,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // refraction being traced.
 [[ stitchable ]] half4 wlBubbles(float2 position, half4 current,
                                  float2 size, float time, float flow,
-                                 half3 tintA, half3 tintB,
-                                 float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                 half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float3 dir = normalize(float3(uv, 1.4));
     float3 origin = float3(0.0, 0.0, -4.5);
     half3 colour = skyWash(dir, tintA, tintB, lift);
@@ -751,7 +682,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float sheen = pow(max(dot(normal, normalize(float3(0.5, 0.8, -0.4))), 0.0), 32.0);
         colour += mix(tintA, tintB, half(fract(fi * 0.37))) * half((fresnel * 0.75 + sheen * 0.6) * lift);
     }
-    return half4(bloom(colour, 0.55, pulse), 1.0h);
+    return half4(bloom(colour, 0.55), 1.0h);
 }
 
 // ---------------------------------------------------------------- galaxy
@@ -759,12 +690,10 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // radius is what turns a face-on disc into one lying in perspective.
 [[ stitchable ]] half4 wlGalaxy(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
     float2 disc = float2(uv.x, uv.y / 0.42);   // the tilt
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float r = max(length(disc), 1e-3);
     float around = atan2(disc.y, disc.x);
 
@@ -775,7 +704,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 
     half3 colour = mix(tintB, tintA, half(arms));
     float intensity = (arms * grain * 0.7 + core * 1.1) * lift;
-    return half4(bloom(colour * half(intensity), intensity, pulse), 1.0h);
+    return half4(bloom(colour * half(intensity), intensity), 1.0h);
 }
 
 // ---------------------------------------------------------------- strata
@@ -784,11 +713,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // scenery crawl past a car window.
 [[ stitchable ]] half4 wlStrata(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     half3 colour = mix(tintB * half(0.28), tintA * half(0.08), half(uv.y + 0.5)) * half(lift);
 
     for (int i = 0; i < 6; i++) {
@@ -802,7 +729,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         half3 band = mix(tintA, tintB, half(fi / 5.0)) * half((1.0 - fi * 0.13) * lift);
         colour = mix(colour, band, half(mask * 0.85));
     }
-    return half4(bloom(colour, 0.4, pulse), 1.0h);
+    return half4(bloom(colour, 0.4), 1.0h);
 }
 
 // ---------------------------------------------------------------- clouds
@@ -811,11 +738,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // be fifteen octaves a pixel for no visible gain.
 [[ stitchable ]] half4 wlClouds(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB,
-                                float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     half3 colour = mix(tintB * half(0.30), tintA * half(0.10), half(uv.y + 0.5)) * half(lift);
 
     for (int i = 0; i < 3; i++) {
@@ -826,7 +751,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float body = smoothstep(0.48, 0.78, n) * (1.0 - fi * 0.22);
         colour += mix(tintA, tintB, half(fi * 0.4)) * half(body * 0.55 * lift);
     }
-    return half4(bloom(colour, 0.5, pulse), 1.0h);
+    return half4(bloom(colour, 0.5), 1.0h);
 }
 
 // -------------------------------------------------------------- curtains
@@ -834,11 +759,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // horizontal drift is what makes them hang rather than lie flat.
 [[ stitchable ]] half4 wlCurtains(float2 position, half4 current,
                                   float2 size, float time, float flow,
-                                  half3 tintA, half3 tintB,
-                                  float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                  half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     half3 colour = tintB * half(0.07 * lift);
 
     for (int i = 0; i < 5; i++) {
@@ -852,7 +775,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float grain = 0.65 + 0.35 * sin(uv.x * 30.0 + flow * 0.5 + fi * 3.1);
         colour += mix(tintA, tintB, half(fi / 4.0)) * half(sheet * grain * (0.75 / depth) * lift);
     }
-    return half4(bloom(colour, 0.6, pulse), 1.0h);
+    return half4(bloom(colour, 0.6), 1.0h);
 }
 
 // --------------------------------------------------------------- ribbons
@@ -860,11 +783,9 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // is enough to make them stack away from the eye.
 [[ stitchable ]] half4 wlRibbons(float2 position, half4 current,
                                  float2 size, float time, float flow,
-                                 half3 tintA, half3 tintB,
-                                 float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                                 half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     half3 colour = tintB * half(0.06 * lift);
 
     for (int i = 0; i < 7; i++) {
@@ -875,7 +796,7 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
         float band = smoothstep(thickness, 0.0, abs(uv.y - wave - (fi - 3.0) * 0.055));
         colour += mix(tintA, tintB, half(fi / 6.0)) * half(band * (0.9 / depth) * lift);
     }
-    return half4(bloom(colour, 0.65, pulse), 1.0h);
+    return half4(bloom(colour, 0.65), 1.0h);
 }
 
 // ----------------------------------------------------------------- prism
@@ -884,13 +805,11 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
 // colour comes from.
 [[ stitchable ]] half4 wlPrism(float2 position, half4 current,
                                float2 size, float time, float flow,
-                               half3 tintA, half3 tintB,
-                               float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+                               half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float lift = beatLift(pulse, swell, time);
+    float lift = ambientLight(time);
     float2 p = rotate2(uv, flow * 0.05);
-    float spread = 0.055 + 0.02 * pulse;
+    float spread = 0.055;
 
     half3 colour = half3(0.0);
     for (int c = 0; c < 3; c++) {
@@ -905,67 +824,60 @@ static half3 litSurface(float3 normal, float3 dir, half3 tintA, half3 tintB, flo
     // Pulled back toward the album so it tints rather than going full rainbow.
     colour = mix(colour, mix(tintA, tintB, half(0.5)) * half(length(float3(colour)) * 0.6), half(0.55));
     float intensity = clamp(float(colour.r + colour.g + colour.b) * 0.4, 0.0, 1.4) * lift;
-    return half4(bloom(colour * half(lift), intensity, pulse), 1.0h);
+    return half4(bloom(colour * half(lift), intensity), 1.0h);
 }
 
 
 // ----------------------------------------------------- shared fluid field
-static float musicalField(float2 p, float flow, float low, float middle) {
-    // Music bends the flow inside the field instead of distorting the image.
-    float2 q = p + float2(sin(p.y * 2.3 + flow * 0.13), cos(p.x * 1.9 - flow * 0.11)) * (0.24 + low * 0.34);
+static float ambientField(float2 p, float flow) {
+    float2 q = p + float2(sin(p.y * 2.3 + flow * 0.13), cos(p.x * 1.9 - flow * 0.11)) * 0.24;
     float f = sin(q.x * 2.1 + q.y * 1.8 + flow * 0.17);
-    f += 0.52 * sin(q.y * 3.8 - q.x * 1.2 - flow * 0.12 + f * (0.65 + middle * 0.38));
+    f += 0.52 * sin(q.y * 3.8 - q.x * 1.2 - flow * 0.12 + f * 0.65);
     f += 0.24 * sin(q.x * 7.0 + q.y * 5.1 + flow * 0.08);
     return f / 1.76;
 }
 
 // --------------------------------------------------------------- tidal
 [[ stitchable ]] half4 wlTidal(float2 position, half4 current,
-    float2 size, float time, float flow, half3 tintA, half3 tintB,
-    float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+    float2 size, float time, float flow, half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float low = clamp(bass, 0.0, 1.0), middle = clamp(mid, 0.0, 1.0);
-    float field = musicalField(uv * 1.8, flow, low, middle);
-    float contour = 0.5 + 0.5 * sin(field * (3.8 + low * 0.3) + flow * 0.035);
+    float field = ambientField(uv * 1.8, flow);
+    float contour = 0.5 + 0.5 * sin(field * 3.8 + flow * 0.035);
     float body = smoothstep(0.18, 0.92, contour);
-    float filament = exp(-pow(abs(contour - 0.61) * (10.0 - middle), 2.0));
+    float filament = exp(-pow(abs(contour - 0.61) * 10.0, 2.0));
     half3 colour = mix(tintA * half(0.16), tintB * half(0.46), half(body));
-    colour += mix(tintA, tintB, half(0.28)) * half(filament * (0.13 + low * 0.10));
+    colour += mix(tintA, tintB, half(0.28)) * half(filament * 0.13);
     float veil = 0.86 + 0.14 * sin(uv.y * 1.2 + time * 0.07);
     float vignette = max(0.32, 1.0 - dot(uv * float2(0.32, 0.7), uv * float2(0.32, 0.7)));
-    return half4(colour * half(veil * vignette * (0.94 + swell * 0.14)), 1.0h);
+    return half4(colour * half(veil * vignette * 0.94), 1.0h);
 }
 
 // --------------------------------------------------------- light trails
 [[ stitchable ]] half4 wlLightTrails(float2 position, half4 current,
-    float2 size, float time, float flow, half3 tintA, half3 tintB,
-    float pulse, float swell, float bass, float mid, float treble) {
-    position = musicPosition(position, size, flow, pulse, bass, mid, treble);
+    float2 size, float time, float flow, half3 tintA, half3 tintB) {
     float2 uv = uvCentered(position, size);
-    float low = clamp(bass, 0.0, 1.0), middle = clamp(mid, 0.0, 1.0), high = clamp(treble, 0.0, 1.0);
-    float fog = 0.5 + 0.5 * musicalField(uv * 2.3, flow * 0.75, low, middle);
+    float fog = 0.5 + 0.5 * ambientField(uv * 2.3, flow * 0.75);
     half3 colour = mix(tintA, tintB, half(fog)) * half(0.07 + pow(fog, 2.0) * 0.19);
     float2 p = rotate2(uv, 0.55);
     for (int i = 0; i < 3; i++) {
         float lane = float(i) - 1.0;
-        float curve = lane * 0.17 + sin(p.x * 1.4 + flow * 0.18 + float(i)) * (0.095 + low * 0.13);
+        float curve = lane * 0.17 + sin(p.x * 1.4 + flow * 0.18 + float(i)) * 0.095;
         curve += sin(p.x * 3.3 - flow * 0.12 + lane) * 0.027;
         float distance = abs(p.y - curve);
-        float width = 0.0022 + low * 0.0045;
+        float width = 0.0022;
         float core = exp(-pow(distance / width, 2.0));
-        float halo = exp(-distance * (43.0 - middle * 18.0)) * 0.25;
+        float halo = exp(-distance * 43.0) * 0.25;
         float head = fract(flow * 0.09 + float(i) * 0.29) * 6.0 - 3.0;
         float tail = exp(-max(0.0, head - p.x) * 3.0) * step(p.x, head);
         float travel = 0.16 + 0.84 * tail;
         float tip = exp(-pow((p.x - head) / 0.012, 2.0) - pow(distance / 0.006, 2.0));
         half3 ink = mix(tintA, tintB, half(float(i) / 2.0));
-        ink = mix(ink, half3(1.0), half(0.10 + high * 0.07));
-        colour += ink * half(((core + halo) * travel + tip * 0.22) * (0.53 + low * 0.50));
+        ink = mix(ink, half3(1.0), half(0.10));
+        colour += ink * half(((core + halo) * travel + tip * 0.22) * 0.53);
     }
     float2 grid = uv * 18.0 + float2(flow * 0.13, -flow * 0.08);
     float2 cell = floor(grid), local = fract(grid) - 0.5;
     float star = exp(-dot(local, local) * 105.0) * step(0.955, hash21(cell));
-    colour += mix(tintA, tintB, half(0.5)) * half(star * (0.055 + high * 0.08));
-    return half4(colour * half(0.96 + swell * 0.10), 1.0h);
+    colour += mix(tintA, tintB, half(0.5)) * half(star * 0.055);
+    return half4(colour * half(0.96), 1.0h);
 }

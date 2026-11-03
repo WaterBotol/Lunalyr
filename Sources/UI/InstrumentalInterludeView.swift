@@ -8,14 +8,13 @@ extension VCVocalGap {
     }
 }
 
-/// A quiet musical passage, not a loading indicator. The same audio envelope
-/// bends the ribbons and the typography; the next vocal gets a visual cue.
+/// A quiet passage with continuous ambient ribbons and a next-vocal cue.
+/// Its motion follows lyric timing rather than reacting to captured audio.
 struct InstrumentalInterludeView: View {
     let time: Double
     let gap: VCVocalGap
     let baseSize: CGFloat
     let accent: Color
-    let response: MusicDynamics.Reactivity
     var nextWord: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var remaining: Double { gap.nextVocal >= 0 ? max(0, gap.end - time) : .infinity }
@@ -66,9 +65,9 @@ struct InstrumentalInterludeView: View {
 
     private func drawRibbons(context: inout GraphicsContext, size: CGSize) {
         let elapsed: Double = reduceMotion ? 0 : max(0, time - gap.start)
-        let low: Double = reduceMotion ? 0 : min(1, response.bass)
-        let middle: Double = reduceMotion ? 0 : min(1, response.mid)
-        let hit: Double = reduceMotion ? 0 : min(1, response.pulse)
+        let low: Double = 0
+        let middle: Double = 0
+        let hit: Double = 0
         let glowRadius: CGFloat = CGFloat(7.0 + low * 6.0)
         let glowWidth: CGFloat = CGFloat(5.0 + low * 5.0)
         let inkWidth: CGFloat = CGFloat(0.8 + low * 1.5)

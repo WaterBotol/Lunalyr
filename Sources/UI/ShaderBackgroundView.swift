@@ -234,11 +234,6 @@ struct ShaderBackgroundView: View {
     let flow: Double
     let tintA: Color
     let tintB: Color
-    /// Beats brighten and bloom the effect. Only intensity is passed through
-    /// -- `time` stays a clean accumulated phase, since scaling it by a
-    /// changing rate would make the pattern jump rather than react.
-    var reactivity: MusicDynamics.Reactivity = .idle
-
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
@@ -249,12 +244,7 @@ struct ShaderBackgroundView: View {
                         .float(Float(time)),
                         .float(Float(flow)),
                         .color(tintA),
-                        .color(tintB),
-                        .float(Float(reactivity.pulse)),
-                        .float(Float(reactivity.swell)),
-                        .float(Float(reactivity.bass)),
-                        .float(Float(reactivity.mid)),
-                        .float(Float(reactivity.treble))
+                        .color(tintB)
                     )
                 )
         }

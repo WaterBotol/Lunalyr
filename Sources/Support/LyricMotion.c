@@ -36,19 +36,19 @@ VCWordPose vc_rolling_pose(int style, double rank, double age, double duration,
         /* Hero word, then a loose fan of receding fragments. */
         p.x = sin(h*.92+phase*.22) * fmin(h, 1) * .70;
         p.y = -separation;
-        p.scale = .55+.49*focus;
+        p.scale = .70+.34*focus;
         p.angle = sin(phase+h*.6)*fmin(h, 1)*2.4;
     } else if (style == 1) {
         /* Uneven, flowing column: differences in type do the emphasis. */
         p.x = sin(rank*.72+phase*.12)*.28;
         p.y = .35-separation;
-        p.scale = .86+.18*focus;
+        p.scale = .94+.10*focus;
         p.angle = sin(phase)*1.3*(1-focus);
     } else {
         /* Labels travel into a loose collage rather than a masked ticker. */
         p.x = sin(rank*.83+phase*.28)*.66;
         p.y = .30-separation;
-        p.scale = .82+.22*focus;
+        p.scale = .94+.10*focus;
         p.angle = sin(phase+rank*.35)*(2.0+3.3*(1-focus));
     }
     if (!reduced && age >= 0) {

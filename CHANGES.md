@@ -1,6 +1,18 @@
-# Custom changes — 0.4.4
+# Custom changes — 0.4.5
 
 Upstream Verso commit: 9354e2f6703fda43e819284563c257e9bb4b07f8. Original licence unchanged.
+
+## 0.4.5 native visualisers and readable scaling
+
+- Integrate Synesthia's MIT-licensed native Metal Aurora and Spectrum Tunnel scenes and its FFT analyser, pinned at 05144bf0f03eea5cc4af8135e9d71553f1ac9202. Retain its licence, attribution and a source/adaptation manifest. Add a quiet Silk Ribbons variation as the default visualiser choice.
+- Replace the old audio-driven shader-domain deformation, colour-field distortion, lyric/background pulse fallback and global beat controls. Audio now belongs to the dedicated visualisers. Keep the existing system-tap/compatibility capture and bounded PCM health diagnostics.
+- Decode supported PCM formats into independent stereo FFTs so opposite-phase channels cannot cancel the picture. Smooth the spectrum in time and frequency. Remove kick-driven camera jumps, suppress flashing stars and use slower desktop defaults with adaptive GPU resolution and bounded frames in flight.
+- Enlarge smaller words and reduce size contrast across all eight styles. Fit each complete line and its reading to the viewport; fit rolling words from actual rotated glyph bounds. Correct wrapping-width reuse and report oversized words honestly instead of concealing overflow.
+- Use continuous Constellation link lighting, shared with the words' vocal envelope. Preserve fixed graph slots and geometry caching.
+- Give near-monochrome artwork a coordinated hue fan and broaden the default gradient palette. Keep ambient wallpaper motion independent of live audio.
+- Keep NSImage creation on the main actor, transferring validated image bytes from the artwork provider to remove the existing Swift concurrency diagnostic.
+- Configure the public updater key and stable feed, preserve private material outside Git, and retain native test results in CI artifacts. Preview publication remains gated by native tests and a Release build; stable candidates remain drafts until reviewed.
+- Source version 0.4.5, build 12. All 70 native tests, including actual Metal rendering, passed on the local Mac; nine Python tests and four sanitizer-enabled C suites also passed. See VALIDATION.md for final Release/runtime evidence and remaining limits.
 
 ## 0.4.4 interlude build fix
 

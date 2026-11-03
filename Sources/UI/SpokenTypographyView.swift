@@ -1,5 +1,21 @@
 import SwiftUI
 
+/// Fit the actual rotated ink around its intended centre. Font estimates
+/// cannot bound wide glyphs, custom typefaces or the Cutout label padding.
+enum WordStageFit {
+    static func scale(ink: CGSize, stageWidth: CGFloat, centreX: CGFloat,
+                      scale: Double, angle: Double, margin: CGFloat) -> CGFloat {
+        guard ink.width.isFinite, ink.height.isFinite, stageWidth.isFinite,
+              centreX.isFinite, scale.isFinite, angle.isFinite, margin.isFinite,
+              ink.width > 0, ink.height > 0, stageWidth > 0, scale > 0 else { return 0 }
+        let radians = angle * .pi / 180
+        let rotatedWidth = ink.width * CGFloat(abs(cos(radians)))
+            + ink.height * CGFloat(abs(sin(radians)))
+        let clearance = max(0, min(centreX, stageWidth - centreX) - max(0, margin))
+        return min(1, clearance * 2 / max(1, rotatedWidth * CGFloat(scale)))
+    }
+}
+
 /// A free lyric stage. Onsets move the composition; held notes keep their
 /// focus. Every exit fades while it is still inside the stage, with no mask.
 @MainActor
@@ -56,10 +72,8 @@ struct SpokenTypographyView: View {
                                    token.hash, energy, reduceMotion ? 1 : 0)
         let focus = exp(-rank * rank * 2.4)
         let shown = presentation.opacity * (presentation.preview ? 1 : pose.opacity)
-        // Natural text bounds, with a conservative fit for long words. No
-        // fixed-width text box, truncation or disappearing horizon.
-        let fit = min(1, size.width * 0.78 / max(1, token.estimatedWidth + 24))
         let columnShift = composition == .spoken ? 0 : -size.width * 0.13
+        let centreX = size.width * 0.5 + columnShift + CGFloat(pose.x) * baseSize
         return Text(word.text)
             .font(token.font)
             .foregroundStyle(composition == .cascade && token.hero ? accent : .white)
@@ -76,11 +90,15 @@ struct SpokenTypographyView: View {
             }
             .modifier(WordEntrance(progress: presentation.progress, style: arrival,
                 size: token.pointSize, direction: token.hash % 2 == 0 ? 1 : -1, visibility: shown))
-            .scaleEffect(CGFloat(pose.scale) * fit)
+            .visualEffect { ink, geometry in
+                ink.scaleEffect(WordStageFit.scale(ink: geometry.size, stageWidth: size.width,
+                    centreX: centreX, scale: pose.scale, angle: pose.angle, margin: baseSize * 0.30))
+            }
+            .scaleEffect(CGFloat(pose.scale))
             .rotationEffect(.degrees(pose.angle))
             .blur(radius: pose.blur)
             .shadow(color: .black.opacity(0.25), radius: 7, y: 2)
-            .position(x: size.width * 0.5 + columnShift + CGFloat(pose.x) * baseSize,
+            .position(x: centreX,
                       y: size.height * 0.54 + CGFloat(pose.y) * baseSize)
             .zIndex(focus)
             .accessibilityHidden(shown < 0.05)

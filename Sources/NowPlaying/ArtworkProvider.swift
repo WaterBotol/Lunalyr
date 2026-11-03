@@ -1,4 +1,5 @@
-import AppKit
+import Foundation
+import ImageIO
 
 /// Apple Music's AppleScript bridge reports `count of artworks == 0` for
 /// streamed catalog tracks -- cover art simply is not exposed there (it is
@@ -8,9 +9,9 @@ import AppKit
 actor ArtworkProvider {
     static let shared = ArtworkProvider()
 
-    private var cache: [String: NSImage] = [:]
+    private var cache: [String: Data] = [:]
 
-    func artwork(title: String, artist: String, album: String?, duration: Double) async -> NSImage? {
+    func artworkData(title: String, artist: String, album: String?, duration: Double) async -> Data? {
         let key = "\(title)|\(artist)|\(album ?? "")"
         if let hit = cache[key] { return hit }
 
@@ -30,7 +31,7 @@ actor ArtworkProvider {
         return nil
     }
 
-    private func search(term: String, title: String, artist: String, album: String?, duration: Double) async -> NSImage? {
+    private func search(term: String, title: String, artist: String, album: String?, duration: Double) async -> Data? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [
             URLQueryItem(name: "term", value: term),
@@ -51,7 +52,9 @@ actor ArtworkProvider {
             let large = thumb.replacingOccurrences(of: "100x100bb", with: "600x600bb")
             guard let imageURL = URL(string: large) else { return nil }
             let (imageData, _) = try await URLSession.shared.data(from: imageURL)
-            return NSImage(data: imageData)
+            guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+                  CGImageSourceGetCount(source) > 0 else { return nil }
+            return imageData
         } catch {
             return nil
         }

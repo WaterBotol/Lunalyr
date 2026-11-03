@@ -19,14 +19,14 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: Verso Custom
-        CFBundleShortVersionString: 0.4.4
-        CFBundleVersion: "11"
+        CFBundleShortVersionString: 0.4.5
+        CFBundleVersion: "12"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026
         NSAppleEventsUsageDescription: Verso Custom reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.
         NSAudioCaptureUsageDescription: Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.
-        SUFeedURL: ""
-        SUPublicEDKey: ""
+        SUFeedURL: "https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml"
+        SUPublicEDKey: "7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY="
         SUEnableAutomaticChecks: false
         SUAutomaticallyUpdate: false
         SUSendProfileInfo: false

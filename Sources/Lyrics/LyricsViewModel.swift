@@ -6,7 +6,6 @@ final class LyricsViewModel: ObservableObject {
     static let shared = LyricsViewModel()
     @Published var lines: [LyricsFetcher.Line] = [] {
         didSet {
-            dynamics = MusicDynamics(lines: lines)
             vocalWindows = LyricGapTiming.windows(for: lines)
             lineIndex = LyricLineIndex(lines: lines)
             if let first = lines.first, let last = lines.last, last.end - first.start > 1 {
@@ -27,7 +26,6 @@ final class LyricsViewModel: ObservableObject {
     @Published var sourceStates: [LyricSourceID:String] = [:]
     @Published var pinnedMatch = false
     @Published var cacheMessage: String?
-    private(set) var dynamics = MusicDynamics(lines: [])
     private(set) var vocalWindows: [VCVocalWindow] = []
     private var lineIndex = LyricLineIndex(lines: [])
     private(set) var wordsPerSecond: Double = 0

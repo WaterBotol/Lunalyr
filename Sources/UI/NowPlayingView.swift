@@ -11,7 +11,6 @@ struct NowPlayingView: View {
     @ObservedObject private var settings = Settings.shared
     // Read the current envelope on a scheduled frame. Subscribing to every
     // meter publication would trigger extra wallpaper redraws outside it.
-    private let audio = AudioReactiveController.shared
     @ObservedObject private var readingOptions = RomanizationOptions.shared
     @State private var paletteGeneration = UUID()
     @State private var palette: [SIMD3<Double>] = ColorExtractor.fallbackHSBPalette
@@ -35,12 +34,13 @@ struct NowPlayingView: View {
     enum BackgroundLayer: Equatable {
         case motion(URL)
         case shader(ShaderStyle)
+        case visualizer(AudioVisualizerStyle)
         /// `nil` pattern means colour field only.
         case generated(pattern: BackgroundStyle?)
     }
 
     private var desiredLayer: BackgroundLayer {
-        if settings.backgroundMode == .auto, !settings.audioReactiveEnabled,
+        if settings.backgroundMode == .auto,
            let motion = nowPlaying.motionArtwork, settings.motionArtworkEnabled,
            !settings.excludesMotion(artist: nowPlaying.current?.artist,
                                     album: nowPlaying.current?.album) {
@@ -48,7 +48,8 @@ struct NowPlayingView: View {
         }
         let mood = self.mood
         let mode = settings.effectiveBackgroundMode
-        if mode == .shader || (mode == .auto && (settings.audioReactiveEnabled || mood.energy > 0.72)) {
+        if mode == .visualizer { return .visualizer(settings.audioVisualizerStyle) }
+        if mode == .shader || (mode == .auto && mood.energy > 0.72) {
             return .shader(settings.resolvedShader(for: mood, seed: trackSeed))
         }
         if mode == .colourOnly { return .generated(pattern: nil) }
@@ -94,27 +95,10 @@ struct NowPlayingView: View {
                 // Kept steady: the shaders take this as `time`, where it drives
                 // the slow breathing that must not lurch with the music.
                 let colourPhase = VisualClock.gradient.advance(to: now, rate: speed)
-                // Beat response scales the envelope, so 0 leaves the visuals
-                // purely ambient without disabling the animation itself.
-                let raw = audio.reactivity(fallback: lyricsVM.dynamics.reactivity(at: playbackTime))
-                let reactivity = MusicDynamics.Reactivity(
-                    swell: raw.swell * settings.beatResponse,
-                    pulse: raw.pulse * settings.beatResponse,
-                    bass: raw.bass * settings.beatResponse,
-                    mid: raw.mid * settings.beatResponse,
-                    treble: raw.treble * settings.beatResponse
-                )
-                // Music changes the material's transport gradually. Keep it
-                // moving forwards: random direction reversals looked detached
-                // from both the song and the shape of each wallpaper.
-                let drive = min(0.75, reactivity.swell * 0.55 + reactivity.bass * 0.30 + reactivity.pulse * 0.15)
-                let flowPhase = VisualClock.flow.advance(to: now, rate: speed * (0.70 + drive * 1.35))
-                // The line patterns draw from the same clock as the shaders.
-                // They used to run at a fixed rate and take no input from the
-                // music at all -- eighteen styles that looked identical
-                // whatever was playing. Halved, because a pen-and-ink drawing
-                // reversing at full speed reads as a glitch where a fluid
-                // reads as a current.
+                // Ambient wallpapers and lyric gestures follow their own
+                // continuous clocks. Only the dedicated visualiser consumes
+                // audio; no global deformation or beat overlay remains.
+                let flowPhase = VisualClock.flow.advance(to: now, rate: speed * 0.70)
                 let patternPhase = flowPhase * 0.5
 
                 // Background switches are crossfaded from a timestamp
@@ -133,7 +117,7 @@ struct NowPlayingView: View {
                     if let outgoing = previousLayer, fade < 1 {
                         backgroundLayer(
                             outgoing, colourPhase: colourPhase, patternPhase: patternPhase,
-                            flowPhase: flowPhase, reactivity: reactivity, size: geometry.size
+                            flowPhase: flowPhase, size: geometry.size
                         )
                         .compositingGroup()
                         .opacity(1 - fade)
@@ -141,7 +125,7 @@ struct NowPlayingView: View {
 
                     backgroundLayer(
                         currentLayer, colourPhase: colourPhase, patternPhase: patternPhase,
-                        flowPhase: flowPhase, reactivity: reactivity, size: geometry.size
+                        flowPhase: flowPhase, size: geometry.size
                     )
                     .compositingGroup()
                     .opacity(previousLayer == nil ? 1 : fade)
@@ -150,8 +134,8 @@ struct NowPlayingView: View {
                         time: playbackTime,
                         baseSize: baseSize,
                         maxWidth: geometry.size.width * 0.80,
-                        mood: mood,
-                        response: reactivity
+                        maxHeight: geometry.size.height * 0.72,
+                        mood: mood
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 40)
@@ -179,7 +163,7 @@ struct NowPlayingView: View {
     @ViewBuilder
     private func backgroundLayer(
         _ layer: BackgroundLayer, colourPhase: Double, patternPhase: Double,
-        flowPhase: Double, reactivity: MusicDynamics.Reactivity, size: CGSize
+        flowPhase: Double, size: CGSize
     ) -> some View {
         // The colour field drifted on a metronome and answered the music only
         // by leaning its blobs 5% wider -- effectively deaf, which made
@@ -220,9 +204,15 @@ struct NowPlayingView: View {
                     time: colourPhase,
                     flow: flowPhase,
                     tintA: paletteColour(0),
-                    tintB: paletteColour(4),
-                    reactivity: reactivity
+                    tintB: paletteColour(4)
                 )
+                scrim
+            }
+
+        case .visualizer(let style):
+            ZStack {
+                AudioVisualizerView(style: style, time: flowPhase, paused: renderingPaused)
+                    .ignoresSafeArea()
                 scrim
             }
 
@@ -230,8 +220,7 @@ struct NowPlayingView: View {
             ZStack {
                 AnimatedGradientView(
                     palette: palette,
-                    time: colourFlow,
-                    reactivity: reactivity
+                    time: colourFlow
                 )
                 if let pattern {
                     FractalBackgroundView(
@@ -297,8 +286,7 @@ struct NowPlayingView: View {
     }
 
     @ViewBuilder
-    private func lyricsSection(time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, mood: TrackMood,
-                               response: MusicDynamics.Reactivity) -> some View {
+    private func lyricsSection(time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, maxHeight: CGFloat, mood: TrackMood) -> some View {
         if nowPlaying.current == nil {
             // Say so, then leave the background to itself rather than
             // parking a notice on the desktop for hours.
@@ -347,8 +335,7 @@ struct NowPlayingView: View {
                         if settings.showInterludes {
                             let gap = VCVocalGap(start: time - max(0, age - Self.noticeHoldDuration),
                                                   end: nowPlaying.current?.duration ?? -1, nextVocal: -1)
-                            InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent,
-                                response: response).opacity(1 - presence)
+                            InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent).opacity(1 - presence)
                         }
                     }
                 }
@@ -356,11 +343,10 @@ struct NowPlayingView: View {
         } else {
             let gap = settings.showInterludes ? instrumentalGap(at: time) : nil
             ZStack {
-                currentLine(time: time, baseSize: baseSize, maxWidth: maxWidth, mood: mood, response: response)
+                currentLine(time: time, baseSize: baseSize, maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
                     .opacity(1 - (gap?.presence(at: time) ?? 0))
                 if settings.showInterludes, let gap {
-                    InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent,
-                        response: response, nextWord: interludeNextWord(gap: gap, mood: mood))
+                    InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent, nextWord: interludeNextWord(gap: gap, mood: mood))
                 }
             }
         }
@@ -401,24 +387,23 @@ struct NowPlayingView: View {
     /// Outgoing ink can finish its exit after a line boundary. Rolling styles
     /// retain one word stage instead of drawing two overlapping timelines.
     @ViewBuilder
-    private func currentLine(time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, mood: TrackMood,
-                             response: MusicDynamics.Reactivity) -> some View {
+    private func currentLine(time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, maxHeight: CGFloat, mood: TrackMood) -> some View {
         let index = lyricsVM.activeLineIndex(at: time) ?? 0
         let composition = settings.resolvedComposition(for: mood, seed: index)
         ZStack {
             if !composition.arrivalOnly, index > 0,
                !settings.resolvedComposition(for: mood, seed: index - 1).arrivalOnly {
                 renderLyricLine(index: index - 1, time: time, baseSize: baseSize,
-                    maxWidth: maxWidth, mood: mood, response: response)
+                    maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
             }
             renderLyricLine(index: index, time: time, baseSize: baseSize,
-                maxWidth: maxWidth, mood: mood, response: response)
+                maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
         }
     }
 
     @ViewBuilder
-    private func renderLyricLine(index: Int, time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat,
-                                 mood: TrackMood, response: MusicDynamics.Reactivity) -> some View {
+    private func renderLyricLine(index: Int, time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, maxHeight: CGFloat,
+                                 mood: TrackMood) -> some View {
         let lines = lyricsVM.lines
 
         if lines.indices.contains(index), !lines[index].words.isEmpty, time >= lines[index].start - 1 {
@@ -449,13 +434,13 @@ struct NowPlayingView: View {
                     composition: composition,
                     seed: composition.arrivalOnly ? trackSeed : index,
                     presence: stagePresence,
-                    accent: lyricAccent,
-                    energy: response.combined
+                    accent: lyricAccent
                 )
                 if readingOptions.display == .below, let readings {
                     readingLine(readings, time: time, baseSize: baseSize, composition: composition)
                 }
             }
+            .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight)))
             .frame(maxWidth: maxWidth)
             .opacity(stagePresence)
               .scaleEffect(composition.arrivalOnly ? 1 : 0.96 + 0.04 * appear - 0.025 * exit)

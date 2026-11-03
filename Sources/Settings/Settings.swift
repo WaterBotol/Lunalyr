@@ -92,7 +92,7 @@ final class Settings: ObservableObject {
     }
 
     enum BackgroundMode: String, CaseIterable, Identifiable {
-        case auto, pattern, shader, colourOnly
+        case auto, pattern, shader, colourOnly, visualizer
         var id: String { rawValue }
 
         var title: String {
@@ -100,6 +100,7 @@ final class Settings: ObservableObject {
             case .auto: return "Match the music"
             case .pattern: return "Line patterns"
             case .shader: return "GPU effects"
+            case .visualizer: return "Visualisers"
             case .colourOnly: return "Colour only"
             }
         }
@@ -149,12 +150,10 @@ final class Settings: ObservableObject {
     // Advanced: fine control over how the background is drawn.
     /// Multiplies every animation clock.
     @Published var effectSpeed: Double { didSet { store(effectSpeed, "effectSpeed") } }
-    /// Scales how hard beats push the visuals. 0 leaves them ambient.
-    @Published var beatResponse: Double { didSet { store(beatResponse, "beatResponse") } }
     @Published var audioReactiveEnabled: Bool { didSet { store(audioReactiveEnabled, "custom.audioReactiveEnabled") } }
     @Published var audioSensitivity: Double { didSet { store(audioSensitivity, "custom.audioSensitivity") } }
     @Published var audioCaptureMethod: AudioCaptureMethod { didSet { store(audioCaptureMethod.rawValue, "custom.audioCaptureMethod") } }
-    @Published var audioMotionStrength: Double { didSet { store(audioMotionStrength, "custom.audioMotionStrength") } }
+    @Published var audioVisualizerStyle: AudioVisualizerStyle { didSet { store(audioVisualizerStyle.rawValue, "custom.visualizerStyle") } }
     /// Strength of the line-pattern layer over the colour field.
     @Published var patternOpacity: Double { didSet { store(patternOpacity, "patternOpacity") } }
     /// How much the backdrop is darkened to keep lyrics readable.
@@ -201,11 +200,10 @@ final class Settings: ObservableObject {
         noLyrics = NoLyricsBehaviour(rawValue: d.string(forKey: "noLyrics") ?? "") ?? .notice
         launchAtLogin = SMAppService.mainApp.status == .enabled
         effectSpeed = d.object(forKey: "effectSpeed") as? Double ?? 1.0
-        beatResponse = d.object(forKey: "beatResponse") as? Double ?? 1.0
         audioReactiveEnabled = d.bool(forKey: "custom.audioReactiveEnabled")
         audioSensitivity = d.object(forKey: "custom.audioSensitivity") as? Double ?? 1.0
         audioCaptureMethod = AudioCaptureMethod(rawValue: d.string(forKey: "custom.audioCaptureMethod") ?? "") ?? .automatic
-        audioMotionStrength = d.object(forKey: "custom.audioMotionStrength") as? Double ?? 0.65
+        audioVisualizerStyle = AudioVisualizerStyle(rawValue: d.string(forKey: "custom.visualizerStyle") ?? "") ?? .silk
         patternOpacity = d.object(forKey: "patternOpacity") as? Double ?? 0.85
         scrimStrength = d.object(forKey: "scrimStrength") as? Double ?? 1.0
         vividness = d.object(forKey: "vividness") as? Double ?? 1.0
@@ -350,7 +348,6 @@ final class Settings: ObservableObject {
     /// Restores every advanced control to its shipped value.
     func resetAdvanced() {
         effectSpeed = 1.0
-        beatResponse = 1.0
         patternOpacity = 0.85
         scrimStrength = 1.0
         vividness = 1.0
@@ -358,7 +355,7 @@ final class Settings: ObservableObject {
     }
 
     var advancedIsDefault: Bool {
-        effectSpeed == 1.0 && beatResponse == 1.0 && patternOpacity == 0.85
+        effectSpeed == 1.0 && patternOpacity == 0.85
             && scrimStrength == 1.0 && vividness == 1.0 && motionBlur == 5.0
     }
 

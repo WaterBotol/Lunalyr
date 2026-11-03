@@ -47,13 +47,7 @@ jobs:
       - name: Python helper tests
         run: python3 -m unittest discover -s Tests/Python -v
       - name: Native Swift tests
-        run: |
-          mkdir -p Build
-          xcodegen generate --spec project.yml
-          set -o pipefail
-          xcodebuild -project VersoCustom.xcodeproj -scheme VersoCustom -configuration Debug \
-            -destination "platform=macOS,arch=$(uname -m)" \
-            -derivedDataPath Build/TestDerivedData test 2>&1 | tee Build/test.log
+        run: bash Run-Tests.command
       - name: Build app and publisher tools
         run: bash Build.command
       - name: Archive app and matching tools
@@ -79,6 +73,7 @@ jobs:
           path: |
             Build/build.log
             Build/test.log
+            Build/TestDerivedData/Logs/Test/*.xcresult
           if-no-files-found: ignore
 
   draft-release:
