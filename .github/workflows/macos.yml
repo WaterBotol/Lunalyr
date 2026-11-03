@@ -1,0 +1,127 @@
+name: Build Lunalyr for Mac
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - LICENSE
+      - UPSTREAM.json
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      prepare_release:
+        description: Prepare a signed draft GitHub release after tests pass
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Ensure Metal tools are installed
+        run: |
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+      - name: Configure updates when a publisher key is available
+        env:
+          PUBLIC_UPDATE_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
+        run: |
+          if [[ -n "$PUBLIC_UPDATE_KEY" ]]; then
+            python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"
+          fi
+      - name: Python helper tests
+        run: python3 -m unittest discover -s Tests/Python -v
+      - name: Native Swift tests
+        run: |
+          mkdir -p Build
+          xcodegen generate --spec project.yml
+          set -o pipefail
+          xcodebuild -project VersoCustom.xcodeproj -scheme VersoCustom -configuration Debug \
+            -destination "platform=macOS,arch=$(uname -m)" \
+            -derivedDataPath Build/TestDerivedData test 2>&1 | tee Build/test.log
+      - name: Build app and publisher tools
+        run: bash Build.command
+      - name: Archive app and matching tools
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent Build/VersoCustom.app Build/VersoCustom-Mac.zip
+          if [[ -d Build/UpdateTools ]]; then
+            ditto -c -k --sequesterRsrc --keepParent Build/UpdateTools Build/UpdateTools.zip
+          fi
+      - name: Upload app download
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: VersoCustom-Mac
+          path: |
+            Build/VersoCustom-Mac.zip
+            Build/UpdateTools.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-logs
+          path: |
+            Build/build.log
+            Build/test.log
+          if-no-files-found: ignore
+
+  draft-release:
+    if: github.event_name == 'workflow_dispatch' && inputs.prepare_release
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: VersoCustom-Mac
+          path: Build
+      - name: Prepare signed update files
+        env:
+          PUBLIC_UPDATE_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
+          PRIVATE_UPDATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$PUBLIC_UPDATE_KEY" || -z "$PRIVATE_UPDATE_KEY" ]]; then
+            echo "Set SPARKLE_PUBLIC_KEY and SPARKLE_PRIVATE_KEY in repository Actions secrets first."
+            exit 1
+          fi
+          python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"
+          ditto -x -k Build/VersoCustom-Mac.zip Build
+          ditto -x -k Build/UpdateTools.zip Build
+          umask 077
+          KEY_FILE="$(mktemp "$RUNNER_TEMP/sparkle-key-XXXXXX")"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$PRIVATE_UPDATE_KEY" > "$KEY_FILE"
+          SPARKLE_PRIVATE_KEY_FILE="$KEY_FILE" bash Scripts/package-update.sh "$GITHUB_REPOSITORY"
+      - name: Create draft release for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Build/VersoCustom.app/Contents/Info.plist)"
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "That release already exists. Bump the marketing and build versions for a new update."
+            exit 1
+          fi
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+            --title "Lunalyr $VERSION" --notes-file CHANGES.md \
+            "Build/Release-$VERSION/VersoCustom-$VERSION.zip" "Build/Release-$VERSION/appcast.xml"
