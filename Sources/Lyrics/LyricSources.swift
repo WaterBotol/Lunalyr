@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 
 enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
-    case lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse
+    case lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -12,6 +12,8 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .qqMusic: return "QQ Music"
         case .kugou: return "Kugou Music"
         case .lrclib: return "LRCLIB"
+        case .kuwo: return "Kuwo Music"
+        case .lyricsOVH: return "lyrics.ovh"
         case .lyrimuse: return "Lyrimuse · local files"
         }
     }
@@ -19,7 +21,9 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .lyricsPlus: return "Word / syllable timing"
         case .netEase: return "Word or line timing"
-        case .qqMusic, .kugou, .lrclib: return "Line timing"
+        case .qqMusic, .kugou, .kuwo: return "Line timing"
+        case .lrclib: return "Word or line timing"
+        case .lyricsOVH: return "Plain text fallback"
         case .lyrimuse: return "LRC / TTML / YRC + readings"
         }
     }
@@ -31,15 +35,16 @@ final class LyricSourceOptions: ObservableObject {
     enum Mode: String, CaseIterable, Identifiable {
         case smart, priority
         var id: String { rawValue }
-        var title: String { self == .smart ? "Best match" : "Priority order" }
+        var title: String { self == .smart ? "Accuracy first" : "Source order" }
     }
     struct Snapshot {
         let enabled: [LyricSourceID]
         let mode: Mode
         var preferWordTimedLRCLIB: Bool = true
+        var preferWordTiming: Bool = true
         let localFolder: String
         let localVersion: String
-        var fingerprint: String { "v4|\(preferWordTimedLRCLIB)|" + mode.rawValue + "|" + enabled.map(\.rawValue).joined(separator: ",") + "|" + localVersion }
+        var fingerprint: String { "v5|\(preferWordTimedLRCLIB)|\(preferWordTiming)|" + mode.rawValue + "|" + enabled.map(\.rawValue).joined(separator: ",") + "|" + localVersion }
     }
     @Published var order: [LyricSourceID] {
         didSet { UserDefaults.standard.set(order.map(\.rawValue), forKey: "custom.lyricSourceOrder") }
@@ -50,6 +55,11 @@ final class LyricSourceOptions: ObservableObject {
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: "custom.lyricMatchMode") }
     }
+    static let recommendedOrder: [LyricSourceID] = [.lyrimuse, .lyricsPlus, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+    @Published var preferWordTiming: Bool {
+        didSet { UserDefaults.standard.set(preferWordTiming, forKey: "custom.preferWordTiming") }
+    }
+    func resetOrder() { order = Self.recommendedOrder; mode = .smart; preferWordTiming = true }
     @Published var preferWordTimedLRCLIB: Bool {
         didSet { UserDefaults.standard.set(preferWordTimedLRCLIB, forKey: "custom.preferWordTimedLRCLIB") }
     }
@@ -57,7 +67,7 @@ final class LyricSourceOptions: ObservableObject {
         didSet { UserDefaults.standard.set(repairQQGaps, forKey: "custom.repairQQGaps") }
     }
     var snapshot: Snapshot {
-        Snapshot(enabled: order.filter { enabled.contains($0) }, mode: mode, preferWordTimedLRCLIB: preferWordTimedLRCLIB,
+        Snapshot(enabled: order.filter { enabled.contains($0) }, mode: mode, preferWordTimedLRCLIB: preferWordTimedLRCLIB, preferWordTiming: preferWordTiming,
                  localFolder: LocalLyricOptions.shared.folder,
                  localVersion: enabled.contains(.lyrimuse) ? LocalLyricOptions.shared.fingerprint : "")
     }
@@ -66,11 +76,12 @@ final class LyricSourceOptions: ObservableObject {
         let d = UserDefaults.standard
         let saved = (d.stringArray(forKey: "custom.lyricSourceOrder") ?? []).compactMap(LyricSourceID.init(rawValue:))
         var unique: [LyricSourceID] = []
-        for item in saved + LyricSourceID.allCases where !unique.contains(item) { unique.append(item) }
+        for item in saved + Self.recommendedOrder where !unique.contains(item) { unique.append(item) }
         order = unique
         enabled = Set((d.stringArray(forKey: "custom.lyricSources") ?? LyricSourceID.allCases.filter { $0 != .lyrimuse }.map(\.rawValue))
             .compactMap(LyricSourceID.init(rawValue:)))
         mode = Mode(rawValue: d.string(forKey: "custom.lyricMatchMode") ?? "") ?? .smart
+        preferWordTiming = d.object(forKey: "custom.preferWordTiming") as? Bool ?? true
         preferWordTimedLRCLIB = d.object(forKey: "custom.preferWordTimedLRCLIB") as? Bool ?? true
         repairQQGaps = d.object(forKey: "custom.repairQQGaps") as? Bool ?? true
     }
@@ -119,8 +130,13 @@ struct LyricCandidate: Identifiable {
     var duration: Double?
     var score: Double
     var id: String { source.rawValue }
+    var hasReadings: Bool {
+        if case .synced(let lines, _) = result { return lines.contains { $0.romanization?.isEmpty == false } }
+        return false
+    }
     var provenance: LyricsFetcher.Provenance {
-        switch result { case .synced(_, let p), .plain(_, let p): return p }
+        switch result { case .synced(let lines, let p): return .init(precision: LyricsFetcher.precision(lines), source: p.source)
+        case .plain(_, let p): return p }
     }
     var lineCount: Int {
         switch result { case .synced(let lines, _): return lines.count; case .plain(let lines, _): return lines.count }
@@ -184,7 +200,7 @@ enum LyricHTTP {
         let message: String
         var errorDescription: String? { message }
     }
-    static func json(_ base: String, _ parameters: [String: String], referer: String? = nil) async throws -> [String: Any] {
+    static func json(_ base: String, _ parameters: [String: String], referer: String? = nil, session: URLSession = .shared) async throws -> [String: Any] {
         try Task.checkCancellation()
         var parts = URLComponents(string: base)
         parts?.queryItems = parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
@@ -192,7 +208,7 @@ enum LyricHTTP {
         var request = URLRequest(url: url, timeoutInterval: 6)
         request.setValue("Lunalyr/0.4.6 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
         if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw Failure(message: "Service response: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
         }

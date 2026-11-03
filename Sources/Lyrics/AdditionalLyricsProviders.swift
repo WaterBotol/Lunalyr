@@ -76,3 +76,42 @@ enum AdditionalLyricsProviders {
         return nil
     }
 }
+
+extension AdditionalLyricsProviders {
+    /// Independent implementation of Kuwo's search + line-lyric web endpoints.
+    /// Contract reference: Yudaotor/lyrimuse, lyrimuse-engine/kuwo.go.
+    static func kuwo(_ query: LyricQuery, session: URLSession = .shared) async throws -> LyricCandidate? {
+        let search = try await LyricHTTP.json("https://search.kuwo.cn/r.s",
+            ["all": query.title + " " + query.artist, "ft": "music", "itemset": "web_2013", "client": "kt", "pn": "0", "rn": "8", "rformat": "json", "encoding": "utf8", "pcjson": "1", "vipver": "1"], referer: "https://www.kuwo.cn/", session: session)
+        let songs = search["abslist"] as? [[String: Any]] ?? []
+        let ranked = songs.compactMap { song -> (String, String, String, Double?, Double)? in
+            guard let rid = song["MUSICRID"] as? String, let title = song["SONGNAME"] as? String, let artist = song["ARTIST"] as? String,
+                  let id = rid.split(separator: "_").last else { return nil }
+            let duration = LyricHTTP.string(song["DURATION"]).flatMap(Double.init)
+            let value = score(query, title: title, artist: artist, duration: duration)
+            return value > 0 ? (String(id), title, artist, duration, value) : nil
+        }.sorted { $0.4 > $1.4 }
+        for hit in ranked.prefix(2) {
+            let json = try await LyricHTTP.json("https://www.kuwo.cn/openapi/v1/www/lyric/getlyric", ["musicId": hit.0], referer: "https://www.kuwo.cn/", session: session)
+            guard let data = json["data"] as? [String: Any], let rows = data["lrclist"] as? [[String: Any]] else { continue }
+            let lrc = rows.compactMap { row -> String? in
+                guard let time = LyricHTTP.string(row["time"]).flatMap(Double.init), time.isFinite, time >= 0,
+                      let text = row["lineLyric"] as? String else { return nil }
+                return String(format: "[%02d:%05.2f]", Int(time / 60), time.truncatingRemainder(dividingBy: 60)) + text
+            }.joined(separator: "\n")
+            if let match = candidate(.kuwo, lrc: lrc, query: query, title: hit.1, artist: hit.2, duration: hit.3) { return match }
+        }
+        return nil
+    }
+    static func lyricsOVH(_ query: LyricQuery, session: URLSession = .shared) async throws -> LyricCandidate? {
+        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/;?#%"))
+        guard let artist = query.artist.addingPercentEncoding(withAllowedCharacters: allowed),
+              let title = query.title.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        let json = try await LyricHTTP.json("https://api.lyrics.ovh/v1/" + artist + "/" + title, [:], session: session)
+        guard let text = json["lyrics"] as? String else { return nil }
+        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard lines.contains(where: { !$0.isEmpty }) else { return nil }
+        return .init(source: .lyricsOVH, result: .plain(lines, .init(precision: "Plain text · no timing", source: "lyrics.ovh")),
+                     title: query.title, artist: query.artist, score: 0)
+    }
+}

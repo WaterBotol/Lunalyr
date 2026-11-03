@@ -1,3 +1,19 @@
+# Validation — Lunalyr 0.4.7 (build 14)
+
+## Actual Mac execution — 4 November 2026
+
+The local Xcode result Test-VersoCustom-2026.11.04_05-02-08-+1100.xcresult reports **83 tests passed, zero failures, zero skips and no runtime warnings**, on the Apple M5 Pro / macOS 27.2 / Xcode 27.2. Its extracted summary is retained in Build/local-tests-0.4.7.json. Nine Python helper tests also passed.
+
+New tests cover a line-only source with a higher provider score/order losing to valid real word timing; explicit strict order; wrong recording rejection; priority ties; punctuation differences versus missing word coverage; and both new adapters through deterministic HTTP fixtures. Existing real Metal GPU rendering tests remain in the suite.
+
+The Release app built through Xcode's Product → Build For → Profiling. It was launched as 0.4.7 and its native sidebar, new inspector, single live preview, preserved preferences/custom font and new menu-bar panel were inspected. Code signing was verified. This is native Mac execution, not a syntax-only check. Extended interactive coverage of every setting and capture permission/output route remains outstanding; this build does not claim a new CPU/GPU benchmark or completed audio-route validation.
+
+Live non-personal test queries verified Kuwo's search and lyric endpoint (98 timed rows for its test recording) and lyrics.ovh's plain-lyric response. Fixture tests establish parsing and provenance; these live responses do not establish service-wide uptime or accuracy.
+
+Source order is a disclosed precision-first heuristic; no comparative catalogue-wide accuracy dataset was collected. Explicit saved song selections still override automatic matching. No Apple Music cache or Accessibility extraction was added. The exact Dynamic-Lyrics retrieval mechanism remains unverified.
+
+---
+
 # Validation — Lunalyr 0.4.6 (build 13)
 
 ## Native Mac verification — 4 November 2026

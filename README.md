@@ -14,18 +14,19 @@ Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app*
 
 The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
 
-## Next version: 0.4.6
+## 0.4.7 preview
 
-- Lunalyr branding and crescent icon; remove the narrated introduction.
-- Resizable native sidebar window with a persistent live wallpaper preview.
-- Song-specific timing offsets saved automatically, added to a separate global offset.
-- Recover from LRCLIB exact-match failures by searching; bounded retry for HTTP 503/429. Read actual word timestamps from Lyricsfile YAML using MIT-licensed Yams.
-- Optional preference for LRCLIB when it supplies complete real word timing. Explicit saved song matches always win; disable the preference for strict source order.
-- Line-only songs show the entire line and reading. Editorial typography is an optional add-on to every composition.
-- Low power visuals select a lightweight wallpaper at 30 fps, including when video or a visualiser was selected. A manual switch and automatic macOS Low Power Mode switch are separate.
-- Smoother, fuller ribbons and integrated audio sway in the original GPU Aurora.
+A rebuilt native workspace replaces the previous settings panes. One live desktop preview stays alongside seven new inspectors: Wallpaper, Typography, Lyrics, Readings, Album covers, Performance and About. The menu-bar panel is rebuilt too. There are no duplicate sample animations.
 
-Apple Music lyric extraction is deferred. Lock-screen integration remains a research item, not an implemented feature.
+Lyrics uses a recording-specific offset, editable metadata search, candidate cards with separate source/timing/reading labels, imports, and explicit saved-choice controls. LRC and TTML imports are supported. Pronunciation readings are labelled separately from translations.
+
+**Accuracy first** is the default for new installations. It rejects poor title/artist/duration matches, prefers complete real word timing, then mixed timing, line timing and plain text. Source order breaks equal-quality ties. This is a transparent selection heuristic, not a measured provider accuracy benchmark; catalogue size is never used. The recommended order is local exports, Lyrics+/KPoe, NetEase, LRCLIB, QQ, Kugou, Kuwo, then lyrics.ovh. Existing custom order and enabled sources are retained. Restore recommended source order is available in Lyrics.
+
+Real word timing is preferred across sources even in Source order mode by default, fixing line-only results hiding available word-timed matches. Disable that preference for strict source order. The separate LRCLIB word-timing preference and explicit saved choices remain available. A saved choice is clearly marked and can be returned to automatic selection. Automatic caches use a new policy fingerprint.
+
+New independent adapters: **Kuwo** (line-synced) and **lyrics.ovh** (plain fallback). Their live endpoints returned lyrics during development; availability varies. Existing installations can enable them in Sources. No extra account credentials are required.
+
+Per-song offsets, low power at 30 fps, Editorial typography across compositions, smoother ribbons and GPU Aurora sway from 0.4.6 are retained. Apple Music lyric extraction remains deferred; the reference app's exact retrieval mechanism has not been established.
 
 ## What changed in 0.4.5
 
@@ -40,10 +41,10 @@ See [CHANGES.md](CHANGES.md), [native validation evidence](VALIDATION.md), [publ
 ## Use it
 
 1. Open Lunalyr and play a song in Music. Allow Automation access when asked so the app can follow playback and lyrics.
-2. Pick a composition in Settings → Composition. Each style remembers its word entrance and faint next-word preview.
-3. In Background, choose an ambient wallpaper or **Visualisers**. For live response, choose Silk Ribbons, Spectral Aurora or Spectrum Tunnel and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
+2. Pick a composition in Typography. Each style remembers its word entrance and faint next-word preview.
+3. In Wallpaper, choose an ambient wallpaper or **Visualisers**. For live response, choose Silk Ribbons, Spectral Aurora or Spectrum Tunnel and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
 4. Look for **Receiving audio** and changing meters. After granting capture permission, use Reconnect. Copy audio status provides connection diagnostics without a recording or song metadata.
-5. Start with **30 fps** in Behaviour; 60 fps uses more CPU/GPU. Close Settings when assessing normal wallpaper performance.
+5. Start with **30 fps** in Performance; 60 fps uses more CPU/GPU. Close Settings when assessing normal wallpaper performance.
 
 Silk Ribbons is intended to sit quietly behind lyrics. Spectrum Tunnel is the more immersive option. Motion remains continuous during instrumental passages; the interlude view supplies a next-vocal cue when the lyric source gives a reliable return time.
 

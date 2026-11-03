@@ -119,8 +119,11 @@ final class LyricsViewModel: ObservableObject {
         switch result {
         case .synced(let value,let source) where !value.isEmpty:
             let repair = repairQQGaps ?? LyricSourceOptions.shared.repairQQGaps
-            lines = repair && source.source.lowercased().contains("qq") ? QQGapRepair.repair(value) : value
-            provenance=source
+            let repaired = repair && source.source.lowercased().contains("qq") ? QQGapRepair.repair(value) : value
+            lines = repaired.map { original in
+                var line = original; line.wordTimed = LyricsFetcher.validWordTiming(original); return line
+            }
+            provenance = .init(precision: LyricsFetcher.precision(lines), source: source.source)
         case .plain(let value,let source) where !value.isEmpty:plainLines=value;provenance=source
         default:notFound=true;notFoundAt=Date()
         }
@@ -154,10 +157,12 @@ final class LyricsViewModel: ObservableObject {
     @discardableResult
     func importLyrics(_ text:String)->Bool {
         guard let query=currentQuery else {return false}
-        let parsed=LyricsFetcher.parseLRC(text,trackDuration:query.duration)
-        guard !parsed.isEmpty else {cacheMessage="This file has no usable LRC timestamps.";return false}
+        let parsed = text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<")
+            ? TTMLLyricParser.parse(text, duration: query.duration)
+            : LyricsFetcher.parseLRC(text,trackDuration:query.duration)
+        guard !parsed.isEmpty else {cacheMessage="This file has no usable LRC or TTML timestamps.";return false}
         lookupTask?.cancel();generation=UUID();isLoading=false
-        let result=LyricsFetcher.Result.synced(parsed,.init(precision:LyricsFetcher.precision(parsed),source:"Imported LRC"))
+        let result=LyricsFetcher.Result.synced(parsed,.init(precision:LyricsFetcher.precision(parsed),source:"Imported lyrics"))
         apply(result)
         pinnedMatch=SavedLyrics.save(result,key:query.recordingKey,pin:true)
         cacheMessage=pinnedMatch ? "Imported lyrics saved for this recording." : "Lyrics imported; the match could not be saved."

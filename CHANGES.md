@@ -2,7 +2,16 @@
 
 Upstream Verso commit: 9354e2f6703fda43e819284563c257e9bb4b07f8. Original licence unchanged.
 
-## 0.4.6 in development
+## 0.4.7 native workspace and accuracy-first lyric selection
+
+- Replace all settings panes and the menu-bar panel with a native workspace and seven new grouped inspectors; retain one shared live preview. Remove obsolete panes, sample renderers and custom pane chrome.
+- Separate song timing, source selection and readings. Add clear saved-choice reset, candidate timing labels and LRC/TTML import.
+- Prefer valid complete word timing across sources before falling back to whole lines; reject mismatched recordings and invalidate automatic caches under the new selection policy. Retain strict priority as an explicit override and preserve custom order/enabled sources.
+- Add native Kuwo line-timed and lyrics.ovh plain-text adapters. Do not rank by catalogue size or claim benchmarked provider accuracy.
+- Validate word coverage and timing once when applying a result; retain punctuation variations and avoid validation in the frame loop. Label line-only results as Line-synced.
+- Source version 0.4.7, build 14. All 83 native tests passed locally, zero failures/skips; nine Python helper tests passed. Release built and the new workspace was inspected on the Mac. Physical multi-monitor and controlled performance coverage remain outstanding.
+
+## 0.4.6
 
 - Rebrand visible application, app bundle, icon, menu and settings to Lunalyr while retaining local.verso.custom and existing storage.
 - Replace the fixed custom sidebar with native resizable navigation and a live desktop renderer preview. Remove narration source and speech resource.

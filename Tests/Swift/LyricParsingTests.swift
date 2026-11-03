@@ -16,7 +16,7 @@ final class LyricParsingTests: XCTestCase {
         let lines=LyricsFetcher.parseLRC("[00:01]A small line\n[00:05]Another line",trackDuration:10)
         XCTAssertEqual(lines.count,2)
         XCTAssertFalse(lines[0].wordTimed)
-        XCTAssertEqual(LyricsFetcher.precision(lines),"Estimated words")
+        XCTAssertEqual(LyricsFetcher.precision(lines),"Line-synced")
         XCTAssertTrue(lines[0].words.allSatisfy {$0.start>=1 && $0.end<=5})
     }
     func testOffsetsAndRepeatedTimestamps() {

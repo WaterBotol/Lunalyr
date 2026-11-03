@@ -48,21 +48,50 @@ final class LyricsFetcher {
             }
         }
         guard !Task.isCancelled else { return LyricLookupReport(result:nil) }
-        candidates.sort {
-            if abs($0.score - $1.score) > 0.001 { return $0.score > $1.score }
-            return $0.source.rawValue < $1.source.rawValue
-        }
+        candidates = Self.ranked(candidates, query: query, options: options)
         let chosen = Self.choose(candidates, options: options)
         if let chosen { SavedLyrics.save(chosen.result,key:key,pin:false) }
         return LyricLookupReport(result:pinned ?? chosen?.result,candidates:candidates,states:states,pinned:pinned != nil)
     }
+    /// Confidence is evaluated per recording. Source catalogue size plays no role.
+    static func ranked(_ candidates: [LyricCandidate], query: LyricQuery, options: LyricSourceOptions.Snapshot) -> [LyricCandidate] {
+        candidates.filter { candidate in
+            guard options.enabled.contains(candidate.source),
+                  LyricQuery.similarity(query.title, candidate.title) >= 0.75,
+                  LyricQuery.similarity(query.artist, candidate.artist) >= 0.65 else { return false }
+            if let duration = candidate.duration, duration > 0, query.duration > 0 {
+                return abs(duration - query.duration) <= max(3, query.duration * 0.02)
+            }
+            return true
+        }.sorted { a, b in
+            let tierA = timingTier(a.result), tierB = timingTier(b.result)
+            if tierA != tierB { return tierA > tierB }
+            let confidenceA = LyricQuery.similarity(query.title, a.title) + LyricQuery.similarity(query.artist, a.artist)
+            let confidenceB = LyricQuery.similarity(query.title, b.title) + LyricQuery.similarity(query.artist, b.artist)
+            if confidenceA != confidenceB { return confidenceA > confidenceB }
+            return (options.enabled.firstIndex(of: a.source) ?? 999) < (options.enabled.firstIndex(of: b.source) ?? 999)
+        }
+    }
+    static func timingTier(_ result: Result) -> Int {
+        if hasWordTiming(result) { return 3 }
+        if case .synced(let lines, _) = result {
+            let vocal = lines.filter { !$0.isInstrumental }
+            if vocal.contains(where: { validWordTiming($0) }) { return 2 }
+            return vocal.isEmpty ? 0 : 1
+        }
+        return 0
+    }
     static func choose(_ candidates: [LyricCandidate], options: LyricSourceOptions.Snapshot) -> LyricCandidate? {
-        let enabled = candidates.filter { options.enabled.contains($0.source) }
+        var enabled = candidates.filter { options.enabled.contains($0.source) }
+        if options.mode == .smart || options.preferWordTiming {
+            let best = enabled.map { timingTier($0.result) }.max() ?? 0
+            enabled = enabled.filter { timingTier($0.result) == best }
+        }
         if options.preferWordTimedLRCLIB, let native = enabled.first(where: { $0.source == .lrclib && hasWordTiming($0.result) }) { return native }
         if options.mode == .priority {
             return options.enabled.compactMap { id in enabled.first { $0.source == id } }.first
         }
-        return enabled.max { $0.score < $1.score }
+        return enabled.first
     }
     private static func bounded(_ id: LyricSourceID, query: LyricQuery, localFolder: String) async -> Outcome {
         await withTaskGroup(of: Outcome.self) { group in
@@ -97,20 +126,31 @@ final class LyricsFetcher {
                 title:query.title,artist:query.artist,duration:query.duration,score:native ? 110 : 96)
         case .qqMusic: return try await AdditionalLyricsProviders.qqMusic(query)
         case .kugou: return try await AdditionalLyricsProviders.kugou(query)
+        case .kuwo: return try await AdditionalLyricsProviders.kuwo(query)
+        case .lyricsOVH: return try await AdditionalLyricsProviders.lyricsOVH(query)
         case .lrclib: return try await lrclib(query)
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
+        }
+    }
+    static func validWordTiming(_ line: Line) -> Bool {
+        guard line.wordTimed, !line.words.isEmpty, line.start.isFinite, line.end.isFinite, line.end > line.start else { return false }
+        let covered = line.words.map(\.text).joined().filter { $0.isLetter || $0.isNumber }
+        guard covered == line.text.filter({ $0.isLetter || $0.isNumber }) else { return false }
+        return line.words.enumerated().allSatisfy { i, word in
+            word.start.isFinite && word.end.isFinite && word.start >= line.start - 0.05 && word.end > word.start && word.end <= line.end + 0.05 &&
+                (i == 0 || word.start >= line.words[i - 1].start)
         }
     }
     static func hasWordTiming(_ result: Result) -> Bool {
         guard case .synced(let lines, _) = result else { return false }
         let vocal = lines.filter { !$0.isInstrumental }
-        return !vocal.isEmpty && vocal.allSatisfy { $0.wordTimed }
+        return !vocal.isEmpty && vocal.allSatisfy { validWordTiming($0) }
     }
     static func precision(_ lines: [Line]) -> String {
         let vocal = lines.filter { !$0.isInstrumental }
-        if !vocal.isEmpty, vocal.allSatisfy({$0.wordTimed}) {return "Word-by-word"}
-        if vocal.contains(where:{$0.wordTimed}) {return "Mixed timing"}
-        return "Estimated words"
+        if !vocal.isEmpty, vocal.allSatisfy({validWordTiming($0)}) {return "Word-by-word"}
+        if vocal.contains(where:{validWordTiming($0)}) {return "Mixed timing"}
+        return "Line-synced"
     }
     private struct Response: Decodable {
         var trackName: String?

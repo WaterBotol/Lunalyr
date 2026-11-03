@@ -1,119 +1,44 @@
 import SwiftUI
 
-/// The menu bar dropdown: what's playing, transport, and a way into the rest.
-/// Everything configurable lives in the settings window instead, so this stays
-/// something you can read at a glance.
 struct MenuBarView: View {
-    @EnvironmentObject private var nowPlaying: NowPlayingMonitor
+    @EnvironmentObject private var playing: NowPlayingMonitor
     @ObservedObject private var lyrics = LyricsViewModel.shared
     @ObservedObject private var updates = AppUpdates.shared
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            nowPlayingCard
-            transport
-                .padding(.top, 12)
-                .padding(.bottom, 4)
-
-            Divider().padding(.vertical, 8)
-
-            menuItem("Settings…", symbol: "slider.horizontal.3") {
-                SettingsWindowController.shared.present()
-            }
-            menuItem("Check for Updates…", symbol: "arrow.triangle.2.circlepath") {
-                updates.check()
-            }
-            .disabled(updates.buttonDisabled)
-
-            Divider().padding(.vertical, 8)
-
-            menuItem("Quit Lunalyr", symbol: "power") {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-        .padding(12)
-        .frame(width: 268)
-    }
-
-    // MARK: - Now playing
-
-    private var nowPlayingCard: some View {
-        HStack(spacing: 10) {
-            artwork
-            VStack(alignment: .leading, spacing: 2) {
-                Text(nowPlaying.current?.title ?? "Nothing playing")
-                    .font(AppFont.ui(12.5, .semibold))
-                    .lineLimit(1)
-                Text(nowPlaying.current?.artist ?? "Play something in Music")
-                    .font(AppFont.ui(11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                if let provenance = lyrics.provenance {
-                    Text(provenance.label)
-                        .font(AppFont.ui(9))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Group {
+                    if let image = playing.artwork { Image(nsImage: image).resizable().scaledToFill() }
+                    else { Image(systemName: "music.note").frame(maxWidth: .infinity, maxHeight: .infinity).background(.quaternary) }
+                }.frame(width: 48, height: 48).clipShape(RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playing.current?.title ?? "Lunalyr").font(.headline).lineLimit(2)
+                    Text(playing.current?.artist ?? "Play a song in Music").font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 }
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    @ViewBuilder
-    private var artwork: some View {
-        if let artwork = nowPlaying.artwork {
-            Image(nsImage: artwork)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 42, height: 42)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        } else {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(.quaternary)
-                .frame(width: 42, height: 42)
-                .overlay(
-                    Image(systemName: "music.note")
-                        .font(AppFont.ui(14))
-                        .foregroundStyle(.secondary)
-                )
-        }
-    }
-
-    private var transport: some View {
-        HStack(spacing: 22) {
-            Spacer()
-            transportButton("backward.fill", 13) { nowPlaying.previousTrack() }
-            transportButton(nowPlaying.isPlaying ? "pause.fill" : "play.fill", 17) { nowPlaying.playPause() }
-            transportButton("forward.fill", 13) { nowPlaying.nextTrack() }
-            Spacer()
-        }
-    }
-
-    private func transportButton(_ symbol: String, _ size: CGFloat, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .medium))
-                .frame(width: size * 2, height: size * 2)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Menu rows
-
-    private func menuItem(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: symbol)
-                    .font(AppFont.ui(11))
-                    .frame(width: 15)
-                Text(title).font(AppFont.ui(12))
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+            HStack(spacing: 28) {
+                Spacer()
+                Button { playing.previousTrack() } label: { Image(systemName: "backward.fill") }
+                Button { playing.playPause() } label: { Image(systemName: playing.isPlaying ? "pause.fill" : "play.fill").font(.title3) }
+                Button { playing.nextTrack() } label: { Image(systemName: "forward.fill") }
+                Spacer()
+            }.buttonStyle(.plain).padding(.vertical, 4).disabled(playing.current == nil)
+            if let source = lyrics.provenance {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(source.source, systemImage: "text.quote")
+                    Label(source.precision, systemImage: "clock")
+                }.font(.caption).foregroundStyle(.secondary)
+            }
+            Divider()
+            Button { SettingsWindowController.shared.present() } label: {
+                Label("Open Lunalyr", systemImage: "rectangle.leadinghalf.inset.filled").frame(maxWidth: .infinity)
+            }.buttonStyle(.borderedProminent).tint(.mint)
+            HStack {
+                Button("Check for updates…") { updates.check() }.disabled(updates.buttonDisabled)
+                Spacer()
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+            }.font(.caption).buttonStyle(.plain).foregroundStyle(.secondary)
+        }.padding(18).frame(width: 300)
     }
 }

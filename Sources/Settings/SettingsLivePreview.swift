@@ -10,10 +10,11 @@ struct SettingsLivePreview: View {
             NowPlayingView(displayID: 0, renderActivity: activity)
                 .environmentObject(NowPlayingMonitor.shared)
                 .frame(width: 1280, height: 720)
-                .scaleEffect(geometry.size.height / 720, anchor: .center)
-                .frame(width: geometry.size.width, height: geometry.size.height)
+                .scaleEffect(min(geometry.size.width / 1280, geometry.size.height / 720), anchor: .topLeading)
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                 .clipped()
                 .allowsHitTesting(false)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Live wallpaper preview")
         }
     }
