@@ -1,5 +1,8 @@
 name: VersoCustom
 packages:
+  Yams:
+    url: https://github.com/jpsim/Yams
+    exactVersion: 6.2.2
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.0
@@ -18,12 +21,13 @@ targets:
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleDisplayName: Verso Custom
-        CFBundleShortVersionString: 0.4.5
-        CFBundleVersion: "12"
+        CFBundleDisplayName: Lunalyr
+        CFBundleName: Lunalyr
+        CFBundleShortVersionString: 0.4.6
+        CFBundleVersion: "13"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026
-        NSAppleEventsUsageDescription: Verso Custom reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.
+        NSAppleEventsUsageDescription: Lunalyr reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.
         NSAudioCaptureUsageDescription: Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.
         SUFeedURL: "https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml"
         SUPublicEDKey: "7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY="
@@ -32,11 +36,15 @@ targets:
         SUSendProfileInfo: false
         SUVerifyUpdateBeforeExtraction: true
     dependencies:
+      - package: Yams
+        product: Yams
       - package: Sparkle
         product: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.verso.custom
+        PRODUCT_NAME: Lunalyr
+        PRODUCT_MODULE_NAME: VersoCustom
         SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/Sources/VersoCustom-Bridging-Header.h"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
@@ -60,7 +68,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/Sources/VersoCustom-Bridging-Header.h"
         SWIFT_VERSION: "5.0"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VersoCustom.app/Contents/MacOS/VersoCustom"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Lunalyr.app/Contents/MacOS/Lunalyr"
         BUNDLE_LOADER: "$(TEST_HOST)"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual

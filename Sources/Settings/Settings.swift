@@ -141,6 +141,14 @@ final class Settings: ObservableObject {
     @Published var pauseWhenCovered: Bool { didSet { store(pauseWhenCovered, "custom.pauseWhenCovered") } }
     @Published var hasOnboarded: Bool { didSet { store(hasOnboarded, "hasOnboarded") } }
     /// Honour macOS Low Power Mode by easing off the GPU.
+    @Published var lowPowerVisuals: Bool = UserDefaults.standard.bool(forKey: "custom.lowPowerVisuals") {
+        didSet { store(lowPowerVisuals, "custom.lowPowerVisuals") }
+    }
+    @Published var editorialTypography: Bool = UserDefaults.standard.bool(forKey: "custom.editorialTypography") {
+        didSet { store(editorialTypography, "custom.editorialTypography") }
+    }
+    private var powerObserver: NSObjectProtocol?
+    var effectiveAnimationRate: AnimationRate { sparesGPU ? .balanced : animationRate }
     @Published var respectLowPower: Bool { didSet { store(respectLowPower, "respectLowPower") } }
     @Published var onBattery: PowerBehaviour { didSet { store(onBattery.rawValue, "onBattery") } }
     @Published var noLyrics: NoLyricsBehaviour { didSet { store(noLyrics.rawValue, "noLyrics") } }
@@ -211,6 +219,9 @@ final class Settings: ObservableObject {
         motionPlacement = MotionPlacement(rawValue: d.string(forKey: "motionPlacement") ?? "") ?? .fill
         motionExclusions = d.stringArray(forKey: "motionExclusions") ?? []
 
+        powerObserver = NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.objectWillChange.send() }
+        }
         if fontChoice == .google, !googleFontFamily.isEmpty {
             Task { await loadGoogleFont(family: googleFontFamily) }
         }
@@ -317,7 +328,7 @@ final class Settings: ObservableObject {
     /// Whether power conditions call for keeping the GPU load down, even
     /// where effects are still permitted at all.
     var sparesGPU: Bool {
-        if respectLowPower, ProcessInfo.processInfo.isLowPowerModeEnabled { return true }
+        if lowPowerVisuals || (respectLowPower && ProcessInfo.processInfo.isLowPowerModeEnabled) { return true }
         if onBattery != .full, PowerSource.isOnBattery { return true }
         return false
     }
@@ -327,7 +338,7 @@ final class Settings: ObservableObject {
     /// thing dropped on battery or in Low Power Mode.
     var effectiveBackgroundMode: BackgroundMode {
         let constrained: PowerBehaviour?
-        if respectLowPower, ProcessInfo.processInfo.isLowPowerModeEnabled {
+        if lowPowerVisuals || (respectLowPower && ProcessInfo.processInfo.isLowPowerModeEnabled) {
             constrained = .patterns
         } else if onBattery != .full, PowerSource.isOnBattery {
             constrained = onBattery

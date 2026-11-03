@@ -14,6 +14,12 @@ struct VersoApp: App {
             Image(nsImage: Self.menuBarIcon)
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Lunalyr Settings…") { SettingsWindowController.shared.present() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
+        }
     }
 
     /// The mark from the wordmark's "o", carrying shape in alpha only.

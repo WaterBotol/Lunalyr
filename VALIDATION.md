@@ -1,3 +1,19 @@
+# Validation — Lunalyr 0.4.6 (build 13)
+
+## Native Mac verification — 4 November 2026
+
+On the same Apple M5 Pro Mac, macOS 27.2 and Xcode 27.2, Xcode's native test report shows **76 passed**. The new tests verify offsets surviving store recreation without leaking between recordings; source order, disabled sources and word-timed LRCLIB opt-out; nested YAML word times and inferred ends; malformed timing falling back to lines; HTTP 503 exact-match failure followed by successful search using a stub URLSession; and low power selecting a lightweight wallpaper at **30 fps**. Existing Metal rendering tests ran as part of this suite.
+
+Nine Python publisher/configuration tests pass. The local Release app was built using Product → Build For → Profiling, launched, and its complete-line fallback was visually inspected with real Music playback. Preferences and the existing custom font were preserved. Code signature and bundled upstream/Yams/libyaml/Synesthia/Sparkle notices were checked. These are actual Mac runs, not syntax checks.
+
+The stable 0.4.5 release was published with the user's approval. Its configured latest-release appcast endpoint was fetched successfully and contains build 12 with its signed ZIP enclosure. This verifies feed availability; it is not an installed Sparkle upgrade test.
+
+## Remaining coverage for 0.4.6
+
+Extended GUI, dense lyric, physical multi-monitor and controlled CPU/GPU profiling remain necessary. The LRCLIB regression uses a deterministic HTTP fixture; it does not claim the external service will never return 503. Apple Music lyric extraction is deferred at user request. No lock-screen implementation is included.
+
+---
+
 # Validation — Verso Custom 0.4.5 (build 12)
 
 ## Actual native Mac evidence — 4 November 2026

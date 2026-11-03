@@ -42,7 +42,7 @@ enum AppFont {
 }
 
 extension Notification.Name {
-    static let appFontLoaded = Notification.Name("VersoAppFontLoaded")
+    static let appFontLoaded = Notification.Name("LunalyrAppFontLoaded")
 }
 
 /// Redraws its content once Manrope finishes downloading.

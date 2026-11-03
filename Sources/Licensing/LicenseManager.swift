@@ -62,7 +62,7 @@ final class LicenseManager: ObservableObject {
 
         var errorDescription: String? {
             switch self {
-            case .malformed: return "That doesn't look like a Verso licence."
+            case .malformed: return "That doesn't look like a Lunalyr licence."
             case .badSignature: return "This licence isn't valid."
             case .expired: return "This licence has expired."
             }

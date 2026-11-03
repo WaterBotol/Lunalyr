@@ -87,7 +87,7 @@ struct AudioVisualizerView: NSViewRepresentable {
             guard let pipeline = pipeline(style.fragment, device: device, library: library) else {
                 inFlight.signal(); return
             }
-            let fps = Double(Settings.shared.animationRate.rawValue)
+            let fps = Double(Settings.shared.effectiveAnimationRate.rawValue)
             if let average = gpuTimer.drain(minimumSamples: 30) {
                 ladder.adjust(averageGPUTime: average, budget: 1 / fps)
             }

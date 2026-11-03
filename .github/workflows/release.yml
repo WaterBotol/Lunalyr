@@ -46,12 +46,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Build/VersoCustom.app/Contents/Info.plist)"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Build/Lunalyr.app/Contents/Info.plist)"
           TAG="v$VERSION-preview"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "This preview already exists. Bump the version before releasing again."
             exit 1
           fi
-          ditto -c -k --sequesterRsrc --keepParent Build/VersoCustom.app "Build/Lunalyr-$VERSION-Mac.zip"
-          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open VersoCustom.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. The updater uses the stable channel, which becomes available after the first stable release. Preview releases are installed manually. See UPDATE_SETUP.md and VALIDATION.md.' > Build/release-notes.md
+          ditto -c -k --sequesterRsrc --keepParent Build/Lunalyr.app "Build/Lunalyr-$VERSION-Mac.zip"
+          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open Lunalyr.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. The updater uses the stable channel. Preview releases are installed manually. See UPDATE_SETUP.md and VALIDATION.md.' > Build/release-notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title "Lunalyr $VERSION preview" --notes-file Build/release-notes.md "Build/Lunalyr-$VERSION-Mac.zip"

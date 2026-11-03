@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Verso Custom</string>
+	<string>Lunalyr</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,29 +13,29 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Lunalyr</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.5</string>
+	<string>0.4.6</string>
 	<key>CFBundleVersion</key>
-	<string>12</string>
+	<string>13</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Verso Custom reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>© 2026</string>
+	<string>Lunalyr reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 	<key>SUFeedURL</key>
 	<string>https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<false/>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUVerifyUpdateBeforeExtraction</key>

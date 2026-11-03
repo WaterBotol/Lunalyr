@@ -27,11 +27,27 @@ final class AudioReactiveController: ObservableObject {
     private var usingTap = false
     private var recoveryNote = ""
 
+    private var settingsSubscription: AnyCancellable?
+    private var shouldCapture: Bool {
+        let settings = Settings.shared
+        return settings.audioReactiveEnabled && !settings.sparesGPU &&
+            (settings.effectiveBackgroundMode == .visualizer ||
+             ((settings.effectiveBackgroundMode == .shader || settings.effectiveBackgroundMode == .auto) && settings.shaderStyle == .aurora))
+    }
     func resumeIfEnabled() {
-        if Settings.shared.backgroundMode == .visualizer && Settings.shared.audioReactiveEnabled { start() }
+        if settingsSubscription == nil {
+            settingsSubscription = Settings.shared.objectWillChange
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+                .sink { [weak self] in self?.reconcile() }
+        }
+        reconcile()
+    }
+    private func reconcile() {
+        if shouldCapture { start() }
+        else if running || starting { stop(disablePreference: false, message: "Audio paused for the current wallpaper or power mode.") }
     }
     func start() {
-        guard Settings.shared.backgroundMode == .visualizer, !running, !starting else { return }
+        guard !Settings.shared.sparesGPU, !running, !starting else { return }
         Settings.shared.audioReactiveEnabled = true
         installAudioObservers()
         connect(compatibility: false)
@@ -191,7 +207,7 @@ final class AudioReactiveController: ObservableObject {
     func copyDiagnostics() {
         let settings = Settings.shared
         let report = """
-        Verso Custom audio · \(ProcessInfo.processInfo.operatingSystemVersionString)
+        Lunalyr audio · \(ProcessInfo.processInfo.operatingSystemVersionString)
         Requested: \(settings.audioCaptureMethod.title); active: \(methodLabel)
         Running: \(running); connecting: \(starting); packets: \(packetsReceived)
         Format: \(formatLabel)

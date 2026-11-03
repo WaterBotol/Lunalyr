@@ -20,9 +20,6 @@ struct MenuBarView: View {
             menuItem("Settings…", symbol: "slider.horizontal.3") {
                 SettingsWindowController.shared.present()
             }
-            menuItem("Guide", symbol: "sparkles.rectangle.stack") {
-                OnboardingWindowController.shared.present()
-            }
             menuItem("Check for Updates…", symbol: "arrow.triangle.2.circlepath") {
                 updates.check()
             }
@@ -30,7 +27,7 @@ struct MenuBarView: View {
 
             Divider().padding(.vertical, 8)
 
-            menuItem("Quit Verso", symbol: "power") {
+            menuItem("Quit Lunalyr", symbol: "power") {
                 NSApplication.shared.terminate(nil)
             }
         }

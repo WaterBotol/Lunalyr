@@ -7,3 +7,7 @@ The updater uses [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/rel
 The dedicated native visualisers reuse [Synesthia](https://github.com/jonjaques/synesthia), copyright (c) 2026 Jon Jaques, under the MIT licence. The pinned commit is 05144bf0f03eea5cc4af8135e9d71553f1ac9202. Its audio analyser, uniform layout, Aurora/Spectrum Tunnel shaders and GPU resolution helpers are adapted for Lunalyr. The full notice is bundled as Sources/Resources/Synesthia-LICENSE.txt; [the adaptation manifest](ThirdParty/Synesthia/SOURCE.md) records source files and local changes. No Synesthia branding, icons or demo music is included.
 
 No source code from VoxelWall, VoxelVerse or Lyrimuse has been incorporated. The reference clip is not distributed. The local Lyrimuse bridge reads exported file formats; it does not bundle those services or their lyric databases.
+
+## Yams
+
+Yams 6.2.2 by JP Sim and contributors (MIT) parses LRCLIB's Lyricsfile YAML, including word timestamps. The package includes libyaml under MIT. Complete notices are bundled in Resources/Yams-LICENSE.txt and Resources/libyaml-LICENSE.txt.

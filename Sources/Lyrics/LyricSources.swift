@@ -36,9 +36,10 @@ final class LyricSourceOptions: ObservableObject {
     struct Snapshot {
         let enabled: [LyricSourceID]
         let mode: Mode
+        var preferWordTimedLRCLIB: Bool = true
         let localFolder: String
         let localVersion: String
-        var fingerprint: String { "v3|" + mode.rawValue + "|" + enabled.map(\.rawValue).joined(separator: ",") + "|" + localVersion }
+        var fingerprint: String { "v4|\(preferWordTimedLRCLIB)|" + mode.rawValue + "|" + enabled.map(\.rawValue).joined(separator: ",") + "|" + localVersion }
     }
     @Published var order: [LyricSourceID] {
         didSet { UserDefaults.standard.set(order.map(\.rawValue), forKey: "custom.lyricSourceOrder") }
@@ -49,11 +50,14 @@ final class LyricSourceOptions: ObservableObject {
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: "custom.lyricMatchMode") }
     }
+    @Published var preferWordTimedLRCLIB: Bool {
+        didSet { UserDefaults.standard.set(preferWordTimedLRCLIB, forKey: "custom.preferWordTimedLRCLIB") }
+    }
     @Published var repairQQGaps: Bool {
         didSet { UserDefaults.standard.set(repairQQGaps, forKey: "custom.repairQQGaps") }
     }
     var snapshot: Snapshot {
-        Snapshot(enabled: order.filter { enabled.contains($0) }, mode: mode,
+        Snapshot(enabled: order.filter { enabled.contains($0) }, mode: mode, preferWordTimedLRCLIB: preferWordTimedLRCLIB,
                  localFolder: LocalLyricOptions.shared.folder,
                  localVersion: enabled.contains(.lyrimuse) ? LocalLyricOptions.shared.fingerprint : "")
     }
@@ -67,6 +71,7 @@ final class LyricSourceOptions: ObservableObject {
         enabled = Set((d.stringArray(forKey: "custom.lyricSources") ?? LyricSourceID.allCases.filter { $0 != .lyrimuse }.map(\.rawValue))
             .compactMap(LyricSourceID.init(rawValue:)))
         mode = Mode(rawValue: d.string(forKey: "custom.lyricMatchMode") ?? "") ?? .smart
+        preferWordTimedLRCLIB = d.object(forKey: "custom.preferWordTimedLRCLIB") as? Bool ?? true
         repairQQGaps = d.object(forKey: "custom.repairQQGaps") as? Bool ?? true
     }
     func move(_ source: LyricSourceID, by amount: Int) {
@@ -185,7 +190,7 @@ enum LyricHTTP {
         parts?.queryItems = parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         guard let url = parts?.url else { throw Failure(message: "Invalid service address") }
         var request = URLRequest(url: url, timeoutInterval: 6)
-        request.setValue("Verso-Custom/0.2 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Lunalyr/0.4.6 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
         if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {

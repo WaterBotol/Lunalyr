@@ -46,58 +46,22 @@ struct SettingsWindowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            pane
-        }
-        .frame(width: 860, height: 580)
-        .colorScheme(.dark)
-    }
-
-    // MARK: - Sidebar
-
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // The real wordmark, lifted off the icon's gradient, rather than
-            // the name re-set in whatever typeface happens to be to hand --
-            // that never quite matches the logo and looks like a near-miss.
-            Wordmark(width: 84)
-                .padding(.horizontal, 20)
-                .padding(.top, 26)
-                .padding(.bottom, 20)
-
-            ForEach(Tab.visible) { sidebarItem($0) }
-
-            Spacer()
-
-            signature
-
-            if LicenseManager.paywallEnabled {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(licensing.isPro ? Color.green : .white.opacity(0.3))
-                        .frame(width: 5, height: 5)
-                    Text(licensing.isPro ? "Pro" : "Free")
-                        .font(AppFont.ui(11, .medium))
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 22)
+        NavigationSplitView {
+            List(Tab.visible, selection: $tab) { item in
+                Label(item.title, systemImage: item.symbol).tag(item)
             }
-        }
-        .frame(width: 186)
-        .background(
-            ZStack {
-                Verso.surfaceRaised
-                // A whisper of the icon's gradient, so the sidebar belongs to
-                // the brand without competing with the pane beside it.
-                LinearGradient(colors: [Verso.violet.opacity(0.16), .clear],
-                               startPoint: .top, endPoint: .bottom)
+            .navigationTitle("Lunalyr")
+            .navigationSplitViewColumnWidth(min: 155, ideal: 175, max: 210)
+            .safeAreaInset(edge: .bottom) { signature }
+        } detail: {
+            VStack(spacing: 0) {
+                SettingsLivePreview().frame(height: 185)
+                Divider()
+                pane.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        )
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(Verso.cream.opacity(0.07)).frame(width: 1)
+            .navigationTitle(tab.title)
         }
+        .frame(minWidth: 760, minHeight: 640)
     }
 
     /// Sits at the foot of the sidebar, quiet enough to be found rather than
@@ -112,7 +76,7 @@ struct SettingsWindowView: View {
                     .font(.system(size: 8))
                     .foregroundStyle(Verso.violet.opacity(0.9))
             }
-            Text("Verso Custom \(Self.version)")
+            Text("Lunalyr \(Self.version)")
                 .font(.system(size: 9.5))
                 .foregroundStyle(Verso.cream.opacity(0.20))
         }
@@ -123,38 +87,6 @@ struct SettingsWindowView: View {
 
     private static let version: String =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
-
-    private func sidebarItem(_ item: Tab) -> some View {
-        let selected = tab == item
-        return Button {
-            withAnimation(.easeOut(duration: 0.14)) { tab = item }
-        } label: {
-            HStack(spacing: 10) {
-                // A rule marks the active pane rather than a filled pill.
-                Capsule()
-                    .fill(selected ? AnyShapeStyle(Verso.accentGradient)
-                                   : AnyShapeStyle(Color.clear))
-                    .frame(width: 2.5, height: 16)
-                Image(systemName: item.symbol)
-                    .font(AppFont.ui(12))
-                    .frame(width: 15)
-                Text(item.title)
-                    .font(AppFont.ui(12.5, selected ? .semibold : .regular))
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(selected ? Verso.cream : Verso.cream.opacity(0.48))
-            .padding(.trailing, 18)
-            .padding(.vertical, 8)
-            .background(alignment: .leading) {
-                if selected {
-                    LinearGradient(colors: [Verso.violet.opacity(0.20), .clear],
-                                   startPoint: .leading, endPoint: .trailing)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: - Panes
 
@@ -198,13 +130,15 @@ final class SettingsWindowController: NSObject {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 580),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 740),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.title = "Lunalyr"
+        window.minSize = NSSize(width: 760, height: 640)
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
         window.isMovableByWindowBackground = true
         window.backgroundColor = NSColor(Verso.surface)
         // Created in code, so it would otherwise be released on close while
@@ -244,13 +178,10 @@ struct Wordmark: View {
     var width: CGFloat = 84
 
     var body: some View {
-        if let image = NSImage(named: "Wordmark") {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: width)
-                .accessibilityLabel("Verso")
-        }
+        Text("Lunalyr")
+            .font(.system(size: width * 0.25, weight: .semibold, design: .rounded))
+            .foregroundStyle(.primary)
+            .accessibilityLabel("Lunalyr")
     }
 }
 

@@ -52,7 +52,7 @@ jobs:
         run: bash Build.command
       - name: Archive app and matching tools
         run: |
-          ditto -c -k --sequesterRsrc --keepParent Build/VersoCustom.app Build/VersoCustom-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent Build/Lunalyr.app Build/Lunalyr-Mac.zip
           if [[ -d Build/UpdateTools ]]; then
             ditto -c -k --sequesterRsrc --keepParent Build/UpdateTools Build/UpdateTools.zip
           fi
@@ -61,7 +61,7 @@ jobs:
         with:
           name: VersoCustom-Mac
           path: |
-            Build/VersoCustom-Mac.zip
+            Build/Lunalyr-Mac.zip
             Build/UpdateTools.zip
           if-no-files-found: error
           retention-days: 14
@@ -101,7 +101,7 @@ jobs:
             exit 1
           fi
           python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"
-          ditto -x -k Build/VersoCustom-Mac.zip Build
+          ditto -x -k Build/Lunalyr-Mac.zip Build
           ditto -x -k Build/UpdateTools.zip Build
           umask 077
           KEY_FILE="$(mktemp "$RUNNER_TEMP/sparkle-key-XXXXXX")"
@@ -112,11 +112,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Build/VersoCustom.app/Contents/Info.plist)"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Build/Lunalyr.app/Contents/Info.plist)"
           if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "That release already exists. Bump the marketing and build versions for a new update."
             exit 1
           fi
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
             --title "Lunalyr $VERSION" --notes-file CHANGES.md \
-            "Build/Release-$VERSION/VersoCustom-$VERSION.zip" "Build/Release-$VERSION/appcast.xml"
+            "Build/Release-$VERSION/Lunalyr-$VERSION.zip" "Build/Release-$VERSION/appcast.xml"

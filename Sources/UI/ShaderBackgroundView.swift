@@ -234,19 +234,27 @@ struct ShaderBackgroundView: View {
     let flow: Double
     let tintA: Color
     let tintB: Color
+    private final class AudioFrame {
+        var smoother = VisualizerSmoother()
+        func frame() -> AudioSnapshot {
+            smoother.frame(VisualizerAudio.shared.latest(), at: ProcessInfo.processInfo.systemUptime)
+        }
+    }
+    @State private var smoothing = AudioFrame()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private func shader(size: CGSize) -> Shader {
+        var arguments: [Shader.Argument] = [.float2(size.width, size.height),
+            .float(Float(time)), .float(Float(flow)), .color(tintA), .color(tintB)]
+        if style == .aurora {
+            let frame = smoothing.frame()
+            let gain = Settings.shared.audioReactiveEnabled && !reduceMotion ? Float(Settings.shared.audioSensitivity) : 0
+            arguments.append(.float3(min(1, frame.bass * gain), min(1, frame.mid * gain), min(1, frame.treble * gain)))
+        }
+        return Shader(function: ShaderFunction(library: .default, name: style.functionName), arguments: arguments)
+    }
     var body: some View {
         GeometryReader { geometry in
-            let size = geometry.size
-            Rectangle()
-                .colorEffect(
-                    ShaderLibrary[dynamicMember: style.functionName](
-                        .float2(size.width, size.height),
-                        .float(Float(time)),
-                        .float(Float(flow)),
-                        .color(tintA),
-                        .color(tintB)
-                    )
-                )
+            Rectangle().colorEffect(shader(size: geometry.size))
         }
         .ignoresSafeArea()
         .drawingGroup()

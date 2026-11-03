@@ -1,4 +1,5 @@
 import Foundation
+import Yams
 
 /// Custom fork: bounded parallel provider lookup, recording-specific caching,
 /// manual selections and explicit timing provenance. Upstream licence retained.
@@ -51,12 +52,17 @@ final class LyricsFetcher {
             if abs($0.score - $1.score) > 0.001 { return $0.score > $1.score }
             return $0.source.rawValue < $1.source.rawValue
         }
-        let chosen: LyricCandidate?
-        if options.mode == .priority {
-            chosen = options.enabled.compactMap { id in candidates.first { $0.source == id } }.first
-        } else { chosen = candidates.first }
+        let chosen = Self.choose(candidates, options: options)
         if let chosen { SavedLyrics.save(chosen.result,key:key,pin:false) }
         return LyricLookupReport(result:pinned ?? chosen?.result,candidates:candidates,states:states,pinned:pinned != nil)
+    }
+    static func choose(_ candidates: [LyricCandidate], options: LyricSourceOptions.Snapshot) -> LyricCandidate? {
+        let enabled = candidates.filter { options.enabled.contains($0.source) }
+        if options.preferWordTimedLRCLIB, let native = enabled.first(where: { $0.source == .lrclib && hasWordTiming($0.result) }) { return native }
+        if options.mode == .priority {
+            return options.enabled.compactMap { id in enabled.first { $0.source == id } }.first
+        }
+        return enabled.max { $0.score < $1.score }
     }
     private static func bounded(_ id: LyricSourceID, query: LyricQuery, localFolder: String) async -> Outcome {
         await withTaskGroup(of: Outcome.self) { group in
@@ -68,7 +74,7 @@ final class LyricsFetcher {
                 catch { return Outcome(id:id,candidate:nil,state:error.localizedDescription) }
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds:8_000_000_000)
+                try? await Task.sleep(nanoseconds: id == .lrclib ? 20_000_000_000 : 8_000_000_000)
                 return Outcome(id:id,candidate:nil,state:"Timed out")
             }
             let first = await group.next() ?? Outcome(id:id,candidate:nil,state:"Unavailable")
@@ -95,6 +101,11 @@ final class LyricsFetcher {
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
         }
     }
+    static func hasWordTiming(_ result: Result) -> Bool {
+        guard case .synced(let lines, _) = result else { return false }
+        let vocal = lines.filter { !$0.isInstrumental }
+        return !vocal.isEmpty && vocal.allSatisfy { $0.wordTimed }
+    }
     static func precision(_ lines: [Line]) -> String {
         let vocal = lines.filter { !$0.isInstrumental }
         if !vocal.isEmpty, vocal.allSatisfy({$0.wordTimed}) {return "Word-by-word"}
@@ -110,29 +121,51 @@ final class LyricsFetcher {
         var lyricsfile: String?
         var plainLyrics: String?
     }
-    private static func requestLRCLIB(_ path: String, parameters: [String:String]) async throws -> Data? {
+    static func requestLRCLIB(_ path: String, parameters: [String:String], session: URLSession = .shared) async throws -> Data? {
         try Task.checkCancellation()
         var components = URLComponents(string:"https://lrclib.net/api/"+path)
         components?.queryItems = parameters.sorted {$0.key<$1.key}.map {URLQueryItem(name:$0.key,value:$0.value)}
         guard let url = components?.url else {return nil}
-        var request = URLRequest(url:url,timeoutInterval:6)
-        request.setValue("Verso-Custom/0.2 (personal macOS lyrics)",forHTTPHeaderField:"User-Agent")
-        let (data,response) = try await URLSession.shared.data(for:request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status == 404 {return nil}
-        guard status == 200 else {throw LyricHTTP.Failure(message:"LRCLIB: HTTP \(status)")}
-        guard data.count <= 2_000_000 else {throw LyricHTTP.Failure(message:"LRCLIB response too large")}
-        return data
+        for attempt in 0...1 {
+            var request = URLRequest(url: url, timeoutInterval: 4)
+            request.setValue("Lunalyr/0.4.6 (https://github.com/WaterBotol/Lunalyr)", forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await session.data(for: request)
+            let http = response as? HTTPURLResponse
+            let status = http?.statusCode ?? 0
+            if status == 404 { return nil }
+            if (status == 503 || status == 429), attempt == 0 {
+                let delay = Double(http?.value(forHTTPHeaderField: "Retry-After") ?? "1") ?? 1
+                // Long server backoffs are reported rather than keeping a lookup alive.
+                guard delay.isFinite, delay <= 3 else { throw LyricHTTP.Failure(message: "LRCLIB is busy. Try again later (HTTP \(status)).") }
+                try await Task.sleep(nanoseconds: UInt64(max(0, delay) * 1_000_000_000))
+                continue
+            }
+            guard status == 200 else { throw LyricHTTP.Failure(message: "LRCLIB: HTTP \(status). The service may be temporarily unavailable.") }
+            guard data.count <= 2_000_000 else { throw LyricHTTP.Failure(message: "LRCLIB response too large") }
+            return data
+        }
+        return nil
     }
-    private static func lrclib(_ query: LyricQuery) async throws -> LyricCandidate? {
+
+    static func lrclib(_ query: LyricQuery, session: URLSession = .shared) async throws -> LyricCandidate? {
         var parameters = ["track_name":query.title,"artist_name":query.artist]
         if let album = query.album, !album.isEmpty {parameters["album_name"]=album}
         if query.duration>0 {parameters["duration"]=String(Int(query.duration.rounded()))}
         var payloads: [Response] = []
-        if let data = try await requestLRCLIB("get",parameters:parameters), let exact = try? JSONDecoder().decode(Response.self,from:data) {payloads.append(exact)}
+        var exactError: Error?
+        do {
+            if let data = try await requestLRCLIB("get",parameters:parameters,session:session), let exact = try? JSONDecoder().decode(Response.self,from:data) { payloads.append(exact) }
+        } catch is CancellationError { throw CancellationError() }
+        catch { exactError = error }
         let exactTimed = payloads.contains { $0.syncedLyrics?.isEmpty == false || $0.lyricsfile?.isEmpty == false }
-        if !exactTimed, let data = try await requestLRCLIB("search",parameters:["track_name":query.title,"artist_name":query.artist]),
-           let found = try? JSONDecoder().decode([Response].self,from:data) {payloads.append(contentsOf:found.prefix(30))}
+        if !exactTimed {
+            do {
+                if let data = try await requestLRCLIB("search",parameters:["track_name":query.title,"artist_name":query.artist],session:session),
+                   let found = try? JSONDecoder().decode([Response].self,from:data) { payloads.append(contentsOf:found.prefix(30)) }
+            } catch is CancellationError { throw CancellationError() }
+            catch { if payloads.isEmpty { throw error } }
+        }
+        if payloads.isEmpty, let exactError { throw exactError }
         let candidates = payloads.compactMap { payload -> LyricCandidate? in
             let title=payload.trackName ?? query.title,artist=payload.artistName ?? query.artist
             let delta=payload.duration.map {abs($0-query.duration)} ?? 0
@@ -162,47 +195,44 @@ final class LyricsFetcher {
     ///   - text: I've been tryna call
     ///     start_ms: 27160
     ///     end_ms: 29960
-    private static func parseLyricsFile(_ yaml: String) -> [Line] {
-        var entries: [(start: Double, end: Double, text: String)] = []
-        var pendingText: String?
-        var pendingStart: Double?
-        var pendingEnd: Double?
-        var insideLines = false
-
-        func flush() {
-            defer { pendingText = nil; pendingStart = nil; pendingEnd = nil }
-            guard let text = pendingText, let start = pendingStart else { return }
-            entries.append((start, pendingEnd ?? start + 4, text))
+    private struct Lyricsfile: Decodable {
+        struct Metadata: Decodable { var offset_ms: Double? }
+        struct Row: Decodable {
+            struct Token: Decodable { var text: String; var start_ms: Double; var end_ms: Double? }
+            var text: String
+            var start_ms: Double
+            var end_ms: Double?
+            var words: [Token]?
         }
-
-        for rawLine in yaml.split(separator: "\n", omittingEmptySubsequences: false) {
-            let trimmed = String(rawLine).trimmingCharacters(in: .whitespaces)
-            if trimmed == "lines:" { insideLines = true; continue }
-            guard insideLines else { continue }
-
-            if trimmed.hasPrefix("- text:") {
-                flush()
-                pendingText = unquote(String(trimmed.dropFirst("- text:".count)).trimmingCharacters(in: .whitespaces))
-            } else if trimmed.hasPrefix("text:"), pendingText == nil {
-                pendingText = unquote(String(trimmed.dropFirst("text:".count)).trimmingCharacters(in: .whitespaces))
-            } else if trimmed.hasPrefix("start_ms:") {
-                pendingStart = Double(trimmed.dropFirst("start_ms:".count).trimmingCharacters(in: .whitespaces)).map { $0 / 1000 }
-            } else if trimmed.hasPrefix("end_ms:") {
-                pendingEnd = Double(trimmed.dropFirst("end_ms:".count).trimmingCharacters(in: .whitespaces)).map { $0 / 1000 }
-            }
-        }
-        flush()
-        return entries.map { makeLine(text: $0.text, start: $0.start, end: $0.end) }
+        var metadata: Metadata?
+        var lines: [Row]?
     }
-
-    private static func unquote(_ value: String) -> String {
-        var result = value
-        for quote in ["'", "\""] where result.hasPrefix(quote) && result.hasSuffix(quote) && result.count >= 2 {
-            result = String(result.dropFirst().dropLast())
-            result = result.replacingOccurrences(of: quote + quote, with: quote)
-            break
+    static func parseLyricsFile(_ yaml: String) -> [Line] {
+        guard yaml.utf8.count <= 1_000_000,
+              let file = try? YAMLDecoder().decode(Lyricsfile.self, from: yaml) else { return [] }
+        let offset = (file.metadata?.offset_ms ?? 0) / 1000
+        guard offset.isFinite else { return [] }
+        let rows = (file.lines ?? []).filter { $0.start_ms.isFinite && $0.start_ms >= 0 }.sorted { $0.start_ms < $1.start_ms }
+        return rows.enumerated().compactMap { index, row in
+            let start = max(0, row.start_ms / 1000 + offset)
+            let end = row.end_ms.map { $0 / 1000 + offset } ?? (index + 1 < rows.count ? rows[index + 1].start_ms / 1000 + offset : start + 4)
+            guard end.isFinite, end > start else { return nil }
+            var line = makeLine(text: row.text, start: start, end: end)
+            let tokens = row.words ?? []
+            let words = tokens.enumerated().map { i, token in
+                Word(text: token.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                     start: token.start_ms / 1000 + offset,
+                     end: token.end_ms.map { $0 / 1000 + offset } ?? (i + 1 < tokens.count ? tokens[i + 1].start_ms / 1000 + offset : end))
+            }
+            let covered = words.map(\.text).joined().filter { !$0.isWhitespace }
+            if !words.isEmpty, covered == row.text.filter({ !$0.isWhitespace }), words.enumerated().allSatisfy({ i, word in
+                word.start.isFinite && word.end.isFinite && word.start >= start && word.end > word.start && word.end <= end &&
+                    (i == 0 || word.start >= words[i - 1].end)
+            }) {
+                line.words = words; line.wordTimed = true
+            }
+            return line
         }
-        return result
     }
 
     // MARK: - LRC parsing (fallback)

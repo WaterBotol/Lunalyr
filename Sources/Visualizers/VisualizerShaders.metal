@@ -513,9 +513,9 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
                         + u.trebleBeat * smoothstep(0.55, 0.85, reg);
         // mids carry the waveform; lows and highs mostly ignore it
         float wWeight = exp(-pow((reg - 0.5) * 2.4, 2.0));
-        float w = (bandAt(bands, fract(uv.x * 0.55 + fi * 0.13)) - 0.3) * 0.45; // Stable spectrum curve, not rapidly changing waveform phase.
+        float w = (bandAt(bands, clamp(uv.x * 0.55 + fi * 0.13, 0.0, 1.0)) - 0.3) * 0.45; // Stable spectrum curve, not rapidly changing waveform phase.
         // low ribbons undulate slowly and widely, high ribbons shiver fast
-        float sway = (0.065 * (1.0 - reg) + 0.018)
+        float sway = (0.065 * (1.0 - reg) + 0.018 + 0.055 * compE)
                    * sin(uv.x * (4.0 + reg * 14.0)
                          + u.time * u.speed * (0.4 + 1.6 * reg) * (0.6 + fi * 0.8));
         float ripple = 0.014 * reg
@@ -528,12 +528,12 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
                  + 0.04 * transient * (1.0 - 0.5 * reg);
         // thickness: fat lows, thin highs, detailed by the local spectrum,
         // puffed by this register's transients
-        float thickness = (0.004 + 0.030 * compE) * (1.6 - 1.1 * reg)
+        float thickness = (0.009 + 0.045 * compE) * (1.6 - 1.1 * reg)
                         * (0.6 + 0.9 * localE) * (1.0 + 0.5 * transient);
         // t/(|dy|+t) is a soft glow profile: 1 on the center line, falling
         // off hyperbolically; the pow sharpens its core.
         float glowR = thickness / (fabs(uv.y - yC) + thickness);
-        glowR = pow(glowR, 1.6);
+        glowR = pow(glowR, 1.4);
         // vertical curtain rays driven by the presence band
         float rays = 0.85 + 0.30 * sin(uv.x * (90.0 + fi * 20.0) + u.time * u.speed * (1.5 + fi))
                    * clamp(u.presence * u.sensitivity * 1.5, 0.0, 1.0);

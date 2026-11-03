@@ -57,7 +57,7 @@ struct CompositionPane: View {
     // MARK: - Preview
 
     private var preview: some View {
-        TimelineView(.animation(minimumInterval: settings.animationRate.interval)) { timeline in
+        TimelineView(.animation(minimumInterval: settings.effectiveAnimationRate.interval)) { timeline in
             let elapsed = timeline.date.timeIntervalSince(started)
             let looped = elapsed.truncatingRemainder(dividingBy: loopLength)
             // What the wallpaper would choose right now, so "Match the music"
@@ -144,6 +144,7 @@ struct CompositionPane: View {
                     matchRow
                 }
 
+                Toggle("Editorial typography with every composition", isOn: $settings.editorialTypography)
                 wordArrivalControls
                 advanced
 

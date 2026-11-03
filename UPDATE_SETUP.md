@@ -84,3 +84,7 @@ For local release preparation with an exported signing seed:
     SPARKLE_PRIVATE_KEY_FILE="$HOME/Lunalyr-private-key.txt" bash Scripts/package-update.sh WaterBotol/Lunalyr
 
 The helper’s appcast check validates URLs, lengths and signature format. Sparkle performs the actual cryptographic verification. Local setup/packaging and the CI workflow still require native Mac testing; a YAML or syntax check alone does not prove a signed upgrade works.
+
+## Publication status — 4 November 2026
+
+v0.4.5 was published as stable after the user completed bugchecking. Its signed appcast and ZIP are publicly available at the configured stable endpoint. Future versions retain the same bundle identifier and signing key. Preview builds remain manual downloads.

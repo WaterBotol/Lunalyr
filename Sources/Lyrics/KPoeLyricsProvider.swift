@@ -53,7 +53,7 @@ enum KPoeLyricsProvider {
         guard let url = components?.url else { return nil }
 
         var request = URLRequest(url: url)
-        request.setValue("Verso/0.1 (macOS now-playing lyrics)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Lunalyr/0.1 (macOS now-playing lyrics)", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 4
 
         do {

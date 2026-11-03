@@ -9,6 +9,7 @@ struct LyricSourcesPane: View {
     @ObservedObject private var nowPlaying=NowPlayingMonitor.shared
     @ObservedObject private var settings=Settings.shared
     @ObservedObject private var local=LocalLyricOptions.shared
+    @ObservedObject private var songOffsets = SongOffsets.shared
     @State private var title=""
     @State private var artist=""
     @State private var importError:String?
@@ -97,7 +98,7 @@ struct LyricSourcesPane: View {
                 }
                 VStack(alignment:.leading,spacing:8) {
                     HStack {
-                        Text("Timing offset").font(AppFont.ui(12,.medium))
+                        Text("Global timing offset").font(AppFont.ui(12,.medium))
                         Spacer()
                         Text(String(format:"%+.1f s",settings.lyricOffset))
                             .font(AppFont.ui(11)).monospacedDigit().foregroundStyle(.white.opacity(0.6))
@@ -106,6 +107,19 @@ struct LyricSourcesPane: View {
                     Slider(value:$settings.lyricOffset,in:-3...3,step:0.05)
                     Text("Positive values bring lyrics in earlier. Line-only sources use estimated word timing.")
                         .font(AppFont.ui(10.5)).foregroundStyle(.white.opacity(0.45))
+                    if let query = model.currentQuery {
+                        Text("Offset for \(query.title)").font(AppFont.ui(12, .medium))
+                        HStack {
+                            Slider(value: Binding(get: { songOffsets.offset(for: query) },
+                                set: { songOffsets.set($0, for: query) }), in: -10...10, step: 0.05)
+                            Text(String(format: "%+.2f s", songOffsets.offset(for: query))).monospacedDigit()
+                            Button("Reset song") { songOffsets.set(0, for: query) }
+                        }
+                        Text("Saved automatically for this recording. Added to the global offset.").font(AppFont.ui(10.5))
+                    }
+                    Toggle("Prefer LRCLIB when it has real word timing", isOn: $options.preferWordTimedLRCLIB)
+                        .font(AppFont.ui(11))
+                    Text("Saved song choices always win. Turn this off to follow source order or match scores exactly.").font(AppFont.ui(10.5))
                     Toggle("Treat long QQ pauses as instrumental", isOn: $options.repairQQGaps)
                         .font(AppFont.ui(11)).toggleStyle(.switch).controlSize(.small)
                     Text("Estimates the end of a line before a long musical gap. Turn this off for a song with unusually long held vocals. Supplied word timestamps stay intact.")
@@ -119,7 +133,6 @@ struct LyricSourcesPane: View {
         .background(Verso.surface)
         .onAppear {fillTrack()}
         .onChange(of:nowPlaying.current) {_,_ in fillTrack()}
-        .onChange(of:options.fingerprint) {_,_ in model.refresh(force:false)}
     }
     private func fillTrack() {
         title=nowPlaying.current?.title ?? ""

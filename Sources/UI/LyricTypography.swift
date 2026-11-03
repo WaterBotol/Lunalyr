@@ -16,6 +16,7 @@ final class RenderMemo<Key: Equatable, Value>: ObservableObject {
 }
 
 struct LyricFontIdentity: Equatable {
+    var editorial: Bool = false
     let choice: String
     let customRegular: String?
     let customBold: String?
@@ -26,6 +27,7 @@ struct LyricFontIdentity: Equatable {
 extension LyricFontIdentity {
     @MainActor
     init(settings: Settings) {
+        editorial = settings.editorialTypography
         choice = settings.fontChoice.rawValue
         customRegular = settings.googleRegular; customBold = settings.googleBold
         appRegular = AppFont.regular; appBold = AppFont.bold
@@ -118,7 +120,7 @@ enum ScatteredTypography {
         // Editorial widens the range hard: a spread gets its character from
         // real size contrast, not from a gentle wobble around one size.
         var alternate = false
-        if composition.hasEditorialTypography {
+        if composition.hasEditorialTypography || key.fontIdentity.editorial {
             size *= isHero ? 1.10 : (1.00 + 0.10 * jitter)
             // Roughly every third word takes the second face. Driven by the
             // word's own hash, so the pairing is fixed for a given lyric.
@@ -181,7 +183,9 @@ enum SpokenTypography {
             let pointSize = key.composition == .spoken ? key.baseSize * 1.10 : columnSize
             return Word(index: index, source: word, hash: hash, hero: hero, pointSize: pointSize,
                 tile: key.composition == .cutout && (hero || hash % 4 == 1),
-                font: settings.lyricFont(size: pointSize, hero: hero || key.composition == .spoken, mood: key.mood))
+                font: key.fontIdentity.editorial && index % 3 == 1
+                    ? key.mood.face.contrasting.font(size: pointSize, hero: hero)
+                    : settings.lyricFont(size: pointSize, hero: hero || key.composition == .spoken, mood: key.mood))
         }
     }
 }

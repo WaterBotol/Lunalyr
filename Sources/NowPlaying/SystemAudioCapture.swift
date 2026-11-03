@@ -34,7 +34,7 @@ final class SystemAudioCapture: AudioCaptureSession {
     }
     private func configure() throws {
         let tap = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
-        tap.name = "Verso Custom music response"
+        tap.name = "Lunalyr music response"
         tap.isPrivate = true
         tap.muteBehavior = .unmuted
         try check(AudioHardwareCreateProcessTap(tap, &tapID), "Creating the system-audio tap")
@@ -61,7 +61,7 @@ final class SystemAudioCapture: AudioCaptureSession {
         }
         try check(uidStatus, "Reading the output identity")
         let description: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Verso Custom private analyser",
+            kAudioAggregateDeviceNameKey: "Lunalyr private analyser",
             kAudioAggregateDeviceUIDKey: "local.verso.audio.\(UUID().uuidString)",
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,

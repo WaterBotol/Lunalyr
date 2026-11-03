@@ -10,7 +10,7 @@ if [[ ! "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   echo "Pass a GitHub repository as OWNER/REPO."
   exit 1
 fi
-APP_PATH="$PROJECT_DIR/Build/VersoCustom.app"
+APP_PATH="$PROJECT_DIR/Build/Lunalyr.app"
 TOOLS_DIR="${SPARKLE_TOOLS_DIR:-$PROJECT_DIR/Build/UpdateTools/bin}"
 if [[ ! -d "$APP_PATH" || ! -x "$TOOLS_DIR/generate_appcast" ]]; then
   echo "Build the app first. Use the matching Sparkle 2.10.0 tools in Build/UpdateTools/bin."
@@ -36,7 +36,7 @@ if [[ -e "$RELEASE_DIR" ]]; then
   exit 1
 fi
 mkdir -p "$RELEASE_DIR"
-ARCHIVE="$RELEASE_DIR/VersoCustom-$VERSO_VERSION.zip"
+ARCHIVE="$RELEASE_DIR/Lunalyr-$VERSO_VERSION.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE"
 set -- --download-url-prefix "https://github.com/$REPOSITORY/releases/download/v$VERSO_VERSION/" \
   -o "$RELEASE_DIR/appcast.xml" "$RELEASE_DIR"

@@ -2,6 +2,18 @@
 
 Upstream Verso commit: 9354e2f6703fda43e819284563c257e9bb4b07f8. Original licence unchanged.
 
+## 0.4.6 in development
+
+- Rebrand visible application, app bundle, icon, menu and settings to Lunalyr while retaining local.verso.custom and existing storage.
+- Replace the fixed custom sidebar with native resizable navigation and a live desktop renderer preview. Remove narration source and speech resource.
+- Persist per-recording offsets separately from the global offset.
+- Retry short 503/429 backoffs and search after exact LRCLIB failures. Decode real nested word timing from Lyricsfile YAML using Yams 6.2.2; reject invalid timing as line-only.
+- Apply source settings outside the sources pane. Make real-word LRCLIB preference opt-out; preserve explicit saved choices and strict priority when disabled.
+- Show complete lines and readings when real word timing is absent. Support Editorial faces on all compositions with cache invalidation.
+- Apply low power fallback before animated artwork selection; add manual low power mode, follow macOS changes, stop unused capture, and use lightweight wallpapers at 30 fps.
+- Broaden ribbon cores and continuous spectrum curvature; add smoothed musical sway inside the original GPU Aurora curtains.
+- Apple Music lyric extraction deferred at user request; no Accessibility-reading option added.
+
 ## 0.4.5 native visualisers and readable scaling
 
 - Integrate Synesthia's MIT-licensed native Metal Aurora and Spectrum Tunnel scenes and its FFT analyser, pinned at 05144bf0f03eea5cc4af8135e9d71553f1ac9202. Retain its licence, attribution and a source/adaptation manifest. Add a quiet Silk Ribbons variation as the default visualiser choice.

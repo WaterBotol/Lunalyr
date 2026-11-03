@@ -84,7 +84,7 @@ static float2 uvCentered(float2 position, float2 size) {
 // Layered vertical curtains sheared by noise, drifting like polar light.
 [[ stitchable ]] half4 wlAurora(float2 position, half4 current,
                                 float2 size, float time, float flow,
-                                half3 tintA, half3 tintB) {
+                                half3 tintA, half3 tintB, float3 music) {
     float2 uv = position / size;
     float glow = 0.0;
 
@@ -94,8 +94,10 @@ static float2 uvCentered(float2 position, float2 size) {
         // Each curtain is a horizontal ribbon warped by stacked sines.
         float centre = 0.5
             + sin(uv.x * 2.3 + phase) * 0.16
-            + sin(uv.x * 5.1 - phase * 0.7) * 0.06;
-        float thickness = 0.055 + 0.03 * sin(phase * 0.8);
+            + sin(uv.x * 5.1 - phase * 0.7) * 0.06
+            + sin(uv.x * 3.2 + phase + fi) * music.x * 0.085
+            + sin(uv.x * 6.0 - phase + fi) * music.y * 0.035;
+        float thickness = 0.055 + 0.03 * sin(phase * 0.8) + music.x * 0.025;
         float band = thickness / (abs(uv.y - centre) + thickness * 0.55);
         glow += band * (0.35 + 0.25 * sin(phase));
     }

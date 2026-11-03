@@ -10,9 +10,22 @@ Eight lyric compositions, word-timed karaoke, per-style next-word previews, roma
 
 ## Install
 
-Download the compiled Mac ZIP from a preview release, extract it and open **VersoCustom.app**. Xcode is unnecessary for the compiled app. Requires macOS 14 or later.
+Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app**. Xcode is unnecessary for the compiled app. Requires macOS 14 or later.
 
-The app still appears as **Verso Custom**, with bundle ID **local.verso.custom**, so existing preferences remain. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
+The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
+
+## Next version: 0.4.6
+
+- Lunalyr branding and crescent icon; remove the narrated introduction.
+- Resizable native sidebar window with a persistent live wallpaper preview.
+- Song-specific timing offsets saved automatically, added to a separate global offset.
+- Recover from LRCLIB exact-match failures by searching; bounded retry for HTTP 503/429. Read actual word timestamps from Lyricsfile YAML using MIT-licensed Yams.
+- Optional preference for LRCLIB when it supplies complete real word timing. Explicit saved song matches always win; disable the preference for strict source order.
+- Line-only songs show the entire line and reading. Editorial typography is an optional add-on to every composition.
+- Low power visuals select a lightweight wallpaper at 30 fps, including when video or a visualiser was selected. A manual switch and automatic macOS Low Power Mode switch are separate.
+- Smoother, fuller ribbons and integrated audio sway in the original GPU Aurora.
+
+Apple Music lyric extraction is deferred. Lock-screen integration remains a research item, not an implemented feature.
 
 ## What changed in 0.4.5
 
@@ -20,13 +33,13 @@ The app still appears as **Verso Custom**, with bundle ID **local.verso.custom**
 - **Calmer response:** spectrum smoothing operates in both time and frequency. Camera jolts and flashing stars are disabled in the desktop defaults. Other wallpapers are ambient; the previous global audio deformation, beat-response controls and lyric-driven background pulses have been removed.
 - **More readable type:** smaller words are larger across all eight compositions, with less extreme size contrast. The whole line and its romanisation fit together on short or narrow displays. Long rolling words fit their measured glyph bounds. Constellation links use continuous lighting instead of abrupt active-word switches.
 - **Richer colour:** near-monochromatic covers gain a broader, coordinated hue fan. Ambient GPU effects use contrasting album-derived colours, and colour fields use a more varied gradient palette.
-- **Updates:** the public signing key and stable feed are configured. Preview downloads remain manual. The stable feed becomes available when the first stable release containing appcast.xml is published.
+- **Updates:** the public signing key and stable feed are configured. Preview downloads remain manual. The stable feed is live with the published 0.4.5 release.
 
 See [CHANGES.md](CHANGES.md), [native validation evidence](VALIDATION.md), [publisher setup](UPDATE_SETUP.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Use it
 
-1. Open Verso Custom and play a song in Music. Allow Automation access when asked so the app can follow playback and lyrics.
+1. Open Lunalyr and play a song in Music. Allow Automation access when asked so the app can follow playback and lyrics.
 2. Pick a composition in Settings → Composition. Each style remembers its word entrance and faint next-word preview.
 3. In Background, choose an ambient wallpaper or **Visualisers**. For live response, choose Silk Ribbons, Spectral Aurora or Spectrum Tunnel and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
 4. Look for **Receiving audio** and changing meters. After granting capture permission, use Reconnect. Copy audio status provides connection diagnostics without a recording or song metadata.
@@ -36,7 +49,7 @@ Silk Ribbons is intended to sit quietly behind lyrics. Spectrum Tunnel is the mo
 
 ## Lyrics and readings
 
-Native word-timed lyrics give the best result. Line-only lyrics use estimated word timing; animation cannot recover exact sung timings from them. No speech recognition or vocal separation is performed.
+Native word-timed lyrics give the best result. Line-only lyrics show each complete line without invented word entrances. No speech recognition or vocal separation is performed.
 
 Online adapters include LRCLIB, NetEase, QQ, Kugou and KPoe; coverage and service availability vary. The optional Lyrimuse bridge reads exported LRC, `.roma.lrc`, TTML and YRC files from a folder you choose. It does not run Lyrimuse or read its account data. Local lyrics live in `~/Library/Application Support/Verso Custom/Lyrics/`.
 

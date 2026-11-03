@@ -12,6 +12,7 @@ struct NowPlayingView: View {
     // Read the current envelope on a scheduled frame. Subscribing to every
     // meter publication would trigger extra wallpaper redraws outside it.
     @ObservedObject private var readingOptions = RomanizationOptions.shared
+    @ObservedObject private var songOffsets = SongOffsets.shared
     @State private var paletteGeneration = UUID()
     @State private var palette: [SIMD3<Double>] = ColorExtractor.fallbackHSBPalette
     @State private var currentLayer: BackgroundLayer = .generated(pattern: nil)
@@ -40,7 +41,7 @@ struct NowPlayingView: View {
     }
 
     private var desiredLayer: BackgroundLayer {
-        if settings.backgroundMode == .auto,
+        if settings.effectiveBackgroundMode == .auto,
            let motion = nowPlaying.motionArtwork, settings.motionArtworkEnabled,
            !settings.excludesMotion(artist: nowPlaying.current?.artist,
                                     album: nowPlaying.current?.album) {
@@ -87,9 +88,9 @@ struct NowPlayingView: View {
 
             // One timeline drives the gradient, the pattern and the lyrics so
             // they share a frame clock instead of each running their own.
-            TimelineView(.animation(minimumInterval: settings.animationRate.interval, paused: renderingPaused)) { timeline in
+            TimelineView(.animation(minimumInterval: settings.effectiveAnimationRate.interval, paused: renderingPaused)) { timeline in
                 let now = timeline.date.timeIntervalSinceReferenceDate
-                let playbackTime = nowPlaying.playbackTime() + settings.lyricOffset
+                let playbackTime = nowPlaying.playbackTime() + settings.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery)
 
                 let speed = settings.effectSpeed
                 // Kept steady: the shaders take this as `time`, where it drives
@@ -416,16 +417,24 @@ struct NowPlayingView: View {
             let exit = Easing.smoothstep((time - min(line.end + 0.12, nextStart - 0.08)) / 0.46)
             let presence = appear * (1 - exit)
 
-            let composition = settings.resolvedComposition(for: mood, seed: index)
+            let composition = line.wordTimed ? settings.resolvedComposition(for: mood, seed: index) : .editorial
             let density = line.words.reduce(0) { $0 + $1.text.count + 3 }
             let densityScale = composition.hasConnections
                 ? min(1.0, max(0.52, sqrt(110.0 / Double(max(density, 110))))) : 1.0
             let readings = lyricsVM.romanized[index]
-            let displayed = composition.arrivalOnly ? rollingWords(around: index, time: time)
-                : (readingOptions.display == .replace ? readings ?? line.words : line.words)
+            let displayed = line.wordTimed
+                ? (composition.arrivalOnly ? rollingWords(around: index, time: time)
+                   : (readingOptions.display == .replace ? readings ?? line.words : line.words))
+                : [LyricsFetcher.Word(text: readingOptions.display == .replace ? readings?.map(\.text).joined(separator: " ") ?? line.text : line.text, start: line.start, end: line.end)]
             let stagePresence = composition.arrivalOnly ? 1 : presence
             if stagePresence > 0.001 {
               VStack(spacing: baseSize * 0.28) {
+                if !line.wordTimed {
+                    Text(displayed.map(\.text).joined(separator: " "))
+                        .font(settings.lyricFont(size: baseSize * 0.72, hero: false, mood: mood))
+                        .foregroundStyle(.white).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
                 LyricLineView(
                     words: displayed,
                     time: time,
@@ -436,8 +445,16 @@ struct NowPlayingView: View {
                     presence: stagePresence,
                     accent: lyricAccent
                 )
+                }
                 if readingOptions.display == .below, let readings {
-                    readingLine(readings, time: time, baseSize: baseSize, composition: composition)
+                    if line.wordTimed {
+                        readingLine(readings, time: time, baseSize: baseSize, composition: composition)
+                    } else {
+                        Text(readings.map(\.text).joined(separator: " "))
+                            .font(settings.uiFont(size: max(13, baseSize * 0.3), mood: mood))
+                            .foregroundStyle(.white.opacity(0.72))
+                            .multilineTextAlignment(.center)
+                    }
                 }
             }
             .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight)))
@@ -456,6 +473,7 @@ struct NowPlayingView: View {
         let lines = lyricsVM.lines
         var result: [LyricsFetcher.Word] = [], seen = Set<TimedWordKey>()
         for row in max(0, index - 2)...min(lines.count - 1, index + 1) {
+            guard lines[row].wordTimed else { continue }
             let words = readingOptions.display == .replace ? lyricsVM.romanized[row] ?? lines[row].words : lines[row].words
             for word in words where word.end >= time - 12 && (row <= index || word.start <= time + 1.2)
                 && word.text.rangeOfCharacter(from: .alphanumerics) != nil {

@@ -185,7 +185,7 @@ struct BackgroundPane: View {
                         selection: $settings.backgroundMode
                     )
                     styleGrid
-                    if settings.backgroundMode == .visualizer { audioControls }
+                    if settings.backgroundMode == .visualizer || settings.shaderStyle == .aurora { audioControls }
                     advanced
                 }
                 .padding(.horizontal, 34)
@@ -196,10 +196,7 @@ struct BackgroundPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Verso.surface)
-        .onChange(of: settings.backgroundMode) { _, mode in
-            if mode == .visualizer { audio.start() }
-            else if audio.running || audio.starting { audio.stop() }
-        }
+
     }
 
     private var previewLabel: some View {
@@ -221,7 +218,7 @@ struct BackgroundPane: View {
     }
 
     private var preview: some View {
-        TimelineView(.animation(minimumInterval: settings.animationRate.interval)) { timeline in
+        TimelineView(.animation(minimumInterval: settings.effectiveAnimationRate.interval)) { timeline in
             let t = timeline.date.timeIntervalSince(started)
             ZStack {
                 switch settings.backgroundMode {
@@ -440,7 +437,7 @@ struct BehaviourPane: View {
                 subtitle: "How hard to work, and what to show when a track has no words."
             )
 
-            setting("Launch at login", "Start Verso when you sign in to this Mac.") {
+            setting("Launch at login", "Start Lunalyr when you sign in to this Mac.") {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("", isOn: $settings.launchAtLogin)
                         .toggleStyle(.switch)
@@ -471,7 +468,10 @@ struct BehaviourPane: View {
                     .toggleStyle(.switch).controlSize(.small)
             }
 
-            setting("Low Power Mode", "Swap GPU effects for line patterns, which cost far less.") {
+            setting("Use low power visuals now", "Use 30 fps and replace video and GPU effects with line patterns.") {
+                Toggle("", isOn: $settings.lowPowerVisuals).labelsHidden()
+            }
+            setting("Follow macOS Low Power Mode", "Automatically use the same reduced visuals when macOS enables Low Power Mode.") {
                 Toggle("", isOn: $settings.respectLowPower)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -565,7 +565,7 @@ struct LicensePane: View {
     ]
 
     private let freeFeatures: [(String, String)] = [
-        ("Word-by-word synced lyrics", "From Apple, NetEase and LRCLIB."),
+        ("Word-by-word synced lyrics", "From enabled lyric providers and imported files."),
         ("All 18 line patterns", "Low-poly, constellation, flow field and the rest."),
         ("Three GPU effects", "Plasma, Aurora and Marble."),
         ("Any Google font", "56 curated families, or type any name."),

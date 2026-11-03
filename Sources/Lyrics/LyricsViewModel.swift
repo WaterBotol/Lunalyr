@@ -51,6 +51,9 @@ final class LyricsViewModel: ObservableObject {
                     self?.refresh(force: true)
                 }
             }.store(in: &cancellables)
+        LyricSourceOptions.shared.objectWillChange
+            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+            .sink { [weak self] in self?.refresh(force: false) }.store(in: &cancellables)
         let readingOptions = RomanizationOptions.shared
         Publishers.CombineLatest4(readingOptions.$display, readingOptions.$language,
                                   readingOptions.$toneMarks, readingOptions.$preferSaved)

@@ -38,7 +38,7 @@ xcrun clang -std=c11 -Wall -Wextra -Werror \
 "$TASK_BUILD_DIR/desktop-tests"
 cd "$PROJECT_DIR"
 xcodegen generate --spec project.yml
-echo "Building Verso Custom..."
+echo "Building Lunalyr..."
 if ! xcodebuild -project VersoCustom.xcodeproj -scheme VersoCustom \
   -configuration Release -derivedDataPath "$TASK_BUILD_DIR/DerivedData" build \
   >"$PROJECT_DIR/Build/build.log" 2>&1; then
@@ -46,7 +46,7 @@ if ! xcodebuild -project VersoCustom.xcodeproj -scheme VersoCustom \
   echo "Build failed. The full log is in Build/build.log."
   exit 1
 fi
-APP_PATH="$TASK_BUILD_DIR/DerivedData/Build/Products/Release/VersoCustom.app"
+APP_PATH="$TASK_BUILD_DIR/DerivedData/Build/Products/Release/Lunalyr.app"
 if [[ ! -s "$APP_PATH/Contents/Resources/default.metallib" ]]; then
   echo "The Metal shader library is missing. No app was packaged."
   exit 1
@@ -63,14 +63,14 @@ for generator in "$TASK_BUILD_DIR"/DerivedData/SourcePackages/artifacts/*/*/bin/
     break
   fi
 done
-OUTPUT_APP="$PROJECT_DIR/Build/VersoCustom.app"
+OUTPUT_APP="$PROJECT_DIR/Build/Lunalyr.app"
 if [[ -e "$OUTPUT_APP" ]]; then
-  mv "$OUTPUT_APP" "$PROJECT_DIR/Build/VersoCustom-$(date +%Y%m%d-%H%M%S).previous.app"
+  mv "$OUTPUT_APP" "$PROJECT_DIR/Build/Lunalyr-$(date +%Y%m%d-%H%M%S).previous.app"
 fi
 ditto "$APP_PATH" "$OUTPUT_APP"
 codesign --verify --deep "$OUTPUT_APP"
 echo "Built: $OUTPUT_APP"
-echo "Quit the running Verso Custom before opening this updated app."
+echo "Quit the running Lunalyr before opening this updated app."
 echo "Open Settings → Composition for Spoken, Cascade, Cutout and per-style next-word previews."
 echo "Open Settings → Lyric sources to test services or import an LRC file."
 echo "Open Settings → Background → Enable system audio for live music response."

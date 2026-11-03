@@ -12,7 +12,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HoverState.shared.start()
         AudioReactiveController.shared.resumeIfEnabled()
         AppUpdates.shared.startIfConfigured()
-        OnboardingWindowController.shared.presentIfNeeded()
+        if !Settings.shared.hasOnboarded {
+            Settings.shared.hasOnboarded = true
+            SettingsWindowController.shared.present()
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindowController.shared.present()
+        return true
     }
 
     /// The wallpaper lives in borderless windows that AppKit does not count,

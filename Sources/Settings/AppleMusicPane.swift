@@ -22,7 +22,7 @@ struct AppleMusicPane: View {
             VStack(alignment: .leading, spacing: 20) {
                 PaneHeader(
                     title: "Apple Music",
-                    subtitle: "Some albums ship an animated cover. Verso can hand the whole background over to it."
+                    subtitle: "Some albums ship an animated cover. Lunalyr can hand the whole background over to it."
                 )
 
                 preview
@@ -88,15 +88,15 @@ struct AppleMusicPane: View {
 
     private var statusText: String {
         if !settings.useMotionArtwork {
-            return "Animated covers are off. Verso will always draw its own background."
+            return "Animated covers are off. Lunalyr will always draw its own background."
         }
         if currentIsExcluded {
-            return "This album is on your exclusion list, so Verso is drawing its own background instead."
+            return "This album is on your exclusion list, so Lunalyr is drawing its own background instead."
         }
         if track == nil {
             return "Nothing is playing. Start a track to see whether its album has an animated cover."
         }
-        return "This album has no animated cover — most don't. Verso is drawing its own background instead."
+        return "This album has no animated cover — most don't. Lunalyr is drawing its own background instead."
     }
 
     // MARK: - Sections
