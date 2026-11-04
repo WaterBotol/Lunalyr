@@ -14,7 +14,7 @@ Lunalyr has two release channels, both hosted on GitHub Releases. No GitHub Page
 
 - **Preview** releases are GitHub pre-releases tagged `v<version>-preview`, with a single `Lunalyr-<version>-Mac.zip`. They are installed by hand and never change the stable feed, because GitHub's `latest` URL ignores pre-releases.
 
-The app keeps the bundle identifier `local.verso.custom`, so existing installations keep their preferences and update identity (see the [README note](../README.md#build-from-source)). Builds are ad-hoc signed; Developer ID signing and notarisation are not configured, which is why the README documents the first-launch steps.
+The bundle identifier must stay `local.verso.custom`; the [README note](../README.md#build-from-source) explains why. Builds are ad-hoc signed; Developer ID signing and notarisation are not configured, which is why the README documents the first-launch steps.
 
 A source build without a feed and public key has no update service: its update button explains that updates are not configured. No placeholder feed or private key is ever committed.
 
