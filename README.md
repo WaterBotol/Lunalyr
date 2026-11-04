@@ -14,7 +14,17 @@ Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app*
 
 The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
 
-## 0.4.7 preview
+## 0.4.8 preview
+
+**Your wallpaper** imports a local image or silent looping video. Lunalyr keeps its own copy, and offers Fill, Fit and top/bottom placement. Low power mode still selects a lightweight wallpaper at 30 fps.
+
+**Aurora Curtains** is a dedicated visualiser based on the original GPU Aurora. Music shapes its layered curtains; the original GPU effect stays ambient. Visualisers now use the full sensitivity range and Colour richness control. Silk Ribbons uses a smoother energy curve, and irrelevant wallpaper controls are hidden.
+
+Lyric size is applied after fitting, so automatic fitting cannot cancel the slider. This includes whole-line and plain-text fallbacks. Editorial words retain their face as rolling lyric windows move. Audio startup has a deadline, clearer failure details, live meters and a packet counter; changing an unrelated slider no longer restarts capture.
+
+All 87 native tests and nine Python tests passed on the development Mac, and Release built successfully. GPU fixture tests confirm that every visualiser responds to input spectrum. Live capture for the current app copy is **not verified**: macOS denied permission and delivered zero packets. Capture is left off and permission setup is deferred at the user's request. See VALIDATION.md for evidence and remaining coverage.
+
+## 0.4.7 native workspace
 
 A rebuilt native workspace replaces the previous settings panes. One live desktop preview stays alongside seven new inspectors: Wallpaper, Typography, Lyrics, Readings, Album covers, Performance and About. The menu-bar panel is rebuilt too. There are no duplicate sample animations.
 
@@ -26,7 +36,7 @@ Real word timing is preferred across sources even in Source order mode by defaul
 
 New independent adapters: **Kuwo** (line-synced) and **lyrics.ovh** (plain fallback). Their live endpoints returned lyrics during development; availability varies. Existing installations can enable them in Sources. No extra account credentials are required.
 
-Per-song offsets, low power at 30 fps, Editorial typography across compositions, smoother ribbons and GPU Aurora sway from 0.4.6 are retained. Apple Music lyric extraction remains deferred; the reference app's exact retrieval mechanism has not been established.
+Per-song offsets, low power at 30 fps and Editorial typography across compositions are retained. Apple Music lyric extraction remains deferred; the reference app's exact retrieval mechanism has not been established.
 
 ## What changed in 0.4.5
 
@@ -42,7 +52,7 @@ See [CHANGES.md](CHANGES.md), [native validation evidence](VALIDATION.md), [publ
 
 1. Open Lunalyr and play a song in Music. Allow Automation access when asked so the app can follow playback and lyrics.
 2. Pick a composition in Typography. Each style remembers its word entrance and faint next-word preview.
-3. In Wallpaper, choose an ambient wallpaper or **Visualisers**. For live response, choose Silk Ribbons, Spectral Aurora or Spectrum Tunnel and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
+3. In Wallpaper, choose an ambient wallpaper, **Your wallpaper**, or **Visualisers**. For live response, choose Silk Ribbons, Spectral Aurora, Spectrum Tunnel or Aurora Curtains and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
 4. Look for **Receiving audio** and changing meters. After granting capture permission, use Reconnect. Copy audio status provides connection diagnostics without a recording or song metadata.
 5. Start with **30 fps** in Performance; 60 fps uses more CPU/GPU. Close Settings when assessing normal wallpaper performance.
 

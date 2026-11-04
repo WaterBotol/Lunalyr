@@ -403,7 +403,7 @@ fragment float4 tunnelFragment(FSQuadOut in [[stage_in]],
     // deepened shadows and richer primaries keep the cave from going muddy
     col *= smoothstep(4.5, 0.8, dot(suv, suv));
     float luma = dot(col, float3(0.299, 0.587, 0.114));
-    col = max(mix(float3(luma), col, 1.5), 0.0);
+    col = max(mix(float3(luma), col, 1.5 * u.p[15]), 0.0);
     col = col / (1.0 + col);
     col = col * col * (3.0 - 2.0 * col);
     return float4(col, 1.0);
@@ -502,10 +502,9 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
         float fi = float(i) / float(max(layers - 1, 1));
         int cIdx = int(fi * 7.0 + 0.5);
         float reg = float(cIdx) / 7.0;
-        float compE = clamp(comps[cIdx] * u.sensitivity, 0.0, 1.3);
+        float compE = 1.0 - exp(-max(comps[cIdx], 0.0) * u.sensitivity);
         // the fine spectrum inside this register, spread across the screen
-        float localE = clamp(bandAt(bands, (float(cIdx) + clamp(uv.x, 0.0, 1.0)) / 8.0)
-                           * u.sensitivity, 0.0, 1.3);
+        float localE = 1.0 - exp(-max(bandAt(bands, (float(cIdx) + clamp(uv.x, 0.0, 1.0)) / 8.0), 0.0) * u.sensitivity);
         // transient personality: lows jump on the kick, mids on onsets,
         // highs shiver on hi-hat transients
         float transient = u.beat * (1.0 - smoothstep(0.15, 0.45, reg))
@@ -548,8 +547,37 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
     // finishing chain as the tunnel, so the ribbons saturate instead of
     // washing out
     float luma = dot(col, float3(0.299, 0.587, 0.114));
-    col = max(mix(float3(luma), col, 1.35), 0.0);
+    col = max(mix(float3(luma), col, 1.35 * u.p[15]), 0.0);
     col = col / (1.0 + col);
     col = col * col * (3.0 - 2.0 * col);
+    return float4(col, 1.0);
+}
+
+// The original GPU Aurora material, now a dedicated audio visualiser.
+fragment float4 curtainAuroraFragment(FSQuadOut in [[stage_in]],
+                                      constant VizUniforms& u [[buffer(0)]],
+                                      constant float* bands [[buffer(1)]],
+                                      constant float* wave [[buffer(2)]]) {
+    float2 uv = in.uv;
+    float energy = clamp(u.bass * u.sensitivity, 0.0, 1.0);
+    float mids = clamp(u.mid * u.sensitivity, 0.0, 1.0);
+    float glow = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float fi = float(i);
+        float phase = u.time * u.speed * (0.5 + fi * 0.14) + fi * 2.1;
+        float detail = bandAt(bands, clamp(uv.x * 0.65 + fi * 0.06, 0.0, 1.0));
+        float centre = 0.5 + sin(uv.x * 2.3 + phase) * (0.16 + 0.09 * energy)
+            + sin(uv.x * 5.1 - phase * 0.7) * (0.06 + 0.045 * mids)
+            + (detail - 0.3) * 0.08 * u.sensitivity;
+        float thickness = 0.04 + 0.02 * sin(phase * 0.8) + 0.035 * energy;
+        float band = thickness / (abs(uv.y - centre) + thickness * 0.55);
+        glow += band * (0.25 + 0.2 * sin(phase) + 0.45 * mids);
+    }
+    glow = clamp(glow * 0.28, 0.0, 1.7);
+    float3 colour = mix(cosPalette(0.16, u.palette), cosPalette(0.7, u.palette), clamp(uv.y * 1.2, 0.0, 1.0));
+    float3 col = colour * glow;
+    float luma = dot(col, float3(0.299, 0.587, 0.114));
+    col = max(mix(float3(luma), col, u.p[15]), 0.0);
+    col = col / (1.0 + col);
     return float4(col, 1.0);
 }

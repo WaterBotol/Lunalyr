@@ -167,6 +167,10 @@ final class RenderingPerformanceTests: XCTestCase {
     @MainActor
     func testRollingStylesPreserveTimedWordIdentityAcrossWindows() {
         let settings = Settings.shared
+        let saved = settings.editorialTypography
+        defer { settings.editorialTypography = saved }
+        for editorial in [false, true] {
+        settings.editorialTypography = editorial
         for style in [LyricComposition.spoken, .cascade, .cutout] {
             let first = SpokenTypography.prepare(.init(words: words, baseSize: 44, mood: .neutral,
                 composition: style, fontIdentity: LyricFontIdentity(settings: settings)), settings: settings)
@@ -175,6 +179,7 @@ final class RenderingPerformanceTests: XCTestCase {
             XCTAssertEqual(first[1].id, shifted[0].id)
             XCTAssertEqual(first[1].hash, shifted[0].hash)
             XCTAssertEqual(first[1].font, shifted[0].font)
+        }
         }
     }
     func testLineIndexMatchesForwardRuleAtBoundariesAndAfterSeeks() {

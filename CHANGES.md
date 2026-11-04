@@ -1,6 +1,15 @@
-# Custom changes — 0.4.5
+# Custom changes
 
 Upstream Verso commit: 9354e2f6703fda43e819284563c257e9bb4b07f8. Original licence unchanged.
+
+## 0.4.8 wallpaper controls and lyric sizing
+
+- Add Your wallpaper: validated image/video import, app-managed copies, silent video looping, placement controls and orientation-aware video sizing.
+- Add Aurora Curtains as a dedicated audio visualiser based on GPU Aurora's native material. Keep the ambient original separate.
+- Connect visualiser Colour richness, honour sensitivity up to 3×, soften ribbon energy saturation and hide irrelevant controls.
+- Apply lyric scaling after neutral fitting for timed, whole-line and plain lyrics. Keep Editorial font identity stable across rolling windows.
+- Stop unrelated settings from restarting capture. Add a capture-startup deadline, clearer tap/fallback error details, meters and packet count; remove a battery guard that could prevent capture while a visualiser remained active.
+- Version 0.4.8, build 15. All 87 native tests and nine Python tests passed locally; Release built and image import/rendering was exercised on the Mac. Live capture permission and response verification are deferred at the user's request. Synthetic GPU input is not live capture evidence.
 
 ## 0.4.7 native workspace and accuracy-first lyric selection
 

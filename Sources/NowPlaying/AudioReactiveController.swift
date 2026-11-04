@@ -18,6 +18,7 @@ final class AudioReactiveController: ObservableObject {
     private var startTask: Task<Void, Never>?
     private var routeTask: Task<Void, Never>?
     private var healthTimer: Timer?
+    private var startupWatchdog: Task<Void, Never>?
     private var outputListener: AudioObjectPropertyListenerBlock?
     private var wakeObserver: NSObjectProtocol?
     private var ticket = UUID()
@@ -30,15 +31,15 @@ final class AudioReactiveController: ObservableObject {
     private var settingsSubscription: AnyCancellable?
     private var shouldCapture: Bool {
         let settings = Settings.shared
-        return settings.audioReactiveEnabled && !settings.sparesGPU &&
-            (settings.effectiveBackgroundMode == .visualizer ||
-             ((settings.effectiveBackgroundMode == .shader || settings.effectiveBackgroundMode == .auto) && settings.shaderStyle == .aurora))
+        return settings.audioReactiveEnabled && settings.effectiveBackgroundMode == .visualizer
     }
     func resumeIfEnabled() {
         if settingsSubscription == nil {
             settingsSubscription = Settings.shared.objectWillChange
                 .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
-                .sink { [weak self] in self?.reconcile() }
+                .map { [weak self] in self?.shouldCapture ?? false }
+                .removeDuplicates()
+                .sink { [weak self] _ in self?.reconcile() }
         }
         reconcile()
     }
@@ -47,13 +48,13 @@ final class AudioReactiveController: ObservableObject {
         else if running || starting { stop(disablePreference: false, message: "Audio paused for the current wallpaper or power mode.") }
     }
     func start() {
-        guard !Settings.shared.sparesGPU, !running, !starting else { return }
+        guard Settings.shared.effectiveBackgroundMode == .visualizer, !running, !starting else { return }
         Settings.shared.audioReactiveEnabled = true
         installAudioObservers()
         connect(compatibility: false)
     }
     private func connect(compatibility: Bool, reason: String = "") {
-        ticket = UUID(); startTask?.cancel()
+        ticket = UUID(); startTask?.cancel(); startupWatchdog?.cancel()
         healthTimer?.invalidate(); healthTimer = nil
         capture?.stop(); capture = nil
         let generation = ticket
@@ -80,13 +81,24 @@ final class AudioReactiveController: ObservableObject {
                 controller.formatProblem = message; controller.updateHealth()
             }
         })
+        startupWatchdog = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 12_000_000_000) } catch { return }
+            guard let self, self.ticket == generation, self.starting else { return }
+            if method == .automatic && self.usingTap {
+                self.connect(compatibility: true, reason: "System audio startup timed out. Trying compatibility capture…")
+            } else {
+                self.stop(disablePreference: false, message: "Audio startup timed out. Check capture permission for this copy of Lunalyr, then reconnect.")
+            }
+        }
         startTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let session: AudioCaptureSession
                 if usingTap, #available(macOS 14.2, *) {
                     methodLabel = "System audio"
+                    status = "Creating the system-audio tap…"
                     let tap = try SystemAudioCapture(processor: processor)
+                    status = "Starting the system-audio callback…"
                     do { try await tap.start() } catch { tap.stop(); throw error }
                     session = tap
                 } else {
@@ -100,10 +112,12 @@ final class AudioReactiveController: ObservableObject {
                             controller.stop(disablePreference: false, message: "Audio stopped: \(error.localizedDescription) Reconnect to retry.")
                         }
                     })
+                    status = "Waiting for compatibility capture; approve its permission request if shown…"
                     do { try await screen.start() } catch { screen.stop(); throw error }
                     session = screen
                 }
                 guard ticket == generation, !Task.isCancelled else { session.stop(); return }
+                startupWatchdog?.cancel(); startupWatchdog = nil
                 capture = session; starting = false; running = true
                 startedAt = ProcessInfo.processInfo.systemUptime
                 let timer = Timer(timeInterval: 0.5, repeats: true) { [weak controller = self] _ in
@@ -114,9 +128,9 @@ final class AudioReactiveController: ObservableObject {
             } catch {
                 guard ticket == generation, !Task.isCancelled else { return }
                 if method == .automatic && usingTap {
-                    connect(compatibility: true, reason: "System audio could not connect. Trying compatibility capture; allow screen-recording access if asked…")
+                    connect(compatibility: true, reason: "System audio failed: \(error.localizedDescription) Trying compatibility capture…")
                 } else {
-                    stop(disablePreference: false, message: "Couldn’t start audio: \(error.localizedDescription) Check permission for this app, then Reconnect.")
+                    stop(disablePreference: false, message: (recoveryNote.isEmpty ? "" : recoveryNote + "\n") + "Couldn’t start audio: \(error.localizedDescription) Check permission for this app, then Reconnect.")
                 }
             }
         }
@@ -126,7 +140,7 @@ final class AudioReactiveController: ObservableObject {
         start()
     }
     func stop(disablePreference: Bool = true, message: String = "Choose a visualiser and enable system audio to follow your music.") {
-        ticket = UUID(); startTask?.cancel(); startTask = nil
+        ticket = UUID(); startTask?.cancel(); startupWatchdog?.cancel(); startupWatchdog = nil; startTask = nil
         routeTask?.cancel(); routeTask = nil
         healthTimer?.invalidate(); healthTimer = nil
         capture?.stop(); capture = nil

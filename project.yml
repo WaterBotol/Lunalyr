@@ -23,8 +23,8 @@ targets:
       properties:
         CFBundleDisplayName: Lunalyr
         CFBundleName: Lunalyr
-        CFBundleShortVersionString: 0.4.7
-        CFBundleVersion: "14"
+        CFBundleShortVersionString: 0.4.8
+        CFBundleVersion: "15"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026
         NSAppleEventsUsageDescription: Lunalyr reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.

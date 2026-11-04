@@ -92,7 +92,7 @@ final class Settings: ObservableObject {
     }
 
     enum BackgroundMode: String, CaseIterable, Identifiable {
-        case auto, pattern, shader, colourOnly, visualizer
+        case auto, pattern, shader, colourOnly, visualizer, custom
         var id: String { rawValue }
 
         var title: String {
@@ -101,6 +101,7 @@ final class Settings: ObservableObject {
             case .pattern: return "Line patterns"
             case .shader: return "GPU effects"
             case .visualizer: return "Visualisers"
+            case .custom: return "Your wallpaper"
             case .colourOnly: return "Colour only"
             }
         }
@@ -161,6 +162,15 @@ final class Settings: ObservableObject {
     @Published var audioReactiveEnabled: Bool { didSet { store(audioReactiveEnabled, "custom.audioReactiveEnabled") } }
     @Published var audioSensitivity: Double { didSet { store(audioSensitivity, "custom.audioSensitivity") } }
     @Published var audioCaptureMethod: AudioCaptureMethod { didSet { store(audioCaptureMethod.rawValue, "custom.audioCaptureMethod") } }
+    @Published var customWallpaperPath = UserDefaults.standard.string(forKey: "custom.wallpaperPath") ?? "" {
+        didSet { store(customWallpaperPath, "custom.wallpaperPath") }
+    }
+    @Published var customWallpaperName = UserDefaults.standard.string(forKey: "custom.wallpaperName") ?? "" {
+        didSet { store(customWallpaperName, "custom.wallpaperName") }
+    }
+    @Published var customWallpaperPlacement = MotionPlacement(rawValue: UserDefaults.standard.string(forKey: "custom.wallpaperPlacement") ?? "") ?? .fill {
+        didSet { store(customWallpaperPlacement.rawValue, "custom.wallpaperPlacement") }
+    }
     @Published var audioVisualizerStyle: AudioVisualizerStyle { didSet { store(audioVisualizerStyle.rawValue, "custom.visualizerStyle") } }
     /// Strength of the line-pattern layer over the colour field.
     @Published var patternOpacity: Double { didSet { store(patternOpacity, "patternOpacity") } }

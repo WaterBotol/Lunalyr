@@ -183,7 +183,7 @@ enum SpokenTypography {
             let pointSize = key.composition == .spoken ? key.baseSize * 1.10 : columnSize
             return Word(index: index, source: word, hash: hash, hero: hero, pointSize: pointSize,
                 tile: key.composition == .cutout && (hero || hash % 4 == 1),
-                font: key.fontIdentity.editorial && index % 3 == 1
+                font: key.fontIdentity.editorial && hash % 3 == 1
                     ? key.mood.face.contrasting.font(size: pointSize, hero: hero)
                     : settings.lyricFont(size: pointSize, hero: hero || key.composition == .spoken, mood: key.mood))
         }

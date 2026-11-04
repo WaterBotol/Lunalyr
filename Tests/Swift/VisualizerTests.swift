@@ -120,3 +120,22 @@ final class VisualizerTests: XCTestCase {
         }
     }
 }
+
+extension VisualizerTests {
+    @MainActor
+    func testVisualiserControlsReachUniformsWithoutClippingSensitivity() {
+        let u = AudioVisualizerView.Coordinator.uniforms(style: .silk, size: .init(width: 640, height: 360),
+            time: 12, frame: AudioSnapshot(), sensitivity: 3, speed: 1, reduced: false, vividness: 1.7)
+        XCTAssertEqual(u.sensitivity, 3)
+        XCTAssertEqual(u.p15, 1.7, accuracy: 0.001)
+    }
+    func testLyricSizeRemainsMonotonicAfterStageFitting() {
+        let content = CGSize(width: 1800, height: 900), available = CGSize(width: 1000, height: 600)
+        let small = LyricStageFit.presentationScale(content: content, available: available, userScale: 0.7)
+        let normal = LyricStageFit.presentationScale(content: content, available: available, userScale: 1)
+        let large = LyricStageFit.presentationScale(content: content, available: available, userScale: 1.5)
+        XCTAssertLessThan(small, normal)
+        XCTAssertLessThan(normal, large)
+        XCTAssertEqual(large / small, 1.5 / 0.7, accuracy: 0.001)
+    }
+}

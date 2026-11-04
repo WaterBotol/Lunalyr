@@ -1,3 +1,21 @@
+# Validation — Lunalyr 0.4.8 (build 15)
+
+## Actual Mac execution — 4 November 2026
+
+On the Apple M5 Pro / macOS 27.2 / Xcode 27.2, Test-VersoCustom-2026.11.04_11-49-34-+1100.xcresult reports **87 passed, zero failures, zero skips and no runtime warnings**. The extracted summary is retained in Build/local-tests-0.4.8.json. Nine Python helper tests also passed. These are native executions, not syntax checks.
+
+The suite constructs real Metal pipelines and renders every visualiser, including Aurora Curtains, with different input spectra; it verifies changed pixels. New tests check the full sensitivity range and colour uniform, monotonic lyric scaling after fitting, independent durable image copies and invalid-image rejection. The rolling-font identity regression now runs with Editorial both on and off.
+
+The Release app built through Xcode's Product → Build For → Profiling and passed deep signature verification. It was launched on this Mac. The native Your wallpaper panel imported the bundled public Flower.png through NSOpenPanel; the image appeared behind the lyrics in the live preview. The previous visualiser selection was restored. Imported-video looping/orientation and every placement option still need extended interactive review; file/track validation and orientation handling in source do not establish that coverage.
+
+Actual capture inspection found zero audio packets and a macOS TCC denial in the compatibility path for the diagnostic app copy. Automatic capture also reached the denied fallback. The user explicitly deferred permission setup; capture was switched off and remains off. No privacy permission was bypassed or changed. The GPU fixture proves renderer response to supplied input, **not successful live system-audio capture**. Route changes, wake, and permission-enabled response remain unverified for this version.
+
+The capture controller now bounds startup, exposes stages and preserves tap/fallback failure details. Visualiser colour richness and 3× sensitivity reach the GPU; unrelated appearance changes do not trigger a capture restart. Controlled Release CPU/GPU profiling, physical multi-monitor coverage and long-form lyric/reading review remain outstanding. No new performance improvement or complete live-capture fix is claimed.
+
+The upstream root and bundled licence hashes remain unchanged. Stable automatic updates remain on the approved 0.4.5 release; this version is a manual preview download.
+
+---
+
 # Validation — Lunalyr 0.4.7 (build 14)
 
 ## Actual Mac execution — 4 November 2026

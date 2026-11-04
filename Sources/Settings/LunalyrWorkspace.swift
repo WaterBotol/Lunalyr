@@ -133,6 +133,25 @@ struct SettingsWindowView: View {
 private struct WallpaperInspector: View {
     @ObservedObject private var s = Settings.shared
     @ObservedObject private var audio = AudioReactiveController.shared
+    @State private var importMessage: String?
+    @State private var importing = false
+    private func chooseWallpaper() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose your wallpaper"
+        panel.allowedContentTypes = [.image, .movie]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importing = true; importMessage = nil
+        Task {
+            defer { importing = false }
+            do {
+                let imported = try await CustomWallpaperStore.importFile(url)
+                s.customWallpaperPath = imported.url.path
+                s.customWallpaperName = imported.originalName
+                s.backgroundMode = .custom
+            } catch { importMessage = error.localizedDescription }
+        }
+    }
     var body: some View {
         Form {
             Section("Wallpaper") {
@@ -157,14 +176,34 @@ private struct WallpaperInspector: View {
                         ForEach(BackgroundStyle.allCases) { Text($0.title).tag(Optional($0)) }
                     }
                 }
-                Slider(value: $s.effectSpeed, in: 0.2...2) { Text("Motion speed") }
+                if s.backgroundMode != .custom {
+                    Slider(value: $s.effectSpeed, in: 0.2...2) { Text("Generated motion speed") }
+                }
             }
-            if s.backgroundMode == .visualizer || s.shaderStyle == .aurora {
+            if s.backgroundMode == .custom {
+                Section("Your wallpaper") {
+                    Button(importing ? "Importing…" : "Choose image or video…") { chooseWallpaper() }.disabled(importing)
+                    if !s.customWallpaperName.isEmpty { Text(s.customWallpaperName).font(.caption).foregroundStyle(.secondary) }
+                    Picker("Placement", selection: $s.customWallpaperPlacement) {
+                        ForEach(Settings.MotionPlacement.allCases) { Text($0.title).tag($0) }
+                    }
+                    Text("Images stay still. Videos loop silently. Lunalyr keeps a copy so moving the original won’t break your wallpaper.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let importMessage { Text(importMessage).font(.caption).foregroundStyle(.orange) }
+                }
+            }
+            if s.backgroundMode == .visualizer {
                 Section("Music response") {
                     Toggle("System audio", isOn: Binding(get: { s.audioReactiveEnabled }, set: { enabled in
                         if enabled { audio.start() } else { audio.stop() }
                     }))
                     Text(audio.status).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        ProgressView("Bass", value: min(1, audio.levels.bass * 5))
+                        ProgressView("Mids", value: min(1, audio.levels.mid * 5))
+                        ProgressView("Highs", value: min(1, audio.levels.treble * 5))
+                    }.font(.caption2)
+                    Text("\(audio.packetsReceived) audio packets").font(.caption2).foregroundStyle(.secondary)
                     Picker("Capture", selection: $s.audioCaptureMethod) {
                         ForEach(AudioCaptureMethod.allCases) { Text($0.title).tag($0) }
                     }.onChange(of: s.audioCaptureMethod) { _, _ in if s.audioReactiveEnabled { audio.reconnect() } }
@@ -178,9 +217,13 @@ private struct WallpaperInspector: View {
                 }
             }
             Section("Colour & contrast") {
-                Slider(value: $s.vividness, in: 0.4...1.8) { Text("Colour richness") }
+                if s.backgroundMode != .custom {
+                    Slider(value: $s.vividness, in: 0.4...1.8) { Text("Colour richness") }
+                }
                 Slider(value: $s.scrimStrength, in: 0...2) { Text("Darkening") }
-                Slider(value: $s.patternOpacity, in: 0...1) { Text("Pattern visibility") }
+                if s.backgroundMode == .pattern {
+                    Slider(value: $s.patternOpacity, in: 0...1) { Text("Pattern visibility") }
+                }
                 Button("Reset appearance adjustments") { s.resetAdvanced() }
             }
         }.formStyle(.grouped)

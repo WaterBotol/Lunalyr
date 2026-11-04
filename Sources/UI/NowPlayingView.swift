@@ -34,6 +34,7 @@ struct NowPlayingView: View {
     /// this differ from `currentLayer` and starts a crossfade.
     enum BackgroundLayer: Equatable {
         case motion(URL)
+        case custom(URL)
         case shader(ShaderStyle)
         case visualizer(AudioVisualizerStyle)
         /// `nil` pattern means colour field only.
@@ -49,6 +50,9 @@ struct NowPlayingView: View {
         }
         let mood = self.mood
         let mode = settings.effectiveBackgroundMode
+        if mode == .custom, !settings.customWallpaperPath.isEmpty {
+            return .custom(URL(fileURLWithPath: settings.customWallpaperPath))
+        }
         if mode == .visualizer { return .visualizer(settings.audioVisualizerStyle) }
         if mode == .shader || (mode == .auto && mood.energy > 0.72) {
             return .shader(settings.resolvedShader(for: mood, seed: trackSeed))
@@ -83,7 +87,7 @@ struct NowPlayingView: View {
     var body: some View {
         let isHovered = hover.isActive(on: displayID)
         GeometryReader { geometry in
-            let baseSize = min(max(geometry.size.width * 0.046, 38), 124) * settings.lyricScale
+            let baseSize = min(max(geometry.size.width * 0.046, 38), 124)
             let mood = self.mood
 
             // One timeline drives the gradient, the pattern and the lyrics so
@@ -174,6 +178,12 @@ struct NowPlayingView: View {
         // shader does to read as moving with the track.
         let colourFlow = flowPhase * 0.34
         switch layer {
+        case .custom(let url):
+            ZStack {
+                CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement, paused: renderingPaused)
+                scrim
+            }
+
         case .motion(let url):
             ZStack {
                 // The album brought its own art direction, so nothing of ours
@@ -222,7 +232,7 @@ struct NowPlayingView: View {
                 AnimatedGradientView(
                     palette: palette,
                     time: colourFlow
-                )
+                ).saturation(settings.vividness)
                 if let pattern {
                     FractalBackgroundView(
                         seed: trackSeed,
@@ -307,6 +317,7 @@ struct NowPlayingView: View {
             // No timed source has this track, so the words are shown as a
             // static block instead of nothing at all.
             plainLyrics(baseSize: baseSize, maxWidth: maxWidth, mood: mood)
+                .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight), userScale: CGFloat(settings.lyricScale)))
         } else if lyricsVM.notFound || lyricsVM.lines.isEmpty {
             // Say so briefly, then get out of the way -- an instrumental
             // should not carry a permanent error notice on the wallpaper.
@@ -457,7 +468,7 @@ struct NowPlayingView: View {
                     }
                 }
             }
-            .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight)))
+            .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight), userScale: CGFloat(settings.lyricScale)))
             .frame(maxWidth: maxWidth)
             .opacity(stagePresence)
               .scaleEffect(composition.arrivalOnly ? 1 : 0.96 + 0.04 * appear - 0.025 * exit)

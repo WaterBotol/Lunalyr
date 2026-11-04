@@ -3,13 +3,14 @@ import QuartzCore
 import SwiftUI
 
 enum AudioVisualizerStyle: String, CaseIterable, Identifiable {
-    case silk, aurora, tunnel
+    case silk, aurora, tunnel, curtainAurora
     var id: String { rawValue }
     var title: String {
         switch self {
         case .silk: return "Silk Ribbons"
         case .aurora: return "Spectral Aurora"
         case .tunnel: return "Spectrum Tunnel"
+        case .curtainAurora: return "Aurora Curtains"
         }
     }
     var detail: String {
@@ -17,9 +18,10 @@ enum AudioVisualizerStyle: String, CaseIterable, Identifiable {
         case .silk: return "Quiet folds of coloured light, shaped by the music."
         case .aurora: return "A flowing sky with a ribbon for each musical register."
         case .tunnel: return "An immersive passage carved from the live spectrum."
+        case .curtainAurora: return "GPU Aurora’s layered curtains, shaped by the music."
         }
     }
-    var fragment: String { self == .tunnel ? "tunnelFragment" : "auroraFragment" }
+    var fragment: String { self == .tunnel ? "tunnelFragment" : self == .curtainAurora ? "curtainAuroraFragment" : "auroraFragment" }
 }
 
 /// The imported scenes are the entire wallpaper. They render directly into
@@ -106,7 +108,7 @@ struct AudioVisualizerView: NSViewRepresentable {
             }
             var uniforms = Self.uniforms(style: style, size: wanted, time: time, frame: frame,
                 sensitivity: Settings.shared.audioSensitivity,
-                speed: 1, reduced: reduced) // The containing clock already applies Speed.
+                speed: 1, reduced: reduced, vividness: Settings.shared.vividness) // The containing clock already applies Speed.
             encoder.setRenderPipelineState(pipeline)
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VizUniforms>.stride, index: 0)
             frame.bands.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 1) }
@@ -131,12 +133,13 @@ struct AudioVisualizerView: NSViewRepresentable {
             return result
         }
         static func uniforms(style: AudioVisualizerStyle, size: CGSize, time: Double, frame: AudioSnapshot,
-                             sensitivity: Double, speed: Double, reduced: Bool) -> VizUniforms {
+                             sensitivity: Double, speed: Double, reduced: Bool, vividness: Double = 1) -> VizUniforms {
             var u = VizUniforms()
             u.resolution = SIMD2(Float(size.width), Float(size.height))
             u.time = Float(time * (reduced ? 0.15 : 1)); u.dt = 1 / 30
             u.speed = Float(speed * (style == .tunnel ? 0.22 : 0.34))
-            u.sensitivity = Float(min(2, max(0.3, sensitivity)))
+            u.sensitivity = Float(min(3, max(0.3, sensitivity)))
+            u.p15 = Float(min(1.8, max(0.4, vividness)))
             u.palette = style == .silk ? 3 : 0
             u.bass = frame.bass; u.mid = frame.mid; u.treble = frame.treble; u.level = frame.level
             u.subBass = frame.components[0]; u.lowMid = frame.components[2]

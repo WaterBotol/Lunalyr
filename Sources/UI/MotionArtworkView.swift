@@ -81,8 +81,11 @@ struct MotionArtworkView: NSViewRepresentable {
                 guard let track = try? await item.asset.loadTracks(withMediaType: .video).first,
                       let size = try? await track.load(.naturalSize)
                 else { return }
+                let transform = (try? await track.load(.preferredTransform)) ?? .identity
+                let oriented = CGRect(origin: .zero, size: size).applying(transform).size
                 await MainActor.run {
-                    self?.naturalSize = size
+                    guard self?.currentURL == url else { return }
+                    self?.naturalSize = CGSize(width: abs(oriented.width), height: abs(oriented.height))
                     self?.needsLayout = true
                 }
             }
