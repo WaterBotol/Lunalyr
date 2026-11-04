@@ -1,0 +1,24 @@
+# Store text files with LF line endings. Git detects binary files itself;
+# common binary types are listed explicitly below.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.mp4 binary
+*.mov binary
+*.ttf binary
+*.otf binary
+*.zip binary
+
+# Bundled web visualiser engines are minified builds of third-party projects.
+# Keep them byte-exact, collapse them in diffs, skip whitespace checks and
+# leave them out of GitHub's language statistics.
+Sources/Resources/*Engine.html -text -diff -whitespace linguist-generated=true
+
+# Third-party originals and build inputs, kept for provenance (see each
+# ThirdParty/<Project>/SOURCE.md). Excluded from language statistics.
+ThirdParty/** linguist-vendored
