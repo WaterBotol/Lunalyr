@@ -1,114 +1,271 @@
-# Lunalyr
+<p align="center">
+  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a crescent moon carrying three lines of text">
+</p>
 
-**Animated desktop lyrics and colourful live wallpapers for macOS.**
+<h1 align="center">Lunalyr</h1>
 
-[![Mac build](https://github.com/WaterBotol/Lunalyr/actions/workflows/macos.yml/badge.svg)](https://github.com/WaterBotol/Lunalyr/actions/workflows/macos.yml)
+<p align="center">
+  <strong>Word-timed Apple Music lyrics, set across your Mac's desktop.</strong><br>
+  Animated typography over ambient GPU scenes, album colours or live audio visualisers.
+</p>
 
-[Downloads](https://github.com/WaterBotol/Lunalyr/releases) · [Report a bug](https://github.com/WaterBotol/Lunalyr/issues/new/choose) · [Contributing](CONTRIBUTING.md)
+<p align="center">
+  <a href="https://github.com/WaterBotol/Lunalyr/actions/workflows/macos.yml"><img src="https://github.com/WaterBotol/Lunalyr/actions/workflows/macos.yml/badge.svg?branch=main" alt="Build status"></a>
+  <a href="https://github.com/WaterBotol/Lunalyr/releases/latest"><img src="https://img.shields.io/github/v/release/WaterBotol/Lunalyr?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="Requires macOS 14 or later">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0%20%2B%20Commons%20Clause-blue" alt="Licence: GPL-3.0 with the Commons Clause"></a>
+</p>
 
-Eight lyric compositions, word-timed karaoke, per-style next-word previews, romanisation, instrumental interludes and album-derived colour palettes. Dedicated visualisers use live system audio to shape their own Metal scenes.
+<p align="center">
+  <a href="https://github.com/WaterBotol/Lunalyr/releases/latest"><strong>Download</strong></a> ·
+  <a href="#install">Install</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#troubleshooting">Troubleshooting</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/hero.webp" width="860" alt="Lunalyr's Echo composition: a lyric line set across a dark desktop, with fainter repeats above and below">
+</p>
+
+Lunalyr turns your desktop into a live lyric display for Apple Music. It follows what the Music app is playing and sets each word on your wallpaper as it is sung: over ambient GPU scenes coloured from the album art, over your own desktop picture, or over visualisers that move with your Mac's audio. It lives in the menu bar and draws beneath your desktop icons, so there is no window to manage.
+
+Lunalyr is free to use. It started as a fork of [Verso](https://github.com/AkkiCode06/verso) by AkkiCode06.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/composition-constellation.webp" alt="Constellation composition: lyric words linked by hairlines over a teal halftone wallpaper"></td>
+    <td width="50%"><img src="docs/images/visualiser-aurora-curtains.webp" alt="Aurora Curtains visualiser: red curtains of light moving behind the lyrics"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Constellation</b></td>
+    <td align="center"><b>Aurora Curtains visualiser</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/your-wallpaper.webp" alt="Your wallpaper mode: lyrics drawn over an existing desktop wallpaper"></td>
+    <td width="50%"><img src="docs/images/workspace.png" alt="The Lunalyr settings window on the Wallpaper page"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Your wallpaper</b>: lyrics over the desktop you already have</td>
+    <td align="center"><b>Settings</b></td>
+  </tr>
+</table>
+
+## Features
+
+- **Words in time with the singer.** Word- and syllable-timed lyrics light up as they are sung, with a karaoke sweep and swelling held notes. When a source only has line timing, Lunalyr shows whole lines rather than inventing word timing.
+- **Eight compositions.** Scattered, Constellation, Constellation + Editorial, Echo, Editorial, Spoken, Cascade and Cutout. Each has its own word entrance and an optional faint preview of the next word.
+- **Wallpapers that match the song.** 27 Metal GPU effects and 18 line patterns tinted from the album art, moving album-colour gradients, Apple Music animated album covers, or an image or looping video of your own. Choose **Your wallpaper** to draw only the lyrics over your existing desktop picture.
+- **Audio-reactive visualisers.** Silk Ribbons, Spectral Aurora, Spectrum Tunnel, Aurora Curtains and Fosfora Aurora respond to your Mac's sound output, analysed on your Mac.
+- **Lyrics from many sources.** Lyrics+ (KPoe), NetEase Cloud Music, LRCLIB, QQ Music, Kugou, Kuwo, lyrics.ovh and local lyric exports, picked by an *Accuracy first* match. Per-song timing offsets, manual search and LRC/TTML import cover the rest.
+- **Readings.** Romanisation below or instead of the lyric: Japanese readings, Mandarin pinyin with tone options, Korean and other scripts, plus Cantonese readings from exported files.
+- **Instrumental interludes.** Album-coloured ribbons and a next-vocal cue fill instrumental breaks.
+- **Typefaces.** Any Google Font, downloaded on demand, or SF Pro, with Editorial pairings.
+- **At home on the desktop.** One wallpaper per display, playback controls that appear when you hover over exposed desktop, a menu-bar panel, launch at login, a choice of 15, 30 or 60 fps, a low-power mode, and pausing while displays sleep.
+- **Built-in updates.** Install new releases from the menu bar. Update archives are signed, and the updater verifies them before installing.
 
 ## Install
 
-Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app**. Xcode is unnecessary for the compiled app. Requires macOS 14 or later.
+You need macOS 14 Sonoma or later and the Music app. Visualisers use Core Audio system-audio capture on macOS 14.2 or later, with a ScreenCaptureKit fallback.
 
-The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
+1. Download `Lunalyr-<version>.zip` from the [latest release](https://github.com/WaterBotol/Lunalyr/releases/latest).
+2. Unzip it in Finder and move **Lunalyr.app** to your **Applications** folder *before* opening it. An app opened straight from Downloads runs from a temporary, read-only copy, and the built-in updater cannot replace it.
+3. Open Lunalyr from Applications and follow the first-launch steps below.
 
-## 0.4.10 stable
+### First launch
 
-[Download the stable Mac app](https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.10). Existing updater-enabled installations can use Check for Updates; the stable feed now serves build 17.
+Releases are ad-hoc signed but not notarised by Apple, so macOS blocks the first launch. You only need to allow it once.
 
-**Aurora Curtains** now maps its whole length to the spectrum: bass on the left, treble on the right. Each of its five lines favours a different register; individual sections bend, widen and glow with their own frequencies. A note changes its part of the material rather than shifting the entire wallpaper.
+On **macOS 15 Sequoia or later**:
 
-**Fosfora Aurora** adds seven luminous frequency ribbons, ported to native Metal from the MIT-licensed [Fosfora](https://github.com/kevinraymond/fosfora). The source revision, original shader and descriptor are retained, with the complete licence bundled. Silk Ribbons and Spectral Aurora have stronger local spectral curvature; Spectrum Tunnel preserves high-gain frequency variation. Global flashes and camera jolts stay disabled.
+1. Open Lunalyr. When macOS says it could not verify the app, click **Done**.
+2. Open **System Settings → Privacy & Security** and scroll down to **Security**.
+3. Next to the message about Lunalyr, click **Open Anyway**. Confirm with your password or Touch ID, then click **Open Anyway** again.
 
-**Your wallpaper** now draws only the lyrics over your existing macOS wallpaper or wallpaper app, using a transparent desktop window. It keeps working as an overlay in low power mode and hides interlude graphics. No wallpaper file selection, copy or screen capture is needed. The settings preview uses a neutral backdrop. The earlier file import feature remains separately named **Imported image or video**, preserving saved files and placement. Live meters update independently of the wallpaper controls so open pickers stay stable.
+On **macOS 14 Sonoma**, Control-click **Lunalyr.app** in Finder, choose **Open**, then click **Open** in the dialog.
 
-## 0.4.9
-
-Wallpaper geometry is now independent of lyric layout, preventing new or oversized lines from resizing/recentering the background. Aurora Curtains preserves bass variation at high sensitivity and has a stronger musical sway. Visualiser smoothing now follows note attacks sooner and releases between phrases, while retaining continuous motion.
-
-Both the user's 0.4.8 Release copy and the packaged 0.4.9 Release were checked with capture enabled: they reported Receiving audio with increasing packets and changing meters. The earlier diagnostic-copy denial does not describe those running copies. All 89 native tests and nine Python tests passed locally, including a viewport layout regression, an envelope timing test and real Metal rendering at maximum sensitivity. Release built and was launched on the Mac. See VALIDATION.md for evidence and remaining coverage.
-
-## 0.4.8 custom wallpapers
-
-**Your wallpaper** imports a local image or silent looping video. Lunalyr keeps its own copy, and offers Fill, Fit and top/bottom placement. Low power mode still selects a lightweight wallpaper at 30 fps.
-
-**Aurora Curtains** is a dedicated visualiser based on the original GPU Aurora. Music shapes its layered curtains; the original GPU effect stays ambient. Visualisers now use the full sensitivity range and Colour richness control. Silk Ribbons uses a smoother energy curve, and irrelevant wallpaper controls are hidden.
-
-Lyric size is applied after fitting, so automatic fitting cannot cancel the slider. This includes whole-line and plain-text fallbacks. Editorial words retain their face as rolling lyric windows move. Audio startup has a deadline, clearer failure details, live meters and a packet counter; changing an unrelated slider no longer restarts capture.
-
-All 87 native tests and nine Python tests passed on the development Mac, and Release built successfully. GPU fixture tests confirm that every visualiser responds to input spectrum. Live capture for the current app copy is **not verified**: macOS denied permission and delivered zero packets. Capture is left off and permission setup is deferred at the user's request. See VALIDATION.md for evidence and remaining coverage.
-
-## 0.4.7 native workspace
-
-A rebuilt native workspace replaces the previous settings panes. One live desktop preview stays alongside seven new inspectors: Wallpaper, Typography, Lyrics, Readings, Album covers, Performance and About. The menu-bar panel is rebuilt too. There are no duplicate sample animations.
-
-Lyrics uses a recording-specific offset, editable metadata search, candidate cards with separate source/timing/reading labels, imports, and explicit saved-choice controls. LRC and TTML imports are supported. Pronunciation readings are labelled separately from translations.
-
-**Accuracy first** is the default for new installations. It rejects poor title/artist/duration matches, prefers complete real word timing, then mixed timing, line timing and plain text. Source order breaks equal-quality ties. This is a transparent selection heuristic, not a measured provider accuracy benchmark; catalogue size is never used. The recommended order is local exports, Lyrics+/KPoe, NetEase, LRCLIB, QQ, Kugou, Kuwo, then lyrics.ovh. Existing custom order and enabled sources are retained. Restore recommended source order is available in Lyrics.
-
-Real word timing is preferred across sources even in Source order mode by default, fixing line-only results hiding available word-timed matches. Disable that preference for strict source order. The separate LRCLIB word-timing preference and explicit saved choices remain available. A saved choice is clearly marked and can be returned to automatic selection. Automatic caches use a new policy fingerprint.
-
-New independent adapters: **Kuwo** (line-synced) and **lyrics.ovh** (plain fallback). Their live endpoints returned lyrics during development; availability varies. Existing installations can enable them in Sources. No extra account credentials are required.
-
-Per-song offsets, low power at 30 fps and Editorial typography across compositions are retained. Apple Music lyric extraction remains deferred; the reference app's exact retrieval mechanism has not been established.
-
-## What changed in 0.4.5
-
-- **New visualisers:** native Metal Aurora and Spectrum Tunnel scenes adapted from the MIT-licensed [Synesthia](https://github.com/jonjaques/synesthia), plus a restrained **Silk Ribbons** variation. Silk is the default choice in Background → Visualisers. These are complete wallpapers: audio shapes their own material and geometry.
-- **Calmer response:** spectrum smoothing operates in both time and frequency. Camera jolts and flashing stars are disabled in the desktop defaults. Other wallpapers are ambient; the previous global audio deformation, beat-response controls and lyric-driven background pulses have been removed.
-- **More readable type:** smaller words are larger across all eight compositions, with less extreme size contrast. The whole line and its romanisation fit together on short or narrow displays. Long rolling words fit their measured glyph bounds. Constellation links use continuous lighting instead of abrupt active-word switches.
-- **Richer colour:** near-monochromatic covers gain a broader, coordinated hue fan. Ambient GPU effects use contrasting album-derived colours, and colour fields use a more varied gradient palette.
-- **Updates:** the public signing key and stable feed are configured. Preview downloads remain manual. The stable feed is live with the published 0.4.5 release.
-
-See [CHANGES.md](CHANGES.md), [native validation evidence](VALIDATION.md), [publisher setup](UPDATE_SETUP.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-## Use it
-
-1. Open Lunalyr and play a song in Music. Allow Automation access when asked so the app can follow playback and lyrics.
-2. Pick a composition in Typography. Each style remembers its word entrance and faint next-word preview.
-3. In Wallpaper, choose **Your wallpaper** for lyrics over your existing desktop, **Imported image or video** for a separate file, an ambient wallpaper, or **Visualisers**. For live response, choose a visualiser and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
-4. Look for **Receiving audio** and changing meters. After granting capture permission, use Reconnect. Copy audio status provides connection diagnostics without a recording or song metadata.
-5. Start with **30 fps** in Performance; 60 fps uses more CPU/GPU. Close Settings when assessing normal wallpaper performance.
-
-Silk Ribbons is intended to sit quietly behind lyrics. Spectrum Tunnel is the more immersive option. Motion remains continuous during instrumental passages; the interlude view supplies a next-vocal cue when the lyric source gives a reliable return time.
-
-## Lyrics and readings
-
-Native word-timed lyrics give the best result. Line-only lyrics show each complete line without invented word entrances. No speech recognition or vocal separation is performed.
-
-Online adapters include LRCLIB, NetEase, QQ, Kugou and KPoe; coverage and service availability vary. The optional Lyrimuse bridge reads exported LRC, `.roma.lrc`, TTML and YRC files from a folder you choose. It does not run Lyrimuse or read its account data. Local lyrics live in `~/Library/Application Support/Verso Custom/Lyrics/`.
-
-Romanisation offers Off, Below and Replace. Japanese uses macOS tokenizer/reading support; Mandarin offers pinyin and tone choices; Korean and other supported scripts use local transliteration. Source exports may supply Cantonese readings; on-device Jyutping generation is not implemented. Unknown Japanese readings remain visible. Pronunciation may be wrong for names or mixed languages.
-
-## Build and test on a Mac
-
-Requires full Xcode and its Metal compiler, XcodeGen, and Python 3.9+.
+If you prefer Terminal, you can remove the download quarantine from a copy you got from this repository's releases page:
 
 ```bash
-bash Run-Tests.command
-bash Build.command
+xattr -dr com.apple.quarantine /Applications/Lunalyr.app
 ```
 
-Run-Tests.command writes native test logs and results under Build/TestDerivedData. Build.command runs four C suites, builds the normal Release app and verifies its Metal library and Sparkle framework. It preserves an existing output app before replacing it. The build log is Build/build.log.
+### Permissions
 
-You can also generate the project with `xcodegen generate --spec project.yml`, open VersoCustom.xcodeproj and use Product → Test, then Product → Build For → Profiling for a Release build.
+- **Automation (Music)** is required. Allow it when macOS asks whether Lunalyr may control Music. This is how it reads the current song and playback position, and how its playback buttons work. You can change it later in **System Settings → Privacy & Security → Automation**.
+- **System audio** is only needed for visualisers. macOS asks the first time you turn on **System audio** in Lunalyr's Wallpaper settings. The **Screen recording compatibility** capture method needs screen recording permission instead. The **Permissions…** button next to the audio controls opens **Privacy & Security → Screen & System Audio Recording**.
 
-Measure-Performance.command collects local CPU readings and a process sample. Compare the same song, style, frame rate and displays, with Settings closed. No report is uploaded automatically. See VALIDATION.md for what has actually been measured and what remains unverified.
+### Updating and uninstalling
 
-## Releases and updates
+Click **Check for updates…** in the menu-bar panel or under **Performance → App**. Stable releases install from there; preview builds are published as GitHub pre-releases and installed manually.
 
-The GitHub workflows run Python helpers, native Swift tests and a Release build. **Publish preview release** publishes a downloadable prerelease after those checks pass. **Build Lunalyr for Mac** can prepare a separately signed stable draft using the repository's encrypted publisher secrets.
+To uninstall, quit Lunalyr and move it to the Bin (Trash). To remove its data as well, delete these folders and reset its preferences:
 
-The stable feed is `https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml`. GitHub prereleases do not supply this endpoint. Publishing a preview does not announce it as a stable automatic update. Follow UPDATE_SETUP.md before publishing the first stable release or rotating any signing material.
+- `~/Library/Application Support/Verso Custom/Lyrics` (saved and cached lyrics)
+- `~/Library/Application Support/Verso/Fonts` (downloaded fonts)
+- `~/Library/Application Support/Lunalyr/Wallpapers` (imported images and videos)
 
-Preferences live outside the app, per macOS user. Sharing an app does not share your settings or local lyric cache. This app supplies desktop wallpapers; lock-screen integration and a screensaver component are not implemented.
+```bash
+defaults delete local.verso.custom
+```
 
-## Privacy and attribution
+## Quick start
 
-Audio analysis stays in local memory. No microphone capture is requested, no recording is saved and audio is never sent to lyric providers. The compatibility path discards its tiny display frames locally. Enabled lyric providers receive song metadata; optional artwork and font fetching retain their network behaviour.
+1. Open Lunalyr. It lives only in the menu bar: look for its crescent icon near the clock. There is no Dock icon or main window, and the workspace opens by itself the first time. To bring it back later, click the menu-bar icon and choose **Open Lunalyr**, or open Lunalyr again from Applications.
+2. Play a song in Music and allow Lunalyr to control Music when asked. The lyrics appear on your desktop.
+3. Click the menu-bar icon, then **Open Lunalyr**. The workspace shows a live preview of your desktop next to the settings.
+4. In **Wallpaper**, choose a kind: Match the music, GPU effects, Line patterns, Colour only, Visualisers, Your wallpaper, or Imported image or video.
+5. In **Typography**, choose a composition, typeface and word entrance.
+6. For a visualiser, choose **Wallpaper → Visualisers**, pick a scene and turn on **System audio**. You should see *Receiving audio* and moving meters. If not, use **Permissions…** or **Reconnect**.
+7. Lyrics early or late? In **Lyrics → This song**, move the offset; it is saved for that recording. Wrong lyrics? Use **Find lyrics** to search, pick another candidate, or import an LRC or TTML file.
+8. In **Performance**, 30 fps is a good balance; 60 fps uses more CPU and GPU. **Low power visuals** and **Launch at login** are there too.
 
-Based on [Verso](https://github.com/AkkiCode06/verso), by Akki / AkkiCode06. The original GPLv3 with Commons Clause licence is unchanged in LICENSE, with upstream details in UPSTREAM.json and UPSTREAM_README.md. Sparkle and the reused Synesthia source retain their MIT notices in the repository and app resources. See THIRD_PARTY_NOTICES.md.
+## Troubleshooting
 
-The VoxelWall reference informed the typography and motion direction. No VoxelWall, VoxelVerse or Lyrimuse source, footage, soundtrack, proprietary fonts or artwork is bundled.
+<details>
+<summary><b>macOS says Lunalyr can't be opened, or that it is damaged</b></summary>
+
+Releases are not notarised, so macOS blocks the first launch; follow the [first-launch steps](#first-launch). If macOS says the app is damaged, unzip the download again with Finder, since some third-party unarchivers break the app's signature. Then move it to Applications and, if needed, clear the quarantine flag with the `xattr` command shown there.
+
+</details>
+
+<details>
+<summary><b>I can't find the menu-bar icon</b></summary>
+
+Lunalyr has no Dock icon. On a MacBook with a notch, menu-bar icons can disappear behind the notch when the menu bar is crowded: quit a few other menu-bar apps, or use a menu-bar manager. You can always open the workspace by opening Lunalyr again from Applications or Spotlight.
+
+</details>
+
+<details>
+<summary><b>No lyrics appear</b></summary>
+
+- Lunalyr follows the Music app. Make sure a song is playing there.
+- Check that Lunalyr may control Music, in **System Settings → Privacy & Security → Automation → Lunalyr → Music**. If you declined the prompt and Lunalyr is not listed, run this in Terminal and open Lunalyr again to be asked once more:
+
+  ```bash
+  tccutil reset AppleEvents local.verso.custom
+  ```
+
+- The menu-bar panel shows which source supplied the lyrics. If none did, use **Find lyrics** in the Lyrics settings to search by hand, turn on more sources, or import an LRC or TTML file.
+
+</details>
+
+<details>
+<summary><b>Lyrics are early or late</b></summary>
+
+Use **Earlier** and **Later** under **Lyrics → This song**. The offset is saved for that recording. **Lyrics → Advanced timing** has a global offset that applies to every song.
+
+</details>
+
+<details>
+<summary><b>The visualiser doesn't react to music</b></summary>
+
+- Turn on **System audio** in **Wallpaper → Music response**, and look for *Receiving audio* with moving meters.
+- Click **Permissions…** and check that Lunalyr is allowed under **Screen & System Audio Recording**. Releases are ad-hoc signed, so macOS can forget this permission, and the Automation permission, after an update. Turn Lunalyr off and on again in that list, or remove and re-add it, then click **Reconnect**.
+- Try the other capture method: **System audio** or **Screen recording compatibility**.
+- If you report a bug, include the text from **Copy audio diagnostics**.
+
+</details>
+
+<details>
+<summary><b>Check for updates doesn't work</b></summary>
+
+Make sure Lunalyr is in your Applications folder and was opened from there. An app opened from Downloads runs from a temporary, read-only copy that the updater cannot replace. Move it, open it again and check once more. You can also download the [latest release](https://github.com/WaterBotol/Lunalyr/releases/latest) by hand.
+
+</details>
+
+<details>
+<summary><b>Lunalyr uses a lot of CPU, GPU or battery</b></summary>
+
+In **Performance**, choose 30 fps, turn on **Low power visuals**, and consider **Pause fully covered wallpapers**. Visualisers and GPU effects cost more than line patterns, colour gradients or Your wallpaper. Close the workspace window when you are not using it, because its live preview renders too.
+
+</details>
+
+Still stuck? [Open a bug report](https://github.com/WaterBotol/Lunalyr/issues/new/choose).
+
+## Accessibility
+
+- **Reduce Motion.** When **Reduce motion** is on in **System Settings → Accessibility → Display**, words appear without sliding, scaling, rotating or blurring in, and interlude graphics stay still. Wallpapers and visualisers keep moving. For a calmer background, choose Your wallpaper, Colour only or a line pattern, and lower **Generated motion speed**.
+- **Light and motion sensitivity.** Visualisers and many GPU effects move continuously, and their light and colour change with the music. Flashes, camera jolts and flashing stars are turned off, but if motion or changing light affects you, avoid the visualisers and use one of the calmer backgrounds above.
+- **Text size.** **Lyric size** in Typography scales every composition, after Lunalyr fits each line to the screen.
+
+## Lyrics sources and privacy
+
+### Where lyrics come from
+
+| Source | Timing | Notes |
+| --- | --- | --- |
+| Local exports | Word or line, with readings | LRC, `.roma.lrc`, TTML and YRC files exported by [Lyrimuse](https://github.com/Yudaotor/lyrimuse) into a folder you choose. Read-only; off by default. |
+| Lyrics+ (KPoe) | Word or syllable | |
+| NetEase Cloud Music | Word or line | |
+| LRCLIB | Word or line | |
+| QQ Music | Line | |
+| Kugou Music | Line | |
+| Kuwo Music | Line | |
+| lyrics.ovh | Plain text | Fallback when nothing timed is found. |
+
+By default, **Accuracy first** rejects results whose title, artist or duration do not match the recording. It then prefers complete word timing over mixed timing, line timing and plain text, and uses the source order above only to break ties. In **Lyrics** you can switch to strict source order, reorder or disable sources, and pin a particular result to a song. Most of these services are unofficial, so availability varies. Lunalyr does not use speech recognition or vocal separation.
+
+### What stays on your Mac
+
+Lunalyr has no accounts, analytics or telemetry. It reads the current track from Music through AppleScript and does not access your library or Apple Account. Audio for the visualisers is analysed in memory on your Mac: nothing is recorded, saved or uploaded, and the microphone is never used.
+
+Lunalyr contacts these services:
+
+- **Lyric sources you have enabled** receive the song's title and artist; some also receive the album and duration.
+- **Apple's iTunes Search API** receives the artist with the title or album when Lunalyr looks up artwork that Music does not provide, or an animated album cover. Animated covers load from Apple Music's public album pages and stream from Apple's servers.
+- **Google Fonts** supplies the default interface and lyric typeface, Manrope, and any Google Font you choose. Downloaded fonts are kept on your Mac.
+- **GitHub** serves update information, only when you click **Check for updates…**. Automatic checks are off, and no system profile is sent.
+
+Preferences are stored in the `local.verso.custom` defaults domain. Lyrics, fonts and imported wallpapers are stored in the folders listed under [Updating and uninstalling](#updating-and-uninstalling).
+
+## Build from source
+
+You need Xcode 16 or later with its Metal toolchain, [XcodeGen](https://github.com/yonaskolb/XcodeGen) and Python 3.9 or later. The build needs the macOS 15 SDK that ships with Xcode 16, which in turn needs macOS 14.5 or later. The app itself still runs on macOS 14.
+
+```bash
+git clone https://github.com/WaterBotol/Lunalyr.git
+cd Lunalyr
+brew install xcodegen
+bash Scripts/test.sh
+bash Scripts/build.sh
+python3 -m unittest discover -s Tests/Python
+```
+
+`Scripts/test.sh` generates the Xcode project and runs the XCTest suite. `Scripts/build.sh` runs the C test suites, builds the Release app into `Build/Lunalyr.app` and checks its Metal library and updater framework. The Python tests cover the update and packaging helpers. If the Metal compiler is missing, run `xcodebuild -downloadComponent MetalToolchain`.
+
+To work in Xcode, run `xcodegen generate --spec project.yml` and open `VersoCustom.xcodeproj`. The project is generated from [`project.yml`](project.yml) and is not committed.
+
+> [!NOTE]
+> **Why `VersoCustom`?** The Xcode project, target, scheme and Swift module are still called `VersoCustom`, and the bundle identifier is still `local.verso.custom`. These names date from the Verso fork. They are kept so existing installations keep their preferences and saved data and continue to receive updates, which is also why some storage folders keep their old names.
+
+More documentation lives in [`docs/`](docs/README.md): the [architecture overview](docs/ARCHITECTURE.md), the [release process](docs/RELEASING.md), [validation records](docs/VALIDATION.md) and [external formats and system APIs](docs/INTEROPERABILITY.md).
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
+## Acknowledgements
+
+Lunalyr is built on [Verso](https://github.com/AkkiCode06/verso) by Akki ([AkkiCode06](https://github.com/AkkiCode06)), which provides its lyric engine, compositions and GPU effects. Verso's original README is kept in [docs/upstream](docs/upstream/README.md).
+
+Lunalyr also relies on:
+
+- [Synesthia](https://github.com/jonjaques/synesthia) by Jon Jaques (MIT) for the FFT analyser and the Spectral Aurora and Spectrum Tunnel scenes.
+- [Fosfora](https://github.com/kevinraymond/fosfora) by Kevin Raymond (MIT) for the Aurora shader behind Fosfora Aurora.
+- [Sparkle](https://sparkle-project.org) (MIT) for updates.
+- [Yams](https://github.com/jpsim/Yams) and libyaml (MIT) for LRCLIB's YAML lyric files.
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) for project generation, and [Google Fonts](https://fonts.google.com) for typefaces.
+- Lyric data from [Lyrics+](https://github.com/Prjkt-La/lyricsplus), [LRCLIB](https://lrclib.net), NetEase Cloud Music, QQ Music, Kugou, Kuwo and lyrics.ovh, and the [Lyrimuse](https://github.com/Yudaotor/lyrimuse) export formats. Lunalyr is not affiliated with any of these services.
+- The [Cotodama Lyric Speaker](https://lyric-speaker.com/), which inspired Verso.
+
+Full notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the licence texts are bundled with the app.
+
+## Licence
+
+Lunalyr is licensed under the GNU General Public License v3.0 with the Commons Clause licence condition, unchanged from Verso. See [LICENSE](LICENSE). The GPL lets you use, study, share and modify the code. The Commons Clause adds that you may not sell the software, or a product or service whose value derives substantially from it. The LICENSE file is the authoritative text.
+
+Apple Music and Music are trademarks of Apple Inc. Lunalyr is not affiliated with or endorsed by Apple.

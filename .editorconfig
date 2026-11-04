@@ -1,0 +1,40 @@
+# EditorConfig keeps basic formatting consistent across editors.
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,sh,command}]
+indent_size = 2
+
+[*.md]
+# Two trailing spaces are a Markdown line break.
+trim_trailing_whitespace = false
+
+# Licence texts are kept exactly as published.
+[{LICENSE,*-LICENSE.txt}]
+trim_trailing_whitespace = unset
+insert_final_newline = unset
+
+# Third-party originals and bundled, minified web engines are kept as generated.
+[ThirdParty/**]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset
+
+[Sources/Resources/*Engine.html]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset

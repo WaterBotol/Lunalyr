@@ -12,7 +12,7 @@ fi
 if ! xcrun metal --version >/dev/null 2>&1; then
   echo "The Metal compiler component is missing. In Terminal, run:"
   echo "xcodebuild -downloadComponent MetalToolchain"
-  echo "Then run Build.command again."
+  echo "Then run Scripts/build.sh again."
   exit 1
 fi
 python3 "$PROJECT_DIR/Scripts/configure-updates.py" --check
@@ -76,5 +76,5 @@ echo "Open Lyrics for sources, per-song offsets and LRC/TTML import."
 echo "Open Wallpaper → Visualisers for audio-reactive scenes and capture diagnostics."
 echo "Choose Wallpaper → Your wallpaper to import an image or video."
 echo "Readings has romanisation controls; Performance has low power mode at 30 fps."
-echo "Use Measure-Performance.command on the affected Mac to collect CPU readings and a process sample."
+echo "Use Scripts/measure-performance.sh on the affected Mac to collect CPU readings and a process sample."
 open -R "$OUTPUT_APP"

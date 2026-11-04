@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - '**/*.md'
       - LICENSE
-      - UPSTREAM.json
+      - 'docs/**'
   pull_request:
   workflow_dispatch:
     inputs:
@@ -47,9 +47,9 @@ jobs:
       - name: Python helper tests
         run: python3 -m unittest discover -s Tests/Python -v
       - name: Native Swift tests
-        run: bash Run-Tests.command
+        run: bash Scripts/test.sh
       - name: Build app and publisher tools
-        run: bash Build.command
+        run: bash Scripts/build.sh
       - name: Archive app and matching tools
         run: |
           ditto -c -k --sequesterRsrc --keepParent Build/Lunalyr.app Build/Lunalyr-Mac.zip
@@ -118,5 +118,5 @@ jobs:
             exit 1
           fi
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
-            --title "Lunalyr $VERSION" --notes-file CHANGES.md \
+            --title "Lunalyr $VERSION" --notes-file CHANGELOG.md \
             "Build/Release-$VERSION/Lunalyr-$VERSION.zip" "Build/Release-$VERSION/appcast.xml"
