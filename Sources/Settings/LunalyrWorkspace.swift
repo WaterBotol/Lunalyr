@@ -132,7 +132,7 @@ struct SettingsWindowView: View {
 @MainActor
 private struct WallpaperInspector: View {
     @ObservedObject private var s = Settings.shared
-    @ObservedObject private var audio = AudioReactiveController.shared
+    private let audio = AudioReactiveController.shared
     @State private var importMessage: String?
     @State private var importing = false
     private func chooseWallpaper() {
@@ -176,12 +176,19 @@ private struct WallpaperInspector: View {
                         ForEach(BackgroundStyle.allCases) { Text($0.title).tag(Optional($0)) }
                     }
                 }
-                if s.backgroundMode != .custom {
+                if s.backgroundMode != .custom && s.backgroundMode != .desktop {
                     Slider(value: $s.effectSpeed, in: 0.2...2) { Text("Generated motion speed") }
                 }
             }
+            if s.backgroundMode == .desktop {
+                Section("Your existing wallpaper") {
+                    Text("Only lyrics are drawn over your desktop. Keep using your current macOS wallpaper or wallpaper app; Lunalyr leaves it in place.")
+                    Text("The settings preview uses a neutral backdrop. Your actual desktop wallpaper stays visible on each monitor.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             if s.backgroundMode == .custom {
-                Section("Your wallpaper") {
+                Section("Imported image or video") {
                     Button(importing ? "Importing…" : "Choose image or video…") { chooseWallpaper() }.disabled(importing)
                     if !s.customWallpaperName.isEmpty { Text(s.customWallpaperName).font(.caption).foregroundStyle(.secondary) }
                     Picker("Placement", selection: $s.customWallpaperPlacement) {
@@ -197,13 +204,7 @@ private struct WallpaperInspector: View {
                     Toggle("System audio", isOn: Binding(get: { s.audioReactiveEnabled }, set: { enabled in
                         if enabled { audio.start() } else { audio.stop() }
                     }))
-                    Text(audio.status).font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        ProgressView("Bass", value: min(1, audio.levels.bass * 5))
-                        ProgressView("Mids", value: min(1, audio.levels.mid * 5))
-                        ProgressView("Highs", value: min(1, audio.levels.treble * 5))
-                    }.font(.caption2)
-                    Text("\(audio.packetsReceived) audio packets").font(.caption2).foregroundStyle(.secondary)
+                    AudioCaptureStatus()
                     Picker("Capture", selection: $s.audioCaptureMethod) {
                         ForEach(AudioCaptureMethod.allCases) { Text($0.title).tag($0) }
                     }.onChange(of: s.audioCaptureMethod) { _, _ in if s.audioReactiveEnabled { audio.reconnect() } }
@@ -216,7 +217,8 @@ private struct WallpaperInspector: View {
                     Text("Audio is analysed on this Mac. No recording is saved or uploaded.").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Section("Colour & contrast") {
+            if s.backgroundMode != .desktop {
+              Section("Colour & contrast") {
                 if s.backgroundMode != .custom {
                     Slider(value: $s.vividness, in: 0.4...1.8) { Text("Colour richness") }
                 }
@@ -225,8 +227,27 @@ private struct WallpaperInspector: View {
                     Slider(value: $s.patternOpacity, in: 0...1) { Text("Pattern visibility") }
                 }
                 Button("Reset appearance adjustments") { s.resetAdvanced() }
+              }
             }
         }.formStyle(.grouped)
+    }
+}
+
+/// Meter publications must not rebuild the scene/capture pickers while a
+/// menu is open. Only this small status view observes the live controller.
+@MainActor
+private struct AudioCaptureStatus: View {
+    @ObservedObject private var audio = AudioReactiveController.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(audio.status).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                ProgressView("Bass", value: min(1, audio.levels.bass * 5))
+                ProgressView("Mids", value: min(1, audio.levels.mid * 5))
+                ProgressView("Highs", value: min(1, audio.levels.treble * 5))
+            }.font(.caption2)
+            Text("\(audio.packetsReceived) audio packets").font(.caption2).foregroundStyle(.secondary)
+        }
     }
 }
 

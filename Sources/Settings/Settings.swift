@@ -92,7 +92,7 @@ final class Settings: ObservableObject {
     }
 
     enum BackgroundMode: String, CaseIterable, Identifiable {
-        case auto, pattern, shader, colourOnly, visualizer, custom
+        case auto, pattern, shader, colourOnly, visualizer, desktop, custom
         var id: String { rawValue }
 
         var title: String {
@@ -101,7 +101,8 @@ final class Settings: ObservableObject {
             case .pattern: return "Line patterns"
             case .shader: return "GPU effects"
             case .visualizer: return "Visualisers"
-            case .custom: return "Your wallpaper"
+            case .desktop: return "Your wallpaper"
+            case .custom: return "Imported image or video"
             case .colourOnly: return "Colour only"
             }
         }
@@ -347,6 +348,9 @@ final class Settings: ObservableObject {
     /// account -- GPU shaders are the expensive layer, so they are the first
     /// thing dropped on battery or in Low Power Mode.
     var effectiveBackgroundMode: BackgroundMode {
+        // A transparent lyrics overlay needs no generated wallpaper, even
+        // under power constraints. Never cover the user's desktop as a fallback.
+        if backgroundMode == .desktop { return .desktop }
         let constrained: PowerBehaviour?
         if lowPowerVisuals || (respectLowPower && ProcessInfo.processInfo.isLowPowerModeEnabled) {
             constrained = .patterns

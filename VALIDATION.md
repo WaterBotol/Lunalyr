@@ -1,3 +1,21 @@
+# Validation — Lunalyr 0.4.10 (build 17)
+
+## Actual Mac execution — 4 November 2026
+
+Test-VersoCustom-2026.11.04_13-13-08-+1100.xcresult reports **90 passed, zero failures, zero skips and no runtime warnings** on the Apple M5 Pro / macOS 27.2 / Xcode 27.2. Build/local-tests-0.4.10.json retains its summary. Nine Python helper tests passed. These are native runs, not syntax checks.
+
+Real Metal pipeline tests render all five visualisers, including the Fosfora port. The Aurora Curtains regression holds time and aggregate level fixed, moves a narrow peak between FFT bands 8, 31 and 54, and checks that the changed pixels' horizontal centre follows the peak within 0.12 of the screen width. It also checks response variation at sensitivity 3. Native layout and new low-power tests verify stable background bounds and preservation of the existing-wallpaper overlay.
+
+The first 0.4.10 Release was built and launched on this Mac. The user's selected Screen recording compatibility initially reported TCC denial; a later coordinated check, after the user made permission available, reported Receiving audio with changing meters and packet counts rising through 614, 898, 1,315 and 2,192. Fosfora Aurora was selected and its seven coloured curtains were inspected live. No OS privacy setting was changed by the agent.
+
+Your wallpaper was selected through the native inspector. The app's desktop surface had no generated wallpaper fill; the window is non-opaque with clear backing. Returning to Visualisers resumed compatibility capture, and Aurora Curtains plus enabled capture were restored. This check exposed interlude ribbons still present in overlay mode and picker invalidation during live meter updates; the final source hides interlude graphics there and isolates the meter observer. The final 90-test result above includes those changes. The settings preview deliberately uses a neutral backdrop rather than capturing the desktop.
+
+The full Fosfora MIT notice is bundled; its exact pinned shader/descriptor and adaptation manifest are retained in ThirdParty/Fosfora. The upstream Verso licence remains unchanged. No Gliss or CC-licensed Aurora shader was imported.
+
+Coverage still excludes physical multi-monitor/Space changes, other wallpaper applications' window levels, long-duration video or route/wake scenarios, controlled beat-to-pixel latency and a new CPU/GPU benchmark. The existing preview pause/play issue remains recorded. The user requested upload and stop; the scheduled backlog continuation is paused.
+
+---
+
 # Validation — Lunalyr 0.4.9 (build 16)
 
 ## Actual Mac execution — 4 November 2026

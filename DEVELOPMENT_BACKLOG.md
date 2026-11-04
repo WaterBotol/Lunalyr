@@ -1,8 +1,13 @@
 # Development continuation
 
-The user asked to finish the current visualiser/lyric-size/custom-wallpaper batch, then wait one hour before resuming earlier postponed work. Do not start the earlier backlog before that delay. Preserve new feedback received in the meantime.
+Latest instruction: finish the 0.4.10 work, upload it and stop. The previous one-hour backlog follow-up is paused. Do not resume earlier work or create another continuation unless the user asks.
 
-## Current batch: 0.4.9 / build 16 (includes 0.4.8)
+## Current batch: 0.4.10 / build 17
+
+- Frequency-local Aurora Curtains: a fixed bass-left/treble-right axis, with different line emphasis and local geometry/light response.
+- MIT-licensed Fosfora Aurora port, stronger local ribbon response and unclipped high-gain tunnel geometry.
+- Your wallpaper is a transparent lyrics-only overlay over the existing desktop; imports remain separately named. Hide interlude graphics in that mode. Meter updates are isolated from picker controls.
+- Native 0.4.10 capture was verified on Screen recording compatibility after the user made that permission available. Preserve this working selection; do not reset preferences or OS privacy settings.
 
 - 0.4.9 isolates wallpaper geometry from lyric layout, preserves Aurora bass/mid dynamics at high sensitivity and reduces extra smoothing latency. It passed 89 native tests, nine Python tests and local/CI Release builds. The packaged Release receives live system audio with existing permissions. Start any new audit from this version and the user's latest feedback.
 
@@ -13,7 +18,7 @@ The user asked to finish the current visualiser/lyric-size/custom-wallpaper batc
 - Support imported local images and silent looping videos, retain app-managed copies, and handle video orientation.
 - Live capture still requires permission for the actual app copy. The diagnostic build reported a macOS TCC denial and zero packets on compatibility capture. Do not describe a GPU fixture render as successful live system capture.
 
-## Earlier work to audit after the requested delay
+## Earlier work retained for a future explicit request
 
 1. Read new user bugchecking feedback, Git status and current Actions results first. Preserve existing work and preferences.
 2. Capture update: after initially deferring permission setup, the user said permissions should work. The actual running 0.4.8 Release now has System audio enabled and reports Receiving audio, increasing packets and changing bass/mid/high meters. Preserve that enabled intent. The older diagnostic-copy TCC denial is historical; do not treat it as current permission state or disable working capture. Do not change OS privacy permissions. Continue checking each new build, real response, route changes, wake and cancellation. Never bypass a denied permission.

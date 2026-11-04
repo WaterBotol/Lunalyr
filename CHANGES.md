@@ -2,6 +2,15 @@
 
 Upstream Verso commit: 9354e2f6703fda43e819284563c257e9bb4b07f8. Original licence unchanged.
 
+## 0.4.10 frequency curtains and existing-wallpaper overlay
+
+- Map the full horizontal span of Aurora Curtains to its 64-band logarithmic spectrum. Give each line a different register emphasis and phase; let local frequencies shape local curvature, thickness and light.
+- Add Fosfora Aurora, a native Metal port of the MIT-licensed seven-register shader pinned at 2e85d3babca5b7f27426e211e58fe3c831fb667f. Bundle its licence and retain source/provenance. Omit global onset/beat flashes and shimmer.
+- Give Silk/Spectral Aurora more local spectral curvature and modest geometric transient response. Remove the tunnel's high-gain hard clamps from angular lanes and ridge geometry.
+- Make Your wallpaper a transparent lyrics overlay over existing macOS/third-party wallpapers. Preserve that mode through power fallback. Keep file imports separately labelled Imported image or video, with their saved data intact.
+- Hide interlude graphics in lyrics-only overlay mode. Isolate live meter updates so they do not rebuild the wallpaper and capture pickers while menus are open.
+- Version 0.4.10, build 17. Ninety native tests and nine Python tests passed locally, including narrow-FFT-peak spatial response and existing-wallpaper low-power coverage.
+
 ## 0.4.9 stable wallpaper bounds and clearer audio response
 
 - Place lyrics over an independently sized wallpaper viewport. Oversized lines and lyric-size changes cannot participate in wallpaper sizing or centering.

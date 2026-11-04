@@ -28,11 +28,15 @@ struct NowPlayingView: View {
     private var renderingPaused: Bool {
         !renderActivity.shouldRender(pauseWhenCovered: settings.pauseWhenCovered)
     }
+    private var showsInterludes: Bool {
+        settings.showInterludes && settings.effectiveBackgroundMode != .desktop
+    }
 
     /// What the background should be right now. Changing any input -- the
     /// album gaining motion art, a settings change, the track's mood -- makes
     /// this differ from `currentLayer` and starts a crossfade.
     enum BackgroundLayer: Equatable {
+        case desktop
         case motion(URL)
         case custom(URL)
         case shader(ShaderStyle)
@@ -50,6 +54,7 @@ struct NowPlayingView: View {
         }
         let mood = self.mood
         let mode = settings.effectiveBackgroundMode
+        if mode == .desktop { return .desktop }
         if mode == .custom, !settings.customWallpaperPath.isEmpty {
             return .custom(URL(fileURLWithPath: settings.customWallpaperPath))
         }
@@ -116,11 +121,14 @@ struct NowPlayingView: View {
 
                 WallpaperViewport(size: geometry.size) {
                   ZStack {
+                    // Generated-wallpaper crossfades remain opaque. Desktop
+                    // overlay mode leaves every background pixel transparent.
+                    if currentLayer != .desktop { Color.black }
                     // `compositingGroup` flattens each layer with its own
                     // scrim before the fade opacity is applied; without it
                     // the two scrims blend through each other and the screen
                     // visibly lightens mid-transition.
-                    if let outgoing = previousLayer, fade < 1 {
+                    if let outgoing = previousLayer, fade < 1, currentLayer != .desktop {
                         backgroundLayer(
                             outgoing, colourPhase: colourPhase, patternPhase: patternPhase,
                             flowPhase: flowPhase, size: geometry.size
@@ -180,6 +188,9 @@ struct NowPlayingView: View {
         // shader does to read as moving with the track.
         let colourFlow = flowPhase * 0.34
         switch layer {
+        case .desktop:
+            Color.clear
+
         case .custom(let url):
             ZStack {
                 CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement, paused: renderingPaused)
@@ -346,7 +357,7 @@ struct NowPlayingView: View {
                         if presence > 0.01 {
                             placeholder("Lyrics unavailable", size: baseSize * 0.34).opacity(presence)
                         }
-                        if settings.showInterludes {
+                        if showsInterludes {
                             let gap = VCVocalGap(start: time - max(0, age - Self.noticeHoldDuration),
                                                   end: nowPlaying.current?.duration ?? -1, nextVocal: -1)
                             InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent).opacity(1 - presence)
@@ -355,11 +366,11 @@ struct NowPlayingView: View {
                 }
             }
         } else {
-            let gap = settings.showInterludes ? instrumentalGap(at: time) : nil
+            let gap = showsInterludes ? instrumentalGap(at: time) : nil
             ZStack {
                 currentLine(time: time, baseSize: baseSize, maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
                     .opacity(1 - (gap?.presence(at: time) ?? 0))
-                if settings.showInterludes, let gap {
+                if showsInterludes, let gap {
                     InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent, nextWord: interludeNextWord(gap: gap, mood: mood))
                 }
             }

@@ -3,7 +3,7 @@ import QuartzCore
 import SwiftUI
 
 enum AudioVisualizerStyle: String, CaseIterable, Identifiable {
-    case silk, aurora, tunnel, curtainAurora
+    case silk, aurora, tunnel, curtainAurora, fosforaAurora
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -11,6 +11,7 @@ enum AudioVisualizerStyle: String, CaseIterable, Identifiable {
         case .aurora: return "Spectral Aurora"
         case .tunnel: return "Spectrum Tunnel"
         case .curtainAurora: return "Aurora Curtains"
+        case .fosforaAurora: return "Fosfora Aurora"
         }
     }
     var detail: String {
@@ -18,10 +19,18 @@ enum AudioVisualizerStyle: String, CaseIterable, Identifiable {
         case .silk: return "Quiet folds of coloured light, shaped by the music."
         case .aurora: return "A flowing sky with a ribbon for each musical register."
         case .tunnel: return "An immersive passage carved from the live spectrum."
-        case .curtainAurora: return "GPU Aurora’s layered curtains, shaped by the music."
+        case .curtainAurora: return "Bass on the left, treble on the right. Each curtain’s sections bend, widen and glow with their own frequencies."
+        case .fosforaAurora: return "Seven luminous frequency ribbons, adapted from Fosfora’s open-source Aurora."
         }
     }
-    var fragment: String { self == .tunnel ? "tunnelFragment" : self == .curtainAurora ? "curtainAuroraFragment" : "auroraFragment" }
+    var fragment: String {
+        switch self {
+        case .tunnel: return "tunnelFragment"
+        case .curtainAurora: return "curtainAuroraFragment"
+        case .fosforaAurora: return "fosforaAuroraFragment"
+        default: return "auroraFragment"
+        }
+    }
 }
 
 /// The imported scenes are the entire wallpaper. They render directly into
@@ -147,14 +156,15 @@ struct AudioVisualizerView: NSViewRepresentable {
             u.centroid = frame.centroid
             // Keep musical phrasing while removing camera jolts, flashing
             // stars and beat-wide exposure jumps from desktop defaults.
-            u.beat = reduced ? 0 : frame.beat * 0.08
-            u.trebleBeat = 0; u.flux = reduced ? 0 : frame.flux * 0.06
+            u.beat = reduced ? 0 : frame.beat * 0.20
+            u.trebleBeat = reduced ? 0 : frame.trebleBeat * 0.12
+            u.flux = reduced ? 0 : frame.flux * 0.14
             if style == .tunnel {
                 u.p0 = 0.38; u.p1 = 0.78; u.p2 = 0.50
                 u.p3 = 0; u.p4 = 0.42; u.p5 = 0.72
             } else {
                 u.p0 = style == .silk ? 4 : 6
-                u.p1 = style == .silk ? 0.10 : 0.16
+                u.p1 = style == .silk ? 0.16 : 0.20
                 u.p2 = 0 // A calm background for lyrics, without flashing stars.
             }
             return u

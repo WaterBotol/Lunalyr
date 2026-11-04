@@ -5,6 +5,16 @@ import XCTest
 
 @MainActor
 final class WallpaperViewportTests: XCTestCase {
+    func testExistingWallpaperOverlaySurvivesLowPowerFallback() {
+        let settings = Settings.shared
+        let savedMode = settings.backgroundMode, savedPower = settings.lowPowerVisuals
+        defer { settings.backgroundMode = savedMode; settings.lowPowerVisuals = savedPower }
+        settings.backgroundMode = .desktop
+        for lowPower in [false, true] {
+            settings.lowPowerVisuals = lowPower
+            XCTAssertEqual(settings.effectiveBackgroundMode, .desktop)
+        }
+    }
     private final class Probe { weak var view: NSView? }
     private struct BackgroundProbe: NSViewRepresentable {
         let probe: Probe

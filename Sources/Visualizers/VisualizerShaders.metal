@@ -106,6 +106,20 @@ static float bandAt(constant float* bands, float x) {
     return mix(bands[i], bands[min(i + 1, 63)], fract(f));
 }
 
+// Soft knee: retain variation through the full sensitivity range.
+static float visualEnergy(float value, float sensitivity) {
+    float x = max(value, 0.0) * sqrt(max(sensitivity, 0.3));
+    return x / (0.65 + x);
+}
+
+// The horizontal coordinate is a fixed logarithmic frequency axis. Smooth
+// neighbours without scrolling the bins or turning them into sharp bars.
+static float spectrumAlongRibbon(constant float* bands, float x, float sensitivity) {
+    float energy = (bandAt(bands, x - 1.0 / 63.0) + 2.0 * bandAt(bands, x)
+                  + bandAt(bands, x + 1.0 / 63.0)) * 0.25;
+    return visualEnergy(energy, sensitivity);
+}
+
 // Samples the 256-point waveform at x in 0...1, averaged with its neighbors
 // to soften single-sample spikes.
 static float waveAt(constant float* wave, float x) {
@@ -272,11 +286,11 @@ static float tunnelMap(float3 pos, constant VizUniforms& u,
                        constant float* bands, constant float* wave) {
     float2 xy = pos.xy - tunnelCenter(pos.z, u.p[kTunnelBend]);
     float angle = atan2(xy.y, xy.x);
-    float e = clamp(bandAt(bands, tunnelFold(angle)) * u.sensitivity, 0.0, 1.2);
+    float e = visualEnergy(bandAt(bands, tunnelFold(angle)), u.sensitivity);
     // spiral ridges spinning past: rate from the Twist slider, depth from
     // the low-mids
     float arms = sin(angle * 3.0 - pos.z * 0.4 + u.time * u.speed * (0.5 + 1.0 * u.p[kTunnelTwist]))
-               * (0.05 + 0.25 * clamp(u.lowMid * u.sensitivity, 0.0, 1.0));
+               * (0.05 + 0.25 * visualEnergy(u.lowMid, u.sensitivity));
     // power-shaped noise carves terraced crags into the rock
     float crags = pow(fbmSharp(pos * 0.55) * 3.3, 1.3);
     // the bore's own slow, irregular breathing: a drifting noise field, so
@@ -284,11 +298,11 @@ static float tunnelMap(float3 pos, constant VizUniforms& u,
     float cavern = vnoise3(float3(1.7, 2.9, pos.z * 0.06) + float3(0.0, u.time * 0.05, 0.0)) - 0.5;
     float r = 1.1
         + 0.5 * cavern
-        + 0.35 * u.bass * u.sensitivity                     // bass blows the tunnel wide
+        + 0.45 * visualEnergy(u.bass, u.sensitivity)         // bass opens the bore without clipping at high gain
         + u.p[kTunnelRipple] * (0.42 * crags - 0.30                       // crags (Ripple slider)
                   + 0.06 * waveAt(wave, fract(pos.z * 0.10)))
         + arms
-        - 0.30 * e * e;                                     // loud bands bulge the wall inward
+        - 0.48 * e * e;                                     // each angular frequency lane shapes its wall
     // Floor the bore radius so a worst-case pile-up of carvings can never
     // close the tunnel over the camera (which rides the centerline).
     r = max(r, 0.30);
@@ -338,7 +352,7 @@ fragment float4 tunnelFragment(FSQuadOut in [[stage_in]],
     // Recover the wall's slice of the spectrum.
     float2 xy = p.xy - tunnelCenter(p.z, u.p[kTunnelBend]);
     float fold = tunnelFold(atan2(xy.y, xy.x));
-    float e = clamp(bandAt(bands, fold) * u.sensitivity, 0.0, 1.5);
+    float e = visualEnergy(bandAt(bands, fold), u.sensitivity);
 
     float crevice = min(0.85, steps / 42.0) + 0.06;
 
@@ -353,7 +367,7 @@ fragment float4 tunnelFragment(FSQuadOut in [[stage_in]],
     float segF = fract(p.z * 0.9);
     float rib = smoothstep(0.10, 0.0, min(segF, 1.0 - segF));
     col += cosPalette(0.5 + fold * 0.3, u.palette) * rib * crevice
-         * (0.08 + 1.0 * clamp(u.highMid * u.sensitivity, 0.0, 1.2)) * glow;
+         * (0.08 + 1.0 * visualEnergy(u.highMid, u.sensitivity)) * glow;
 
     // glitter veins answering hi-hats and air: soft pow-shaped noise spots
     // tinted by the palette, twinkling as they stream past (hard hash cells
@@ -502,9 +516,9 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
         float fi = float(i) / float(max(layers - 1, 1));
         int cIdx = int(fi * 7.0 + 0.5);
         float reg = float(cIdx) / 7.0;
-        float compE = 1.0 - exp(-max(comps[cIdx], 0.0) * u.sensitivity);
+        float compE = visualEnergy(comps[cIdx], u.sensitivity);
         // the fine spectrum inside this register, spread across the screen
-        float localE = 1.0 - exp(-max(bandAt(bands, (float(cIdx) + clamp(uv.x, 0.0, 1.0)) / 8.0), 0.0) * u.sensitivity);
+        float localE = spectrumAlongRibbon(bands, (float(cIdx) + clamp(uv.x, 0.0, 1.0)) / 8.0, u.sensitivity);
         // transient personality: lows jump on the kick, mids on onsets,
         // highs shiver on hi-hat transients
         float transient = u.beat * (1.0 - smoothstep(0.15, 0.45, reg))
@@ -512,7 +526,7 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
                         + u.trebleBeat * smoothstep(0.55, 0.85, reg);
         // mids carry the waveform; lows and highs mostly ignore it
         float wWeight = exp(-pow((reg - 0.5) * 2.4, 2.0));
-        float w = (bandAt(bands, clamp(uv.x * 0.55 + fi * 0.13, 0.0, 1.0)) - 0.3) * 0.45; // Stable spectrum curve, not rapidly changing waveform phase.
+        float w = (localE - 0.3) * 0.8; // Each section bends with frequencies inside this ribbon's own register.
         // low ribbons undulate slowly and widely, high ribbons shiver fast
         float sway = (0.065 * (1.0 - reg) + 0.018 + 0.055 * compE)
                    * sin(uv.x * (4.0 + reg * 14.0)
@@ -553,31 +567,28 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
     return float4(col, 1.0);
 }
 
-// The original GPU Aurora material, now a dedicated audio visualiser.
-static float curtainEnergy(float value, float sensitivity) {
-    // A soft knee keeps loud music responsive even at maximum sensitivity.
-    // clamp(value * sensitivity, 0, 1) flattened most mastered bass to 1.
-    float x = max(value, 0.0) * sqrt(max(sensitivity, 0.3));
-    return x / (0.65 + x);
-}
+// GPU Aurora's flowing material, with a frequency axis along every curtain.
 fragment float4 curtainAuroraFragment(FSQuadOut in [[stage_in]],
                                       constant VizUniforms& u [[buffer(0)]],
                                       constant float* bands [[buffer(1)]],
                                       constant float* wave [[buffer(2)]]) {
     float2 uv = in.uv;
-    float energy = curtainEnergy(u.bass, u.sensitivity);
-    float mids = curtainEnergy(u.mid, u.sensitivity);
+    float local = spectrumAlongRibbon(bands, uv.x, u.sensitivity);
     float glow = 0.0;
     for (int i = 0; i < 5; i++) {
         float fi = float(i);
         float phase = u.time * u.speed * (0.5 + fi * 0.14) + fi * 2.1;
-        float detail = curtainEnergy(bandAt(bands, clamp(uv.x * 0.65 + fi * 0.06, 0.0, 1.0)), u.sensitivity);
-        float centre = 0.5 + sin(uv.x * 2.3 + phase) * (0.12 + 0.18 * energy)
-            + sin(uv.x * 5.1 - phase * 0.7) * (0.045 + 0.09 * mids)
-            + sin(uv.x * 3.2 + phase + fi) * (detail - 0.3) * 0.14;
-        float thickness = 0.028 + 0.015 * (1.0 + sin(phase * 0.8)) + 0.06 * energy;
+        // Each line favours a different register while keeping the complete
+        // bass-left/treble-right axis. Notes affect their own section, never
+        // a whole-frame translation or a global brightness pulse.
+        float emphasis = 0.45 + 0.55 * exp(-pow((uv.x - fi / 4.0) * 2.8, 2.0));
+        float response = local * emphasis;
+        float centre = 0.5 + sin(uv.x * 2.3 + phase) * 0.16
+            + sin(uv.x * 5.1 - phase * 0.7) * 0.06
+            + sin(uv.x * (5.0 + fi) + phase + fi) * response * 0.17;
+        float thickness = 0.018 + 0.009 * (1.0 + sin(phase * 0.8)) + 0.045 * response;
         float band = thickness / (abs(uv.y - centre) + thickness * 0.55);
-        glow += band * (0.25 + 0.2 * sin(phase) + 0.45 * mids);
+        glow += band * (0.15 + 0.10 * sin(phase) + 1.15 * response);
     }
     glow = clamp(glow * 0.28, 0.0, 1.7);
     float3 colour = mix(cosPalette(0.16, u.palette), cosPalette(0.7, u.palette), clamp(uv.y * 1.2, 0.0, 1.0));
@@ -586,4 +597,40 @@ fragment float4 curtainAuroraFragment(FSQuadOut in [[stage_in]],
     col = max(mix(float3(luma), col, u.p[15]), 0.0);
     col = col / (1.0 + col);
     return float4(col, 1.0);
+}
+
+// Ported from Fosfora Aurora, copyright (c) 2025-2026 Kevin Raymond, MIT.
+// Original WGSL, pinned revision and local adaptations: ThirdParty/Fosfora.
+// Complete notice is bundled as Resources/Fosfora-LICENSE.txt.
+fragment float4 fosforaAuroraFragment(FSQuadOut in [[stage_in]],
+                                     constant VizUniforms& u [[buffer(0)]],
+                                     constant float* bands [[buffer(1)]],
+                                     constant float* wave [[buffer(2)]]) {
+    float2 uv = in.uv;
+    float2 p = (uv - 0.5) * float2(u.resolution.x / max(u.resolution.y, 1.0), 1.0);
+    float t = u.time * u.speed;
+    float travel = t * 1.3; // The containing clock already integrates Motion speed.
+    float registers[7] = {u.subBass, u.bass, u.lowMid, u.mid, u.highMid, u.presence, u.air};
+    float3 colours[7] = {float3(0.8, 0.1, 0.2), float3(1.0, 0.4, 0.1), float3(1.0, 0.8, 0.2),
+        float3(0.2, 1.0, 0.3), float3(0.1, 0.7, 1.0), float3(0.3, 0.3, 1.0), float3(0.7, 0.2, 1.0)};
+    float3 col = float3(0.002, 0.003, 0.008);
+    for (int i = 0; i < 7; i++) {
+        float fi = float(i);
+        float bandValue = visualEnergy(registers[i], u.sensitivity);
+        float section = spectrumAlongRibbon(bands, (fi + uv.x) / 7.0, u.sensitivity);
+        float phase = travel * (0.8 + fi * 0.1);
+        float curve = sin(p.x * (2.0 + fi * 0.5) + phase) * 0.05
+            + sin(p.x * (2.0 + fi * 0.5) * 2.3 + phase * 0.7) * 0.03;
+        float ripple = (vnoise(float2(p.x * 3.0 + phase * 0.5, fi * 2.0 + t * 0.1)) - 0.5) * 0.08;
+        float dy = p.y - (fi - 3.0) / 7.0 * 0.85 - curve - ripple
+            - sin(uv.x * 9.0 + phase) * section * 0.045;
+        float width = 0.014 * (1.0 + 1.5 * bandValue + section);
+        float glow = exp(-dy * dy / (width * width));
+        col += colours[i] * glow * (0.06 + 1.7 * bandValue + 0.8 * section);
+    }
+    // Keep Fosfora's frequency curtains; omit its global onset/beat flashes
+    // and shimmer so the material stays calm behind lyrics.
+    float luma = dot(col, float3(0.299, 0.587, 0.114));
+    col = max(mix(float3(luma), col, u.p[15]), 0.0);
+    return float4(col / (1.0 + col), 1.0);
 }

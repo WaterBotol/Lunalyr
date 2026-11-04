@@ -130,12 +130,32 @@ final class VisualizerTests: XCTestCase {
             XCTAssertGreaterThan(difference, 1000, style.title)
             if style == .curtainAurora {
                 sound.bass = 0.45
+                for i in 0..<16 { sound.bands[i] = 0.45 }
                 let medium = try render(sound, sensitivity: 3)
                 sound.bass = 0.9
+                for i in 0..<16 { sound.bands[i] = 0.9 }
                 let loud = try render(sound, sensitivity: 3)
                 let change = zip(medium, loud).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
                 XCTAssertGreaterThan(Double(change) / Double(width * height * 3), 0.75,
                     "High sensitivity must preserve the difference between medium and loud bass")
+
+                // Hold time and aggregate loudness fixed. Only a narrow FFT
+                // peak moves: its affected region must follow the frequency
+                // axis, rather than shaking or brightening the entire scene.
+                for centre in [8.0, 31.0, 54.0] {
+                    var note = AudioSnapshot()
+                    note.bands = (0..<64).map { Float(0.85 * exp(-pow((Double($0) - centre) / 2.0, 2))) }
+                    let pixels = try render(note)
+                    var change = 0.0, weightedX = 0.0
+                    for y in 0..<height { for x in 0..<width {
+                        let start = (y * width + x) * 4
+                        let delta = (0..<3).reduce(0.0) { $0 + Double(abs(Int(pixels[start + $1]) - Int(quiet[start + $1]))) }
+                        change += delta; weightedX += delta * (Double(x) + 0.5) / Double(width)
+                    } }
+                    XCTAssertGreaterThan(change, 3000)
+                    XCTAssertEqual(weightedX / max(1, change), centre / 63.0, accuracy: 0.12,
+                        "The responsive section must stay at this note's horizontal frequency position")
+                }
             }
         }
     }

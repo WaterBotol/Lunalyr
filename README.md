@@ -14,7 +14,15 @@ Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app*
 
 The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
 
-## 0.4.9 preview
+## 0.4.10 preview
+
+**Aurora Curtains** now maps its whole length to the spectrum: bass on the left, treble on the right. Each of its five lines favours a different register; individual sections bend, widen and glow with their own frequencies. A note changes its part of the material rather than shifting the entire wallpaper.
+
+**Fosfora Aurora** adds seven luminous frequency ribbons, ported to native Metal from the MIT-licensed [Fosfora](https://github.com/kevinraymond/fosfora). The source revision, original shader and descriptor are retained, with the complete licence bundled. Silk Ribbons and Spectral Aurora have stronger local spectral curvature; Spectrum Tunnel preserves high-gain frequency variation. Global flashes and camera jolts stay disabled.
+
+**Your wallpaper** now draws only the lyrics over your existing macOS wallpaper or wallpaper app, using a transparent desktop window. It keeps working as an overlay in low power mode and hides interlude graphics. No wallpaper file selection, copy or screen capture is needed. The settings preview uses a neutral backdrop. The earlier file import feature remains separately named **Imported image or video**, preserving saved files and placement. Live meters update independently of the wallpaper controls so open pickers stay stable.
+
+## 0.4.9
 
 Wallpaper geometry is now independent of lyric layout, preventing new or oversized lines from resizing/recentering the background. Aurora Curtains preserves bass variation at high sensitivity and has a stronger musical sway. Visualiser smoothing now follows note attacks sooner and releases between phrases, while retaining continuous motion.
 
@@ -58,7 +66,7 @@ See [CHANGES.md](CHANGES.md), [native validation evidence](VALIDATION.md), [publ
 
 1. Open Lunalyr and play a song in Music. Allow Automation access when asked so the app can follow playback and lyrics.
 2. Pick a composition in Typography. Each style remembers its word entrance and faint next-word preview.
-3. In Wallpaper, choose an ambient wallpaper, **Your wallpaper**, or **Visualisers**. For live response, choose Silk Ribbons, Spectral Aurora, Spectrum Tunnel or Aurora Curtains and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
+3. In Wallpaper, choose **Your wallpaper** for lyrics over your existing desktop, **Imported image or video** for a separate file, an ambient wallpaper, or **Visualisers**. For live response, choose a visualiser and enable system audio. Automatic capture uses a Core Audio process tap on macOS 14.2+, with ScreenCaptureKit as a compatibility fallback.
 4. Look for **Receiving audio** and changing meters. After granting capture permission, use Reconnect. Copy audio status provides connection diagnostics without a recording or song metadata.
 5. Start with **30 fps** in Performance; 60 fps uses more CPU/GPU. Close Settings when assessing normal wallpaper performance.
 

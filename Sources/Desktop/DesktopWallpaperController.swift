@@ -49,9 +49,9 @@ final class DesktopWallpaperController {
             window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
             window.ignoresMouseEvents = true
-            window.isOpaque = true
+            window.isOpaque = false
             window.hasShadow = false
-            window.backgroundColor = .black
+            window.backgroundColor = .clear
             window.canHide = false
             window.isReleasedWhenClosed = false
 

@@ -8,6 +8,8 @@ The dedicated native visualisers reuse [Synesthia](https://github.com/jonjaques/
 
 No source code from VoxelWall, VoxelVerse or Lyrimuse has been incorporated. The reference clip is not distributed. The local Lyrimuse bridge reads exported file formats; it does not bundle those services or their lyric databases.
 
+Fosfora Aurora adapts [Fosfora](https://github.com/kevinraymond/fosfora)'s Aurora shader, copyright (c) 2025-2026 Kevin Raymond, under its MIT licence option. Pinned commit: 2e85d3babca5b7f27426e211e58fe3c831fb667f. The original WGSL, descriptor and [adaptation manifest](ThirdParty/Fosfora/SOURCE.md) are retained. The complete notice is bundled as Sources/Resources/Fosfora-LICENSE.txt. No Fosfora engine, branding, demo footage or audio is included.
+
 ## Yams
 
 Yams 6.2.2 by JP Sim and contributors (MIT) parses LRCLIB's Lyricsfile YAML, including word timestamps. The package includes libyaml under MIT. Complete notices are bundled in Resources/Yams-LICENSE.txt and Resources/libyaml-LICENSE.txt.
