@@ -12,6 +12,8 @@ The Release build succeeded in Xcode at 12:34 Melbourne time. The packaged 0.4.9
 
 This establishes actual capture delivery and live rendering in this app copy, in addition to deterministic renderer/layout tests. It does not establish subjective tuning for every song, controlled beat-to-pixel latency, every route/wake scenario, physical multi-monitor coverage or a new CPU/GPU performance benchmark. The preview pause/play issue remains on the postponed backlog.
 
+GitHub Actions run [41755421184](https://github.com/WaterBotol/Lunalyr/actions/runs/41755421184) passed native tests, Python helpers, four C suites and Release at source commit ee7065e886c81fc48edb5f78793bb4b1e4923b8a. Its extracted app passed deep signature, version/build, Metal-library and upstream-licence checks. The preview uses its exact ZIP, SHA256 b6536d64d56d8957e30fd0dc5ec00e37d66be7410bfc16efd05f74ac8e137199.
+
 ---
 
 # Validation — Lunalyr 0.4.8 (build 15)

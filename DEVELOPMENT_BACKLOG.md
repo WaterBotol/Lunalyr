@@ -2,7 +2,9 @@
 
 The user asked to finish the current visualiser/lyric-size/custom-wallpaper batch, then wait one hour before resuming earlier postponed work. Do not start the earlier backlog before that delay. Preserve new feedback received in the meantime.
 
-## Current batch: 0.4.8 / build 15
+## Current batch: 0.4.9 / build 16 (includes 0.4.8)
+
+- 0.4.9 isolates wallpaper geometry from lyric layout, preserves Aurora bass/mid dynamics at high sensitivity and reduces extra smoothing latency. It passed 89 native tests, nine Python tests and local/CI Release builds. The packaged Release receives live system audio with existing permissions. Start any new audit from this version and the user's latest feedback.
 
 - Add Aurora Curtains, a dedicated visualiser based on the ambient GPU Aurora.
 - Correct visualiser colour richness and the full sensitivity range, remove irrelevant controls, and avoid hard saturation of ribbon energy.
