@@ -554,22 +554,28 @@ fragment float4 auroraFragment(FSQuadOut in [[stage_in]],
 }
 
 // The original GPU Aurora material, now a dedicated audio visualiser.
+static float curtainEnergy(float value, float sensitivity) {
+    // A soft knee keeps loud music responsive even at maximum sensitivity.
+    // clamp(value * sensitivity, 0, 1) flattened most mastered bass to 1.
+    float x = max(value, 0.0) * sqrt(max(sensitivity, 0.3));
+    return x / (0.65 + x);
+}
 fragment float4 curtainAuroraFragment(FSQuadOut in [[stage_in]],
                                       constant VizUniforms& u [[buffer(0)]],
                                       constant float* bands [[buffer(1)]],
                                       constant float* wave [[buffer(2)]]) {
     float2 uv = in.uv;
-    float energy = clamp(u.bass * u.sensitivity, 0.0, 1.0);
-    float mids = clamp(u.mid * u.sensitivity, 0.0, 1.0);
+    float energy = curtainEnergy(u.bass, u.sensitivity);
+    float mids = curtainEnergy(u.mid, u.sensitivity);
     float glow = 0.0;
     for (int i = 0; i < 5; i++) {
         float fi = float(i);
         float phase = u.time * u.speed * (0.5 + fi * 0.14) + fi * 2.1;
-        float detail = bandAt(bands, clamp(uv.x * 0.65 + fi * 0.06, 0.0, 1.0));
-        float centre = 0.5 + sin(uv.x * 2.3 + phase) * (0.16 + 0.09 * energy)
-            + sin(uv.x * 5.1 - phase * 0.7) * (0.06 + 0.045 * mids)
-            + (detail - 0.3) * 0.08 * u.sensitivity;
-        float thickness = 0.04 + 0.02 * sin(phase * 0.8) + 0.035 * energy;
+        float detail = curtainEnergy(bandAt(bands, clamp(uv.x * 0.65 + fi * 0.06, 0.0, 1.0)), u.sensitivity);
+        float centre = 0.5 + sin(uv.x * 2.3 + phase) * (0.12 + 0.18 * energy)
+            + sin(uv.x * 5.1 - phase * 0.7) * (0.045 + 0.09 * mids)
+            + sin(uv.x * 3.2 + phase + fi) * (detail - 0.3) * 0.14;
+        float thickness = 0.028 + 0.015 * (1.0 + sin(phase * 0.8)) + 0.06 * energy;
         float band = thickness / (abs(uv.y - centre) + thickness * 0.55);
         glow += band * (0.25 + 0.2 * sin(phase) + 0.45 * mids);
     }

@@ -114,7 +114,8 @@ struct NowPlayingView: View {
                     Date().timeIntervalSince(layerChangedAt) / Self.backgroundFadeDuration
                 )
 
-                ZStack {
+                WallpaperViewport(size: geometry.size) {
+                  ZStack {
                     // `compositingGroup` flattens each layer with its own
                     // scrim before the fade opacity is applied; without it
                     // the two scrims blend through each other and the screen
@@ -134,7 +135,8 @@ struct NowPlayingView: View {
                     )
                     .compositingGroup()
                     .opacity(previousLayer == nil ? 1 : fade)
-
+                  }
+                } lyrics: {
                     lyricsSection(
                         time: playbackTime,
                         baseSize: baseSize,
@@ -142,8 +144,8 @@ struct NowPlayingView: View {
                         maxHeight: geometry.size.height * 0.72,
                         mood: mood
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 40)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                     .blur(radius: isHovered ? 22 : 0)
                     .opacity(isHovered ? 0.3 : 1)
                     .animation(.easeOut(duration: 0.3), value: isHovered)

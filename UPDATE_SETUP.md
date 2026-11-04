@@ -10,7 +10,7 @@ This endpoint is live for the approved stable 0.4.5 release. No dummy feed or pr
 
 ## Current publisher state
 
-Version **0.4.8 / build 15** retains the stable feed and public Ed25519 key introduced in 0.4.5. Both SPARKLE_PUBLIC_KEY and SPARKLE_PRIVATE_KEY are configured as encrypted repository Actions secrets. A protected local seed backup is retained outside Git. Do not generate a replacement key for this existing publisher identity without planning a supported key rotation.
+Version **0.4.9 / build 16** retains the stable feed and public Ed25519 key introduced in 0.4.5. Both SPARKLE_PUBLIC_KEY and SPARKLE_PRIVATE_KEY are configured as encrypted repository Actions secrets. A protected local seed backup is retained outside Git. Do not generate a replacement key for this existing publisher identity without planning a supported key rotation.
 
 Preview downloads are GitHub prereleases and are installed manually. They do not replace the stable/latest appcast. A signed draft is a review candidate; preparing it does not publish the stable channel or prove an installed upgrade.
 
@@ -71,7 +71,7 @@ This synchronizes project.yml and Info.plist. Use --disable to remove the local 
 
 ## Publish an update
 
-1. Update both CFBundleShortVersionString and CFBundleVersion in project.yml and Sources/Info.plist. Increase the numeric build version every release. The current source version is 0.4.8, build 15; the approved stable channel is 0.4.5, build 12.
+1. Update both CFBundleShortVersionString and CFBundleVersion in project.yml and Sources/Info.plist. Increase the numeric build version every release. The current source version is 0.4.9, build 16; the approved stable channel is 0.4.5, build 12.
 2. Commit and push the change.
 3. In Actions → Build Lunalyr for Mac → Run workflow, enable **Prepare a signed draft GitHub release**.
 4. The workflow runs tests, builds the app with the public key, packages it with ditto to preserve framework symlinks, signs the archive using Sparkle’s tooling and creates a draft release. The existing release/tag is never overwritten.

@@ -14,7 +14,7 @@ The user asked to finish the current visualiser/lyric-size/custom-wallpaper batc
 ## Earlier work to audit after the requested delay
 
 1. Read new user bugchecking feedback, Git status and current Actions results first. Preserve existing work and preferences.
-2. The user explicitly chose “Leave capture permissions for later.” Do not prompt again, change privacy permissions, or enable capture to work around that choice. Finish actual Mac capture and response verification only when the user makes permission available: real audio packets, silence/playback response, route changes, wake and cancellation. Never bypass a denied privacy permission.
+2. Capture update: after initially deferring permission setup, the user said permissions should work. The actual running 0.4.8 Release now has System audio enabled and reports Receiving audio, increasing packets and changing bass/mid/high meters. Preserve that enabled intent. The older diagnostic-copy TCC denial is historical; do not treat it as current permission state or disable working capture. Do not change OS privacy permissions. Continue checking each new build, real response, route changes, wake and cancellation. Never bypass a denied permission.
 3. Profile Release CPU/GPU with a controlled song/style/frame-rate/display comparison. Record this Mac's hardware; it cannot establish improvement on the older Mac that previously showed about 154% CPU.
 4. Audit expressive lyric entrances, held words and exits; clipping/horizon artefacts and Constellation line stability; instrumental interludes.
 5. Verify per-style faint next-word previews, romanisation and physical multi-monitor behaviour where the necessary hardware is available.

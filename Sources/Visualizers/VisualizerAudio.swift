@@ -74,7 +74,10 @@ struct VisualizerSmoother {
     }
     private static func follow(_ value: Float, first: inout Float, output: inout Float, dt: Double) {
         let target = value.isFinite ? min(1, max(0, value)) : 0
-        let tau: Float = target > first ? 0.18 : 0.60
+        // The FFT already has attack/release filtering. Another slow envelope
+        // erased note attacks; these poles round the geometry without hiding
+        // a beat behind several hundred milliseconds of delay.
+        let tau: Float = target > first ? 0.055 : 0.22
         let step = Float(dt) / tau, decay = exp(-step)
         let old = first - target
         output = target + (output - target + old * step) * decay

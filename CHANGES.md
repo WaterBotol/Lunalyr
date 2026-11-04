@@ -2,6 +2,14 @@
 
 Upstream Verso commit: 9354e2f6703fda43e819284563c257e9bb4b07f8. Original licence unchanged.
 
+## 0.4.9 stable wallpaper bounds and clearer audio response
+
+- Place lyrics over an independently sized wallpaper viewport. Oversized lines and lyric-size changes cannot participate in wallpaper sizing or centering.
+- Remove Aurora Curtains' hard bass/mid clamp at high sensitivity. Use a soft knee and greater spectrum-shaped curtain sway and thickness variation.
+- Reduce the extra two-pole envelope's attack/release constants from 180/600 ms to 55/220 ms; the FFT's existing filtering remains. Note attacks survive without introducing waveform-driven jagged geometry.
+- Recheck the actual running Release copy: system audio was arriving with changing meters. Preserve the user's enabled capture setting; the older diagnostic permission failure is historical.
+- Version 0.4.9, build 16. All 89 native tests passed locally, including AppKit/SwiftUI viewport layout and Metal high-sensitivity rendering regressions; nine Python tests passed.
+
 ## 0.4.8 wallpaper controls and lyric sizing
 
 - Add Your wallpaper: validated image/video import, app-managed copies, silent video looping, placement controls and orientation-aware video sizing.

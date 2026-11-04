@@ -14,7 +14,13 @@ Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app*
 
 The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
 
-## 0.4.8 preview
+## 0.4.9 preview
+
+Wallpaper geometry is now independent of lyric layout, preventing new or oversized lines from resizing/recentering the background. Aurora Curtains preserves bass variation at high sensitivity and has a stronger musical sway. Visualiser smoothing now follows note attacks sooner and releases between phrases, while retaining continuous motion.
+
+Both the user's 0.4.8 Release copy and the packaged 0.4.9 Release were checked with capture enabled: they reported Receiving audio with increasing packets and changing meters. The earlier diagnostic-copy denial does not describe those running copies. All 89 native tests and nine Python tests passed locally, including a viewport layout regression, an envelope timing test and real Metal rendering at maximum sensitivity. Release built and was launched on the Mac. See VALIDATION.md for evidence and remaining coverage.
+
+## 0.4.8 custom wallpapers
 
 **Your wallpaper** imports a local image or silent looping video. Lunalyr keeps its own copy, and offers Fill, Fit and top/bottom placement. Low power mode still selects a lightweight wallpaper at 30 fps.
 

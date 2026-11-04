@@ -1,3 +1,19 @@
+# Validation — Lunalyr 0.4.9 (build 16)
+
+## Actual Mac execution — 4 November 2026
+
+Test-VersoCustom-2026.11.04_12-33-21-+1100.xcresult reports **89 passed, zero failures, zero skips and no runtime warnings** on the Apple M5 Pro / macOS 27.2 / Xcode 27.2. Build/local-tests-0.4.9.json retains the extracted summary. Nine Python helper tests also passed.
+
+The new AppKit/SwiftUI regression hosts the actual WallpaperViewport, changes lyric bounds from 40×60 to 3000×2200 and back, and verifies that the background remains at origin zero with size 640×360. The lyric overlay does not contribute to wallpaper layout; only the wallpaper is clipped to its viewport. Existing lyric fitting remains in place.
+
+The real Metal render test now checks Aurora Curtains at sensitivity 3 with bass 0.45 versus 0.9 while holding other inputs/time fixed. The previous hard clamp made these inputs identical; the soft knee preserves a measurable pixel difference. An envelope test requires more than half the note attack within 100 ms and decay below 0.4 after 500 ms of silence. Frame-rate independence, silence and invalid-sample tests still pass.
+
+The Release build succeeded in Xcode at 12:34 Melbourne time. The packaged 0.4.9 app passed deep signature/version checks and was launched. With the user's existing Automatic capture and Aurora Curtains selection, it reported **Receiving audio · System audio**; packet count rose from 98 to 377 to 2,113, with changing high-band meter values during Music playback. Its live preview was visually inspected with changing lyrics. No OS privacy setting was changed or new permission accepted. The earlier 0.4.8 diagnostic-copy TCC denial is historical and does not describe this running Release copy.
+
+This establishes actual capture delivery and live rendering in this app copy, in addition to deterministic renderer/layout tests. It does not establish subjective tuning for every song, controlled beat-to-pixel latency, every route/wake scenario, physical multi-monitor coverage or a new CPU/GPU performance benchmark. The preview pause/play issue remains on the postponed backlog.
+
+---
+
 # Validation — Lunalyr 0.4.8 (build 15)
 
 ## Actual Mac execution — 4 November 2026

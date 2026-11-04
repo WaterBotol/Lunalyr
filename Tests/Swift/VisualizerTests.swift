@@ -51,7 +51,18 @@ final class VisualizerTests: XCTestCase {
         _ = smoother.frame(target, at: 0)
         let first = smoother.frame(target, at: 1 / 60)
         XCTAssertGreaterThan(first.bands[20], 0)
-        XCTAssertLessThan(first.bands[20], 0.01)
+        XCTAssertLessThan(first.bands[20], 0.05)
+    }
+    func testAudioEnvelopeKeepsNoteAttacksAndReleasesVisible() {
+        var smoother = VisualizerSmoother(), sound = AudioSnapshot()
+        sound.bass = 1
+        _ = smoother.frame(sound, at: 0)
+        var frame = sound
+        for step in 1...6 { frame = smoother.frame(sound, at: Double(step) / 60) }
+        XCTAssertGreaterThan(frame.bass, 0.5, "Do not smear a note attack over several hundred milliseconds")
+        for step in 7...60 { _ = smoother.frame(sound, at: Double(step) / 60) }
+        for step in 61...90 { frame = smoother.frame(AudioSnapshot(), at: Double(step) / 60) }
+        XCTAssertLessThan(frame.bass, 0.4, "Do not hold the previous note through the next beat")
     }
     func testSilenceAndInvalidSamplesCannotDriveTheVisualiser() {
         let analyzer = AudioAnalyzer()
@@ -80,7 +91,7 @@ final class VisualizerTests: XCTestCase {
             descriptor.fragmentFunction = library.makeFunction(name: style.fragment)
             descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
             let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
-            func render(_ sound: AudioSnapshot) throws -> [UInt8] {
+            func render(_ sound: AudioSnapshot, sensitivity: Double = 1) throws -> [UInt8] {
                 let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
                     width: width, height: height, mipmapped: false)
                 textureDescriptor.usage = [.renderTarget]
@@ -94,7 +105,7 @@ final class VisualizerTests: XCTestCase {
                 let encoder = try XCTUnwrap(command.makeRenderCommandEncoder(descriptor: pass))
                 var u = AudioVisualizerView.Coordinator.uniforms(style: style,
                     size: CGSize(width: width, height: height), time: 12, frame: sound,
-                    sensitivity: 1, speed: 1, reduced: false)
+                    sensitivity: sensitivity, speed: 1, reduced: false)
                 encoder.setRenderPipelineState(pipeline)
                 encoder.setFragmentBytes(&u, length: MemoryLayout<VizUniforms>.stride, index: 0)
                 sound.bands.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 1) }
@@ -117,6 +128,15 @@ final class VisualizerTests: XCTestCase {
             let playing = try render(sound)
             let difference = zip(quiet, playing).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
             XCTAssertGreaterThan(difference, 1000, style.title)
+            if style == .curtainAurora {
+                sound.bass = 0.45
+                let medium = try render(sound, sensitivity: 3)
+                sound.bass = 0.9
+                let loud = try render(sound, sensitivity: 3)
+                let change = zip(medium, loud).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
+                XCTAssertGreaterThan(Double(change) / Double(width * height * 3), 0.75,
+                    "High sensitivity must preserve the difference between medium and loud bass")
+            }
         }
     }
 }
