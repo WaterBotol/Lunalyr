@@ -6,7 +6,7 @@ On the Apple M5 Pro / macOS 27.2 / Xcode 27.2, Test-VersoCustom-2026.11.04_11-49
 
 The suite constructs real Metal pipelines and renders every visualiser, including Aurora Curtains, with different input spectra; it verifies changed pixels. New tests check the full sensitivity range and colour uniform, monotonic lyric scaling after fitting, independent durable image copies and invalid-image rejection. The rolling-font identity regression now runs with Editorial both on and off.
 
-The Release app built through Xcode's Product → Build For → Profiling and passed deep signature verification. It was launched on this Mac. The native Your wallpaper panel imported the bundled public Flower.png through NSOpenPanel; the image appeared behind the lyrics in the live preview. The previous visualiser selection was restored. Imported-video looping/orientation and every placement option still need extended interactive review; file/track validation and orientation handling in source do not establish that coverage.
+The Release app built through Xcode's Product → Build For → Profiling and passed deep signature verification. It was launched on this Mac. The native Your wallpaper panel imported the bundled public Flower.png through NSOpenPanel; the image appeared behind the lyrics in the live preview. A generated one-second 360×640 H.264 fixture was also imported and continued playing beyond its duration; Fill and Fit whole frame displayed the expected crop and portrait letterboxing. Fill and the previous visualiser selection were restored. Rotation metadata, top/bottom placement and extended playback still need interactive review.
 
 The packaged Release's lyric-size slider was exercised from the saved 0.7 to 1.5 during playback; the preview rendered larger words. The saved 0.7 was restored. This was a basic interactive check, not a controlled comparison of every style/font/line. Pausing from the preview also exposed an outstanding issue: current-track metadata disappeared and Play became disabled. Playback was restored through Music; this is recorded for the postponed UI audit.
 
@@ -15,6 +15,8 @@ Actual capture inspection found zero audio packets and a macOS TCC denial in the
 The capture controller now bounds startup, exposes stages and preserves tap/fallback failure details. Visualiser colour richness and 3× sensitivity reach the GPU; unrelated appearance changes do not trigger a capture restart. Controlled Release CPU/GPU profiling, physical multi-monitor coverage and long-form lyric/reading review remain outstanding. No new performance improvement or complete live-capture fix is claimed.
 
 The upstream root and bundled licence hashes remain unchanged. Stable automatic updates remain on the approved 0.4.5 release; this version is a manual preview download.
+
+GitHub Actions run [41749945784](https://github.com/WaterBotol/Lunalyr/actions/runs/41749945784) passed native tests, Python helpers, all four C suites and the Release build at source commit add13477648497ab0e88c456693dcd4a4f60ff4e. Its downloaded app artifact passed deep signature and version checks; its ZIP SHA256 is 54b8216b6d20eec07eb30609076f36690d4e94949110df437ae1892815170469. The preview uses this exact CI archive, rather than repackaging the local app.
 
 ---
 
