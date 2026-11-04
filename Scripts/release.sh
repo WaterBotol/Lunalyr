@@ -2,7 +2,7 @@
 # Custom fork: a simple drag-and-drop DMG using the verified custom build.
 set -euo pipefail
 PROJECT_DIR="$(cd -- "$(dirname -- "$0")/.." && pwd)"
-bash "$PROJECT_DIR/Scripts/build-custom.sh"
+bash "$PROJECT_DIR/Scripts/build.sh"
 TASK_STAGE_DIR="$(mktemp -d /tmp/verso-custom-dmg.XXXXXX)"
 trap 'rm -rf "$TASK_STAGE_DIR"' EXIT
 ditto "$PROJECT_DIR/Build/Lunalyr.app" "$TASK_STAGE_DIR/Lunalyr.app"

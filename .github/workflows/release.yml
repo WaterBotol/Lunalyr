@@ -30,8 +30,8 @@ jobs:
             python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"
           fi
           python3 -m unittest discover -s Tests/Python -v
-          bash Run-Tests.command
-          bash Build.command
+          bash Scripts/test.sh
+          bash Scripts/build.sh
       - name: Upload validation logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

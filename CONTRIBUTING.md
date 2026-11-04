@@ -4,7 +4,7 @@ Lunalyr is a native macOS SwiftUI and Metal app derived from Verso. Read LICENSE
 
 ## Development
 
-Install full Xcode, its Metal compiler and XcodeGen. Run `bash Run-Tests.command`, then `bash Build.command`. The generated project and Build directory are excluded from Git.
+Install full Xcode, its Metal compiler and XcodeGen. Run `bash Scripts/test.sh`, then `bash Scripts/build.sh`. The generated project and Build directory are excluded from Git.
 
 Open a focused pull request describing the problem, resulting behaviour and checks performed. For visual changes, include a short recording from the actual app. For performance changes, compare the same track, composition, wallpaper and displays in a Release build with Settings closed.
 

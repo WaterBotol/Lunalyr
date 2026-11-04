@@ -87,15 +87,15 @@ Romanisation offers Off, Below and Replace. Japanese uses macOS tokenizer/readin
 Requires full Xcode and its Metal compiler, XcodeGen, and Python 3.9+.
 
 ```bash
-bash Run-Tests.command
-bash Build.command
+bash Scripts/test.sh
+bash Scripts/build.sh
 ```
 
-Run-Tests.command writes native test logs and results under Build/TestDerivedData. Build.command runs four C suites, builds the normal Release app and verifies its Metal library and Sparkle framework. It preserves an existing output app before replacing it. The build log is Build/build.log.
+Scripts/test.sh writes native test logs and results under Build/TestDerivedData. Scripts/build.sh runs four C suites, builds the normal Release app and verifies its Metal library and Sparkle framework. It preserves an existing output app before replacing it. The build log is Build/build.log.
 
 You can also generate the project with `xcodegen generate --spec project.yml`, open VersoCustom.xcodeproj and use Product → Test, then Product → Build For → Profiling for a Release build.
 
-Measure-Performance.command collects local CPU readings and a process sample. Compare the same song, style, frame rate and displays, with Settings closed. No report is uploaded automatically. See docs/VALIDATION.md for what has actually been measured and what remains unverified.
+Scripts/measure-performance.sh collects local CPU readings and a process sample. Compare the same song, style, frame rate and displays, with Settings closed. No report is uploaded automatically. See docs/VALIDATION.md for what has actually been measured and what remains unverified.
 
 ## Releases and updates
 

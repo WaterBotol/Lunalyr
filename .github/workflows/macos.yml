@@ -47,9 +47,9 @@ jobs:
       - name: Python helper tests
         run: python3 -m unittest discover -s Tests/Python -v
       - name: Native Swift tests
-        run: bash Run-Tests.command
+        run: bash Scripts/test.sh
       - name: Build app and publisher tools
-        run: bash Build.command
+        run: bash Scripts/build.sh
       - name: Archive app and matching tools
         run: |
           ditto -c -k --sequesterRsrc --keepParent Build/Lunalyr.app Build/Lunalyr-Mac.zip

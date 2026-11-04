@@ -65,7 +65,7 @@ Do not paste the private key into a chat, commit it or attach it to a release. T
 For local builds, enable the same channel with:
 
     python3 Scripts/configure-updates.py --github WaterBotol/Lunalyr --public-key 'YOUR_PUBLIC_KEY'
-    bash Build.command
+    bash Scripts/build.sh
 
 This synchronizes project.yml and Info.plist. Use --disable to remove the local feed/key pair. Configuration checks reject mismatches, malformed keys, non-HTTPS feeds and credentials embedded in the feed URL.
 
