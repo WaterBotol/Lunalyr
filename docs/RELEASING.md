@@ -16,30 +16,9 @@ Preview downloads are GitHub prereleases and are installed manually. They do not
 
 The signing fixture and stable ZIP signature were cryptographically verified with Sparkle 2.10.0 and OpenSSL. The stable feed was fetched successfully. An installed old-to-new upgrade still requires a real installation test.
 
-## Put the source in your repo
+## Continuous integration
 
-Extract the latest source into a fresh folder on your Mac. Install GitHub CLI and sign in through its browser flow:
-
-```bash
-brew install gh
-gh auth login --hostname github.com --git-protocol https --web --scopes workflow
-```
-
-Choose the account which owns WaterBotol/Lunalyr. The workflow scope allows uploading the included Actions workflow. If gh is already installed, skip the brew command.
-
-In Terminal type `cd ` (including the space), drag the extracted VersoCustom folder into Terminal and press Return. Then run:
-
-```bash
-bash Push-to-GitHub.command
-```
-
-The source files, project.yml and .github folder belong at the repository root. The command configures the GitHub credential helper only for this repository. If Git author identity is missing, it uses the signed-in account’s name and ID-based no-reply email, without changing global Git settings. Existing author settings remain.
-
-It never force-pushes and excludes Build output and signing files. If remote work already exists and a push is rejected, stop and reconcile the changes in GitHub Desktop or a Codex session; do not force-push over it. GitHub Desktop is also an alternative to the command-line upload.
-
-The GitHub connection used while preparing this version could read the empty repository, but its initial file-write request returned 403, Resource not accessible by integration. No source commit or workflow run was created by that failed request.
-
-After upload, open [Actions](https://github.com/WaterBotol/Lunalyr/actions). **Build Lunalyr for Mac** runs the Python helper tests, native Swift tests and a Release build. Download the VersoCustom-Mac artifact, extract it, then extract VersoCustom-Mac.zip for the app. Friends do not need Xcode to use this compiled app. These builds are locally/ad-hoc signed; Developer ID signing and notarization are not configured.
+Open [Actions](https://github.com/WaterBotol/Lunalyr/actions). **Build Lunalyr for Mac** runs the Python helper tests, native Swift tests and a Release build. Download the VersoCustom-Mac artifact, extract it, then extract VersoCustom-Mac.zip for the app. Friends do not need Xcode to use this compiled app. These builds are locally/ad-hoc signed; Developer ID signing and notarization are not configured.
 
 ## One-time signing setup for a new publisher
 
