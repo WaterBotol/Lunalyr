@@ -25,41 +25,34 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
+<p align="center">
+  <img src="docs/images/hero.webp" width="860" alt="Lunalyr's Echo composition: a lyric line set across a dark desktop, with fainter repeats above and below">
+</p>
+
 Lunalyr turns your desktop into a live lyric display for Apple Music. It follows what the Music app is playing and sets each word on your wallpaper as it is sung: over ambient GPU scenes coloured from the album art, over your own desktop picture, or over visualisers that move with your Mac's audio. It lives in the menu bar and draws beneath your desktop icons, so there is no window to manage.
 
 Lunalyr is free to use. It started as a fork of [Verso](https://github.com/AkkiCode06/verso) by AkkiCode06.
 
 ## Screenshots
 
-<!--
-Screenshot grid. Put the captures in docs/images/ and uncomment this block.
-Never use reference.mp4, reference-grid.jpg or any VoxelWall material.
-
-<p align="center">
-  <img src="docs/images/hero.png" width="860" alt="Lunalyr setting a lyric line across the desktop">
-</p>
-
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/composition-constellation.png" alt="Constellation composition"></td>
-    <td width="50%"><img src="docs/images/visualiser-aurora-curtains.png" alt="Aurora Curtains visualiser"></td>
+    <td width="50%"><img src="docs/images/composition-constellation.webp" alt="Constellation composition: lyric words linked by hairlines over a teal halftone wallpaper"></td>
+    <td width="50%"><img src="docs/images/visualiser-aurora-curtains.webp" alt="Aurora Curtains visualiser: red curtains of light moving behind the lyrics"></td>
   </tr>
   <tr>
     <td align="center"><b>Constellation</b></td>
-    <td align="center"><b>Aurora Curtains</b></td>
+    <td align="center"><b>Aurora Curtains visualiser</b></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/your-wallpaper.png" alt="Lyrics over an existing desktop wallpaper"></td>
-    <td width="50%"><img src="docs/images/workspace.png" alt="The Lunalyr workspace with its live preview"></td>
+    <td width="50%"><img src="docs/images/your-wallpaper.webp" alt="Your wallpaper mode: lyrics drawn over an existing desktop wallpaper"></td>
+    <td width="50%"><img src="docs/images/workspace.png" alt="The Lunalyr settings window on the Wallpaper page"></td>
   </tr>
   <tr>
-    <td align="center"><b>Your wallpaper</b></td>
-    <td align="center"><b>Workspace</b></td>
+    <td align="center"><b>Your wallpaper</b>: lyrics over the desktop you already have</td>
+    <td align="center"><b>Settings</b></td>
   </tr>
 </table>
--->
-
-Screenshots and a short demo are on the way. The [latest release](https://github.com/WaterBotol/Lunalyr/releases/latest) is the quickest way to see Lunalyr in the meantime.
 
 ## Features
 

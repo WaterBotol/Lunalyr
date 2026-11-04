@@ -14,7 +14,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
-- Reorganised the repository for contributors. The README is rewritten, this changelog replaces `CHANGES.md`, and long-form documentation now lives in [`docs/`](docs/README.md), including a new [architecture overview](docs/ARCHITECTURE.md).
+- Reorganised the repository for contributors. The README is rewritten with screenshots, this changelog replaces `CHANGES.md`, and long-form documentation now lives in [`docs/`](docs/README.md), including a new [architecture overview](docs/ARCHITECTURE.md).
 - Added contributing, code of conduct and security policies, issue forms, a pull request checklist, `.editorconfig` and `.gitattributes`.
 - Moved the build and test entry points from the repository root into `Scripts/`. `Build.command` is now `Scripts/build.sh` and `Run-Tests.command` is now `Scripts/test.sh`. The performance helper is run directly as `Scripts/measure-performance.sh`.
 
