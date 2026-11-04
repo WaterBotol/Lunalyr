@@ -20,6 +20,7 @@
   <a href="https://github.com/WaterBotol/Lunalyr/releases/latest"><strong>Download</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#troubleshooting">Troubleshooting</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -78,8 +79,8 @@ Screenshots and a short demo are on the way. The [latest release](https://github
 You need macOS 14 Sonoma or later and the Music app. Visualisers use Core Audio system-audio capture on macOS 14.2 or later, with a ScreenCaptureKit fallback.
 
 1. Download `Lunalyr-<version>.zip` from the [latest release](https://github.com/WaterBotol/Lunalyr/releases/latest).
-2. Unzip it and drag **Lunalyr.app** to your Applications folder.
-3. Open Lunalyr and follow the first-launch steps below.
+2. Unzip it in Finder and move **Lunalyr.app** to your **Applications** folder *before* opening it. An app opened straight from Downloads runs from a temporary, read-only copy, and the built-in updater cannot replace it.
+3. Open Lunalyr from Applications and follow the first-launch steps below.
 
 ### First launch
 
@@ -120,7 +121,7 @@ defaults delete local.verso.custom
 
 ## Quick start
 
-1. Open Lunalyr. Its crescent icon appears in the menu bar; there is no Dock icon.
+1. Open Lunalyr. It lives only in the menu bar: look for its crescent icon near the clock. There is no Dock icon or main window, and the workspace opens by itself the first time. To bring it back later, click the menu-bar icon and choose **Open Lunalyr**, or open Lunalyr again from Applications.
 2. Play a song in Music and allow Lunalyr to control Music when asked. The lyrics appear on your desktop.
 3. Click the menu-bar icon, then **Open Lunalyr**. The workspace shows a live preview of your desktop next to the settings.
 4. In **Wallpaper**, choose a kind: Match the music, GPU effects, Line patterns, Colour only, Visualisers, Your wallpaper, or Imported image or video.
@@ -128,6 +129,75 @@ defaults delete local.verso.custom
 6. For a visualiser, choose **Wallpaper → Visualisers**, pick a scene and turn on **System audio**. You should see *Receiving audio* and moving meters. If not, use **Permissions…** or **Reconnect**.
 7. Lyrics early or late? In **Lyrics → This song**, move the offset; it is saved for that recording. Wrong lyrics? Use **Find lyrics** to search, pick another candidate, or import an LRC or TTML file.
 8. In **Performance**, 30 fps is a good balance; 60 fps uses more CPU and GPU. **Low power visuals** and **Launch at login** are there too.
+
+## Troubleshooting
+
+<details>
+<summary><b>macOS says Lunalyr can't be opened, or that it is damaged</b></summary>
+
+Releases are not notarised, so macOS blocks the first launch; follow the [first-launch steps](#first-launch). If macOS says the app is damaged, unzip the download again with Finder, since some third-party unarchivers break the app's signature. Then move it to Applications and, if needed, clear the quarantine flag with the `xattr` command shown there.
+
+</details>
+
+<details>
+<summary><b>I can't find the menu-bar icon</b></summary>
+
+Lunalyr has no Dock icon. On a MacBook with a notch, menu-bar icons can disappear behind the notch when the menu bar is crowded: quit a few other menu-bar apps, or use a menu-bar manager. You can always open the workspace by opening Lunalyr again from Applications or Spotlight.
+
+</details>
+
+<details>
+<summary><b>No lyrics appear</b></summary>
+
+- Lunalyr follows the Music app. Make sure a song is playing there.
+- Check that Lunalyr may control Music, in **System Settings → Privacy & Security → Automation → Lunalyr → Music**. If you declined the prompt and Lunalyr is not listed, run this in Terminal and open Lunalyr again to be asked once more:
+
+  ```bash
+  tccutil reset AppleEvents local.verso.custom
+  ```
+
+- The menu-bar panel shows which source supplied the lyrics. If none did, use **Find lyrics** in the Lyrics settings to search by hand, turn on more sources, or import an LRC or TTML file.
+
+</details>
+
+<details>
+<summary><b>Lyrics are early or late</b></summary>
+
+Use **Earlier** and **Later** under **Lyrics → This song**. The offset is saved for that recording. **Lyrics → Advanced timing** has a global offset that applies to every song.
+
+</details>
+
+<details>
+<summary><b>The visualiser doesn't react to music</b></summary>
+
+- Turn on **System audio** in **Wallpaper → Music response**, and look for *Receiving audio* with moving meters.
+- Click **Permissions…** and check that Lunalyr is allowed under **Screen & System Audio Recording**. Releases are ad-hoc signed, so macOS can forget this permission, and the Automation permission, after an update. Turn Lunalyr off and on again in that list, or remove and re-add it, then click **Reconnect**.
+- Try the other capture method: **System audio** or **Screen recording compatibility**.
+- If you report a bug, include the text from **Copy audio diagnostics**.
+
+</details>
+
+<details>
+<summary><b>Check for updates doesn't work</b></summary>
+
+Make sure Lunalyr is in your Applications folder and was opened from there. An app opened from Downloads runs from a temporary, read-only copy that the updater cannot replace. Move it, open it again and check once more. You can also download the [latest release](https://github.com/WaterBotol/Lunalyr/releases/latest) by hand.
+
+</details>
+
+<details>
+<summary><b>Lunalyr uses a lot of CPU, GPU or battery</b></summary>
+
+In **Performance**, choose 30 fps, turn on **Low power visuals**, and consider **Pause fully covered wallpapers**. Visualisers and GPU effects cost more than line patterns, colour gradients or Your wallpaper. Close the workspace window when you are not using it, because its live preview renders too.
+
+</details>
+
+Still stuck? [Open a bug report](https://github.com/WaterBotol/Lunalyr/issues/new/choose).
+
+## Accessibility
+
+- **Reduce Motion.** When **Reduce motion** is on in **System Settings → Accessibility → Display**, words appear without sliding, scaling, rotating or blurring in, and interlude graphics stay still. Wallpapers and visualisers keep moving. For a calmer background, choose Your wallpaper, Colour only or a line pattern, and lower **Generated motion speed**.
+- **Light and motion sensitivity.** Visualisers and many GPU effects move continuously, and their light and colour change with the music. Flashes, camera jolts and flashing stars are turned off, but if motion or changing light affects you, avoid the visualisers and use one of the calmer backgrounds above.
+- **Text size.** **Lyric size** in Typography scales every composition, after Lunalyr fits each line to the screen.
 
 ## Lyrics sources and privacy
 

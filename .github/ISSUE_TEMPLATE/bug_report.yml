@@ -75,7 +75,7 @@ body:
     id: composition
     attributes:
       label: Composition
-      description: Typography → Composition.
+      description: The lyric composition you were using.
       options:
         - Not related to typography
         - Scattered
@@ -91,7 +91,7 @@ body:
     id: wallpaper
     attributes:
       label: Wallpaper
-      description: Wallpaper → Kind. If it matters, name the effect, pattern or visualiser scene in the description.
+      description: The wallpaper type chosen on the Wallpaper page. If it matters, name the effect, pattern or visualiser scene in the description.
       options:
         - Not related to the wallpaper
         - Match the music
