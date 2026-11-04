@@ -1,0 +1,338 @@
+# Changelog
+
+All notable changes to Lunalyr are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each release has a marketing version (`0.4.10`) and an increasing build number (`17`).
+
+Lunalyr is a fork of [Verso](https://github.com/AkkiCode06/verso) at upstream commit `9354e2f6703fda43e819284563c257e9bb4b07f8`. The original licence is unchanged. The [upstream modification record](docs/upstream/MODIFICATIONS.md) lists files changed in early versions, and [docs/VALIDATION.md](docs/VALIDATION.md) holds the test evidence for each release.
+
+## [Unreleased]
+
+<!--
+Add entries for merged, unreleased work here under Added, Changed, Deprecated,
+Removed, Fixed or Security. Several branches may add entries at the same time.
+When merging, keep every entry and combine duplicate headings.
+-->
+
+### Changed
+
+- Reorganised the repository for contributors. The README is rewritten, this changelog replaces `CHANGES.md`, and long-form documentation now lives in [`docs/`](docs/README.md), including a new [architecture overview](docs/ARCHITECTURE.md).
+- Added contributing, code of conduct and security policies, issue forms, a pull request checklist, `.editorconfig` and `.gitattributes`.
+- Moved the build and test entry points from the repository root into `Scripts/`. `Build.command` is now `Scripts/build.sh` and `Run-Tests.command` is now `Scripts/test.sh`. The performance helper is run directly as `Scripts/measure-performance.sh`.
+
+### Removed
+
+- The owner-only `Push-to-GitHub.command` upload helper. Use Git or GitHub Desktop.
+
+## [0.4.10] - 2026-11-04
+
+Stable release, build 17. Copies that already include the updater can install it with **Check for Updates…**.
+
+### Added
+
+- **Fosfora Aurora** visualiser: seven luminous frequency ribbons, ported to native Metal from the MIT-licensed [Fosfora](https://github.com/kevinraymond/fosfora) shader at commit `2e85d3babca5b7f27426e211e58fe3c831fb667f`. Its licence is bundled and the original shader, descriptor and provenance are kept in `ThirdParty/Fosfora`. Global onset/beat flashes and shimmer are left out.
+
+### Changed
+
+- **Aurora Curtains** maps its full width to the 64-band logarithmic spectrum, with bass on the left and treble on the right. Each of its five lines favours a different register and phase, so local frequencies bend, widen and light their own part of the curtain instead of shifting the whole wallpaper.
+- Silk Ribbons and Spectral Aurora have more local spectral curvature and a modest geometric response to transients. Spectrum Tunnel no longer hard-clamps its high-gain angular lanes and ridge geometry. Global flashes and camera jolts stay disabled.
+- **Your wallpaper** now draws only the lyrics, in a transparent desktop window over your existing macOS wallpaper or third-party wallpaper app. No file selection, copy or screen capture is needed, the mode survives the low-power fallback, and the settings preview uses a neutral backdrop.
+- The earlier file import is now labelled **Imported image or video**. Saved files and placement are kept.
+
+### Fixed
+
+- Interlude graphics no longer appear in the lyrics-only overlay.
+- Live audio meters no longer rebuild the wallpaper and capture pickers while a menu is open.
+
+_Validation: 90 native tests and 9 Python tests passed locally, including narrow FFT-peak spatial response and existing-wallpaper low-power coverage._
+
+## [0.4.9] - 2026-11-04
+
+Preview release, build 16.
+
+### Changed
+
+- Visualiser smoothing follows note attacks sooner and releases between phrases. The extra two-pole envelope's attack/release times drop from 180/600 ms to 55/220 ms; the FFT's existing filtering is unchanged, so attacks come through without jagged, waveform-driven geometry.
+- Aurora Curtains has a stronger, spectrum-shaped sway and more thickness variation.
+
+### Fixed
+
+- The wallpaper keeps its size and position when lines are long or the lyric size changes. Lyrics are now placed over an independently sized wallpaper viewport.
+- Aurora Curtains keeps its bass and mid variation at high sensitivity. A soft knee replaces the previous hard clamp.
+
+_Validation: 89 native tests passed locally, including AppKit/SwiftUI viewport-layout and high-sensitivity Metal rendering regressions, plus 9 Python tests. Live system-audio capture was confirmed in the running Release build._
+
+## [0.4.8] - 2026-11-04
+
+Preview release, build 15.
+
+### Added
+
+- **Your wallpaper** (renamed **Imported image or video** in 0.4.10): import a local image or a silent looping video. Lunalyr validates the file and keeps its own copy, with Fill, Fit and top/bottom placement and orientation-aware video sizing. Low power mode still uses a lightweight wallpaper at 30 fps.
+- **Aurora Curtains**, a dedicated audio visualiser built on the ambient GPU Aurora's material. Music shapes its layered curtains; the ambient original stays separate.
+- Audio capture shows its startup stage, live meters and a packet counter, gives up after a startup deadline, and reports clearer tap and fallback errors.
+
+### Changed
+
+- Visualisers use the full sensitivity range (up to 3×) and respond to the Colour richness control.
+- Silk Ribbons uses a smoother energy curve, and wallpaper controls that do not apply are hidden.
+
+### Fixed
+
+- The lyric size slider is applied after automatic fitting, so fitting can no longer cancel it. This covers word-timed, whole-line and plain-text lyrics.
+- Editorial words keep their typeface as rolling lyric windows move.
+- Changing an unrelated setting no longer restarts audio capture.
+- A battery guard no longer stops capture while a visualiser is active.
+
+_Validation: 87 native tests and 9 Python tests passed locally; the Release build was exercised with image import and rendering. Live capture was not verified for this build (macOS denied permission to the test copy). Synthetic GPU input is not evidence of live capture._
+
+## [0.4.7] - 2026-11-04
+
+Preview release, build 14.
+
+### Added
+
+- A native settings workspace with one live desktop preview and seven inspectors: Wallpaper, Typography, Lyrics, Readings, Album covers, Performance and About. The menu-bar panel is rebuilt to match.
+- Lyric candidate cards with separate source, timing and reading labels; editable metadata search; LRC and TTML import; a clear way to reset a saved choice.
+- **Kuwo** (line-synced) and **lyrics.ovh** (plain-text fallback) lyric sources. Existing installations can enable them in the Lyrics inspector's source list. Neither needs an account.
+- **Restore recommended source order** in Lyrics.
+
+### Changed
+
+- **Accuracy first** is the default lyric selection for new installations. It rejects poor title, artist and duration matches, then prefers complete word timing, mixed timing, line timing and plain text, in that order. Source order breaks ties. This is a transparent heuristic, not a measured accuracy benchmark, and catalogue size is never used.
+- The recommended source order is local exports, Lyrics+/KPoe, NetEase, LRCLIB, QQ, Kugou, Kuwo, then lyrics.ovh. Existing custom orders and enabled sources are kept.
+- Valid word timing from any source is preferred over line-only results, even in Source order mode. Turn this preference off for strict source order.
+- Song timing, source selection and readings are now separate. Pronunciation readings are labelled separately from translations, and line-only results are labelled **Line-synced**.
+- Word coverage and timing are validated once when a result is applied, never in the frame loop. Punctuation variants are kept.
+- Automatic lyric caches use a new policy fingerprint, so results chosen under the old policy are looked up again.
+
+### Removed
+
+- The previous settings panes, sample renderers and custom pane chrome.
+
+### Fixed
+
+- Line-only results no longer hide available word-timed matches from other sources.
+- Results for a different recording of the same song are rejected.
+
+_Validation: 83 native tests passed locally with no failures or skips, plus 9 Python helper tests. The Release build and new workspace were inspected on a Mac. Physical multi-monitor and controlled performance coverage remain outstanding._
+
+## [0.4.6] - 2026-11-04
+
+Preview release, build 13.
+
+### Added
+
+- Per-recording lyric offsets, stored separately from the global offset.
+- A manual low power mode that also follows macOS Low Power Mode, stops unused capture and switches to lightweight wallpapers at 30 fps.
+- Editorial typefaces on every composition.
+- Real nested word timing from LRCLIB's Lyricsfile YAML, decoded with [Yams](https://github.com/jpsim/Yams) 6.2.2.
+
+### Changed
+
+- The app is rebranded as **Lunalyr**: name, app bundle, icon, menu and settings. The bundle identifier (`local.verso.custom`) and existing storage locations are unchanged.
+- Settings use native, resizable navigation with a live desktop renderer preview instead of the fixed custom sidebar.
+- When real word timing is missing, complete lines and readings are shown instead of invented word entrances.
+- The LRCLIB word-timing preference is now opt-out. Explicit saved choices and strict priority are kept when it is turned off.
+- Wider ribbon cores and continuous spectrum curvature; the original GPU Aurora curtains gain a smoothed musical sway.
+
+### Removed
+
+- The narrated walkthrough's narration source and speech resource.
+
+### Fixed
+
+- LRCLIB requests retry short 503/429 back-offs and fall back to search after an exact-match failure. Invalid word timing is treated as line-only.
+- Lyric source settings now take effect outside the Sources pane.
+- The low-power fallback is applied before animated artwork is chosen.
+
+Apple Music lyric extraction was investigated and deferred; no Accessibility-based reading was added.
+
+## [0.4.5] - 2026-11-04
+
+Stable release, build 12. The first release published on the stable update feed.
+
+### Added
+
+- Native Metal **Spectral Aurora** and **Spectrum Tunnel** visualisers and an FFT analyser, adapted from the MIT-licensed [Synesthia](https://github.com/jonjaques/synesthia) at commit `05144bf0f03eea5cc4af8135e9d71553f1ac9202`. Its licence, attribution and an adaptation manifest are kept.
+- **Silk Ribbons**, a quiet aurora variation and the default visualiser. Visualisers are complete wallpapers: audio shapes their own material and geometry.
+- The stable update feed and public updater key are configured, so copies with the updater can use **Check for Updates**. Private signing material stays outside Git, and native test results are kept as CI artifacts. Preview publication is gated on native tests and a Release build; stable candidates stay as drafts until reviewed.
+
+### Changed
+
+- Audio now drives only the dedicated visualisers. Capture still uses the system tap with the compatibility fallback and bounded PCM health diagnostics.
+- Supported PCM formats are decoded into independent left and right FFTs, so opposite-phase channels cannot cancel each other out. The spectrum is smoothed in time and frequency.
+- Desktop defaults are calmer: slower motion, adaptive GPU resolution and a bounded number of frames in flight.
+- Smaller words are larger and size contrast is lower across all eight compositions. Each complete line is fitted to the screen together with its reading, and rolling words are fitted to their measured, rotated glyph bounds.
+- Constellation links light continuously, following the same vocal envelope as the words. Fixed graph slots and geometry caching are kept.
+- Near-monochrome artwork gets a coordinated fan of hues, and the default gradient palette is broader. Ambient wallpaper motion no longer depends on live audio.
+
+### Removed
+
+- Audio-driven shader-domain deformation, colour-field distortion, lyric and background pulses, and the global beat-response controls.
+- Kick-driven camera jumps and flashing stars.
+
+### Fixed
+
+- Text wrapping no longer reuses a stale width, and oversized words are reported instead of silently overflowing.
+- `NSImage` is created on the main actor from validated image bytes, removing a Swift concurrency diagnostic.
+
+_Validation: 70 native tests, including real Metal rendering, passed locally, as did 9 Python tests and four C suites built with sanitizers._
+
+## 0.4.4 - 2026-11-04
+
+Development build 11 and the first commit in this repository. Not published as a release.
+
+### Fixed
+
+- Release builds failed at `InstrumentalInterludeView.swift:40` because the compiler could not type-check a mixed numeric expression in reasonable time. Ribbon drawing and path construction now live outside the view builder, with explicitly typed `Double` and `CGFloat` calculations. The visual equations and settings are unchanged.
+
+_Validation: the fix was made in source; a native rebuild had not yet been confirmed._
+
+## 0.4.3
+
+Development build; not published. Date not recorded.
+
+### Added
+
+- Automatic capture falls back to compatibility capture after a setup failure, missing or stalled callbacks, unsupported PCM, or eight seconds of silence while Music is playing. Explicit method choices are honoured, and compatibility capture never loops back into recovery. Output-device changes and display wake reconnect the session.
+- Richer damped word entrances, held-note growth and drift, and line exits for the existing compositions. Word motion seeds are cached with the static typography, and Constellation keeps its fixed graph slots and envelopes.
+- **Copy audio status**, plus an explanation when the response intensity is zero.
+
+### Changed
+
+- System-audio capture clocks its private aggregate device from the current output, waits for the device to be ready, disables physical input channels and analyses only the trailing tap channels, including interleaved layouts.
+- Real audio-band energy is compressed so quieter playback still responds, with faster attacks, smooth releases and bounded intensity. Bass, mid and high deformation applies inside all 27 GPU materials, with stronger Tidal and Light Trails behaviour and responsive colour-field movement. (Replaced by the dedicated visualisers in 0.4.5.)
+- In Automatic background mode, a generated GPU wallpaper is used while live audio is on, so animated album video cannot hide the response.
+- Rolling typography uses a larger free stage with natural word bounds, onset-driven handoffs, distinct hero, column and collage paths, and fades before the stage edges. Long held words stay in focus; cadence, duration and real energy shape the motion, and seeking stays deterministic.
+- The interlude spinner is replaced by flowing album-coloured ribbons, moving type and a next-vocal cue. Each composition's next-word preview switch is respected, and no countdown is shown when the return time is unknown.
+- Pausing when the wallpaper is covered is now opt-in for new installations, because desktop occlusion can report a visible wallpaper as covered. Display-sleep pausing and existing explicit preferences are kept.
+- The GitHub upload helper derives a missing repository-local Git author from the signed-in GitHub account, keeps existing identities and never force-pushes. The browser sign-in and workflow scope are documented.
+
+### Fixed
+
+- Compatibility capture consumes and discards its tiny 1 Hz screen stream so the stream starts reliably. No microphone output is requested and nothing is recorded.
+
+_Validation: the 0.4.2 build passed all 53 Debug native tests on a Mac. This version adds five audio recovery and channel-selection tests (58 total), a portable motion regression suite and quiet, loud and noise audio checks. Native compilation and live checks were still pending._
+
+## 0.4.2
+
+Development build 9; not published. Date not recorded.
+
+### Added
+
+- [Sparkle](https://sparkle-project.org) 2.10.0 with **Check for Updates** in the menu and Behaviour settings. No feed is invented and no private key is bundled. Includes synchronised update configuration, signature-format and packaging checks, and signed-update preparation helpers.
+- GitHub Actions workflows that test and build the Mac app and, on request, prepare a signed draft release. Normal build jobs are read-only; only the draft job can write releases. Signing material comes from Actions secrets and is removed from the runner afterwards.
+- `Measure-Performance.command`, an owner-run helper that samples CPU locally and uploads nothing (now `Scripts/measure-performance.sh`).
+- `Push-to-GitHub.command`, an owner-run upload command that never force-pushes.
+- Bundled licence notices for upstream Verso and Sparkle.
+
+### Changed
+
+- Static scattered and rolling typography is cached, including font identity, glyph strings, held-word metadata and layout styling. The cache is invalidated by font loading, reading or source changes, and composition, spread and size changes.
+- Unchanged words sit behind an `Equatable` glyph boundary; per-frame state (preview, karaoke, held-word lighting, seeking) still derives from playback time.
+- Word measurements and flow rows use SwiftUI `Layout` caches.
+- Line starts are prepared for binary search, and density is computed once per lyric result. Duplicate-timestamp and malformed-import behaviour is preserved.
+- The lyric fallback is evaluated lazily, only when live audio is not running.
+
+### Removed
+
+- Hidden scrubber schedules and unnecessary battery lookups.
+
+_Validation: 13 new native test methods (53 total) were added but not run in that environment; 9 Python helper tests passed. Native build, real performance and installed updates were not yet verified._
+
+## 0.4.1
+
+Development build 8; not published. Date not recorded.
+
+### Added
+
+- Frame-rate choices of 15, 30 or 60 fps in Behaviour, applied to the settings previews too. The default is 30 fps and the walkthrough is capped at 30 fps.
+- Per-window occlusion and display-sleep handling: covered wallpapers pause their schedules and album videos independently, with a pause-when-covered preference.
+
+### Changed
+
+- The wallpaper no longer subscribes to the audio meter; it reads the latest response on its existing scheduled frame.
+- The C connection graph is memoised per canvas, including empty graphs, and invalidated when geometry, viewport, count or clearance change. A caller asking for a prefix still gets the full cached graph, and the cache never publishes changes while drawing.
+- Line-wide word filtering, cadence and density are computed once per lyric render.
+
+### Fixed
+
+- Settings and walkthrough hosting views are torn down after their windows close, including via the walkthrough's title-bar close button, without deleting a window that was reopened before cleanup ran.
+
+_Validation: the C suite gained cache reuse, output equivalence, invalidation, independent-display, partial-output, empty-result and invalid-input checks; the 40 existing native tests were not run in that environment. This work responded to a reported 154.5% CPU reading; the reduction had not been measured on a Mac at the time._
+
+## 0.4.0
+
+Development build 7; not published. Date not recorded.
+
+### Added
+
+- **Spoken**, **Cascade** and **Cutout** compositions, built around individual word arrival, with stable word identities and timestamp-based scrolling across line changes and seeking.
+- An optional faint next word (and its romanisation) for every composition, remembered per style, with a continuous handoff at the word's timestamp. Later words stay hidden.
+- **Glide** and **Unfold** word entrances, smoother settling and Reduce Motion support.
+- Album-coloured **Tidal** and **Light Trails** GPU effects, whose fluid fields and ribbons are shaped by the music, bringing the total to 27.
+- System-audio analysis through private, unmuted Core Audio process taps on macOS 14.2 and later, with a selectable ScreenCaptureKit compatibility path and **Reconnect**. Floating-point and integer PCM are decoded instead of assuming Float32, unsupported formats are reported, and input health is judged from the actual samples.
+- Interlude visuals during timed instrumental gaps, intros and outros: an album-coloured breathing ring with a next-vocal countdown when the return time is known, and a Behaviour toggle. Overlapping vocals are merged, short breaths ignored, unknown vocal boundaries in line-only lyrics left unknown, and explicit no-lyrics choices respected.
+
+### Changed
+
+- Constellation links stay anchored to fixed ink and entrance slots and are drawn behind the glyphs, with room reserved for the new entrances.
+- An explicitly chosen GPU effect takes priority over animated album video; videos remain available in Automatic mode.
+- Shared bloom and pulse are reduced, the flow clock is smoother, and analysis sensitivity is separate from visual intensity.
+
+### Removed
+
+- The global camera deformation.
+
+_Validation: portable tests were extended for PCM formats, bounds, smoothing, the preview handoff curve, seeking and gap detection. Ten new XCTest methods (40 total) were added but not run in that environment, and no natively tested binary was produced for this version._
+
+## 0.3.3
+
+Development build 6; not published. Date not recorded.
+
+### Fixed
+
+- Controls panels no longer hide when the app deactivates: `NSPanel.hidesOnDeactivate` is off, app hiding cannot hide them, and they stay at their desktop level while the app is inactive. An unexpectedly hidden panel is shown again without activating the app.
+- Hover detection asks AppKit which window is under the pointer and checks only that window's layer. This replaces an all-window scan that unrelated helper windows could confuse.
+- Display-specific hover state, window positions, app-window blocking and same-display linger from 0.3.2 are kept.
+
+### Added
+
+- The build script reminds you to quit the old app before opening the new build.
+
+_Validation: seven native metadata-classification tests were added, and the portable hit-classification suite was updated._
+
+## 0.3.2
+
+Development build 5; not published. Date not recorded.
+
+### Fixed
+
+- Hover state is tracked per display instead of with one global flag, and is read separately by the wallpaper and controls views.
+- Each display gets its own controls panel; inactive panels let clicks through.
+- Controls appear only over exposed desktop: normal app windows cancel the reveal. AppKit pointer coordinates are matched to Quartz window coordinates using the primary display's origin.
+- Hover linger stays within one display, keeps the controls while you reach for a button, and clears when you switch screens or enter an app.
+- Windows are initialised relative to their screen, then given explicit global frames. Wallpaper and control panels are rebuilt on display changes, and obsolete windows are closed.
+
+### Added
+
+- A portable desktop-interaction implementation with regression tests.
+
+## 0.3.1
+
+Development build 4; not published. Date not recorded.
+
+### Fixed
+
+- The Japanese tokenizer locale builds a `CFLocaleIdentifier` explicitly, fixing a compiler error.
+- Asynchronous audio callbacks capture their controller weakly.
+- Display-change notifications hop to the main actor, and the shared style picker is marked as main-actor UI.
+
+Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
+
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.4.10...HEAD
+[0.4.10]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.10
+[0.4.9]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.9-preview
+[0.4.8]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.8-preview
+[0.4.7]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.7-preview
+[0.4.6]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.6-preview
+[0.4.5]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.5

@@ -118,5 +118,5 @@ jobs:
             exit 1
           fi
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
-            --title "Lunalyr $VERSION" --notes-file CHANGES.md \
+            --title "Lunalyr $VERSION" --notes-file CHANGELOG.md \
             "Build/Release-$VERSION/Lunalyr-$VERSION.zip" "Build/Release-$VERSION/appcast.xml"

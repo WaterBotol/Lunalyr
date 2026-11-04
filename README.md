@@ -62,7 +62,7 @@ Per-song offsets, low power at 30 fps and Editorial typography across compositio
 - **Richer colour:** near-monochromatic covers gain a broader, coordinated hue fan. Ambient GPU effects use contrasting album-derived colours, and colour fields use a more varied gradient palette.
 - **Updates:** the public signing key and stable feed are configured. Preview downloads remain manual. The stable feed is live with the published 0.4.5 release.
 
-See [CHANGES.md](CHANGES.md), [native validation evidence](docs/VALIDATION.md), [publisher setup](docs/RELEASING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
+See [CHANGELOG.md](CHANGELOG.md), [native validation evidence](docs/VALIDATION.md), [publisher setup](docs/RELEASING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Use it
 
