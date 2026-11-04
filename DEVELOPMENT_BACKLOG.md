@@ -18,7 +18,7 @@ The user asked to finish the current visualiser/lyric-size/custom-wallpaper batc
 3. Profile Release CPU/GPU with a controlled song/style/frame-rate/display comparison. Record this Mac's hardware; it cannot establish improvement on the older Mac that previously showed about 154% CPU.
 4. Audit expressive lyric entrances, held words and exits; clipping/horizon artefacts and Constellation line stability; instrumental interludes.
 5. Verify per-style faint next-word previews, romanisation and physical multi-monitor behaviour where the necessary hardware is available.
-6. Audit remaining non-working controls and UI regressions against actual running behaviour.
+6. Audit remaining non-working controls and UI regressions against actual running behaviour. In 0.4.8 testing, pausing from the preview cleared the current track and disabled the preview Play button. Playback was restored through Music. Reproduce this after the requested delay and preserve paused-track metadata/control availability.
 7. Revisit the Apple Music investigation and the user's latest scope before implementation. The reference is Dynamic-Lyrics, App Store ID 6476125287, not jackson-storm/DynamicNotch. Its AM-source preference is documented, but its retrieval implementation is unverified. A separate MIT project reads local Music cache TTML. Do not infer a method from an icon or claim an official public lyric-content API.
 8. Lock-screen integration was posed as a question. Research and answer it; do not silently treat every question-marked item as a feature request.
 
