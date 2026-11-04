@@ -12,6 +12,8 @@ Your wallpaper was selected through the native inspector. The app's desktop surf
 
 The full Fosfora MIT notice is bundled; its exact pinned shader/descriptor and adaptation manifest are retained in ThirdParty/Fosfora. The upstream Verso licence remains unchanged. No Gliss or CC-licensed Aurora shader was imported.
 
+After the final UI-only cleanup, Release succeeded again at 13:14 Melbourne time. The final packaged app passed deep signature verification, was relaunched, and reported Receiving audio via Screen recording compatibility with 507 packets while Fosfora Aurora was selected. No further control changes were made after the user resumed bugchecking.
+
 Coverage still excludes physical multi-monitor/Space changes, other wallpaper applications' window levels, long-duration video or route/wake scenarios, controlled beat-to-pixel latency and a new CPU/GPU benchmark. The existing preview pause/play issue remains recorded. The user requested upload and stop; the scheduled backlog continuation is paused.
 
 ---
