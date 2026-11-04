@@ -16,6 +16,8 @@ After the final UI-only cleanup, Release succeeded again at 13:14 Melbourne time
 
 Coverage still excludes physical multi-monitor/Space changes, other wallpaper applications' window levels, long-duration video or route/wake scenarios, controlled beat-to-pixel latency and a new CPU/GPU benchmark. The existing preview pause/play issue remains recorded. The user requested upload and stop; the scheduled backlog continuation is paused.
 
+GitHub Actions [41759586623](https://github.com/WaterBotol/Lunalyr/actions/runs/41759586623) passed native/Python/C tests and Release at 5b1ddcb153beacdb16495030285b1bcd64e28c02. The user subsequently approved this build as stable. Its CI app was repackaged with ditto, signed using Sparkle 2.10.0 sign_update, and the archive signature independently verified by OpenSSL against the public key embedded in the app. The archive SHA256 is bfc3452d43c292d58e27dad90385834f9cce8250cba099836b7f3653cbdb65de. The appcast was assembled from verified bundle metadata because the local generate_appcast tool could not classify its extracted bundle; packaging checks passed. v0.4.10 is published as stable/latest with the signed ZIP and appcast. This does not claim a completed installed Sparkle upgrade.
+
 ---
 
 # Validation — Lunalyr 0.4.9 (build 16)

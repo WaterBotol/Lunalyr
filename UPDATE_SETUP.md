@@ -6,7 +6,7 @@ The permanent feed URL is:
 
     https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml
 
-This endpoint is live for the approved stable 0.4.5 release. No dummy feed or private signing key is installed in the source build. Without a feed/key pair, the button explains that this build’s update service is not configured.
+This endpoint is live for the approved stable 0.4.10 release. No dummy feed or private signing key is installed in the source build. Without a feed/key pair, the button explains that this build’s update service is not configured.
 
 ## Current publisher state
 
@@ -71,7 +71,7 @@ This synchronizes project.yml and Info.plist. Use --disable to remove the local 
 
 ## Publish an update
 
-1. Update both CFBundleShortVersionString and CFBundleVersion in project.yml and Sources/Info.plist. Increase the numeric build version every release. The current source version is 0.4.10, build 17; the approved stable channel is 0.4.5, build 12.
+1. Update both CFBundleShortVersionString and CFBundleVersion in project.yml and Sources/Info.plist. Increase the numeric build version every release. The current source version is 0.4.10, build 17; the approved stable channel is 0.4.10, build 17.
 2. Commit and push the change.
 3. In Actions → Build Lunalyr for Mac → Run workflow, enable **Prepare a signed draft GitHub release**.
 4. The workflow runs tests, builds the app with the public key, packages it with ditto to preserve framework symlinks, signs the archive using Sparkle’s tooling and creates a draft release. The existing release/tag is never overwritten.
@@ -88,3 +88,5 @@ The helper’s appcast check validates URLs, lengths and signature format. Spark
 ## Publication status — 4 November 2026
 
 v0.4.5 was published as stable after the user completed bugchecking. Its signed appcast and ZIP are publicly available at the configured stable endpoint. Future versions retain the same bundle identifier and signing key. Preview builds remain manual downloads.
+
+The user approved v0.4.10 / build 17 as stable after bugchecking. It is now the latest stable release, with an Ed25519-signed ZIP and matching appcast using the existing publisher key. The ZIP signature was independently verified against the app’s embedded public key. An installed Sparkle upgrade remains unverified.

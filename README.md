@@ -14,7 +14,9 @@ Download the compiled Mac ZIP from a release, extract it and open **Lunalyr.app*
 
 The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing lyric/font storage paths remain for preference and updater compatibility. Developer ID signing and notarisation are not configured; builds are locally/ad-hoc signed.
 
-## 0.4.10 preview
+## 0.4.10 stable
+
+[Download the stable Mac app](https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.10). Existing updater-enabled installations can use Check for Updates; the stable feed now serves build 17.
 
 **Aurora Curtains** now maps its whole length to the spectrum: bass on the left, treble on the right. Each of its five lines favours a different register; individual sections bend, widen and glow with their own frequencies. A note changes its part of the material rather than shifting the entire wallpaper.
 
