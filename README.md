@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a crescent moon carrying three lines of text">
+  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a white crescent moon with a line of text across its dark centre">
 </p>
 
 <h1 align="center">Lunalyr</h1>
@@ -114,7 +114,7 @@ defaults delete local.verso.custom
 
 ## Quick start
 
-1. Open Lunalyr. It lives only in the menu bar: look for its crescent icon near the clock. There is no Dock icon or main window, and the workspace opens by itself the first time. To bring it back later, click the menu-bar icon and choose **Open Lunalyr**, or open Lunalyr again from Applications.
+1. Open Lunalyr. It lives in the menu bar: look for its crescent icon near the clock. There is no main window, and a Dock icon appears only while the workspace is open. The workspace opens by itself the first time. To bring it back later, click the menu-bar icon and choose **Open Lunalyr**, or open Lunalyr again from Applications.
 2. Play a song in Music and allow Lunalyr to control Music when asked. The lyrics appear on your desktop.
 3. Click the menu-bar icon, then **Open Lunalyr**. The workspace shows a live preview of your desktop next to the settings.
 4. In **Wallpaper**, choose a kind: Match the music, GPU effects, Line patterns, Colour only, Visualisers, Your wallpaper, or Imported image or video.
@@ -135,7 +135,7 @@ Releases are not notarised, so macOS blocks the first launch; follow the [first-
 <details>
 <summary><b>I can't find the menu-bar icon</b></summary>
 
-Lunalyr has no Dock icon. On a MacBook with a notch, menu-bar icons can disappear behind the notch when the menu bar is crowded: quit a few other menu-bar apps, or use a menu-bar manager. You can always open the workspace by opening Lunalyr again from Applications or Spotlight.
+Lunalyr has no Dock icon while its workspace is closed. On a MacBook with a notch, menu-bar icons can disappear behind the notch when the menu bar is crowded: quit a few other menu-bar apps, or use a menu-bar manager. You can always open the workspace by opening Lunalyr again from Applications or Spotlight.
 
 </details>
 
@@ -188,8 +188,8 @@ Still stuck? [Open a bug report](https://github.com/WaterBotol/Lunalyr/issues/ne
 
 ## Accessibility
 
-- **Reduce Motion.** When **Reduce motion** is on in **System Settings → Accessibility → Display**, words appear without sliding, scaling, rotating or blurring in, and interlude graphics stay still. Wallpapers and visualisers keep moving. For a calmer background, choose Your wallpaper, Colour only or a line pattern, and lower **Generated motion speed**.
-- **Light and motion sensitivity.** Visualisers and many GPU effects move continuously, and their light and colour change with the music. Flashes, camera jolts and flashing stars are turned off, but if motion or changing light affects you, avoid the visualisers and use one of the calmer backgrounds above.
+- **Reduce Motion.** When **Reduce motion** is on in **System Settings → Accessibility**, most word entrances become simple fades, Spoken, Cascade and Cutout step from word to word instead of gliding, and interlude graphics stay still. Except for word-timed lines in Spoken, Cascade and Cutout, each line still fades in and out with a slight rise and a small change in size, and blurs slightly as it leaves. Visualisers slow to about 15% speed and stop reacting to beats; other wallpapers keep moving as usual. For a calmer background, choose Your wallpaper, Colour only or a line pattern, and lower **Generated motion speed**.
+- **Light and motion sensitivity.** Visualisers move continuously, and their light and colour change with the music. GPU effects also move continuously but do not react to audio. Flashes, camera jolts and flashing stars are turned off, but if motion or changing light affects you, avoid the visualisers and use one of the calmer backgrounds above.
 - **Text size.** **Lyric size** in Typography scales every composition, after Lunalyr fits each line to the screen.
 
 ## Lyrics sources and privacy
@@ -207,7 +207,7 @@ Still stuck? [Open a bug report](https://github.com/WaterBotol/Lunalyr/issues/ne
 | Kuwo Music | Line | |
 | lyrics.ovh | Plain text | Fallback when nothing timed is found. |
 
-By default, **Accuracy first** rejects results whose title, artist or duration do not match the recording. It then prefers complete word timing over mixed timing, line timing and plain text, and uses the source order above only to break ties. In **Lyrics** you can switch to strict source order, reorder or disable sources, and pin a particular result to a song. Most of these services are unofficial, so availability varies. Lunalyr does not use speech recognition or vocal separation.
+By default, **Accuracy first** rejects results whose title, artist or duration do not match the recording. It then keeps the best timing available: complete word timing, then mixed, line timing and plain text. Among equally timed results, a word-timed LRCLIB result is preferred, then the closest title and artist match, then the source order above. In **Lyrics** you can reorder or disable sources, pin a particular result to a song, or choose by **Source order**. For a strict source order, also turn off **Prefer real word timing across sources** and **Prefer LRCLIB with real word timing**. Most of these services are unofficial, so availability varies. Lunalyr does not use speech recognition or vocal separation.
 
 ### What stays on your Mac
 
@@ -216,7 +216,7 @@ Lunalyr has no accounts, analytics or telemetry. It reads the current track from
 Lunalyr contacts these services:
 
 - **Lyric sources you have enabled** receive the song's title and artist; some also receive the album and duration.
-- **Apple's iTunes Search API** receives the artist with the title or album when Lunalyr looks up artwork that Music does not provide, or an animated album cover. Animated covers load from Apple Music's public album pages and stream from Apple's servers.
+- **Apple's iTunes Search API** receives the artist with the album or song title for each new album you play, so Lunalyr can look for an animated cover. If it finds the album, Lunalyr also loads its public Apple Music page. This happens even when **Use animated covers** is off. The API is also used to find artwork that Music does not provide. Animated covers stream from Apple's servers while they are shown.
 - **Google Fonts** supplies the default interface and lyric typeface, Manrope, and any Google Font you choose. Downloaded fonts are kept on your Mac.
 - **GitHub** serves update information, only when you click **Check for updates…**. Automatic checks are off, and no system profile is sent.
 
@@ -254,12 +254,12 @@ Lunalyr is built on [Verso](https://github.com/AkkiCode06/verso) by Akki ([AkkiC
 
 Lunalyr also relies on:
 
-- [Synesthia](https://github.com/jonjaques/synesthia) by Jon Jaques (MIT) for the FFT analyser and the Spectral Aurora and Spectrum Tunnel scenes.
+- [Synesthia](https://github.com/jonjaques/synesthia) by Jon Jaques (MIT) for the FFT analyser and the aurora and tunnel shaders behind Silk Ribbons, Spectral Aurora and Spectrum Tunnel.
 - [Fosfora](https://github.com/kevinraymond/fosfora) by Kevin Raymond (MIT) for the Aurora shader behind Fosfora Aurora.
 - [Sparkle](https://sparkle-project.org) (MIT) for updates.
 - [Yams](https://github.com/jpsim/Yams) and libyaml (MIT) for LRCLIB's YAML lyric files.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) for project generation, and [Google Fonts](https://fonts.google.com) for typefaces.
-- Lyric data from [Lyrics+](https://github.com/Prjkt-La/lyricsplus), [LRCLIB](https://lrclib.net), NetEase Cloud Music, QQ Music, Kugou, Kuwo and lyrics.ovh, and the [Lyrimuse](https://github.com/Yudaotor/lyrimuse) export formats. Lunalyr is not affiliated with any of these services.
+- Lyric data from [Lyrics+](https://github.com/ibratabian17/LyricsPlus), [LRCLIB](https://lrclib.net), NetEase Cloud Music, QQ Music, Kugou, Kuwo and lyrics.ovh, and the [Lyrimuse](https://github.com/Yudaotor/lyrimuse) export formats. Lunalyr is not affiliated with any of these services.
 - The [Cotodama Lyric Speaker](https://lyric-speaker.com/), which inspired Verso.
 
 Full notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the licence texts are bundled with the app.

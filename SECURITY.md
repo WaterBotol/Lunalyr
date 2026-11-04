@@ -13,7 +13,7 @@ Security fixes go into the latest stable release, which is offered through the b
 
 Please do not report security problems in public issues, pull requests or discussions.
 
-Report them privately through GitHub instead: open the repository's **Security** tab and choose **[Report a vulnerability](https://github.com/WaterBotol/Lunalyr/security/advisories/new)**. Only the maintainers can see the report. Please include:
+Report them privately through GitHub instead, with the **[Report a vulnerability](https://github.com/WaterBotol/Lunalyr/security/advisories/new)** form on the repository's security page. Only you and the maintainers can see the report. Please include:
 
 - what is affected, and what an attacker could do;
 - steps or a small proof of concept to reproduce it;
