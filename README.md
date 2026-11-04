@@ -28,7 +28,7 @@ The app appears as **Lunalyr**. Bundle ID **local.verso.custom** and existing ly
 
 Wallpaper geometry is now independent of lyric layout, preventing new or oversized lines from resizing/recentering the background. Aurora Curtains preserves bass variation at high sensitivity and has a stronger musical sway. Visualiser smoothing now follows note attacks sooner and releases between phrases, while retaining continuous motion.
 
-Both the user's 0.4.8 Release copy and the packaged 0.4.9 Release were checked with capture enabled: they reported Receiving audio with increasing packets and changing meters. The earlier diagnostic-copy denial does not describe those running copies. All 89 native tests and nine Python tests passed locally, including a viewport layout regression, an envelope timing test and real Metal rendering at maximum sensitivity. Release built and was launched on the Mac. See VALIDATION.md for evidence and remaining coverage.
+Both the user's 0.4.8 Release copy and the packaged 0.4.9 Release were checked with capture enabled: they reported Receiving audio with increasing packets and changing meters. The earlier diagnostic-copy denial does not describe those running copies. All 89 native tests and nine Python tests passed locally, including a viewport layout regression, an envelope timing test and real Metal rendering at maximum sensitivity. Release built and was launched on the Mac. See docs/VALIDATION.md for evidence and remaining coverage.
 
 ## 0.4.8 custom wallpapers
 
@@ -38,7 +38,7 @@ Both the user's 0.4.8 Release copy and the packaged 0.4.9 Release were checked w
 
 Lyric size is applied after fitting, so automatic fitting cannot cancel the slider. This includes whole-line and plain-text fallbacks. Editorial words retain their face as rolling lyric windows move. Audio startup has a deadline, clearer failure details, live meters and a packet counter; changing an unrelated slider no longer restarts capture.
 
-All 87 native tests and nine Python tests passed on the development Mac, and Release built successfully. GPU fixture tests confirm that every visualiser responds to input spectrum. Live capture for the current app copy is **not verified**: macOS denied permission and delivered zero packets. Capture is left off and permission setup is deferred at the user's request. See VALIDATION.md for evidence and remaining coverage.
+All 87 native tests and nine Python tests passed on the development Mac, and Release built successfully. GPU fixture tests confirm that every visualiser responds to input spectrum. Live capture for the current app copy is **not verified**: macOS denied permission and delivered zero packets. Capture is left off and permission setup is deferred at the user's request. See docs/VALIDATION.md for evidence and remaining coverage.
 
 ## 0.4.7 native workspace
 
@@ -62,7 +62,7 @@ Per-song offsets, low power at 30 fps and Editorial typography across compositio
 - **Richer colour:** near-monochromatic covers gain a broader, coordinated hue fan. Ambient GPU effects use contrasting album-derived colours, and colour fields use a more varied gradient palette.
 - **Updates:** the public signing key and stable feed are configured. Preview downloads remain manual. The stable feed is live with the published 0.4.5 release.
 
-See [CHANGES.md](CHANGES.md), [native validation evidence](VALIDATION.md), [publisher setup](UPDATE_SETUP.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
+See [CHANGES.md](CHANGES.md), [native validation evidence](docs/VALIDATION.md), [publisher setup](docs/RELEASING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Use it
 
@@ -95,13 +95,13 @@ Run-Tests.command writes native test logs and results under Build/TestDerivedDat
 
 You can also generate the project with `xcodegen generate --spec project.yml`, open VersoCustom.xcodeproj and use Product → Test, then Product → Build For → Profiling for a Release build.
 
-Measure-Performance.command collects local CPU readings and a process sample. Compare the same song, style, frame rate and displays, with Settings closed. No report is uploaded automatically. See VALIDATION.md for what has actually been measured and what remains unverified.
+Measure-Performance.command collects local CPU readings and a process sample. Compare the same song, style, frame rate and displays, with Settings closed. No report is uploaded automatically. See docs/VALIDATION.md for what has actually been measured and what remains unverified.
 
 ## Releases and updates
 
 The GitHub workflows run Python helpers, native Swift tests and a Release build. **Publish preview release** publishes a downloadable prerelease after those checks pass. **Build Lunalyr for Mac** can prepare a separately signed stable draft using the repository's encrypted publisher secrets.
 
-The stable feed is `https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml`. GitHub prereleases do not supply this endpoint. Publishing a preview does not announce it as a stable automatic update. Follow UPDATE_SETUP.md before publishing the first stable release or rotating any signing material.
+The stable feed is `https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml`. GitHub prereleases do not supply this endpoint. Publishing a preview does not announce it as a stable automatic update. Follow docs/RELEASING.md before publishing the first stable release or rotating any signing material.
 
 Preferences live outside the app, per macOS user. Sharing an app does not share your settings or local lyric cache. This app supplies desktop wallpapers; lock-screen integration and a screensaver component are not implemented.
 
@@ -109,6 +109,6 @@ Preferences live outside the app, per macOS user. Sharing an app does not share 
 
 Audio analysis stays in local memory. No microphone capture is requested, no recording is saved and audio is never sent to lyric providers. The compatibility path discards its tiny display frames locally. Enabled lyric providers receive song metadata; optional artwork and font fetching retain their network behaviour.
 
-Based on [Verso](https://github.com/AkkiCode06/verso), by Akki / AkkiCode06. The original GPLv3 with Commons Clause licence is unchanged in LICENSE, with upstream details in UPSTREAM.json and UPSTREAM_README.md. Sparkle and the reused Synesthia source retain their MIT notices in the repository and app resources. See THIRD_PARTY_NOTICES.md.
+Based on [Verso](https://github.com/AkkiCode06/verso), by Akki / AkkiCode06. The original GPLv3 with Commons Clause licence is unchanged in LICENSE, with upstream details in docs/upstream/. Sparkle and the reused Synesthia source retain their MIT notices in the repository and app resources. See THIRD_PARTY_NOTICES.md.
 
 The VoxelWall reference informed the typography and motion direction. No VoxelWall, VoxelVerse or Lyrimuse source, footage, soundtrack, proprietary fonts or artwork is bundled.

@@ -53,5 +53,5 @@ jobs:
             exit 1
           fi
           ditto -c -k --sequesterRsrc --keepParent Build/Lunalyr.app "Build/Lunalyr-$VERSION-Mac.zip"
-          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open Lunalyr.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. The updater uses the stable channel. Preview releases are installed manually. See UPDATE_SETUP.md and VALIDATION.md.' > Build/release-notes.md
+          printf '%s\n' 'Early preview for macOS 14+. Extract the ZIP and open Lunalyr.app. Xcode is not needed to use the compiled app.' '' 'This app is locally signed; Developer ID notarisation is not configured. Live audio, animations and performance remain under development. The updater uses the stable channel. Preview releases are installed manually. See docs/RELEASING.md and docs/VALIDATION.md.' > Build/release-notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title "Lunalyr $VERSION preview" --notes-file Build/release-notes.md "Build/Lunalyr-$VERSION-Mac.zip"

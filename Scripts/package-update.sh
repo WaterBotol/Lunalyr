@@ -21,7 +21,7 @@ FEED="$(/usr/libexec/PlistBuddy -c 'Print SUFeedURL' "$APP_PATH/Contents/Info.pl
 PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print SUPublicEDKey' "$APP_PATH/Contents/Info.plist")"
 EXPECTED_FEED="https://github.com/$REPOSITORY/releases/latest/download/appcast.xml"
 if [[ "$FEED" != "$EXPECTED_FEED" || -z "$PUBLIC_KEY" ]]; then
-  echo "Configure the feed and public key, then rebuild before packaging an update. See UPDATE_SETUP.md."
+  echo "Configure the feed and public key, then rebuild before packaging an update. See docs/RELEASING.md."
   exit 1
 fi
 codesign --verify --deep "$APP_PATH"

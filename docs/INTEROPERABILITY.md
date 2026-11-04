@@ -31,4 +31,4 @@ The performance update uses [AnimationTimelineSchedule](https://developer.apple.
 
 The updater uses [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0) through Swift Package Manager. It follows the documented standard updater controller and KVO availability interface. An HTTPS feed and a canonical 32-byte Ed25519 public key are required before the controller starts. Initial automatic checks, unattended installation and optional profile submission are off. No update request is made by an unconfigured build.
 
-The intended channel is WaterBotol/Lunalyr’s latest stable GitHub release asset, appcast.xml, alongside its signed app archive. No existing upstream feed is substituted. The project contains no private key. See UPDATE_SETUP.md for publishing and THIRD_PARTY_NOTICES.md for licensing.
+The intended channel is WaterBotol/Lunalyr’s latest stable GitHub release asset, appcast.xml, alongside its signed app archive. No existing upstream feed is substituted. The project contains no private key. See [RELEASING.md](RELEASING.md) for publishing and [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) for licensing.
