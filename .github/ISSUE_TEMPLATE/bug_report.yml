@@ -1,0 +1,132 @@
+name: Bug report
+description: Something in Lunalyr does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please search [existing issues](https://github.com/WaterBotol/Lunalyr/issues?q=is%3Aissue) first.
+        Report security problems privately instead, as described in [SECURITY.md](https://github.com/WaterBotol/Lunalyr/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen instead.
+      placeholder: When the next song starts, the previous song's lyrics stay on screen…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Choose Wallpaper → Visualisers → Aurora Curtains
+        2. Play a song in Music
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Lunalyr version
+      description: Shown under About in the Lunalyr workspace.
+      placeholder: "0.4.10"
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac.
+      placeholder: "macOS 15.1"
+    validations:
+      required: true
+  - type: input
+    id: mac-model
+    attributes:
+      label: Mac model
+      placeholder: "MacBook Air (M2, 2022)"
+  - type: dropdown
+    id: lyric-source
+    attributes:
+      label: Lyric source
+      description: The source shown in the menu-bar panel while the problem happens.
+      options:
+        - Not related to lyrics
+        - Lyrics+ / KPoe
+        - NetEase Cloud Music
+        - LRCLIB
+        - QQ Music
+        - Kugou Music
+        - Kuwo Music
+        - lyrics.ovh
+        - Lyrimuse · local files
+        - Imported LRC or TTML file
+        - No lyrics were found
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: song
+    attributes:
+      label: Song
+      description: Title and artist, if the problem only happens with certain songs.
+  - type: dropdown
+    id: composition
+    attributes:
+      label: Composition
+      description: Typography → Composition.
+      options:
+        - Not related to typography
+        - Scattered
+        - Constellation
+        - Constellation + Editorial
+        - Echo
+        - Editorial
+        - Spoken
+        - Cascade
+        - Cutout
+        - Not sure
+  - type: dropdown
+    id: wallpaper
+    attributes:
+      label: Wallpaper
+      description: Wallpaper → Kind. If it matters, name the effect, pattern or visualiser scene in the description.
+      options:
+        - Not related to the wallpaper
+        - Match the music
+        - GPU effects
+        - Line patterns
+        - Colour only
+        - Visualisers
+        - Your wallpaper
+        - Imported image or video
+        - Not sure
+  - type: input
+    id: displays
+    attributes:
+      label: Displays
+      description: How many displays you use, if that might matter.
+      placeholder: "Built-in display and one external 4K display"
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Logs and diagnostics
+      description: |
+        For audio or visualiser problems, paste the text from **Copy audio diagnostics** (Wallpaper → Music response).
+        Remove personal information first, and never include signing keys or tokens.
+      render: text
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots, recordings and crash reports
+      description: |
+        Drag files here. For visual problems, a screenshot or short screen recording helps a lot.
+        For crashes, attach the newest `Lunalyr-*.ips` file from `~/Library/Logs/DiagnosticReports/`.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this has not been reported yet.
+          required: true

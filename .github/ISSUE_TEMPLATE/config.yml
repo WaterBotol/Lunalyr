@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/WaterBotol/Lunalyr/security/advisories/new
+    about: Please report security problems privately, not in a public issue.
+  - name: Install and first-launch help
+    url: https://github.com/WaterBotol/Lunalyr#install
+    about: Opening an app that is not notarised, permissions, and the quick start guide.

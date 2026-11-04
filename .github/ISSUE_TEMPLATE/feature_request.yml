@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an idea or improvement for Lunalyr.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please search [existing issues](https://github.com/WaterBotol/Lunalyr/issues?q=is%3Aissue) first; adding a 👍 to an existing request helps too.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the problem or situation, not only the solution you have in mind.
+      placeholder: When I listen to albums with long instrumental tracks, I'd like to…
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: How should Lunalyr behave? Where would the setting or control live?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you have tried.
+  - type: textarea
+    id: references
+    attributes:
+      label: References or examples
+      description: Links, sketches or screenshots of other apps that do this well. Please only attach media you have the right to share.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this has not been requested yet.
+          required: true
