@@ -21,6 +21,7 @@ When merging, keep every entry and combine duplicate headings.
 ### Removed
 
 - The owner-only `Push-to-GitHub.command` upload helper. Use Git or GitHub Desktop.
+- `DEVELOPMENT_BACKLOG.md`, internal notes from earlier AI-assisted development sessions.
 
 ## [0.4.10] - 2026-11-04
 
