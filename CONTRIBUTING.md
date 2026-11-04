@@ -80,8 +80,8 @@ Some behaviour can only be checked in the real app on a Mac: live audio capture,
 ### Swift
 
 - Keep UI work on the main actor. Keep audio processing on its capture queue, and network and file work in `async` tasks or actors.
-- The desktop renders every frame on every display, at up to 60 fps. Keep per-frame work, allocations and layout passes out of `NowPlayingView`'s timeline. Cache what does not change between frames, as `LyricTypography` and `ConnectionGeometryCache` do.
-- Preferences live in `UserDefaults` under the `local.verso.custom` domain. Never rename or repurpose an existing key, because users would silently lose their settings. Give new keys the `custom.` prefix.
+- The desktop renders every frame on every display, at up to 60 fps. Keep per-frame work, allocations and layout passes out of `NowPlayingView`'s timeline. Cache what does not change between frames, as `RenderMemo` (in `LyricTypography.swift`) and `ConnectionGeometryCache` do.
+- Preferences live in `UserDefaults` under the `local.verso.custom` domain. Never rename or repurpose an existing key without a migration, because users would silently lose their settings. Give new keys the `custom.` prefix.
 - Do not change the bundle identifier, product name or storage folders. Updates and existing installations depend on them.
 
 ### C and Metal

@@ -1,6 +1,6 @@
 # Architecture
 
-Lunalyr is a single macOS app target written in Swift with SwiftUI and AppKit, plus Metal shaders and a few small, portable C modules. It runs as a menu-bar accessory app: there is no Dock icon, and its main output is one borderless window per display, placed just above the desktop picture and below the desktop icons.
+Lunalyr is a single macOS app target written in Swift with SwiftUI and AppKit, plus Metal shaders and a few small, portable C modules. It runs as a menu-bar accessory app: there is no Dock icon except while the workspace window is open, and its main output is one borderless window per display, placed just above the desktop picture and below the desktop icons.
 
 This document maps the source tree and follows the data from the Music app to the pixels on your desktop. For build commands, see the [README](../README.md#build-from-source) and [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -58,7 +58,7 @@ flowchart LR
 | `HoverState.swift` | Polls the pointer and decides which display, if any, shows its controls. |
 | `MediaControlsView.swift` | The hover playback controls. |
 | `DisplayGeometry.swift` | Screen IDs and frames, and `DesktopVisibility`, which stops hover from triggering through app windows. |
-| `WindowRenderActivity.swift` | Tracks each window's occlusion and display sleep, so rendering pauses when nobody can see it. |
+| `WindowRenderActivity.swift` | Tracks each window's occlusion and display sleep. Rendering pauses while displays sleep, and for fully covered windows when **Pause fully covered wallpapers** is on. |
 
 ### `NowPlaying/`: playback, artwork and audio capture
 
@@ -77,7 +77,7 @@ flowchart LR
 
 | File | Role |
 | --- | --- |
-| `LyricsViewModel.swift` | The lyric state for the current track. Starts lookups and applies results, offsets, QQ gap repair and readings. |
+| `LyricsViewModel.swift` | The lyric state for the current track. Starts lookups and applies results, QQ gap repair and readings. |
 | `LyricsFetcher.swift` | Runs lookups across sources, ranks and chooses a result. Also contains the LRCLIB client (Lyricsfile YAML via Yams, with an LRC fallback) and the LRC parser. |
 | `LyricSources.swift` | `LyricSourceID` (the eight sources), `LyricSourceOptions` (enabled sources, order and selection mode), `LyricQuery`, `LyricCandidate` and `SavedLyrics` (on-disk cache and pinned choices). |
 | `KPoeLyricsProvider.swift` | Lyrics+ (KPoe) mirrors; merges syllables into words. |
@@ -87,7 +87,7 @@ flowchart LR
 | `TTMLLyricParser.swift` | Hardened TTML parser, used for local exports and manual imports. |
 | `QQGapRepair.swift` | Optionally treats long pauses in QQ Music lyrics as instrumental gaps. |
 | `LyricLineIndex.swift` | Sorted line starts for binary search by playback time. |
-| `LyricGapTiming.swift` | Finds instrumental gaps between vocal lines. |
+| `LyricGapTiming.swift` | Builds the sorted vocal windows used to find instrumental gaps. |
 | `LyricRomanization.swift` | `LyricRomanizer`: language detection and romanisation off the main thread. |
 | `SongOffsets.swift` | Per-recording timing offsets. |
 
@@ -98,7 +98,7 @@ flowchart LR
 | `NowPlayingView.swift` | The desktop scene. One `TimelineView` drives each frame: the background, the lyric layer and interludes. |
 | `WallpaperViewport.swift` | Sizes the wallpaper independently of the lyric layer, so long lines cannot move or resize the background. |
 | `LyricComposition.swift` | The eight compositions and word entrances, and `LyricLineView`, which routes each composition to its renderer. |
-| `ScatteredLyricText.swift`, `SpokenTypographyView.swift` | The two lyric renderers: flowing compositions (Scattered, Constellation, Echo, Editorial) and word-arrival compositions (Spoken, Cascade, Cutout). |
+| `ScatteredLyricText.swift`, `SpokenTypographyView.swift` | The two lyric renderers: flowing compositions (Scattered, Constellation, Constellation + Editorial, Echo, Editorial) and word-arrival compositions (Spoken, Cascade, Cutout). |
 | `LyricTypography.swift`, `LyricStageFit.swift`, `WordPresentation.swift` | Cached typography, fitting lines to the stage, and per-word reveal state. |
 | `InstrumentalInterludeView.swift` | The interlude ribbons and next-vocal cue. |
 | `ShaderBackgroundView.swift` + `Shaders.metal` | The 27 ambient GPU effects, run per pixel through SwiftUI's `colorEffect`. |
@@ -112,7 +112,7 @@ flowchart LR
 | File | Role |
 | --- | --- |
 | `AudioVisualizerView.swift` | Wraps a paused `MTKView` drawn once per wallpaper frame. Defines `AudioVisualizerStyle`. |
-| `VisualizerShaders.metal` | A full-screen vertex shader and one fragment shader per visualiser. |
+| `VisualizerShaders.metal` | A full-screen vertex shader and four fragment shaders. Silk Ribbons and Spectral Aurora share `auroraFragment` with different settings. |
 | `VisualizerUniforms.swift` | `VizUniforms`, the 168-byte uniform block shared with Metal. |
 | `AudioAnalyzer.swift`, `VisualizerAudio.swift` | FFT analysis into 64 logarithmic bands, per channel, merged without phase cancellation. `VisualizerSmoother` smooths the result over time. |
 | `RenderScaleLadder.swift` | Adjusts render resolution to keep each frame within its time budget (`GPUFrameTimer`). |
@@ -121,11 +121,11 @@ flowchart LR
 
 | File | Role |
 | --- | --- |
-| `Settings/Settings.swift` | All user preferences, stored in `UserDefaults`. |
+| `Settings/Settings.swift` | Wallpaper, typography, performance and audio preferences, plus the global lyric offset, stored in `UserDefaults`. Lyric source, local folder, reading and per-recording offset options have their own stores. |
 | `Settings/LunalyrWorkspace.swift` | The workspace window: sidebar, live preview and the seven inspectors (Wallpaper, Typography, Lyrics, Readings, Album covers, Performance, About). |
 | `Settings/SettingsWindow.swift`, `SettingsLivePreview.swift` | The window controller, and a preview that renders the real `NowPlayingView` at 1280×720. |
 | `Settings/GoogleFontsProvider.swift`, `GoogleFontsCatalog.swift` | Downloads and registers Google Fonts for the running process. |
-| `Settings/CustomWallpaperStore.swift`, `PowerSource.swift` | Copies of imported wallpapers; battery and Low Power Mode state. |
+| `Settings/CustomWallpaperStore.swift`, `PowerSource.swift` | Copies of imported wallpapers; whether the Mac is on battery. |
 | `Updates/AppUpdates.swift`, `UpdateConfiguration.swift` | Starts Sparkle only when a valid HTTPS feed and EdDSA public key are configured. |
 | `Licensing/LicenseManager.swift` | Verso's offline licence check. `paywallEnabled` is `false`, so every feature is available. |
 | `Support/*.c` | Portable C: PCM decoding and level analysis (`AudioAnalysis`), Constellation geometry, vocal gaps and word reveal (`ConstellationGeometry`), hover and display logic (`DesktopInteraction`), and word motion (`LyricMotion`). |
@@ -134,9 +134,9 @@ flowchart LR
 
 ### 1. Now playing
 
-`NowPlayingMonitor` talks to Music only while it is running. It re-reads the track when Music posts its `com.apple.Music.playerInfo` distributed notification, and refreshes the position every two seconds. Between reads, `playbackTime()` extrapolates the position, and every rendered frame calls it.
+`NowPlayingMonitor` reads Music's state over AppleScript. It re-reads the track when Music posts its `com.apple.Music.playerInfo` distributed notification, and a two-second timer re-reads the play state and position. Between reads, `playbackTime()` extrapolates the position, and every rendered frame calls it.
 
-The monitor publishes `current`, `artwork`, `isPlaying` and `motionArtwork`. Artwork comes from Music when available, otherwise from `ArtworkProvider`.
+The monitor publishes `current`, `idleSince`, `artwork`, `isPlaying` and `motionArtwork`. Artwork comes from Music when available, otherwise from `ArtworkProvider`.
 
 ### 2. Finding lyrics
 
@@ -148,23 +148,23 @@ The monitor publishes `current`, `artwork`, `isPlaying` and `motionArtwork`. Art
 2. a cached automatic result;
 3. every enabled source in parallel. LRCLIB has a 20-second timeout; the other sources have 8 seconds.
 
-`ranked()` drops candidates whose title, artist or duration do not match. It sorts the rest by timing quality (word, then mixed, then line, then plain text), then by match similarity, then by your source order. `choose()` applies the selection mode: **Accuracy first** (the default) keeps only the best timing quality, while **Source order** takes the first source in your order.
+`ranked()` drops candidates whose title, artist or duration do not match. It sorts the rest by timing quality (word, then mixed, then line, then plain text), then by match similarity, then by your source order. `choose()` then keeps only the best timing quality when the mode is **Accuracy first** (the default) or **Prefer real word timing across sources** is on (also the default). Next, a word-timed LRCLIB result wins if **Prefer LRCLIB with real word timing** is on (the default). Otherwise **Accuracy first** takes the top-ranked result and **Source order** takes the first remaining source in your order.
 
 `SavedLyrics` stores results as JSON in `~/Library/Application Support/Verso Custom/Lyrics/`. Automatic results (`cache-*.json`) expire after 14 days, and at most 150 are kept. Pinned choices and imports (`pin-*.json`) never expire. Cache keys include a fingerprint of the source settings, so changing sources looks lyrics up again.
 
 ### 3. Timing and readings
 
-`NowPlayingView` adds the global offset (`Settings.lyricOffset`) and the per-recording offset (`SongOffsets`) to `playbackTime()`. It finds the active line with a binary search over `LyricLineIndex`. Per-word reveal, karaoke progress and held-note emphasis come from `WordPresentation` and the C helpers in `ConstellationGeometry.c`. `LyricGapTiming` detects instrumental gaps and hands them to `InstrumentalInterludeView`.
+`NowPlayingView` adds the global offset (`Settings.lyricOffset`) and the per-recording offset (`SongOffsets`) to `playbackTime()`. It finds the active line with a binary search over `LyricLineIndex`. Per-word reveal and the next-word preview come from `WordPresentation` and the C helpers in `ConstellationGeometry.c`. Karaoke fill and held-note emphasis are computed in `ScatteredLyricText.swift`, and word motion comes from `LyricMotion.c`. `LyricGapTiming` prepares the vocal windows; on each frame `NowPlayingView` finds the current instrumental gap with `vc_vocal_gap` and hands it to `InstrumentalInterludeView`.
 
-`LyricRomanizer` runs off the main thread. It prefers readings supplied with the lyrics; otherwise it detects the language with NaturalLanguage and generates readings with `CFStringTokenizer` and ICU transforms. The results land in `LyricsViewModel.romanized`.
+`LyricRomanizer` runs off the main thread. When readings are shown **Below lyrics** and **Prefer saved readings** is on (both defaults), it uses readings supplied with the lyrics. Otherwise it generates them with `CFStringTokenizer` and ICU transforms, detecting the language with NaturalLanguage unless you choose one. The results land in `LyricsViewModel.romanized`.
 
 ### 4. Drawing a frame
 
-Each desktop window hosts `NowPlayingView`. A single `TimelineView(.animation)` ticks at the chosen frame rate (15, 30 or 60 fps) and pauses through `WindowRenderActivity` when the display sleeps, or when the window is covered and you have turned on pausing for covered wallpapers.
+Each desktop window hosts `NowPlayingView`. A single `TimelineView(.animation)` ticks at the chosen frame rate (15, 30 or 60 fps), or at 30 fps while Lunalyr is sparing the GPU (low power visuals, macOS Low Power Mode or battery power, depending on your settings), and pauses through `WindowRenderActivity` when the display sleeps, or when the window is covered and you have turned on pausing for covered wallpapers.
 
 Inside it, `WallpaperViewport` stacks two layers:
 
-- **Background**, cross-faded when it changes: nothing (Your wallpaper), an animated album cover, an imported image or video, a GPU effect, a visualiser, or an album-colour gradient with a line pattern. In **Match the music** mode, an animated cover wins if there is one, then a GPU effect for high-energy tracks, then a pattern.
+- **Background**: nothing (Your wallpaper), an animated album cover, an imported image or video, a GPU effect, a visualiser, or an album-colour gradient on its own (Colour only) or with a line pattern. Changes cross-fade, except when switching to or from Your wallpaper. In **Match the music** mode, an animated cover wins if there is one, then a GPU effect for high-energy tracks, then a pattern.
 - **Lyrics**: `LyricLineView` sends Spoken, Cascade and Cutout to `SpokenTypographyView` and the other compositions to `ScatteredLyricText`.
 
 The workspace preview (`SettingsLivePreview`) renders the same `NowPlayingView`, so what you see in settings is what the desktop draws.
@@ -185,7 +185,7 @@ The 27 ambient GPU effects are separate: they are `[[stitchable]]` functions in 
 
 ## Settings and storage
 
-`Settings` and the option stores (`LyricSourceOptions`, `LocalLyricOptions`, `RomanizationOptions`, `SongOffsets`) use `UserDefaults.standard`, so everything lives in the `local.verso.custom` defaults domain. Keys inherited from Verso have no prefix (for example `backgroundMode`); keys added by Lunalyr start with `custom.` (for example `custom.animationRate`). Keep existing keys when changing a setting's meaning, or add a migration, so updates do not reset preferences.
+`Settings` and the option stores (`LyricSourceOptions`, `LocalLyricOptions`, `RomanizationOptions`, `SongOffsets`) use `UserDefaults.standard`, so everything lives in the `local.verso.custom` defaults domain. Keys inherited from Verso have no prefix (for example `backgroundMode`); keys added by Lunalyr start with `custom.` (for example `custom.animationRate`), apart from `constellationLinkOpacity`. Keep existing keys when changing a setting's meaning, or add a migration, so updates do not reset preferences.
 
 The app is not sandboxed. On disk it uses:
 

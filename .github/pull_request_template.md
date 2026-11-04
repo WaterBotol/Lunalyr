@@ -24,6 +24,6 @@ frame rate and displays, in a Release build with the workspace window closed. --
 - [ ] The change is focused, with no unrelated reformatting.
 - [ ] User-visible changes are noted under **Unreleased** in `CHANGELOG.md`.
 - [ ] Documentation is updated where needed (README, `docs/`).
-- [ ] Existing preference keys, the bundle identifier and storage folders are unchanged, or a migration is included.
+- [ ] The bundle identifier, product name and storage folders are unchanged, and no existing preference key is renamed or repurposed without a migration.
 - [ ] Any third-party code or assets are compatibly licensed and recorded in `THIRD_PARTY_NOTICES.md`.
 - [ ] No secrets, signing material or personal data are included.

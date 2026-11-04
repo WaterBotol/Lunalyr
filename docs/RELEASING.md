@@ -42,7 +42,7 @@ As of 0.4.10 (build 17), the stable feed serves 0.4.10. Its ZIP signature was ch
 
 ## Publish a preview
 
-Run [**Publish preview release**](https://github.com/WaterBotol/Lunalyr/actions/workflows/release.yml) from the Actions tab. It runs the Python tests, the native tests and the Release build, then publishes `v<version>-preview` as a pre-release with the app ZIP. It refuses to overwrite an existing tag, so bump the version for each new preview.
+Run [**Publish preview release**](https://github.com/WaterBotol/Lunalyr/actions/workflows/release.yml) from the Actions tab. It runs the Python tests, the native tests and the Release build, then publishes `v<version>-preview` as a pre-release with the app ZIP. It stops if a release with that tag already exists, so bump the version for each new preview. If you delete a preview release, delete its tag too (`gh release delete v<version>-preview --cleanup-tag`), or the next preview of that version is attached to the old tag.
 
 ## Publish a stable release
 
@@ -68,7 +68,7 @@ This writes `Build/Release-<version>/` with the ZIP and appcast. `Scripts/verify
 
 ## One-time signing setup for a new publisher
 
-Only do this for a new publisher identity, such as a fork with its own feed. Use the Sparkle 2.10.0 tools from the `UpdateTools.zip` CI artifact, from `Build/UpdateTools` after a local build, or from [Sparkle's official 2.10.0 release](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0). From the folder containing `UpdateTools`, run:
+Only do this for a new publisher identity, such as a fork with its own feed. Use the Sparkle 2.10.0 tools from the `UpdateTools.zip` CI artifact, from `Build/UpdateTools` after a local build, or from [Sparkle's official 2.10.0 release](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0). From the folder containing `UpdateTools`, run the commands below. With Sparkle's official archive, run them from the archive's top folder as `./bin/generate_keys` instead:
 
 ```bash
 ./UpdateTools/bin/generate_keys
@@ -78,7 +78,7 @@ Only do this for a new publisher identity, such as a fork with its own feed. Use
 
 The first command creates a key in your macOS Keychain, or reuses an existing one. The second prints the public key. The third exports the private signing seed. Back it up somewhere secure: losing it can stop existing installations from receiving updates.
 
-Then add these [repository Actions secrets](https://github.com/WaterBotol/Lunalyr/settings/secrets/actions):
+Then add these secrets in the repository's **Settings → Secrets and variables → Actions**:
 
 | Secret | Value |
 | --- | --- |

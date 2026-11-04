@@ -17,7 +17,7 @@ TTML parsing disables external entities, rejects DTD/entity declarations, bounds
 
 Core Audio and ScreenCaptureKit feed one serial PCM processor. Float32/Float64, packed signed 16/24/32-bit PCM and planar/interleaved channel layouts are supported within bounded sizes and sample rates. No microphone callback is attached. Capture health depends on received buffers, not a screen-permission preflight. The tap aggregate uses the current output clock, waits for readiness and selects only its trailing tap channels. Automatic capture can recover through compatibility capture; explicit choices are retained. Compatibility discards a tiny 1 Hz display stream and does not attach a microphone output.
 
-Audio analysis uses original allocation-free C code for energy bands, attack/release envelopes and onset pulses. It is a reactive envelope, not a BPM estimator or vocal aligner.
+The visualisers' 64-band spectrum, smoothing and beat envelopes come from an FFT analyser adapted from Synesthia (see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)). Original allocation-free C code (`Sources/Support/AudioAnalysis.c`) decodes the supported PCM formats and computes the level meters and silence checks used by capture diagnostics. Neither is a BPM estimator or vocal aligner.
 
 ## Visual reference
 
