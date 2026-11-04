@@ -36,8 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-<!-- TODO(maintainer): replace [INSERT CONTACT METHOD] with a private contact before publishing. -->
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at [INSERT CONTACT METHOD]. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement through [GitHub's private reporting form](https://github.com/WaterBotol/Lunalyr/security/advisories/new) for this repository (the **Security** tab, then **Report a vulnerability**). Only you and the maintainers can see the report. Start its title with "Code of Conduct" so it is not mistaken for a security issue. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
