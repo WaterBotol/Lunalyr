@@ -1,5 +1,8 @@
+> [!NOTE]
+> **Archived upstream README.** This is the README of [Verso](https://github.com/AkkiCode06/verso) by Akki (AkkiCode06) at commit [`9354e2f`](https://github.com/AkkiCode06/verso/tree/9354e2f6703fda43e819284563c257e9bb4b07f8), the version Lunalyr was forked from. See the [pin](UPSTREAM.json) and the [modification record](MODIFICATIONS.md). It is kept for attribution and describes Verso, not Lunalyr: its badges, download links and instructions refer to the upstream project. Relative links now point to the upstream repository at that commit, or to this repository's identical LICENSE; the text is otherwise unchanged. For Lunalyr, see the [main README](../../README.md).
+
 <p align="center">
-  <img src="docs/icon.png" alt="Verso" width="132">
+  <img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/icon.png" alt="Verso" width="132">
 </p>
 
 <h1 align="center">Verso</h1>
@@ -13,7 +16,7 @@
   <a href="https://github.com/AkkiCode06/verso/releases/latest"><img src="https://img.shields.io/github/v/release/AkkiCode06/verso?style=for-the-badge&color=C36BFA&labelColor=1C0A2B&label=DOWNLOAD" alt="Download"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-F1EFE8?style=for-the-badge&labelColor=1C0A2B" alt="macOS 14+">
   <a href="https://github.com/AkkiCode06/verso/stargazers"><img src="https://img.shields.io/github/stars/AkkiCode06/verso?style=for-the-badge&color=D78FE8&labelColor=1C0A2B" alt="Stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/GPL--3.0-+_Commons_Clause-9D4DD7?style=for-the-badge&labelColor=1C0A2B" alt="License"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/GPL--3.0-+_Commons_Clause-9D4DD7?style=for-the-badge&labelColor=1C0A2B" alt="License"></a>
 </p>
 
 <p align="center">
@@ -65,7 +68,7 @@ Inspired by the [Cotodama Lyric Speaker](https://lyric-speaker.com/).
 
 ## ◈ Apple Music animated covers
 
-<p align="center"><img src="docs/feature-motion.gif" alt="Animated album cover" width="720"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/feature-motion.gif" alt="Animated album cover" width="720"></p>
 
 A growing number of Apple Music albums ship an **animated cover** — a short
 looping video the artist supplied alongside the square artwork. Verso fetches it
@@ -89,16 +92,16 @@ step, which is what keeps real depth affordable on an integrated GPU.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/bg-ripple.gif" alt="Ripple"></td>
-    <td width="50%"><img src="docs/bg-orbit.gif" alt="Orbit"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/bg-ripple.gif" alt="Ripple"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/bg-orbit.gif" alt="Orbit"></td>
   </tr>
   <tr>
     <td align="center"><b>Ripple</b><br><sub>Interfering wave trains, Fresnel water, sun glitter</sub></td>
     <td align="center"><b>Orbit</b><br><sub>Real spheres — ray/sphere intersection, real silhouettes</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/bg-wormhole.gif" alt="Wormhole"></td>
-    <td width="50%"><img src="docs/bg-galaxy.gif" alt="Galaxy"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/bg-wormhole.gif" alt="Wormhole"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/bg-galaxy.gif" alt="Galaxy"></td>
   </tr>
   <tr>
     <td align="center"><b>Wormhole</b><br><sub>Inverse-radial projection, twisting with depth</sub></td>
@@ -112,16 +115,16 @@ step, which is what keeps real depth affordable on an integrated GPU.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/comp-scattered.png" alt="Scattered"></td>
-    <td width="50%"><img src="docs/comp-constellation.png" alt="Constellation"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/comp-scattered.png" alt="Scattered"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/comp-constellation.png" alt="Constellation"></td>
   </tr>
   <tr>
     <td align="center"><b>Scattered</b><br><sub>Words set loose across the line</sub></td>
     <td align="center"><b>Constellation</b><br><sub>Fragments linked by hairlines, like a star chart</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/comp-echo.png" alt="Echo"></td>
-    <td width="50%"><img src="docs/comp-editorial.png" alt="Editorial"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/comp-echo.png" alt="Echo"></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/comp-editorial.png" alt="Editorial"></td>
   </tr>
   <tr>
     <td align="center"><b>Echo</b><br><sub>The phrase repeated at many sizes, some mirrored</sub></td>
@@ -359,7 +362,7 @@ for personal use, the way any lyrics app does, and stores nothing.
 ## ⚖ License
 
 Verso is released under the **GPL-3.0 License with Commons Clause**. See
-[LICENSE](LICENSE) for the full terms.
+[LICENSE](../../LICENSE) for the full terms.
 
 Free to use, study, modify and share. **You may not sell it** — the Commons
 Clause removes that right specifically. Contributions welcome; profiting off
@@ -380,6 +383,6 @@ someone else's work is not.
 </p>
 
 <p align="center">
-  <img src="docs/icon.png" width="54"><br>
+  <img src="https://raw.githubusercontent.com/AkkiCode06/verso/9354e2f6703fda43e819284563c257e9bb4b07f8/docs/icon.png" width="54"><br>
   <sub>Built with ♥</sub>
 </p>

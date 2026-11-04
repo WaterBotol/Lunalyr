@@ -1,6 +1,6 @@
 # External formats and system APIs
 
-This custom build preserves Verso’s original licence. No source code from Lyrimuse, VoxelWall or VoxelVerse is incorporated. The additions are original implementations of the requested behaviours using Apple frameworks and exported lyric formats.
+This page records the external file formats, Apple frameworks and update infrastructure Lunalyr relies on, and where its designs came from. Lunalyr keeps Verso’s original licence. No source code from Lyrimuse, VoxelWall or VoxelVerse is incorporated: these features are original implementations built on Apple frameworks and documented export formats. For code that is adapted from other projects, see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ## Lyrimuse local files
 
@@ -11,7 +11,7 @@ TTML parsing disables external entities, rejects DTD/entity declarations, bounds
 ## Apple frameworks
 
 - [Core Audio system taps](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps): private unmuted system-output analysis on macOS 14.2+, with NSAudioCaptureUsageDescription. The tap and aggregate are destroyed on stop; the app does not select an output device or change speaker volume.
-- [ScreenCaptureKit audio](https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos): system-output capture, enabled explicitly in Background settings; no microphone output or recording is created.
+- [ScreenCaptureKit audio](https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos): system-output capture, selectable under Wallpaper → Music response; no microphone output or recording is created.
 - [CFStringTokenizer](https://developer.apple.com/documentation/corefoundation/cfstringtokenizer): Japanese reading attributes.
 - Foundation string transforms and NaturalLanguage language recognition: local transliteration and language selection.
 
