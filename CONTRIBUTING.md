@@ -22,8 +22,8 @@ Report security problems privately, as described in [SECURITY.md](SECURITY.md), 
 
 You need:
 
-- macOS 14 or later
-- Xcode 15 or later (the full app, not only the command-line tools) with its Metal toolchain. If `xcrun metal --version` fails, run `xcodebuild -downloadComponent MetalToolchain`.
+- macOS 14.5 or later
+- Xcode 16 or later (the full app, not only the command-line tools) with its Metal toolchain. The build needs the macOS 15 SDK. If `xcrun metal --version` fails, run `xcodebuild -downloadComponent MetalToolchain`.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
 - Python 3.9 or later, for the helper tests
 

@@ -231,7 +231,7 @@ Preferences are stored in the `local.verso.custom` defaults domain. Lyrics, font
 
 ## Build from source
 
-You need macOS 14 or later, Xcode 15 or later with its Metal toolchain, [XcodeGen](https://github.com/yonaskolb/XcodeGen) and Python 3.9 or later.
+You need Xcode 16 or later with its Metal toolchain, [XcodeGen](https://github.com/yonaskolb/XcodeGen) and Python 3.9 or later. The build needs the macOS 15 SDK that ships with Xcode 16, which in turn needs macOS 14.5 or later. The app itself still runs on macOS 14.
 
 ```bash
 git clone https://github.com/WaterBotol/Lunalyr.git
