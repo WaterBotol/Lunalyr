@@ -288,11 +288,15 @@ struct WavefieldModes {
 
     private static func ambient(at time: Float) -> WavefieldFrame {
         let shimmer = 0.5 + 0.5 * sin(time * 0.42)
-        let modes = atlas[4..<16].enumerated().map { index, resonance in
-            let wave = 0.5 + 0.5 * sin(time * (0.08 + resonance.frequencyNorm * 0.18) + Float(index) * 0.73)
-            return uniforms(resonance, weight: 0.16 + wave * 0.08, phase: resonance.seed * 2 * .pi,
-                coherence: 0.42 + resonance.frequencyNorm * 0.28, layer: index % 3 == 0 ? 1 : 0,
-                excitation: 0.18 + wave * 0.08, pulse: 0.08 + wave * 0.08)
+        let modes = atlas[4..<16].enumerated().map { index, resonance -> WavefieldModeUniforms in
+            let rate: Float = 0.08 + resonance.frequencyNorm * 0.18
+            let offset: Float = Float(index) * 0.73
+            let wave: Float = 0.5 + 0.5 * sin(time * rate + offset)
+            let phase: Float = resonance.seed * 2 * .pi
+            let coherence: Float = 0.42 + resonance.frequencyNorm * 0.28
+            let layer: Float = index % 3 == 0 ? 1 : 0
+            return uniforms(resonance, weight: 0.16 + wave * 0.08, phase: phase,
+                coherence: coherence, layer: layer, excitation: 0.18 + wave * 0.08, pulse: 0.08 + wave * 0.08)
         }
         let onset = 0.02 + shimmer * 0.01
         return WavefieldFrame(modes: modes, bandsAndRMS: SIMD4(0.18 + shimmer * 0.03,
