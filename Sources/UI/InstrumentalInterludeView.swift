@@ -1,118 +1,83 @@
 import SwiftUI
 
+struct InstrumentalCue {
+    let elapsed: Double
+    let opacity: Double
+    let progress: Double?
+    /// Seeds the dots' wander, so each break moves in its own way.
+    var seed: UInt64 = 0x1D07_5EED
+    /// Live or timing-derived intensity, 0...1: livelier music, livelier dots.
+    var energy: Double = 0
+
+    /// Vertical wander of one dot, -1...1. Each dot follows its own seeded
+    /// noise over a shared slow swell, so the three drift like things
+    /// floating rather than tracing a sine wave in lockstep.
+    func bob(at index: Int) -> Double {
+        let pace = 0.38 + 0.22 * min(1, max(0, energy))
+        let own = vc_noise2(seed &+ UInt64(index) &* 0x9E37_79B9, elapsed * pace)
+        let shared = vc_noise(seed ^ 0xA5A5, elapsed * 0.21)
+        return min(1, max(-1, own * 0.8 + shared * 0.45))
+    }
+
+    /// A gentle swell in size, -1...1, out of phase with the bob.
+    func breath(at index: Int) -> Double {
+        vc_noise(seed ^ (0xB0 &+ UInt64(index)), elapsed * 0.27)
+    }
+
+    func highlight(at index: Int) -> Double {
+        guard let progress else { return 0 }
+        return Easing.smoothstep(progress * 3 - Double(index))
+    }
+}
+
 extension VCVocalGap {
     func presence(at time: Double) -> Double {
         let enter = Easing.smoothstep((time - start) / 0.7)
         let leave = nextVocal >= 0 ? 1 - Easing.smoothstep((time - end + 0.65) / 0.65) : 1
         return min(enter, leave)
     }
+
+    func instrumentalCue(at time: Double, previewLead: Double, energy: Double = 0) -> InstrumentalCue? {
+        let elapsed = time - start
+        let fadeIn = Easing.smoothstep((elapsed - 0.42) / 0.5)
+        let knownEnd = end > start
+        let cueEnd = end - (nextVocal >= 0 ? min(previewLead, max(0, end - start - 0.85)) : 0)
+        let fadeOut = knownEnd ? Easing.smoothstep((cueEnd - time) / 0.24) : 1
+        let opacity = min(fadeIn, fadeOut)
+        let progress = knownEnd ? min(1, max(0, elapsed / max(0.01, cueEnd - start))) : nil
+        let seed = UInt64(bitPattern: Int64((start * 1000).rounded())) ^ 0x1D07_5EED
+        return opacity > 0 ? InstrumentalCue(elapsed: elapsed, opacity: opacity, progress: progress,
+                                             seed: seed, energy: energy) : nil
+    }
 }
 
-/// A quiet passage with continuous ambient ribbons and a next-vocal cue.
-/// Its motion follows lyric timing rather than reacting to captured audio.
+/// Three centred dots show the length of the break without covering the scene.
 struct InstrumentalInterludeView: View {
-    let time: Double
-    let gap: VCVocalGap
-    let baseSize: CGFloat
+    let cue: InstrumentalCue
     let accent: Color
-    var nextWord: String? = nil
+    let baseSize: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var remaining: Double { gap.nextVocal >= 0 ? max(0, gap.end - time) : .infinity }
-    private var returnCue: Double { 1 - Easing.smoothstep((remaining - 0.7) / 3.6) }
+    @Environment(\.lyricInk) private var ink
 
     var body: some View {
-        ZStack {
-            Canvas { context, size in
-                drawRibbons(context: &context, size: size)
-            }
-            VStack(spacing: baseSize * 0.23) {
-                HStack(spacing: baseSize * 0.045) {
-                    ForEach(Array("INSTRUMENTAL".enumerated()), id: \.offset) { index, letter in
-                        let phase = max(0, time - gap.start) * 0.65 - Double(index) * 0.27
-                        Text(String(letter))
-                            .font(.system(size: max(10, baseSize * 0.145), weight: .medium))
-                            .foregroundStyle(.white.opacity(0.40 + (reduceMotion ? 0 : 0.12 * sin(phase))))
-                            .offset(y: reduceMotion ? 0 : CGFloat(sin(phase)) * baseSize * 0.025)
-                    }
-                }
-                Spacer().frame(height: baseSize * 1.1)
-                if let nextWord, gap.nextVocal >= 0 {
-                    Text(nextWord)
-                        .font(.system(size: baseSize * 0.42, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.25))
-                        .blur(radius: reduceMotion ? 0 : (1 - returnCue) * 5)
-                        .offset(y: reduceMotion ? 0 : CGFloat(1 - returnCue) * baseSize * 0.25)
-                        .opacity(returnCue)
-                }
-                if gap.nextVocal >= 0 {
-                    HStack(spacing: 7) {
-                        ForEach(0..<3) { dot in
-                            let cue = Easing.smoothstep((Double(3 - dot) - remaining) / 0.45)
-                            Capsule().fill(accent.opacity(0.16 + 0.64 * cue))
-                                .frame(width: CGFloat(7 + 11 * cue), height: 3)
-                        }
-                    }
-                    .opacity(returnCue)
-                    .accessibilityLabel("Vocals return in \(Int(ceil(remaining))) seconds")
-                }
+        // Scales with the lyric size, so the cue is not lost on a large display.
+        let diameter = min(40, max(15, baseSize * 0.3))
+        let colour = ink.dot ?? accent
+        // The wander grows in with the cue, so the dots arrive still.
+        let float = reduceMotion ? 0 : cue.opacity
+        HStack(spacing: diameter * 0.65) {
+            ForEach(0..<3) { index in
+                let highlight = cue.highlight(at: index)
+                Circle()
+                    .fill(colour.opacity(0.32 + highlight * 0.62))
+                    .overlay { Circle().strokeBorder(.white.opacity(highlight * 0.22), lineWidth: 1) }
+                    .frame(width: diameter, height: diameter)
+                    .scaleEffect(1 + CGFloat(float * cue.breath(at: index)) * 0.09)
+                    .offset(y: CGFloat(float * cue.bob(at: index)) * diameter * 0.42)
             }
         }
-        .frame(height: baseSize * 4.4)
-        .opacity(gap.presence(at: time))
-        .scaleEffect(reduceMotion ? 1 : 0.97 + gap.presence(at: time) * 0.03)
+        .opacity(cue.opacity)
+        .accessibilityLabel("Instrumental break")
         .allowsHitTesting(false)
-    }
-
-    private func drawRibbons(context: inout GraphicsContext, size: CGSize) {
-        let elapsed: Double = reduceMotion ? 0 : max(0, time - gap.start)
-        let low: Double = 0
-        let middle: Double = 0
-        let hit: Double = 0
-        let glowRadius: CGFloat = CGFloat(7.0 + low * 6.0)
-        let glowWidth: CGFloat = CGFloat(5.0 + low * 5.0)
-        let inkWidth: CGFloat = CGFloat(0.8 + low * 1.5)
-        let glowOpacity: Double = 0.22 + hit * 0.15
-        let inkOpacity: Double = 0.32 + middle * 0.28
-        let colours: [Color] = [.clear, accent.opacity(0.40), .white.opacity(inkOpacity),
-                                accent.opacity(0.40), .clear]
-        let paint = GraphicsContext.Shading.linearGradient(Gradient(colors: colours),
-            startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0))
-
-        for ribbon in 0..<3 {
-            let path = ribbonPath(size: size, elapsed: elapsed, low: low, middle: middle, ribbon: ribbon)
-            var glow = context
-            glow.addFilter(.blur(radius: glowRadius))
-            glow.stroke(path, with: .color(accent.opacity(glowOpacity)),
-                        style: StrokeStyle(lineWidth: glowWidth, lineCap: .round))
-            context.stroke(path, with: paint, style: StrokeStyle(lineWidth: inkWidth, lineCap: .round))
-        }
-    }
-
-    /// Explicit scalar types keep Swift's overloaded numeric operators out of
-    /// the view builder's constraint graph. The visual equations are unchanged.
-    private func ribbonPath(size: CGSize, elapsed: Double, low: Double, middle: Double, ribbon: Int) -> Path {
-        let phase: Double = Double(ribbon) * 1.9
-        let travelRate: Double = 0.40 + middle * 0.22
-        let travel: Double = elapsed * travelRate
-        let counterTravel: Double = elapsed * 0.29
-        let amplitude: Double = 0.12 + low * 0.10
-        let laneOffset: Double = (Double(ribbon) - 1.0) * 0.045
-        var path = Path()
-
-        for step in 0...56 {
-            let u: Double = Double(step) / 56.0
-            let envelope: Double = sin(u * Double.pi)
-            let firstPhase: Double = u * 6.8 + travel + phase
-            let secondPhase: Double = u * 12.0 - counterTravel + phase
-            let wave: Double = sin(firstPhase) + sin(secondPhase) * 0.22
-            let displacement: Double = wave * envelope * amplitude
-            let xFraction: Double = 0.08 + u * 0.84
-            let yFraction: Double = 0.55 + displacement + laneOffset
-            let x: CGFloat = size.width * CGFloat(xFraction)
-            let y: CGFloat = size.height * CGFloat(yFraction)
-            let point = CGPoint(x: x, y: y)
-            if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
-        }
-        return path
     }
 }

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Lunalyr are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each release has a marketing version (`0.4.10`) and an increasing build number (`17`).
+All notable changes to Lunalyr are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each release has a marketing version (`0.5.0`) and an increasing build number (`18`).
 
 Lunalyr is a fork of [Verso](https://github.com/AkkiCode06/verso) at upstream commit `9354e2f6703fda43e819284563c257e9bb4b07f8`. The original licence is unchanged. The [upstream modification record](docs/upstream/MODIFICATIONS.md) lists files changed in early versions, and [docs/VALIDATION.md](docs/VALIDATION.md) holds the test evidence for each release.
 
@@ -12,8 +12,22 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [0.5.0] - 2026-11-06
+
+Build 18 for macOS 14 and later.
+
+### Added
+
+- Copy animated lyric excerpts as GIFs. Choose the lyric layout and up to five lines on either side of the current line in Settings under **Menu bar & shortcuts → Share**. The card puts the cover, song title and artist credits below the lyrics.
+- Add a menu-bar lyric ticker, configurable keyboard shortcuts, and per-song or per-artist style memory.
+- Add Star Trails, Wavefield variants, Wavecore, Light 3D, Colour Strata and Overprint visualisers. Star Trails can blend its nebula from the album art.
+- Add a lyric colour strength control, a white-to-colour sung sweep, custom highlight colours and a nine-stop animated album gradient.
+- Add a **Use Default Folder** control for local Lyrimuse lyrics.
+
 ### Changed
 
+- Redesign Settings, the menu-bar panel and first-run onboarding with clearer controls and live previews.
+- Expand romanisation across scripts, refine album colour extraction and show instrumental cues over your own wallpaper.
 - Reorganised the repository for contributors. The README is rewritten with screenshots, this changelog replaces `CHANGES.md`, and long-form documentation now lives in [`docs/`](docs/README.md), including a new [architecture overview](docs/ARCHITECTURE.md).
 - Rewrote the contributing guide and pull request template, replaced the issue templates with issue forms, and added a code of conduct, a security policy, `.editorconfig` and `.gitattributes`.
 - Moved the build and test entry points from the repository root into `Scripts/`. `Build.command` is now `Scripts/build.sh` and `Run-Tests.command` is now `Scripts/test.sh`. The performance helper is run directly as `Scripts/measure-performance.sh`.
@@ -22,6 +36,11 @@ When merging, keep every entry and combine duplicate headings.
 
 - The owner-only `Push-to-GitHub.command` upload helper. Use Git or GitHub Desktop.
 - `DEVELOPMENT_BACKLOG.md`, internal notes from earlier AI-assisted development sessions.
+
+### Fixed
+
+- Preserve word timing within mixed-timing songs, suppress duplicate lyrics and prevent a full phrase from flashing during next-word previews or playback corrections.
+- Keep Cutout Highlight active through the end of the line and improve GIF text fitting for long and short excerpts.
 
 ## [0.4.10] - 2026-11-04
 
@@ -330,7 +349,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.4.10...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.0
 [0.4.10]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.10
 [0.4.9]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.9-preview
 [0.4.8]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.8-preview

@@ -14,7 +14,10 @@ enum QQGapRepair {
         }.sorted()
         let pace = samples.isEmpty ? 0.45 : samples[samples.count / 2]
         var result: [LyricsFetcher.Line] = []
-        for line in lines {
+        for original in lines {
+            // QQ's own pacing has now judged every end, so the generic pause
+            // inference (LyricGapTiming) leaves these lines alone.
+            var line = original; line.endFromNextLine = nil
             guard !line.isInstrumental, !line.words.isEmpty else { result.append(line); continue }
             let end: Double
             if line.wordTimed {

@@ -24,21 +24,36 @@ struct MediaControlsView: View {
         // bounds and reads as a grey rectangle floating on the wallpaper.
         // Per-element shadows carry legibility instead.
         VStack(spacing: 13) {
-            if let artwork = nowPlaying.artwork {
+            // Only ever this track's cover. While it loads (or when there is
+            // none) a plain tile holds the space, so the panel does not jump.
+            if let artwork = nowPlaying.currentTrackArtwork {
                 Image(nsImage: artwork)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 88, height: 88)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.55), radius: 20, y: 7)
+                    .accessibilityHidden(true)
+            } else if let current = nowPlaying.current {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.white.opacity(0.08))
+                    .frame(width: 88, height: 88)
+                    .overlay {
+                        Image(systemName: MenuBarView.placeholderSymbol(for: current))
+                            .font(.system(size: 30, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                    .accessibilityHidden(true)
             }
 
             VStack(spacing: 3) {
-                Text(nowPlaying.current?.title ?? "Nothing playing")
+                // Idle, the same words as the wallpaper's notice: the player
+                // Lunalyr can't read, when it may be the one playing.
+                Text(nowPlaying.current?.title ?? nowPlaying.idleTitle)
                     .font(Settings.shared.uiFont(size: 19, bold: true, mood: mood))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text(nowPlaying.current?.artist ?? "")
+                Text(nowPlaying.current?.artist ?? nowPlaying.idleDetail ?? "")
                     .font(Settings.shared.uiFont(size: 13, mood: mood))
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(1)
@@ -55,11 +70,19 @@ struct MediaControlsView: View {
             }
             .shadow(color: .black.opacity(0.6), radius: 7, y: 1)
 
-            // No hidden 5 Hz progress timer on every display.
-            if isHovered {
+            // No hidden 5 Hz progress timer on every display, and no
+            // "0:01 / 0:01" bar for radio: a stream has no length to scrub.
+            if isHovered, let current = nowPlaying.current, !current.isStream, current.duration > 0 {
               scrubber
                 .frame(width: 290)
                 .padding(.top, 2)
+            } else if isHovered, let current = nowPlaying.current, current.isStream {
+                // An advert has a length but nothing to scrub; it is not live.
+                Text(current.isAdvert ? "Advertisement" : "Live")
+                    .font(Settings.shared.uiFont(size: 11, bold: true, mood: mood))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 290, height: 43)
+                    .padding(.top, 2)
             } else {
                 Color.clear.frame(width: 290, height: 43).padding(.top, 2)
             }
@@ -84,6 +107,16 @@ struct MediaControlsView: View {
                     progress: elapsed / duration,
                     onSeek: { fraction in nowPlaying.seek(to: fraction * duration) }
                 )
+                .accessibilityElement()
+                .accessibilityLabel("Playback position")
+                .accessibilityValue("\(timestamp(elapsed)) of \(timestamp(duration))")
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: nowPlaying.seek(to: min(elapsed + Self.adjustStep, duration))
+                    case .decrement: nowPlaying.seek(to: max(elapsed - Self.adjustStep, 0))
+                    @unknown default: break
+                    }
+                }
                 HStack {
                     Text(timestamp(elapsed))
                     Spacer()
@@ -98,14 +131,19 @@ struct MediaControlsView: View {
 
     private var transport: some View {
         HStack(spacing: 26) {
-            controlButton("backward.fill", size: 17) { nowPlaying.previousTrack() }
-            controlButton(nowPlaying.isPlaying ? "pause.fill" : "play.fill", size: 23) { nowPlaying.playPause() }
-            controlButton("forward.fill", size: 17) { nowPlaying.nextTrack() }
+            controlButton("backward.fill", label: "Previous track", size: 17) { nowPlaying.previousTrack() }
+            controlButton(nowPlaying.isPlaying ? "pause.fill" : "play.fill", label: nowPlaying.isPlaying ? "Pause" : "Play",
+                          size: 23) { nowPlaying.playPause() }
+            controlButton("forward.fill", label: "Next track", size: 17) { nowPlaying.nextTrack() }
         }
+        .disabled(!nowPlaying.canControlPlayback)
         .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
     }
 
-    private func controlButton(_ symbol: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+    /// Seconds VoiceOver's adjust gestures move the scrubber.
+    private static let adjustStep: TimeInterval = 10
+
+    private func controlButton(_ symbol: String, label: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
@@ -114,6 +152,8 @@ struct MediaControlsView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .help(label)
     }
 
     private func timestamp(_ seconds: TimeInterval) -> String {

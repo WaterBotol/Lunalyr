@@ -12,7 +12,8 @@ final class VisualizerTests: XCTestCase {
         return analyzer.latest()
     }
     func testImportedFFTSeparatesMusicalRegisters() {
-        let peaks = [100.0, 1000, 8000].map { frequency -> Int in
+        let frequencies = [100.0, 1000, 8000]
+        let peaks = frequencies.map { frequency -> Int in
             let analyzer = AudioAnalyzer()
             analyzer.setAutoGainEnabled(false)
             let frame = tone(frequency, into: analyzer)
@@ -21,8 +22,12 @@ final class VisualizerTests: XCTestCase {
         }
         XCTAssertLessThan(peaks[0], peaks[1])
         XCTAssertLessThan(peaks[1], peaks[2])
-        XCTAssertLessThan(peaks[0], 10)
-        XCTAssertGreaterThan(peaks[2], 50)
+        // The axis is log-spaced in real Hz from 30 Hz to 16 kHz: each tone
+        // peaks in the band containing it, within the FFT's ~23 Hz bins.
+        for (frequency, peak) in zip(frequencies, peaks) {
+            let expected = Int(64 * log(frequency / 30) / log(16_000.0 / 30))
+            XCTAssertLessThanOrEqual(abs(peak - expected), frequency < 200 ? 2 : 1, "\(frequency) Hz")
+        }
     }
     func testStereoFFTDoesNotCancelOppositePhaseAudio() {
         let source = VisualizerAudio()
@@ -76,22 +81,47 @@ final class VisualizerTests: XCTestCase {
         XCTAssertTrue(smoother.frame(target, at: 1).bands.allSatisfy { $0.isFinite && $0 == 0 })
     }
     func testGPUUniformLayoutMatchesImportedMetalShaders() {
-        XCTAssertEqual(MemoryLayout<VizUniforms>.stride, 168)
+        // 54 floats, as VisualizerShaderTypes.h asserts; the sound types follow `intro`.
+        XCTAssertEqual(MemoryLayout<VizUniforms>.stride, 216)
+        XCTAssertEqual(MemoryLayout<VizUniforms>.offset(of: \.intro), 164)
+        XCTAssertEqual(MemoryLayout<VizUniforms>.offset(of: \.soundKick), 168)
+        XCTAssertEqual(MemoryLayout<VizUniforms>.offset(of: \.soundPad), 188)
+        XCTAssertEqual(MemoryLayout<VizUniforms>.offset(of: \.kickOnsets), 192)
+        XCTAssertEqual(MemoryLayout<VizUniforms>.offset(of: \.hatAge), 212)
     }
+    func testWavefieldMapsLiveFFTPeaksToDistinctResonances() throws {
+        let low = tone(220, into: AudioAnalyzer())
+        let high = tone(1100, into: AudioAnalyzer())
+        XCTAssertEqual(try XCTUnwrap(low.wavefield.peaks.first).frequency, 220, accuracy: 6)
+        XCTAssertEqual(try XCTUnwrap(high.wavefield.peaks.first).frequency, 1100, accuracy: 6)
+
+        var bank = WavefieldModes()
+        let lowMode = try XCTUnwrap(bank.frame(low, at: 0, time: 0, sensitivity: 1, reduced: false).modes.first)
+        XCTAssertEqual(lowMode.shape.x, 2)
+        XCTAssertEqual(lowMode.shape.y, 3)
+        var highFrame = bank.frame(high, at: 1.0 / 60, time: 0, sensitivity: 1, reduced: false)
+        XCTAssertTrue(highFrame.modes.contains { $0.shape.x == 2 && $0.shape.y == 3 },
+            "The old resonance must stay visible while the new one attacks")
+        for step in 2...60 {
+            highFrame = bank.frame(high, at: Double(step) / 60, time: 0, sensitivity: 1, reduced: false)
+        }
+        let highMode = try XCTUnwrap(highFrame.modes.first)
+        XCTAssertNotEqual(SIMD2(lowMode.shape.x, lowMode.shape.y), SIMD2(highMode.shape.x, highMode.shape.y))
+    }
+
     @MainActor
     func testEveryImportedSceneRendersAndChangesWithItsSpectrum() throws {
-        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
-            throw XCTSkip("This test host has no Metal device; GPU rendering is unverified here.")
-        }
+        let device = try GPUTestSupport.device()
+        let queue = try XCTUnwrap(device.makeCommandQueue())
         let library = try device.makeDefaultLibrary(bundle: .main)
         let width = 160, height = 90
-        for style in AudioVisualizerStyle.allCases {
+        for style in AudioVisualizerStyle.allCases where style.webEngine == nil {
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.vertexFunction = library.makeFunction(name: "fullscreenVertex")
-            descriptor.fragmentFunction = library.makeFunction(name: style.fragment)
+            descriptor.fragmentFunction = library.makeFunction(name: try XCTUnwrap(style.fragment))
             descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
             let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
-            func render(_ sound: AudioSnapshot, sensitivity: Double = 1) throws -> [UInt8] {
+            func render(_ sound: AudioSnapshot, sensitivity: Double = 1, time: Double = 12, palette: AlbumWallpaperPalette? = nil) throws -> [UInt8] {
                 let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
                     width: width, height: height, mipmapped: false)
                 textureDescriptor.usage = [.renderTarget]
@@ -104,12 +134,12 @@ final class VisualizerTests: XCTestCase {
                 let command = try XCTUnwrap(queue.makeCommandBuffer())
                 let encoder = try XCTUnwrap(command.makeRenderCommandEncoder(descriptor: pass))
                 var u = AudioVisualizerView.Coordinator.uniforms(style: style,
-                    size: CGSize(width: width, height: height), time: 12, frame: sound,
+                    size: CGSize(width: width, height: height), time: time, frame: sound,
                     sensitivity: sensitivity, speed: 1, reduced: false)
                 encoder.setRenderPipelineState(pipeline)
-                encoder.setFragmentBytes(&u, length: MemoryLayout<VizUniforms>.stride, index: 0)
-                sound.bands.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 1) }
-                sound.waveform.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 2) }
+                var wavefield = WavefieldModes()
+                AudioVisualizerView.Coordinator.bind(sound, to: encoder, style: style, uniforms: &u,
+                    wavefield: &wavefield, at: 0, reduced: false, palette: palette)
                 encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
                 encoder.endEncoding(); command.commit(); command.waitUntilCompleted()
                 XCTAssertEqual(command.status, .completed, command.error?.localizedDescription ?? style.title)
@@ -121,13 +151,63 @@ final class VisualizerTests: XCTestCase {
                 return pixels
             }
             let quiet = try render(AudioSnapshot())
+            let idle = try render(AudioVisualizerView.Coordinator.ambientSpectrum(at: 12))
+            let later = try render(AudioVisualizerView.Coordinator.ambientSpectrum(at: 16), time: 16)
+            let visiblePixels = idle.enumerated().filter { $0.offset % 4 != 3 && $0.element > 16 }.count
+            XCTAssertGreaterThan(visiblePixels, width * height / 100, "\(style.title) has a visible idle scene")
+            XCTAssertNotEqual(idle, later, "\(style.title) moves during silence")
             var sound = AudioSnapshot()
             sound.bands = (0..<64).map { Float(0.4 + 0.35 * sin(Double($0) * 0.3)) }
             sound.components = [Float](repeating: 0.6, count: 8)
             sound.bass = 0.7; sound.mid = 0.5; sound.level = 0.7
+            if style.isWavefield { sound = tone(220, into: AudioAnalyzer()) }
             let playing = try render(sound)
             let difference = zip(quiet, playing).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
             XCTAssertGreaterThan(difference, 1000, style.title)
+            let red = AlbumWallpaperPalette(grid: Array(repeating: SIMD3(0, 1, 0.8), count: 9))
+            let blue = AlbumWallpaperPalette(grid: Array(repeating: SIMD3(2.0 / 3, 1, 0.8), count: 9))
+            func warmth(_ pixels: [UInt8]) -> Int {
+                stride(from: 0, to: pixels.count, by: 4).reduce(0) { $0 + Int(pixels[$1 + 2]) - Int(pixels[$1]) }
+            }
+            XCTAssertGreaterThan(warmth(try render(sound, palette: red)), width * height, style.title)
+            XCTAssertLessThan(warmth(try render(sound, palette: blue)), -width * height, style.title)
+            let gentle = try render(sound, sensitivity: 0.3)
+            let strong = try render(sound, sensitivity: 3)
+            let sensitivityDifference = zip(gentle, strong).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
+            XCTAssertGreaterThan(sensitivityDifference, width * height, "\(style.title) sensitivity must visibly change the same input")
+            if style == .colourStrata || style == .overprint {
+                func changedPixels(_ band: WritableKeyPath<AudioSnapshot, Float>) throws -> Set<Int> {
+                    var isolated = AudioSnapshot()
+                    isolated[keyPath: band] = 0.85
+                    let image = try render(isolated)
+                    return Set(stride(from: 0, to: image.count, by: 4).filter { offset in
+                        (0..<3).contains { abs(Int(image[offset + $0]) - Int(quiet[offset + $0])) > 2 }
+                    })
+                }
+                let bass = try changedPixels(\.bass)
+                let mids = try changedPixels(\.mid)
+                let highs = try changedPixels(\.treble)
+                for region in [bass, mids, highs] {
+                    XCTAssertGreaterThan(region.count, 50, "\(style.title) responds to all three bands")
+                }
+                XCTAssertGreaterThan(bass.symmetricDifference(mids).count, 50, style.title)
+                XCTAssertGreaterThan(bass.symmetricDifference(highs).count, 50, style.title)
+                XCTAssertGreaterThan(mids.symmetricDifference(highs).count, 50, style.title)
+            }
+            // Star Trails lights its stars by sound type, not by band: StarTrailsTests.
+            if style == .tunnel {
+                var waveform = AudioSnapshot()
+                waveform.waveform = (0..<AudioSnapshot.waveformCount).map { Float(0.3 + 0.2 * sin(Double($0) * 0.1)) }
+                XCTAssertNotEqual(try render(waveform, sensitivity: 0.3), try render(waveform, sensitivity: 3))
+            }
+            if style.isWavefield {
+                let high = try render(tone(1100, into: AudioAnalyzer()))
+                let topologyChange = zip(playing, high).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
+                XCTAssertGreaterThan(topologyChange, 10_000, "Changing the note must redraw the field")
+                if style == .wavefieldSphere {
+                    XCTAssertEqual(Array(playing.prefix(4)), [0, 0, 0, 255], "Outside the sphere stays black")
+                }
+            }
             if style == .curtainAurora {
                 sound.bass = 0.45
                 for i in 0..<16 { sound.bands[i] = 0.45 }
@@ -156,6 +236,27 @@ final class VisualizerTests: XCTestCase {
                     XCTAssertEqual(weightedX / max(1, change), centre / 63.0, accuracy: 0.12,
                         "The responsive section must stay at this note's horizontal frequency position")
                 }
+                // Real notes through the analyser: the band axis is log-spaced
+                // in Hz, so each lands at its own log-frequency position, bass
+                // on the left and treble on the right.
+                var positions: [Double] = []
+                for frequency in [100.0, 1000, 8000] {
+                    let analyzer = AudioAnalyzer()
+                    analyzer.setAutoGainEnabled(false)
+                    let pixels = try render(tone(frequency, into: analyzer))
+                    var change = 0.0, weightedX = 0.0
+                    for y in 0..<height { for x in 0..<width {
+                        let start = (y * width + x) * 4
+                        let delta = (0..<3).reduce(0.0) { $0 + Double(abs(Int(pixels[start + $1]) - Int(quiet[start + $1]))) }
+                        change += delta; weightedX += delta * (Double(x) + 0.5) / Double(width)
+                    } }
+                    let position = weightedX / max(1, change)
+                    let expected = (64 * log(frequency / 30) / log(16_000.0 / 30) - 0.5) / 63
+                    XCTAssertEqual(position, expected, accuracy: 0.15, "\(frequency) Hz")
+                    positions.append(position)
+                }
+                XCTAssertLessThan(positions[0], positions[1])
+                XCTAssertLessThan(positions[1], positions[2])
             }
         }
     }
@@ -176,6 +277,7 @@ extension VisualizerTests {
         let large = LyricStageFit.presentationScale(content: content, available: available, userScale: 1.5)
         XCTAssertLessThan(small, normal)
         XCTAssertLessThan(normal, large)
-        XCTAssertEqual(large / small, 1.5 / 0.7, accuracy: 0.001)
+        XCTAssertEqual(small / normal, 0.7, accuracy: 0.001)
+        XCTAssertEqual(large * content.width, available.width, accuracy: 0.001)
     }
 }

@@ -19,6 +19,10 @@ final class VisualClock {
     /// Integrating is what makes this safe: the surge changes speed, where
     /// scaling the clock directly would jump the fluid to a new state.
     static let flow = VisualClock()
+    /// NowPlayingView advances `flow` at this rate times Effect speed, and
+    /// the visualiser scenes take it as their source clock. The render
+    /// harness (Tests/Swift/Support) reads it too.
+    static let visualizerRate = 0.70
 
     private var phase: Double = 0
     private var lastTime: Double?
@@ -64,6 +68,89 @@ final class VisualClock {
 
         phase += dt * eased
         return phase
+    }
+}
+
+/// Playback position between player samples.
+///
+/// The player is asked where it is every couple of seconds and the position
+/// is extrapolated in between. Each fresh sample disagrees with the
+/// extrapolation by a few tens of milliseconds -- round-trip jitter, not a
+/// seek -- and jumping to it made the lyric highlight twitch, sometimes
+/// backwards, on every re-sync. A small disagreement is therefore eased out
+/// over a fraction of a second instead: the clock briefly runs a little
+/// fast or slow, never backwards, and lands exactly on the sample. A real
+/// seek, a new track or a pause still moves at once.
+///
+/// Times are plain seconds on a monotonic clock supplied by the caller, so
+/// the result depends only on when it is read, not on how often: the same
+/// at 30 Hz, 60 Hz or 120 Hz.
+struct PlaybackClock {
+    struct Anchor: Equatable {
+        var position: TimeInterval
+        var time: TimeInterval
+    }
+
+    /// How long a small correction takes to settle.
+    static let slewDuration: TimeInterval = 0.4
+    /// Errors at or above this are treated as a seek and applied at once.
+    /// Below `slewDuration`, so the eased clock always still moves forward.
+    static let slewLimit: TimeInterval = 0.25
+
+    private(set) var anchor: Anchor?
+    private(set) var isRunning = false
+    private var correction: (offset: TimeInterval, start: TimeInterval)?
+
+    /// The position to show at `now`, or nil before the first sample.
+    func position(at now: TimeInterval) -> TimeInterval? {
+        guard let anchor else { return nil }
+        let base = isRunning ? anchor.position + max(0, now - anchor.time) : anchor.position
+        return base + remainingCorrection(at: now)
+    }
+
+    /// Whether a correction is still being eased out at `now`.
+    func isSlewing(at now: TimeInterval) -> Bool {
+        remainingCorrection(at: now) != 0
+    }
+
+    /// Re-anchors to a sample taken at `time`, applied at `now`.
+    /// `continuous` means nothing but time passed since the previous sample:
+    /// same track, playing throughout.
+    mutating func sync(to position: TimeInterval, sampledAt time: TimeInterval, running: Bool,
+                       now: TimeInterval, continuous: Bool) {
+        let target = running ? position + max(0, now - time) : position
+        var next: (offset: TimeInterval, start: TimeInterval)?
+        if continuous, isRunning, running, let shown = self.position(at: now) {
+            let error = target - shown
+            if abs(error) < Self.slewLimit, error != 0 {
+                // Start from what is on screen and ease onto the sample.
+                next = (offset: -error, start: now)
+            }
+        }
+        anchor = Anchor(position: position, time: time)
+        isRunning = running
+        correction = next
+    }
+
+    /// Pauses or resumes from what is on screen now.
+    mutating func setRunning(_ running: Bool, now: TimeInterval) {
+        guard running != isRunning else { return }
+        if let shown = position(at: now) { anchor = Anchor(position: shown, time: now) }
+        correction = nil
+        isRunning = running
+    }
+
+    mutating func reset() {
+        anchor = nil
+        isRunning = false
+        correction = nil
+    }
+
+    private func remainingCorrection(at now: TimeInterval) -> TimeInterval {
+        guard let correction else { return 0 }
+        let progress = (now - correction.start) / Self.slewDuration
+        guard progress < 1 else { return 0 }
+        return correction.offset * (1 - max(0, progress))
     }
 }
 

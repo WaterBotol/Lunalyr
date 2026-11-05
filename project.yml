@@ -23,11 +23,11 @@ targets:
       properties:
         CFBundleDisplayName: Lunalyr
         CFBundleName: Lunalyr
-        CFBundleShortVersionString: 0.4.10
-        CFBundleVersion: "17"
+        CFBundleShortVersionString: 0.5.0
+        CFBundleVersion: "18"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026
-        NSAppleEventsUsageDescription: Lunalyr reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.
+        NSAppleEventsUsageDescription: Lunalyr reads the playing song and its position from Music or Spotify to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.
         NSAudioCaptureUsageDescription: Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.
         SUFeedURL: "https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml"
         SUPublicEDKey: "7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY="
@@ -35,6 +35,14 @@ targets:
         SUAutomaticallyUpdate: false
         SUSendProfileInfo: false
         SUVerifyUpdateBeforeExtraction: true
+        # Without this key a dual-GPU Intel MacBook Pro switches to the
+        # discrete GPU for as long as Lunalyr runs. The key only helps while
+        # no Metal code asks for the system default device: that is the
+        # discrete GPU, powered up for as long as the device is held. Every
+        # renderer (visualisers and GPU effects alike) takes the GPU driving
+        # its display from VisualizerGPU instead, and the artwork palette's
+        # Core Image context is allowed the low-power GPU.
+        NSSupportsAutomaticGraphicsSwitching: true
     dependencies:
       - package: Yams
         product: Yams
@@ -54,6 +62,13 @@ targets:
         ENABLE_HARDENED_RUNTIME: false
         COMBINE_HIDPI_IMAGES: true
         MACOSX_DEPLOYMENT_TARGET: "14.0"
+      configs:
+        Debug:
+          # Debug runs, including the unit-test host, get their own
+          # preferences domain, caches and privacy grants, so they never read
+          # or rewrite the installed app's settings. Release keeps
+          # local.verso.custom, which existing installs and updates rely on.
+          PRODUCT_BUNDLE_IDENTIFIER: local.verso.custom.debug
 
   VersoCustomTests:
     type: bundle.unit-test
@@ -66,6 +81,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.verso.custom.tests
         GENERATE_INFOPLIST_FILE: YES
+        # Created before any test runs; it moves home-relative folders
+        # (Application Support, Caches) into a throwaway directory.
+        INFOPLIST_KEY_NSPrincipalClass: LunalyrTestEnvironment
         SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/Sources/VersoCustom-Bridging-Header.h"
         SWIFT_VERSION: "5.0"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Lunalyr.app/Contents/MacOS/Lunalyr"

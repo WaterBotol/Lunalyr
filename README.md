@@ -100,7 +100,7 @@ xattr -dr com.apple.quarantine /Applications/Lunalyr.app
 
 ### Updating and uninstalling
 
-Click **Check for updates…** in the menu-bar panel or under **Performance → App**. Stable releases install from there; preview builds are published as GitHub pre-releases and installed manually.
+Click **Check for updates…** in the menu-bar panel or under **Settings → General**. Stable releases install from there; preview builds are published as GitHub pre-releases and installed manually.
 
 To uninstall, quit Lunalyr and move it to the Bin (Trash). To remove its data as well, delete these folders and reset its preferences:
 

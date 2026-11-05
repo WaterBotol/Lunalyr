@@ -19,7 +19,7 @@ struct WallpaperViewport<Background: View, Lyrics: View>: View {
                 background.frame(width: size.width, height: size.height).clipped()
             }
             .overlay {
-                lyrics.frame(width: size.width, height: size.height)
+                lyrics.frame(width: size.width, height: size.height).clipped()
             }
     }
 }

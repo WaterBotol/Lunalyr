@@ -5,74 +5,122 @@ import CoreGraphics
 struct NowPlayingView: View {
     let displayID: CGDirectDisplayID
     @ObservedObject var renderActivity: WindowRenderActivity
+    var isSettingsPreview = false
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var hover = HoverState.shared
-    @ObservedObject private var settings = Settings.shared
+    @ObservedObject var settings: Settings = .shared
+    /// Passed to the web scenes, so a test can host this view with its own.
+    var visualizerPreferences: VisualizerPreferences = .shared
     // Read the current envelope on a scheduled frame. Subscribing to every
     // meter publication would trigger extra wallpaper redraws outside it.
     @ObservedObject private var readingOptions = RomanizationOptions.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
+    @ObservedObject private var desktopOptions = DesktopOptions.shared
+    /// Published when an effect finishes compiling, so a crossfade into it
+    /// can start.
+    @ObservedObject private var effects = ShaderPipelineCache.shared
+    @StateObject private var backdrop = BackdropLuminance()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var extras = LunalyrExtras.shared
     @State private var paletteGeneration = UUID()
-    @State private var palette: [SIMD3<Double>] = ColorExtractor.fallbackHSBPalette
-    @State private var currentLayer: BackgroundLayer = .generated(pattern: nil)
-    @State private var previousLayer: BackgroundLayer?
-    @State private var layerChangedAt = Date.distantPast
+    @State private var palette = ColorExtractor.fallbackHSBPalette
+    @State private var wallpaperPalette = AlbumWallpaperPalette(grid: ColorExtractor.fallbackHSBPalette)
+    @State private var previousWallpaperPalette: AlbumWallpaperPalette?
+    @State private var paletteChangedAt = Date.distantPast
+    @State private var hasAlbumPalette = false
+    /// The background layer on screen, the one it replaced, and the fade
+    /// between them.
+    @State private var crossfade = BackgroundCrossfade<BackgroundLayer>(.generated(pattern: nil, seed: 0))
+    /// The last track's look, kept while nothing plays so a pause or a stop
+    /// does not redraw the wallpaper as a different one.
+    @State private var heldMood: TrackMood?
+    @State private var heldSeed: Int?
+    @State private var viewportSize: CGSize = .zero
+    /// Renewed at natural breaks to keep the shader's clock small.
+    @State private var shaderEpoch = 0
+    @State private var shaderEpochStartedAt = Date()
+    /// Bumped when a fade or notice ends, so a quiet frame clock can stop.
+    @State private var clockCheck = 0
 
     private static let backgroundFadeDuration: TimeInterval = 0.75
+    private static let paletteFadeDuration: TimeInterval = 0.9
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
     private static let noticeHoldDuration: TimeInterval = 4.0
     private static let noticeFadeDuration: TimeInterval = 1.0
     private static let idleHoldDuration: TimeInterval = 5.0
+    /// Ambient motion under Reduce Motion, matching the visualisers.
+    private static let reducedMotionRate = 0.15
+    /// How long the text backing takes to come or go when the lyric stage
+    /// fills or empties at once.
+    private static let backingFadeDuration: TimeInterval = 0.6
 
+    /// A hidden or covered surface stops, and so do the desktop wallpapers
+    /// while the user has paused them. The Settings preview keeps moving
+    /// through that pause -- it is where changes are judged -- and stops
+    /// only with its own window. System audio follows the same rule
+    /// (`WindowRenderActivity.state`), so it runs exactly while a visualiser
+    /// can be drawn. The Settings preview ignores the user's Pause wallpaper.
     private var renderingPaused: Bool {
-        !renderActivity.shouldRender(pauseWhenCovered: settings.pauseWhenCovered)
-    }
-    private var showsInterludes: Bool {
-        settings.showInterludes && settings.effectiveBackgroundMode != .desktop
+        !renderActivity.shouldRender(pauseWhenCovered: settings.pauseWhenCovered,
+                                     wallpaperPaused: !isSettingsPreview && extras.wallpaperPaused)
     }
 
     /// What the background should be right now. Changing any input -- the
     /// album gaining motion art, a settings change, the track's mood -- makes
     /// this differ from `currentLayer` and starts a crossfade.
-    enum BackgroundLayer: Equatable {
+    enum BackgroundLayer: Hashable {
         case desktop
-        case motion(URL)
+        /// `still` shows the cover itself instead of its animation.
+        case motion(URL, still: Bool)
         case custom(URL)
-        case shader(ShaderStyle)
+        /// A new epoch is the same effect restarted on a fresh clock.
+        case shader(ShaderStyle, epoch: Int)
         case visualizer(AudioVisualizerStyle)
-        /// `nil` pattern means colour field only.
-        case generated(pattern: BackgroundStyle?)
+        case albumGradient
+        /// `nil` pattern means colour field only. Each layer keeps its own
+        /// seed, so the outgoing pattern keeps its geometry while it fades.
+        case generated(pattern: BackgroundStyle?, seed: Int)
+
+        /// Whether the wallpaper clock must redraw it every frame. Videos and
+        /// still pictures draw themselves.
+        var animatesWithClock: Bool {
+            switch self {
+            case .desktop, .motion, .custom: return false
+            case .shader, .visualizer, .generated, .albumGradient: return true
+            }
+        }
     }
 
     private var desiredLayer: BackgroundLayer {
-        if settings.effectiveBackgroundMode == .auto,
+        // Read once: on battery each read asks IOKit for the power source.
+        let mode = settings.effectiveBackgroundMode
+        if mode == .auto,
            let motion = nowPlaying.motionArtwork, settings.motionArtworkEnabled,
            !settings.excludesMotion(artist: nowPlaying.current?.artist,
                                     album: nowPlaying.current?.album) {
-            return .motion(motion.square)
+            // Portrait displays get the tall rendition when the album has a
+            // dependable one.
+            return .motion(motion.rendition(portrait: prefersTallArtwork), still: reduceMotion)
         }
-        let mood = self.mood
-        let mode = settings.effectiveBackgroundMode
+        let mood = backgroundMood
+        let seed = backgroundSeed
         if mode == .desktop { return .desktop }
         if mode == .custom, !settings.customWallpaperPath.isEmpty {
             return .custom(URL(fileURLWithPath: settings.customWallpaperPath))
         }
         if mode == .visualizer { return .visualizer(settings.audioVisualizerStyle) }
         if mode == .shader || (mode == .auto && mood.energy > 0.72) {
-            return .shader(settings.resolvedShader(for: mood, seed: trackSeed))
+            return .shader(settings.resolvedShader(for: mood, seed: seed), epoch: shaderEpoch)
         }
-        if mode == .colourOnly { return .generated(pattern: nil) }
-        return .generated(pattern: settings.resolvedPattern(for: mood))
+        if mode == .colourOnly {
+            return settings.albumGradientWallpaper ? .albumGradient : .generated(pattern: nil, seed: 0)
+        }
+        return .generated(pattern: settings.resolvedPattern(for: mood), seed: seed)
     }
 
     private var trackSeed: Int {
-        let key = (nowPlaying.current?.title ?? "") + (nowPlaying.current?.artist ?? "")
-        var value: UInt64 = 1469598103934665603
-        for byte in key.utf8 {
-            value = (value ^ UInt64(byte)) &* 1099511628211
-        }
-        return Int(value % 100_000)
+        TrackMood.seed(title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "")
     }
 
     private var artworkSaturation: Double {
@@ -89,128 +137,322 @@ struct NowPlayingView: View {
         )
     }
 
+    /// The background follows the last track until another one plays.
+    private var backgroundMood: TrackMood { nowPlaying.current == nil ? heldMood ?? mood : mood }
+    private var backgroundSeed: Int { nowPlaying.current == nil ? heldSeed ?? trackSeed : trackSeed }
+
+    private var currentLayer: BackgroundLayer { crossfade.current }
+
+    /// Whether `layer` has something to draw: anything but an effect still
+    /// compiling on this surface's GPU. A crossfade into an effect that has
+    /// never had anything to draw waits instead of fading towards an empty
+    /// view (see `BackgroundCrossfade`).
+    private func canDraw(_ layer: BackgroundLayer) -> Bool {
+        guard case .shader(let style, _) = layer else { return true }
+        return effects.isSettled(style, display: effectDisplay)
+    }
+
+    private func prepareEffect(for layer: BackgroundLayer) {
+        if case .shader(let style, _) = layer { effects.prepare(style, display: effectDisplay) }
+    }
+
+    /// The display whose GPU draws this surface's effects; the Settings
+    /// preview takes the GPU the visualisers prefer.
+    private var effectDisplay: CGDirectDisplayID? { isSettingsPreview ? nil : displayID }
+
+    /// How much of the lyric stage is in use, following `lyricsSection`, so
+    /// the text backing is drawn only behind something. Hidden lyrics leave
+    /// nothing: the boolean, not the dissolve, so the backing eases out with
+    /// them even while this frame clock is idle.
+    private func stagePresence(at date: Date) -> Double {
+        LyricStagePresence.presence(.init(
+            hasTrack: nowPlaying.current != nil, idleSince: nowPlaying.idleSince,
+            isLoading: lyricsVM.isLoading, hasTimedLines: !lyricsVM.lines.isEmpty,
+            hasPlainLines: !lyricsVM.plainLines.isEmpty, notFound: lyricsVM.notFound,
+            notFoundAt: lyricsVM.notFoundAt, noLyrics: settings.noLyrics, lyricsShown: extras.lyricsVisible),
+            at: date, timing: .init(idleHold: Self.idleHoldDuration, noticeHold: Self.noticeHoldDuration,
+                                    noticeFade: Self.noticeFadeDuration))
+    }
+
+    private var prefersTallArtwork: Bool {
+        let size = viewportSize.width > 0 ? viewportSize
+            : NSScreen.screens.first { $0.versoDisplayID == displayID }?.frame.size ?? .zero
+        return size.height > size.width
+    }
+
+    /// The Settings preview follows the desktop's frame rate, except while
+    /// power is being saved.
+    private var frameInterval: Double {
+        isSettingsPreview && settings.sparesGPU ? 1.0 / 15 : settings.effectiveAnimationRate.interval
+    }
+
+    /// When the frame clock may stop: every visible layer draws itself or
+    /// holds still, no lyric is advancing, and fades and notices are done.
+    private var quietAfter: Date? {
+        var ends: [Date] = []
+        if crossfade.previous != nil { ends.append(crossfade.changedAt.addingTimeInterval(Self.backgroundFadeDuration)) }
+        ends.append(paletteChangedAt.addingTimeInterval(Self.paletteFadeDuration))
+        if nowPlaying.current == nil, let since = nowPlaying.idleSince {
+            ends.append(since.addingTimeInterval(Self.idleHoldDuration + Self.noticeFadeDuration))
+        }
+        if lyricsVM.notFound, settings.noLyrics == .notice, let at = lyricsVM.notFoundAt {
+            ends.append(at.addingTimeInterval(Self.noticeHoldDuration + Self.noticeFadeDuration))
+        }
+        let lyricsAdvance = nowPlaying.current != nil && nowPlaying.isPlaying
+            && !lyricsVM.lines.isEmpty && lyricsVM.plainLines.isEmpty
+        // An outgoing layer only needs the clock until its fade ends, which
+        // is already one of the transition deadlines.
+        return FrameClockPolicy.quietAfter(.init(
+            backgroundAnimates: currentLayer.animatesWithClock && !(reduceMotion && currentLayer == .albumGradient),
+            lyricsAdvance: lyricsAdvance, transitionsEnd: ends))
+    }
+
     var body: some View {
-        let isHovered = hover.isActive(on: displayID)
+        let isHovered = !isSettingsPreview && hover.isActive(on: displayID)
+        let quietAfter = self.quietAfter
+        // Read so that a passing quiet deadline re-evaluates this body.
+        let _ = clockCheck
+        let clockIdle = FrameClockPolicy.isIdle(quietAfter: quietAfter, now: Date())
+        // Power state is read once per update, never once per frame.
+        let economical = settings.sparesGPU
         GeometryReader { geometry in
-            let baseSize = min(max(geometry.size.width * 0.046, 38), 124)
             let mood = self.mood
 
-            // One timeline drives the gradient, the pattern and the lyrics so
-            // they share a frame clock instead of each running their own.
-            TimelineView(.animation(minimumInterval: settings.effectiveAnimationRate.interval, paused: renderingPaused)) { timeline in
+            // One timeline drives the gradient and the pattern so they share a
+            // frame clock; the lyrics keep their own (see LyricStage). It stops
+            // while the surface is hidden, and while nothing on it can change.
+            TimelineView(.animation(minimumInterval: frameInterval, paused: renderingPaused || clockIdle)) { timeline in
                 let now = timeline.date.timeIntervalSinceReferenceDate
-                let playbackTime = nowPlaying.playbackTime() + settings.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery)
 
                 let speed = settings.effectSpeed
+                // Reduce Motion slows the ambient wallpaper, as the
+                // visualisers already slow themselves.
+                let ambientSpeed = speed * (reduceMotion ? Self.reducedMotionRate : 1)
                 // Kept steady: the shaders take this as `time`, where it drives
                 // the slow breathing that must not lurch with the music.
-                let colourPhase = VisualClock.gradient.advance(to: now, rate: speed)
+                let colourPhase = VisualClock.gradient.advance(to: now, rate: ambientSpeed)
                 // Ambient wallpapers and lyric gestures follow their own
                 // continuous clocks. Only the dedicated visualiser consumes
                 // audio; no global deformation or beat overlay remains.
-                let flowPhase = VisualClock.flow.advance(to: now, rate: speed * 0.70)
+                let flowPhase = VisualClock.ambientFlow.advance(to: now, rate: ambientSpeed * 0.70)
+                let visualizerPhase = VisualClock.flow.advance(to: now, rate: speed * VisualClock.visualizerRate)
                 let patternPhase = flowPhase * 0.5
+                let cover = wallpaperPalette(at: renderingPaused ? .distantFuture : Date(timeIntervalSinceReferenceDate: now))
 
                 // Background switches are crossfaded from a timestamp
                 // rather than a SwiftUI transition: this view is rebuilt
                 // every frame by TimelineView, which discards transition
-                // state, so a `.transition` here would simply cut.
-                let fade = Easing.smoothstep(
-                    Date().timeIntervalSince(layerChangedAt) / Self.backgroundFadeDuration
-                )
+                // state, so a `.transition` here would simply cut. An effect
+                // that has not yet had anything to draw holds the fade at its
+                // start.
+                let fade = crossfade.fade(at: Date(), duration: Self.backgroundFadeDuration)
+                let outgoing = crossfade.outgoing(fade: fade)
+                let layers = crossfade.layers(fade: fade)
+                let phases = LayerPhases(colour: colourPhase, flow: flowPhase, pattern: patternPhase,
+                                         visualizer: visualizerPhase, economical: economical)
+                let stage = stagePresence(at: Date())
 
                 WallpaperViewport(size: geometry.size) {
                   ZStack {
-                    // Generated-wallpaper crossfades remain opaque. Desktop
-                    // overlay mode leaves every background pixel transparent.
-                    if currentLayer != .desktop { Color.black }
-                    // `compositingGroup` flattens each layer with its own
-                    // scrim before the fade opacity is applied; without it
-                    // the two scrims blend through each other and the screen
-                    // visibly lightens mid-transition.
-                    if let outgoing = previousLayer, fade < 1, currentLayer != .desktop {
-                        backgroundLayer(
-                            outgoing, colourPhase: colourPhase, patternPhase: patternPhase,
-                            flowPhase: flowPhase, size: geometry.size
-                        )
-                        .compositingGroup()
-                        .opacity(1 - fade)
+                    // Generated wallpapers sit on opaque black. Desktop
+                    // overlay mode leaves the desktop showing, and the black
+                    // fades with the layer moving to or from it.
+                    let base = baseOpacity(outgoing: outgoing, fade: fade)
+                    if base > 0 { Color.black.opacity(base) }
+                    // Keyed by the layer itself, so the outgoing layer stays
+                    // the same view -- and the same video or web page -- for
+                    // the whole fade instead of being rebuilt in a new slot.
+                    ForEach(layers, id: \.self) { layer in
+                        crossfaded(layer, opacity: crossfade.opacity(of: layer, fade: fade),
+                                   phases: phases, size: geometry.size, cover: cover, stage: stage)
                     }
-
-                    backgroundLayer(
-                        currentLayer, colourPhase: colourPhase, patternPhase: patternPhase,
-                        flowPhase: flowPhase, size: geometry.size
-                    )
-                    .compositingGroup()
-                    .opacity(previousLayer == nil ? 1 : fade)
                   }
                 } lyrics: {
-                    lyricsSection(
-                        time: playbackTime,
-                        baseSize: baseSize,
-                        maxWidth: geometry.size.width * 0.80,
-                        maxHeight: geometry.size.height * 0.72,
-                        mood: mood
+                    // The lyrics run on their own clock (see LyricStage), so
+                    // this frame passes them by unless an input changed.
+                    LyricStage(
+                        size: geometry.size,
+                        mood: mood,
+                        accent: lyricAccent,
+                        trackSeed: trackSeed,
+                        palette: cover.stops,
+                        interval: frameInterval,
+                        paused: renderingPaused,
+                        // The measured brightness behind the lyrics, so text
+                        // colours over Your wallpaper or an imported picture
+                        // are judged against what is really there.
+                        backdrop: lyricBackdrop(for: cover)
                     )
-                    .padding(.horizontal, 40)
+                    .equatable()
                     .frame(width: geometry.size.width, height: geometry.size.height)
+                    .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
                     .blur(radius: isHovered ? 22 : 0)
                     .opacity(isHovered ? 0.3 : 1)
-                    .animation(.easeOut(duration: 0.3), value: isHovered)
+                    // A soft spring rather than a fixed curve: moving off and
+                    // back on mid-fade reverses smoothly from where it was.
+                    .animation(.spring(response: 0.42, dampingFraction: 0.9), value: isHovered)
                 }
+                // The words, copies and echoes on screen are decoration for
+                // assistive technology; the element below speaks for them.
+                .accessibilityHidden(true)
+            }
+            // One element per surface for assistive technology: the line being
+            // sung. It keeps its own slow clock, because the background clock
+            // above idles while the lyrics run on theirs.
+            .overlay {
+                TimelineView(.animation(minimumInterval: 1, paused: renderingPaused)) { _ in
+                    Color.clear
+                        .accessibilityElement()
+                        .accessibilityLabel("Lyrics")
+                        .accessibilityValue(accessibleLyric(at: accessiblePlaybackTime))
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
+                .allowsHitTesting(false)
+            }
+            .onChange(of: geometry.size, initial: true) { _, size in
+                if viewportSize != size { viewportSize = size }
             }
         }
+        .ignoresSafeArea(edges: isSettingsPreview ? [] : .all)
         .onChange(of: nowPlaying.artwork) { _, artwork in updatePalette(artwork) }
-        .onChange(of: desiredLayer) { previous, next in
-            // Hold the old layer alive just long enough to fade it out.
-            previousLayer = previous
-            currentLayer = next
-            layerChangedAt = Date()
+        .onChange(of: desiredLayer) { _, next in
+            // Hold the old layer alive just long enough to fade it out. A
+            // layer that never had anything to draw was never seen, so the
+            // fade carries on from the one that is on screen.
+            prepareEffect(for: next)
+            crossfade.change(to: next, ready: canDraw(next), at: Date())
+        }
+        .onChange(of: canDraw(currentLayer)) { _, ready in
+            // The effect is ready: start the fade into it now. Once shown, it
+            // stays shown -- its surface keeps drawing it on the GPU it has
+            // while the display's new GPU compiles it.
+            if ready { crossfade.becameReady(at: Date()) }
+        }
+        .onChange(of: mood, initial: true) { _, mood in
+            if nowPlaying.current != nil { heldMood = mood }
+        }
+        .onChange(of: trackSeed, initial: true) { _, seed in
+            if nowPlaying.current != nil { heldSeed = seed }
+        }
+        .onChange(of: nowPlaying.current) { _, _ in renewShaderClock(.trackChange) }
+        .onChange(of: renderActivity.screensAsleep) { _, asleep in
+            if !asleep { renewShaderClock(.wake) }
+        }
+        .onChange(of: backdropSource, initial: true) { _, source in
+            backdrop.track(mode: source.mode, customPath: source.path, placement: source.placement,
+                           displayID: displayID, screen: source.screen)
+        }
+        // Stop the frame clock the moment the last fade or notice ends.
+        .task(id: quietAfter) {
+            guard let quietAfter, quietAfter > Date() else { return }
+            try? await Task.sleep(for: .seconds(quietAfter.timeIntervalSinceNow + 0.05))
+            if !Task.isCancelled { clockCheck &+= 1 }
+        }
+        // A long-running effect is renewed even without a track change.
+        .task(id: shaderEpoch) {
+            try? await Task.sleep(for: .seconds(ShaderEpochPolicy.maximumAge))
+            if !Task.isCancelled { renewShaderClock(.elapsed) }
         }
         .onAppear {
             updatePalette(nowPlaying.artwork)
-            currentLayer = desiredLayer
+            let layer = desiredLayer
+            prepareEffect(for: layer)
+            crossfade = BackgroundCrossfade(layer, ready: canDraw(layer))
         }
+    }
+
+    private struct LayerPhases {
+        let colour: Double, flow: Double, pattern: Double, visualizer: Double
+        let economical: Bool
+    }
+
+    private struct BackdropSource: Equatable {
+        let mode: Settings.BackgroundMode
+        let path: String
+        let placement: Settings.MotionPlacement
+        let screen: CGSize
+    }
+
+    private var backdropSource: BackdropSource {
+        BackdropSource(mode: settings.effectiveBackgroundMode, path: settings.customWallpaperPath,
+                       placement: settings.customWallpaperPlacement, screen: viewportSize)
+    }
+
+    /// Opaque black under generated wallpapers; none under the desktop
+    /// overlay; fading with a crossfade to or from it.
+    private func baseOpacity(outgoing: BackgroundLayer?, fade: Double) -> Double {
+        if currentLayer == .desktop { return outgoing == nil ? 0 : 1 - fade }
+        return outgoing == .desktop ? fade : 1
+    }
+
+    private func crossfaded(_ layer: BackgroundLayer, opacity: Double, phases: LayerPhases,
+                            size: CGSize, cover: AlbumWallpaperPalette, stage: Double) -> some View {
+        // `compositingGroup` flattens each layer with its own scrim before the
+        // fade opacity is applied; without it the two scrims blend through
+        // each other and the screen visibly lightens mid-transition. Videos,
+        // web views and Metal views are included: their layers sit in one
+        // group-opacity layer, so the fade applies to the whole layer rather
+        // than to each part separately.
+        backgroundLayer(layer, phases: phases, size: size, cover: cover, stage: stage)
+            .compositingGroup()
+            .opacity(opacity)
+    }
+
+    private func renewShaderClock(_ trigger: ShaderEpochPolicy.Trigger) {
+        guard ShaderEpochPolicy.shouldRenew(age: Date().timeIntervalSince(shaderEpochStartedAt), trigger: trigger) else { return }
+        shaderEpoch &+= 1
+        shaderEpochStartedAt = Date()
     }
 
     /// Renders one background layer. Each carries its own scrim so the two
     /// sides of a crossfade stay legible throughout the blend.
     @ViewBuilder
-    private func backgroundLayer(
-        _ layer: BackgroundLayer, colourPhase: Double, patternPhase: Double,
-        flowPhase: Double, size: CGSize
-    ) -> some View {
+    private func backgroundLayer(_ layer: BackgroundLayer, phases: LayerPhases, size: CGSize,
+                                 cover: AlbumWallpaperPalette, stage: Double) -> some View {
         // The colour field drifted on a metronome and answered the music only
         // by leaning its blobs 5% wider -- effectively deaf, which made
         // "Colour only" the one mode that ignored what was playing. It now
         // orbits on the same clock as everything else, at a third the rate:
         // the blobs are large and slow, so they need far less of it than a
         // shader does to read as moving with the track.
-        let colourFlow = flowPhase * 0.34
+        let colourFlow = phases.flow * 0.34
+        let backing = textBackingAmount(for: layer, cover: cover, size: size)
         switch layer {
         case .desktop:
-            Color.clear
+            ZStack {
+                Color.clear
+                textBacking(backing, presence: stage, size: size)
+            }
 
         case .custom(let url):
             ZStack {
-                CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement, paused: renderingPaused)
+                // Reduce Motion holds an imported video on a still frame.
+                CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement,
+                                    paused: renderingPaused || reduceMotion)
+                if hasAlbumPalette { cover.gradient.opacity(0.18).ignoresSafeArea() }
                 scrim
+                textBacking(backing, presence: stage, size: size)
             }
 
-        case .motion(let url):
+        case .motion(let url, let still):
             ZStack {
-                // The album brought its own art direction, so nothing of ours
-                // is drawn over it -- just enough softening and shade that
-                // the words stay readable on a bright frame.
-                MotionArtworkView(url: url, placement: settings.motionPlacement, isPaused: renderingPaused)
-                    .ignoresSafeArea()
-                    // Only softened enough to stop fine detail fighting the
-                    // type -- the footage should still be recognisable.
-                    .blur(radius: settings.motionBlur)
-                    // A fixed overscan, purely to keep the blur from showing
-                    // the frame edge. It used to breathe with the beat; that
-                    // twitched the whole picture on every hit.
-                    .scaleEffect(1.04)
+                cover.gradient.ignoresSafeArea()
+                Group {
+                    if still {
+                        stillCover
+                    } else {
+                        MotionArtworkView(url: url, placement: settings.motionPlacement, isPaused: renderingPaused)
+                    }
+                }
+                .ignoresSafeArea()
+                // Only softened enough to stop fine detail fighting the
+                // type -- the footage should still be recognisable.
+                .blur(radius: settings.motionBlur)
+                // A fixed overscan, purely to keep the blur from showing
+                // the frame edge. It used to breathe with the beat; that
+                // twitched the whole picture on every hit.
+                .scaleEffect(1.04)
+                if hasAlbumPalette { cover.gradient.opacity(0.18).ignoresSafeArea() }
                 Color.black.opacity(0.40 * settings.scrimStrength).ignoresSafeArea()
                 RadialGradient(
                     colors: [.black.opacity(0.5), .black.opacity(0.16), .clear],
@@ -219,42 +461,87 @@ struct NowPlayingView: View {
                     endRadius: max(size.width, size.height) * 0.55
                 )
                 .ignoresSafeArea()
+                textBacking(backing, presence: stage, size: size)
             }
 
-        case .shader(let style):
+        case .shader(let style, _):
             ZStack {
-                ShaderBackgroundView(
-                    style: style,
-                    time: colourPhase,
-                    flow: flowPhase,
-                    tintA: paletteColour(0),
-                    tintB: paletteColour(4)
-                )
+                // The album tint and colour richness are applied inside the
+                // effect's own pass, at a bounded resolution.
+                ShaderBackgroundView(style: style, time: phases.colour, flow: phases.flow, palette: cover,
+                                     vividness: settings.vividness, paused: renderingPaused,
+                                     preview: isSettingsPreview, economical: phases.economical,
+                                     displayID: effectDisplay)
+                    .ignoresSafeArea()
                 scrim
+                textBacking(backing, presence: stage, size: size)
             }
 
         case .visualizer(let style):
             ZStack {
-                AudioVisualizerView(style: style, time: flowPhase, paused: renderingPaused)
-                    .ignoresSafeArea()
+                if let engine = style.webEngine {
+                    let originalLight3D = style == .light3D && settings.light3DColours == .original
+                    WebVisualizerView(engine: engine, preset: settings.wavefieldPreset, projection: settings.wavefieldProjection,
+                        sensitivity: settings.audioSensitivity, motion: settings.effectSpeed, tick: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview, palette: hasAlbumPalette && !originalLight3D ? cover : nil,
+                        displayID: effectDisplay, preferences: visualizerPreferences)
+                        .id(engine)
+                        .ignoresSafeArea()
+                        .saturation(originalLight3D ? 1 : settings.vividness)
+                } else {
+                    AudioVisualizerView(style: style, time: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview,
+                        palette: hasAlbumPalette ? cover : nil)
+                        .ignoresSafeArea()
+                }
                 scrim
+                textBacking(backing, presence: stage, size: size)
             }
 
-        case .generated(let pattern):
+        case .albumGradient:
+            let turn = reduceMotion ? 0 : sin(phases.flow * 0.16) * 0.2
             ZStack {
+                LinearGradient(colors: cover.gradientStops(vividness: settings.vividness).map(AlbumWallpaperPalette.color),
+                    startPoint: UnitPoint(x: 0, y: 0.22 + turn), endPoint: UnitPoint(x: 1, y: 0.78 - turn))
+                    .ignoresSafeArea()
+                scrim
+                textBacking(backing, presence: stage, size: size)
+            }
+
+        case .generated(let pattern, let seed):
+            ZStack {
+                // Drawn at a bounded pixel budget, richness included.
                 AnimatedGradientView(
-                    palette: palette,
-                    time: colourFlow
-                ).saturation(settings.vividness)
+                    palette: cover,
+                    time: colourFlow,
+                    vividness: settings.vividness,
+                    economical: phases.economical
+                )
                 if let pattern {
                     FractalBackgroundView(
-                        seed: trackSeed,
-                        phase: patternPhase,
+                        seed: seed,
+                        phase: phases.pattern,
                         style: pattern
                     )
                     .opacity(settings.patternOpacity)
                 }
                 scrim
+                textBacking(backing, presence: stage, size: size)
+            }
+        }
+    }
+
+    /// The album's own cover, softened and filled like its animation, for
+    /// Reduce Motion.
+    @ViewBuilder
+    private var stillCover: some View {
+        if let artwork = nowPlaying.artwork {
+            GeometryReader { geometry in
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: settings.motionPlacement == .fit ? .fit : .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height,
+                           alignment: settings.motionPlacement == .fillTop ? .top
+                               : settings.motionPlacement == .fillBottom ? .bottom : .center)
+                    .clipped()
             }
         }
     }
@@ -262,29 +549,114 @@ struct NowPlayingView: View {
     private var scrim: some View {
         let strength = settings.scrimStrength
         return LinearGradient(
-            colors: [
-                .black.opacity(0.34 * strength),
-                .black.opacity(0.12 * strength),
-                .black.opacity(0.50 * strength),
-            ],
+            colors: WallpaperShade.scrim.map { .black.opacity($0 * strength) },
             startPoint: .top, endPoint: .bottom
         )
         .ignoresSafeArea()
     }
 
-    private func paletteColour(_ index: Int) -> Color {
-        guard palette.indices.contains(index) else { return .purple }
-        let hsb = palette[index]
-        return Color(
-            hue: hsb.x,
-            saturation: min(hsb.y * 1.2 * settings.vividness, 1),
-            brightness: min(hsb.z * 1.15 + 0.1, 1)
-        )
+    /// Soft shade behind the lyric stage: as strong as this layer's backdrop
+    /// needs for white type to reach its contrast target -- across the whole
+    /// stage, where long lines and plain lyrics end, easing out by the
+    /// screen's edges -- or the user's own amount in the ellipse it has always
+    /// been; and only while the stage is in use. See `TextBackingShade`.
+    @ViewBuilder
+    private func textBacking(_ amount: Double, presence: Double, size: CGSize) -> some View {
+        if amount > WallpaperShade.minimumBacking {
+            TextBackingShade(amount: amount, manual: desktopOptions.manualTextBacking != nil, size: size)
+            // Notices fade it frame by frame on the running clock; a stage
+            // that fills or empties at once (a track starting, lyrics turning
+            // out to be missing) eases it in or out.
+            .opacity(presence)
+            .animation(.easeInOut(duration: Self.backingFadeDuration), value: presence > 0.001)
+            .allowsHitTesting(false)
+        }
     }
 
+    private func lyricBackdrop(for cover: AlbumWallpaperPalette) -> Double? {
+        switch currentLayer {
+        case .albumGradient: return cover.gradientLuminance(vividness: settings.vividness)
+        case .generated(pattern: nil, seed: _): return nil
+        default: return backdrop.luminance
+        }
+    }
+
+    private func textBackingAmount(for layer: BackgroundLayer, cover: AlbumWallpaperPalette, size: CGSize) -> Double {
+        if let manual = desktopOptions.manualTextBacking { return manual }
+        let hasLyrics = !lyricsVM.lines.isEmpty || !lyricsVM.plainLines.isEmpty
+        let target = hasLyrics ? LyricLegibility.pastelBackingTarget(increaseContrast: settings.increaseContrast)
+            : LyricLegibility.targetContrast(baseSize: LyricViewportMetrics(size: size).baseSize)
+        let strength = max(0, settings.scrimStrength)
+        // The shared scrim is lightest exactly where the lyrics sit.
+        let scrim = WallpaperShade.scrimAtStage(strength: strength)
+        let luminance: Double, existing: Double
+        switch layer {
+        case .desktop:
+            luminance = backdrop.luminance ?? LyricLegibility.unknownBackdropLuminance
+            existing = 0
+        case .custom:
+            luminance = backdrop.luminance ?? LyricLegibility.unknownBackdropLuminance
+            existing = scrim
+        case .motion:
+            luminance = LyricLegibility.coverLuminance(hsbGrid: palette)
+            existing = 1 - (1 - min(1, 0.40 * strength)) * 0.5
+        case .shader:
+            luminance = LyricLegibility.shaderLuminance(cover)
+            existing = scrim
+        case .visualizer:
+            luminance = LyricLegibility.visualizerLuminance(cover)
+            existing = scrim
+        case .albumGradient:
+            luminance = cover.gradientLuminance(vividness: settings.vividness)
+            existing = scrim
+        case .generated(let pattern, _):
+            luminance = LyricLegibility.colourFieldLuminance(cover, patternOpacity: pattern == nil ? nil : settings.patternOpacity)
+            existing = scrim
+        }
+        return LyricLegibility.stageBacking(forLuminance: luminance, existingDarkening: existing, target: target)
+    }
+
+    /// The line being sung, for VoiceOver.
+    /// Where the song is, with the same offsets the lyric stage applies.
+    private var accessiblePlaybackTime: TimeInterval {
+        nowPlaying.playbackTime() + settings.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery)
+    }
+
+    private func accessibleLyric(at time: TimeInterval) -> String {
+        guard let track = nowPlaying.current else { return "Nothing playing" }
+        if !lyricsVM.lines.isEmpty {
+            guard let index = lyricsVM.activeLineIndex(at: time), lyricsVM.lines.indices.contains(index) else {
+                return track.title
+            }
+            let text = lyricsVM.lines[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? track.title : text
+        }
+        if !lyricsVM.plainLines.isEmpty {
+            return lyricsVM.plainLines.prefix(4).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        return lyricsVM.notFound ? "Lyrics unavailable" : track.title
+    }
+
+    private func wallpaperPalette(at date: Date) -> AlbumWallpaperPalette {
+        let progress = Easing.smoothstep(date.timeIntervalSince(paletteChangedAt) / 0.9)
+        guard progress < 1, let previousWallpaperPalette else { return wallpaperPalette }
+        return previousWallpaperPalette.interpolated(to: wallpaperPalette, fraction: progress)
+    }
+
+    private func applyPalette(_ extracted: [SIMD3<Double>], hasArtwork: Bool) {
+        let now = Date()
+        previousWallpaperPalette = wallpaperPalette(at: now)
+        wallpaperPalette = AlbumWallpaperPalette(grid: extracted)
+        paletteChangedAt = now
+        hasAlbumPalette = hasArtwork
+        palette = extracted
+        DesktopWallpaperController.shared.currentPalette = extracted
+    }
+
+    private var albumAccent: SIMD3<Double> { ColorExtractor.accent(in: palette) }
+
     private var lyricAccent: Color {
-        guard palette.indices.contains(2) else { return .mint }
-        let hsb = palette[2]
+        let hsb = albumAccent
         return Color(hue: hsb.x, saturation: min(0.65, max(0.2, hsb.y)), brightness: max(0.78, hsb.z))
     }
 
@@ -292,240 +664,15 @@ struct NowPlayingView: View {
         let token = UUID()
         paletteGeneration = token
         guard let artwork else {
-            withAnimation(.easeInOut(duration: 0.9)) {
-                palette = ColorExtractor.fallbackHSBPalette
-            }
+            applyPalette(ColorExtractor.fallbackHSBPalette, hasArtwork: false)
             return
         }
         Task.detached(priority: .userInitiated) {
             let extracted = ColorExtractor.extractPalette(from: artwork)
             await MainActor.run {
                 guard self.paletteGeneration == token else { return }
-                withAnimation(.easeInOut(duration: 0.9)) {
-                    self.palette = extracted
-                }
-                DesktopWallpaperController.shared.currentPalette = extracted
+                self.applyPalette(extracted, hasArtwork: true)
             }
         }
-    }
-
-    @ViewBuilder
-    private func lyricsSection(time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, maxHeight: CGFloat, mood: TrackMood) -> some View {
-        if nowPlaying.current == nil {
-            // Say so, then leave the background to itself rather than
-            // parking a notice on the desktop for hours.
-            if let since = nowPlaying.idleSince {
-                let age = Date().timeIntervalSince(since)
-                let presence = 1 - Easing.smoothstep(
-                    (age - Self.idleHoldDuration) / Self.noticeFadeDuration
-                )
-                if presence > 0.01 {
-                    placeholder("Nothing playing", size: baseSize * 0.42)
-                        .opacity(presence)
-                }
-            }
-        } else if lyricsVM.isLoading && lyricsVM.lines.isEmpty && lyricsVM.plainLines.isEmpty {
-            ProgressView().controlSize(.large).tint(.white)
-        } else if !lyricsVM.plainLines.isEmpty {
-            // No timed source has this track, so the words are shown as a
-            // static block instead of nothing at all.
-            plainLyrics(baseSize: baseSize, maxWidth: maxWidth, mood: mood)
-                .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight), userScale: CGFloat(settings.lyricScale)))
-        } else if lyricsVM.notFound || lyricsVM.lines.isEmpty {
-            // Say so briefly, then get out of the way -- an instrumental
-            // should not carry a permanent error notice on the wallpaper.
-            switch settings.noLyrics {
-            case .nothing:
-                Color.clear
-            case .trackName:
-                VStack(spacing: baseSize * 0.12) {
-                    Text(nowPlaying.current?.title ?? "")
-                        .font(settings.lyricFont(size: baseSize * 0.5, hero: true, mood: mood))
-                    Text(nowPlaying.current?.artist ?? "")
-                        .font(settings.uiFont(size: baseSize * 0.26, mood: mood))
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-                .foregroundStyle(.white.opacity(0.85))
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
-            case .notice:
-                if let reportedAt = lyricsVM.notFoundAt {
-                    let age = Date().timeIntervalSince(reportedAt)
-                    let presence = 1 - Easing.smoothstep(
-                        (age - Self.noticeHoldDuration) / Self.noticeFadeDuration
-                    )
-                    ZStack {
-                        if presence > 0.01 {
-                            placeholder("Lyrics unavailable", size: baseSize * 0.34).opacity(presence)
-                        }
-                        if showsInterludes {
-                            let gap = VCVocalGap(start: time - max(0, age - Self.noticeHoldDuration),
-                                                  end: nowPlaying.current?.duration ?? -1, nextVocal: -1)
-                            InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent).opacity(1 - presence)
-                        }
-                    }
-                }
-            }
-        } else {
-            let gap = showsInterludes ? instrumentalGap(at: time) : nil
-            ZStack {
-                currentLine(time: time, baseSize: baseSize, maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
-                    .opacity(1 - (gap?.presence(at: time) ?? 0))
-                if showsInterludes, let gap {
-                    InstrumentalInterludeView(time: time, gap: gap, baseSize: baseSize, accent: lyricAccent, nextWord: interludeNextWord(gap: gap, mood: mood))
-                }
-            }
-        }
-    }
-
-    private func instrumentalGap(at time: Double) -> VCVocalGap? {
-        var gap = VCVocalGap()
-        let found = lyricsVM.vocalWindows.withUnsafeBufferPointer {
-            vc_vocal_gap($0.baseAddress, Int32($0.count), time, nowPlaying.current?.duration ?? 0, 2.4, &gap)
-        }
-        return found != 0 ? gap : nil
-    }
-
-    private func interludeNextWord(gap: VCVocalGap, mood: TrackMood) -> String? {
-        guard gap.nextVocal >= 0,
-              let index = lyricsVM.activeLineIndex(at: gap.end + 0.02),
-              lyricsVM.lines.indices.contains(index) else { return nil }
-        let composition = settings.resolvedComposition(for: mood, seed: index)
-        guard settings.previewsNextWord(in: composition) else { return nil }
-        let source = readingOptions.display == .replace ? lyricsVM.romanized[index] ?? lyricsVM.lines[index].words : lyricsVM.lines[index].words
-        return source.first(where: { $0.start >= gap.end - 0.02 && $0.text.contains(where: \.isLetter) })?.text
-    }
-
-    private func plainLyrics(baseSize: CGFloat, maxWidth: CGFloat, mood: TrackMood) -> some View {
-        VStack(spacing: baseSize * 0.10) {
-            ForEach(Array(lyricsVM.plainLines.prefix(14).enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .font(settings.lyricFont(size: baseSize * 0.26, hero: false, mood: mood))
-                    .foregroundStyle(.white.opacity(line.isEmpty ? 0 : 0.7))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: maxWidth)
-        .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
-    }
-
-    /// Outgoing ink can finish its exit after a line boundary. Rolling styles
-    /// retain one word stage instead of drawing two overlapping timelines.
-    @ViewBuilder
-    private func currentLine(time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, maxHeight: CGFloat, mood: TrackMood) -> some View {
-        let index = lyricsVM.activeLineIndex(at: time) ?? 0
-        let composition = settings.resolvedComposition(for: mood, seed: index)
-        ZStack {
-            if !composition.arrivalOnly, index > 0,
-               !settings.resolvedComposition(for: mood, seed: index - 1).arrivalOnly {
-                renderLyricLine(index: index - 1, time: time, baseSize: baseSize,
-                    maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
-            }
-            renderLyricLine(index: index, time: time, baseSize: baseSize,
-                maxWidth: maxWidth, maxHeight: maxHeight, mood: mood)
-        }
-    }
-
-    @ViewBuilder
-    private func renderLyricLine(index: Int, time: TimeInterval, baseSize: CGFloat, maxWidth: CGFloat, maxHeight: CGFloat,
-                                 mood: TrackMood) -> some View {
-        let lines = lyricsVM.lines
-
-        if lines.indices.contains(index), !lines[index].words.isEmpty, time >= lines[index].start - 1 {
-            // The fade is computed from playback time rather than a SwiftUI
-            // transition: this view is rebuilt every frame by TimelineView,
-            // which discards transition state and made line changes snap.
-            let line = lines[index]
-            let appear = Easing.smoothstep((time - line.start) / 0.22)
-            let nextStart = index + 1 < lines.count ? lines[index + 1].start : line.end + 0.8
-            let exit = Easing.smoothstep((time - min(line.end + 0.12, nextStart - 0.08)) / 0.46)
-            let presence = appear * (1 - exit)
-
-            let composition = line.wordTimed ? settings.resolvedComposition(for: mood, seed: index) : .editorial
-            let density = line.words.reduce(0) { $0 + $1.text.count + 3 }
-            let densityScale = composition.hasConnections
-                ? min(1.0, max(0.52, sqrt(110.0 / Double(max(density, 110))))) : 1.0
-            let readings = lyricsVM.romanized[index]
-            let displayed = line.wordTimed
-                ? (composition.arrivalOnly ? rollingWords(around: index, time: time)
-                   : (readingOptions.display == .replace ? readings ?? line.words : line.words))
-                : [LyricsFetcher.Word(text: readingOptions.display == .replace ? readings?.map(\.text).joined(separator: " ") ?? line.text : line.text, start: line.start, end: line.end)]
-            let stagePresence = composition.arrivalOnly ? 1 : presence
-            if stagePresence > 0.001 {
-              VStack(spacing: baseSize * 0.28) {
-                if !line.wordTimed {
-                    Text(displayed.map(\.text).joined(separator: " "))
-                        .font(settings.lyricFont(size: baseSize * 0.72, hero: false, mood: mood))
-                        .foregroundStyle(.white).multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                LyricLineView(
-                    words: displayed,
-                    time: time,
-                    baseSize: baseSize * densityScale,
-                    mood: mood,
-                    composition: composition,
-                    seed: composition.arrivalOnly ? trackSeed : index,
-                    presence: stagePresence,
-                    accent: lyricAccent
-                )
-                }
-                if readingOptions.display == .below, let readings {
-                    if line.wordTimed {
-                        readingLine(readings, time: time, baseSize: baseSize, composition: composition)
-                    } else {
-                        Text(readings.map(\.text).joined(separator: " "))
-                            .font(settings.uiFont(size: max(13, baseSize * 0.3), mood: mood))
-                            .foregroundStyle(.white.opacity(0.72))
-                            .multilineTextAlignment(.center)
-                    }
-                }
-            }
-            .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight), userScale: CGFloat(settings.lyricScale)))
-            .frame(maxWidth: maxWidth)
-            .opacity(stagePresence)
-              .scaleEffect(composition.arrivalOnly ? 1 : 0.96 + 0.04 * appear - 0.025 * exit)
-              .offset(y: composition.arrivalOnly ? 0 : CGFloat((1 - appear) * 0.22 - exit * 0.36) * baseSize)
-              .blur(radius: composition.arrivalOnly ? 0 : exit * 3.5)
-            }
-        } else {
-            Color.clear
-        }
-    }
-
-    private func rollingWords(around index: Int, time: Double) -> [LyricsFetcher.Word] {
-        let lines = lyricsVM.lines
-        var result: [LyricsFetcher.Word] = [], seen = Set<TimedWordKey>()
-        for row in max(0, index - 2)...min(lines.count - 1, index + 1) {
-            guard lines[row].wordTimed else { continue }
-            let words = readingOptions.display == .replace ? lyricsVM.romanized[row] ?? lines[row].words : lines[row].words
-            for word in words where word.end >= time - 12 && (row <= index || word.start <= time + 1.2)
-                && word.text.rangeOfCharacter(from: .alphanumerics) != nil {
-                if seen.insert(word.presentationID).inserted { result.append(word) }
-            }
-        }
-        return result.sorted { $0.start < $1.start }
-    }
-
-    private func readingLine(_ words: [LyricsFetcher.Word], time: TimeInterval,
-                             baseSize: CGFloat, composition: LyricComposition) -> some View {
-        let next = words.firstIndex { $0.start > time }
-        return FlowLayout(spacing: baseSize * 0.07, lineSpacing: 5, rowAlignment: .center) {
-            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                let state = WordPresentation.make(word: word, index: index, nextIndex: next, time: time, composition: composition)
-                Text(word.text)
-                    .font(settings.uiFont(size: max(13, baseSize * 0.24), mood: mood))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .modifier(WordEntrance(progress: state.progress, style: settings.arrival(in: composition).resolved(for: composition),
-                                           size: baseSize * 0.24, direction: index.isMultiple(of: 2) ? 1 : -1, visibility: state.opacity))
-            }
-        }
-        .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
-    }
-
-    private func placeholder(_ text: String, size: CGFloat) -> some View {
-        Text(text)
-            .font(settings.uiFont(size: size, mood: mood))
-            .foregroundStyle(.white.opacity(0.5))
     }
 }

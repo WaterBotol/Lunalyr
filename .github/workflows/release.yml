@@ -13,18 +13,40 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Xcode and XcodeGen versions are pinned in Scripts/ci.sh.
+      - name: Select pinned Xcode
+        run: bash Scripts/ci.sh select-xcode
       - name: Install build tools
         run: |
-          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          bash Scripts/ci.sh install-xcodegen
           if ! xcrun metal --version >/dev/null 2>&1; then
             xcodebuild -downloadComponent MetalToolchain
           fi
+      - name: Swift package cache key
+        id: packages
+        run: bash Scripts/ci.sh package-cache-key
+      - name: Restore resolved Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: Build/TestDerivedData/SourcePackages
+          key: ${{ steps.packages.outputs.key }}
+          restore-keys: ${{ steps.packages.outputs.prefix }}
+      # Previews are signed ad hoc. The code-signing certificate is reserved
+      # for stable updates (the draft-release job in macos.yml), which run in
+      # the protected "release" environment.
+      #
+      # As in macos.yml: the step limit stays under the job's so the
+      # validation logs are still uploaded, and a runner without a Metal
+      # device fails the GPU and WebKit tests instead of skipping them.
       - name: Test and build
+        timeout-minutes: 30
         env:
           PUBLIC_UPDATE_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
+          LUNALYR_SOURCE_PACKAGES_DIR: ${{ github.workspace }}/Build/TestDerivedData/SourcePackages
+          TEST_RUNNER_LUNALYR_REQUIRE_GPU: '1'
         run: |
           if [[ -n "$PUBLIC_UPDATE_KEY" ]]; then
             python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"

@@ -25,6 +25,12 @@ if [[ "$FEED" != "$EXPECTED_FEED" || -z "$PUBLIC_KEY" ]]; then
   exit 1
 fi
 codesign --verify --deep "$APP_PATH"
+SIGNATURE_INFO="$(codesign -dv "$APP_PATH" 2>&1)"
+if grep -q '^Signature=adhoc' <<< "$SIGNATURE_INFO"; then
+  # The appcast check below refuses this once the live release has a stable identity.
+  MESSAGE="This app is signed ad hoc, so macOS asks again for System Audio / Screen Recording after it is installed. See docs/RELEASING.md for a stable signing identity."
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::warning title=Ad-hoc signature::$MESSAGE"; else echo "Note: $MESSAGE"; fi
+fi
 VERSO_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
 if [[ ! "$VERSO_VERSION" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
   echo "Expected a numeric marketing version."
@@ -44,7 +50,22 @@ if [[ -n "${SPARKLE_PRIVATE_KEY_FILE:-}" ]]; then
   set -- --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" "$@"
 fi
 "$TOOLS_DIR/generate_appcast" "$@"
-python3 "$PROJECT_DIR/Scripts/verify-appcast.py" "$RELEASE_DIR/appcast.xml" "$ARCHIVE" "$REPOSITORY" "$VERSO_VERSION"
+# Installed copies read the live feed and verify with the key they embed, so
+# the new archive must verify against this app's key, outrank that feed, and
+# match the live release's update key and (once it has one) stable identity.
+#   LUNALYR_PREVIOUS_APPCAST       a saved copy of the live feed, or "none" for
+#                                  the very first update a repository publishes
+#   LUNALYR_PREVIOUS_APP           a copy of the live release's app or ZIP
+#                                  (otherwise it is downloaded from the feed)
+#   LUNALYR_ALLOW_IDENTITY_CHANGE  1 accepts a new signing identity
+#   LUNALYR_ALLOW_KEY_ROTATION     1 accepts a new update key, which installed
+#                                  copies cannot install
+CHECKS=(--app "$APP_PATH" --previous-feed "${LUNALYR_PREVIOUS_APPCAST:-$FEED}")
+if [[ -n "${LUNALYR_PREVIOUS_APP:-}" ]]; then CHECKS+=(--previous-app "$LUNALYR_PREVIOUS_APP"); fi
+if [[ "${LUNALYR_ALLOW_IDENTITY_CHANGE:-}" == 1 ]]; then CHECKS+=(--allow-identity-change); fi
+if [[ "${LUNALYR_ALLOW_KEY_ROTATION:-}" == 1 ]]; then CHECKS+=(--allow-key-change); fi
+python3 "$PROJECT_DIR/Scripts/verify-appcast.py" "$RELEASE_DIR/appcast.xml" "$ARCHIVE" "$REPOSITORY" "$VERSO_VERSION" \
+  "${CHECKS[@]}"
 echo "Prepared signed update files in $RELEASE_DIR"
 echo "Attach the ZIP and appcast.xml to the same GitHub release tagged v$VERSO_VERSION."
 echo "Publish it as a stable release to make it available through the app’s update button."

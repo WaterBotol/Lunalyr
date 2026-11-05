@@ -6,50 +6,66 @@ import SwiftUI
 /// read as pigment suspended in water rather than distinct shapes.
 ///
 /// Colour masses drift continuously through a varied album-derived palette.
+///
+/// This is the base of every pattern and colour-only wallpaper, of Match the
+/// music for most tracks and of every power-saving fallback, and it redraws
+/// on every frame of the wallpaper clock. Drawn at native pixels, its blur
+/// cost an offscreen pass of 6 MP on a 14-inch MacBook Pro and 15 MP on a 5K
+/// display, every frame. It is drawn at a bounded pixel budget instead and
+/// stretched over the screen by the compositor: the field is a few blobs
+/// under a blur of 7.5% of the short side, so the upscale cannot be seen.
 struct AnimatedGradientView: View {
-    /// Base palette as 3x3 hue/saturation/brightness triples.
-    let palette: [SIMD3<Double>]
+    let palette: AlbumWallpaperPalette
     /// Accumulated phase from `VisualClock`.
     let time: Double
-
-    /// Corners and centre of the sampled grid -- spread across the artwork,
-    /// so the blobs carry genuinely different colours.
-    private let sampleIndices = [0, 2, 4, 6, 8]
+    /// Colour richness, applied inside the small pass rather than to the
+    /// full-size result.
+    var vividness: Double = 1
+    /// Spend fewer pixels while power is being saved.
+    var economical = false
+    /// Replaces the pixel budget; `.infinity` draws at native resolution.
+    var pixelBudget: Double?
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            ZStack {
-                baseColor
-                ZStack {
-                    ForEach(sampleIndices.indices, id: \.self) { slot in
-                        blob(slot: slot, size: size)
-                    }
-                }
-                // Diffuses the blobs into one another. Scaled up first so the
-                // blur's soft edge falls outside the screen instead of
-                // darkening the border.
-                .blur(radius: min(size.width, size.height) * 0.075)
-                .scaleEffect(1.2)
-            }
-            // Flattens the whole stack into one GPU pass -- several large
-            // blurred gradients composited every frame is otherwise costly.
-            .drawingGroup()
+            let canvas = ColourFieldBudget.canvas(points: size, scale: displayScale,
+                budget: pixelBudget ?? ColourFieldBudget.pixels(economical: economical))
+            field(size: canvas.size)
+                .frame(width: canvas.size.width, height: canvas.size.height)
+                // Flattens the whole stack into one GPU pass -- several large
+                // blurred gradients composited every frame is otherwise
+                // costly -- at the canvas size...
+                .drawingGroup()
+                // ...which the compositor stretches over the screen.
+                .scaleEffect(x: canvas.stretch.width, y: canvas.stretch.height)
+                .frame(width: size.width, height: size.height)
         }
         .ignoresSafeArea()
+    }
+
+    private func field(size: CGSize) -> some View {
+        ZStack {
+            baseColor
+            ZStack {
+                ForEach(palette.stops.indices, id: \.self) { slot in
+                    blob(slot: slot, size: size)
+                }
+            }
+            // Diffuses the blobs into one another. Scaled up first so the
+            // blur's soft edge falls outside the screen instead of
+            // darkening the border.
+            .blur(radius: min(size.width, size.height) * 0.075)
+            .scaleEffect(1.2)
+        }
+        .saturation(vividness)
     }
 
     // MARK: - Layers
 
     private var baseColor: Color {
-        guard !palette.isEmpty else { return .black }
-        let average = palette.reduce(SIMD3<Double>(0, 0, 0), +) / Double(palette.count)
-        // Held back so the blobs above stay the brightest thing on screen.
-        return Color(
-            hue: average.x,
-            saturation: min(average.y * 1.1, 1),
-            brightness: max(average.z * 0.45, 0.06)
-        )
+        AlbumWallpaperPalette.color(palette.average * 0.45)
     }
 
     private func blob(slot: Int, size: CGSize) -> some View {
@@ -67,7 +83,7 @@ struct AnimatedGradientView: View {
         let breathe = 1 + 0.05 * sin(time / spec.periodRadius * turn + spec.phase)
         let radius = shortest * spec.radius * CGFloat(breathe)
 
-        let colour = colour(for: spec)
+        let colour = AlbumWallpaperPalette.color(palette.stops[slot])
 
         return RadialGradient(
             gradient: Gradient(stops: [
@@ -83,28 +99,9 @@ struct AnimatedGradientView: View {
         .position(x: x, y: y)
     }
 
-    /// Beats lift saturation and brightness a little. Hue never moves -- a
-    /// shifting hue is what previously made the palette look like it was
-    /// swapping rather than pulsing.
-    /// Takes no beat input at all. Lifting saturation and brightness on each
-    /// hit was the colour layer's share of the glow -- the same lamp-switch
-    /// effect the shaders had -- so the blob now holds one steady colour and
-    /// lets its movement carry the music.
-    private func colour(for spec: BlobSpec) -> Color {
-        let base = palette.indices.contains(spec.paletteIndex)
-            ? palette[spec.paletteIndex]
-            : SIMD3(0.6, 0.4, 0.5)
-        return Color(
-            hue: base.x,
-            saturation: min(base.y * 1.05, 1),
-            brightness: min(base.z * 0.98 + 0.05, 1)
-        )
-    }
-
     // MARK: - Blob definitions
 
     private struct BlobSpec {
-        var paletteIndex: Int
         var periodX: Double
         var periodY: Double
         var periodRadius: Double
@@ -125,7 +122,6 @@ struct AnimatedGradientView: View {
         let radii: [CGFloat] = [0.72, 0.62, 0.80, 0.58, 0.68]
 
         return BlobSpec(
-            paletteIndex: sampleIndices[slot],
             periodX: periodsX[slot],
             periodY: periodsY[slot],
             periodRadius: periodsR[slot],
@@ -134,5 +130,52 @@ struct AnimatedGradientView: View {
             radius: radii[slot],
             phase: Double(slot) * 1.27
         )
+    }
+}
+
+/// How many pixels the colour field may draw per frame.
+enum ColourFieldBudget {
+    /// A quarter of a megapixel: a 14-inch MacBook Pro's 6 MP and a 5K
+    /// display's 15 MP both come down to it, with no visible difference.
+    static let standard = 250_000.0
+
+    static func pixels(economical: Bool) -> Double {
+        economical ? standard * 0.6 : standard
+    }
+
+    /// Where the field is drawn and how far it is stretched to fill `points`.
+    struct Canvas: Equatable {
+        /// In points, a whole number of pixels at the display scale.
+        var size: CGSize
+        /// Per axis; 1 when the field is drawn natively.
+        var stretch: CGSize
+        /// The pixels drawn per frame.
+        func pixels(scale: CGFloat) -> Double {
+            Double(size.width * scale) * Double(size.height * scale)
+        }
+    }
+
+    /// The share of each side the field is drawn at: native when `points`
+    /// at `scale` fits the budget, otherwise the same aspect scaled down.
+    static func factor(points: CGSize, scale: CGFloat, budget: Double) -> CGFloat {
+        guard points.width > 0, points.height > 0, points.width.isFinite, points.height.isFinite else { return 1 }
+        let scale = scale.isFinite && scale > 0 ? scale : 2
+        let native = Double(points.width * scale) * Double(points.height * scale)
+        guard budget.isFinite else { return 1 }
+        return CGFloat(min(1, sqrt(max(1, budget) / native)))
+    }
+
+    /// A canvas of whole pixels, so nothing is rounded off it, stretched to
+    /// reach one of its pixels past each edge of the screen: an offscreen
+    /// pass rounded down by a pixel would otherwise leave a seam there.
+    static func canvas(points: CGSize, scale: CGFloat, budget: Double) -> Canvas {
+        let factor = factor(points: points, scale: scale, budget: budget)
+        guard factor < 1 else { return Canvas(size: points, stretch: CGSize(width: 1, height: 1)) }
+        let scale = scale.isFinite && scale > 0 ? scale : 2
+        let pixels = CGSize(width: max(4, (points.width * factor * scale).rounded(.down)),
+                            height: max(4, (points.height * factor * scale).rounded(.down)))
+        let size = CGSize(width: pixels.width / scale, height: pixels.height / scale)
+        return Canvas(size: size, stretch: CGSize(width: points.width / size.width * (pixels.width + 2) / pixels.width,
+                                                  height: points.height / size.height * (pixels.height + 2) / pixels.height))
     }
 }

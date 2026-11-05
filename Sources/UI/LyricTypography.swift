@@ -17,6 +17,8 @@ final class RenderMemo<Key: Equatable, Value>: ObservableObject {
 
 struct LyricFontIdentity: Equatable {
     var editorial: Bool = false
+    var editorialAmount: Double = 1
+    var randomize: Bool = false
     let choice: String
     let customRegular: String?
     let customBold: String?
@@ -28,6 +30,8 @@ extension LyricFontIdentity {
     @MainActor
     init(settings: Settings) {
         editorial = settings.editorialTypography
+        editorialAmount = settings.editorialAmount
+        randomize = settings.randomizeLyricFonts
         choice = settings.fontChoice.rawValue
         customRegular = settings.googleRegular; customBold = settings.googleBold
         appRegular = AppFont.regular; appBold = AppFont.bold
@@ -43,16 +47,80 @@ enum ScatteredTypography {
         let composition: LyricComposition
         let spread: Double
         let fontIdentity: LyricFontIdentity
+        var readings: [TimedWordKey: String] = [:]
+        var wordTimed = true
+        var lineEnd: Double?
+        /// Per word: continues the previous word's run (see `LyricRuns`).
+        var glue: [Bool] = []
     }
     struct Word: Equatable {
         let index: Int
         let source: LyricsFetcher.Word
+        /// The run's metrics: every token of a glued run shares one size,
+        /// face, baseline and slot.
         let metrics: WordMetrics
         let label: String
         let characters: [String]
         let font: Font
+        let reading: LyricReadingInk?
         let sustain: Double
-        let motionSeed: UInt64
+        /// Seeded from the word and its timestamp, so the same word sung
+        /// twice never moves the same way.
+        let seed: UInt64
+        /// Time to the next onset: sets how briskly the word moves.
+        let cadence: Double
+        /// Reading position in the line, 0...1: staggers exits, places colour.
+        let order: Double
+        var slot: Double { order }
+        let rightToLeft: Bool
+        let lineRightToLeft: Bool
+        /// Whether glyphs may be swelled one at a time (see `LyricScript`).
+        let glyphMotion: Bool
+        /// The run this token belongs to.
+        var run = 0
+    }
+    /// Glued tokens as the layout places them: one shaped label, one slot.
+    /// A line of separate words has one run per word.
+    struct Run: Equatable {
+        let index: Int
+        let tokens: Range<Int>
+        let label: String
+        let font: Font
+        let metrics: WordMetrics
+        let reading: LyricReadingInk?
+        /// The run as one timed word: first onset to last end.
+        let source: LyricsFetcher.Word
+        let seed: UInt64
+        let order: Double
+        /// Held-ness of a single-token run (per-glyph lighting); glued runs
+        /// light through the shared sweep instead.
+        let sustain: Double
+        let rightToLeft: Bool
+        let glyphMotion: Bool
+        /// Where each token begins and ends along the label, 0...1 by
+        /// character, so a token's fill and reveal fall on its own letters.
+        let boundaries: [Double]
+        /// The words a reader takes in along the run, each highlighted on
+        /// its own by "Cutout · Highlight": one for a single word or a word
+        /// sung in syllables, several for a run of Japanese or Chinese.
+        var segments: [Segment] = []
+        var isGlued: Bool { tokens.count > 1 }
+        /// Fixed clearance around the ink: the slot never grows with the word.
+        var inset: CGSize { CGSize(width: metrics.size * 0.12, height: metrics.size * 0.05) }
+    }
+    /// One sung word of a run: where it falls along the run's label, when
+    /// it is sung, and the end of its line.
+    struct Segment: Equatable {
+        var from: Double
+        var to: Double
+        var onset: Double
+        var end: Double
+        var release: Double
+    }
+    struct Layout: Equatable {
+        let words: [Word]
+        let runs: [Run]
+        let rightToLeft: Bool
     }
     private static let functionWords: Set<String> = [
         "a", "an", "the", "and", "or", "but", "so", "if", "as", "of", "to", "in",
@@ -63,20 +131,102 @@ enum ScatteredTypography {
     ]
     @MainActor
     static func prepare(_ key: Key, settings: Settings) -> [Word] {
-        let words = key.words.filter { $0.text.contains { $0.isLetter || $0.isNumber } }
-        let durations = words.map { $0.end - $0.start }.filter { $0 > 0.01 }
+        layout(key, settings: settings).words
+    }
+
+    /// Tokens and the runs they form. Size, weight and placement are worked
+    /// out per run, from the run's own timing, so a word split into timed
+    /// syllables sets exactly as the whole word would.
+    @MainActor
+    static func layout(_ key: Key, settings: Settings) -> Layout {
+        let visible = LyricRuns.visible(key.words, glue: key.glue)
+        let words = visible.words
+        let ranges = LyricRuns.ranges(visible.glue, count: words.count)
+        let sources = ranges.map { range -> LyricsFetcher.Word in
+            guard range.count > 1 else { return words[range.lowerBound] }
+            let tokens = words[range]
+            return LyricsFetcher.Word(text: tokens.map(\.text).joined().trimmingCharacters(in: .whitespaces),
+                                      start: tokens.first?.start ?? 0, end: tokens.map(\.end).max() ?? 0)
+        }
+        let durations = sources.map { $0.end - $0.start }.filter { $0 > 0.01 }
         let average = durations.isEmpty ? 0.3 : durations.reduce(0, +) / Double(durations.count)
-        let fullness = min(Double(words.count) / 7, 1)
-        return words.enumerated().map { index, word in
-            let metrics = metrics(index: index, word: word, averageDuration: average, fullness: fullness, key: key)
-            let label = metrics.uppercased ? word.text.uppercased() : word.text
-            let font = metrics.alternateFace
-                ? key.mood.face.contrasting.font(size: metrics.size, hero: metrics.isHero)
-                : settings.lyricFont(size: metrics.size, hero: metrics.isHero, mood: key.mood)
-            let motionSeed = word.text.utf8.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1)) &* 1099511628211 }
-            return Word(index: index, source: word, metrics: metrics, label: label,
-                        characters: label.map(String.init), font: font,
-                        sustain: Easing.smoothstep(((word.end - word.start) - 0.45) / 0.85), motionSeed: motionSeed)
+        let fullness = min(Double(ranges.count) / 7, 1)
+        let lineRightToLeft = LyricScript.lineIsRightToLeft(words.map(\.text))
+        let span = Double(max(ranges.count - 1, 1))
+        var tokens: [Word] = []
+        var runs: [Run] = []
+        tokens.reserveCapacity(words.count)
+        for (runIndex, range) in ranges.enumerated() {
+            let source = sources[runIndex]
+            let metrics = metrics(index: runIndex, word: source, averageDuration: average, fullness: fullness, key: key)
+            let seed = source.presentationID.visualSeed
+            let font = settings.lyricFont(size: metrics.size, hero: metrics.isHero, mood: key.mood,
+                seed: seed, alternate: metrics.alternateFace)
+            // Readings are secondary: smaller, regular weight, same face.
+            let readingFont = settings.lyricFont(size: metrics.size * 0.56, hero: false, mood: key.mood,
+                seed: seed, alternate: metrics.alternateFace)
+            let order = ranges.count > 1 ? Double(runIndex) / span : 0.5
+            let runCadence = runIndex + 1 < ranges.count
+                ? max(0.05, sources[runIndex + 1].start - source.start) : max(source.end - source.start, 0.12)
+            var labels: [String] = []
+            for index in range {
+                let word = words[index]
+                let label = metrics.uppercased ? word.text.uppercased() : word.text
+                labels.append(label)
+                tokens.append(Word(index: index, source: word, metrics: metrics, label: label,
+                    characters: label.map(String.init), font: font,
+                    reading: key.readings[word.presentationID].map { LyricReadingInk(text: $0, font: readingFont) },
+                    sustain: Easing.smoothstep(((word.end - word.start) - 0.45) / 0.85),
+                    seed: word.presentationID.visualSeed,
+                    // A run enters at the pace of the run, not of its first syllable.
+                    cadence: index == range.lowerBound ? runCadence : OrganicMotion.cadence(of: words, at: index),
+                    order: order,
+                    rightToLeft: LyricScript.isRightToLeft(label),
+                    lineRightToLeft: lineRightToLeft,
+                    glyphMotion: LyricScript.allowsGlyphMotion(label),
+                    run: runIndex))
+            }
+            let label = range.count > 1
+                ? labels.joined().trimmingCharacters(in: .whitespaces) : labels.first ?? ""
+            let total = Double(max(1, labels.reduce(0) { $0 + $1.count }))
+            var boundaries: [Double] = [0], running = 0.0
+            for text in labels {
+                running += Double(text.count)
+                boundaries.append(min(1, running / total))
+            }
+            let readings = range.compactMap { key.readings[words[$0].presentationID] }
+            runs.append(Run(index: runIndex, tokens: range, label: label, font: font, metrics: metrics,
+                reading: readings.isEmpty ? nil : LyricReadingInk(text: readings.joined(), font: readingFont),
+                source: source, seed: seed, order: order,
+                sustain: range.count == 1 ? tokens[range.lowerBound].sustain : 0,
+                rightToLeft: LyricScript.isRightToLeft(label), glyphMotion: LyricScript.allowsGlyphMotion(label),
+                boundaries: boundaries))
+        }
+        segment(&runs, words: words, ranges: ranges, glue: visible.glue,
+                lineEnd: LyricHighlightTiming.lineEnd(key.lineEnd, words: words))
+        return Layout(words: tokens, runs: runs, rightToLeft: lineRightToLeft)
+    }
+
+    /// Each run's sung words. A run of a script written without spaces is
+    /// parted where a reader would start a word (`LyricRuns.splittingWords`),
+    /// so a Japanese line set as one run is highlighted word by word, not
+    /// all at once. Syllables of one Latin word stay one word. Every
+    /// segment releases at the same line end.
+    private static func segment(_ runs: inout [Run], words: [LyricsFetcher.Word], ranges: [Range<Int>],
+                                glue: [Bool], lineEnd: Double) {
+        let parted = LyricRuns.splittingWords(words, glue: glue, into: .words)
+        for (runIndex, range) in ranges.enumerated() {
+            let bounds = runs[runIndex].boundaries
+            var start = range.lowerBound
+            for index in range.lowerBound...range.upperBound {
+                let begins = index == range.upperBound || (index > range.lowerBound && !(index < parted.count && parted[index]))
+                guard begins, index > start else { continue }
+                let from = bounds.indices.contains(start - range.lowerBound) ? bounds[start - range.lowerBound] : 0
+                let to = bounds.indices.contains(index - range.lowerBound) ? bounds[index - range.lowerBound] : 1
+                runs[runIndex].segments.append(Segment(from: from, to: to, onset: words[start].start,
+                    end: words[start..<index].map(\.end).max() ?? words[start].end, release: lineEnd))
+                start = index
+            }
         }
     }
     private static func drag(_ word: LyricsFetcher.Word, average: Double) -> Double {
@@ -107,7 +257,7 @@ enum ScatteredTypography {
 
         // How hard the singer leans on this word decides the weight; the hash
         // only supplies a little size jitter so the line is not mechanical.
-        let held = drag(word, average: averageDuration)
+        let held = key.wordTimed ? drag(word, average: averageDuration) : 0
         let isHero = held > 0.25
         let jitter = CGFloat(Int(value / 100) % 5) / 5.0
 
@@ -120,13 +270,22 @@ enum ScatteredTypography {
         // Editorial widens the range hard: a spread gets its character from
         // real size contrast, not from a gentle wobble around one size.
         var alternate = false
-        if composition.hasEditorialTypography || key.fontIdentity.editorial {
-            size *= isHero ? 1.10 : (1.00 + 0.10 * jitter)
+        let editorialAmount = key.fontIdentity.editorial ? key.fontIdentity.editorialAmount
+            : composition.hasEditorialTypography ? 1 : 0
+        if editorialAmount > 0 {
+            size *= 1 + 0.10 * editorialAmount * (isHero ? 1 : jitter)
             // Roughly every third word takes the second face. Driven by the
             // word's own hash, so the pairing is fixed for a given lyric.
-            alternate = !isHero && (composition == .constellationEditorial ? index % 2 == 0 : (value / 10_000) % 3 == 0)
+            let eligible = composition == .constellationEditorial ? index % 2 == 0 : (value / 10_000) % 3 == 0
+            alternate = !isHero && eligible && Double((value / 700_000) % 100) < editorialAmount * 100
         }
 
+        // A line without word timing is read as one phrase: one size, level
+        // and upright, as a single sentence would be set.
+        guard key.wordTimed else {
+            return WordMetrics(size: max(baseSize * 0.68, 11), isHero: false, rotation: 0, waveOffset: 0,
+                               uppercased: false, alternateFace: alternate)
+        }
         var offset = sin(Double(index) * 0.85) * style.wave * baseSize * CGFloat(mood.intensity)
 
         if composition.hasConnections {
@@ -161,16 +320,48 @@ enum SpokenTypography {
         let mood: TrackMood
         let composition: LyricComposition
         let fontIdentity: LyricFontIdentity
+        var readings: [TimedWordKey: String] = [:]
+        /// The onset after the last word, when that word is not in `words`
+        /// yet. Its pace must not change when the next word joins.
+        var following: Double?
+        /// Each word's place in the whole song (see `Word.slot`).
+        var ordinals: [TimedWordKey: Int] = [:]
+        /// The tokens of each word that is a glued run (see `Word.parts`).
+        var parts: [TimedWordKey: [LyricsFetcher.Word]] = [:]
     }
     struct Word: Identifiable {
         let index: Int
         let source: LyricsFetcher.Word
         let hash: UInt64
+        /// Per timed word, so repeats of one word still move differently.
+        let seed: UInt64
+        let cadence: Double
+        let rightToLeft: Bool
         let hero: Bool
         let pointSize: CGFloat
         let tile: Bool
         let font: Font
+        let reading: LyricReadingInk?
+        /// Where along the ink's colours the word sits, 0...1. Consecutive
+        /// words take well-separated places. Keyed by the word's place in
+        /// the song, never by its place in the rolling window: that shifts
+        /// whenever a line leaves the window, and every word's colour cut
+        /// to a new hue with it.
+        var slot = 0.0
+        /// The syllables or characters a glued run is made of, each with
+        /// its own timing, and where each falls along the word (0...1 by
+        /// character). Empty for a single token.
+        var parts: [LyricsFetcher.Word] = []
+        var boundaries: [Double] = []
+        /// The largest entrance turn this word may make on a rolling stage,
+        /// in degrees (see `RollingStack.turnLimit`). Worked out once here,
+        /// not on every frame.
+        var turnLimit: Double = 12
         var id: TimedWordKey { source.presentationID }
+
+        static func slot(ordinal: Int) -> Double {
+            (Double(ordinal) * 0.618_034).truncatingRemainder(dividingBy: 1)
+        }
     }
     @MainActor
     static func prepare(_ key: Key, settings: Settings) -> [Word] {
@@ -180,12 +371,93 @@ enum SpokenTypography {
             let hash = word.text.utf8.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1)) &* 1099511628211 }
             let hero = !filler && (word.text.count >= 5 || word.end - word.start > 0.65)
             let columnSize = key.baseSize * (hero ? 0.88 : filler ? 0.62 : 0.74)
-            let pointSize = key.composition == .spoken ? key.baseSize * 1.10 : columnSize
-            return Word(index: index, source: word, hash: hash, hero: hero, pointSize: pointSize,
-                tile: key.composition == .cutout && (hero || hash % 4 == 1),
-                font: key.fontIdentity.editorial && hash % 3 == 1
-                    ? key.mood.face.contrasting.font(size: pointSize, hero: hero)
-                    : settings.lyricFont(size: pointSize, hero: hero || key.composition == .spoken, mood: key.mood))
+            // A word with its reading under it is set a little smaller, so
+            // the pair reads as one unit rather than a word and a half.
+            let compact: CGFloat = key.readings[word.presentationID] == nil ? 1 : 0.88
+            let pointSize = (key.composition == .spoken ? key.baseSize * 1.10 : columnSize) * compact
+            let heavy = hero || key.composition == .spoken
+            let alternate = key.fontIdentity.editorial && hash % 3 == 1
+                && Double((hash / 300) % 100) < key.fontIdentity.editorialAmount * 100
+            let seed = word.presentationID.visualSeed
+            let isLast = index == key.words.count - 1
+            let tile = key.composition == .cutout && (hero || hash % 4 == 1)
+            let reading = key.readings[word.presentationID]
+            return Word(index: index, source: word, hash: hash, seed: seed,
+                cadence: isLast && (key.following ?? -.infinity) > word.start
+                    ? (key.following ?? 0) - word.start : OrganicMotion.cadence(of: key.words, at: index),
+                rightToLeft: LyricScript.isRightToLeft(word.text), hero: hero, pointSize: pointSize,
+                tile: tile,
+                font: settings.lyricFont(size: pointSize, hero: heavy, mood: key.mood, seed: seed, alternate: alternate),
+                reading: reading.map { LyricReadingInk(text: $0,
+                    font: settings.lyricFont(size: pointSize * 0.56, hero: false, mood: key.mood,
+                        seed: seed, alternate: alternate)) },
+                slot: Word.slot(ordinal: key.ordinals[word.presentationID] ?? index),
+                parts: key.parts[word.presentationID] ?? [],
+                boundaries: key.parts[word.presentationID].map(LyricRuns.boundaries) ?? [],
+                turnLimit: RollingStack.turnLimit(text: word.text, reading: reading, pointSize: pointSize, tile: tile))
         }
+    }
+}
+
+
+struct LyricReadingInk: View, Equatable {
+    let text: String
+    let font: Font
+    /// Readings sit back from the lyric they annotate.
+    var colour: Color = .white.opacity(0.7)
+    /// The widest the reading may run before it wraps, centred. Nil sets it
+    /// on one line. A rolling stage hangs a reading of the whole line under
+    /// the line's first word, where on one line it could run off the stage.
+    var maxWidth: CGFloat?
+
+    /// The same reading in the colour of the word it belongs to.
+    func tinted(_ colour: Color) -> LyricReadingInk {
+        var copy = self
+        copy.colour = colour
+        return copy
+    }
+
+    /// The same reading, wrapping at `width`.
+    func wrapping(at width: CGFloat) -> LyricReadingInk {
+        var copy = self
+        copy.maxWidth = width
+        return copy
+    }
+
+    var body: some View {
+        if let maxWidth {
+            CappedWidthLayout(maxWidth: maxWidth) {
+                Text(text)
+                    .font(font)
+                    .foregroundStyle(colour)
+                    .multilineTextAlignment(.center)
+            }
+        } else {
+            Text(text)
+                .font(font)
+                .foregroundStyle(colour)
+                .fixedSize()
+        }
+    }
+}
+
+/// Sets its one child at its own width up to `maxWidth`, and wraps it at
+/// `maxWidth` beyond that.
+struct CappedWidthLayout: Layout {
+    let maxWidth: CGFloat
+
+    private func proposal(for child: LayoutSubview) -> ProposedViewSize {
+        let ideal = child.sizeThatFits(.unspecified)
+        return ideal.width <= maxWidth ? .unspecified : ProposedViewSize(width: max(1, maxWidth), height: nil)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        return child.sizeThatFits(self.proposal(for: child))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let child = subviews.first else { return }
+        child.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: self.proposal(for: child))
     }
 }

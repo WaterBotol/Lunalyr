@@ -61,7 +61,8 @@ struct VizUniforms {
     // kernel has no memory of the previous frame's envelope).
     var beatHit: Float = 0
     var trebleHit: Float = 0
-    /// Kicks counted since launch. A free clock for anything that wants to
+    /// Kicks counted since the audio source started: `kickOnsets`, so it
+    /// restarts with a new source. A free clock for anything that wants to
     /// advance per beat rather than per second (and the seed of the
     /// beat-synced scene changes in docs/roadmap.md).
     var beatCount: Float = 0
@@ -77,6 +78,34 @@ struct VizUniforms {
     /// so a switch can fade in rather than pop. Groundwork for the crossfade
     /// half of beat-synced scene changes.
     var intro: Float = 1
+    // Sound types (SoundTypeDetector), evaluated at the displayed time. The
+    // six envelopes are 0...1. The transients (kick, snare, hat) are already
+    // scaled by Punch; under Reduce Motion and Dim Flashing Lights they are
+    // read with slow shapes at half Punch instead (at most half strength, 0
+    // when Punch is off). The sustained ones are never scaled. Classes are
+    // not exclusive: a kick and a snare on one beat both fire. While the
+    // scene is idle nothing new flares and the counters hold.
+    var soundKick: Float = 0
+    var soundSnare: Float = 0
+    var soundHat: Float = 0
+    /// The bass line, kick tails held out.
+    var soundBass: Float = 0
+    /// The lead voice or melodic lead: partials that move together in pitch.
+    var soundVocal: Float = 0
+    /// The sustained harmonic bed: chords, pads, strings.
+    var soundPad: Float = 0
+    /// Onsets counted since the source started, as exact integers (wrapped
+    /// at 2^24); only a new source restarts them. `uint(u.kickOnsets)` seeds
+    /// a fresh random subset per hit; crossfade from the previous subset over
+    /// the first ~50 ms of the age so membership never pops.
+    var kickOnsets: Float = 0
+    var snareOnsets: Float = 0
+    var hatOnsets: Float = 0
+    /// Real seconds since the newest onset at the displayed time, 0...60
+    /// (60 = none yet). Not scaled by Speed or Reduce Motion.
+    var kickAge: Float = 60
+    var snareAge: Float = 60
+    var hatAge: Float = 60
 
     /// The option slots in descriptor order. They are stored properties
     /// rather than a Swift array because the layout has to match MSL's

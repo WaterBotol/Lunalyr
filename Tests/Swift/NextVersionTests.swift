@@ -56,20 +56,21 @@ final class NextVersionTests: XCTestCase {
         XCTAssertTrue(lines[0].wordTimed)
         XCTAssertEqual(lines[0].words.map(\.end), [2, 4])
     }
-    func testPriorityAndWordTimingOverrideRespectExplicitOptOut() {
+    func testLRCLIBWordTimingLeadsOtherServicesInEitherModeAndOrder() {
         func candidate(_ source: LyricSourceID, native: Bool, score: Double) -> LyricCandidate {
             var line = LyricsFetcher.makeLine(text: "hello", start: 1, end: 2); line.wordTimed = native
             return .init(source: source, result: .synced([line], .init(precision: "test", source: source.title)), title: "Song", artist: "Artist", score: score)
         }
+        let query = LyricQuery(title: "Song", artist: "Artist", album: nil, duration: 0)
         let values = [candidate(.netEase, native: true, score: 110), candidate(.lrclib, native: true, score: 95)]
-        var options = LyricSourceOptions.Snapshot(enabled: [.netEase, .lrclib], mode: .priority, localFolder: "", localVersion: "")
-        XCTAssertEqual(LyricsFetcher.choose(values, options: options)?.source, .lrclib)
-        options.preferWordTimedLRCLIB = false
-        XCTAssertEqual(LyricsFetcher.choose(values, options: options)?.source, .netEase)
-        options = .init(enabled: [.lrclib, .netEase], mode: .priority, preferWordTimedLRCLIB: false, localFolder: "", localVersion: "")
-        XCTAssertEqual(LyricsFetcher.choose(values, options: options)?.source, .lrclib)
-        options = .init(enabled: [.netEase], mode: .smart, localFolder: "", localVersion: "")
-        XCTAssertEqual(LyricsFetcher.choose(values, options: options)?.source, .netEase)
+        for mode in LyricSourceOptions.Mode.allCases {
+            for order in [[LyricSourceID.netEase, .lrclib], [.lrclib, .netEase]] {
+                let options = LyricSourceOptions.Snapshot(enabled: order, mode: mode, localFolder: "", localVersion: "")
+                XCTAssertEqual(LyricsFetcher.choose(values, query: query, options: options)?.source, .lrclib)
+            }
+        }
+        let options = LyricSourceOptions.Snapshot(enabled: [.netEase], mode: .smart, localFolder: "", localVersion: "")
+        XCTAssertEqual(LyricsFetcher.choose(values, query: query, options: options)?.source, .netEase)
     }
     @MainActor
     func testForcedLowPowerUsesLightWallpaperAndThirtyFPS() {

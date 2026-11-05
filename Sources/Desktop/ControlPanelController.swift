@@ -2,23 +2,42 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// One non-activating controls panel per display. Only the panel belonging
-/// to the current desktop hover accepts mouse events; others are click-through.
+/// One non-activating controls panel per display. Panels are click-through
+/// everywhere except over the controls actually drawn on the display being
+/// hovered, so desktop icons, rubber-band selections, context menus and
+/// drops in the middle of the screen still reach Finder.
 @MainActor
 final class ControlPanelController {
     static let shared = ControlPanelController()
+    static let windowTitle = "Lunalyr controls"
+
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
-    private var cancellable: AnyCancellable?
+    private var masks: [CGDirectDisplayID: (mask: ControlHitMask?, renderedAt: TimeInterval)] = [:]
+    private var masksStale = true
+    private var cancellables: Set<AnyCancellable> = []
     private var screenObserver: NSObjectProtocol?
     var windowIDs: Set<CGWindowID> {
-        Set(panels.values.compactMap { $0.windowNumber > 0 ? CGWindowID($0.windowNumber) : nil })
+        Set(panels.values.compactMap(\.windowServerID))
     }
 
     func start() {
         guard screenObserver == nil else { return }
-        cancellable = HoverState.shared.$activeDisplayID.removeDuplicates().sink { [weak self] displayID in
-            self?.updateMouseHandling(activeDisplayID: displayID)
-        }
+        HoverState.shared.$activeDisplayID.removeDuplicates().sink { [weak self] _ in
+            // Published before the value changes; act once it has.
+            Task { @MainActor [weak self] in
+                self?.masksStale = true
+                self?.updatePointer(buttonsHeld: NSEvent.pressedMouseButtons != 0)
+            }
+        }.store(in: &cancellables)
+        // What the panel draws changes with the track, artwork, play state
+        // and lyric provenance; redraw the hit mask lazily after any of them.
+        NowPlayingMonitor.shared.objectWillChange.sink { [weak self] _ in self?.masksStale = true }
+            .store(in: &cancellables)
+        LyricsViewModel.shared.$provenance.sink { [weak self] _ in self?.masksStale = true }
+            .store(in: &cancellables)
+        DesktopOptions.shared.$showsControlsOnHover.removeDuplicates().dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in self?.rebuild() }
+        }.store(in: &cancellables)
         rebuild()
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -32,6 +51,10 @@ final class ControlPanelController {
         HoverState.shared.reset()
         for panel in panels.values { panel.orderOut(nil); panel.contentView = nil; panel.close() }
         panels.removeAll()
+        masks.removeAll()
+        // With hover controls switched off there is nothing to show, so no
+        // panel sits over the desktop at all.
+        guard DesktopOptions.shared.showsControlsOnHover else { return }
         for screen in NSScreen.screens {
             guard let displayID = screen.versoDisplayID else { continue }
             let frame = vc_control_panel_frame(screen.versoFrame).rect
@@ -53,25 +76,55 @@ final class ControlPanelController {
             panel.isReleasedWhenClosed = false
             panel.ignoresMouseEvents = true
             panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
-            let hosting = NSHostingView(
-                rootView: MediaControlsView(displayID: displayID)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .environmentObject(NowPlayingMonitor.shared)
-            )
+            panel.title = Self.windowTitle
+            panel.isExcludedFromWindowsMenu = true
+            let hosting = NSHostingView(rootView: Self.content(displayID: displayID))
             hosting.frame = CGRect(origin: .zero, size: frame.size)
             hosting.autoresizingMask = [.width, .height]
             panel.contentView = hosting
             panel.orderFrontRegardless()
             panels[displayID] = panel
         }
-        updateMouseHandling(activeDisplayID: HoverState.shared.activeDisplayID)
+        masksStale = true
+        updatePointer(buttonsHeld: NSEvent.pressedMouseButtons != 0)
     }
 
-    private func updateMouseHandling(activeDisplayID: CGDirectDisplayID?) {
+    private static func content(displayID: CGDirectDisplayID) -> some View {
+        MediaControlsView(displayID: displayID)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .environmentObject(NowPlayingMonitor.shared)
+    }
+
+    /// Called from the hover poll: only the hovered display's panel may take
+    /// the pointer, and only over drawn controls. A held button never changes
+    /// which window owns the pointer.
+    func updatePointer(buttonsHeld: Bool) {
+        let location = NSEvent.mouseLocation
+        let active = HoverState.shared.activeDisplayID
         for (displayID, panel) in panels {
-            let active = displayID == activeDisplayID
-            panel.ignoresMouseEvents = !active
-            if active && !panel.isVisible { panel.orderFrontRegardless() }
+            let isActive = displayID == active
+            let accepts = ControlHitMask.acceptsMouse(
+                active: isActive,
+                overContent: isActive && !buttonsHeld && isOverControls(location, panel: panel, displayID: displayID),
+                buttonsHeld: buttonsHeld, previously: !panel.ignoresMouseEvents)
+            if panel.ignoresMouseEvents == accepts { panel.ignoresMouseEvents = !accepts }
+            if isActive && !panel.isVisible { panel.orderFrontRegardless() }
         }
+    }
+
+    private func isOverControls(_ location: CGPoint, panel: NSPanel, displayID: CGDirectDisplayID) -> Bool {
+        let local = CGPoint(x: location.x - panel.frame.minX, y: location.y - panel.frame.minY)
+        guard CGRect(origin: .zero, size: panel.frame.size).contains(local) else { return false }
+        let now = ProcessInfo.processInfo.systemUptime
+        let entry = masks[displayID]
+        if ControlHitMask.needsRender(usable: entry.map { $0.mask.map { !$0.isEmpty } ?? false }, stale: masksStale,
+                                      age: now - (entry?.renderedAt ?? now)) {
+            masksStale = false
+            masks[displayID] = (ControlHitMask.render(Self.content(displayID: displayID), size: panel.frame.size), now)
+        }
+        // If the panel could not be rendered (or rendered before its content
+        // appeared), keep the controls usable; the mask is retried shortly.
+        guard let mask = masks[displayID]?.mask, !mask.isEmpty else { return true }
+        return mask.contains(local)
     }
 }

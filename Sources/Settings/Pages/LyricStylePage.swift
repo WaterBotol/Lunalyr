@@ -1,0 +1,168 @@
+import SwiftUI
+
+/// Lyric style: the layout, the typeface, the text colour, how words enter,
+/// the layouts' own controls, instrumental breaks and remembered styles.
+@MainActor
+struct LyricStylePage: View {
+    @Model(\.settings) private var s
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var familyDraft = ""
+
+    /// The layout the word controls read from. Match the music saves them
+    /// for every layout it picks; Scattered, its general-purpose pick, stands
+    /// in when reading them back.
+    private var style: LyricComposition { s.lyricComposition ?? .scattered }
+    private var automatic: Bool { s.lyricComposition == nil }
+
+    var body: some View {
+        Form {
+            layout
+            typeface
+            LyricColourSection()
+            wordEntrances
+            // Match the music can pick either, so both stay reachable there.
+            if style.hasConnections || automatic {
+                Section("Constellation") {
+                    ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
+                                format: SettingsFormat.percent)
+                    ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
+                                format: SettingsFormat.percent)
+                    if automatic {
+                        InspectorCaption("Used when Match the music picks Constellation.")
+                    }
+                }
+            }
+            if style == .echo || automatic {
+                Section("Echo") {
+                    ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
+                                format: SettingsFormat.percent)
+                    if automatic {
+                        InspectorCaption("Used when Match the music picks Echo.")
+                    }
+                }
+            }
+            Section("Instrumental breaks") {
+                Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
+            }
+            LyricStyleMemorySection()
+        }
+        .formStyle(.grouped)
+        .onAppear { familyDraft = s.googleFontFamily }
+        .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
+    }
+
+    private var layout: some View {
+        Section("Layout") {
+            ChoiceMenu("Layout", selection: $s.lyricComposition, selectedTitle: { $0?.title ?? "Match the music" }) {
+                Text("Match the music").tag(Optional<LyricComposition>.none)
+                ForEach(LyricComposition.allCases) { Text($0.title).tag(Optional($0)) }
+            }
+            InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
+            RememberedStyleNote(aspect: .layout)
+            Toggle("Add Editorial typography", isOn: $s.editorialTypography)
+            if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
+                InspectorCaption(note)
+            }
+            if s.editorialTypography {
+                ValueSlider("Editorial amount", value: $s.editorialAmount, in: 0...1, step: 0.01,
+                            format: SettingsFormat.percent)
+            }
+            ValueSlider("Lyric size", value: $s.lyricScale, in: 0.7...1.5, step: 0.01, format: SettingsFormat.percent)
+        }
+    }
+
+    private var typeface: some View {
+        Section("Typeface") {
+            Toggle("Randomise lyric fonts", isOn: $s.randomizeLyricFonts)
+            if s.randomizeLyricFonts {
+                InspectorCaption("Words use a mix of built-in typefaces while this is on.")
+            }
+            ChoiceMenu("Typeface", selection: Binding(get: { s.fontChoice }, set: { s.selectFontChoice($0) }),
+                       selectedTitle: \.title) {
+                ForEach(Settings.FontChoice.allCases) { Text($0.title).tag($0) }
+            }
+            if s.randomizeLyricFonts {
+                InspectorCaption(WorkspaceCopy.randomisedTypeface)
+            }
+            if s.fontChoice == .google {
+                ChoiceMenu("Google Fonts family",
+                           selection: Binding(get: { s.googleFontFamily }, set: { s.applyGoogleFont(family: $0) }),
+                           selectedTitle: { $0.isEmpty ? "Select a family" : $0 }) {
+                    if !GoogleFontsCatalog.allFamilies.contains(s.googleFontFamily) {
+                        Text(s.googleFontFamily.isEmpty ? "Select a family" : s.googleFontFamily).tag(s.googleFontFamily)
+                    }
+                    ForEach(GoogleFontsCatalog.groups) { group in
+                        Section(group.name) {
+                            ForEach(group.families, id: \.self) { family in Text(family).tag(family) }
+                        }
+                    }
+                }
+                LabeledContent("Any family") {
+                    HStack(spacing: LunalyrDesign.Spacing.small) {
+                        TextField("Any family", text: $familyDraft, prompt: Text("Family name"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit(applyFamilyDraft)
+                        // The current family can be asked for again after
+                        // it failed, but not re-fetched once it works.
+                        Button("Use", action: applyFamilyDraft)
+                            .disabled(Settings.normalizedFontFamily(familyDraft) == nil
+                                      || (Settings.normalizedFontFamily(familyDraft) == s.googleFontFamily && s.googleRegular != nil))
+                            .help("Use this family for the lyrics")
+                    }
+                }
+                InspectorCaption("Type a family from fonts.google.com or one installed on this Mac.")
+                if let message = s.googleStatus {
+                    InspectorCaption(message)
+                }
+            }
+        }
+    }
+
+    private var wordEntrances: some View {
+        Section("Word entrances") {
+            Toggle("Reveal sung words", isOn: Binding(get: { s.revealsWords(in: style) },
+                                                       set: { s.wordRevealByStyle[s.wordControlsKey] = $0 }))
+                .disabled(s.requiresWordEntrances(in: style))
+            if let reason = WorkspaceCopy.revealLockReason(s.wordRevealLock(in: style)) {
+                DisabledReason(reason)
+            }
+            ChoiceMenu("Entrance", selection: Binding(get: { s.arrival(in: style) },
+                                                      set: { s.wordArrivalByStyle[s.wordControlsKey] = $0.rawValue }),
+                       selectedTitle: \.title) {
+                ForEach(WordArrival.allCases) { Text($0.title).tag($0) }
+            }
+            if reduceMotion {
+                InspectorCaption(WorkspaceCopy.reduceMotionEntrances)
+            }
+            if s.arrival(in: style) == .mix {
+                ForEach(WordArrival.mixChoices) { option in
+                    Toggle(option.title, isOn: Binding(
+                        get: { s.wordEntranceMix.contains(option.rawValue) },
+                        set: { enabled in
+                            if enabled { s.wordEntranceMix.append(option.rawValue) }
+                            else { s.wordEntranceMix.removeAll { $0 == option.rawValue } }
+                        }
+                    ))
+                }
+            }
+            Toggle("Faint next-word preview", isOn: Binding(get: { s.previewsNextWord(in: style) },
+                                                             set: { s.nextWordPreviewByStyle[s.wordControlsKey] = $0 }))
+            if s.previewsNextWord(in: style) {
+                ValueSlider("Preview lead", value: $s.nextWordPreviewLead, in: 0.15...1.25, step: 0.05,
+                            format: SettingsFormat.seconds,
+                            spoken: { SettingsFormat.spokenSeconds($0) + " before the next word" })
+                    .help("How long before each word its faint preview appears")
+            }
+            InspectorCaption(automatic ? "These controls apply to layouts picked by Match the music."
+                                       : "These controls apply to the selected layout.")
+        }
+    }
+
+    private func applyFamilyDraft() {
+        guard let typed = Settings.normalizedFontFamily(familyDraft) else { return }
+        let family = GoogleFontsCatalog.canonicalName(typed) ?? typed
+        familyDraft = family
+        s.applyGoogleFont(family: family)
+    }
+}

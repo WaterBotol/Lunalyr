@@ -4,7 +4,9 @@ import SwiftUI
 /// Plays Apple Music's animated album art as the backdrop, looping silently.
 ///
 /// Shown only for albums that actually ship motion artwork; everything else
-/// falls back to the generated colour field.
+/// falls back to the generated colour field. Every display shows the same
+/// shared player (`SharedVideoPlayers`) through its own layer, which fades
+/// in once it has a frame instead of popping in over the album gradient.
 struct MotionArtworkView: NSViewRepresentable {
     let url: URL
     var placement: Settings.MotionPlacement = .fill
@@ -13,14 +15,13 @@ struct MotionArtworkView: NSViewRepresentable {
     func makeNSView(context: Context) -> PlayerView {
         let view = PlayerView()
         view.placement = placement
-        view.play(url: url)
-        view.setPaused(isPaused)
+        view.play(url: url, paused: isPaused)
         return view
     }
 
     func updateNSView(_ view: PlayerView, context: Context) {
         view.placement = placement
-        view.play(url: url)
+        view.play(url: url, paused: isPaused)
         view.setPaused(isPaused)
     }
 
@@ -29,9 +30,9 @@ struct MotionArtworkView: NSViewRepresentable {
     }
 
     final class PlayerView: NSView {
-        private var player: AVQueuePlayer?
-        private var looper: AVPlayerLooper?
+        private var lease: SharedVideoPlayers.Lease?
         private var playerLayer: AVPlayerLayer?
+        private var readyObservation: NSKeyValueObservation?
         private var currentURL: URL?
         private var paused = false
         /// The clip's real dimensions, once the asset reports them.
@@ -56,38 +57,32 @@ struct MotionArtworkView: NSViewRepresentable {
             didSet { if placement != oldValue { needsLayout = true } }
         }
 
-        func play(url: URL) {
+        func play(url: URL, paused: Bool) {
             guard currentURL != url else { return }
-            currentURL = url
             stop()
+            currentURL = url
+            self.paused = paused
 
-            let queuePlayer = AVQueuePlayer()
-            queuePlayer.isMuted = true
-            queuePlayer.preventsDisplaySleepDuringVideoPlayback = false
+            let players = SharedVideoPlayers.shared
+            let lease = players.acquire(url, paused: paused) { [weak self] size in
+                guard let self, self.currentURL == url else { return }
+                self.naturalSize = size
+                self.needsLayout = true
+            }
+            self.lease = lease
+            naturalSize = players.naturalSize(for: lease)
 
-            let item = AVPlayerItem(url: url)
-            // AVPlayerLooper gives a gapless repeat, which matters when the
-            // clip is only a few seconds long.
-            looper = AVPlayerLooper(player: queuePlayer, templateItem: item)
-
-            let layer = AVPlayerLayer(player: queuePlayer)
+            let layer = AVPlayerLayer(player: players.player(for: lease))
             // The layer's own frame does the fitting, so gravity must not also
             // scale -- otherwise the two fight and the anchor is ignored.
             layer.videoGravity = .resizeAspect
             layer.frame = bounds
-
-            naturalSize = nil
-            Task { [weak self] in
-                guard let track = try? await item.asset.loadTracks(withMediaType: .video).first,
-                      let size = try? await track.load(.naturalSize)
-                else { return }
-                let transform = (try? await track.load(.preferredTransform)) ?? .identity
-                let oriented = CGRect(origin: .zero, size: size).applying(transform).size
-                await MainActor.run {
-                    guard self?.currentURL == url else { return }
-                    self?.naturalSize = CGSize(width: abs(oriented.width), height: abs(oriented.height))
-                    self?.needsLayout = true
-                }
+            // Hidden until it can show a frame, then faded in: the album
+            // gradient underneath carries the wait.
+            layer.opacity = 0
+            readyObservation = layer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] observed, _ in
+                guard observed.isReadyForDisplay else { return }
+                DispatchQueue.main.async { self?.reveal(observed) }
             }
 
             wantsLayer = true
@@ -100,22 +95,36 @@ struct MotionArtworkView: NSViewRepresentable {
             host.addSublayer(layer)
 
             playerLayer = layer
-            player = queuePlayer
-            if !paused { queuePlayer.play() }
+            needsLayout = true
+        }
+
+        private func reveal(_ layer: AVPlayerLayer) {
+            guard layer === playerLayer, layer.opacity < 1 else { return }
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
+            fade.toValue = 1
+            fade.duration = 0.6
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.opacity = 1
+            layer.add(fade, forKey: "reveal")
         }
 
         func setPaused(_ value: Bool) {
             guard paused != value else { return }
             paused = value
-            if value { player?.pause() } else { player?.play() }
+            if let lease { SharedVideoPlayers.shared.setPaused(value, for: lease) }
         }
 
         func stop() {
-            player?.pause()
+            readyObservation?.invalidate()
+            readyObservation = nil
             playerLayer?.removeFromSuperlayer()
+            playerLayer?.player = nil
             playerLayer = nil
-            looper = nil
-            player = nil
+            if let lease { SharedVideoPlayers.shared.release(lease) }
+            lease = nil
+            currentURL = nil
+            naturalSize = nil
         }
 
         override func layout() {
@@ -148,5 +157,18 @@ struct MotionArtworkView: NSViewRepresentable {
             layer.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
             CATransaction.commit()
         }
+    }
+}
+
+extension MotionArtworkProvider.Motion {
+    /// The rendition to play on a display. A portrait display prefers the
+    /// tall cover, but only as a single progressive file. The provider
+    /// resolves both renditions to one MP4 wherever Apple publishes one; a
+    /// tall cover left as Apple's raw HLS playlist can be slow to start and
+    /// loop with a gap, so the square cover fills the portrait display
+    /// instead.
+    func rendition(portrait: Bool) -> URL {
+        guard portrait, let tall, tall.pathExtension.lowercased() == "mp4" else { return square }
+        return tall
     }
 }

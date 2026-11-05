@@ -23,16 +23,55 @@ enum NetEaseLyricsProvider {
               let payload = await lyricPayload(id: songID) else {return nil}
         if let yrc=payload.yrc?.lyric {
             let parsed=parseYRC(yrc)
-            if !parsed.isEmpty {return parsed}
+            if !parsed.isEmpty {return attachingRomanization(payload.romalrc?.lyric,to:parsed,duration:duration)}
         }
         if let lrc=payload.lrc?.lyric {
             let parsed=LyricsFetcher.parseLRC(lrc,trackDuration:duration)
-            if !parsed.isEmpty {return parsed}
+            if !parsed.isEmpty {return attachingRomanization(payload.romalrc?.lyric,to:parsed,duration:duration)}
         }
         return nil
     }
 
     // MARK: - Search
+
+    /// The catalogue entry a search settled on. The fetcher ranks and labels
+    /// NetEase by it, so a different edit cannot pass as the playing song.
+    struct MatchedSong: Equatable, Sendable {
+        var id: Int
+        var title: String
+        var artist: String
+        var duration: Double?
+    }
+
+    /// Receives the entry `songID` picks while `timedLines` runs, and why a
+    /// request failed, so a lookup can tell an outage from "no match". Scoped
+    /// to a lookup with `$recorder.withValue`, so concurrent lookups never mix.
+    final class MatchRecorder: @unchecked Sendable {
+        /// The session the lookup's requests use.
+        let session: URLSession
+        private let lock = NSLock()
+        private var stored: MatchedSong?
+        private var error: Error?
+        init(session: URLSession = .shared) { self.session = session }
+        var song: MatchedSong? {
+            get { lock.withLock { stored } }
+            set { lock.withLock { stored = newValue } }
+        }
+        var failure: Error? {
+            get { lock.withLock { error } }
+            set { lock.withLock { error = newValue } }
+        }
+    }
+    @TaskLocal static var recorder: MatchRecorder?
+
+    /// One search result, as `bestSong` compares it.
+    struct SearchHit {
+        var id: Int
+        var name: String
+        var artists: [String]
+        /// Milliseconds, as NetEase reports it.
+        var duration: Int?
+    }
 
     private static func songID(title: String, artist: String, duration: Double) async -> Int? {
         var components = URLComponents(string: "https://music.163.com/api/search/get")
@@ -42,73 +81,53 @@ enum NetEaseLyricsProvider {
             URLQueryItem(name: "limit", value: "8"),
         ]
         guard let url = components?.url, let data = await get(url) else { return nil }
-        guard let payload = try? JSONDecoder().decode(SearchResponse.self, from: data),
-              let songs = payload.result?.songs
-        else { return nil }
-
-        let wantedTitle = normalize(title)
-        let wantedArtist = normalize(artist)
-
-        // Search returns many editions of a popular track -- radio edits,
-        // live cuts, remixes -- all with matching titles and artists. Taking
-        // the first acceptable hit picks the wrong edit often enough to
-        // matter, and a wrong edit means every word timestamp drifts. So
-        // score every candidate and keep the best, weighting runtime most
-        // heavily since it is the signal that actually separates editions.
-        struct Candidate {
-            var id: Int
-            var score: Int
-            var durationDelta: Double
+        // A reply without a result is an error ("code": -460 and the like);
+        // a result without songs is a real "no match".
+        guard let result = (try? JSONDecoder().decode(SearchResponse.self, from: data))?.result else {
+            recorder?.failure = LyricHTTP.Failure(message: "NetEase: unexpected search response")
+            return nil
         }
+        let hits = (result.songs ?? []).map {
+            SearchHit(id: $0.id, name: $0.name, artists: ($0.artists ?? []).map(\.name), duration: $0.duration)
+        }
+        guard let match = bestSong(hits, title: title, artist: artist, duration: duration) else { return nil }
+        recorder?.song = match
+        return match.id
+    }
 
-        var best: Candidate?
+    /// Search returns many editions of a popular track -- radio edits, live
+    /// cuts, remixes -- all with similar titles and artists. A wrong edit
+    /// means every word timestamp drifts, so every hit is scored and the best
+    /// kept: an edition whose runtime matches first, then the closest title
+    /// and artist, then the smallest runtime difference.
+    static func bestSong(_ songs: [SearchHit], title: String, artist: String, duration: Double) -> MatchedSong? {
+        let query = LyricQuery(title: title, artist: artist, album: nil, duration: duration)
+        var best: (song: MatchedSong, key: [Double])?
         for song in songs {
-            guard matches(normalize(song.name), wantedTitle) else { continue }
-
-            let artistMatches = song.artists?.contains { candidate in
-                matches(normalize(candidate.name), wantedArtist)
-            } ?? false
-
-            guard artistMatches else {continue}
-            let delta = duration > 0 && (song.duration ?? 0) > 0
-                ? abs(Double(song.duration ?? 0) / 1000 - duration)
-                : Double.greatestFiniteMagnitude
-
-            guard duration <= 0 || delta < 8 else {continue}
-            var score = 0
-            if delta < 2 { score += 5 } else if delta < 5 { score += 4 }
-            if artistMatches { score += 2 }
-            guard score > 0 else { continue }
-
-            let candidate = Candidate(id: song.id, score: score, durationDelta: delta)
-            if let current = best {
-                let better = candidate.score > current.score
-                    || (candidate.score == current.score && candidate.durationDelta < current.durationDelta)
-                if better { best = candidate }
-            } else {
-                best = candidate
-            }
+            let names = song.artists.filter { !$0.isEmpty }
+            let credit = names.joined(separator: ", ")
+            let titleMatch = LyricQuery.similarity(title, song.name)
+            let artistMatch = query.hasArtist
+                ? names.map { LyricQuery.similarity(artist, $0) }.reduce(LyricQuery.similarity(artist, credit), max) : 1
+            guard titleMatch >= 0.75, artistMatch >= 0.65 else { continue }
+            // An entry without a length cannot be told apart from other edits.
+            let length = song.duration.map { Double($0) / 1000 }.flatMap { $0 > 0 ? $0 : nil }
+            guard duration <= 0 || length != nil else { continue }
+            let delta = duration > 0 ? length.map { abs($0 - duration) } ?? 0 : 0
+            guard duration <= 0 || delta < 8 else { continue }
+            let fits = duration <= 0 || delta <= max(3, duration * 0.02)
+            let key: [Double] = [fits ? 1 : 0, titleMatch, artistMatch, -delta]
+            if let current = best, !current.key.lexicographicallyPrecedes(key) { continue }
+            best = (MatchedSong(id: song.id, title: song.name, artist: credit, duration: length), key)
         }
-        return best?.id
-    }
-
-    private static func matches(_ a: String, _ b: String) -> Bool {
-        guard !a.isEmpty, !b.isEmpty else { return false }
-        return a == b || a.contains(b) || b.contains(a)
-    }
-
-    private static func normalize(_ value: String) -> String {
-        var text = value.lowercased()
-        for pattern in [#"\([^)]*\)"#, #"\[[^\]]*\]"#, #"feat\..*"#, #"ft\..*"#] {
-            text = text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
-        }
-        return text.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+        return best?.song
     }
 
     // MARK: - Lyric fetch
 
     private static func lyricPayload(id: Int) async -> LyricResponse? {
-        guard let url=URL(string:"https://music.163.com/api/song/lyric?id=\(id)&lv=1&kv=1&tv=-1&yv=1"),
+        // rv=-1 adds `romalrc`, NetEase's own romanised lines (romaji, Korean).
+        guard let url=URL(string:"https://music.163.com/api/song/lyric?id=\(id)&lv=1&kv=1&tv=-1&yv=1&rv=-1"),
               let data=await get(url) else {return nil}
         return try? JSONDecoder().decode(LyricResponse.self,from:data)
     }
@@ -120,10 +139,15 @@ enum NetEaseLyricsProvider {
         request.setValue("https://music.163.com/", forHTTPHeaderField: "Referer")
         request.timeoutInterval = 6
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+            let (data, response) = try await (recorder?.session ?? .shared).data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                recorder?.failure = LyricHTTP.Failure(message: "NetEase: HTTP \(status). The service may be temporarily unavailable.")
+                return nil
+            }
             return data
         } catch {
+            recorder?.failure = error
             return nil
         }
     }
@@ -131,63 +155,65 @@ enum NetEaseLyricsProvider {
     // MARK: - yrc parsing
 
     static func parseYRC(_ yrc: String) -> [LyricsFetcher.Line] {
-        guard let headerRegex = try? NSRegularExpression(pattern: #"^\[(\d+),(\d+)\]"#),
-              let wordRegex = try? NSRegularExpression(pattern: #"\((\d+),(\d+),\d+\)([^(]*)"#)
+        guard yrc.utf8.count <= 2_000_000,
+              let headerRegex = try? NSRegularExpression(pattern: #"^\[(\d+),(\d+)\]"#),
+              let timingRegex = try? NSRegularExpression(pattern: #"\((\d+),(\d+),-?\d+\)"#)
         else { return [] }
 
         var lines: [LyricsFetcher.Line] = []
-        for rawLine in yrc.split(separator: "\n") {
+        var inCredits = true
+        for rawLine in yrc.split(whereSeparator: \.isNewline) {
             let s = String(rawLine)
-            let fullRange = NSRange(s.startIndex..., in: s)
-            guard let header = headerRegex.firstMatch(in: s, range: fullRange),
-                  let startRange = Range(header.range(at: 1), in: s),
-                  let durationRange = Range(header.range(at: 2), in: s),
-                  let startMs = Double(s[startRange]),
-                  let durationMs = Double(s[durationRange])
+            let ns = s as NSString
+            guard let header = headerRegex.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)),
+                  let startMs = Double(ns.substring(with: header.range(at: 1))),
+                  let durationMs = Double(ns.substring(with: header.range(at: 2)))
             else { continue }
 
-            var words: [LyricsFetcher.Word] = []
-            var fullText = ""
-
-            wordRegex.enumerateMatches(in: s, range: fullRange) { match, _, _ in
-                guard let match,
-                      let wordStartRange = Range(match.range(at: 1), in: s),
-                      let wordDurationRange = Range(match.range(at: 2), in: s),
-                      let textRange = Range(match.range(at: 3), in: s),
-                      let wordStart = Double(s[wordStartRange]),
-                      let wordDuration = Double(s[wordDurationRange])
-                else { return }
-
-                let piece = String(s[textRange])
+            // A word's text runs up to the next timing tuple, so brackets in
+            // the lyric itself ("Oh (yeah) baby") stay in place.
+            let body = NSMaxRange(header.range)
+            let timings = timingRegex.matches(in: s, range: NSRange(location: body, length: ns.length - body))
+            var pieces: [LyricScript.TimedToken] = []
+            var fullText = "", spaced = true
+            var vocalEnd = 0.0
+            for (index, timing) in timings.enumerated() {
+                let from = NSMaxRange(timing.range)
+                let to = index + 1 < timings.count ? timings[index + 1].range.location : ns.length
+                let piece = ns.substring(with: NSRange(location: from, length: to - from))
+                let wordStart = Double(ns.substring(with: timing.range(at: 1))) ?? 0
+                let wordDuration = Double(ns.substring(with: timing.range(at: 2))) ?? 0
                 fullText += piece
+                vocalEnd = max(vocalEnd, (wordStart + wordDuration) / 1000)
+                let glued = !spaced && !(piece.first?.isWhitespace ?? true)
+                spaced = piece.last?.isWhitespace ?? spaced
                 let trimmed = piece.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty else { return }
+                guard !trimmed.isEmpty else { continue }
 
                 // yrc occasionally parks a huge duration on a trailing token
                 // (a lone "!" carrying 30+ seconds across an instrumental).
                 // Left alone that pins the word at full emphasis and glow, so
                 // cap what any single word can hold.
                 let start = wordStart / 1000
-                let end = start + min(max(wordDuration / 1000, 0.06), maxWordDuration)
-
-                // Bare punctuation is its own token in yrc; fold it into the
-                // preceding word so it does not float as a separate chip. Its
-                // timing is not meaningful, so the word's own end stands.
-                if trimmed.allSatisfy({ !$0.isLetter && !$0.isNumber }), var previous = words.popLast() {
-                    previous.text += trimmed
-                    words.append(previous)
-                    return
-                }
-                words.append(LyricsFetcher.Word(text: trimmed, start: start, end: end))
+                pieces.append(.init(text: trimmed, start: start, end: start + min(max(wordDuration / 1000, 0.06), maxWordDuration), glued: glued))
             }
 
             let cleaned = fullText.trimmingCharacters(in: .whitespaces)
-            guard !cleaned.isEmpty, !isCredits(cleaned) else { continue }
-
+            guard !cleaned.isEmpty else { continue }
+            if LyricCredits.isCredit(cleaned, inCredits: inCredits) { inCredits = true; continue }
+            // Zero-length rows ("[0,0](0,0,0) 作词 : …") are headers, not lyrics.
+            // A zero-length row that does carry sung words ends with them.
+            let start = startMs / 1000
+            let end = durationMs > 0 ? (startMs + durationMs) / 1000 : vocalEnd
+            guard end > start else { continue }
+            // Glued Latin syllables ("beau" "ti" "ful ") join into one word;
+            // Han characters stay separate karaoke tokens.
+            let words = LyricScript.hasLetters(cleaned) ? LyricScript.words(from: attachingPunctuation(pieces, lineEnd: end)) : []
+            if !words.isEmpty { inCredits = false }
             lines.append(LyricsFetcher.Line(
-                start: startMs / 1000,
-                end: (startMs + durationMs) / 1000,
-                text: cleaned,
+                start: start,
+                end: end,
+                text: words.isEmpty ? "" : cleaned,
                 words: words,
                 isInstrumental: words.isEmpty, wordTimed: !words.isEmpty
             ))
@@ -195,15 +221,80 @@ enum NetEaseLyricsProvider {
         return lines
     }
 
-    /// NetEase prefixes most tracks with production credits in Chinese; they
-    /// are timed like lyrics but are not lyrics.
-    private static let creditMarkers = [
-        "制作人", "作词", "作曲", "编曲", "混音", "录音", "母带",
-        "出品", "发行", "监制", "吉他", "贝斯", "鼓", "键盘", "和声", "制作",
-    ]
+    /// Bare punctuation is its own piece in yrc. A mark touching a word
+    /// belongs to it: before the word when it opens one ("(" "yeah" ")",
+    /// "\"" "Hello" "\""), otherwise after the word it follows ("day" "!").
+    /// A mark with spaces on both sides ("Je t'aime !", "Oh - yeah") stays a
+    /// token of its own, so every word reads exactly as it does in the line.
+    /// A mark's own timing means little, so a word keeps its own.
+    private static func attachingPunctuation(_ pieces: [LyricScript.TimedToken], lineEnd: Double) -> [LyricScript.TimedToken] {
+        func opens(_ text: String) -> Bool {
+            text.unicodeScalars.allSatisfy { [.openPunctuation, .initialPunctuation].contains($0.properties.generalCategory) }
+        }
+        var tokens: [LyricScript.TimedToken] = []
+        var index = 0
+        while index < pieces.count {
+            // A run of pieces with no whitespace between them: one source word.
+            var next = index + 1
+            while next < pieces.count, pieces[next].glued { next += 1 }
+            let run = Array(pieces[index..<next])
+            index = next
+            guard run.contains(where: { LyricScript.hasLetters($0.text) }) else {
+                let start = run[0].start
+                tokens.append(.init(text: run.map(\.text).joined(), start: start,
+                                    end: lineEnd > start ? min(run[run.count - 1].end, lineEnd) : run[run.count - 1].end, glued: false))
+                continue
+            }
+            var opening = "", hasWord = false
+            for (offset, piece) in run.enumerated() {
+                if LyricScript.hasLetters(piece.text) {
+                    tokens.append(.init(text: opening + piece.text, start: piece.start, end: piece.end, glued: hasWord))
+                    opening = ""; hasWord = true
+                } else if hasWord, !(opens(piece.text) && run[(offset + 1)...].contains(where: { LyricScript.hasLetters($0.text) })) {
+                    tokens[tokens.count - 1].text += opening + piece.text
+                    opening = ""
+                } else {
+                    opening += piece.text
+                }
+            }
+            if !opening.isEmpty { tokens[tokens.count - 1].text += opening }
+        }
+        return tokens
+    }
 
-    private static func isCredits(_ text: String) -> Bool {
-        creditMarkers.contains { text.contains($0) }
+    /// Attaches NetEase's romanised lines (`romalrc`, timed like the LRC) to
+    /// the lines they read. A yrc line can start a little after its LRC stamp,
+    /// so a reading goes to the nearest line within 0.6 s, and only when that
+    /// line has no reading nearer to it.
+    static func attachingRomanization(_ romalrc: String?, to lines: [LyricsFetcher.Line], duration: Double) -> [LyricsFetcher.Line] {
+        guard let romalrc, !romalrc.isEmpty else { return lines }
+        let readings = LyricsFetcher.parseLRC(romalrc, trackDuration: duration).filter { !$0.isInstrumental }
+        let order = lines.indices.filter { !lines[$0].isInstrumental }.sorted { lines[$0].start < lines[$1].start }
+        guard !readings.isEmpty, !order.isEmpty else { return lines }
+        let lineStarts = order.map { lines[$0].start }, readingStarts = readings.map(\.start)
+        var result = lines
+        for (index, reading) in readings.enumerated() {
+            guard let nearestLine = nearest(reading.start, in: lineStarts),
+                  abs(lineStarts[nearestLine] - reading.start) <= 0.6,
+                  nearest(lineStarts[nearestLine], in: readingStarts) == index else { continue }
+            let target = order[nearestLine]
+            guard result[target].romanization == nil,
+                  reading.text.lowercased() != result[target].text.lowercased() else { continue }
+            result[target].romanization = reading.text
+        }
+        return result
+    }
+
+    /// Index of the value closest to `value` in ascending `sorted`.
+    private static func nearest(_ value: Double, in sorted: [Double]) -> Int? {
+        guard !sorted.isEmpty else { return nil }
+        var low = 0, high = sorted.count
+        while low < high {
+            let middle = (low + high) / 2
+            if sorted[middle] < value { low = middle + 1 } else { high = middle }
+        }
+        if low == sorted.count { return low - 1 }
+        return low > 0 && value - sorted[low - 1] <= sorted[low] - value ? low - 1 : low
     }
 
     // MARK: - Payloads
@@ -225,5 +316,6 @@ enum NetEaseLyricsProvider {
         struct Lyric: Decodable { var lyric: String? }
         var yrc: Lyric?
         var lrc: Lyric?
+        var romalrc: Lyric?
     }
 }

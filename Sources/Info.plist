@@ -17,17 +17,19 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.10</string>
+	<string>0.5.0</string>
 	<key>CFBundleVersion</key>
-	<string>17</string>
+	<string>18</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Lunalyr reads song information and playback position from Music to display lyrics. Enabled lyric services receive song metadata.</string>
+	<string>Lunalyr reads the playing song and its position from Music or Spotify to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>

@@ -50,7 +50,7 @@ Run [**Publish preview release**](https://github.com/WaterBotol/Lunalyr/actions/
 2. The workflow runs the tests, builds the app with the public key, packages it with `ditto` to keep the framework symlinks intact, signs the archive with Sparkle's tools, and creates a draft release `v<version>` with the ZIP and `appcast.xml`. An existing release or tag is never overwritten.
 3. The draft's notes are the whole of `CHANGELOG.md`. Trim them to the new version's section.
 4. Test the new app, and an upgrade from an older updater-enabled build if you can.
-5. Publish the draft as the latest release. Updater-enabled copies can then install it with **Check for updates…** in the menu-bar panel or under **Performance → App**. Copies built without a configured updater need one manual installation.
+5. Publish the draft as the latest release. Updater-enabled copies can then install it with **Check for updates…** in the menu-bar panel or under **Settings → General**. Copies built without a configured updater need one manual installation.
 
 Automatic update checks, unattended installation and Sparkle's system-profile reporting are all off. Users always start an update themselves.
 

@@ -1,7 +1,20 @@
 import SwiftUI
 
+private struct LyricReduceMotionOverride: EnvironmentKey {
+    static let defaultValue: Bool? = nil
+}
+
+extension EnvironmentValues {
+    /// Offscreen rendering supplies the system preference explicitly.
+    var lyricReduceMotion: Bool {
+        get { self[LyricReduceMotionOverride.self] ?? accessibilityReduceMotion }
+        set { self[LyricReduceMotionOverride.self] = newValue }
+    }
+}
+
 enum WordArrival: String, CaseIterable, Identifiable {
-    case automatic, fade, lift, pop, orbit, glide, unfold
+    case automatic, fade, lift, pop, orbit, glide, unfold, cutoutFold, cutoutSlide, cutoutHighlight, satinRibbon, splitInk, mix
+    static var mixChoices: [Self] { allCases.filter { $0 != .automatic && $0 != .mix } }
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -12,8 +25,37 @@ enum WordArrival: String, CaseIterable, Identifiable {
         case .orbit: return "Orbit"
         case .glide: return "Glide"
         case .unfold: return "Unfold"
+        case .cutoutFold: return "Cutout · Fold"
+        case .cutoutSlide: return "Cutout · Slide"
+        case .cutoutHighlight: return "Cutout · Highlight"
+        case .satinRibbon: return "Satin Ribbon"
+        case .splitInk: return "Split Ink"
+        case .mix: return "Custom mix"
         }
     }
+    var isCutout: Bool { self == .cutoutFold || self == .cutoutSlide }
+    /// "Cutout · Highlight": words enter as the layout has them enter, and
+    /// each gets a cutout tile from its onset until the line ends
+    /// (`LyricHighlightTiming`). This works whether the words are already
+    /// visible or enter as they are sung.
+    var highlightsSungWords: Bool { self == .cutoutHighlight }
+    var isSwipe: Bool { self == .satinRibbon || self == .splitInk }
+    var requiresReveal: Bool { isCutout || isSwipe }
+    var travelRotation: Double { self == .orbit || self == .cutoutSlide ? 12 : 0 }
+
+    func travelBounds(pointSize: CGFloat, active: Bool = true) -> CGSize {
+        guard active else { return .zero }
+        let horizontal: CGFloat = self == .orbit ? 0.32 : (self == .glide || self == .cutoutSlide ? 0.72 : 0)
+        let vertical: CGFloat = self == .lift ? 0.48 : (self == .glide || self == .orbit ? 0.20 : 0)
+        return CGSize(width: horizontal * pointSize * 2, height: vertical * pointSize * 2)
+    }
+
+    /// The entrance a word makes: "Cutout · Highlight" keeps the layout's
+    /// own (what Match the style picks); every other entrance is its own.
+    func motion(in composition: LyricComposition) -> WordArrival {
+        highlightsSungWords ? WordArrival.automatic.resolved(for: composition) : self
+    }
+
     func resolved(for composition: LyricComposition) -> WordArrival {
         guard self == .automatic else { return self }
         switch composition {
@@ -23,7 +65,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
         case .editorial: return .fade
         case .spoken: return .glide
         case .cascade: return .lift
-        case .cutout: return .unfold
+        case .cutout: return .cutoutFold
         }
     }
 }
@@ -74,6 +116,13 @@ enum LyricComposition: String, CaseIterable, Identifiable {
     var hasEditorialTypography: Bool { self == .editorial || self == .constellationEditorial }
     var arrivalOnly: Bool { self == .spoken || self == .cascade || self == .cutout }
 
+    /// A remembered "automatic" choice takes precedence over a global layout.
+    @MainActor
+    static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int) -> Self {
+        if let remembered { return Self(rawValue: remembered) ?? matching(mood, seed: seed) }
+        return settings.resolvedComposition(for: mood, seed: seed)
+    }
+
     /// Which composition suits a track, when the choice is left automatic.
     ///
     /// Deliberately coarse: the composition changes the *reading* of a line,
@@ -100,6 +149,7 @@ enum LyricComposition: String, CaseIterable, Identifiable {
 struct LyricLineView: View {
     let words: [LyricsFetcher.Word]
     let time: TimeInterval
+    let stageSize: CGSize
     var baseSize: CGFloat = 44
     var mood: TrackMood = .neutral
     var composition: LyricComposition = .scattered
@@ -108,35 +158,83 @@ struct LyricLineView: View {
     var presence: Double = 1
     var accent: Color = Color(hue: 0.16, saturation: 0.55, brightness: 0.64)
     var energy: Double = 0
+    var readings: [TimedWordKey: String] = [:]
+    var wordTimed = true
+    var lineEnd: Double?
+    var phraseSweep = 0.0
+    /// When the line begins to leave; its words then exit one by one.
+    var exitStart: Double = .infinity
+    /// When the line's first word could first be previewed.
+    var previewSince: Double = -.infinity
+    /// Per word: continues the previous word's run (see `LyricRuns`).
+    var glue: [Bool] = []
+    /// Line-timed preview: draw only the first word, at this opacity.
+    var firstRunOnly: Double?
+    /// Rolling stages: room kept at the foot, the onset after the window,
+    /// and each word's place in the song (its colour).
+    var bottomInset: CGFloat = 0
+    var rollingHeightInTypeSizes: CGFloat = 7.2
+    var following: Double?
+    var ordinals: [TimedWordKey: Int] = [:]
+    var rollingLineEnds: [TimedWordKey: Double] = [:]
+    /// Rolling stages: the tokens each glued run is made of.
+    var parts: [TimedWordKey: [LyricsFetcher.Word]] = [:]
+    @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
+
+    /// The words Echo repeats, and how they run together.
+    struct EchoPhrase: Equatable {
+        let words: [LyricsFetcher.Word]
+        let glue: [Bool]
+    }
 
     var body: some View {
         ZStack {
             // Echo lays repeats of the whole phrase behind the live line, so
             // it has to sit under the words rather than beside them.
             if composition == .echo {
+                let reveals = wordTimed && Settings.shared.revealsWords(in: composition)
+                // Set as the line reads: glued characters and syllables
+                // together, as the live line shows them.
+                let phrase = echoText.value(for: EchoPhrase(words: words, glue: glue)) {
+                    (LyricRuns.text(words, glue: glue), LyricScript.lineIsRightToLeft(words.map(\.text)))
+                }
                 EchoBackdrop(
-                    text: words.filter { !Settings.shared.revealsWords(in: composition) || time >= $0.start }
-                        .map(\.text).joined(separator: " "),
+                    text: phrase.text,
+                    revealed: reveals ? EchoBackdrop.revealed(words, at: time) : 1,
+                    rightToLeft: phrase.rightToLeft,
                     font: { Settings.shared.lyricFont(size: $0, hero: false, mood: mood) },
                     baseSize: baseSize,
+                    stageSize: stageSize,
                     seed: seed,
-                    presence: presence
+                    presence: presence,
+                    time: time
                 )
                 .frame(width: 0, height: 0)
             }
             if composition.arrivalOnly {
                 SpokenTypographyView(words: words, time: time, baseSize: baseSize, mood: mood,
-                                     composition: composition, seed: seed, accent: accent, energy: energy)
+                                     composition: composition, seed: seed, accent: accent, energy: energy, readings: readings,
+                                     stageHeight: stageSize.height, stageHeightInTypeSizes: rollingHeightInTypeSizes, bottomInset: bottomInset, following: following,
+                                     ordinals: ordinals, parts: parts, lineEnd: lineEnd, lineEnds: rollingLineEnds)
             } else {
               ScatteredLyricText(
                 words: words,
+                stageWidth: stageSize.width,
                 time: time,
                 baseSize: baseSize,
                 style: .forLine(seed),
                 mood: mood,
                 composition: composition,
                 seed: seed,
-                energy: energy
+                energy: energy,
+                readings: readings,
+                wordTimed: wordTimed,
+                lineEnd: lineEnd,
+                phraseSweep: phraseSweep,
+                exitStart: exitStart,
+                previewSince: previewSince,
+                glue: glue,
+                firstRunOnly: firstRunOnly
               )
             }
         }
@@ -169,6 +267,10 @@ struct ConstellationLines: View {
     let seed: Int
     var visibility: [Double] = []
     var emphasis: [Double] = []
+    var colour: Color = .white
+    /// Each slot's clearance around its ink: links end at the letters, not
+    /// at the slot's edge.
+    var insets: [CGSize] = []
 
     var body: some View {
         let opacity = Settings.shared.constellationLinkOpacity
@@ -179,7 +281,8 @@ struct ConstellationLines: View {
                 let keys = (0..<count).filter { anchors[$0] != nil }
                 let boxes = keys.compactMap { index -> VCBox? in
                     guard let anchor = anchors[index] else { return nil }
-                    let rect = proxy[anchor]
+                    let inset = insets.indices.contains(index) ? insets[index] : .zero
+                    let rect = proxy[anchor].insetBy(dx: inset.width, dy: inset.height)
                     guard rect.width.isFinite, rect.height.isFinite,
                           rect.width > 0, rect.height > 0 else { return nil }
                     return VCBox(x: Double(rect.minX), y: Double(rect.minY),
@@ -200,11 +303,11 @@ struct ConstellationLines: View {
                     var path = Path()
                     path.move(to: CGPoint(x: CGFloat(edge.ax), y: CGFloat(edge.ay)))
                     path.addLine(to: CGPoint(x: CGFloat(edge.bx), y: CGFloat(edge.by)))
-                    context.stroke(path, with: .color(.white.opacity(alpha)),
+                    context.stroke(path, with: .color(colour.opacity(alpha)),
                                    style: StrokeStyle(lineWidth: 0.75, lineCap: .round))
                     for point in [CGPoint(x: CGFloat(edge.ax), y: CGFloat(edge.ay)), CGPoint(x: CGFloat(edge.bx), y: CGFloat(edge.by))] {
                         let dot = Path(ellipseIn: CGRect(x: point.x - 1.0, y: point.y - 1.0, width: 2, height: 2))
-                        context.fill(dot, with: .color(.white.opacity(alpha)))
+                        context.fill(dot, with: .color(colour.opacity(alpha)))
                     }
                 }
             }
@@ -223,12 +326,23 @@ struct ConstellationLines: View {
 /// rather than as a drop shadow: on the real display the repeats are mirrored
 /// through the horizontal, so the line appears reflected in the glass.
 struct EchoBackdrop: View {
+    /// The whole line. Ghosts are always laid out from all of it and revealed
+    /// through a mask: setting only the sung words re-centred every ghost at
+    /// each onset, so the whole backdrop jumped sideways word by word.
     let text: String
+    /// How much of the line has been sung, 0...1, weighted by characters.
+    var revealed: Double = 1
+    var rightToLeft = false
     let font: (CGFloat) -> Font
     let baseSize: CGFloat
+    let stageSize: CGSize
     let seed: Int
     /// Rises as the line is sung, so the echoes arrive with the vocal.
     let presence: Double
+    /// Drives a slow, seeded drift so the reflections never sit frozen.
+    var time: Double = 0
+    @Environment(\.lyricReduceMotion) private var reduceMotion
+    @Environment(\.lyricInk) private var ink
 
     private struct Ghost {
         var scale: CGFloat
@@ -239,39 +353,61 @@ struct EchoBackdrop: View {
         var flipped: Bool
     }
 
+    /// The share of the line revealed so far: each word counts by its
+    /// length and arrives on its own reveal curve, so this never steps.
+    static func revealed(_ words: [LyricsFetcher.Word], at time: Double) -> Double {
+        var total = 0.0, shown = 0.0
+        for word in words {
+            let weight = Double(max(1, word.text.count))
+            total += weight
+            shown += weight * vc_settle(time - word.start, min(0.46, max(0.16, (word.end - word.start) * 0.65)))
+        }
+        return total > 0 ? shown / total : 1
+    }
+
     /// Fixed rather than random: a line must set the same way every frame,
     /// and `TimelineView` rebuilds this view continuously.
-    private var ghosts: [Ghost] {
+    private static let variants: [Ghost] = [
         // Every repeat sits well under the live line and well away from the
         // centre. The first pass had them at full size and a fifth opacity,
         // which made them read as five competing lines rather than as an
         // echo of one -- the live lyric was the hardest thing on screen to
         // find. Nothing here is legible enough to be mistaken for the line
         // being sung.
-        let variants: [Ghost] = [
-            .init(scale: 0.85, dx: -0.30, dy: -0.62, angle: -2.0, opacity: 0.055, flipped: true),
-            .init(scale: 0.42, dx: 0.46, dy: -0.44, angle: 1.5, opacity: 0.085, flipped: false),
-            .init(scale: 0.30, dx: -0.50, dy: 0.48, angle: -1.0, opacity: 0.10, flipped: false),
-            .init(scale: 0.60, dx: 0.34, dy: 0.66, angle: 2.5, opacity: 0.065, flipped: true),
-            .init(scale: 0.22, dx: 0.10, dy: -0.78, angle: 0.0, opacity: 0.12, flipped: false),
-        ]
-        // The seed rotates which variant leads, so two lines in a row do not
-        // arrange themselves identically.
-        let offset = abs(seed) % variants.count
-        return Array(variants[offset...] + variants[..<offset])
-    }
+        .init(scale: 0.85, dx: -0.30, dy: -0.62, angle: -2.0, opacity: 0.055, flipped: true),
+        .init(scale: 0.42, dx: 0.46, dy: -0.44, angle: 1.5, opacity: 0.085, flipped: false),
+        .init(scale: 0.30, dx: -0.50, dy: 0.48, angle: -1.0, opacity: 0.10, flipped: false),
+        .init(scale: 0.60, dx: 0.34, dy: 0.66, angle: 2.5, opacity: 0.065, flipped: true),
+        .init(scale: 0.22, dx: 0.10, dy: -0.78, angle: 0.0, opacity: 0.12, flipped: false),
+    ]
 
     var body: some View {
+        // The seed rotates which variant leads, so two lines in a row do not
+        // arrange themselves identically.
+        let offset = abs(seed) % Self.variants.count
+        let drift = reduceMotion ? 0.0 : 1.0
+        let tint = ink.sample(slot: 0.5, seed: UInt64(abs(seed))).rest
         ZStack {
-            ForEach(Array(ghosts.enumerated()), id: \.offset) { _, ghost in
+            ForEach(0..<Self.variants.count, id: \.self) { slot in
+                let ghost = Self.variants[(slot + offset) % Self.variants.count]
+                let wander = UInt64(abs(seed) &* 31 &+ slot)
+                let x = baseSize * ghost.dx * 3.2 + CGFloat(drift * vc_noise2(wander, time * 0.09)) * baseSize * 0.10
+                let y = baseSize * ghost.dy * 1.5 + CGFloat(drift * vc_noise2(wander ^ 0x5EED, time * 0.07)) * baseSize * 0.06
+                let stage = CGSize(width: stageSize.width * 2 / 3, height: stageSize.height * 2 / 3)
+                let centre = CGPoint(x: stage.width / 2 + baseSize * ghost.dx * 3.2, y: stage.height / 2 + baseSize * ghost.dy * 1.5)
                 Text(text)
                     .font(font(baseSize * ghost.scale))
-                    .foregroundStyle(.white.opacity(ghost.opacity * presence * Settings.shared.echoStrength))
+                    .foregroundStyle(tint.opacity(ghost.opacity * presence * Settings.shared.echoStrength))
                     .lineLimit(1)
                     .fixedSize()
-                    .rotationEffect(.degrees(ghost.angle))
+                    .mask(LyricSweepMask(progress: revealed, rightToLeft: rightToLeft, feather: 0.2))
+                    .visualEffect { ink, geometry in
+                        ink.scaleEffect(WordStageFit.scale(ink: geometry.size, stage: stage,
+                            centre: centre, scale: 1.04, angle: ghost.angle, margin: 4))
+                    }
+                    .rotationEffect(.degrees(ghost.angle + drift * vc_noise(wander ^ 0xA9, time * 0.11) * 0.9))
                     .scaleEffect(x: 1, y: ghost.flipped ? -1 : 1)
-                    .offset(x: baseSize * ghost.dx * 3.2, y: baseSize * ghost.dy * 1.5)
+                    .offset(x: x, y: y)
             }
         }
         .allowsHitTesting(false)

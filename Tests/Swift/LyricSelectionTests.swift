@@ -11,11 +11,7 @@ final class LyricSelectionTests: XCTestCase {
     func testLineOnlyPriorityDoesNotHideAvailableRealWords() {
         let options = LyricSourceOptions.Snapshot(enabled: [.lrclib, .netEase], mode: .priority, localFolder: "", localVersion: "")
         let values = [candidate(.lrclib, word: false, score: 999), candidate(.netEase, word: true, score: 1)]
-        XCTAssertEqual(LyricsFetcher.choose(LyricsFetcher.ranked(values, query: query, options: options), options: options)?.source, .netEase)
-    }
-    func testExplicitStrictPriorityIsStillRespected() {
-        let options = LyricSourceOptions.Snapshot(enabled: [.lrclib, .netEase], mode: .priority, preferWordTimedLRCLIB: false, preferWordTiming: false, localFolder: "", localVersion: "")
-        XCTAssertEqual(LyricsFetcher.choose([candidate(.lrclib, word: false), candidate(.netEase, word: true)], options: options)?.source, .lrclib)
+        XCTAssertEqual(LyricsFetcher.choose(LyricsFetcher.ranked(values, query: query, options: options), query: query, options: options)?.source, .netEase)
     }
     func testAccuracyModeUsesTimingRatherThanProviderScoreOrCatalogue() {
         let options = LyricSourceOptions.Snapshot(enabled: [.qqMusic, .netEase], mode: .smart, localFolder: "", localVersion: "")

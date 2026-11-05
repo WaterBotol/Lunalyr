@@ -3,6 +3,8 @@ import Foundation
 import ScreenCaptureKit
 
 /// Compatibility path for macOS 14.0/14.1 or devices that do not expose taps.
+/// It cannot pause cheaply, so idle periods stop the stream (and macOS's
+/// recording indicator) and the controller starts a new one on demand.
 final class ScreenAudioCapture: NSObject, AudioCaptureSession, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
     private let processor: AudioPCMProcessor
@@ -24,9 +26,10 @@ final class ScreenAudioCapture: NSObject, AudioCaptureSession, SCStreamOutput, S
         config.queueDepth = 3
         let capture = SCStream(filter: filter, configuration: config, delegate: self)
         // Consume/discard the tiny 1 Hz display output as well. Some macOS
-        // versions do not reliably start an audio-only display stream.
-        try capture.addStreamOutput(self, type: .screen, sampleHandlerQueue: processor.queue)
-        try capture.addStreamOutput(self, type: .audio, sampleHandlerQueue: processor.queue)
+        // versions do not reliably start an audio-only display stream. One
+        // serial queue keeps this the processor's single ring producer.
+        try capture.addStreamOutput(self, type: .screen, sampleHandlerQueue: processor.captureQueue)
+        try capture.addStreamOutput(self, type: .audio, sampleHandlerQueue: processor.captureQueue)
         stream = capture
         try await capture.startCapture()
     }

@@ -43,9 +43,13 @@ double vc_word_reveal(double time,double start,double end) {
     double t=fmin(1,fmax(0,(time-start)/duration));
     return t*t*(3-2*t);
 }
-double vc_word_visibility(double time,double start,double end,int preview,int next) {
+double vc_word_visibility(double time,double start,double end,int preview,int next,double lead) {
     if(!isfinite(time)||!isfinite(start)||!isfinite(end))return 0;
-    if(time<start)return preview&&next ? .25 : 0;
+    if(time<start) {
+        if(!preview||!next||!isfinite(lead)||lead<=0)return 0;
+        double t=fmin(1,fmax(0,1-(start-time)/lead));
+        return .25*t*t*(3-2*t);
+    }
     double progress=vc_word_reveal(time,start,end);
     return preview ? .25+.75*progress : progress;
 }

@@ -6,14 +6,21 @@ import Yams
 final class LyricsFetcher {
     static let shared = LyricsFetcher()
     struct Word: Codable, Equatable { var text: String; var start: TimeInterval; var end: TimeInterval }
-    struct Line: Codable {
+    /// Equatable over every field, so `sameResult` sees each one, including
+    /// fields added later.
+    struct Line: Codable, Equatable {
         var start: TimeInterval
         var end: TimeInterval
+        /// True when the source timed only the line's start (LRC), so `end` is
+        /// just where the next line or the track begins, not where singing
+        /// stops. Nil when the source supplied the end, and in older caches.
+        var endFromNextLine: Bool? = nil
         var text: String
         var words: [Word]
         var isInstrumental: Bool
         var wordTimed: Bool = false
         var romanization: String? = nil
+        var translation: String? = nil
     }
     struct Provenance: Equatable, Codable {
         var precision: String
@@ -24,52 +31,474 @@ final class LyricsFetcher {
         case synced([Line], Provenance)
         case plain([String], Provenance)
     }
-    private struct Outcome {
+    private struct Outcome: Sendable {
         var id: LyricSourceID
         var candidate: LyricCandidate?
         var state: String
+        var offline = false
+        /// The source replied, with or without lyrics, rather than failing.
+        var answered = false
+    }
+    private enum Event: Sendable {
+        case outcome(Outcome)
+        case grace
+        case settle(Int)
+        /// Music's own cache took too long; the services are asked anyway.
+        case onlineDue
+    }
+    /// What `collect` gathered, and which sources it asked or stopped.
+    private struct Collected {
+        var report: LyricLookupReport
+        /// Sources that replied, with or without lyrics.
+        var answered: Set<LyricSourceID>
+        /// Sources stopped, or never started, because their answer could not
+        /// have changed what shows or what is cached.
+        var stopped: Set<LyricSourceID>
+        var asked: Set<LyricSourceID>
+        /// The match on screen when the lookup ended.
+        var shown: LyricCandidate?
+    }
+    typealias SourceFetch = @Sendable (LyricSourceID, LyricQuery, String) async throws -> LyricCandidate?
+    /// How long a lookup holds back before showing what it has, and how long
+    /// each source may take. Slow sources keep answering in the background
+    /// while their answer could still matter.
+    struct Timing: Sendable {
+        /// The best match found by then is shown even if sources are pending.
+        var grace: Double = 1.5
+        /// A pending upgrade waits this long for something better still.
+        var upgradeSettle: Double = 0.75
+        /// Music can finish loading its own lyrics just after a track change.
+        var appleRetry: Double = 4
+        var lrclibLimit: Double = 20
+        var sourceLimit: Double = 8
+        /// An automatic lookup reads Music's own cache before asking any
+        /// service, for at most this long, so a hit there needs no network.
+        var musicFirst: Double = 0.7
+        static let standard = Timing()
+    }
+    private let cacheFolder: URL
+    private let timing: Timing
+    private let fetchSource: SourceFetch
+    private let isOnline: @Sendable () -> Bool
+    private let misses: LyricMissCache
+    init(cacheFolder: URL = SavedLyrics.defaultFolder, timing: Timing = .standard, misses: LyricMissCache = LyricMissCache(),
+         isOnline: @escaping @Sendable () -> Bool = { LyricConnectivity.shared.isOnline }, fetch: SourceFetch? = nil) {
+        self.cacheFolder = cacheFolder
+        self.timing = timing
+        self.misses = misses
+        self.isOnline = isOnline
+        fetchSource = fetch ?? { id, query, folder in try await LyricsFetcher.fetch(id, query: query, localFolder: folder) }
     }
     func lyrics(title: String, artist: String, album: String? = nil, duration: Double) async -> Result? {
         await lookup(LyricQuery(title:title,artist:artist,album:album,duration:duration)).result
     }
-    func lookup(_ query: LyricQuery, force: Bool = false) async -> LyricLookupReport {
-        let options = await MainActor.run { LyricSourceOptions.shared.snapshot }
+    /// Queries every enabled source at once and reports progress as they
+    /// answer. A match is shown as soon as nothing pending could beat it, or
+    /// when the grace period ends; after that only a match that ranks higher
+    /// (`outranks`) replaces it, never a lower one. Saved explicit choices
+    /// always win. An automatic lookup reads Music's cache first and stops
+    /// asking sources whose answer could no longer change anything.
+    func lookup(_ query: LyricQuery, force: Bool = false, options given: LyricSourceOptions.Snapshot? = nil,
+                onUpdate: (@Sendable (LyricLookupReport) async -> Void)? = nil) async -> LyricLookupReport {
+        let options: LyricSourceOptions.Snapshot
+        if let given { options = given } else { options = await MainActor.run { LyricSourceOptions.shared.snapshot } }
         let key = query.recordingKey + "|" + options.fingerprint
-        let pinned = SavedLyrics.read(query.recordingKey,pin:true)
-        if !force, let pinned { return LyricLookupReport(result:pinned,pinned:true,cached:true) }
-        if !force, let cached = SavedLyrics.read(key,pin:false) { return LyricLookupReport(result:cached,cached:true) }
-        var candidates: [LyricCandidate] = []
-        var states: [LyricSourceID:String] = [:]
-        await withTaskGroup(of: Outcome.self) { group in
-            for id in options.enabled { group.addTask { await Self.bounded(id,query:query,localFolder:options.localFolder) } }
-            for await outcome in group {
-                states[outcome.id] = outcome.state
-                if let candidate = outcome.candidate { candidates.append(candidate) }
+        let pinned = SavedLyrics.read(query.recordingKey, pin: true, in: cacheFolder)
+        if !force, let pinned { return LyricLookupReport(result: pinned, pinned: true, cached: true, revision: 1) }
+        // Station names make junk matches, and a stream's clock is not the song's.
+        if !force, query.duration <= 0 { return LyricLookupReport(result: nil, skippedStream: true) }
+        let local = options.enabled.filter(\.isLocal)
+        var online = options.enabled.filter { !$0.isLocal }
+        var saved: LyricCandidate?
+        var offered: [LyricCandidate] = []
+        var states: [LyricSourceID: String] = [:]
+        if !force, !online.isEmpty {
+            if let candidate = SavedLyrics.readCandidate(key, in: cacheFolder), online.contains(candidate.source) {
+                saved = candidate
+                for id in online { states[id] = id == candidate.source ? "Saved match" : "Not checked: a saved match was used" }
+                online = []
+            } else {
+                let recent = misses.answered(key)
+                for id in online where recent.sources.contains(id) { states[id] = "No match a few minutes ago" }
+                online.removeAll { recent.sources.contains($0) }
+                // A close match they offered is listed again, with its reason.
+                offered = recent.rejected
             }
         }
-        guard !Task.isCancelled else { return LyricLookupReport(result:nil) }
-        candidates = Self.ranked(candidates, query: query, options: options)
-        let chosen = Self.choose(candidates, options: options)
-        if let chosen { SavedLyrics.save(chosen.result,key:key,pin:false) }
-        return LyricLookupReport(result:pinned ?? chosen?.result,candidates:candidates,states:states,pinned:pinned != nil)
-    }
-    /// Confidence is evaluated per recording. Source catalogue size plays no role.
-    static func ranked(_ candidates: [LyricCandidate], query: LyricQuery, options: LyricSourceOptions.Snapshot) -> [LyricCandidate] {
-        candidates.filter { candidate in
-            guard options.enabled.contains(candidate.source),
-                  LyricQuery.similarity(query.title, candidate.title) >= 0.75,
-                  LyricQuery.similarity(query.artist, candidate.artist) >= 0.65 else { return false }
-            if let duration = candidate.duration, duration > 0, query.duration > 0 {
-                return abs(duration - query.duration) <= max(3, query.duration * 0.02)
+        let localPrint = local.contains(.lyrimuse) ? LocalLyricBridge.fingerprint(query, folder: options.localFolder) : nil
+        let collected = await collect(query, options: options, local: local, online: online, seeded: (saved.map { [$0] } ?? []) + offered,
+                                      states: states, pinned: pinned, automatic: !force, localPrint: localPrint, onUpdate: onUpdate)
+        var report = collected.report
+        let queried = !collected.asked.isDisjoint(with: online)
+        report.cached = saved != nil
+        report.offline = queried && report.offline
+        guard !Task.isCancelled, queried else { return report }
+        // Only the online choice is cached; local sources are read afresh
+        // every time, so editing or adding a file needs no network lookup.
+        if let best = Self.choose(report.candidates.filter { !$0.source.isLocal }, query: query, options: options) {
+            // A choice that a source stopped early might have beaten is not kept.
+            if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options) {
+                SavedLyrics.save(best, key: key, in: cacheFolder)
+                misses.remove(key)
             }
-            return true
-        }.sorted { a, b in
-            let tierA = timingTier(a.result), tierB = timingTier(b.result)
-            if tierA != tierB { return tierA > tierB }
-            let confidenceA = LyricQuery.similarity(query.title, a.title) + LyricQuery.similarity(query.artist, a.artist)
-            let confidenceB = LyricQuery.similarity(query.title, b.title) + LyricQuery.similarity(query.artist, b.artist)
-            if confidenceA != confidenceB { return confidenceA > confidenceB }
-            return (options.enabled.firstIndex(of: a.source) ?? 999) < (options.enabled.firstIndex(of: b.source) ?? 999)
+        } else if !force, !report.offline {
+            // Only sources that replied are remembered, each with the close
+            // match it offered, if any; ones that failed are asked again.
+            let replied = collected.answered.intersection(online)
+            misses.insert(key, sources: replied, rejected: report.rejected.map(\.candidate).filter { replied.contains($0.source) })
+        }
+        return report
+    }
+    /// Re-reads only the local lyric files after they change, keeping the
+    /// online candidates already found. Nil when nothing relevant changed.
+    func refreshLocal(_ query: LyricQuery, previous: LyricLookupReport,
+                      options given: LyricSourceOptions.Snapshot? = nil) async -> LyricLookupReport? {
+        let options: LyricSourceOptions.Snapshot
+        if let given { options = given } else { options = await MainActor.run { LyricSourceOptions.shared.snapshot } }
+        guard query.duration > 0, !previous.pinned, options.enabled.contains(.lyrimuse) else { return nil }
+        let print = LocalLyricBridge.fingerprint(query, folder: options.localFolder)
+        guard print != previous.localPrint else { return nil }
+        let outcome = await Self.bounded(.lyrimuse, query: query, folder: options.localFolder, timing: timing, fetch: fetchSource)
+        guard !Task.isCancelled else { return nil }
+        let known = previous.candidates + previous.rejected.map(\.candidate)
+        let before = known.first { $0.source == .lyrimuse }
+        var report = previous
+        report.localPrint = print
+        guard !Self.sameResult(before?.result, outcome.candidate?.result) else { return report }
+        var found = known.filter { $0.source != .lyrimuse }
+        if let candidate = outcome.candidate { found.append(candidate) }
+        let screened = Self.screen(found, query: query, options: options)
+        let best = Self.choose(screened.accepted, query: query, options: options)
+        // Only the local file changed: switch when it wins now or was what showed.
+        let localWasShown = before.map { Self.sameResult($0.result, previous.result) } ?? false
+        let shown = best?.source == .lyrimuse || localWasShown ? best : known.first { Self.sameResult($0.result, previous.result) }
+        var states = previous.states
+        states[.lyrimuse] = outcome.state
+        report.candidates = screened.accepted
+        report.rejected = screened.rejected
+        report.states = Self.annotate(states, screened, shown: shown?.source)
+        if !Self.sameResult(shown?.result, previous.result) {
+            report.result = shown?.result
+            report.revision = previous.revision + 1
+        }
+        return report
+    }
+    private func collect(_ query: LyricQuery, options: LyricSourceOptions.Snapshot, local: [LyricSourceID], online: [LyricSourceID],
+                         seeded: [LyricCandidate], states initial: [LyricSourceID: String], pinned: Result?, automatic: Bool,
+                         localPrint: String?, onUpdate: (@Sendable (LyricLookupReport) async -> Void)?) async -> Collected {
+        let sources = local + online
+        var found: [LyricSourceID: LyricCandidate] = [:]
+        for candidate in seeded { found[candidate.source] = candidate }
+        var states = initial
+        for id in sources { states[id] = "Searching…" }
+        var pending = Set(sources), answered: Set<LyricSourceID> = [], stopped: Set<LyricSourceID> = []
+        var offline = false
+        var publication = Publication(options: options, query: query, locked: pinned != nil)
+        let fetch = fetchSource, timing = timing, folder = options.localFolder
+        func report(_ screened: Screened, complete: Bool) -> LyricLookupReport {
+            LyricLookupReport(result: publication.shown?.result ?? pinned, candidates: screened.accepted,
+                              states: Self.annotate(states, screened, shown: publication.shown?.source), pinned: pinned != nil,
+                              rejected: screened.rejected, revision: publication.revision, isComplete: complete, offline: offline,
+                              localPrint: localPrint)
+        }
+        // Each source runs as its own task, so one can be stopped on its own.
+        var running: [LyricSourceID: Task<Outcome, Never>] = [:]
+        func stop(_ ids: Set<LyricSourceID>, because reason: String) {
+            for id in ids {
+                running[id]?.cancel()
+                stopped.insert(id)
+                pending.remove(id)
+                states[id] = reason
+            }
+        }
+        let retryApple = automatic && local.contains(.appleMusicCache)
+        // An automatic lookup reads Music's own cache before asking any
+        // service: a hit there needs no network, as before lookups were
+        // progressive. The services are asked once Music has answered.
+        let musicFirst = retryApple && !online.isEmpty
+        await withTaskGroup(of: Event.self) { group in
+            func start(_ ids: [LyricSourceID]) {
+                // A cancelled lookup asks nothing more; pending sources it never
+                // started simply end with the group.
+                for id in ids where running[id] == nil && !stopped.contains(id) && !Task.isCancelled {
+                    let task = Task { await Self.bounded(id, query: query, folder: folder, timing: timing, fetch: fetch) }
+                    running[id] = task
+                    group.addTask { await withTaskCancellationHandler { .outcome(await task.value) } onCancel: { task.cancel() } }
+                }
+            }
+            start(musicFirst ? local : sources)
+            var onlineStarted = !musicFirst, musicAnswered = false, onlineDue = false
+            if musicFirst {
+                group.addTask { try? await Task.sleep(nanoseconds: Self.nanoseconds(timing.musicFirst)); return .onlineDue }
+            }
+            if pinned == nil, !sources.isEmpty {
+                group.addTask { try? await Task.sleep(nanoseconds: Self.nanoseconds(timing.grace)); return .grace }
+            }
+            var graceOver = false, settleOver = false, settleArmed = false, settleToken = 0
+            // Music's second look is an upgrade opportunity; it never holds
+            // back the first result, so it is not counted as pending.
+            var appleRetried = false, appleRetrying = false
+            while !pending.isEmpty || appleRetrying, let event = await group.next() {
+                switch event {
+                case .outcome(let outcome) where stopped.contains(outcome.id):
+                    // Stopped: what it says can no longer change anything.
+                    continue
+                case .outcome(let outcome) where outcome.id == .appleMusicCache && outcome.candidate == nil
+                        && retryApple && !appleRetried && !Task.isCancelled:
+                    musicAnswered = true
+                    appleRetried = true
+                    appleRetrying = true
+                    pending.remove(.appleMusicCache)
+                    states[.appleMusicCache] = "Checking Music again shortly…"
+                    group.addTask {
+                        try? await Task.sleep(nanoseconds: Self.nanoseconds(timing.appleRetry))
+                        guard !Task.isCancelled else { return .outcome(Outcome(id: .appleMusicCache, candidate: nil, state: "Cancelled")) }
+                        var retry = await Self.bounded(.appleMusicCache, query: query, folder: folder, timing: timing, fetch: fetch)
+                        if retry.candidate == nil, !Task.isCancelled {
+                            retry.state = "No matching lyrics cached. Open Lyrics in Music to load them."
+                        }
+                        return .outcome(retry)
+                    }
+                case .outcome(let outcome):
+                    if outcome.id == .appleMusicCache {
+                        musicAnswered = true
+                        if appleRetried { appleRetrying = false }
+                    }
+                    pending.remove(outcome.id)
+                    states[outcome.id] = outcome.state
+                    if let candidate = outcome.candidate { found[outcome.id] = candidate }
+                    if outcome.answered { answered.insert(outcome.id) }
+                    offline = offline || outcome.offline
+                case .grace:
+                    graceOver = true
+                case .settle(let token):
+                    settleOver = settleOver || token == settleToken
+                case .onlineDue:
+                    onlineDue = true
+                }
+                let screened = Self.screen(Array(found.values), query: query, options: options)
+                let best = Self.choose(screened.accepted, query: query, options: options)
+                let settled = Self.isSettled(best, pending: pending, query: query, options: options)
+                switch publication.step(best: best, settled: settled, graceOver: graceOver, settleOver: settleOver) {
+                case .publish:
+                    settleArmed = false; settleOver = false; settleToken += 1
+                case .holdForUpgrade where !settleArmed:
+                    settleArmed = true; settleToken += 1
+                    let token = settleToken
+                    group.addTask { try? await Task.sleep(nanoseconds: Self.nanoseconds(timing.upgradeSettle)); return .settle(token) }
+                default:
+                    break
+                }
+                // Stop early once a source's answer could no longer change what
+                // shows or what replays use: everything stops only once the best
+                // possible match is in hand. A search asks every source, so all
+                // the alternatives are listed.
+                if automatic, publication.shown != nil, let best {
+                    let onlineBest = Self.choose(screened.accepted.filter { !$0.source.isLocal }, query: query, options: options)
+                    let idle = pending.filter {
+                        !Self.matters($0, best: best, onlineBest: onlineBest, query: query, options: options)
+                    }
+                    if !idle.isEmpty {
+                        stop(idle, because: Self.notNeeded + (best.source == .appleMusicCache
+                             ? "Music’s own lyrics are showing" : "it couldn’t beat the match showing"))
+                    }
+                }
+                if !onlineStarted, musicAnswered || onlineDue {
+                    onlineStarted = true
+                    start(online)
+                }
+                if !pending.isEmpty || appleRetrying, !Task.isCancelled, let onUpdate { await onUpdate(report(screened, complete: false)) }
+            }
+            group.cancelAll()
+        }
+        let screened = Self.screen(Array(found.values), query: query, options: options)
+        // Every source has answered or been stopped, so whatever is best now is settled.
+        _ = publication.step(best: Self.choose(screened.accepted, query: query, options: options), settled: true,
+                             graceOver: true, settleOver: true)
+        offline = offline || !isOnline()
+        return Collected(report: report(screened, complete: true), answered: answered, stopped: stopped, asked: Set(running.keys),
+                         shown: publication.shown)
+    }
+    /// Starts the state of a source that an automatic lookup stopped, or
+    /// never asked, because its answer could not have changed anything.
+    static let notNeeded = "Not needed: "
+    /// Whether a pending source's answer could still change what shows, or
+    /// the online choice that replays use. `best` is what shows once any
+    /// upgrade waiting for a better match has been made.
+    static func matters(_ source: LyricSourceID, best: LyricCandidate, onlineBest: LyricCandidate?,
+                        query: LyricQuery, options: LyricSourceOptions.Snapshot) -> Bool {
+        // Nothing outranks Music's own word-by-word or mixed timing, and a
+        // replay reads Music's cache again, so no service is needed at all.
+        if best.source == .appleMusicCache, rankedTiming(best.result) == 2 { return false }
+        if couldBeat(best, from: source, query: query, options: options) { return true }
+        guard !source.isLocal else { return false }
+        return onlineBest.map { couldBeat($0, from: source, query: query, options: options) } ?? true
+    }
+    private static func nanoseconds(_ seconds: Double) -> UInt64 { UInt64(max(0, seconds) * 1_000_000_000) }
+
+    /// When a progressive lookup shows lyrics and whether a later arrival may
+    /// replace them. The first match appears once nothing pending could beat
+    /// it, or when the grace period ends. After that a match that ranks
+    /// higher (`outranks`) replaces it and a lower one never does, so the
+    /// lookup ends on the best match found. While a pending source could
+    /// still beat that upgrade too, it waits until `settleOver`, so one swap
+    /// does instead of two.
+    struct Publication {
+        enum Step: Equatable { case wait, holdForUpgrade, publish }
+        let options: LyricSourceOptions.Snapshot
+        let query: LyricQuery
+        /// An explicit saved choice is showing; automatic results never replace it.
+        let locked: Bool
+        private(set) var shown: LyricCandidate?
+        private(set) var revision = 0
+        init(options: LyricSourceOptions.Snapshot, query: LyricQuery, locked: Bool = false) {
+            self.options = options
+            self.query = query
+            self.locked = locked
+            revision = locked ? 1 : 0
+        }
+        /// `settled`: no pending source could change the choice.
+        mutating func step(best: LyricCandidate?, settled: Bool, graceOver: Bool, settleOver: Bool) -> Step {
+            guard !locked, let best else { return .wait }
+            guard let current = shown else {
+                guard settled || graceOver else { return .wait }
+                show(best)
+                return .publish
+            }
+            guard isUpgrade(best, over: current) else { return .wait }
+            guard settled || settleOver else { return .holdForUpgrade }
+            show(best)
+            return .publish
+        }
+        func isUpgrade(_ next: LyricCandidate, over current: LyricCandidate) -> Bool {
+            next.source != current.source && LyricsFetcher.outranks(next, current, query: query, options: options)
+        }
+        private mutating func show(_ candidate: LyricCandidate) {
+            shown = candidate
+            revision += 1
+        }
+    }
+
+    typealias Screened = (accepted: [LyricCandidate], rejected: [LyricRejection])
+    /// Accepted candidates in ranking order (`outranks`), and recording
+    /// mismatches with the reason. Every source, Music's own cache included,
+    /// must pass the recording check; catalogue size plays no role.
+    static func screen(_ candidates: [LyricCandidate], query: LyricQuery, options: LyricSourceOptions.Snapshot) -> Screened {
+        var accepted: [LyricCandidate] = [], rejected: [LyricRejection] = []
+        for candidate in candidates where options.enabled.contains(candidate.source) {
+            if let reason = rejection(candidate, query: query) { rejected.append(.init(candidate: candidate, reason: reason)) }
+            else { accepted.append(candidate) }
+        }
+        accepted.sort { outranks($0, $1, query: query, options: options) }
+        rejected.sort { order($0.candidate.source, in: options) < order($1.candidate.source, in: options) }
+        return (accepted, rejected)
+    }
+    static func ranked(_ candidates: [LyricCandidate], query: LyricQuery, options: LyricSourceOptions.Snapshot) -> [LyricCandidate] {
+        screen(candidates, query: query, options: options).accepted
+    }
+    /// Whether `a` ranks above `b`. Word-by-word and mixed timing rank
+    /// together, first: Music's own lyrics, then LRCLIB's, then the other
+    /// sources'. Line timing is next, Music's own first, then plain text.
+    /// Beyond those leads, sources follow the configured order, which in
+    /// Accuracy first comes after a closer title and artist match.
+    static func outranks(_ a: LyricCandidate, _ b: LyricCandidate, query: LyricQuery,
+                         options: LyricSourceOptions.Snapshot) -> Bool {
+        let timing = rankedTiming(a.result), other = rankedTiming(b.result)
+        if timing != other { return timing > other }
+        let lead = Self.lead(a.source, timing: timing), otherLead = Self.lead(b.source, timing: timing)
+        if lead != otherLead { return lead < otherLead }
+        if options.mode == .smart {
+            let closeness = confidence(a, query), otherCloseness = confidence(b, query)
+            if closeness != otherCloseness { return closeness > otherCloseness }
+        }
+        return order(a.source, in: options) < order(b.source, in: options)
+    }
+    /// The timing matches are ranked by: 2 for word-by-word or mixed timing,
+    /// which rank together, 1 for line timing and 0 for plain text.
+    static func rankedTiming(_ result: Result) -> Int { min(timingTier(result), 2) }
+    /// Where a source stands ahead of the configured order at a ranked
+    /// timing: Music's own cache leads timed lyrics, and LRCLIB follows it
+    /// only with word-by-word or mixed timing. Every other source is 2.
+    private static func lead(_ source: LyricSourceID, timing: Int) -> Int {
+        switch source {
+        case .appleMusicCache where timing >= 1: return 0
+        case .lrclib where timing == 2: return 1
+        default: return 2
+        }
+    }
+    private static func order(_ source: LyricSourceID, in options: LyricSourceOptions.Snapshot) -> Int {
+        options.enabled.firstIndex(of: source) ?? 999
+    }
+    private static func confidence(_ candidate: LyricCandidate, _ query: LyricQuery) -> Double {
+        LyricQuery.similarity(query.title, candidate.title) + LyricQuery.similarity(query.artist, candidate.artist)
+    }
+    /// Why a candidate is not the playing recording, or nil when it is.
+    static func rejection(_ candidate: LyricCandidate, query: LyricQuery) -> String? {
+        guard LyricQuery.similarity(query.title, candidate.title) >= 0.75 else { return "Rejected: title “\(candidate.title)”" }
+        let duration = candidate.duration ?? 0
+        let timed = duration > 0 && query.duration > 0
+        if query.hasArtist {
+            guard LyricQuery.similarity(query.artist, candidate.artist) >= 0.65 else {
+                return candidate.artist.isEmpty ? "Rejected: no artist given" : "Rejected: artist “\(candidate.artist)”"
+            }
+        } else if !timed {
+            // Without an artist, only a matching length confirms the recording.
+            return "Rejected: no artist or song length to compare"
+        }
+        // A local export whose artist matches is not rejected on its [length:],
+        // as before: the files are written for the playing track. Without an
+        // artist, the length is all that confirms the recording.
+        let lengthDecides = !(candidate.source == .lyrimuse && query.hasArtist)
+        if timed, lengthDecides, abs(duration - query.duration) > max(3, query.duration * 0.02) {
+            return "Rejected: duration \(LyricQuery.clock(duration)) vs \(LyricQuery.clock(query.duration))"
+        }
+        // A service that reports no length is still caught serving a longer edit.
+        if !timed, !candidate.source.isLocal, query.duration > 0, case .synced(let lines, _) = candidate.result,
+           let last = lines.last(where: { !$0.isInstrumental }), last.start > query.duration + 3 {
+            return "Rejected: lyrics run past the end of this recording"
+        }
+        return nil
+    }
+    private static func annotate(_ base: [LyricSourceID: String], _ screened: Screened, shown: LyricSourceID?) -> [LyricSourceID: String] {
+        var states = base
+        for candidate in screened.accepted {
+            let found = base[candidate.source]?.hasPrefix("Saved match") == true ? "Saved match" : "Match found"
+            states[candidate.source] = candidate.source == shown ? found + " · showing" : found
+        }
+        for rejection in screened.rejected { states[rejection.candidate.source] = rejection.reason }
+        return states
+    }
+    /// Whether no pending source could change what `choose` picks.
+    static func isSettled(_ best: LyricCandidate?, pending: Set<LyricSourceID>, query: LyricQuery,
+                          options: LyricSourceOptions.Snapshot) -> Bool {
+        let open = pending.filter { options.enabled.contains($0) }
+        guard !open.isEmpty else { return true }
+        guard let best else { return false }
+        return !open.contains { couldBeat(best, from: $0, query: query, options: options) }
+    }
+    /// Whether the best result a source could still return would rank above
+    /// `best`. Nothing ranks above Music's own word-by-word or mixed timing.
+    static func couldBeat(_ best: LyricCandidate, from source: LyricSourceID, query: LyricQuery,
+                          options: LyricSourceOptions.Snapshot) -> Bool {
+        guard source != best.source else { return false }
+        let timing = rankedTiming(best.result), ceiling = min(source.timingCeiling, 2)
+        if ceiling != timing { return ceiling > timing }
+        let lead = Self.lead(source, timing: timing), bestLead = Self.lead(best.source, timing: timing)
+        if lead != bestLead { return lead < bestLead }
+        // Accuracy first: a closer title and artist match could still arrive.
+        if options.mode == .smart, confidence(best, query) < 2 { return true }
+        return order(source, in: options) < order(best.source, in: options)
+    }
+    /// Structural equality, so re-running a lookup that finds the same lyrics
+    /// does not restart what is on screen. Every field of every line counts,
+    /// translations included, so an edited local file, or a lookup that now
+    /// has translations, still replaces what is shown.
+    static func sameResult(_ a: Result?, _ b: Result?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case (.plain(let x, let p)?, .plain(let y, let q)?): return x == y && p == q
+        case (.synced(let x, let p)?, .synced(let y, let q)?): return p == q && x == y
+        default: return false
         }
     }
     static func timingTier(_ result: Result) -> Int {
@@ -81,29 +510,26 @@ final class LyricsFetcher {
         }
         return 0
     }
-    static func choose(_ candidates: [LyricCandidate], options: LyricSourceOptions.Snapshot) -> LyricCandidate? {
-        var enabled = candidates.filter { options.enabled.contains($0.source) }
-        if options.mode == .smart || options.preferWordTiming {
-            let best = enabled.map { timingTier($0.result) }.max() ?? 0
-            enabled = enabled.filter { timingTier($0.result) == best }
+    /// The highest-ranked of `candidates` (`outranks`) from an enabled source.
+    static func choose(_ candidates: [LyricCandidate], query: LyricQuery, options: LyricSourceOptions.Snapshot) -> LyricCandidate? {
+        var chosen: LyricCandidate?
+        for candidate in candidates where options.enabled.contains(candidate.source) {
+            if chosen.map({ outranks(candidate, $0, query: query, options: options) }) ?? true { chosen = candidate }
         }
-        if options.preferWordTimedLRCLIB, let native = enabled.first(where: { $0.source == .lrclib && hasWordTiming($0.result) }) { return native }
-        if options.mode == .priority {
-            return options.enabled.compactMap { id in enabled.first { $0.source == id } }.first
-        }
-        return enabled.first
+        return chosen
     }
-    private static func bounded(_ id: LyricSourceID, query: LyricQuery, localFolder: String) async -> Outcome {
+    private static func bounded(_ id: LyricSourceID, query: LyricQuery, folder: String, timing: Timing,
+                                fetch: @escaping SourceFetch) async -> Outcome {
         await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
                 do {
-                    let candidate = try await fetch(id,query:query,localFolder:localFolder)
-                    return Outcome(id:id,candidate:candidate,state:candidate == nil ? "No usable match / unavailable" : "Match found")
+                    let candidate = try await fetch(id, query, folder)
+                    return Outcome(id:id,candidate:candidate,state:candidate == nil ? "No usable match / unavailable" : "Match found",answered:true)
                 } catch is CancellationError { return Outcome(id:id,candidate:nil,state:"Cancelled") }
-                catch { return Outcome(id:id,candidate:nil,state:error.localizedDescription) }
+                catch { return Outcome(id:id,candidate:nil,state:error.localizedDescription,offline:LyricHTTP.isOffline(error)) }
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: id == .lrclib ? 20_000_000_000 : 8_000_000_000)
+                try? await Task.sleep(nanoseconds: Self.nanoseconds(id == .lrclib ? timing.lrclibLimit : timing.sourceLimit))
                 return Outcome(id:id,candidate:nil,state:"Timed out")
             }
             let first = await group.next() ?? Outcome(id:id,candidate:nil,state:"Unavailable")
@@ -114,16 +540,19 @@ final class LyricsFetcher {
     private static func fetch(_ id: LyricSourceID, query: LyricQuery, localFolder: String) async throws -> LyricCandidate? {
         try Task.checkCancellation()
         switch id {
+        case .appleMusicCache: return await AppleMusicCachedLyrics.lookup(query)
         case .lyricsPlus:
-            guard let hit = await KPoeLyricsProvider.lines(title:query.title,artist:query.artist,album:query.album,duration:query.duration) else {return nil}
+            guard let hit = try await KPoeLyricsProvider.lookup(title:query.title,artist:query.artist,album:query.album,duration:query.duration) else {return nil}
             let provenance = Provenance(precision:precision(hit.lines),source:hit.source+" via Lyrics+")
-            return LyricCandidate(source:id,result:.synced(hit.lines,provenance),title:query.title,artist:query.artist,
-                                  duration:query.duration,score:113)
-        case .netEase:
-            guard let lines = await NetEaseLyricsProvider.timedLines(title:query.title,artist:query.artist,duration:query.duration) else {return nil}
-            let native = lines.contains { $0.wordTimed }
-            return LyricCandidate(source:id,result:.synced(lines,Provenance(precision:precision(lines),source:"NetEase")),
-                title:query.title,artist:query.artist,duration:query.duration,score:native ? 110 : 96)
+            // Rank and label by the recording the node matched, when its names
+            // can be checked. One in another script may be the same name
+            // transliterated: the search used the library's names, so those
+            // stand in and only the song's length is checked.
+            let title = LyricQuery.checkable(hit.title, against: query.title)
+            let artist = LyricQuery.checkable(hit.artist, against: query.artist)
+            return LyricCandidate(source:id,result:.synced(hit.lines,provenance),title:title ?? query.title,artist:artist ?? query.artist,
+                                  duration:nil,score:113,metadataReported:title != nil && artist != nil)
+        case .netEase: return try await netEase(query)
         case .qqMusic: return try await AdditionalLyricsProviders.qqMusic(query)
         case .kugou: return try await AdditionalLyricsProviders.kugou(query)
         case .kuwo: return try await AdditionalLyricsProviders.kuwo(query)
@@ -131,6 +560,24 @@ final class LyricsFetcher {
         case .lrclib: return try await lrclib(query)
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
         }
+    }
+    /// NetEase's lyrics for the edition its search matched, ranked and
+    /// labelled by that edition. Throws when NetEase could not be reached or
+    /// answered with an error, so an outage is not remembered as "no lyrics".
+    static func netEase(_ query: LyricQuery, session: URLSession = .shared) async throws -> LyricCandidate? {
+        let recorder = NetEaseLyricsProvider.MatchRecorder(session: session)
+        let found = await NetEaseLyricsProvider.$recorder.withValue(recorder) {
+            await NetEaseLyricsProvider.timedLines(title:query.title,artist:query.artist,duration:query.duration)
+        }
+        try Task.checkCancellation()
+        guard let lines = found else {
+            if let failure = recorder.failure { throw failure }
+            return nil
+        }
+        let native = lines.contains { $0.wordTimed }, song = recorder.song
+        return LyricCandidate(source:.netEase,result:.synced(lines,Provenance(precision:precision(lines),source:"NetEase")),
+            title:song?.title ?? query.title,artist:song?.artist ?? query.artist,duration:song?.duration,
+            score:native ? 110 : 96,metadataReported:song != nil)
     }
     static func validWordTiming(_ line: Line) -> Bool {
         guard line.wordTimed, !line.words.isEmpty, line.start.isFinite, line.end.isFinite, line.end > line.start else { return false }
@@ -193,14 +640,18 @@ final class LyricsFetcher {
         if query.duration>0 {parameters["duration"]=String(Int(query.duration.rounded()))}
         var payloads: [Response] = []
         var exactError: Error?
-        do {
-            if let data = try await requestLRCLIB("get",parameters:parameters,session:session), let exact = try? JSONDecoder().decode(Response.self,from:data) { payloads.append(exact) }
-        } catch is CancellationError { throw CancellationError() }
-        catch { exactError = error }
+        // The exact endpoint needs an artist; without one only search can match.
+        if query.hasArtist {
+            do {
+                if let data = try await requestLRCLIB("get",parameters:parameters,session:session), let exact = try? JSONDecoder().decode(Response.self,from:data) { payloads.append(exact) }
+            } catch is CancellationError { throw CancellationError() }
+            catch { exactError = error }
+        }
         let exactTimed = payloads.contains { $0.syncedLyrics?.isEmpty == false || $0.lyricsfile?.isEmpty == false }
         if !exactTimed {
+            let search = query.hasArtist ? ["track_name":query.title,"artist_name":query.artist] : ["track_name":query.title]
             do {
-                if let data = try await requestLRCLIB("search",parameters:["track_name":query.title,"artist_name":query.artist],session:session),
+                if let data = try await requestLRCLIB("search",parameters:search,session:session),
                    let found = try? JSONDecoder().decode([Response].self,from:data) { payloads.append(contentsOf:found.prefix(30)) }
             } catch is CancellationError { throw CancellationError() }
             catch { if payloads.isEmpty { throw error } }
@@ -209,7 +660,7 @@ final class LyricsFetcher {
         let candidates = payloads.compactMap { payload -> LyricCandidate? in
             let title=payload.trackName ?? query.title,artist=payload.artistName ?? query.artist
             let delta=payload.duration.map {abs($0-query.duration)} ?? 0
-            let score=vc_match_score(LyricQuery.similarity(query.title,title),LyricQuery.similarity(query.artist,artist),
+            let score=vc_match_score(LyricQuery.similarity(query.title,title),query.artistScore(artist),
                 delta,payload.duration != nil && query.duration>0 ? 1 : 0,0,1,
                 LyricQuery.normalize(payload.albumName ?? "") == LyricQuery.normalize(query.album ?? "") ? 1 : 0)
             guard score>0 else {return nil}
@@ -258,6 +709,7 @@ final class LyricsFetcher {
             let end = row.end_ms.map { $0 / 1000 + offset } ?? (index + 1 < rows.count ? rows[index + 1].start_ms / 1000 + offset : start + 4)
             guard end.isFinite, end > start else { return nil }
             var line = makeLine(text: row.text, start: start, end: end)
+            if row.end_ms == nil { line.endFromNextLine = true }
             let tokens = row.words ?? []
             let words = tokens.enumerated().map { i, token in
                 Word(text: token.text.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -277,8 +729,16 @@ final class LyricsFetcher {
 
     // MARK: - LRC parsing (fallback)
 
+    /// The longest LRC text read, in UTF-8 bytes.
+    static let lrcInputLimit = 1_000_000
+    /// A row is read once for each of its timestamps. The copies, counted by
+    /// their text's length plus one each, may come to at most this, so a
+    /// crafted file (thousands of stamps on a long row of word stamps) cannot
+    /// exhaust memory; the rows after that point are not read.
+    static let lrcExpansionLimit = 2 * lrcInputLimit
+
     static func parseLRC(_ text: String, trackDuration: Double) -> [Line] {
-        guard text.utf8.count <= 1_000_000,
+        guard text.utf8.count <= lrcInputLimit,
               let lineStamp = try? NSRegularExpression(pattern:#"\[(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?\]"#),
               let wordStamp = try? NSRegularExpression(pattern:#"<(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?>"#)
         else {return []}
@@ -290,11 +750,13 @@ final class LyricsFetcher {
             let fraction=range.location == NSNotFound ? "" : ns.substring(with:range)
             return m*60+s+(Double(fraction) ?? 0)/pow(10,Double(fraction.count))
         }
+        // LRC convention: a positive [offset:] (milliseconds) shows lyrics
+        // sooner, matching the app's own song offset.
         var offset=0.0
-        if let regex=try? NSRegularExpression(pattern:#"(?im)^\s*\[offset:([+-]?\d+)\]"#),
+        if let regex=try? NSRegularExpression(pattern:#"(?im)^\s*\[offset:\s*([+-]?\d+(?:\.\d+)?)\s*\]"#),
            let match=regex.firstMatch(in:text,range:NSRange(text.startIndex...,in:text)),
            let range=Range(match.range(at:1),in:text) {let value=Double(text[range]) ?? 0;offset=value.isFinite ? value/1000 : 0}
-        var parsed:[(start:Double,text:String,words:[Word])]=[]
+        var rows:[LRCRow]=[],inCredits=true,budget=lrcExpansionLimit
         for raw in text.components(separatedBy:.newlines) {
             let row=raw.trimmingCharacters(in:.whitespaces)
             let ns=row as NSString
@@ -306,42 +768,117 @@ final class LyricsFetcher {
             let bodyNS=body as NSString
             let markers=wordStamp.matches(in:body,range:NSRange(location:0,length:bodyNS.length))
             let plain=wordStamp.stringByReplacingMatches(in:body,range:NSRange(location:0,length:bodyNS.length),withTemplate:"")
+            // Credits are not lyrics; an everyday label ("鼓：…") counts only
+            // before the first lyric or straight after another credit.
+            if LyricCredits.isCredit(plain,inCredits:inCredits) {inCredits=true;continue}
+            if !isInstrumentalMark(plain) {inCredits=false}
+            let cost=leading.count*(bodyNS.length+1)
+            guard cost<=budget else {break}
+            budget-=cost
+            // The word stamps are read once; each copy of the row moves them
+            // by its own timestamp.
+            let prefix=markers.first.map {bodyNS.substring(to:$0.range.location).trimmingCharacters(in:.whitespaces)} ?? ""
+            var syllables:[(text:String,time:Double,next:Double?,glued:Bool)]=[],spaced=true
+            for (index,marker) in markers.enumerated() {
+                let from=NSMaxRange(marker.range),to=index+1<markers.count ? markers[index+1].range.location : bodyNS.length
+                let label=bodyNS.substring(with:NSRange(location:from,length:to-from))
+                defer {spaced=label.last?.isWhitespace ?? spaced}
+                let trimmed=label.trimmingCharacters(in:.whitespacesAndNewlines)
+                if trimmed.isEmpty {continue}
+                // Syllable stamps with no space between them belong to one word.
+                syllables.append((trimmed,time(marker,body),index+1<markers.count ? time(markers[index+1],body) : nil,
+                                  !spaced && !(label.first?.isWhitespace ?? true)))
+            }
+            let firstTime=time(first,row)
             for tag in leading {
-                let begin=max(0,time(tag,row)+offset),shift=time(tag,row)-time(first,row)+offset
-                var words:[Word]=[]
-                let prefix=markers.first.map {bodyNS.substring(to:$0.range.location).trimmingCharacters(in:.whitespaces)} ?? ""
-                for (index,marker) in markers.enumerated() {
-                    let from=NSMaxRange(marker.range),to=index+1<markers.count ? markers[index+1].range.location : bodyNS.length
-                    let label=bodyNS.substring(with:NSRange(location:from,length:to-from))
-                    if label.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {continue}
-                    let start=max(0,time(marker,body)+shift)
-                    let finish=index+1<markers.count ? max(start,time(markers[index+1],body)+shift) : Double.greatestFiniteMagnitude
-                    words.append(Word(text:label.trimmingCharacters(in:.whitespacesAndNewlines),start:start,end:finish))
+                let stamp=time(tag,row)-offset,shift=time(tag,row)-firstTime-offset
+                let begin=max(0,stamp)
+                let tokens=syllables.map { syllable -> LyricScript.TimedToken in
+                    let start=max(0,syllable.time+shift)
+                    return .init(text:syllable.text,start:start,end:syllable.next.map {max(start,$0+shift)} ?? .greatestFiniteMagnitude,
+                                 glued:syllable.glued)
                 }
-                let valid=prefix.isEmpty && words.enumerated().allSatisfy { index,word in
-                    word.start>=begin && (index==0 || word.start>=words[index-1].start)
+                let valid=prefix.isEmpty && tokens.enumerated().allSatisfy { index,token in
+                    token.start>=begin && (index==0 || token.start>=tokens[index-1].start)
                 }
-                parsed.append((begin,plain,valid ? words : []))
+                rows.append(LRCRow(stamp:stamp,start:begin,text:plain,tokens:valid ? tokens : []))
             }
         }
-        parsed.sort {$0.start<$1.start}
-        return parsed.enumerated().map { index,item in
-            let end=index+1<parsed.count ? parsed[index+1].start : max(trackDuration,item.start+4)
+        let parsed=mergingSharedTimestamps(rows),lastEnd=trackDuration.isFinite ? trackDuration : 0
+        return parsed.enumerated().compactMap { index,item in
+            let end=index+1<parsed.count ? parsed[index+1].start : max(lastEnd,item.start+4)
+            // A row an [offset:] pushed before the start is overtaken at 0.
+            guard end>item.start else {return nil}
             var line=makeLine(text:item.text,start:item.start,end:end)
-            if !item.words.isEmpty, item.words.allSatisfy({$0.start < end}) {
-                line.words=item.words.map {Word(text:$0.text,start:$0.start,end:max($0.start,min(end,$0.end)))}
-                line.wordTimed=true
+            line.endFromNextLine=true
+            // Words are built once the end is known: the last syllable stamp
+            // runs to it, so a final "tiful day" can still be divided.
+            let words=LyricScript.words(from:item.tokens.map {var token=$0;token.end=min(token.end,end);return token})
+            if !line.isInstrumental, !words.isEmpty, words.allSatisfy({$0.start < end}) {
+                var timed = line
+                timed.words = words
+                timed.wordTimed = true
+                if validWordTiming(timed) { line = timed }
             }
+            if !line.isInstrumental {line.romanization=item.romanization;line.translation=item.translation}
             return line
         }
     }
 
+    private struct LRCRow {
+        /// The row's time after the offset, before clamping at zero.
+        var stamp: Double
+        var start: Double
+        var text: String
+        var tokens: [LyricScript.TimedToken]
+        var romanization: String? = nil
+        var translation: String? = nil
+    }
+
+    /// Bilingual LRC repeats a timestamp for a reading or a translation, e.g.
+    /// "[00:10.00]君の名は" then "[00:10.00]kimi no na wa". Those rows become one
+    /// line: the first is the lyric, a Latin reading of a non-Latin lyric is its
+    /// romanisation and any other version is its translation. Without this the
+    /// first row lasted no time at all and only the second was ever shown. An
+    /// empty or "♪" row gives way to a lyric at the same time, and a
+    /// word-timed copy of the lyric lends it its word timing.
+    private static func mergingSharedTimestamps(_ rows: [LRCRow]) -> [LRCRow] {
+        // Stable: rows at one instant keep their order in the file. Rows that
+        // meet at 0 only because an [offset:] moved them earlier stay apart.
+        let ordered = rows.enumerated().sorted { ($0.element.stamp, $0.offset) < ($1.element.stamp, $1.offset) }.map(\.element)
+        let readings = LyricScript.ReadingCache()
+        var merged: [LRCRow] = []
+        for row in ordered {
+            guard var line = merged.last, abs(line.stamp - row.stamp) < 0.0005 else { merged.append(row); continue }
+            let text = row.text.trimmingCharacters(in: .whitespaces)
+            let lyric = line.text.trimmingCharacters(in: .whitespaces)
+            if isInstrumentalMark(text) { continue }
+            if isInstrumentalMark(lyric) {
+                line.text = row.text; line.tokens = row.tokens
+            } else if text == lyric {
+                guard line.tokens.isEmpty, !row.tokens.isEmpty else { continue }
+                line.tokens = row.tokens
+            } else if line.romanization == nil, LyricScript.isReading(text, of: lyric, cache: readings) {
+                line.romanization = text
+            } else if line.translation == nil {
+                line.translation = text
+            } else { continue }
+            merged[merged.count - 1] = line
+        }
+        return merged
+    }
+
     // MARK: - Shared line construction
+
+    /// Empty text, or a lone note glyph: an instrumental break, not a lyric.
+    static func isInstrumentalMark(_ text: String) -> Bool {
+        text.allSatisfy { "♪♫•·-–—".contains($0) || $0.isWhitespace }
+    }
 
     static func makeLine(text: String, start: Double, end: Double) -> Line {
         let cleaned = text.trimmingCharacters(in: .whitespaces)
         // A lone note glyph marks an instrumental break rather than a lyric.
-        let instrumental = cleaned.isEmpty || cleaned.allSatisfy { "♪♫•·-–—".contains($0) || $0.isWhitespace }
+        let instrumental = isInstrumentalMark(cleaned)
         return Line(
             start: start,
             end: end,

@@ -10,6 +10,17 @@ if [[ ! "$VERSO_PID" =~ ^[0-9]+$ ]]; then
   echo "Open one copy of Lunalyr, quit any older copies, then run this again."
   exit 1
 fi
+# Release builds keep their settings in local.verso.custom, Debug builds in
+# local.verso.custom.debug; read the domain of the copy actually running.
+DOMAIN=local.verso.custom
+EXECUTABLE="$(/bin/ps -p "$VERSO_PID" -o comm= || true)"
+INFO_PLIST="${EXECUTABLE%/MacOS/*}/Info.plist"
+if [[ "$EXECUTABLE" == */Contents/MacOS/* && -f "$INFO_PLIST" ]]; then
+  CANDIDATE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$INFO_PLIST" 2>/dev/null || true)"
+  if [[ "$CANDIDATE" =~ ^[A-Za-z0-9.-]+$ ]]; then
+    DOMAIN="$CANDIDATE"
+  fi
+fi
 mkdir -p "$PROJECT_DIR/Build/Performance"
 REPORT_DIR="$(mktemp -d "$PROJECT_DIR/Build/Performance/run-XXXXXX")"
 echo "Collecting about 30 seconds of CPU readings, then a 5-second process sample."
@@ -21,9 +32,10 @@ echo "If Terminal fully covers the wallpaper, automatic pausing can change what 
   /usr/sbin/sysctl hw.model hw.ncpu hw.memsize
   /usr/sbin/sysctl machdep.cpu.brand_string 2>/dev/null || true
   echo "Lunalyr PID: $VERSO_PID"
+  echo "Preferences domain: $DOMAIN"
   for preference in custom.animationRate custom.pauseWhenCovered lyricComposition backgroundMode shaderStyle useMotionArtwork custom.audioReactiveEnabled; do
     echo "$preference:"
-    /usr/bin/defaults read local.verso.custom "$preference" 2>/dev/null || echo "(default)"
+    /usr/bin/defaults read "$DOMAIN" "$preference" 2>/dev/null || echo "(default)"
   done
 } >"$REPORT_DIR/configuration.txt"
 if ! /usr/bin/top -l 16 -s 2 -pid "$VERSO_PID" -n 1 -F -R \

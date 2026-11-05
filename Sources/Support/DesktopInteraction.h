@@ -16,4 +16,21 @@ int vc_hit_exposes_desktop(uint32_t window_id, int layer_known, int32_t layer,
 /* An occluding app or a change of display cancels the previous hover at once. */
 uint32_t vc_hover_update(VCHoverSession *session, const VCDisplayFrame *screens,
                          int count, VCPoint mouse, int blocked, double now, double linger);
+/* As vc_hover_update, but a held mouse button can never start a reveal or move
+   it to another display: rubber-band selections and file drags pass through.
+   A reveal that is already active (scrubbing) keeps its display and linger. */
+uint32_t vc_hover_step(VCHoverSession *session, const VCDisplayFrame *screens,
+                       int count, VCPoint mouse, int blocked, int buttons_held,
+                       double now, double linger);
+
+/* Desktop coverage, in any one consistent coordinate space. At most
+   VC_MAX_COVERS rectangles are considered; callers pass the largest first. */
+#define VC_MAX_COVERS 64
+/* Uncovered share of `region` (0...1). Invalid regions count as fully exposed. */
+double vc_exposed_fraction(VCBox region, const VCBox *covers, int count);
+/* 1 when the covers leave no axis-aligned square of side `min_gap` exposed
+   inside `region` and expose at most `max_exposed` of its area. Thin slivers
+   (window margins, tiling gaps) are ignored; invalid input is never covered. */
+int vc_region_covered(VCBox region, const VCBox *covers, int count,
+                      double min_gap, double max_exposed);
 #endif

@@ -5,18 +5,23 @@ import SwiftUI
 struct VersoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var nowPlaying = NowPlayingMonitor.shared
+    /// For the icon, which says when the wallpaper is paused.
+    @StateObject private var extras = LunalyrExtras.shared
 
     var body: some Scene {
-        MenuBarExtra {
+        // The XCTest host is this app: without this, every test run put a
+        // second Lunalyr icon in the menu bar beside the real one.
+        MenuBarExtra(isInserted: .constant(!AppRuntime.isUnitTesting)) {
             MenuBarView()
                 .environmentObject(nowPlaying)
         } label: {
-            Image(nsImage: Self.menuBarIcon)
+            Image(nsImage: extras.wallpaperPaused ? Self.pausedMenuBarIcon : Self.menuBarIcon)
+                .accessibilityLabel(extras.wallpaperPaused ? "Lunalyr, wallpaper paused" : "Lunalyr")
         }
         .menuBarExtraStyle(.window)
         .commands {
             CommandGroup(replacing: .appSettings) {
-                Button("Lunalyr Settings…") { SettingsWindowController.shared.present() }
+                Button("Lunalyr Settings…") { LunalyrNavigation.shared.openSettings() }
                     .keyboardShortcut(",", modifiers: .command)
             }
         }
@@ -32,6 +37,10 @@ struct VersoApp: App {
         let image = NSImage(named: "MenuBarIconTemplate") ?? NSImage()
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
+        // VoiceOver names the status item by this; the glyph alone says nothing.
+        image.accessibilityDescription = "Lunalyr"
         return image
     }()
+
+    private static let pausedMenuBarIcon = MenuBarView.pausedIcon(from: menuBarIcon)
 }

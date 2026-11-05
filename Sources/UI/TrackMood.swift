@@ -89,6 +89,14 @@ struct TrackMood: Equatable {
     /// this is the axis that can.
     var organic: Double = 0.5
 
+    static func seed(title: String, artist: String) -> Int {
+        var value: UInt64 = 1469598103934665603
+        for byte in (title + artist).utf8 {
+            value = (value ^ UInt64(byte)) &* 1099511628211
+        }
+        return Int(value % 100_000)
+    }
+
     static let neutral = TrackMood(
         energy: 0.5, face: .sans, background: .constellation,
         motionRate: 1.0, intensity: 1.0, organic: 0.5

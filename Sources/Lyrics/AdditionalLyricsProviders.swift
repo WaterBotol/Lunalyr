@@ -4,7 +4,7 @@ import Foundation
 /// credentials, audio downloads or private listening history are requested.
 enum AdditionalLyricsProviders {
     private static func score(_ query: LyricQuery, title: String, artist: String, duration: Double?) -> Double {
-        vc_match_score(LyricQuery.similarity(query.title, title), LyricQuery.similarity(query.artist, artist),
+        vc_match_score(LyricQuery.similarity(query.title, title), query.artistScore(artist),
             duration.map { abs($0 - query.duration) } ?? 0, duration != nil && query.duration > 0 ? 1 : 0,
             0, 1, 0)
     }
@@ -43,9 +43,13 @@ enum AdditionalLyricsProviders {
         }
         return nil
     }
-    static func kugou(_ query: LyricQuery) async throws -> LyricCandidate? {
-        let payload = try await LyricHTTP.json("https://mobilecdn.kugou.com/api/v3/search/song",
-            ["keyword":query.title+" "+query.artist,"page":"1","pagesize":"8","format":"json"])
+    /// Kugou's song search. mobilecdn.kugou.com stopped presenting a
+    /// certificate for its own name, so every request to it failed;
+    /// mobileservice.kugou.com serves the same API.
+    static let kugouSearch = "https://mobileservice.kugou.com/api/v3/search/song"
+    static func kugou(_ query: LyricQuery, session: URLSession = .shared) async throws -> LyricCandidate? {
+        let payload = try await LyricHTTP.json(kugouSearch,
+            ["keyword":query.title+" "+query.artist,"page":"1","pagesize":"8","format":"json"], session: session)
         let songs = (payload["data"] as? [String:Any])?["info"] as? [[String:Any]] ?? []
         let ranked = songs.compactMap { song -> (song:[String:Any],title:String,artist:String,duration:Double?,score:Double)? in
             let filename = (song["filename"] as? String ?? "").components(separatedBy:" - ")
@@ -60,13 +64,13 @@ enum AdditionalLyricsProviders {
             guard let hash = hit.song["hash"] as? String else { continue }
             let search = try await LyricHTTP.json("https://lyrics.kugou.com/search",
                 ["ver":"1","man":"yes","client":"pc","keyword":query.title+" "+query.artist,
-                 "duration":String(Int(query.duration*1000)),"hash":hash])
+                 "duration":String(Int(query.duration*1000)),"hash":hash], session: session)
             let candidates = search["candidates"] as? [[String:Any]] ?? []
             for item in candidates.prefix(2) {
                 try Task.checkCancellation()
                 guard let id = LyricHTTP.string(item["id"]), let key = item["accesskey"] as? String else { continue }
                 let response = try await LyricHTTP.json("https://lyrics.kugou.com/download",
-                    ["ver":"1","client":"pc","id":id,"accesskey":key,"fmt":"lrc","charset":"utf8"])
+                    ["ver":"1","client":"pc","id":id,"accesskey":key,"fmt":"lrc","charset":"utf8"], session: session)
                 guard let encoded = response["content"] as? String,
                       let bytes = Data(base64Encoded:encoded),
                       let lrc = String(data:bytes,encoding:.utf8) else { continue }
@@ -104,6 +108,8 @@ extension AdditionalLyricsProviders {
         return nil
     }
     static func lyricsOVH(_ query: LyricQuery, session: URLSession = .shared) async throws -> LyricCandidate? {
+        // The endpoint is addressed by artist; there is nothing to ask without one.
+        guard query.hasArtist else { return nil }
         let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/;?#%"))
         guard let artist = query.artist.addingPercentEncoding(withAllowedCharacters: allowed),
               let title = query.title.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }

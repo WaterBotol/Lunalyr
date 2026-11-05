@@ -11,16 +11,28 @@ on:
   workflow_dispatch:
     inputs:
       prepare_release:
-        description: Prepare a signed draft GitHub release after tests pass
+        description: Prepare a signed draft GitHub release after tests pass (main branch only)
+        type: boolean
+        default: false
+      first_update:
+        description: With prepare_release, this is the first update the repository publishes (no live appcast.xml yet)
+        type: boolean
+        default: false
+      new_signing_identity:
+        description: With prepare_release, accept a signing identity other than the live release's (users grant System Audio / Screen Recording again)
         type: boolean
         default: false
 
 permissions:
   contents: read
 
+# A newer push or pull-request run replaces an older one, but a manual
+# (release-preparation) run is never cancelled. The incoming run decides
+# whether to cancel, so manual runs also get a group of their own; otherwise
+# a push to main would still cancel a release being prepared.
 concurrency:
-  group: macos-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: macos-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   build:
@@ -30,13 +42,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install XcodeGen
-        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      # Xcode and XcodeGen versions are pinned in Scripts/ci.sh.
+      - name: Select pinned Xcode
+        run: bash Scripts/ci.sh select-xcode
+      - name: Install pinned XcodeGen
+        run: bash Scripts/ci.sh install-xcodegen
       - name: Ensure Metal tools are installed
         run: |
           if ! xcrun metal --version >/dev/null 2>&1; then
             xcodebuild -downloadComponent MetalToolchain
           fi
+      - name: Swift package cache key
+        id: packages
+        run: bash Scripts/ci.sh package-cache-key
+      - name: Restore resolved Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: Build/TestDerivedData/SourcePackages
+          key: ${{ steps.packages.outputs.key }}
+          restore-keys: ${{ steps.packages.outputs.prefix }}
       - name: Configure updates when a publisher key is available
         env:
           PUBLIC_UPDATE_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
@@ -46,9 +70,24 @@ jobs:
           fi
       - name: Python helper tests
         run: python3 -m unittest discover -s Tests/Python -v
+      # These step limits add up to less than the job's, so a hung test run or
+      # build fails its step and "Upload build logs" still runs. A job
+      # timeout cancels the job instead, and Build/build.log is lost.
+      #
+      # macos-15 runners have a Metal device (the GPU scene tests rendered on
+      # every run), so a runner without one fails here instead of skipping
+      # every GPU and WebKit test. xcodebuild hands the tests only
+      # TEST_RUNNER_ variables, with that prefix removed.
       - name: Native Swift tests
+        timeout-minutes: 20
+        env:
+          TEST_RUNNER_LUNALYR_REQUIRE_GPU: '1'
         run: bash Scripts/test.sh
+      # Signed ad hoc; draft-release re-signs it when it becomes an update.
       - name: Build app and publisher tools
+        timeout-minutes: 15
+        env:
+          LUNALYR_SOURCE_PACKAGES_DIR: ${{ github.workspace }}/Build/TestDerivedData/SourcePackages
         run: bash Scripts/build.sh
       - name: Archive app and matching tools
         run: |
@@ -77,36 +116,64 @@ jobs:
           if-no-files-found: ignore
 
   draft-release:
-    if: github.event_name == 'workflow_dispatch' && inputs.prepare_release
+    # Only main may publish, and only this job reads the release secrets: the
+    # private update key and the optional code-signing certificate. The
+    # "release" environment lets the owner hold them there and require
+    # approval; until then the repository secrets are used as before.
+    if: github.event_name == 'workflow_dispatch' && inputs.prepare_release && github.ref == 'refs/heads/main'
     needs: build
     runs-on: macos-15
     timeout-minutes: 15
+    environment: release
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Select pinned Xcode
+        run: bash Scripts/ci.sh select-xcode
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: VersoCustom-Mac
           path: Build
+      - name: Unpack the tested app and publisher tools
+        run: |
+          ditto -x -k Build/Lunalyr-Mac.zip Build
+          ditto -x -k Build/UpdateTools.zip Build
+      # A stable signing identity keeps users' System Audio / Screen Recording
+      # permissions across updates. Without the certificate the app stays ad
+      # hoc, which release preparation refuses once the live release has one.
+      - name: Import code-signing certificate when configured
+        env:
+          MACOS_CODESIGN_P12: ${{ secrets.MACOS_CODESIGN_P12 }}
+          MACOS_CODESIGN_P12_PASSWORD: ${{ secrets.MACOS_CODESIGN_P12_PASSWORD }}
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+        run: bash Scripts/ci.sh import-signing-identity
+      - name: Sign with the stable identity when configured
+        run: bash Scripts/sign-app.sh Build/Lunalyr.app
+      - name: Remove code-signing keychain
+        if: always()
+        run: bash Scripts/ci.sh remove-signing-identity
       - name: Prepare signed update files
         env:
           PUBLIC_UPDATE_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
           PRIVATE_UPDATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          LUNALYR_PREVIOUS_APPCAST: ${{ inputs.first_update && 'none' || '' }}
+          LUNALYR_ALLOW_IDENTITY_CHANGE: ${{ inputs.new_signing_identity && '1' || '' }}
         run: |
           if [[ -z "$PUBLIC_UPDATE_KEY" || -z "$PRIVATE_UPDATE_KEY" ]]; then
-            echo "Set SPARKLE_PUBLIC_KEY and SPARKLE_PRIVATE_KEY in repository Actions secrets first."
+            echo "Set the SPARKLE_PUBLIC_KEY and SPARKLE_PRIVATE_KEY Actions secrets first."
             exit 1
           fi
           python3 Scripts/configure-updates.py --github "$GITHUB_REPOSITORY" --public-key "$PUBLIC_UPDATE_KEY"
-          ditto -x -k Build/Lunalyr-Mac.zip Build
-          ditto -x -k Build/UpdateTools.zip Build
           umask 077
           KEY_FILE="$(mktemp "$RUNNER_TEMP/sparkle-key-XXXXXX")"
           trap 'rm -f "$KEY_FILE"' EXIT
           printf '%s' "$PRIVATE_UPDATE_KEY" > "$KEY_FILE"
+          # Also verifies the signature against the key embedded in the app,
+          # that the build number is newer than the live appcast's, and that
+          # the update key and signing identity match the live release's.
           SPARKLE_PRIVATE_KEY_FILE="$KEY_FILE" bash Scripts/package-update.sh "$GITHUB_REPOSITORY"
       - name: Create draft release for review
         env:

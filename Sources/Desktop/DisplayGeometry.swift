@@ -19,7 +19,12 @@ extension VCBox {
 @MainActor
 enum DesktopVisibility {
     static func isExposed(at point: CGPoint, ignoring windowIDs: Set<CGWindowID>) -> Bool {
-        let number = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+        isExposed(windowNumber: NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0), ignoring: windowIDs)
+    }
+
+    /// Classifies a window already found under the pointer, so callers that
+    /// cache the hit can skip the first window-server query.
+    static func isExposed(windowNumber number: Int, ignoring windowIDs: Set<CGWindowID>) -> Bool {
         if number == 0 { return true }
         guard number > 0, let id = CGWindowID(exactly: number) else { return false }
         if windowIDs.contains(id) { return true }

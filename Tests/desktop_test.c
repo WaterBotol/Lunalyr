@@ -64,4 +64,69 @@ int main(void) {
     assert(vc_hit_exposes_desktop(77,1,25,0,0)==0); /* menu / floating app */
     assert(vc_hit_exposes_desktop(77,0,0,0,0)==0); /* unknown interactive target */
     puts("Display isolation, point-hit classification, negative/stacked coordinates, linger and unplugging passed.");
+
+    /* A held button never starts a reveal (rubber-band selection, file drags)
+       and cannot carry one to another display; an active reveal survives a
+       press so the scrubber can be dragged. */
+    VCHoverSession press={0};
+    assert(vc_hover_step(&press,screens,5,laptop,0,1,30,.7)==0);
+    assert(press.activeDisplayID==0);
+    assert(vc_hover_step(&press,screens,5,laptop,0,0,30.1,.7)==101);
+    assert(vc_hover_step(&press,screens,5,laptop,0,1,30.2,.7)==101);
+    assert(vc_hover_step(&press,screens,5,(VCPoint){50,50},0,1,30.4,.7)==101); /* linger while held */
+    assert(vc_hover_step(&press,screens,5,right,0,1,30.5,.7)==0); /* no hand-off mid-drag */
+    assert(vc_hover_step(&press,screens,5,right,0,1,30.6,.7)==0);
+    assert(vc_hover_step(&press,screens,5,right,0,0,30.7,.7)==202);
+    assert(vc_hover_step(&press,screens,5,right,1,1,30.8,.7)==0); /* occlusion still wins */
+    assert(vc_hover_step(NULL,screens,5,right,0,0,31,.7)==0);
+
+    /* Coverage: exact union area and the "no noticeable exposed square" rule. */
+    VCBox visible={0,25,1512,945};
+    VCBox maximised[]={{0,25,1512,945}};
+    assert(vc_exposed_fraction(visible,maximised,1)==0);
+    assert(vc_region_covered(visible,maximised,1,24,.06)==1);
+    assert(vc_exposed_fraction(visible,NULL,0)==1);
+    assert(vc_region_covered(visible,NULL,0,24,.06)==0);
+    VCBox half[]={{0,25,756,945}};
+    assert(fabs(vc_exposed_fraction(visible,half,1)-.5)<1e-9);
+    assert(vc_region_covered(visible,half,1,24,.06)==0);
+    /* Overlapping windows are not double counted. */
+    VCBox overlap[]={{0,25,1000,945},{500,25,1012,945}};
+    assert(vc_exposed_fraction(visible,overlap,2)==0);
+    assert(vc_region_covered(visible,overlap,2,24,.06)==1);
+    /* Tiled windows with 8 pt margins leave only slivers: still covered,
+       unless the caller treats an 8 pt strip as noticeable. */
+    VCBox tiled[]={{8,33,744,929},{760,33,744,929}};
+    double sliver=vc_exposed_fraction(visible,tiled,2);
+    assert(sliver>.02&&sliver<.04);
+    assert(vc_region_covered(visible,tiled,2,24,.06)==1);
+    assert(vc_region_covered(visible,tiled,2,4,.06)==0);
+    assert(vc_region_covered(visible,tiled,2,24,.01)==0); /* area budget */
+    /* A 100 pt hole in the middle (where lyrics sit) is visible desktop. */
+    VCBox frame[]={{0,25,1512,422},{0,547,1512,423},{0,447,706,100},{806,447,706,100}};
+    assert(vc_exposed_fraction(visible,frame,4)>0);
+    assert(vc_region_covered(visible,frame,4,24,.06)==0);
+    /* Windows spilling onto another display are clipped to this one. */
+    VCBox spill[]={{-400,0,2400,1200}};
+    assert(vc_region_covered(visible,spill,1,24,.06)==1);
+    VCBox elsewhere[]={{1600,0,800,600}};
+    assert(vc_exposed_fraction(visible,elsewhere,1)==1);
+    /* Negative/stacked origins and malformed input. */
+    VCBox left_display={-1920,-200,1920,1080};
+    VCBox left_cover[]={{-1925,-205,1930,1090}};
+    assert(vc_region_covered(left_display,left_cover,1,24,.06)==1);
+    VCBox junk[]={{NAN,0,100,100},{0,0,-5,10},{0,25,1512,945}};
+    assert(vc_region_covered(visible,junk,3,24,.06)==1);
+    assert(vc_region_covered((VCBox){NAN,0,10,10},maximised,1,24,.06)==0);
+    assert(vc_region_covered(visible,maximised,1,NAN,.06)==0);
+    assert(vc_exposed_fraction((VCBox){0,0,0,10},maximised,1)==1);
+    /* Only the first VC_MAX_COVERS covers count, so a long list is bounded
+       and can only under-report coverage. */
+    VCBox many[VC_MAX_COVERS+8];
+    for(int i=0;i<VC_MAX_COVERS+8;i++)many[i]=(VCBox){0,0,1,1};
+    many[VC_MAX_COVERS+2]=(VCBox){0,25,1512,945};
+    assert(vc_region_covered(visible,many,VC_MAX_COVERS+8,24,.06)==0);
+    many[0]=(VCBox){0,25,1512,945};
+    assert(vc_region_covered(visible,many,VC_MAX_COVERS+8,24,.06)==1);
+    puts("Held-button hover gating and window-coverage geometry passed.");
 }

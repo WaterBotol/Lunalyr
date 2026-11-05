@@ -883,3 +883,124 @@ static float ambientField(float2 p, float flow) {
     colour += mix(tintA, tintB, half(0.5)) * half(star * 0.055);
     return half4(colour * half(0.96), 1.0h);
 }
+
+// ======================================================= direct rendering
+// The same effects drawn by Lunalyr's own Metal view instead of SwiftUI's
+// `colorEffect`, so the wallpaper renders at a bounded pixel budget and is
+// upscaled, rather than shading every Retina pixel. The album tint (formerly
+// a `.color` blend layer) and colour richness (a `.saturation` pass) are
+// applied here, in the same pass. Each fragment calls its effect directly;
+// the effect is linked into the pipeline as a private function.
+
+struct WLBackgroundVertex { float4 position [[position]]; };
+
+vertex WLBackgroundVertex wlBackgroundVertex(uint vid [[vertex_id]]) {
+    float2 corner = float2(float((vid << 1) & 2), float(vid & 2));
+    WLBackgroundVertex out;
+    out.position = float4(corner * 2.0 - 1.0, 0.0, 1.0);
+    return out;
+}
+
+struct WLBackgroundUniforms {
+    float2 size;        // points, as SwiftUI passed them
+    float2 pixelScale;  // drawable pixels per point
+    float time;
+    float flow;
+    float vividness;
+    float padding;
+    float4 tintA;
+    float4 tintB;
+};
+
+static float wlBlendLum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
+
+static float3 wlClipColor(float3 c) {
+    float l = wlBlendLum(c);
+    float n = min(c.r, min(c.g, c.b));
+    float x = max(c.r, max(c.g, c.b));
+    if (n < 0.0) c = l + (c - l) * l / max(l - n, 1e-5);
+    if (x > 1.0) c = l + (c - l) * (1.0 - l) / max(x - l, 1e-5);
+    return c;
+}
+
+static float3 wlEncodeSRGB(float3 l) {
+    return select(1.055 * pow(l, float3(1.0 / 2.4)) - 0.055, l * 12.92, l <= 0.0031308);
+}
+
+static float3 wlFromOKLab(float3 c) {
+    float l = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    float m = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    float s = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    l = l * l * l; m = m * m * m; s = s * s * s;
+    float3 linear = float3( 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                           -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                           -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+    return wlEncodeSRGB(clamp(linear, 0.0, 1.0));
+}
+
+// The album gradient runs corner to corner, top-leading to bottom-trailing,
+// through five evenly spaced stops -- the layer that used to sit on top.
+// SwiftUI blends gradient stops perceptually, so the stops arrive in OKLab.
+static float3 wlAlbumGradient(float2 position, float2 size, constant float4 *stops) {
+    float t = clamp(dot(position, size) / max(dot(size, size), 1e-3), 0.0, 1.0) * 4.0;
+    int index = min(int(t), 3);
+    return wlFromOKLab(mix(stops[index].xyz, stops[index + 1].xyz, t - float(index)));
+}
+
+// `.color` blend: the gradient's hue and saturation, the effect's luminosity;
+// then a luminance-preserving saturation for colour richness.
+static half4 wlGrade(half4 effect, float2 position, constant WLBackgroundUniforms &u, constant float4 *stops) {
+    float3 lit = clamp(float3(effect.rgb), 0.0, 1.0);
+    float3 album = wlAlbumGradient(position, u.size, stops);
+    float3 tinted = wlClipColor(album + (wlBlendLum(lit) - wlBlendLum(album)));
+    float grey = dot(tinted, float3(0.2126, 0.7152, 0.0722));
+    return half4(half3(clamp(mix(float3(grey), tinted, u.vividness), 0.0, 1.0)), 1.0h);
+}
+
+#define WL_BACKGROUND(effect) \
+fragment half4 effect##Background(WLBackgroundVertex in [[stage_in]], \
+                                  constant WLBackgroundUniforms &u [[buffer(0)]], \
+                                  constant float4 *stops [[buffer(1)]]) { \
+    float2 p = in.position.xy / u.pixelScale; \
+    half4 c = effect(p, half4(0.0h, 0.0h, 0.0h, 1.0h), u.size, u.time, u.flow, \
+                     half3(u.tintA.rgb), half3(u.tintB.rgb)); \
+    return wlGrade(c, p, u, stops); \
+}
+
+WL_BACKGROUND(wlPlasma)
+WL_BACKGROUND(wlKaleido)
+WL_BACKGROUND(wlFractal)
+WL_BACKGROUND(wlLiquid)
+WL_BACKGROUND(wlWarp)
+WL_BACKGROUND(wlNebula)
+WL_BACKGROUND(wlVoronoi)
+WL_BACKGROUND(wlOrbs)
+WL_BACKGROUND(wlSilk)
+WL_BACKGROUND(wlWaves)
+WL_BACKGROUND(wlHelix)
+WL_BACKGROUND(wlRipple)
+WL_BACKGROUND(wlMirror)
+WL_BACKGROUND(wlWormhole)
+WL_BACKGROUND(wlRings)
+WL_BACKGROUND(wlVortex)
+WL_BACKGROUND(wlOrbit)
+WL_BACKGROUND(wlBubbles)
+WL_BACKGROUND(wlGalaxy)
+WL_BACKGROUND(wlStrata)
+WL_BACKGROUND(wlClouds)
+WL_BACKGROUND(wlCurtains)
+WL_BACKGROUND(wlRibbons)
+WL_BACKGROUND(wlPrism)
+WL_BACKGROUND(wlTidal)
+WL_BACKGROUND(wlLightTrails)
+
+// Ambient Aurora takes a music vector; the music response lives in the
+// Aurora Curtains visualiser, so it is always silent here.
+fragment half4 wlAuroraBackground(WLBackgroundVertex in [[stage_in]],
+                                  constant WLBackgroundUniforms &u [[buffer(0)]],
+                                  constant float4 *stops [[buffer(1)]]) {
+    float2 p = in.position.xy / u.pixelScale;
+    half4 c = wlAurora(p, half4(0.0h, 0.0h, 0.0h, 1.0h), u.size, u.time, u.flow,
+                       half3(u.tintA.rgb), half3(u.tintB.rgb), float3(0.0));
+    return wlGrade(c, p, u, stops);
+}

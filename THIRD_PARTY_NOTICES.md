@@ -13,3 +13,17 @@ Fosfora Aurora adapts [Fosfora](https://github.com/kevinraymond/fosfora)'s Auror
 ## Yams
 
 Yams 6.2.2 by JP Sim and contributors (MIT) parses LRCLIB's Lyricsfile YAML, including word timestamps. The package includes libyaml under MIT. Complete notices are bundled in Resources/Yams-LICENSE.txt and Resources/libyaml-LICENSE.txt.
+
+## Wavefield
+
+Wavefield and Wavefield Sphere adapt [Wavefield](https://github.com/niko-dellic/wavefield)'s Default preset, modal audio mapping and field shader, copyright (c) 2026 Niko Dellic, under MIT. Pinned commit: 3858a657190ebd09bee704caa094e7e1fd3c6cc2. The [adaptation manifest](ThirdParty/Wavefield/SOURCE.md) records the specific sources and local changes. The full notice is bundled as Sources/Resources/Wavefield-LICENSE.txt.
+
+Wavefield Original bundles the pinned upstream WebGL engine and stock presets. Its Three.js (MIT) and postprocessing (zlib) dependency notices are bundled as Sources/Resources/Wavefield-Web-Dependencies-LICENSE.txt.
+
+## Wavecore
+
+Wavecore bundles Dinesh Kadavakuduru's original WebGL scene and audio mapping under MIT. Its MIT notice, the Ashima Arts and Stefan Gustavson simplex notice, and the WebGL dependency notices are bundled. See [Wavecore source and licences](ThirdParty/Wavecore/SOURCE.md).
+
+## Cymatic Light 3D
+
+Light 3D bundles Corey Epstein's MIT-licensed Cymatic preset and its renderer. See the [source and licence](ThirdParty/Cymatic/SOURCE.md).

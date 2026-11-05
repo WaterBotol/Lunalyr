@@ -32,13 +32,14 @@ int main(void) {
     assert(vc_word_reveal(3,1,2)==1);
     assert(vc_word_reveal(.5,1,2)==0); /* backwards seek */
     assert(vc_word_reveal(NAN,1,2)==0);
-    assert(vc_word_visibility(.5,1,2,1,1)==.25);
-    assert(vc_word_visibility(.5,1,2,1,0)==0);
-    assert(vc_word_visibility(.5,1,2,0,1)==0);
-    assert(vc_word_visibility(1,1,2,1,0)==.25); /* no blink at preview handoff */
-    assert(vc_word_visibility(1.1,1,2,1,0)>.25);
-    assert(vc_word_visibility(3,1,2,1,0)==1);
-    assert(vc_word_visibility(.5,1,2,1,0)==0); /* backwards seek */
+    assert(vc_word_visibility(.5,1,2,1,1,.5)==0);
+    assert(fabs(vc_word_visibility(.75,1,2,1,1,.5)-.125)<1e-8);
+    assert(vc_word_visibility(.5,1,2,1,0,.5)==0);
+    assert(vc_word_visibility(.5,1,2,0,1,.5)==0);
+    assert(vc_word_visibility(1,1,2,1,0,.5)==.25); /* no blink at preview handoff */
+    assert(vc_word_visibility(1.1,1,2,1,0,.5)>.25);
+    assert(vc_word_visibility(3,1,2,1,0,.5)==1);
+    assert(vc_word_visibility(.5,1,2,1,0,.5)==0); /* backwards seek */
     for(int i=0;i<=100;i++) {
         double p=i/100.0;
         assert(vc_word_settle(p)>=0&&vc_word_settle(p)<=1.05);

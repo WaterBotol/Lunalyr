@@ -23,7 +23,7 @@ int vc_vocal_gap(const VCVocalWindow *vocals, int count, double time,
 VCBox vc_word_envelope(double width, double height, double peak_scale, double degrees);
 /* Seek-safe word arrival, 0 before its timestamp and 1 after its entrance. */
 double vc_word_reveal(double time, double start, double end);
-double vc_word_visibility(double time, double start, double end, int preview_enabled, int next_word);
+double vc_word_visibility(double time, double start, double end, int preview_enabled, int next_word, double preview_lead);
 double vc_word_settle(double progress);
 /* Conservative fallback for line-only lyrics spanning a long instrumental. */
 double vc_estimated_line_end(double start, double next_start, int word_count, double seconds_per_word);
