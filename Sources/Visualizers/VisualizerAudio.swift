@@ -23,6 +23,7 @@ final class VisualizerAudio: @unchecked Sendable {
     private var channelCount = 1
     private var latencyOverride: Double?
     private let followsOutput: Bool
+    private let now: () -> Double
     /// The last merged read; surfaces drawing the same frame share it.
     private var cached: (time: Double, snapshot: AudioSnapshot)?
     static let frameShare = 0.002
@@ -31,8 +32,9 @@ final class VisualizerAudio: @unchecked Sendable {
 
     /// `followsOutput` measures the default output device's latency; other
     /// instances (tests) use `setOutputLatency`, or none.
-    init(followsOutput: Bool = false) {
+    init(followsOutput: Bool = false, now: @escaping () -> Double = AudioAnalyzer.now) {
         self.followsOutput = followsOutput
+        self.now = now
         let feed = soundTypes
         left.observeSpectra { feed.receive($0, channel: 0) }
         right.observeSpectra { feed.receive($0, channel: 1) }
@@ -44,7 +46,7 @@ final class VisualizerAudio: @unchecked Sendable {
     /// render harness, which passes simulated times to that one, takes the
     /// same path. Put any per-buffer work there, not here.
     func append(_ pcm: UnsafePointer<Float>, count: Int, sampleRate: Double, channel: Int) {
-        append(pcm, count: count, sampleRate: sampleRate, channel: channel, hostTime: AudioAnalyzer.now())
+        append(pcm, count: count, sampleRate: sampleRate, channel: channel, hostTime: now())
     }
     /// `hostTime` is the capture time of the buffer's last sample, on the
     /// `CACurrentMediaTime` clock (an IO timestamp's host time in seconds).
@@ -89,7 +91,7 @@ final class VisualizerAudio: @unchecked Sendable {
     }
 
     /// The time readers should show now.
-    var presentationTime: Double { AudioAnalyzer.now() - visualDelay }
+    var presentationTime: Double { now() - visualDelay }
 
     func wavefieldPCM() -> WavefieldPCMWindow? { pcm(count: 2048) }
 

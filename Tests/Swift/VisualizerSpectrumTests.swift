@@ -159,9 +159,9 @@ final class VisualizerSpectrumTests: XCTestCase {
 
         // A note that began 100 ms ago is not yet audible on AirPods-like
         // output, and is on screen at once on speakers.
-        let source = VisualizerAudio()
         let rate = 48_000.0
-        let now = AudioAnalyzer.now()
+        let now = 100.0
+        let source = VisualizerAudio(now: { now })
         var buffer = [Float](repeating: 0, count: 480)
         // One second of capture ending now: silence, then a note for the last 100 ms.
         for step in 0..<100 {
@@ -179,10 +179,8 @@ final class VisualizerSpectrumTests: XCTestCase {
         source.setOutputLatency(0.01)
         XCTAssertGreaterThan(source.latest().bands.max()!, 0.4, "Speakers: the note shows immediately")
         let immediate = source.pcm(count: 2048)
-        // The reads happen a few milliseconds after `now`, so allow for that.
         let lead = Double((immediate?.end ?? 0) - (delayed?.end ?? 0))
-        XCTAssertGreaterThan(lead, 0.1 * rate, "Web scenes receive the same delay-aligned window")
-        XCTAssertLessThanOrEqual(lead, 0.155 * rate + 480)
+        XCTAssertEqual(lead, 0.155 * rate, accuracy: 1, "Web scenes receive the same delay-aligned window")
     }
 
     func testTransientsRiseWithinAFrameWhileBandsKeepTheirSoftAttack() {
