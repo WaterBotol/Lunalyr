@@ -72,16 +72,10 @@ struct LyricLineIndex {
     }
 
     private static func isTimingCopy(_ fallback: LyricsFetcher.Line, of timed: LyricsFetcher.Line) -> Bool {
-        let distance = abs(fallback.start - timed.start)
-        guard distance <= 0.85, fallback.end > fallback.start else { return false }
         let vocalEnd = timed.words.lazy.map(\.end).max() ?? timed.end
-        let overlap = min(fallback.end, vocalEnd) - max(fallback.start, timed.start)
-        if overlap >= 0.12 { return true }
-        // An enhanced LRC copy can occupy only the sliver between the
-        // two timestamps. An explicit end can instead mark a real repeat.
-        return fallback.endFromNextLine == true && fallback.start < timed.start
-            && abs(fallback.end - timed.start) < 0.06
-            && (fallback.words.count > 1 || LyricScript.keepsSyllables(fallback.text))
+        let multipleSyllables = fallback.words.count > 1 || LyricScript.keepsSyllables(fallback.text)
+        return ll_mixed_timing_copy(fallback.start, fallback.end, fallback.endFromNextLine == true ? 1 : 0,
+                                    multipleSyllables ? 1 : 0, timed.start, vocalEnd) != 0
     }
 
     /// The line before `index` while it is still being sung at `time`: duet

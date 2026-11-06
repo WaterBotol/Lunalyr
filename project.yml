@@ -18,6 +18,10 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Shared/LyricRules
+        excludes:
+          - Fixtures.json
+          - UPSTREAM
     info:
       path: Sources/Info.plist
       properties:

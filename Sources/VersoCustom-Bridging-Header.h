@@ -2,3 +2,4 @@
 #include "Support/AudioAnalysis.h"
 #include "Support/DesktopInteraction.h"
 #include "Support/LyricMotion.h"
+#include "../Shared/LyricRules/LyricRules.h"

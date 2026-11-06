@@ -434,23 +434,28 @@ final class LyricsFetcher {
     }
     /// Why a candidate is not the playing recording, or nil when it is.
     static func rejection(_ candidate: LyricCandidate, query: LyricQuery) -> String? {
-        guard LyricQuery.similarity(query.title, candidate.title) >= 0.75 else { return "Rejected: title “\(candidate.title)”" }
         let duration = candidate.duration ?? 0
-        let timed = duration > 0 && query.duration > 0
-        if query.hasArtist {
-            guard LyricQuery.similarity(query.artist, candidate.artist) >= 0.65 else {
-                return candidate.artist.isEmpty ? "Rejected: no artist given" : "Rejected: artist “\(candidate.artist)”"
-            }
-        } else if !timed {
-            // Without an artist, only a matching length confirms the recording.
-            return "Rejected: no artist or song length to compare"
-        }
+        let timed = duration.isFinite && duration > 0 && query.duration > 0
         // A local export whose artist matches is not rejected on its [length:],
         // as before: the files are written for the playing track. Without an
         // artist, the length is all that confirms the recording.
         let lengthDecides = !(candidate.source == .lyrimuse && query.hasArtist)
-        if timed, lengthDecides, abs(duration - query.duration) > max(3, query.duration * 0.02) {
+        let match = ll_recording_match(
+            LyricQuery.similarity(query.title, candidate.title), query.artistScore(candidate.artist),
+            query.hasArtist ? 1 : 0, query.hasArtist ? 0 : 1, lengthDecides ? 1 : 0,
+            query.duration, duration
+        )
+        switch match {
+        case Int32(LL_TITLE_MISMATCH.rawValue):
+            return "Rejected: title “\(candidate.title)”"
+        case Int32(LL_ARTIST_MISMATCH.rawValue):
+            return candidate.artist.isEmpty ? "Rejected: no artist given" : "Rejected: artist “\(candidate.artist)”"
+        case Int32(LL_MISSING_IDENTITY.rawValue):
+            return "Rejected: no artist or song length to compare"
+        case Int32(LL_DURATION_MISMATCH.rawValue):
             return "Rejected: duration \(LyricQuery.clock(duration)) vs \(LyricQuery.clock(query.duration))"
+        default:
+            break
         }
         // A service that reports no length is still caught serving a longer edit.
         if !timed, !candidate.source.isLocal, query.duration > 0, case .synced(let lines, _) = candidate.result,
