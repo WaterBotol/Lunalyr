@@ -146,8 +146,8 @@ enum LyricColourMode: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .standard: return "White type, as before."
-        case .albumDrift: return "Colours from the cover drift slowly through the words."
-        case .sungSweep: return "White lyrics fill with the cover’s accent as each word or line is sung. Unsynced lyrics use Album Drift."
+        case .albumDrift: return "Cover colours and coordinating accents drift slowly through the words."
+        case .sungSweep: return "White lyrics fill with an accent that sets off the cover as each word or line is sung. Unsynced lyrics use Album Drift."
         case .musicReactive: return "Hue follows bass against treble; brightness and depth follow loudness. Uses live audio when a visualiser is capturing it, and the vocal timing otherwise."
         case .customGradient: return "Your own two to four colours, drifting through the line."
         }
@@ -485,6 +485,7 @@ final class LyricInkDirector {
     private var vivid = LyricInkDirector.fallbackPastels.2
     /// The cover's colours in OKLab, for "Album accent".
     private var albumColours: [OKLab] = []
+    private var backgroundHue: Double?
     /// Static white's ink, worked out again only when what it depends on changes.
     private struct WhiteKey: Equatable {
         var tile: OKLab
@@ -655,7 +656,10 @@ final class LyricInkDirector {
                          hue: Double(values[0]) * 3 * .pi / 180)
         }
         let shade = Double(key.backdrop) / 256
-        let album = { LyricHighlight.album(self.albumColours, accent: inputs.accent, backdrop: shade, ratio: ratio) }
+        let album = {
+            LyricHighlight.album(self.albumColours, accent: inputs.accent, backgroundHue: self.backgroundHue,
+                                 backdrop: shade, ratio: ratio)
+        }
         switch inputs.highlight {
         case .custom:
             goalTile = LyricHighlight.custom(inputs.highlightCustom ?? LyricHighlight.coral, backdrop: shade, ratio: ratio)
@@ -665,7 +669,8 @@ final class LyricInkDirector {
             let others = stride(from: 0, to: key.stops.count, by: 3).compactMap { restored(Array(key.stops[$0..<$0 + 3])) }
             let previous = highlightKey?.mode == .complement ? goalTile : nil
             goalTile = restored(key.basis).flatMap {
-                LyricHighlight.complement(of: $0, stops: others, previous: previous, backdrop: shade, ratio: ratio)
+                LyricHighlight.complement(of: $0, stops: others, previous: previous, backgroundHue: backgroundHue,
+                                          backdrop: shade, ratio: ratio)
             } ?? album()
         }
         highlightKey = key
@@ -719,13 +724,15 @@ final class LyricInkDirector {
         albumKey = album
         let colours = album.map { Perceptual.oklab(sRGB: SIMD3(Double($0.x), Double($0.y), Double($0.z))) }
         albumColours = colours
-        guard let strongest = colours.max(by: { $0.chroma < $1.chroma }), strongest.chroma >= 0.035 else {
+        let harmony = AlbumColourHarmony(colours)
+        backgroundHue = harmony.backgroundHue
+        guard let backgroundHue, let accentHue = harmony.accentHue(turn: .pi * 0.86) else {
             vivid = Self.fallbackPastels.2
             albumStops = Self.fallbackPastels
             albumCount = 4
             return
         }
-        vivid = strongest
+        vivid = OKLab(l: 0.82, chroma: 0.16, hue: accentHue)
         // Keep distinct cover hues, including the most vivid one wherever
         // it landed in the background gradient.
         var picks: [OKLab] = []
@@ -737,15 +744,20 @@ final class LyricInkDirector {
             if !matches { picks.append(colour) }
             if picks.count == 4 { break }
         }
-        var lyric = picks.map { LyricInk.pastel($0) }.sorted { $0.hue < $1.hue }
+        var lyric = picks.map { LyricInk.pastel($0) }
         if let tint = lyric.first, lyric.count == 1 {
-            // One cover hue still drifts through lighter and deeper shades.
+            // Keep the cover's own light and deep shades, with one colour
+            // that stands out against both.
             lyric = [
                 OKLab(l: min(0.91, tint.l + 0.07), chroma: tint.chroma * 0.65, hue: tint.hue),
-                tint,
                 OKLab(l: max(0.70, tint.l - 0.05), chroma: tint.chroma * 1.18, hue: tint.hue),
+                vivid,
             ]
+        } else if lyric.allSatisfy({ LyricHighlight.hueDistance($0.hue, backgroundHue) < .pi * 0.42 }) {
+            if lyric.count == 4 { lyric.removeLast() }
+            lyric.append(vivid)
         }
+        lyric.sort { $0.hue < $1.hue }
         albumStops = Self.stops(lyric)
         albumCount = max(1, min(4, lyric.count))
     }

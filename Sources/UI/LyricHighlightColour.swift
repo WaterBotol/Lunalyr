@@ -29,9 +29,9 @@ enum LyricHighlightMode: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .complement:
-            return "Opposite the text colour on the colour wheel, and it follows the text as it changes. White text takes the album accent."
+            return "Follows the text colour and picks a complementary accent clear of the cover’s main hue. White text takes an album accent."
         case .album:
-            return "The cover's richest colour, made vivid. Dull olives and browns turn towards a clean colour from the cover."
+            return "A vivid cover accent that stands apart from the album’s main colour."
         case .custom:
             return "Your chosen colour, adjusted only where the text needs more contrast."
         }
@@ -316,7 +316,8 @@ enum LyricHighlight {
     /// to oppose (white, grey). `previous`, the tile chosen a moment ago
     /// for a drifting lyric colour, is kept a little longer when two hues
     /// score alike, so the tile does not flicker between them.
-    static func complement(of lyric: OKLab, stops: [OKLab] = [], previous: OKLab? = nil, backdrop: Double,
+    static func complement(of lyric: OKLab, stops: [OKLab] = [], previous: OKLab? = nil, backgroundHue: Double? = nil,
+                           backdrop: Double,
                            ratio: Double = textContrast) -> OKLab? {
         guard lyric.chroma >= 0.035 else { return nil }
         let others = stops.filter { $0.chroma >= 0.04 }
@@ -326,7 +327,8 @@ enum LyricHighlight {
             // pale one, much less.
             let crowding = others.map { max(0, 30 - degrees(hueDistance(hue, $0.hue))) * min(1, $0.chroma / 0.14) }.max() ?? 0
             let staying = previous.map { degrees(hueDistance(hue, $0.hue)) <= 8 ? 0.025 : 0 } ?? 0
-            return Candidate(hue: hue, chroma: 0.19, penalty: abs(turn) * 0.003 + crowding * 0.004 - staying)
+            let background = backgroundPenalty(hue, beside: backgroundHue)
+            return Candidate(hue: hue, chroma: 0.19, penalty: abs(turn) * 0.003 + crowding * 0.004 + background - staying)
         }
         return best(candidates, backdrop: backdrop, ratio: ratio)?.tile
     }
@@ -340,7 +342,7 @@ enum LyricHighlight {
     /// muddy hue is turned to the nearest clean one. A cover of one hue
     /// that gives nothing clean fans out to its neighbours and its
     /// complement; a cover with no colour takes vermilion.
-    static func album(_ colours: [OKLab], accent: OKLab? = nil, backdrop: Double,
+    static func album(_ colours: [OKLab], accent: OKLab? = nil, backgroundHue: Double? = nil, backdrop: Double,
                       ratio: Double = textContrast) -> OKLab {
         let chromatic = colours.filter { $0.chroma >= 0.04 }
         guard let richest = chromatic.max(by: { $0.chroma < $1.chroma }) else {
@@ -355,8 +357,9 @@ enum LyricHighlight {
             var preference = (richest.chroma - colour.chroma) * 1.2
             if let accent, accent.chroma >= 0.04, hueDistance(colour.hue, accent.hue) < 20 * .pi / 180 { preference -= 0.03 }
             for turn in turns {
-                candidates.append(Candidate(hue: colour.hue + turn * .pi / 180, chroma: want,
-                                            penalty: preference + abs(turn) * 0.004))
+                let hue = colour.hue + turn * .pi / 180
+                candidates.append(Candidate(hue: hue, chroma: want,
+                                            penalty: preference + abs(turn) * 0.004 + backgroundPenalty(hue, beside: backgroundHue)))
             }
         }
         let own = best(candidates, backdrop: backdrop, ratio: ratio)
@@ -370,6 +373,11 @@ enum LyricHighlight {
             if let fanned = best(candidates, backdrop: backdrop, ratio: ratio) { return fanned.tile }
         }
         return own?.tile ?? OKLab(l: 0.5, chroma: 0.15, hue: richest.hue)
+    }
+
+    private static func backgroundPenalty(_ hue: Double, beside backgroundHue: Double?) -> Double {
+        guard let backgroundHue else { return 0 }
+        return 0.50 * max(0, 1 - hueDistance(hue, backgroundHue) / (.pi / 3))
     }
 
     /// The user's own colour as a tile: its hue and chroma kept, its

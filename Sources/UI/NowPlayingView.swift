@@ -275,7 +275,7 @@ struct NowPlayingView: View {
                         mood: mood,
                         accent: lyricAccent,
                         trackSeed: trackSeed,
-                        palette: cover.stops,
+                        palette: cover.artworkStops,
                         interval: frameInterval,
                         paused: renderingPaused,
                         // The measured brightness behind the lyrics, so text

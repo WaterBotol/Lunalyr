@@ -10,8 +10,8 @@ final class StarTrailsTests: XCTestCase {
     // MARK: Simulation
 
     func testStateLayoutMatchesTheShader() throws {
-        XCTAssertEqual(L.float4Count, 204)
-        XCTAssertEqual(L.byteCount, 3264)
+        XCTAssertEqual(L.float4Count, 206)
+        XCTAssertEqual(L.byteCount, 3296)
         XCTAssertLessThanOrEqual(L.byteCount, 4096, "Small enough for setFragmentBytes on the static path")
         let shader = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Visualizers/StarTrails.metal")
@@ -23,7 +23,8 @@ final class StarTrailsTests: XCTestCase {
         }
         let expected = ["HDR0": L.hdr0, "HDR1": L.hdr1, "HDR2": L.hdr2, "ENV0": L.env0, "ENV1": L.env1,
                         "STAGE": L.stage, "CLK": L.clock, "CRAFT": L.craft, "ONSET": L.onset, "LIVE": L.live,
-                        "AST": L.asteroid, "TRAIL": L.trail, "kTrailN": L.trailSamples, "kAst": L.asteroids, "SKY": L.sky, "SKYTINT": L.skyTints]
+                        "AST": L.asteroid, "TRAIL": L.trail, "kTrailN": L.trailSamples, "kAst": L.asteroids,
+                        "SKY": L.sky, "SKYTINT": L.skyTints, "TRAILCOLOUR": L.trailColours]
         for (name, value) in expected { XCTAssertEqual(try constant(name), value, name) }
         XCTAssertTrue(source.contains("[[buffer(\(L.bufferIndex))]]"), "The shader reads the state at buffer \(L.bufferIndex)")
     }
@@ -575,6 +576,26 @@ final class StarTrailsTests: XCTestCase {
         }
     }
 
+    func testAlbumTrailsStayDistinctAndBrightAgainstTheSky() throws {
+        for hue in stride(from: 0.0, to: 1.0, by: 1.0 / 12) {
+            let cover = AlbumWallpaperPalette(grid: Array(repeating: SIMD3(hue, 0.9, 0.85), count: 9))
+            let sky = try XCTUnwrap(AlbumColourHarmony(cover.artworkStops.map {
+                Perceptual.oklab(sRGB: SIMD3<Double>($0))
+            }).backgroundHue)
+            let trails = StarTrailsSky.album(cover).trails.map { core in
+                let rgb = SIMD3(core.x, core.y, core.z)
+                XCTAssertEqual(core.w, 1)
+                XCTAssertGreaterThanOrEqual(Perceptual.contrast(Perceptual.luminance(sRGB: rgb), 0.13), 2.99)
+                return Perceptual.oklab(sRGB: rgb)
+            }
+            XCTAssertGreaterThan(LyricHighlight.hueDistance(trails[0].hue, trails[1].hue), .pi / 2)
+            for trail in trails {
+                XCTAssertGreaterThan(LyricHighlight.hueDistance(trail.hue, sky), .pi * 0.6)
+            }
+        }
+        XCTAssertEqual(sky(.bw).trails, StarTrailsSky.original.trails)
+    }
+
     @MainActor
     func testAlbumColoursReachDifferentRegionsOfTheRenderedSky() throws {
         let (w, h) = (384, 216)
@@ -643,7 +664,7 @@ final class StarTrailsTests: XCTestCase {
         for _ in 0..<360 { simulation.advance(wallDelta: 1.0 / 30, motionDelta: 1.0 / 30, sound: StarTrailsSound()) }
         let restored = simulation.pack(aspect: 16.0 / 9)
         XCTAssertEqual(Array(restored[L.sky..<L.skyTints]), expected, "settled back exactly")
-        XCTAssertEqual(Array(restored[L.skyTints..<L.float4Count]), StarTrailsSky.original.tints.map { SIMD4<Float>($0) })
+        XCTAssertEqual(Array(restored[L.skyTints..<L.float4Count]), StarTrailsSky.original.colours.map { SIMD4<Float>($0) })
     }
 
     /// A new cover's sky crossfades over about 2.5 s: no pop at the start, small steps, settled
@@ -659,8 +680,8 @@ final class StarTrailsTests: XCTestCase {
             }
         }
         func distance(_ a: [SIMD4<Float>], _ b: [SIMD4<Float>]) -> Float { zip(a, b).map { simd_length($0 - $1) }.max() ?? 0 }
-        let start = from.tints.map { SIMD4<Float>($0) }
-        let end = to.tints.map { SIMD4<Float>($0) }
+        let start = from.colours.map { SIMD4<Float>($0) }
+        let end = to.colours.map { SIMD4<Float>($0) }
         let total = distance(start, end)
         XCTAssertGreaterThan(total, 0.2)
         let frames = fade(fps: 60, seconds: 4)
@@ -722,7 +743,7 @@ final class StarTrailsTests: XCTestCase {
                                         sensitivity: 1, palette: RenderPalette.earth.palette)
         XCTAssertEqual(simulation.skyTarget, sky(.earth), "starts on the cover's sky")
         XCTAssertEqual(Array(simulation.pack(aspect: 16.0 / 9)[L.skyTints..<L.float4Count]),
-                       sky(.earth).tints.map { SIMD4<Float>($0) }, "no fade in from violet")
+                       sky(.earth).colours.map { SIMD4<Float>($0) }, "no fade in from violet")
         shared.advance(sceneTime: 2, clock: 2, frame: AudioSnapshot(), response: VisualizerResponse(), sensitivity: 1, palette: nil)
         XCTAssertEqual(simulation.skyTarget, .original, "no cover: the violet sky")
     }

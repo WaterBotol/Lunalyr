@@ -38,9 +38,10 @@ enum LyricCard {
         }
 
         func inkInputs(vocal: Double) -> LyricInkDirector.Inputs {
-            .init(mode: mode, speed: speed, strength: strength, custom: custom, album: palette.stops,
-                  backdrop: 0.06, vocal: vocal, reduceMotion: reduceMotion, increaseContrast: increaseContrast,
-                  highlight: highlight, highlightCustom: highlightCustom)
+            let backdrop = LyricLegibility.darkened(palette.gradientLuminance(vividness: 1), by: LyricCard.lightestScrim)
+            return .init(mode: mode, speed: speed, strength: strength, custom: custom, album: palette.artworkStops,
+                         backdrop: max(0.06, backdrop), vocal: vocal, reduceMotion: reduceMotion,
+                         increaseContrast: increaseContrast, highlight: highlight, highlightCustom: highlightCustom)
         }
     }
 
@@ -94,6 +95,7 @@ enum LyricCard {
     static let inset: CGFloat = 52
     static let trackFooterHeight: CGFloat = 224
     static let signatureHeight: CGFloat = 38
+    static let lightestScrim = 0.48
     static let rollingHeightInTypeSizes: CGFloat = 2.35
 
     /// The line to share: the one being sung, or the last one sung during
@@ -470,7 +472,7 @@ struct LyricCardView: View {
                     .blur(radius: 108)
                     .opacity(0.62)
             }
-            LinearGradient(colors: [.black.opacity(0.48), .black.opacity(0.64), .black.opacity(0.86)],
+            LinearGradient(colors: [.black.opacity(LyricCard.lightestScrim), .black.opacity(0.64), .black.opacity(0.86)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }

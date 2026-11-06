@@ -154,6 +154,15 @@ final class LyricHighlightTests: XCTestCase {
 
     // MARK: Complement lyrics
 
+    func testComplementAvoidsAnAlbumBackgroundThatMatchesTheOppositeHue() throws {
+        let background = 2 * Double.pi / 3
+        let lyric = OKLab(l: 0.84, chroma: 0.15, hue: background + .pi)
+        let tile = try XCTUnwrap(LyricHighlight.complement(of: lyric, backgroundHue: background, backdrop: 0.13))
+        XCTAssertGreaterThan(LyricHighlight.hueDistance(tile.hue, background), .pi / 6)
+        XCTAssertGreaterThanOrEqual(LyricHighlight.hueDistance(tile.hue, lyric.hue), .pi * 0.74)
+        assertReadable(tile, backdrop: 0.13, "tile beside the album and lyric colours")
+    }
+
     func testComplementOpposesTheLyricColourAndStaysClean() {
         for hue in stride(from: 0.0, to: 360, by: 7.5) {
             for (l, c) in [(0.78, 0.08), (0.85, 0.14), (0.7, 0.18)] {

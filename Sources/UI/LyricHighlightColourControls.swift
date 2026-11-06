@@ -72,7 +72,7 @@ struct LyricColourSwatch: View {
         let grid = rendersLiveContent ? DesktopWallpaperController.shared.currentPalette : ColorExtractor.fallbackHSBPalette
         return LyricInkDirector.Inputs(mode: colours.mode, speed: colours.speed, strength: colours.strength,
             custom: colours.customColours,
-            album: AlbumWallpaperPalette(grid: grid).stops,
+            album: AlbumWallpaperPalette(grid: grid).artworkStops,
             backdrop: Self.backdropLuminance, vocal: 0.5, reduceMotion: reduceMotion,
             increaseContrast: contrast == .increased, highlight: options.mode, highlightCustom: options.customColour)
     }

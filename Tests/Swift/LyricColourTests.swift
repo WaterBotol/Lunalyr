@@ -332,7 +332,7 @@ final class LyricColourTests: XCTestCase {
     }
 
     @MainActor
-    func testAlbumDriftStillMovesThroughShadesOfASingleCoverHue() {
+    func testSingleHueAlbumDriftKeepsCoverShadesAndAddsAnAccent() {
         let director = LyricInkDirector()
         let album = [SIMD3<Float>(0.13, 0.26, 0.8)]
         let inputs = LyricInkDirector.Inputs(mode: .albumDrift, album: album)
@@ -343,7 +343,26 @@ final class LyricColourTests: XCTestCase {
         let lightness = samples.map(\.l)
         XCTAssertGreaterThan((lightness.max() ?? 0) - (lightness.min() ?? 0), 0.08)
         let hue = Perceptual.oklab(sRGB: SIMD3<Double>(album[0])).hue
-        XCTAssertTrue(samples.allSatisfy { abs($0.hue - hue) < 0.03 })
+        XCTAssertTrue(samples.contains { LyricHighlight.hueDistance($0.hue, hue) < 0.03 })
+        XCTAssertTrue(samples.contains { LyricHighlight.hueDistance($0.hue, hue) > .pi * 0.75 })
+    }
+
+    @MainActor
+    func testSungSweepUsesAContrastingAccentFromTheCover() {
+        let field = SIMD3<Float>(0.12, 0.30, 0.74)
+        let accent = SIMD3<Float>(0.78, 0.45, 0.12)
+        let album = Array(repeating: field, count: 8) + [accent]
+        let backdrop = 0.14
+        let director = LyricInkDirector()
+        var ink = LyricInk.white
+        for frame in 0...32 {
+            ink = director.ink(.init(mode: .sungSweep, album: album, backdrop: backdrop), wall: Double(frame) / 4)
+        }
+        let sung = Perceptual.oklab(sRGB: rgb(ink.base.sung))
+        let source = Perceptual.oklab(sRGB: SIMD3<Double>(accent))
+        XCTAssertLessThan(LyricHighlight.hueDistance(sung.hue, source.hue), .pi / 16)
+        XCTAssertGreaterThanOrEqual(Perceptual.contrast(luminance(ink.base.sung), backdrop), 2.99)
+        XCTAssertGreaterThan(luminance(ink.base.rest), 0.99)
     }
 
     func testBackdropEstimateFollowsTheWallpaperAndScrim() {

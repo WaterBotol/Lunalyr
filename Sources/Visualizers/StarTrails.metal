@@ -45,7 +45,7 @@ namespace st {
 #endif
 
 // ------------------------------------------------------------ state layout (float4 slots)
-// Keep in sync with StarTrailsLayout (StarTrailsSimulation.swift; pinned by StarTrailsTests). 204 float4 = 3,264 bytes.
+// Keep in sync with StarTrailsLayout (StarTrailsSimulation.swift; pinned by StarTrailsTests). 206 float4 = 3,296 bytes.
 constant int HDR0 = 0;    // formation centre x, y (H), flight axis (rad: the craft's mean heading), aspect
 constant int HDR1 = 1;    // trail s0 (H), trail ds (H), bright-star scroll, dust-star scroll ([0,256) H along the axis)
 constant int HDR2 = 2;    // morph angle A, morph angle B [0, 2pi), calm 0..1 (ramped), star-light gain
@@ -61,6 +61,7 @@ constant int AST = 52;    // 10 asteroids x 2: (x, y, radius, rotation), (seed, 
 constant int TRAIL = 72;  // 2 trails x 56 samples: (cross offset c, width = 1 + 0.35 x lead, glow, hot)
 constant int SKY = 184;   // 11 reference sky colours (display space): deep sky, cloud ramp x7, wisp, hot wisp, dust tint
 constant int SKYTINT = 195; // 3x3 cover tints (linear RGB), with album strength in W
+constant int TRAILCOLOUR = 204; // two trail cores (display RGB), with album strength in W
 constant int kTrailN = 56;
 constant int kAst = 10;
 constant int kKick0 = 0, kKickN = 6, kSnare0 = 6, kSnareN = 6, kHat0 = 12, kHatN = 8;
@@ -128,9 +129,7 @@ static float fbmL(float2 x, uint salt, int octaves) { return fbmP(x + 512.0, 1 <
 
 // ------------------------------------------------------------ palette (display space; measured from the reference)
 // The sky's own colours (the violet original or the album cover's) come from the state: SKY.
-constant float3 kPinkCore = float3(0.992, 0.478, 0.992); // #FD7AFD (measured core, colour-managed)
 constant float3 kPinkGlow = float3(0.620, 0.140, 0.360); // glow at the core edge, above the sky (measured #B93C90 rim)
-constant float3 kLimeCore = float3(0.882, 0.996, 0.478); // #E1FE7A
 constant float3 kLimeGlow = float3(0.190, 0.420, 0.080);
 // The pink trail while the voice sings: a warmer, rosier hue at the same luminance, so the voice
 // warms the trail without brightening the lyric stage.
@@ -496,7 +495,8 @@ static float sdTri(float2 p, float2 a, float2 b, float2 c) {
 // The craft's light: `under` (beneath the hull) is the engine glow, which the trail's own sound
 // swells, and a kick's bloom round it; `over` (on top of the hull) is a snare's ice sparkle at
 // the nose. A snare also lights the hull's rim. fx: (engine glow, head s, snare sparkle, kick bloom).
-static float4 craftSprite(float2 p, float4 craft, float4 fx, int k, float resY, thread float3& under, thread float3& over) {
+static float4 craftSprite(float2 p, float4 craft, float4 fx, int k, float4 trailColour,
+                          float resY, thread float3& under, thread float3& over) {
     const float L = 0.074;                       // craft length, H (110 px at 1440p)
     float2 d = p - craft.xy;
     under = float3(0.0); over = float3(0.0);
@@ -507,7 +507,7 @@ static float4 craftSprite(float2 p, float4 craft, float4 fx, int k, float resY, 
     float2 lp = float2(dot(d, float2(ch, sh)), dot(d, float2(-sh, ch))) / L;   // x forward, y left
     float2 ep = lp - float2(-0.45, 0.0);
     float r2 = dot(ep, ep);
-    under = (k == 0 ? kPinkCore : kLimeCore) * (exp(-r2 / 0.006) * (0.9 * fx.x + 1.4 * fx.w) + 0.65 * fx.w * exp(-r2 / 0.09));
+    under = trailColour.rgb * (exp(-r2 / 0.006) * (0.9 * fx.x + 1.4 * fx.w) + 0.65 * fx.w * exp(-r2 / 0.09));
     if (fx.z > 0.002) {
         float2 dpx = (d - L * 0.53 * float2(ch, sh)) * resY;     // pixels from just past the nose
         float px = resY / 1000.0;
@@ -530,6 +530,9 @@ static float4 craftSprite(float2 p, float4 craft, float4 fx, int k, float resY, 
     float3 hull = k == 0 ? float3(0.80, 0.24, 0.32) : float3(0.33, 0.48, 0.90);
     float3 dark = k == 0 ? float3(0.36, 0.08, 0.15) : float3(0.12, 0.17, 0.42);
     float3 hi   = k == 0 ? float3(1.00, 0.62, 0.66) : float3(0.74, 0.84, 1.00);
+    hull = mix(hull, trailColour.rgb * 0.86, trailColour.w);
+    dark = mix(dark, trailColour.rgb * 0.35, trailColour.w);
+    hi = mix(hi, mix(trailColour.rgb, float3(1.0), 0.45), trailColour.w);
     float2 lightLocal = float2(dot(float2(-0.6, 0.8), float2(ch, sh)), dot(float2(-0.6, 0.8), float2(-sh, ch)));
     float side = sign(bp.y) * sign(lightLocal.y) * (0.6 + 0.4 * sin(bank) * sign(bp.y));
     float3 colr = mix(dark, hull, 0.55 + 0.45 * clamp(side, -1.0, 1.0));
@@ -651,17 +654,20 @@ fragment float4 starTrailsFragment(FSQuadOut in [[stage_in]], constant VizUnifor
     TrailHit ta = trail(s, 0, sAxis, cAxis, resY);
     TrailHit tb = trail(s, 1, sAxis, cAxis, resY);
     float glowGain = kTrailGlow * mix(1.0, 0.52, stage);       // glows step back behind the lyrics
-    float3 pinkGlow = mix(kPinkGlow, kPinkWarmGlow, 0.7 * ta.lead);                     // the voice warms the pink trail
-    col += pinkGlow * ta.glow * (1.0 - ta.core) * min(2.6, ta.bright) * glowGain;
-    col += kLimeGlow * tb.glow * (1.0 - tb.core) * min(2.6, tb.bright) * glowGain;
-    float3 coreA = mix(mix(kPinkCore, kPinkWarmCore, 0.45 * ta.lead), float3(1.0, 0.92, 1.0), 0.7 * ta.hot);   // kick packets:
-    float3 coreB = mix(kLimeCore, float3(0.97, 1.0, 0.90), 0.7 * tb.hot);                                     // a white-hot bead
+    float4 trailA = s[TRAILCOLOUR], trailB = s[TRAILCOLOUR + 1];
+    float3 warm = mix(kPinkWarmCore, mix(trailA.rgb, float3(1.0, 0.91, 0.80), 0.20), trailA.w);
+    float3 glowA = mix(mix(kPinkGlow, kPinkWarmGlow, 0.7 * ta.lead), mix(trailA.rgb, warm, 0.5 * ta.lead) * 0.54, trailA.w);
+    float3 glowB = mix(kLimeGlow, trailB.rgb * 0.50, trailB.w);
+    col += glowA * ta.glow * (1.0 - ta.core) * min(2.6, ta.bright) * glowGain;
+    col += glowB * tb.glow * (1.0 - tb.core) * min(2.6, tb.bright) * glowGain;
+    float3 coreA = mix(mix(trailA.rgb, warm, 0.45 * ta.lead), float3(1.0, 0.92, 1.0), 0.7 * ta.hot);   // kick packets:
+    float3 coreB = mix(trailB.rgb, float3(0.97, 1.0, 0.90), 0.7 * tb.hot);                              // a white-hot bead
     float cover = max(ta.core, tb.core);
     col = col * (1.0 - cover) + coreA * ta.core + coreB * tb.core;
 
     for (int k = 0; k < 2; k++) {
         float3 under, over;
-        float4 cs = craftSprite(p, s[CRAFT + 2 * k], s[CRAFT + 2 * k + 1], k, resY, under, over);
+        float4 cs = craftSprite(p, s[CRAFT + 2 * k], s[CRAFT + 2 * k + 1], k, s[TRAILCOLOUR + k], resY, under, over);
         col += under * (1.0 - cs.a);
         col = mix(col, cs.rgb, cs.a) + over;
     }
