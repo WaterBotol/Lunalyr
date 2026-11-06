@@ -105,8 +105,7 @@ enum StarTrailsLayout {
     static let trailSamples = 56, asteroids = 10
     static let sky = trail + 2 * trailSamples              // 184: StarTrailsSky.count colours
     static let skyTints = sky + StarTrailsSky.count        // 195: nine album tints
-    static let trailColours = skyTints + StarTrailsSky.tintCount // 204: two trail cores
-    static let float4Count = trailColours + StarTrailsSky.trailCount
+    static let float4Count = skyTints + StarTrailsSky.tintCount
     static let byteCount = float4Count * 16
     /// The fragment buffer index the state is bound at.
     static let bufferIndex = 6

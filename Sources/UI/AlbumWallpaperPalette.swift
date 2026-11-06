@@ -69,11 +69,9 @@ struct AlbumWallpaperPalette: Equatable {
 /// A small vivid detail can supply an accent without becoming the background.
 struct AlbumColourHarmony {
     let backgroundHue: Double?
-    private let colours: [OKLab]
 
     init(_ colours: [OKLab]) {
         let chromatic = colours.filter { $0.chroma >= 0.035 }
-        self.colours = chromatic
         func support(_ colour: OKLab) -> Double {
             chromatic.reduce(0) { sum, sample in
                 let distance = LyricHighlight.hueDistance(colour.hue, sample.hue)
@@ -81,20 +79,5 @@ struct AlbumColourHarmony {
             }
         }
         backgroundHue = chromatic.max { support($0) < support($1) }?.hue
-    }
-
-    /// Prefer a real cover colour near the desired harmony. For covers
-    /// with one hue, turn around the wheel to make an accent.
-    func accentHue(turn: Double, tolerance: Double) -> Double? {
-        guard let backgroundHue else { return nil }
-        let goal = backgroundHue + turn
-        let candidates = colours.filter {
-            LyricHighlight.hueDistance($0.hue, backgroundHue) >= .pi * 0.45
-                && LyricHighlight.hueDistance($0.hue, goal) <= tolerance
-        }
-        func cost(_ colour: OKLab) -> Double {
-            LyricHighlight.hueDistance(colour.hue, goal) - min(0.24, colour.chroma)
-        }
-        return candidates.min { cost($0) < cost($1) }?.hue ?? goal
     }
 }

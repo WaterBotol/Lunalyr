@@ -14,19 +14,14 @@ struct StarTrailsSky: Equatable {
     ]
     static let count = originalColours.count
     static let tintCount = 9
-    private static let originalTrails: [SIMD4<Double>] = [[0.992, 0.478, 0.992, 0], [0.882, 0.996, 0.478, 0]]
-    static let trailCount = originalTrails.count
-    static let brightNebulaLuminance = 0.085
 
     /// Linear RGB, scaled to at most unit luminance. W is the strength of
-    /// the album effect. The final two slots hold trail cores in sRGB.
-    let colours: [SIMD4<Double>]
-    var tints: ArraySlice<SIMD4<Double>> { colours.prefix(Self.tintCount) }
-    var trails: ArraySlice<SIMD4<Double>> { colours.suffix(Self.trailCount) }
-    static let original = StarTrailsSky(colours: Array(repeating: SIMD4(1, 1, 1, 0), count: tintCount) + originalTrails)
+    /// the album effect, also used for the nebula's softness.
+    let tints: [SIMD4<Double>]
+    static let original = StarTrailsSky(tints: Array(repeating: SIMD4(1, 1, 1, 0), count: tintCount))
 
     static func album(_ palette: AlbumWallpaperPalette) -> StarTrailsSky {
-        let tints = palette.artworkStops.map { rgb -> SIMD4<Double> in
+        StarTrailsSky(tints: palette.artworkStops.map { rgb in
             let colour = SIMD3<Double>(rgb)
             let luminance = Perceptual.luminance(sRGB: colour)
             let linear = SIMD3(Perceptual.linear(colour.x), Perceptual.linear(colour.y), Perceptual.linear(colour.z))
@@ -35,31 +30,7 @@ struct StarTrailsSky: Equatable {
             let gain = 0.68 + 0.28 * sqrt(luminance)
             let tint = luminance > 0.0005 ? linear * (gain / luminance) : SIMD3(repeating: gain)
             return SIMD4(tint.x, tint.y, tint.z, 1)
-        }
-        let harmony = AlbumColourHarmony(palette.artworkStops.map { Perceptual.oklab(sRGB: SIMD3<Double>($0)) })
-        // Two sides of a triad, with room to match a nearby cover accent
-        // while staying at least 100 degrees away from the sky and each other.
-        let turn = 2 * Double.pi / 3
-        let trails = [turn, -turn].enumerated().map { index, turn in
-            guard let hue = harmony.accentHue(turn: turn, tolerance: .pi / 18) else { return originalTrails[index] }
-            let core = Perceptual.sRGB(vividCore(hue: hue))
-            return SIMD4(core.x, core.y, core.z, 1)
-        }
-        return StarTrailsSky(colours: tints + trails)
-    }
-
-    /// Find the most saturated tone the display can show at this hue
-    /// while keeping the core at least 3:1 against a bright part of the sky.
-    private static func vividCore(hue: Double) -> OKLab {
-        let background = brightNebulaLuminance
-        var best = Perceptual.readable(OKLab(l: 0.92, chroma: 0.34, hue: hue), background: background)
-        for step in 0..<16 {
-            let tone = Perceptual.clipped(OKLab(l: 0.72 + Double(step) * 0.0125, chroma: 0.34, hue: hue))
-            if tone.chroma > best.chroma, Perceptual.contrast(Perceptual.luminance(tone), background) >= 3 {
-                best = tone
-            }
-        }
-        return best
+        })
     }
 
     static let packedOriginal = originalColours.map { colour in
@@ -76,7 +47,7 @@ struct StarTrailsSkyFade {
 
     init(_ sky: StarTrailsSky) {
         target = sky
-        a = sky.colours; b = sky.colours; c = sky.colours
+        a = sky.tints; b = sky.tints; c = sky.tints
     }
 
     mutating func aim(at sky: StarTrailsSky) {
@@ -86,8 +57,8 @@ struct StarTrailsSkyFade {
     mutating func step(_ dt: Double) {
         guard dt > 0 else { return }
         let k = 1 - exp(-dt / Self.tau)
-        for i in target.colours.indices {
-            a[i] += (target.colours[i] - a[i]) * k
+        for i in target.tints.indices {
+            a[i] += (target.tints[i] - a[i]) * k
             b[i] += (a[i] - b[i]) * k
             c[i] += (b[i] - c[i]) * k
         }
@@ -95,9 +66,9 @@ struct StarTrailsSkyFade {
 
     func write(into out: UnsafeMutablePointer<SIMD4<Float>>) {
         for (i, colour) in StarTrailsSky.packedOriginal.enumerated() { out[i] = colour }
-        for (i, colour) in c.enumerated() {
-            let goal = target.colours[i]
-            let value = simd_distance(colour, goal) < 1e-7 ? goal : colour
+        for (i, tint) in c.enumerated() {
+            let goal = target.tints[i]
+            let value = simd_distance(tint, goal) < 1e-7 ? goal : tint
             out[StarTrailsSky.count + i] = SIMD4<Float>(value)
         }
     }
