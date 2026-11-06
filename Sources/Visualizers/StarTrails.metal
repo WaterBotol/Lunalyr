@@ -49,7 +49,7 @@ namespace st {
 constant int HDR0 = 0;    // formation centre x, y (H), flight axis (rad: the craft's mean heading), aspect
 constant int HDR1 = 1;    // trail s0 (H), trail ds (H), bright-star scroll, dust-star scroll ([0,256) H along the axis)
 constant int HDR2 = 2;    // morph angle A, morph angle B [0, 2pi), calm 0..1 (ramped), star-light gain
-constant int ENV0 = 3;    // display envelopes: kick, snare, hat, bass
+constant int ENV0 = 3;    // trail beat pulse, snare envelope, hat envelope, bass envelope
 constant int ENV1 = 4;    // vocal, pad, level, pad breath
 constant int STAGE = 5;   // lyric stage centre (uv), radii (uv)
 constant int CLK = 6;     // twinkle clock [0,64) s, vocal phase [0,4pi), cloud scroll [0,256) H, 1/drift (s per H)
@@ -650,7 +650,8 @@ fragment float4 starTrailsFragment(FSQuadOut in [[stage_in]], constant VizUnifor
     float sAxis = -dot(rel, f), cAxis = dot(rel, n);
     TrailHit ta = trail(s, 0, sAxis, cAxis, resY);
     TrailHit tb = trail(s, 1, sAxis, cAxis, resY);
-    float glowGain = kTrailGlow * mix(1.0, 0.52, stage);       // glows step back behind the lyrics
+    float beatGlow = 1.0 + mix(1.25, 0.55, stage) * env0.x;
+    float glowGain = kTrailGlow * mix(1.0, 0.52, stage) * beatGlow;
     float3 pinkGlow = mix(kPinkGlow, kPinkWarmGlow, 0.7 * ta.lead);                     // the voice warms the pink trail
     col += pinkGlow * ta.glow * (1.0 - ta.core) * min(2.6, ta.bright) * glowGain;
     col += kLimeGlow * tb.glow * (1.0 - tb.core) * min(2.6, tb.bright) * glowGain;

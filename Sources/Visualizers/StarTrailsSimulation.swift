@@ -2,7 +2,7 @@ import Foundation
 import simd
 
 // StarTrailsSimulation is the CPU half of Star Trails (StarTrails.metal). It owns
-// everything with memory and packs the 195-float4 StarTrailsState (3,120 bytes) that
+// everything with memory and packs the 204-float4 StarTrailsState (3,264 bytes) that
 // starTrailsFragment reads at fragment buffer 6:
 //   * the two craft: a formation orbit (180° apart, clockwise, 3.55 s, 0.095 × 0.075 H)
 //     with seeded wander. They glide: the path, speed and heading are smooth functions of
@@ -12,7 +12,8 @@ import simd
 //     heading is the path's analytic tangent, so it never swings on a hit either;
 //   * light from hits, each rising from zero when the simulation learns of the onset, never
 //     mid-flare: a kick lays a bright packet into the trail being laid and blooms the craft's
-//     engines, a snare puts a brief sparkle and rim light on each craft;
+//     engines, a snare puts a brief sparkle and rim light on each craft. Kicks
+//     and bass attacks also pulse the coloured glow along both trails;
 //   * the trail history: space-frame craft positions per substep, drifting to the lower
 //     left at 0.97 H/s, resampled to 56 uniform axis samples per trail. Each sample keeps
 //     the width and glow it was laid with, so kick packets, sung phrases (pink, warmer
@@ -237,6 +238,10 @@ final class StarTrailsSimulation {
     private var engine = Follower(attack: 0.04, release: 0.30)
     /// The snare's sparkle on the craft (light only), 0…1.
     private var sparkle = 0.0
+    private var bassAttackArmed = true
+    private var bassAttackTime = -Double.infinity
+    private var bassAttackStrength = 0.0
+    private var trailPulse = 0.0
     /// Each craft's heading: the analytic tangent of its path in the space frame.
     private var headings = SIMD2<Double>(0, 0)
     /// The sky's colours, crossfading to the latest target.
@@ -411,6 +416,15 @@ final class StarTrailsSimulation {
             }
         }
         display[0].step(sound.kick, dtW); display[1].step(sound.snare, dtW); display[2].step(sound.hat, dtW)
+        // The tonal bass envelope also follows sustained notes. Compare it
+        // with its slower display envelope to catch attacks only.
+        let bassRise = sound.bass - display[3].v
+        if bassRise <= 0.055 { bassAttackArmed = true }
+        if bassAttackArmed && bassRise >= 0.14 && w - bassAttackTime >= 0.16 {
+            bassAttackArmed = false
+            bassAttackTime = w - dtW
+            bassAttackStrength = min(1, 0.45 + 1.1 * bassRise)
+        }
         display[3].step(sound.bass, dtW); display[4].step(sound.vocal, dtW); display[5].step(sound.pad, dtW)
         level.step(sound.level, dtW)
         cruise.step(sound.level, dtW)
@@ -433,6 +447,10 @@ final class StarTrailsSimulation {
         var pulse = 0.0, flash = 0.0
         for o in onsets[0] { pulse = max(pulse, o.strength * Self.bump(w - o.lit, tau: Self.packetPeak)) }
         for o in onsets[1] { flash = max(flash, o.strength * Self.bump(w - o.lit, tau: Self.sparklePeak)) }
+        // Band-only frames have a kick envelope without an onset counter.
+        let kickGlow = sound.kickOnsets == 0 && sound.kickTime == nil ? display[0].v : pulse
+        let bassGlow = bassAttackStrength * Self.bump(w - bassAttackTime, tau: 0.085)
+        trailPulse = max(kickGlow, 0.85 * bassGlow) * transient
         pulse *= transient
         sparkle = min(1, flash * transient)
         engine.step(pulse, dtW)
@@ -482,7 +500,7 @@ final class StarTrailsSimulation {
     /// The light of a hit: zero value and slope at age 0 (it never pops), peak 1 at age = tau,
     /// then a smooth fall (16 % at 3 tau). The 10-90 % rise takes 0.58 tau.
     static func bump(_ age: Double, tau: Double) -> Double {
-        guard age > 0 else { return 0 }
+        guard age.isFinite, age > 0 else { return 0 }
         let x = age / tau; return x * x * exp(2 * (1 - x))
     }
     /// A kick's packet peaks 100 ms after it starts (58 ms rise) and has faded by 0.4 s; the
@@ -535,7 +553,7 @@ final class StarTrailsSimulation {
         st[L.hdr1] = SIMD4<Float>(SIMD4(Self.trailS0, (Self.trailS1 - Self.trailS0) / Double(L.trailSamples - 1), sky, dustSky))
         let punchGain = 0.55 + 0.45 * min(max(punch, 0), 2)
         st[L.hdr2] = SIMD4<Float>(SIMD4(thetaA, thetaB, calm, starLight * (punchGain + (0.7 - punchGain) * calm)))
-        st[L.env0] = SIMD4<Float>(SIMD4(display[0].v, display[1].v, display[2].v, display[3].v))
+        st[L.env0] = SIMD4<Float>(SIMD4(trailPulse, display[1].v, display[2].v, display[3].v))
         st[L.env1] = SIMD4<Float>(SIMD4(display[4].v, display[5].v, level.v, breath.v))
         st[L.stage] = SIMD4<Float>(stage)
         st[L.clock] = SIMD4<Float>(SIMD4(twinkle, vocalPhase, cloudSky, 1 / Self.drift))

@@ -153,6 +153,33 @@ final class StarTrailsTests: XCTestCase {
         XCTAssertGreaterThan(packet, 0.3, "Kicks lay bright packets into the trails")
     }
 
+    func testTrailPulseRespondsToKickAndBassAttacks() {
+        func pulse(_ change: (inout StarTrailsSound) -> Void, calm: Bool = false, punch: Double = 1) -> (peak: Float, tail: Float) {
+            let simulation = StarTrailsSimulation(calm: calm)
+            simulation.punch = punch
+            var sound = StarTrailsSound()
+            let dt = 1.0 / 60
+            simulation.advance(wallDelta: dt, motionDelta: dt, sound: sound)
+            change(&sound)
+            var peak: Float = 0, tail: Float = 0
+            for _ in 0..<60 {
+                simulation.advance(wallDelta: dt, motionDelta: dt, sound: sound)
+                tail = simulation.pack(aspect: 16.0 / 9)[L.env0].x
+                peak = max(peak, tail)
+            }
+            return (peak, tail)
+        }
+        let kick: (inout StarTrailsSound) -> Void = { $0.kick = 0.9; $0.kickOnsets = 1 }
+        let bass: (inout StarTrailsSound) -> Void = { $0.bass = 0.75 }
+        XCTAssertGreaterThan(pulse(kick).peak, 0.7)
+        XCTAssertGreaterThan(pulse { $0.kick = 0.9 }.peak, 0.7, "Band-only kick envelope")
+        XCTAssertGreaterThan(pulse(bass).peak, 0.6)
+        XCTAssertLessThan(pulse(bass).tail, 0.01, "A sustained bass note pulses only at its attack")
+        XCTAssertEqual(pulse { $0.snareOnsets = 1; $0.hatOnsets = 1; $0.snare = 1; $0.hat = 1 }.peak, 0)
+        XCTAssertEqual(pulse(kick, calm: true).peak, 0)
+        XCTAssertEqual(pulse(bass, punch: 0).peak, 0)
+    }
+
     /// The craft glide: little jerk and turn per frame, and a kick-only song whose level pumps with
     /// every kick flies as smoothly as a steady one at the same mean level.
     func testCraftGlideSmoothly() {
@@ -441,6 +468,30 @@ final class StarTrailsTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(added / max(base, 1), 0.15, "A kick brightens the craft and their trails by \(Int(100 * added / max(base, 1))) %")
+    }
+
+    @MainActor
+    func testBeatGlowReachesOlderSectionsOfBothTrails() throws {
+        let (w, h) = (640, 360)
+        let renderer = try Renderer(width: w, height: h)
+        var state = run(fps: 60, seconds: 2.18).pack(aspect: 16.0 / 9)
+        XCTAssertGreaterThan(state[L.env0].x, 0.5)
+        let centre = SIMD2(Double(state[L.hdr0].x), Double(state[L.hdr0].y))
+        let forward = SIMD2(cos(StarTrailsSimulation.axis), sin(StarTrailsSimulation.axis))
+        for c in 0..<2 { state[L.craft + 2 * c].x = -100 }
+        for c in 0..<2 {
+            var lit = state
+            lit[L.craft + 2 * (1 - c) + 1].y = 100
+            var quiet = lit
+            quiet[L.env0].x = 0
+            let bright = luma(try renderer.render(.bytes(lit)))
+            let base = luma(try renderer.render(.bytes(quiet)))
+            let pixels = bright.indices.filter { i in
+                let point = SIMD2((Double(i % w) + 0.5) / Double(h), 1 - (Double(i / w) + 0.5) / Double(h))
+                return -simd_dot(point - centre, forward) > 0.35 && bright[i] - base[i] > 2
+            }
+            XCTAssertGreaterThan(pixels.count, 50, "Older glow on trail \(c)")
+        }
     }
 
     /// The clouds are out of focus: once the star points are removed, almost no pixel has a sharp
