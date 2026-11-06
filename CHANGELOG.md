@@ -12,6 +12,16 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [0.5.1] - 2026-11-06
+
+Build 19 for macOS 14 and later.
+
+### Changed
+
+- Star Trails restores the original planes and their pink and lime trails. Kicks and distinct bass attacks pulse the glow along both trails. Beat Punch controls the strength, and the sky can still take its colours from the album cover.
+- Album lyric colours favour hues present in the artwork, with contrasting highlights and a colour fallback for monochrome covers.
+- The Mac and Windows apps share the rules that check lyric recording matches and remove duplicate cues in mixed-timing lyrics.
+
 ## [0.5.0] - 2026-11-06
 
 Build 18 for macOS 14 and later.
@@ -349,7 +359,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.1
 [0.5.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.0
 [0.4.10]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.10
 [0.4.9]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.9-preview
