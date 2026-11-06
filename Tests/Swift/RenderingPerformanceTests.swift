@@ -306,12 +306,14 @@ final class RenderingPerformanceTests: XCTestCase {
         let director = LyricInkDirector()
         var ink = LyricInk.white
         for step in 0...30 {
-            ink = director.ink(.init(mode: .albumDrift, album: cover.stops), wall: Double(step) * 0.2)
+            ink = director.ink(.init(mode: .albumDrift, album: cover.artworkStops), wall: Double(step) * 0.2)
         }
-        XCTAssertEqual(ink.stopCount, 2)
-        let hues = [ink.stops.0.hue, ink.stops.1.hue]
-        XCTAssertTrue(hues.contains { (0.3...0.7).contains($0) }, "cover red")
-        XCTAssertTrue(hues.contains { abs($0) > 2.8 }, "cover cyan")
+        let hues = [ink.stops.0.hue, ink.stops.1.hue, ink.stops.2.hue, ink.stops.3.hue]
+        func coverRed(_ hue: Double) -> Bool { (0.3...0.7).contains(hue) }
+        func coverCyan(_ hue: Double) -> Bool { abs(hue) > 2.8 }
+        XCTAssertTrue(hues.contains(where: coverRed), "cover red")
+        XCTAssertTrue(hues.contains(where: coverCyan), "cover cyan")
+        XCTAssertTrue(hues.allSatisfy { coverRed($0) || coverCyan($0) }, "all stops use a hue sampled from the cover")
     }
 
     @MainActor

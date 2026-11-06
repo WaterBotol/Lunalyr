@@ -85,12 +85,12 @@ struct AlbumColourHarmony {
 
     /// Prefer a real cover colour near the desired harmony. For covers
     /// with one hue, turn around the wheel to make an accent.
-    func accentHue(turn: Double) -> Double? {
+    func accentHue(turn: Double, tolerance: Double) -> Double? {
         guard let backgroundHue else { return nil }
         let goal = backgroundHue + turn
         let candidates = colours.filter {
             LyricHighlight.hueDistance($0.hue, backgroundHue) >= .pi * 0.45
-                && LyricHighlight.hueDistance($0.hue, goal) <= .pi / 6
+                && LyricHighlight.hueDistance($0.hue, goal) <= tolerance
         }
         func cost(_ colour: OKLab) -> Double {
             LyricHighlight.hueDistance(colour.hue, goal) - min(0.24, colour.chroma)

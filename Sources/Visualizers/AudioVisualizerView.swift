@@ -35,7 +35,7 @@ enum AudioVisualizerStyle: String, CaseIterable, Identifiable {
         case .wavefieldOriginal: return "Wavefield’s original engine and presets, driven by system audio. Some presets flash with the beat; Reduce Motion or Dim Flashing Lights calms them."
         case .wavecore: return "The original Wavecore scene with a luminous core and spectral particles."
         case .light3D: return "Cymatic’s original rotating cloud of light, with bass-driven expansion and treble-driven spin."
-        case .starTrails: return "Two craft weave neon trails through a nebula, with trails that complement the album’s colours or use the original neon pair. Kicks, snares, hi-hats, bass, voice and pads each light their own stars."
+        case .starTrails: return "Two craft weave contrasting neon trails through a nebula. Album colours can tint the sky and pick a vivid pair for the trails. Kicks, snares, hi-hats, bass, voice and pads each light their own stars."
         case .colourStrata: return "Soft album-coloured layers. Bass widens the lower field, mids bend the middle, and highs soften the upper edge."
         case .overprint: return "Overlapping matte ink in album colours. Bass swells a plate, mids shift the overlap, and highs bring out fine dots."
         }

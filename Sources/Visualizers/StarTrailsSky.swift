@@ -16,6 +16,7 @@ struct StarTrailsSky: Equatable {
     static let tintCount = 9
     private static let originalTrails: [SIMD4<Double>] = [[0.992, 0.478, 0.992, 0], [0.882, 0.996, 0.478, 0]]
     static let trailCount = originalTrails.count
+    static let brightNebulaLuminance = 0.085
 
     /// Linear RGB, scaled to at most unit luminance. W is the strength of
     /// the album effect. The final two slots hold trail cores in sRGB.
@@ -36,13 +37,29 @@ struct StarTrailsSky: Equatable {
             return SIMD4(tint.x, tint.y, tint.z, 1)
         }
         let harmony = AlbumColourHarmony(palette.artworkStops.map { Perceptual.oklab(sRGB: SIMD3<Double>($0)) })
-        let trails = [Double.pi * 0.69, -Double.pi * 0.69].enumerated().map { index, turn in
-            guard let hue = harmony.accentHue(turn: turn) else { return originalTrails[index] }
-            let tone = OKLab(l: 0.87, chroma: 0.17, hue: hue)
-            let core = Perceptual.sRGB(Perceptual.readable(tone, background: 0.13))
+        // Two sides of a triad, with room to match a nearby cover accent
+        // while staying at least 100 degrees away from the sky and each other.
+        let turn = 2 * Double.pi / 3
+        let trails = [turn, -turn].enumerated().map { index, turn in
+            guard let hue = harmony.accentHue(turn: turn, tolerance: .pi / 18) else { return originalTrails[index] }
+            let core = Perceptual.sRGB(vividCore(hue: hue))
             return SIMD4(core.x, core.y, core.z, 1)
         }
         return StarTrailsSky(colours: tints + trails)
+    }
+
+    /// Find the most saturated tone the display can show at this hue
+    /// while keeping the core at least 3:1 against a bright part of the sky.
+    private static func vividCore(hue: Double) -> OKLab {
+        let background = brightNebulaLuminance
+        var best = Perceptual.readable(OKLab(l: 0.92, chroma: 0.34, hue: hue), background: background)
+        for step in 0..<16 {
+            let tone = Perceptual.clipped(OKLab(l: 0.72 + Double(step) * 0.0125, chroma: 0.34, hue: hue))
+            if tone.chroma > best.chroma, Perceptual.contrast(Perceptual.luminance(tone), background) >= 3 {
+                best = tone
+            }
+        }
+        return best
     }
 
     static let packedOriginal = originalColours.map { colour in

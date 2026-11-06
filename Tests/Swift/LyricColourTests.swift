@@ -332,7 +332,7 @@ final class LyricColourTests: XCTestCase {
     }
 
     @MainActor
-    func testSingleHueAlbumDriftKeepsCoverShadesAndAddsAnAccent() {
+    func testSingleHueAlbumDriftMovesThroughShadesOfTheCoverHue() {
         let director = LyricInkDirector()
         let album = [SIMD3<Float>(0.13, 0.26, 0.8)]
         let inputs = LyricInkDirector.Inputs(mode: .albumDrift, album: album)
@@ -343,8 +343,26 @@ final class LyricColourTests: XCTestCase {
         let lightness = samples.map(\.l)
         XCTAssertGreaterThan((lightness.max() ?? 0) - (lightness.min() ?? 0), 0.08)
         let hue = Perceptual.oklab(sRGB: SIMD3<Double>(album[0])).hue
-        XCTAssertTrue(samples.contains { LyricHighlight.hueDistance($0.hue, hue) < 0.03 })
-        XCTAssertTrue(samples.contains { LyricHighlight.hueDistance($0.hue, hue) > .pi * 0.75 })
+        XCTAssertTrue(samples.allSatisfy { LyricHighlight.hueDistance($0.hue, hue) < 0.03 })
+    }
+
+    @MainActor
+    func testAutomaticLyricsUseEvenAFaintCoverHueAmongBlackAndWhite() {
+        let tint = SIMD3<Float>(0.53, 0.49, 0.51)
+        let coverHue = Perceptual.oklab(sRGB: SIMD3<Double>(tint)).hue
+        let album = [SIMD3<Float>.zero, tint, SIMD3<Float>(repeating: 1)]
+        for mode in [LyricColourMode.albumDrift, .sungSweep, .musicReactive] {
+            let director = LyricInkDirector()
+            var ink = LyricInk.white
+            for step in 0...32 {
+                let audio = VCAudioLevels(rms: 0.3, bass: 0.4, mid: 0.2, treble: 0.1, pulse: 0)
+                ink = director.ink(.init(mode: mode, album: album, backdrop: 0.1, audio: audio), wall: Double(step) / 4)
+            }
+            let colour = Perceptual.oklab(sRGB: rgb(ink.sample(slot: 0.5).sung))
+            XCTAssertLessThan(LyricHighlight.hueDistance(colour.hue, coverHue), 0.04, mode.title)
+            XCTAssertGreaterThan(colour.chroma, 0.06, mode.title)
+            XCTAssertGreaterThanOrEqual(Perceptual.contrast(Perceptual.luminance(colour), 0.1), 2.99)
+        }
     }
 
     @MainActor

@@ -577,23 +577,57 @@ final class StarTrailsTests: XCTestCase {
     }
 
     func testAlbumTrailsStayDistinctAndBrightAgainstTheSky() throws {
-        for hue in stride(from: 0.0, to: 1.0, by: 1.0 / 12) {
-            let cover = AlbumWallpaperPalette(grid: Array(repeating: SIMD3(hue, 0.9, 0.85), count: 9))
+        let singleHue = stride(from: 0.0, to: 1.0, by: 1.0 / 12).map { hue in
+            AlbumWallpaperPalette(grid: Array(repeating: SIMD3(hue, 0.9, 0.85), count: 9))
+        }
+        let varied = [RenderPalette.warm, .blue, .vivid, .earth].compactMap(\.palette)
+        for cover in singleHue + varied {
             let sky = try XCTUnwrap(AlbumColourHarmony(cover.artworkStops.map {
                 Perceptual.oklab(sRGB: SIMD3<Double>($0))
             }).backgroundHue)
             let trails = StarTrailsSky.album(cover).trails.map { core in
                 let rgb = SIMD3(core.x, core.y, core.z)
                 XCTAssertEqual(core.w, 1)
-                XCTAssertGreaterThanOrEqual(Perceptual.contrast(Perceptual.luminance(sRGB: rgb), 0.13), 2.99)
+                let contrast = Perceptual.contrast(Perceptual.luminance(sRGB: rgb), StarTrailsSky.brightNebulaLuminance)
+                XCTAssertGreaterThanOrEqual(contrast, 2.99)
+                XCTAssertGreaterThan(max(rgb.x, rgb.y, rgb.z) - min(rgb.x, rgb.y, rgb.z), 0.38)
                 return Perceptual.oklab(sRGB: rgb)
             }
-            XCTAssertGreaterThan(LyricHighlight.hueDistance(trails[0].hue, trails[1].hue), .pi / 2)
+            XCTAssertGreaterThan(LyricHighlight.hueDistance(trails[0].hue, trails[1].hue), .pi * 0.55)
             for trail in trails {
                 XCTAssertGreaterThan(LyricHighlight.hueDistance(trail.hue, sky), .pi * 0.6)
             }
         }
         XCTAssertEqual(sky(.bw).trails, StarTrailsSky.original.trails)
+    }
+
+    @MainActor
+    func testEachRenderedAlbumTrailHasVividPixelsAgainstTheNebula() throws {
+        let renderer = try Renderer(width: 640, height: 360)
+        for palette in [RenderPalette.warm, .blue] {
+            let simulation = StarTrailsSimulation(sky: sky(palette))
+            var state = simulation.pack(aspect: 16.0 / 9)
+            state[L.live] = .zero
+            for k in 0..<2 { state[L.craft + 2 * k].x = -100 }
+            let nebula = try renderer.render(.bytes(backgroundOnly(state)))
+            func rgb(_ frame: [UInt8], at pixel: Int) -> SIMD3<Double> {
+                SIMD3(Double(frame[pixel + 2]), Double(frame[pixel + 1]), Double(frame[pixel])) / 255
+            }
+            for k in 0..<2 {
+                var isolated = state
+                isolated[L.craft + 2 * (1 - k) + 1].y = 100
+                let frame = try renderer.render(.bytes(isolated))
+                let vivid = stride(from: 0, to: frame.count, by: 4).filter { pixel in
+                    let colour = rgb(frame, at: pixel)
+                    let span = max(colour.x, colour.y, colour.z) - min(colour.x, colour.y, colour.z)
+                    guard span > 0.40 else { return false }
+                    let background = rgb(nebula, at: pixel)
+                    return Perceptual.contrast(Perceptual.luminance(sRGB: colour),
+                                               Perceptual.luminance(sRGB: background)) > 3 && colour != background
+                }.count
+                XCTAssertGreaterThan(vivid, 30, "\(palette.rawValue), trail \(k)")
+            }
+        }
     }
 
     @MainActor

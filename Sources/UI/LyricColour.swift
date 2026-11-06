@@ -146,9 +146,9 @@ enum LyricColourMode: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .standard: return "White type, as before."
-        case .albumDrift: return "Cover colours and coordinating accents drift slowly through the words."
-        case .sungSweep: return "White lyrics fill with an accent that sets off the cover as each word or line is sung. Unsynced lyrics use Album Drift."
-        case .musicReactive: return "Hue follows bass against treble; brightness and depth follow loudness. Uses live audio when a visualiser is capturing it, and the vocal timing otherwise."
+        case .albumDrift: return "Colours from the cover drift slowly through the words."
+        case .sungSweep: return "White lyrics fill with a contrasting colour from the cover as each word or line is sung. Unsynced lyrics use Album Drift."
+        case .musicReactive: return "Bass and treble shift the emphasis between cover colours; brightness and depth follow loudness. Uses live audio when a visualiser is capturing it, and the vocal timing otherwise."
         case .customGradient: return "Your own two to four colours, drifting through the line."
         }
     }
@@ -257,7 +257,7 @@ struct LyricInk {
     /// different pastels keep their colour between stops.
     func gradient(slot: Double, seed: UInt64 = 0) -> OKLab {
         if mode == .musicReactive {
-            return Self.turning(stops.0, stops.1, min(1, max(0, slot)))
+            return Perceptual.mix(stops.0, stops.1, slot)
         }
         guard stopCount > 1 else { return stops.0 }
         var t = (phase + slot * 0.42 + vc_jitter(seed, 21) * 0.02).truncatingRemainder(dividingBy: 1)
@@ -481,8 +481,8 @@ final class LyricInkDirector {
         OKLab(l: 0.84, chroma: 0.14, hue: 1.25), OKLab(l: 0.84, chroma: 0.15, hue: 3.12),
         OKLab(l: 0.80, chroma: 0.16, hue: 4.85), OKLab(l: 0.82, chroma: 0.16, hue: 5.82))
     private var albumStops: Stops = LyricInkDirector.fallbackPastels
-    private var albumCount = 4
     private var vivid = LyricInkDirector.fallbackPastels.2
+    private var reactiveAccent = LyricInkDirector.fallbackPastels.3
     /// The cover's colours in OKLab, for "Album accent".
     private var albumColours: [OKLab] = []
     private var backgroundHue: Double?
@@ -724,19 +724,25 @@ final class LyricInkDirector {
         albumKey = album
         let colours = album.map { Perceptual.oklab(sRGB: SIMD3(Double($0.x), Double($0.y), Double($0.z))) }
         albumColours = colours
-        let harmony = AlbumColourHarmony(colours)
-        backgroundHue = harmony.backgroundHue
-        guard let backgroundHue, let accentHue = harmony.accentHue(turn: .pi * 0.86) else {
+        backgroundHue = AlbumColourHarmony(colours).backgroundHue
+        // White, black and grey have no hue. A faint cover tint still
+        // supplies a hue worth keeping and can be strengthened for type.
+        let chromatic = colours.filter { $0.chroma >= 0.012 }.sorted { $0.chroma > $1.chroma }
+        guard let strongest = chromatic.first else {
             vivid = Self.fallbackPastels.2
+            reactiveAccent = Self.fallbackPastels.3
             albumStops = Self.fallbackPastels
-            albumCount = 4
             return
         }
-        vivid = OKLab(l: 0.82, chroma: 0.16, hue: accentHue)
-        // Keep distinct cover hues, including the most vivid one wherever
-        // it landed in the background gradient.
-        var picks: [OKLab] = []
-        for colour in colours.sorted(by: { $0.chroma > $1.chroma }) where colour.chroma >= 0.035 {
+        let backdropHue = backgroundHue ?? strongest.hue
+        func contrastScore(_ colour: OKLab) -> Double {
+            colour.chroma + 0.18 * LyricHighlight.hueDistance(colour.hue, backdropHue) / .pi
+        }
+        vivid = chromatic.max { contrastScore($0) < contrastScore($1) } ?? strongest
+        // Keep distinct sampled hues. Start with the cover accent that
+        // best sets off its main colour so it survives the stop limit.
+        var picks = [vivid]
+        for colour in chromatic {
             let matches = picks.contains { pick in
                 let difference = abs(pick.hue - colour.hue)
                 return min(difference, 2 * .pi - difference) < 0.28
@@ -744,22 +750,20 @@ final class LyricInkDirector {
             if !matches { picks.append(colour) }
             if picks.count == 4 { break }
         }
-        var lyric = picks.map { LyricInk.pastel($0) }
+        reactiveAccent = picks.dropFirst().first {
+            LyricHighlight.hueDistance($0.hue, vivid.hue) < .pi * 0.60
+        } ?? vivid
+        var lyric = picks.map { LyricInk.pastel($0, fallbackHue: $0.hue) }
         if let tint = lyric.first, lyric.count == 1 {
-            // Keep the cover's own light and deep shades, with one colour
-            // that stands out against both.
             lyric = [
                 OKLab(l: min(0.91, tint.l + 0.07), chroma: tint.chroma * 0.65, hue: tint.hue),
+                tint,
                 OKLab(l: max(0.70, tint.l - 0.05), chroma: tint.chroma * 1.18, hue: tint.hue),
-                vivid,
+                tint,
             ]
-        } else if lyric.allSatisfy({ LyricHighlight.hueDistance($0.hue, backgroundHue) < .pi * 0.42 }) {
-            if lyric.count == 4 { lyric.removeLast() }
-            lyric.append(vivid)
         }
         lyric.sort { $0.hue < $1.hue }
         albumStops = Self.stops(lyric)
-        albumCount = max(1, min(4, lyric.count))
     }
 
     private static func stops(_ colours: [OKLab]) -> Stops {
@@ -773,9 +777,11 @@ final class LyricInkDirector {
         case .standard:
             return ((.white, .white, .white, .white), 1)
         case .albumDrift:
-            return (albumStops, albumCount)
+            // Keep the gradient phase in the same slot when a new cover
+            // has a different number of colours.
+            return (albumStops, 4)
         case .sungSweep:
-            let sung = LyricInk.applyingStrength(1.35, to: LyricInk.pastel(vivid))
+            let sung = LyricInk.applyingStrength(1.35, to: LyricInk.pastel(vivid, fallbackHue: vivid.hue))
             return ((.white, sung, .white, sung), 2)
         case .musicReactive:
             let calm = inputs.reduceMotion
@@ -783,14 +789,13 @@ final class LyricInkDirector {
             let tilt = inputs.audio.map { min(1, max(-1, ($0.treble - $0.bass) * 2.5)) } ?? 0
             let intensity = vc_follow(&level, calm ? 0.3 : min(1, max(0, loud)), dt, 0.3, 1.5)
             let shift = vc_follow(&balance, calm ? 0 : tilt, dt, 0.4, 1.5)
-            // Bass pulls warm and treble cool, around the cover's own hue.
-            let hue = vivid.hue - shift * 1.1
             let chroma = 0.12 + 0.09 * intensity, lightness = 0.77 + 0.09 * intensity
-            let first = OKLab(l: lightness, chroma: chroma, hue: hue)
-            let second = OKLab(l: lightness, chroma: chroma * 0.9, hue: hue + 0.75)
+            let emphasis = shift * 0.04
+            let first = OKLab(l: lightness, chroma: chroma - emphasis, hue: vivid.hue)
+            let second = OKLab(l: lightness, chroma: chroma * 0.9 + emphasis, hue: reactiveAccent.hue)
             return ((first, second, first, second), 2)
         case .customGradient:
-            guard !inputs.custom.isEmpty else { return (albumStops, albumCount) }
+            guard !inputs.custom.isEmpty else { return (albumStops, 4) }
             let count = min(4, inputs.custom.count)
             func at(_ index: Int) -> OKLab { LyricInk.pastel(inputs.custom[index % count]) }
             return ((at(0), at(1), at(2), at(3)), count)

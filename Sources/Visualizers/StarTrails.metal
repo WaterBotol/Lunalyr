@@ -442,6 +442,14 @@ static float3 brightLayer(StarCtx c, constant float4* s, thread float3& lit) {
 // ------------------------------------------------------------ trails
 struct TrailHit { float core; float glow; float bright; float hot; float lead; };
 
+// The luminous core can contain a lot of white. Use just its colour for
+// the fringe, so the glow remains vivid against the clouds.
+static float3 albumTrailGlow(float3 core) {
+    float low = min(core.r, min(core.g, core.b));
+    float high = max(core.r, max(core.g, core.b));
+    return (core - low) * (0.65 / max(high - low, 0.12));
+}
+
 // Each trail is the craft's lateral history as a graph over the flight axis: 56 samples at
 // uniform axis distance, one Catmull-Rom lookup per pixel, no segment loop.
 static TrailHit trail(constant float4* s, int k, float sAxis, float cAxis, float resY) {
@@ -465,6 +473,7 @@ static TrailHit trail(constant float4* s, int k, float sAxis, float cAxis, float
     float headMask = smoothstep(headS + 0.004, headS + 0.020, sAxis);
     float age = max(sAxis - headS, 0.0) * s[CLK].w;              // the history drifts at a constant speed
     float hw = 0.0045 * m.y * (1.0 - 0.20 * saturate(age));     // 13 px at 1440p near the head, 10.4 px after 1 s
+    hw *= 1.0 + 0.12 * s[TRAILCOLOUR + k].w;
     float aa = 0.75 / resY;
     h.core = (1.0 - smoothstep(hw - aa, hw + aa, dist)) * headMask;
     h.glow = exp(-max(dist - hw, 0.0) / (0.0037 * (1.0 + 0.8 * saturate(m.z - 1.0)))) * headMask;   // e-fold 5.3 px at 1440p
@@ -655,13 +664,15 @@ fragment float4 starTrailsFragment(FSQuadOut in [[stage_in]], constant VizUnifor
     TrailHit tb = trail(s, 1, sAxis, cAxis, resY);
     float glowGain = kTrailGlow * mix(1.0, 0.52, stage);       // glows step back behind the lyrics
     float4 trailA = s[TRAILCOLOUR], trailB = s[TRAILCOLOUR + 1];
-    float3 warm = mix(kPinkWarmCore, mix(trailA.rgb, float3(1.0, 0.91, 0.80), 0.20), trailA.w);
-    float3 glowA = mix(mix(kPinkGlow, kPinkWarmGlow, 0.7 * ta.lead), mix(trailA.rgb, warm, 0.5 * ta.lead) * 0.54, trailA.w);
-    float3 glowB = mix(kLimeGlow, trailB.rgb * 0.50, trailB.w);
+    float3 warm = mix(kPinkWarmCore, mix(trailA.rgb, float3(1.0, 0.91, 0.80), 0.12), trailA.w);
+    float3 glowA = mix(mix(kPinkGlow, kPinkWarmGlow, 0.7 * ta.lead), albumTrailGlow(trailA.rgb), trailA.w);
+    float3 glowB = mix(kLimeGlow, albumTrailGlow(trailB.rgb), trailB.w);
     col += glowA * ta.glow * (1.0 - ta.core) * min(2.6, ta.bright) * glowGain;
     col += glowB * tb.glow * (1.0 - tb.core) * min(2.6, tb.bright) * glowGain;
-    float3 coreA = mix(mix(trailA.rgb, warm, 0.45 * ta.lead), float3(1.0, 0.92, 1.0), 0.7 * ta.hot);   // kick packets:
-    float3 coreB = mix(trailB.rgb, float3(0.97, 1.0, 0.90), 0.7 * tb.hot);                              // a white-hot bead
+    float hotA = mix(0.70, 0.28, trailA.w) * ta.hot;
+    float hotB = mix(0.70, 0.28, trailB.w) * tb.hot;
+    float3 coreA = mix(mix(trailA.rgb, warm, 0.45 * ta.lead), float3(1.0, 0.92, 1.0), hotA);
+    float3 coreB = mix(trailB.rgb, float3(0.97, 1.0, 0.90), hotB);
     float cover = max(ta.core, tb.core);
     col = col * (1.0 - cover) + coreA * ta.core + coreB * tb.core;
 
