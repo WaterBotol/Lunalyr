@@ -278,17 +278,21 @@ struct ConstellationLines: View {
             Canvas { context, size in
                 // Anchors belong to fixed slots outside time-driven transforms.
                 // The graph stays identical as words enter, fill and swell.
-                let keys = (0..<count).filter { anchors[$0] != nil }
-                let boxes = keys.compactMap { index -> VCBox? in
-                    guard let anchor = anchors[index] else { return nil }
+                // A word with no usable box yet (it has just been laid out, or
+                // has zero size mid-transition) is left out; the others keep
+                // their links instead of every link vanishing for a frame.
+                var keys: [Int] = []
+                var boxes: [VCBox] = []
+                for index in 0..<count {
+                    guard let anchor = anchors[index] else { continue }
                     let inset = insets.indices.contains(index) ? insets[index] : .zero
                     let rect = proxy[anchor].insetBy(dx: inset.width, dy: inset.height)
-                    guard rect.width.isFinite, rect.height.isFinite,
-                          rect.width > 0, rect.height > 0 else { return nil }
-                    return VCBox(x: Double(rect.minX), y: Double(rect.minY),
-                                 width: Double(rect.width), height: Double(rect.height))
+                    guard rect.width.isFinite, rect.height.isFinite, rect.width > 0, rect.height > 0 else { continue }
+                    keys.append(index)
+                    boxes.append(VCBox(x: Double(rect.minX), y: Double(rect.minY),
+                                       width: Double(rect.width), height: Double(rect.height)))
                 }
-                guard boxes.count == keys.count, boxes.count > 1, boxes.count <= 64 else { return }
+                guard boxes.count > 1, boxes.count <= 64 else { return }
                 guard opacity > 0 else { return }
                 let viewport = VCBox(x: 0, y: 0, width: Double(size.width), height: Double(size.height))
                 let links = connectionCache.segments(boxes: boxes, viewport: viewport)

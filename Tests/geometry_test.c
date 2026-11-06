@@ -82,6 +82,8 @@ int main(void) {
                    {650,350,400,120},{140,530,160,50},{550,550,90,40}};
     n=vc_build_connections(words,6,view,8,links,64);
     assert(n>0&&n<=5);
+    /* Chain: every link joins a word to the one before it. */
+    for(int i=0;i<n;i++)assert(links[i].to==links[i].from+1);
     for(int i=0;i<n;i++){
         VCSegment s=links[i];
         assert(isfinite(s.ax)&&isfinite(s.ay)&&isfinite(s.bx)&&isfinite(s.by));
