@@ -127,12 +127,17 @@ private struct ModeTile: View {
                 .padding(.horizontal, wide ? 10 : 2)
                 .background(
                     RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                        .fill(selected ? AnyShapeStyle(Color.lunalyrAccent) : AnyShapeStyle(.quaternary))
+                        .fill(selected ? AnyShapeStyle(Color.lunalyrAccent.gradient) : AnyShapeStyle(.quinary))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
+                        .strokeBorder(selected ? Color.white.opacity(0.22) : Color.primary.opacity(0.07), lineWidth: 1)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
                         .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1)
                 )
+                .shadow(color: selected ? Color.lunalyrAccent.opacity(0.35) : .clear, radius: 6, y: 2)
                 .overlay(alignment: .topTrailing) {
                     if standsIn {
                         Image(systemName: "leaf.fill")
