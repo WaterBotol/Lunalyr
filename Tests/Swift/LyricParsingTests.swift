@@ -173,8 +173,8 @@ final class LyricParsingTests: XCTestCase {
         """
         let all=LyricsFetcher.parseLRC(text,trackDuration:240)
         let lines=all.filter {$0.credit != true}
-        XCTAssertEqual(all.filter {$0.credit == true}.map(\.text),["作词：邓紫棋","鼓：张三","电吉他：李四","制作人：王五","和声：赵六"])
-        XCTAssertEqual(lines.map(\.text),["光年之外 - 邓紫棋","感受停在我发端的指尖","音乐：响起来","鼓：咚咚咚"])
+        XCTAssertEqual(all.filter {$0.credit == true}.map(\.text),["光年之外 - 邓紫棋","作词：邓紫棋","鼓：张三","电吉他：李四","制作人：王五","和声：赵六"])
+        XCTAssertEqual(lines.map(\.text),["感受停在我发端的指尖","音乐：响起来","鼓：咚咚咚"])
     }
     func testCachedLinesWithoutNewFieldsStillDecode() throws {
         let old=#"{"start":1,"end":2,"text":"Hi","words":[{"text":"Hi","start":1,"end":2}],"isInstrumental":false,"wordTimed":true,"romanization":"hai"}"#

@@ -24,6 +24,24 @@ enum LyricCredits {
         return kind == .specific || (inCredits && looksLikeNames(line[line.index(after: colon)...]))
     }
 
+    /// Services open the credits with the song's own heading ("Human Nature -
+    /// Yot Club"). That line is not sung either, so when it sits right ahead
+    /// of the credits it becomes one.
+    static func markingTitleHeader(_ lines: [LyricsFetcher.Line]) -> [LyricsFetcher.Line] {
+        guard let index = lines.firstIndex(where: { !$0.isInstrumental }), index + 1 < lines.count,
+              lines[..<index].allSatisfy({ $0.isInstrumental }), lines[index + 1].credit == true, lines[index].start < 20,
+              lines[index].text.contains(" - ") || lines[index].text.contains(" – ") else { return lines }
+        var result = lines
+        result[index].isInstrumental = true
+        result[index].words = []
+        result[index].wordTimed = false
+        result[index].romanization = nil
+        result[index].translation = nil
+        result[index].credit = true
+        result[index].end = result[index].start + 0.01
+        return result
+    }
+
     /// "Produced by Max Martin", "Written by Tove Lo & Ali Payami": a role
     /// word, "by", then names, with no colon. Only before the first lyric or
     /// straight after another credit, and only past-tense roles, so a lyric

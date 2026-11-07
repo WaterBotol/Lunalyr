@@ -828,7 +828,7 @@ final class LyricsFetcher {
             }
         }
         let parsed=mergingSharedTimestamps(rows),lastEnd=trackDuration.isFinite ? trackDuration : 0
-        return parsed.enumerated().compactMap { index,item in
+        return LyricCredits.markingTitleHeader(parsed.enumerated().compactMap { index,item in
             let end=index+1<parsed.count ? parsed[index+1].start : max(lastEnd,item.start+4)
             if item.credit {
                 // Credits sit apart from the lyric: kept for the credits layer,
@@ -851,7 +851,7 @@ final class LyricsFetcher {
             }
             if !line.isInstrumental {line.romanization=item.romanization;line.translation=item.translation}
             return line
-        }
+        })
     }
 
     private struct LRCRow {

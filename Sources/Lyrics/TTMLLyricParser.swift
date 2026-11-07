@@ -46,6 +46,8 @@ final class TTMLLyricParser: NSObject, XMLParserDelegate {
         var background = ""
     }
     private var lines: [LyricsFetcher.Line] = []
+    /// No sung line has come yet, or the line before was a credit.
+    private var inCredits = true
     private var keys: [String?] = []
     private var leadingBackground: [Bool] = []
     private var paragraph: Paragraph?
@@ -78,7 +80,8 @@ final class TTMLLyricParser: NSObject, XMLParserDelegate {
         parser.delegate = delegate
         guard parser.parse() else { return [] }
         delegate.attachReadings()
-        return delegate.lines.enumerated().sorted { ($0.element.start, $0.offset) < ($1.element.start, $1.offset) }.map(\.element)
+        return LyricCredits.markingTitleHeader(
+            delegate.lines.enumerated().sorted { ($0.element.start, $0.offset) < ($1.element.start, $1.offset) }.map(\.element))
     }
     static func seconds(_ value: String?) -> Double? {
         guard let value else { return nil }
@@ -231,7 +234,14 @@ final class TTMLLyricParser: NSObject, XMLParserDelegate {
         let text = (leads ? [backgroundText, mainText] : [mainText, backgroundText]).filter { !$0.isEmpty }.joined(separator: " ")
         guard !text.isEmpty else { return }
         let end = timed ? max(p.end, backgroundWords.map(\.end).max() ?? p.end) : p.end
+        if LyricCredits.isCredit(text, inCredits: inCredits) {
+            inCredits = true
+            lines.append(LyricsFetcher.Line(start: p.start, end: p.start + 0.01, text: text, words: [], isInstrumental: true, credit: true))
+            keys.append(nil); leadingBackground.append(false)
+            return
+        }
         var line = LyricsFetcher.makeLine(text: text, start: p.start, end: end)
+        if !line.isInstrumental { inCredits = false }
         guard !line.isInstrumental else { lines.append(line); keys.append(nil); leadingBackground.append(false); return }
         if timed {
             line.words = leads ? backgroundWords + mainWords

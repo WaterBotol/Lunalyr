@@ -40,4 +40,19 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertEqual(LyricCreditCues.level(of: cues[0], at: cues[0].start + 1.5), 1)
         XCTAssertEqual(LyricCreditCues.level(of: cues[0], at: cues[0].end + 5), 0)
     }
+
+    func testAppleTTMLCreditsAndTitleHeadingAreCredits() {
+        let ttml = """
+        <tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"><body><div>
+        <p begin="0.5" end="3">Human Nature - Yot Club</p>
+        <p begin="3" end="5">Lyrics by：Ryan Kaiser/Harrison Lipton</p>
+        <p begin="5" end="7">Composed by：Ryan Kaiser/Harrison Lipton</p>
+        <p begin="7" end="9">Produced by：Ryan Kaiser/Harrison Lipton</p>
+        <p begin="12" end="16">Hold on tight</p>
+        </div></body></tt>
+        """
+        let lines = TTMLLyricParser.parse(ttml, duration: 200)
+        XCTAssertEqual(lines.filter { $0.credit == true }.count, 4)
+        XCTAssertEqual(lines.filter { !$0.isInstrumental }.map(\.text), ["Hold on tight"])
+    }
 }

@@ -232,7 +232,7 @@ enum NetEaseLyricsProvider {
                 isInstrumental: words.isEmpty, wordTimed: !words.isEmpty
             ))
         }
-        return lines
+        return LyricCredits.markingTitleHeader(lines)
     }
 
     /// Bare punctuation is its own piece in yrc. A mark touching a word
