@@ -87,5 +87,6 @@ struct CoversPage: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 }

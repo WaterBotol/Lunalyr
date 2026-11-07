@@ -301,6 +301,7 @@ struct ExtrasInspector: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 
     /// One shortcut: what it does, its keys, whether another app holds them,

@@ -48,6 +48,7 @@ struct TimingPage: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onAppear { fillTrack() }
         .onChange(of: query?.recordingKey) { _, _ in fillTrack() }
     }

@@ -31,6 +31,7 @@ struct SettingsWindowView: View {
                                largePreview: largePreview, scrollRequest: scrollRequest,
                                select: { page = $0 })
             }
+            .styledCanvas()
             .navigationTitle(page.title)
             .toolbar { previewToolbar }
         }
@@ -112,7 +113,7 @@ private struct SettingsTopNav: View {
                             .foregroundStyle(tab == group ? Color.primary : Color.secondary)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 6)
-                            .background(Capsule().fill(tab == group ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)))
+                            .background(Capsule().fill(tab == group ? AnyShapeStyle(Color.lunalyrAccent.opacity(0.22)) : AnyShapeStyle(.clear)))
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -120,7 +121,7 @@ private struct SettingsTopNav: View {
                 }
             }
             .padding(3)
-            .background(Capsule().fill(.quinary))
+            .styledSurface(radius: 20)
             if group.pages.count > 1 {
                 HStack(spacing: LunalyrDesign.Spacing.small) {
                     ForEach(group.pages) { page in

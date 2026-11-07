@@ -47,6 +47,7 @@ struct LyricStylePage: View {
             LyricStyleMemorySection()
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onAppear { familyDraft = s.googleFontFamily }
         .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
     }

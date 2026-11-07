@@ -31,6 +31,7 @@ struct MenuBarView: View {
         }
         .frame(width: LunalyrDesign.Layout.menuPanelWidth)
         .frame(maxHeight: Self.maximumPanelHeight)
+        .styledCanvas()
         .lunalyrTint()
         .onReceive(models.resolved.audio.$state.map(\.needsAttention).removeDuplicates()) { audioNeedsAttention = $0 }
     }
@@ -132,9 +133,6 @@ extension View {
     func menuCard() -> some View {
         padding(LunalyrDesign.Spacing.medium + 2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.preview, style: .continuous)
-                .fill(.quinary))
-            .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.preview, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1))
+            .styledSurface(radius: LunalyrDesign.Radius.preview)
     }
 }
