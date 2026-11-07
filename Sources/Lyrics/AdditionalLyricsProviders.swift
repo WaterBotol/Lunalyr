@@ -69,6 +69,14 @@ enum AdditionalLyricsProviders {
             for item in candidates.prefix(2) {
                 try Task.checkCancellation()
                 guard let id = LyricHTTP.string(item["id"]), let key = item["accesskey"] as? String else { continue }
+                // KRC carries each word's timing; plain LRC is the fallback.
+                if let krc = try? await LyricHTTP.json("https://lyrics.kugou.com/download",
+                        ["ver":"1","client":"pc","id":id,"accesskey":key,"fmt":"krc","charset":"utf8"], session: session),
+                   let encoded = krc["content"] as? String, let bytes = Data(base64Encoded:encoded),
+                   let converted = KugouKRC.enhancedLRC(from: bytes),
+                   let result = candidate(.kugou,lrc:converted,query:query,title:hit.title,artist:hit.artist,duration:hit.duration) {
+                    return result
+                }
                 let response = try await LyricHTTP.json("https://lyrics.kugou.com/download",
                     ["ver":"1","client":"pc","id":id,"accesskey":key,"fmt":"lrc","charset":"utf8"], session: session)
                 guard let encoded = response["content"] as? String,

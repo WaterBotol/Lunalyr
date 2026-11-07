@@ -49,9 +49,8 @@ final class LyricRankingTests: XCTestCase {
         func print(_ mode: LyricSourceOptions.Mode, _ enabled: [LyricSourceID]) -> String {
             LyricSourceOptions.Snapshot(enabled: enabled, mode: mode, localFolder: "", localVersion: "x").fingerprint
         }
-        // v8 reads Lyrics+ syllables apart, so choices cached with an
-        // unspaced line joined into one word are looked up again.
-        XCTAssertTrue(print(.smart, [.lrclib]).hasPrefix("v8|"))
+        // v9 adds AMLL and Kugou's word timing, so choices cached before are looked up again.
+        XCTAssertTrue(print(.smart, [.lrclib]).hasPrefix("v9|"))
         XCTAssertNotEqual(print(.smart, [.lrclib]), print(.priority, [.lrclib]))
         XCTAssertEqual(print(.smart, [.lrclib]), print(.smart, [.lyrimuse, .lrclib, .appleMusicCache]))
         XCTAssertNotEqual(print(.smart, [.lrclib, .netEase]), print(.smart, [.netEase, .lrclib]))

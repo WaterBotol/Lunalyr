@@ -430,7 +430,13 @@ final class LyricsFetcher {
         options.enabled.firstIndex(of: source) ?? 999
     }
     private static func confidence(_ candidate: LyricCandidate, _ query: LyricQuery) -> Double {
-        LyricQuery.similarity(query.title, candidate.title) + LyricQuery.similarity(query.artist, candidate.artist)
+        // How closely the name matches, and a little more for a recording whose
+        // length is nearly the playing one's (never enough to outweigh a name).
+        var value = LyricQuery.similarity(query.title, candidate.title) + LyricQuery.similarity(query.artist, candidate.artist)
+        if let length = candidate.duration, length > 0, query.duration > 0 {
+            value += 0.25 * max(0, 1 - abs(length - query.duration) / 10)
+        }
+        return value
     }
     /// Why a candidate is not the playing recording, or nil when it is.
     static func rejection(_ candidate: LyricCandidate, query: LyricQuery) -> String? {
@@ -559,6 +565,7 @@ final class LyricsFetcher {
         case .lyricsOVH: return try await AdditionalLyricsProviders.lyricsOVH(query)
         case .lrclib: return try await lrclib(query)
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
+        case .amll: return try await AMLLLyricsProvider.lookup(query)
         }
     }
     /// NetEase's lyrics for the edition its search matched, ranked and

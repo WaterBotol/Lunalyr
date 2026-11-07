@@ -260,8 +260,9 @@ final class LyricProviderTests: XCTestCase {
         XCTAssertEqual(found?.lineCount, 2)
         let requests = Kugou.store.requests
         XCTAssertEqual(requests.map { ($0.host ?? "") + $0.path },
-                       ["mobileservice.kugou.com/api/v3/search/song", "lyrics.kugou.com/search", "lyrics.kugou.com/download"])
-        guard requests.count == 3 else { return }
+                       ["mobileservice.kugou.com/api/v3/search/song", "lyrics.kugou.com/search", "lyrics.kugou.com/download",
+                        "lyrics.kugou.com/download"], "KRC is asked for first, then plain LRC")
+        guard requests.count == 4 else { return }
         func value(_ name: String, _ index: Int) -> String? {
             URLComponents(url: requests[index], resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value
         }
@@ -270,6 +271,8 @@ final class LyricProviderTests: XCTestCase {
         XCTAssertEqual(value("hash", 1), "b3a52a7a958bf0aed0ebfba2e9a818b7")
         XCTAssertEqual(value("duration", 1), "180000")
         XCTAssertEqual(value("accesskey", 2), "2A7B35884B3C20E9D3281686BA59A3F8")
+        XCTAssertEqual(value("fmt", 2), "krc")
+        XCTAssertEqual(value("fmt", 3), "lrc")
     }
 
     func testNoUsableMirrorIsAnErrorRatherThanAMiss() async {
