@@ -55,6 +55,7 @@ struct LyricStylePage: View {
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
     @AppStorage(BackingVocals.settingKey) private var backingLayer = true
     @AppStorage(BackingVocals.styleKey) private var backingStyle = ""
+    @AppStorage(LyricCreditCues.settingKey) private var showCredits = true
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
@@ -87,6 +88,8 @@ struct LyricStylePage: View {
                 }
             }
             RememberedStyleNote(aspect: .layout)
+            Toggle("Show credits in the background", isOn: $showCredits)
+            InspectorCaption("Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.")
             Toggle("Backing vocals in the background", isOn: $backingLayer)
             if backingLayer {
                 ChoiceMenu("Backing vocals animate like", selection: $backingStyle,

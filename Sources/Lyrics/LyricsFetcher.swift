@@ -21,6 +21,10 @@ final class LyricsFetcher {
         var wordTimed: Bool = false
         var romanization: String? = nil
         var translation: String? = nil
+        /// True for a production credit ("Produced by: …"). Such a line is
+        /// also `isInstrumental` with no words, so the lead layer skips it;
+        /// its `text` is drawn apart by the credits layer instead.
+        var credit: Bool? = nil
     }
     struct Provenance: Equatable, Codable {
         var precision: String
@@ -782,7 +786,14 @@ final class LyricsFetcher {
             let plain=wordStamp.stringByReplacingMatches(in:body,range:NSRange(location:0,length:bodyNS.length),withTemplate:"")
             // Credits are not lyrics; an everyday label ("鼓：…") counts only
             // before the first lyric or straight after another credit.
-            if LyricCredits.isCredit(plain,inCredits:inCredits) {inCredits=true;continue}
+            if LyricCredits.isCredit(plain,inCredits:inCredits) {
+                inCredits=true
+                for tag in leading {
+                    let stamp=time(tag,row)-offset
+                    rows.append(LRCRow(stamp:stamp,start:max(0,stamp),text:plain.trimmingCharacters(in:.whitespaces),tokens:[],credit:true))
+                }
+                continue
+            }
             if !isInstrumentalMark(plain) {inCredits=false}
             let cost=leading.count*(bodyNS.length+1)
             guard cost<=budget else {break}
@@ -819,6 +830,12 @@ final class LyricsFetcher {
         let parsed=mergingSharedTimestamps(rows),lastEnd=trackDuration.isFinite ? trackDuration : 0
         return parsed.enumerated().compactMap { index,item in
             let end=index+1<parsed.count ? parsed[index+1].start : max(lastEnd,item.start+4)
+            if item.credit {
+                // Credits sit apart from the lyric: kept for the credits layer,
+                // never drawn as a lead line, and never in the way of one.
+                return Line(start:item.start,end:item.start+0.01,
+                            endFromNextLine:true,text:item.text,words:[],isInstrumental:true,credit:true)
+            }
             // A row an [offset:] pushed before the start is overtaken at 0.
             guard end>item.start else {return nil}
             var line=makeLine(text:item.text,start:item.start,end:end)
@@ -845,6 +862,7 @@ final class LyricsFetcher {
         var tokens: [LyricScript.TimedToken]
         var romanization: String? = nil
         var translation: String? = nil
+        var credit = false
     }
 
     /// Bilingual LRC repeats a timestamp for a reading or a translation, e.g.
@@ -861,7 +879,7 @@ final class LyricsFetcher {
         let readings = LyricScript.ReadingCache()
         var merged: [LRCRow] = []
         for row in ordered {
-            guard var line = merged.last, abs(line.stamp - row.stamp) < 0.0005 else { merged.append(row); continue }
+            guard var line = merged.last, abs(line.stamp - row.stamp) < 0.0005, !line.credit, !row.credit else { merged.append(row); continue }
             let text = row.text.trimmingCharacters(in: .whitespaces)
             let lyric = line.text.trimmingCharacters(in: .whitespaces)
             if isInstrumentalMark(text) { continue }

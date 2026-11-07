@@ -83,8 +83,9 @@ final class LyricSourceOptions: ObservableObject {
         /// v7: Music's own lyrics and LRCLIB lead word and mixed timing.
         /// v8: Lyrics+ keeps each syllable of an unspaced (Japanese,
         /// Chinese, Thai) line, which it had joined into one word.
+        /// v10: production credits are kept (as `Line.credit`) for the credits layer.
         /// v9: AMLL's word-timed database and Kugou's word-timed KRC.
-        static let cachePolicy = "v9"
+        static let cachePolicy = "v10"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

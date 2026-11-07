@@ -208,7 +208,13 @@ enum NetEaseLyricsProvider {
 
             let cleaned = fullText.trimmingCharacters(in: .whitespaces)
             guard !cleaned.isEmpty else { continue }
-            if LyricCredits.isCredit(cleaned, inCredits: inCredits) { inCredits = true; continue }
+            if LyricCredits.isCredit(cleaned, inCredits: inCredits) {
+                inCredits = true
+                let creditStart = startMs / 1000
+                lines.append(LyricsFetcher.Line(start: creditStart, end: creditStart + 0.01, text: cleaned, words: [],
+                                                isInstrumental: true, credit: true))
+                continue
+            }
             // Zero-length rows ("[0,0](0,0,0) 作词 : …") are headers, not lyrics.
             // A zero-length row that does carry sung words ends with them.
             let start = startMs / 1000

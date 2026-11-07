@@ -15,11 +15,30 @@ enum LyricCredits {
         let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // A line wholly in brackets is a sung aside: "(和声：啦啦啦)".
         if let first = line.first, let last = line.last, "(（".contains(first), ")）".contains(last) { return false }
-        guard let colon = line.prefix(48).firstIndex(where: { $0 == ":" || $0 == "：" }) else { return false }
+        guard let colon = line.prefix(48).firstIndex(where: { $0 == ":" || $0 == "：" }) else {
+            return inCredits && isColonlessCredit(line)
+        }
         let label = line[..<colon].trimmingCharacters(in: CharacterSet.whitespaces.union(brackets))
         guard !label.isEmpty, label.count <= 32,
               let kind = englishRole(label) ?? chineseRole(Array(label)) else { return false }
         return kind == .specific || (inCredits && looksLikeNames(line[line.index(after: colon)...]))
+    }
+
+    /// "Produced by Max Martin", "Written by Tove Lo & Ali Payami": a role
+    /// word, "by", then names, with no colon. Only before the first lyric or
+    /// straight after another credit, and only past-tense roles, so a lyric
+    /// like "Written by the stars" (no names) or later in the song never
+    /// matches.
+    private static func isColonlessCredit(_ line: String) -> Bool {
+        let words = line.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.count >= 3, words.count <= 12,
+              let by = words.prefix(4).firstIndex(where: { $0.lowercased() == "by" }), by >= 1,
+              !words.prefix(by).contains(where: { $0.lowercased() == "by" }) else { return false }
+        let label = words[...by].joined(separator: " ")
+        guard let kind = englishRole(label), kind == .specific,
+              words[..<by].allSatisfy({ englishRoles.contains($0.lowercased()) || englishQualifiers.contains($0.lowercased()) }),
+              words[..<by].contains(where: { $0.lowercased().hasSuffix("ed") || ["written", "prod."].contains($0.lowercased()) }) else { return false }
+        return looksLikeNames(Substring(words[(by + 1)...].joined(separator: " ")))
     }
 
     private enum Kind { case specific, everyday }
@@ -102,7 +121,7 @@ enum LyricCredits {
 
     /// Role words: one of them, with any qualifiers and joins, makes a label.
     private static let englishRoles: Set<String> = [
-        "producer", "producers", "production", "produced", "coproducer", "composer", "composers", "composed",
+        "producer", "producers", "production", "produced", "prod", "prod.", "coproducer", "composer", "composers", "composed",
         "composition", "lyricist", "lyricists", "lyrics", "lyric", "writer", "writers", "written", "songwriter",
         "songwriters", "songwriting", "arranger", "arrangers", "arranged", "arrangement", "arrangements", "engineer",
         "engineers", "engineered", "engineering", "mixer", "mixing", "mixed", "mix", "mastering", "mastered",
