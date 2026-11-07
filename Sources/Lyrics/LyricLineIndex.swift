@@ -47,7 +47,16 @@ struct LyricLineIndex {
                 // A near copy: the line-timed version sits just ahead of the
                 // word-timed one (sources are synced a little apart) and ends
                 // by the time it starts.
-                return fallback.endFromNextLine == true && sameLyric(fallback.text, timed.text)
+                guard fallback.endFromNextLine == true else { return false }
+                if candidate > index {
+                    // A copy after it: the line-timed version starts while the
+                    // word-timed line is still being sung (or as it ends), often
+                    // as one half of a line the word timing keeps whole.
+                    let vocalEnd = timed.words.lazy.map(\.end).max() ?? timed.end
+                    return sameLyric(fallback.text, timed.text, minimumShare: 0.25)
+                        && fallback.start >= timed.start - 0.3 && fallback.start <= vocalEnd + 0.15
+                }
+                return sameLyric(fallback.text, timed.text)
                     && abs(fallback.start - timed.start) <= 2.0 && fallback.end <= timed.start + 0.6
             }
             guard let duplicate = matching.min(by: {
@@ -73,11 +82,11 @@ struct LyricLineIndex {
     /// The same words, give or take punctuation, a dropped "yeah" or a split
     /// phrase: "Dear Slim, I wrote you, but" / "Dear Slim, I wrote you but",
     /// "Give me yo, give me yo," / "give me yo".
-    static func sameLyric(_ a: String, _ b: String) -> Bool {
+    static func sameLyric(_ a: String, _ b: String, minimumShare: Double = 0.4) -> Bool {
         let x = timingKey(a), y = timingKey(b)
         if x == y { return true }
         let (short, long) = x.count <= y.count ? (x, y) : (y, x)
-        if short.count >= 8, long.contains(short), Double(short.count) / Double(long.count) >= 0.4 { return true }
+        if short.count >= 8, long.contains(short), Double(short.count) / Double(long.count) >= minimumShare { return true }
         return LyricQuery.similarity(a, b) >= 0.8
     }
 

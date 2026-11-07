@@ -26,6 +26,23 @@ final class MixedTimingCopyTests: XCTestCase {
         XCTAssertTrue(shown[0].wordTimed)
     }
 
+    func testAHalfLineCopyDuringTheWordTimedLineIsDropped() {
+        // Stan: the line-timed file splits a line in two; the word-timed one
+        // keeps it whole, so the second half used to flash up while the line
+        // was being sung (and again after it).
+        let lines = [wordTimed("the morning rain clouds up my window and I can't see at all", 8.34, 14.28),
+                     lineTimed("And I can't see at all", 10.96, 13.28),
+                     wordTimed("And even if I could it'd all be grey", 14.28, 20.16)]
+        XCTAssertEqual(LyricLineIndex.removingMixedTimingCopies(lines + [lineTimed("A different closing line", 20.2, 24)]).map(\.text),
+                       ["the morning rain clouds up my window and I can't see at all",
+                        "And even if I could it'd all be grey", "A different closing line"])
+    }
+
+    func testARepeatAfterTheWordTimedLineHasEndedStays() {
+        let lines = [wordTimed("Say it again", 87.65, 90.0), lineTimed("Say it again", 91.64, 94.01)]
+        XCTAssertEqual(LyricLineIndex.removingMixedTimingCopies(lines).count, 2)
+    }
+
     func testASplitPhraseCountsAsACopy() {
         let lines = [lineTimed("Give me yo, give me yo,", 4.64, 5.60), wordTimed("give me yo", 5.71, 6.4)]
         XCTAssertEqual(LyricLineIndex.removingMixedTimingCopies(lines).count, 1)
