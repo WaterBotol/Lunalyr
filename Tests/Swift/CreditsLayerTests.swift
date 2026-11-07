@@ -55,4 +55,18 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertEqual(lines.filter { $0.credit == true }.count, 4)
         XCTAssertEqual(lines.filter { !$0.isInstrumental }.map(\.text), ["Hold on tight"])
     }
+
+    @MainActor func testAnySourcesCreditsAreFlaggedWhenShown() {
+        func line(_ text: String, _ start: Double) -> LyricsFetcher.Line {
+            LyricsFetcher.Line(start: start, end: start + 2, text: text,
+                               words: [.init(text: text, start: start, end: start + 2)], isInstrumental: false, wordTimed: true)
+        }
+        let source = [line("Human Nature - Yot Club", 0), line("Lyrics by：Ryan Kaiser/Harrison Lipton", 2),
+                      line("Produced by：Ryan Kaiser/Harrison Lipton", 4), line("Always felt like you were gonna stick around", 8)]
+        let shown = LyricsViewModel.presentation(of: .synced(source, .init(precision: "Word", source: "KPoe")), repairingGaps: false)
+        XCTAssertEqual(shown.lines.filter { $0.credit == true }.count, 3)
+        XCTAssertEqual(shown.lines.filter { !$0.isInstrumental }.map(\.text), ["Always felt like you were gonna stick around"])
+        let plain = LyricsViewModel.presentation(of: .plain(["Human Nature - Yot Club", "Lyrics by: A B", "", "Always felt"], .init(precision: "Plain", source: "x")), repairingGaps: false)
+        XCTAssertEqual(plain.plainLines, ["Always felt"])
+    }
 }

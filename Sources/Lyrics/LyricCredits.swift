@@ -24,6 +24,46 @@ enum LyricCredits {
         return kind == .specific || (inCredits && looksLikeNames(line[line.index(after: colon)...]))
     }
 
+    /// Every source's lines, whichever parser made them: credits the parsers
+    /// did not already set apart (KPoe, LRCLIB's lyrics files, a cached
+    /// result) are flagged here, in song order. Safe to run again.
+    static func flagging(_ lines: [LyricsFetcher.Line]) -> [LyricsFetcher.Line] {
+        var result = lines
+        var inCredits = true
+        for index in result.indices {
+            if result[index].credit == true { inCredits = true; continue }
+            if result[index].isInstrumental { continue }
+            if isCredit(result[index].text, inCredits: inCredits) {
+                inCredits = true
+                result[index].isInstrumental = true
+                result[index].words = []
+                result[index].wordTimed = false
+                result[index].romanization = nil
+                result[index].translation = nil
+                result[index].credit = true
+                result[index].end = result[index].start + 0.01
+            } else {
+                inCredits = false
+            }
+        }
+        return markingTitleHeader(result)
+    }
+
+    /// Unsynced lyrics have no time to show a credit at, so the ones opening
+    /// the text (and the heading above them) are dropped.
+    static func droppingLeadingCredits(_ lines: [String]) -> [String] {
+        func blank(_ text: String) -> Bool { text.trimmingCharacters(in: .whitespaces).isEmpty }
+        var index = lines.firstIndex { !blank($0) } ?? lines.count
+        // "Title - Artist" heading right above the credits.
+        if index < lines.count, lines[index].contains(" - ") || lines[index].contains(" – "),
+           let next = lines[(index + 1)...].first(where: { !blank($0) }), isCredit(next, inCredits: true) {
+            index += 1
+        }
+        let heading = index
+        while index < lines.count, blank(lines[index]) || isCredit(lines[index], inCredits: true) { index += 1 }
+        return index == heading ? lines : Array(lines[index...])
+    }
+
     /// Services open the credits with the song's own heading ("Human Nature -
     /// Yot Club"). That line is not sung either, so when it sits right ahead
     /// of the credits it becomes one.

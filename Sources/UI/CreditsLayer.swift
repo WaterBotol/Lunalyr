@@ -38,8 +38,9 @@ enum LyricCreditCues {
             guard !text.isEmpty, line.start.isFinite else { continue }
             let start = max(line.start, cursor)
             cursor = start + stagger
-            let hold = minimumHold + min(5.0, Double(text.count) * 0.12)
             let spell = min(3.5, 0.2 * Double(text.count))
+            // From its last word arriving to leaving takes half what it used to.
+            let hold = 0.2 + max(0.4, spell) + (minimumHold + min(5.0, Double(text.count) * 0.12) - 0.2 - max(0.4, spell)) / 2
             let words = LyricsFetcher.distributeWords(in: text, from: start + 0.2, to: start + 0.2 + max(0.4, spell))
             guard !words.isEmpty else { continue }
             cues.append(Cue(id: cues.count, text: text, start: start, end: start + hold, words: words))

@@ -316,14 +316,15 @@ final class LyricsViewModel: ObservableObject {
         switch result {
         case .synced(let value, let source) where !value.isEmpty:
             let qq = source.source.lowercased().contains("qq")
-            let validated = (repair && qq ? QQGapRepair.repair(value) : value).map { original in
+            let validated = (repair && qq ? QQGapRepair.repair(LyricCredits.flagging(value)) : LyricCredits.flagging(value)).map { original in
                 var line = original; line.wordTimed = LyricsFetcher.validWordTiming(original); return line
             }
             let lines = LyricLineIndex.removingMixedTimingCopies(validated)
             return Presentation(lines: lines, provenance: .init(precision: LyricsFetcher.precision(lines), source: source.source),
                                 infersPauses: repair && !qq)
         case .plain(let value, let source) where !value.isEmpty:
-            return Presentation(plainLines: value, provenance: source)
+            let plain = LyricCredits.droppingLeadingCredits(value)
+            return Presentation(plainLines: plain.isEmpty ? value : plain, provenance: source)
         default:
             return Presentation()
         }
