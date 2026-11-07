@@ -141,7 +141,11 @@ struct TrackMood: Equatable {
         } else if genreText.containsAny("ambient", "chill", "acoustic", "folk", "country", "singer") {
             genreEnergy = 0.25
         } else {
-            genreEnergy = 0.50
+            // No usable genre: let the cover colours and lyric cadence decide
+            // instead of landing every such song on the same middle. A vivid
+            // cover reads livelier, a washed-out one calmer.
+            let cadenceHint = wordsPerSecond > 0 ? min(max((wordsPerSecond - 0.8) / 2.6, 0), 1) - 0.5 : 0
+            genreEnergy = min(max(0.5 + (artworkSaturation - 0.5) * 0.5 + cadenceHint * 0.3, 0.12), 0.92)
         }
         let face = LyricFace.forGenre(genre)
 

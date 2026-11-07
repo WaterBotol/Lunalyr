@@ -65,3 +65,18 @@ final class MatchTheMusicTests: XCTestCase {
         XCTAssertGreaterThan(faces.count, 1)
     }
 }
+
+@MainActor
+final class UnknownGenreMoodTests: XCTestCase {
+    func testSongsWithoutAGenreAreToldApartByCoverAndCadence() {
+        let vivid = TrackMood.derive(genre: nil, wordsPerSecond: 3.0, artworkSaturation: 0.95, seed: 1)
+        let washed = TrackMood.derive(genre: nil, wordsPerSecond: 1.0, artworkSaturation: 0.1, seed: 1)
+        XCTAssertGreaterThan(vivid.energy, washed.energy + 0.3)
+        XCTAssertTrue((0...1).contains(vivid.energy) && (0...1).contains(washed.energy))
+    }
+
+    func testAKnownGenreStillWins() {
+        let known = TrackMood.derive(genre: "Electronic", wordsPerSecond: 1.0, artworkSaturation: 0.1, seed: 1)
+        XCTAssertGreaterThan(known.energy, 0.5)
+    }
+}
