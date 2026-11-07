@@ -66,7 +66,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
         case .spoken: return .glide
         case .cascade: return .lift
         case .cutout: return .cutoutFold
-        case .hinge, .broadside, .portal: return .fade
+        case .hinge, .broadside, .portal, .mosaic, .reverb, .torque, .fable: return .fade
         }
     }
 }
@@ -83,7 +83,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
 /// `ScatteredLyricText`; the rolling layouts use `SpokenTypographyView`.
 /// Both renderers share timestamp-derived word entrances and preview state.
 enum LyricComposition: String, CaseIterable, Identifiable {
-    case scattered, constellation, constellationEditorial, echo, editorial, spoken, cascade, cutout, hinge, broadside, portal
+    case scattered, constellation, constellationEditorial, echo, editorial, spoken, cascade, cutout, hinge, broadside, portal, mosaic, reverb, torque, fable
 
     var id: String { rawValue }
 
@@ -100,6 +100,10 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .hinge: return "Hinge"
         case .broadside: return "Broadside"
         case .portal: return "Portal"
+        case .mosaic: return "Mosaic"
+        case .reverb: return "Reverb"
+        case .torque: return "Torque"
+        case .fable: return "Fable"
         }
     }
 
@@ -116,6 +120,10 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .hinge: return "Heavy words swing in on a hinge and fold into a stack."
         case .broadside: return "One strip of big type that slides along, with little words as labels."
         case .portal: return "The sung word in a pill; earlier words drift away as pale ones."
+        case .mosaic: return "A collage: each word set huge, on a bar, or letter by letter."
+        case .reverb: return "A heavy crooked word with echoes rippling out behind it."
+        case .torque: return "Words wrung into place with a thick edge, stacking upwards."
+        case .fable: return "Words climb a diagonal staircase, each a size up on the last."
         }
     }
 
@@ -468,8 +476,8 @@ final class LyricLayoutRotation: ObservableObject {
 
     /// The order songs step through: contrasting looks sit next to each other.
     static let order: [LyricComposition] = [
-        .cutout, .hinge, .constellation, .broadside, .editorial, .portal, .spoken, .echo, .cascade, .scattered,
-        .constellationEditorial,
+        .cutout, .hinge, .constellation, .broadside, .editorial, .portal, .spoken, .mosaic, .echo, .torque, .cascade,
+        .fable, .scattered, .reverb, .constellationEditorial,
     ]
 
     private let defaults: UserDefaults

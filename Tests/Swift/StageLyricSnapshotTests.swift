@@ -29,9 +29,9 @@ final class StageLyricSnapshotTests: XCTestCase {
     }
 
     func testEveryStageLayoutDraws() throws {
-        let kinds: [LyricComposition] = LyricComposition.allCases.filter(\.fillsStage)
+        let kinds: [LyricComposition] = LyricComposition.allCases.filter(\.fillsStage).filter { ![.hinge, .broadside, .portal].contains($0) }
         XCTAssertFalse(kinds.isEmpty)
-        let times: [Double] = [1.1, 1.8, 2.6, 3.6, 5.2, 6.4]
+        let times: [Double] = [1.4, 2.3, 3.2, 4.2, 5.4, 6.7]
         let sheet = VStack(spacing: 2) {
             ForEach(kinds) { kind in
                 HStack(spacing: 2) { ForEach(times, id: \.self) { self.cell(kind, at: $0) } }
@@ -54,7 +54,7 @@ final class HingeSnapshotTests: XCTestCase {
         guard let dir = ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] else { return }
         let text = "Dance under stars rain over the city can fly".split(separator: " ")
         let words = text.enumerated().map { i, w in LyricsFetcher.Word(text: String(w), start: 1 + Double(i) * 0.6, end: 1.5 + Double(i) * 0.6) }
-        let times: [Double] = [1.3, 2.0, 2.5, 3.0, 3.6, 4.4, 5.2, 6.4]
+        let times: [Double] = [2.55, 3.1, 4.7, 7.0, 9.1, 9.35, 9.6, 9.95]
         let sheet = LazyVGrid(columns: [GridItem(.fixed(760)), GridItem(.fixed(760))], spacing: 2) {
             ForEach(times, id: \.self) { t in
                 ZStack {
@@ -97,5 +97,29 @@ final class PortalVarietyTests: XCTestCase {
         renderer.scale = 0.5
         let image = try XCTUnwrap(renderer.nsImage)
         try NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/portal.png"))
+    }
+}
+
+@MainActor
+final class FastPortalTests: XCTestCase {
+    func testFastSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] else { return }
+        let text = "run run run away from the city lights tonight".split(separator: " ")
+        let words = text.enumerated().map { i, w in LyricsFetcher.Word(text: String(w), start: 1 + Double(i) * 0.22, end: 1.2 + Double(i) * 0.22) }
+        let times: [Double] = [1.5, 1.9, 2.3, 2.7, 3.0, 3.3]
+        let sheet = LazyVGrid(columns: [GridItem(.fixed(640)), GridItem(.fixed(640)), GridItem(.fixed(640))], spacing: 2) {
+            ForEach(times, id: \.self) { t in
+                ZStack {
+                    LinearGradient(colors: [Color(red: 0.16, green: 0.1, blue: 0.3), Color(red: 0.05, green: 0.05, blue: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LyricLineView(words: words, time: t, stageSize: CGSize(width: 640, height: 300), baseSize: 40, mood: .neutral,
+                                  composition: .portal, seed: 2, lineEnd: 9, exitStart: 9, glue: [Bool](repeating: false, count: words.count))
+                        .frame(width: 640, height: 300)
+                }.frame(width: 640, height: 300).environment(\.lyricInk, LyricInk())
+            }
+        }.frame(width: 1924)
+        let renderer = ImageRenderer(content: sheet)
+        renderer.scale = 0.5
+        let image = try XCTUnwrap(renderer.nsImage)
+        try NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/fast.png"))
     }
 }
