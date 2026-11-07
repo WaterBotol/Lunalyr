@@ -31,6 +31,7 @@ struct MenuBarView: View {
         }
         .frame(width: LunalyrDesign.Layout.menuPanelWidth)
         .frame(maxHeight: Self.maximumPanelHeight)
+        .styledCanvas()
         .lunalyrTint()
         .onReceive(models.resolved.audio.$state.map(\.needsAttention).removeDuplicates()) { audioNeedsAttention = $0 }
     }
@@ -38,15 +39,15 @@ struct MenuBarView: View {
     private func panel(_ statuses: [MenuBarStatus]) -> some View {
         VStack(alignment: .leading, spacing: Self.groupSpacing) {
             MenuBarNowPlaying()
+                .menuCard()
                 .focusSection()
             if !statuses.isEmpty {
                 MenuBarStatusBanners(statuses: statuses)
                     .focusSection()
             }
-            Divider()
             MenuBarWallpaperControls()
+                .menuCard()
                 .focusSection()
-            Divider()
             MenuBarFooter()
                 .focusSection()
         }
@@ -124,5 +125,14 @@ struct MenuBarView: View {
             context.fill(CGRect(x: centre - bar.width / 2, y: badge.midY - bar.height / 2, width: bar.width, height: bar.height))
         }
         context.setBlendMode(.normal)
+    }
+}
+
+extension View {
+    /// A soft rounded card that groups one part of the menu-bar panel.
+    func menuCard() -> some View {
+        padding(LunalyrDesign.Spacing.medium + 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .styledSurface(radius: LunalyrDesign.Radius.preview)
     }
 }

@@ -5,7 +5,7 @@ import SwiftUI
 //
 // One visual language for the Settings window, the menu-bar panel and
 // onboarding: calm system chrome, with colour kept for the wallpaper preview,
-// the mint accent and status. Every surface uses these instead of numbers of
+// the violet accent and status. Every surface uses these instead of numbers of
 // its own (the spec, gui/spec.md, says where each applies):
 //
 //     VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
@@ -37,7 +37,7 @@ enum LunalyrDesign {
         static let xxLarge: CGFloat = 24
         static let section: CGFloat = 32
         /// Inside the menu-bar panel and other floating panels.
-        static let panel: CGFloat = 16
+        static let panel: CGFloat = 18
         /// Around a window's content (Settings stage, onboarding).
         static let window: CGFloat = 20
     }
@@ -47,13 +47,13 @@ enum LunalyrDesign {
         /// Key caps, small tags.
         static let tag: CGFloat = 5
         /// Settings sidebar icon badges at 20 points.
-        static let badge: CGFloat = 5
+        static let badge: CGFloat = 6
         /// Album artwork up to 64 points.
         static let artwork: CGFloat = 8
         /// Banners, cards, tiles.
-        static let card: CGFloat = 10
+        static let card: CGFloat = 14
         /// The wallpaper preview: a desktop in miniature.
-        static let preview: CGFloat = 12
+        static let preview: CGFloat = 18
         /// The menu-bar panel's own corners (drawn by the system).
         static let panel: CGFloat = 12
     }
@@ -69,15 +69,15 @@ enum LunalyrDesign {
         /// icon buttons; text buttons are taller than their text anyway).
         static let minimumHitTarget: CGFloat = 28
         /// Quick-control tiles in the menu-bar panel.
-        static let tileHeight: CGFloat = 64
+        static let tileHeight: CGFloat = 68
     }
 
     /// Window and panel geometry the three surfaces share.
     enum Layout {
         /// The menu-bar panel's content width.
-        static let menuPanelWidth: CGFloat = 320
+        static let menuPanelWidth: CGFloat = 364
         /// The Settings inspector column beside the preview stage.
-        static let inspectorWidth: CGFloat = 380
+        static let inspectorWidth: CGFloat = 440
         /// Narrower than this, the Settings detail stacks the preview above
         /// the inspector instead of beside it.
         static let stageBesideInspectorMinimum: CGFloat = 760
@@ -197,7 +197,7 @@ private struct LunalyrTextModifier: ViewModifier {
 // MARK: - Accent
 
 extension Color {
-    /// Lunalyr's mint as a fill under white -- switches, slider tracks,
+    /// Lunalyr's violet as a fill under white -- switches, slider tracks,
     /// selection, prominent buttons. Plain `.mint` gives white about 2:1.
     /// Apply it with `.tint(.lunalyrAccent)` at the root of every surface.
     static let lunalyrAccent = Color(nsColor: NSColor(name: "LunalyrAccent") { appearance in
@@ -205,7 +205,7 @@ extension Color {
         return LunalyrAccent.fill(dark: look.dark, increaseContrast: look.increaseContrast)
     })
 
-    /// Lunalyr's mint for text and symbols drawn on the window itself.
+    /// Lunalyr's violet for text and symbols drawn on the window itself.
     static let lunalyrAccentText = Color(nsColor: NSColor(name: "LunalyrAccentText") { appearance in
         let look = LunalyrAppearance(appearance)
         return LunalyrAccent.text(dark: look.dark, increaseContrast: look.increaseContrast)
@@ -221,7 +221,7 @@ extension Color {
 }
 
 extension View {
-    /// Lunalyr's mint for every control of a surface: put it at the root of
+    /// Lunalyr's violet for every control of a surface: put it at the root of
     /// the Settings window, the menu-bar panel and onboarding. It is the
     /// text-safe mint, so popup values, bordered buttons and links stay
     /// readable in dark mode; a button that puts white text on the mint
@@ -294,9 +294,9 @@ enum LunalyrAccent {
     /// dim the white on it, and macOS outlines controls then.
     static func fill(dark: Bool, increaseContrast: Bool) -> NSColor {
         switch (dark, increaseContrast) {
-        case (true, _): return LunalyrPalette.rgb(0x00, 0x85, 0x77)
-        case (false, true): return LunalyrPalette.rgb(0x00, 0x5E, 0x55)
-        case (false, false): return LunalyrPalette.rgb(0x00, 0x78, 0x6E)
+        case (true, _): return LunalyrPalette.rgb(0x6A, 0x57, 0xE8)
+        case (false, true): return LunalyrPalette.rgb(0x3F, 0x2F, 0xB5)
+        case (false, false): return LunalyrPalette.rgb(0x5B, 0x48, 0xD9)
         }
     }
 
@@ -305,10 +305,10 @@ enum LunalyrAccent {
     /// again under Increase Contrast.
     static func text(dark: Bool, increaseContrast: Bool) -> NSColor {
         switch (dark, increaseContrast) {
-        case (true, true): return LunalyrPalette.rgb(0x6E, 0xE3, 0xD2)
-        case (true, false): return LunalyrPalette.rgb(0x2A, 0xBA, 0xA7)
-        case (false, true): return LunalyrPalette.rgb(0x00, 0x5E, 0x55)
-        case (false, false): return LunalyrPalette.rgb(0x00, 0x78, 0x6E)
+        case (true, true): return LunalyrPalette.rgb(0xCF, 0xC7, 0xFF)
+        case (true, false): return LunalyrPalette.rgb(0xA8, 0x9B, 0xFF)
+        case (false, true): return LunalyrPalette.rgb(0x3F, 0x2F, 0xB5)
+        case (false, false): return LunalyrPalette.rgb(0x5B, 0x48, 0xD9)
         }
     }
 }
@@ -382,10 +382,10 @@ enum LunalyrPalette {
         // Each keeps 4.5:1 on its own fill over the window and grouped rows
         // (DesignSystemTests), a little deeper than the plain accent text.
         switch (status, look.dark, look.increaseContrast) {
-        case (.info, false, false): return rgb(0x00, 0x67, 0x5E)
-        case (.info, false, true): return rgb(0x00, 0x50, 0x48)
-        case (.info, true, false): return rgb(0x38, 0xC4, 0xB1)
-        case (.info, true, true): return rgb(0x6E, 0xE3, 0xD2)
+        case (.info, false, false): return rgb(0x4A, 0x39, 0xC4)
+        case (.info, false, true): return rgb(0x36, 0x27, 0xA0)
+        case (.info, true, false): return rgb(0xB0, 0xA5, 0xFF)
+        case (.info, true, true): return rgb(0xD2, 0xCB, 0xFF)
         case (.success, false, false): return rgb(0x12, 0x70, 0x2F)
         case (.success, false, true): return rgb(0x0E, 0x5A, 0x25)
         case (.success, true, false): return rgb(0x5E, 0xD4, 0x7A)

@@ -100,17 +100,55 @@ enum Perceptual {
     /// against `background`. Where even white cannot reach it, the
     /// lightest version of the colour is returned: the text keeps its
     /// dark shadow for the rest.
-    static func readable(_ lab: OKLab, background: Double, ratio: Double = LyricInk.minimumContrast) -> OKLab {
+    static func readable(_ lab: OKLab, background: Double, ratio: Double = LyricInk.minimumContrast,
+                         keepingColour: Bool = false) -> OKLab {
         let colour = clipped(lab)
         let target = ratio * (background + 0.05) - 0.05
         if luminance(colour) >= target { return colour }
-        if target >= 1 { return clipped(OKLab(l: 1, a: colour.a * 0.3, b: colour.b * 0.3)) }
-        var low = colour.l, high = 1.0
-        for _ in 0..<16 {
-            let mid = (low + high) / 2
-            if luminance(OKLab(l: mid, a: colour.a, b: colour.b)) >= target { high = mid } else { low = mid }
+        var lifted: OKLab
+        if target >= 1 {
+            lifted = clipped(OKLab(l: 1, a: colour.a * 0.3, b: colour.b * 0.3))
+        } else {
+            var low = colour.l, high = 1.0
+            for _ in 0..<16 {
+                let mid = (low + high) / 2
+                if luminance(OKLab(l: mid, a: colour.a, b: colour.b)) >= target { high = mid } else { low = mid }
+            }
+            lifted = clipped(OKLab(l: high, a: colour.a, b: colour.b))
         }
-        return clipped(OKLab(l: high, a: colour.a, b: colour.b))
+        // Increase Contrast keeps its stricter ratio, colour or not.
+        guard keepingColour, ratio <= LyricInk.minimumContrast else { return lifted }
+        return tinted(lifted, from: colour, background: background)
+    }
+
+    /// The least chroma a lifted lyric colour may lose before it reads as
+    /// white. Lifting a pastel to reach 3:1 on a bright wallpaper used to
+    /// fade every colour to white.
+    static let minimumLyricChroma = 0.05
+    /// The contrast a lyric colour may give up to keep that tint; the dark
+    /// backing and the text shadow carry the rest.
+    static let tintedContrast = 2.5
+
+    /// `lifted`, or if lifting washed the colour out, the lightest version
+    /// of `original`'s hue that keeps `minimumLyricChroma` (or the
+    /// original's own chroma, if it had less) at `tintedContrast` or better.
+    /// Where no such colour exists, the most colourful one that does.
+    static func tinted(_ lifted: OKLab, from original: OKLab, background: Double) -> OKLab {
+        let floor = min(original.chroma, minimumLyricChroma)
+        if lifted.chroma >= floor * 0.95 { return lifted }
+        let target = tintedContrast * (background + 0.05) - 0.05
+        guard target < 1 else { return lifted }
+        let hue = original.chroma > 0.001 ? original.hue : lifted.hue
+        var best = lifted, bestChroma = lifted.chroma
+        var lightness = lifted.l
+        while lightness >= original.l - 0.0001 {
+            let candidate = clipped(OKLab(l: lightness, chroma: max(floor, original.chroma), hue: hue))
+            if luminance(candidate) < target { break }
+            if candidate.chroma > bestChroma { best = candidate; bestChroma = candidate.chroma }
+            if candidate.chroma >= floor * 0.95 { return candidate }
+            lightness -= 0.01
+        }
+        return best
     }
 
     static func color(_ lab: OKLab, opacity: Double = 1) -> Color {
@@ -583,8 +621,9 @@ final class LyricInkDirector {
             ink.stopCount = 1
             ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio))
         case .sungSweep:
-            let sung = Perceptual.readable(followed.1, background: behind, ratio: ratio)
-            ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio), sung: sung)
+            let sung = Perceptual.readable(followed.1, background: behind, ratio: ratio, keepingColour: true)
+            ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio, keepingColour: true),
+                                       sung: sung)
             let fade = Easing.smoothstep((sung.l - 0.91) / 0.07)
                 * Easing.smoothstep((0.065 - sung.chroma) / 0.045)
                 * Easing.smoothstep((behind - 0.14) / 0.10) * min(1, strength)
@@ -593,7 +632,8 @@ final class LyricInkDirector {
                 ink.base.sweepUnderline = Perceptual.color(marker, opacity: fade)
             }
         default:
-            ink.base = LyricInk.sample(Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio))
+            ink.base = LyricInk.sample(Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio,
+                                                           keepingColour: true))
         }
         ink.base.dim = ink.dim
         let highlight = Perceptual.readable(inputs.mode == .sungSweep ? followed.1 : ink.gradient(slot: 0.5),

@@ -47,9 +47,15 @@ struct LyricStylePage: View {
             LyricStyleMemorySection()
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onAppear { familyDraft = s.googleFontFamily }
         .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
     }
+
+    @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
+    @AppStorage(BackingVocals.settingKey) private var backingLayer = true
+    @AppStorage(BackingVocals.styleKey) private var backingStyle = ""
+    @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
         Section("Layout") {
@@ -58,7 +64,38 @@ struct LyricStylePage: View {
                 ForEach(LyricComposition.allCases) { Text($0.title).tag(Optional($0)) }
             }
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
+            if automatic {
+                Toggle("Change layout every song", isOn: $rotateLayouts)
+                InspectorCaption("Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
+                if rotateLayouts {
+                    DisclosureGroup("Layouts in the rotation") {
+                        ForEach(LyricLayoutRotation.order) { layout in
+                            Stepper(value: Binding(get: { rotation.count(for: layout) },
+                                                   set: { rotation.setCount($0, for: layout) }),
+                                    in: 0...LyricLayoutRotation.maximumCount) {
+                                HStack {
+                                    Text(layout.title)
+                                    Spacer()
+                                    Text(rotation.count(for: layout) == 0 ? "Never"
+                                         : rotation.count(for: layout) == 1 ? "1 song" : "\(rotation.count(for: layout)) songs in a row")
+                                        .lunalyrText(.caption)
+                                }
+                            }
+                        }
+                        InspectorCaption("How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
+                    }
+                }
+            }
             RememberedStyleNote(aspect: .layout)
+            Toggle("Backing vocals in the background", isOn: $backingLayer)
+            if backingLayer {
+                ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
+                           selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition(rawValue: $0)?.title ?? "The lead’s layout") }) {
+                    Text("The lead’s layout").tag("")
+                    ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
+                }
+            }
+            InspectorCaption("Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.")
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)
             if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
                 InspectorCaption(note)

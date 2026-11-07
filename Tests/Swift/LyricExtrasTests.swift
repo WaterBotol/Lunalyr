@@ -582,6 +582,23 @@ final class LyricExtrasTests: XCTestCase {
     }
 
     @MainActor
+    func testTheLyricGIFIsExportedAtFullCardResolution() async throws {
+        let words = (0..<8).map { LyricsFetcher.Word(text: "word\($0)", start: 10 + Double($0) * 0.5, end: 10.45 + Double($0) * 0.5) }
+        let line = LyricsFetcher.Line(start: 10, end: 14, text: words.map(\.text).joined(separator: " "), words: words,
+                                      isInstrumental: false, wordTimed: true)
+        let content = LyricCard.Content(pages: [
+            .init(words: words.map(\.text), animation: LyricCard.Animation(line: line, composition: .cutout, mood: .neutral, seed: 0)),
+        ], title: "A Song", artist: "An Artist", artwork: nil, palette: LyricCard.palette(for: nil), reduceMotion: true)
+        let encoded = await LyricCard.gif(content)
+        let gif = try XCTUnwrap(encoded)
+        let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
+        let frame = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        XCTAssertEqual(frame.width, 1080)
+        XCTAssertEqual(frame.height, 1350)
+        print("LYRIC-GIF-SIZE frames=\(CGImageSourceGetCount(source)) bytes=\(gif.count)")
+    }
+
+    @MainActor
     func testAnExcerptIncludesTimedAndUntimedPagesInOneGIF() async throws {
         let word = LyricsFetcher.Word(text: "Middle", start: 10, end: 10.7)
         let line = LyricsFetcher.Line(start: 10, end: 10.8, text: word.text, words: [word],
@@ -591,7 +608,7 @@ final class LyricExtrasTests: XCTestCase {
             .init(words: [word.text], animation: LyricCard.Animation(line: line, composition: .cutout, mood: .neutral, seed: 0)),
             .init(words: ["After"]),
         ], title: "A Song", artist: "An Artist", artwork: nil, palette: LyricCard.palette(for: nil), reduceMotion: true)
-        let encoded = await LyricCard.gif(content)
+        let encoded = await LyricCard.gif(content, scale: 0.5)
         let gif = try XCTUnwrap(encoded)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
         let count = CGImageSourceGetCount(source)
@@ -623,7 +640,7 @@ final class LyricExtrasTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(bright, 200)
-        let encoded = await LyricCard.gif(content)
+        let encoded = await LyricCard.gif(content, scale: 0.5)
         let gif = try XCTUnwrap(encoded)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
         XCTAssertEqual(CGImageSourceGetType(source) as String?, UTType.gif.identifier)
@@ -640,7 +657,7 @@ final class LyricExtrasTests: XCTestCase {
             artwork: nil, palette: LyricCard.palette(for: nil), mode: .albumDrift, reduceMotion: true)
         func render(_ style: LyricComposition) async throws -> Data {
             content.pages[0].animation = LyricCard.Animation(line: line, composition: style, mood: .neutral, seed: 0)
-            let encoded = await LyricCard.gif(content)
+            let encoded = await LyricCard.gif(content, scale: 0.5)
             return try XCTUnwrap(encoded)
         }
         let spoken = try await render(.spoken)
@@ -716,7 +733,7 @@ final class LyricExtrasTests: XCTestCase {
             animation: .init(line: line, composition: .constellationEditorial, mood: .neutral, seed: 1))
         let content = LyricCard.Content(pages: [page], title: "Where the Night Begins", artist: "June Arcade & Noa Vale", artwork: artwork,
             palette: LyricCard.palette(for: artwork), reduceMotion: true)
-        let encoded = await LyricCard.gif(content)
+        let encoded = await LyricCard.gif(content, scale: 0.5)
         let gif = try XCTUnwrap(encoded)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
         for index in [0, CGImageSourceGetCount(source) - 1] {
@@ -766,7 +783,7 @@ final class LyricExtrasTests: XCTestCase {
             animation: LyricCard.Animation(line: line, composition: .spoken, mood: .neutral, seed: 0))
         let content = LyricCard.Content(pages: [page], title: "A Song", artist: "An Artist", artwork: artwork,
             palette: LyricCard.palette(for: artwork), reduceMotion: true)
-        let encoded = await LyricCard.gif(content)
+        let encoded = await LyricCard.gif(content, scale: 0.5)
         let gif = try XCTUnwrap(encoded)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
         let frame = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 8, nil))

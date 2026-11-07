@@ -116,46 +116,29 @@ static int connect(VCBox a,VCBox b,VCBox view,double gap,VCSegment *s) {
     return !interior(pa,s->ax,s->ay) && !interior(pa,s->bx,s->by) &&
            !interior(pb,s->ax,s->ay) && !interior(pb,s->bx,s->by);
 }
-static int compare_edges(const void *aa,const void *bb) {
-    const VCEdge *a=aa,*b=bb;
-    if(a->cost<b->cost)return -1;
-    if(a->cost>b->cost)return 1;
-    if(a->segment.from!=b->segment.from)return a->segment.from-b->segment.from;
-    return a->segment.to-b->segment.to;
-}
-static int root(int *parent,int x) {
-    while(parent[x]!=x){parent[x]=parent[parent[x]];x=parent[x];}return x;
-}
+/* Each word links only to the word sung just before it, so the constellation
+   is a chain that grows with the line. A pair that cannot be joined cleanly
+   (overlapping words, a word in the way, off screen) simply has no link. */
 int vc_build_connections(const VCBox *boxes,int count,VCBox viewport,
                          double clearance,VCSegment *output,int capacity) {
     if(!boxes || !output || count<2 || count>64 || capacity<1 || !finite_box(viewport))return 0;
     double gap=isfinite(clearance)?fmax(0,fmin(clearance,40)):6;
-    VCEdge edges[2016];int edge_count=0,parent[64];
-    for(int i=0;i<count;i++)parent[i]=i;
-    for(int i=0;i<count;i++) {
+    int written=0,previous=-1;
+    for(int i=0;i<count && written<capacity;i++) {
         if(!finite_box(boxes[i]) || !overlaps(boxes[i],viewport))continue;
-        for(int j=i+1;j<count;j++) {
-            if(!finite_box(boxes[j]) || !overlaps(boxes[j],viewport))continue;
-            VCSegment line={0};line.from=i;line.to=j;
-            if(!connect(boxes[i],boxes[j],viewport,gap,&line))continue;
-            int blocked=0;
-            for(int k=0;k<count;k++) {
-                if(k==i || k==j || !finite_box(boxes[k]))continue;
-                VCSegment test=line;
-                if(clip(&test,padded(boxes[k],gap*.6))){blocked=1;break;}
-            }
-            if(blocked)continue;
-            double dx=(boxes[j].x+boxes[j].width/2)-(boxes[i].x+boxes[i].width/2);
-            double dy=(boxes[j].y+boxes[j].height/2)-(boxes[i].y+boxes[i].height/2);
-            edges[edge_count++]=(VCEdge){line,dx*dx+dy*dy};
+        int before=previous;
+        previous=i;
+        if(before<0)continue;
+        VCSegment line={0};line.from=before;line.to=i;
+        if(!connect(boxes[before],boxes[i],viewport,gap,&line))continue;
+        int blocked=0;
+        for(int k=0;k<count;k++) {
+            if(k==before || k==i || !finite_box(boxes[k]))continue;
+            VCSegment test=line;
+            if(clip(&test,padded(boxes[k],gap*.6))){blocked=1;break;}
         }
-    }
-    qsort(edges,(size_t)edge_count,sizeof(VCEdge),compare_edges);
-    int written=0;
-    for(int i=0;i<edge_count && written<capacity;i++) {
-        int a=root(parent,edges[i].segment.from),b=root(parent,edges[i].segment.to);
-        if(a==b)continue;
-        parent[a]=b;output[written++]=edges[i].segment;
+        if(blocked)continue;
+        output[written++]=line;
     }
     return written;
 }

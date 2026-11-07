@@ -12,6 +12,27 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [0.6.0] - 2026-11-07
+
+Build 20 for macOS 14 and later.
+
+### Added
+
+- Lyric Card window: pick any lines from the playing song, choose a 4:5, 1:1, 9:16 or 16:9 card whose layout fits its shape, and make an MP4, GIF, PNG or any mix. MP4 is 30 frames a second H.264; PNG is a crisp still of up to three lines. Copy puts each format on the clipboard as an attachment, and Save… writes them to a folder.
+- The AMLL TTML database as a lyric source: community word- and syllable-timed lyrics, found through NetEase's song id.
+- Kugou lyrics now ask for word-timed KRC first and fall back to line timing.
+- Soft and Clay looks for Settings, the menu-bar panel and the welcome, chosen on first launch or in Settings > App. Both keep full-contrast text and selection and drop their shadows under Increase Contrast.
+- Match the music can change the lyric layout with every song. Choose which layouts take part and how many songs in a row each one gets.
+- Backing vocals written in brackets, like (oh oh), animate word by word as small, soft lyrics behind the lead, in a layout you choose, and stay on screen a little longer.
+
+### Changed
+
+- Settings uses Look, Lyrics and App tabs with page chips instead of a sidebar, in a new violet accent with rounder cards. The menu-bar panel is grouped into cards, its Settings and Options buttons close it, and it is wider.
+- Animated lyric GIFs export at the card's full size.
+- Songs without a genre take their energy from the cover's colour and the lyrics' pace, so they no longer all land on the same look.
+- Lyric recordings that closely match the playing song's length rank slightly higher among equal matches. Cached automatic lyric choices are looked up again.
+- Lyric colours keep a tint on moderately bright wallpapers, and Constellation links each word to the previous one.
+
 ## [0.5.1] - 2026-11-06
 
 Build 19 for macOS 14 and later.
@@ -359,7 +380,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.6.0
 [0.5.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.1
 [0.5.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.0
 [0.4.10]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.4.10

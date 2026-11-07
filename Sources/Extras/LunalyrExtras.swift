@@ -337,30 +337,13 @@ final class LunalyrExtras: ObservableObject {
         }
     }
 
+    /// Opens the lyric card window for the song that is playing.
     func copyLyricCard() {
-        copyCardTask?.cancel()
-        guard let content = LyricCard.currentContent(before: lyricCardLinesBefore, after: lyricCardLinesAfter,
-                                                     composition: lyricCardComposition) else {
+        guard NowPlayingMonitor.shared.current != nil else {
             post("Play a song to make a lyric card", symbol: "photo")
             return
         }
-        let pasteboard = NSPasteboard.general
-        let changeCount = pasteboard.changeCount
-        post("Making lyric GIF…", symbol: "photo.on.rectangle")
-        copyCardTask = Task { [weak self] in
-            let gif = await LyricCard.gif(content)
-            guard !Task.isCancelled, let self else { return }
-            self.copyCardTask = nil
-            guard pasteboard.changeCount == changeCount else {
-                self.post("The clipboard changed while making the lyric GIF", symbol: "clipboard")
-                return
-            }
-            if let gif, LyricCard.copy(gif, to: pasteboard) {
-                self.post("Lyric GIF copied", symbol: "photo.on.rectangle")
-            } else {
-                self.post("Couldn’t copy the lyric GIF", symbol: "photo")
-            }
-        }
+        LyricCardPopoutController.shared.show()
     }
 
     func post(_ text: String, symbol: String) {

@@ -45,5 +45,6 @@ struct ReadingsPage: View {
             TranslationSection()
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 }

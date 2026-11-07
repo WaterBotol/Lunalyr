@@ -67,7 +67,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             switch self {
             case .look: return "Look"
             case .lyrics: return "Lyrics"
-            case .lunalyr: return "Lunalyr"
+            case .lunalyr: return "App"
             }
         }
 
