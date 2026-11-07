@@ -47,9 +47,9 @@ final class LyricCardPopoutModel: ObservableObject {
         var title: String {
             switch self {
             case .none: return "None"
-            case .song: return "The song"
-            case .video: return "Video’s sound"
-            case .file: return "A file"
+            case .song: return "Song"
+            case .video: return "Video"
+            case .file: return "File"
             }
         }
     }
@@ -62,6 +62,9 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var songRange: ClosedRange<Double>?
     @Published var songStatus = ""
     @Published var songBusy = false
+    /// Brings the card window back to the front: recording the song or
+    /// copying can leave another app in front.
+    var onFinished: (() -> Void)?
     private var songTask: Task<Void, Never>?
     var songNeedsFetching: Bool {
         guard let range = songRange else { return true }
@@ -103,7 +106,7 @@ final class LyricCardPopoutModel: ObservableObject {
         songBusy = true
         songStatus = "Looking for the song’s file…"
         songTask = Task { [weak self] in
-            defer { Task { @MainActor in self?.songBusy = false } }
+            defer { Task { @MainActor in self?.songBusy = false; self?.onFinished?() } }
             if let file = await SongAudioSource.localFile() {
                 self?.songClip = SongAudioClip(url: file, songStart: 0, songEnd: .infinity)
                 self?.songStatus = "Using the song’s own file."
@@ -255,7 +258,10 @@ final class LyricCardPopoutModel: ObservableObject {
             }
             guard let self, !Task.isCancelled else { return }
             self.progress = nil
-            defer { if !warnings.isEmpty { self.status += "\n" + warnings.joined(separator: "\n") } }
+            defer {
+                if !warnings.isEmpty { self.status += "\n" + warnings.joined(separator: "\n") }
+                if folder == nil { self.onFinished?() }
+            }
             guard !files.isEmpty else { self.status = "Couldn’t make the card"; return }
             let names = files.map { $0.0.title }.joined(separator: ", ")
             if folder == nil {
@@ -324,7 +330,9 @@ struct LyricCardPopoutView: View {
     }
 
     private var options: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
+            ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.quinary)
                 if let image = model.preview {
@@ -438,7 +446,10 @@ struct LyricCardPopoutView: View {
                 Text("The PNG shows the first \(LyricCard.Content.stillLineLimit) lines. MP4 and GIF play them all.")
                     .lunalyrText(.caption)
             }
-            Spacer(minLength: 0)
+            }
+            .padding(.trailing, 6)
+            }
+            .scrollIndicators(.automatic)
             if let progress = model.progress {
                 ProgressView(value: progress)
                 Button("Cancel") { model.cancel() }
@@ -476,6 +487,10 @@ final class LyricCardPopoutController {
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window
+            model.onFinished = { [weak self] in
+                NSApp.activate(ignoringOtherApps: true)
+                self?.window?.makeKeyAndOrderFront(nil)
+            }
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
