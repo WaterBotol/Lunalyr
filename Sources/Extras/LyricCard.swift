@@ -89,6 +89,8 @@ enum LyricCard {
         /// A sound to put under the MP4: any audio file, or a video whose sound is
         /// taken. It takes the place of a video background's own sound.
         var soundFile: URL?
+        /// The song's own sound for these lines, which wins over any other.
+        var songAudio: SongAudioClip?
 
         var size: CGSize { aspect.size }
 

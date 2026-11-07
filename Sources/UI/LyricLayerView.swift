@@ -631,7 +631,6 @@ struct LyricLayer: View {
                         let still = rolls || reduceMotion
                         let lineBase: CGFloat = rolls ? baseSize * 0.75 * userScale
                             : composition.fillsStage ? baseSize * 0.8 * userScale : baseSize * densityScale
-                        let priorLine = priorWords(before: index, in: lines)
                         let lineSeed = rolls ? trackSeed : index
                         let lineExit: Double = rolls || previewing ? .infinity : pose.exitStart
                         let lineView = LyricLineView(words: words, time: time, stageSize: stageSize,
@@ -641,7 +640,7 @@ struct LyricLayer: View {
                             energy: energy, readings: annotations, lineEnd: line.end,
                             exitStart: lineExit,
                             previewSince: previewSince,
-                            glue: glue, prior: priorLine,
+                            glue: glue,
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:])
                         let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
@@ -659,7 +658,7 @@ struct LyricLayer: View {
                             annotations: readingOptions.display == .below
                                 ? readingPairs(index, readings: readings, words: line.words, glue: glue,
                                                scene: scene, live: live) : [:],
-                            yield: yield, prior: priorWords(before: index, in: lines))
+                            yield: yield)
                     }
                 }
                 if let lineReading {
@@ -700,14 +699,6 @@ struct LyricLayer: View {
         }
     }
 
-    /// The words of the line before `index`, for layouts that keep them in view.
-    private func priorWords(before index: Int, in lines: [LyricsFetcher.Line]) -> [String] {
-        guard composition(at: index) == .hinge, lines.indices.contains(index - 1), !lines[index - 1].isInstrumental else { return [] }
-        let previous = lines[index - 1]
-        let pieces = previous.words.isEmpty ? previous.text.split(separator: " ").map(String.init) : previous.words.map(\.text)
-        return pieces.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-    }
-
     /// A line with only a line timestamp, set as one level phrase of words.
     /// Its preview is the same layout with only the first word showing, so
     /// that word appears exactly where it will be rather than mid-screen
@@ -716,7 +707,7 @@ struct LyricLayer: View {
                                 pose: LyricPhraseTiming, stageSize: CGSize, composition: LyricComposition,
                                 seed: Int, previewing: Bool,
                                 previewSince: Double, glue: [Bool], annotations: [TimedWordKey: String],
-                                yield: Double, prior: [String] = []) -> some View {
+                                yield: Double) -> some View {
         let phrase = LyricsFetcher.Word(text: line.text, start: line.start, end: line.end)
         // A line sung as one has no words to highlight one by one; it
         // enters as its layout has it enter.
@@ -732,7 +723,7 @@ struct LyricLayer: View {
             baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, settings.lyricScale))) : base, mood: mood,
             composition: stage ? composition : .scattered, seed: seed, presence: pose.presence, readings: annotations,
             wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
-            glue: glue, firstRunOnly: previewing ? previewOpacity : nil, prior: prior)
+            glue: glue, firstRunOnly: previewing ? previewOpacity : nil)
             .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
                 direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : pose.presence * (1 - 0.5 * yield),
                 arrival: previewing ? 1 : pose.arrival))

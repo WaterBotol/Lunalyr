@@ -192,4 +192,29 @@ final class LyricCardBackgroundTests: XCTestCase {
         XCTAssertEqual(notes.count, 1)
         XCTAssertTrue(notes[0].contains("missing.m4a"))
     }
+
+    func testTheSongsSoundIsCutToTheStretchesTheCardPlays() async throws {
+        let card = content()
+        let windows = LyricCard.songWindows(card)
+        XCTAssertEqual(windows.count, 1)
+        let range = try XCTUnwrap(LyricCard.songRange(card))
+        XCTAssertEqual(range.lowerBound, windows[0].start, accuracy: 0.001)
+        XCTAssertGreaterThan(range.upperBound - range.lowerBound, 1.5)
+
+        // A recording of the song that begins at 9.0 s and runs 5 s.
+        let clip = SongAudioClip(url: try tone(seconds: 5), songStart: 9.0, songEnd: 14.0)
+        XCTAssertTrue(clip.covers(range))
+        XCTAssertFalse(SongAudioClip(url: clip.url, songStart: 11, songEnd: 14).covers(range))
+
+        let video = folder.appendingPathComponent("song.mp4")
+        let made = await LyricCard.video(card, to: video)
+        XCTAssertTrue(made)
+        let mixed = await LyricCard.addSongAudio(clip, windows: windows, to: video)
+        XCTAssertTrue(mixed)
+        let asset = AVURLAsset(url: video)
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audio.count, 1)
+        let sound = try await audio[0].load(.timeRange).duration.seconds
+        XCTAssertEqual(sound, windows[0].duration, accuracy: 0.3)
+    }
 }

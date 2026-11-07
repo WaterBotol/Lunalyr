@@ -106,24 +106,34 @@ extension LyricCard {
     /// there is no sound or it cannot be carried into an MP4.
     @discardableResult
     static func addSound(from soundURL: URL, to videoURL: URL) async -> Bool {
-        let video = AVURLAsset(url: videoURL)
         let sound = AVURLAsset(url: soundURL)
-        guard let videoTrack = try? await video.loadTracks(withMediaType: .video).first,
-              let soundTrack = try? await sound.loadTracks(withMediaType: .audio).first,
-              let length = try? await video.load(.duration), length.seconds > 0,
+        guard let soundTrack = try? await sound.loadTracks(withMediaType: .audio).first,
               let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return false }
+        return await mux(soundOnto: videoURL) { audio, length in
+            var cursor = CMTime.zero
+            while cursor < length {
+                let piece = CMTimeMinimum(soundLength, CMTimeSubtract(length, cursor))
+                try audio.insertTimeRange(CMTimeRange(start: .zero, duration: piece), of: soundTrack, at: cursor)
+                cursor = CMTimeAdd(cursor, piece)
+            }
+            return true
+        }
+    }
+
+    /// Builds a composition of the video and whatever `fill` puts on its audio
+    /// track, exports it, and replaces `videoURL` with the result.
+    static func mux(soundOnto videoURL: URL,
+                    fill: (AVMutableCompositionTrack, CMTime) throws -> Bool) async -> Bool {
+        let video = AVURLAsset(url: videoURL)
+        guard let videoTrack = try? await video.loadTracks(withMediaType: .video).first,
+              let length = try? await video.load(.duration), length.seconds > 0 else { return false }
         let composition = AVMutableComposition()
         guard let outVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
               let outSound = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
         else { return false }
         do {
             try outVideo.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: videoTrack, at: .zero)
-            var cursor = CMTime.zero
-            while cursor < length {
-                let piece = CMTimeMinimum(soundLength, CMTimeSubtract(length, cursor))
-                try outSound.insertTimeRange(CMTimeRange(start: .zero, duration: piece), of: soundTrack, at: cursor)
-                cursor = CMTimeAdd(cursor, piece)
-            }
+            guard try fill(outSound, length) else { return false }
         } catch { return false }
         let output = videoURL.deletingLastPathComponent().appendingPathComponent("sound-\(UUID().uuidString).mp4")
         // Copy the video as it is; if the sound will not go into an MP4 as it
@@ -138,7 +148,6 @@ extension LyricCard {
                 session.exportAsynchronously { finished.resume() }
             }
             done = session.status == .completed
-            if !done { print("LYRIC-SOUND preset \(preset) failed: \(String(describing: session.error))") }
         }
         guard done else {
             try? FileManager.default.removeItem(at: output)
@@ -192,7 +201,14 @@ extension LyricCard {
             case .mp4:
                 if await video(content, to: file, progress: share) {
                     made.append((format, file))
-                    if let source = content.soundSource {
+                    if let clip = content.songAudio {
+                        let windows = songWindows(content)
+                        if let range = songRange(content), !clip.covers(range) {
+                            notes("The MP4 has no sound: the recording doesn’t cover these lines. Record the song again.")
+                        } else if !(await addSongAudio(clip, windows: windows, to: file)) {
+                            notes("The MP4 has no sound: couldn’t use the song’s audio.")
+                        }
+                    } else if let source = content.soundSource {
                         // Best effort: the card stays silent, and says so, if the sound cannot be carried over.
                         if !(await addSound(from: source, to: file)) {
                             notes("The MP4 has no sound: couldn’t read the audio in \(source.lastPathComponent)")

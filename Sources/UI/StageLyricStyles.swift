@@ -74,8 +74,6 @@ struct StageLyricView: View {
     let seed: Int
     var exitStart: Double = .infinity
     var firstRunOnly: Double?
-    /// The previous line's words, which Hinge keeps in the corner.
-    var prior: [String] = []
 
     @ObservedObject private var settings = Settings.shared
     @Environment(\.lyricInk) private var ink
@@ -138,128 +136,98 @@ struct StageLyricView: View {
 
     // MARK: Hinge
     //
-    // A line folds itself up like hinged panels, seen at a slant. The first
-    // two words sit as a tight pair; the third arrives huge and settles down
-    // as a tilted bar on the left, pushing the pair into a tiny cluster over
-    // its right end; every word after that stacks downward in a tall column
-    // to the right of the bar, each one a little bigger than the last, as if
-    // the column leaned towards you. When the line goes, it folds away into
-    // the top left corner.
+    // Picture the corner of a cube seen from a slant. Text sits on its two
+    // adjacent faces: the first two words as a tight pair, then the third as a
+    // big bar on the left face, and from the fourth on a tall column down the
+    // right face, each word a little bigger than the one above. Both faces
+    // meet at the vertical edge in the middle and fall away from it in
+    // perspective. When the line ends the faces swing shut edge-on.
 
     private func hinge(_ runs: [StageRun], total: Int) -> some View {
         let arrivals = runs.map { Self.arrive($0, at: time, over: 0.4) }
         let barStart = runs.count > 2 ? runs[2].start : .infinity
-        // How far the third word has settled from huge to its place, and how far
-        // the pair has been pushed aside by it.
+        // How far the bar has settled from huge to its place, and how far the
+        // pair has been pushed to the corner.
         let settle = Easing.smoothstep((time - barStart - 0.25) / 0.5)
         let pushed = runs.count > 2 ? Easing.smoothstep((time - barStart + 0.05) / 0.4) : 0
         let columnCount = max(0, runs.count - 3)
         let u = unit
-        func columnSize(_ j: Int) -> CGFloat { u * min(3.0, 1.25 + 0.26 * CGFloat(j)) * (columnCount > 6 ? 0.85 : 1) }
+        func columnSize(_ j: Int) -> CGFloat { u * min(2.8, 1.2 + 0.24 * CGFloat(j)) * (columnCount > 6 ? 0.85 : 1) }
         let heightSum = (0..<columnCount).map { columnSize($0) * 0.95 }.reduce(0, +)
-        // The whole fold grows to fill the stage once it has a bar to hang from.
+        // The whole corner grows to fill the stage once it has a bar to hang from.
         let barWidth = runs.count > 2 ? CGFloat(runs[2].text.count) * u * 1.7 * 0.66 : 0
         let columnWidth = (0..<columnCount).map { CGFloat(runs[$0 + 3].text.count) * columnSize($0) * 0.66 * 0.84 }.max() ?? 0
-        let structureWidth = max(barWidth + columnWidth + u * 0.3, u * 3)
+        let structureWidth = max(2 * max(barWidth, columnWidth) + u * 0.3, u * 3)
         let structureHeight = max(heightSum, u * 2.4) + u * 0.8
-        let fill = min(2.2, stageSize.width * 0.78 / structureWidth, stageSize.height * 0.78 / structureHeight)
+        let fill = min(2.0, stageSize.width * 0.8 / structureWidth, stageSize.height * 0.78 / structureHeight)
         let fit = min(1, stageSize.height * 0.74 / max(heightSum + u * 0.8, 1)) * (1 + (max(fill, 1) - 1) * settle)
         let leaving = leave
-        let tilt = reduceMotion ? 0 : -7.0
-        return StageLayout(place: { measured, bounds in
-            var centres = [CGPoint](repeating: bounds.center, count: measured.count)
-            guard !measured.isEmpty else { return centres }
-            let columnTop: CGFloat
-            let columnX: CGFloat
-            let barWidth = measured.count > 2 ? measured[2].width : 0
-            if measured.count > 3 {
-                var heights: [CGFloat] = []
-                for j in 0..<(measured.count - 3) { heights.append(measured[j + 3].height * 0.9) }
-                let total = heights.reduce(0, +)
-                let columnWidth = (3..<measured.count).map { measured[$0].width }.max() ?? 0
-                columnTop = bounds.midY - total / 2
-                columnX = bounds.midX + (barWidth * settle + 0) / 2 + 0 * columnWidth
-                var cursor = columnTop
-                for j in 0..<heights.count {
-                    centres[j + 3] = CGPoint(x: columnX + (barWidth * 0.5) * settle * 0 + (CGFloat(j % 2 == 0 ? 1 : -1) * u * 0.08), y: cursor + heights[j] / 2)
-                    cursor += heights[j]
+        let faceAngle = reduceMotion ? 0.0 : 52 + (88 - 52) * leaving
+        let leftRuns = runs.filter { $0.id < 3 }
+        let rightRuns = runs.filter { $0.id >= 3 }
+        let stage = stageSize
+        let face: (Bool) -> AnyView = { isLeft in
+            let items = isLeft ? leftRuns : rightRuns
+            return AnyView(StageLayout(place: { measured, bounds in
+                let edge = bounds.midX
+                let gap = u * 0.12
+                if isLeft {
+                    let barSize = measured.count > 2 ? measured[2] : .zero
+                    let totalColumn = rightRuns.indices.map { columnSize($0) * 0.95 }.reduce(0, +)
+                    let top = bounds.midY - (rightRuns.isEmpty ? u : totalColumn / 2)
+                    var centres = [CGPoint](repeating: CGPoint(x: edge / 2, y: bounds.midY), count: measured.count)
+                    if measured.count > 2 {
+                        let settledX = rightRuns.isEmpty ? edge - gap - barSize.width / 2 : edge - gap - barSize.width / 2
+                        let settledY = rightRuns.isEmpty ? bounds.midY : top + barSize.height * 0.45
+                        centres[2] = CGPoint(x: edge / 2 + (settledX - edge / 2) * settle, y: bounds.midY + (settledY - bounds.midY) * settle)
+                    }
+                    let pairHeight = (measured.first?.height ?? 0) * 0.78
+                    let home = CGPoint(x: edge / 2, y: bounds.midY)
+                    let corner = measured.count > 2
+                        ? CGPoint(x: centres[2].x + barSize.width * 0.28, y: centres[2].y - barSize.height * 0.62) : home
+                    let spot = CGPoint(x: home.x + (corner.x - home.x) * pushed, y: home.y + (corner.y - home.y) * pushed)
+                    if !measured.isEmpty { centres[0] = CGPoint(x: spot.x, y: spot.y - (measured.count > 1 ? pairHeight * 0.5 : 0)) }
+                    if measured.count > 1 { centres[1] = CGPoint(x: spot.x, y: spot.y + pairHeight * 0.5 * (1 - 0.25 * pushed)) }
+                    return centres
                 }
-            } else {
-                columnTop = bounds.midY - u
-                columnX = bounds.midX
-            }
-            let columnWidth = measured.count > 3 ? ((3..<measured.count).map { measured[$0].width }.max() ?? 0) : 0
-            let barRight = columnX - columnWidth / 2 - u * 0.12
-            // The bar: huge in the middle, then down to the left of the column.
-            if measured.count > 2 {
-                let settledX = measured.count > 3 ? barRight - measured[2].width / 2 : bounds.midX
-                let settledY = measured.count > 3 ? columnTop + measured[2].height * 0.45 : bounds.midY
-                centres[2] = CGPoint(x: bounds.midX + (settledX - bounds.midX) * settle, y: bounds.midY + (settledY - bounds.midY) * settle)
-            }
-            // The pair: stacked at the middle, then a cluster over the bar's right end.
-            let pairHeight = (measured.first?.height ?? 0) * 0.78
-            let pairCentre = CGPoint(x: bounds.midX, y: bounds.midY)
-            let cluster: CGPoint
-            if measured.count > 2 {
-                cluster = CGPoint(x: centres[2].x + measured[2].width * 0.3, y: centres[2].y - measured[2].height * 0.62)
-            } else {
-                cluster = pairCentre
-            }
-            let spot = CGPoint(x: pairCentre.x + (cluster.x - pairCentre.x) * pushed, y: pairCentre.y + (cluster.y - pairCentre.y) * pushed)
-            centres[0] = CGPoint(x: spot.x, y: spot.y - (measured.count > 1 ? pairHeight * 0.5 : 0))
-            if measured.count > 1 { centres[1] = CGPoint(x: spot.x, y: spot.y + pairHeight * 0.5 * (1 - 0.25 * pushed)) }
-            return centres
-        }) {
-            ForEach(runs) { run in
-                let sample = sample(run, of: total)
-                let a = arrivals[run.id]
-                let isPair = run.id < 2, isBar = run.id == 2
-                let size: CGFloat = isPair ? u * (runs.count > 1 ? 0.95 : 1.3) * (1 - 0.45 * pushed)
-                    : isBar ? u * (3.6 - 1.9 * settle)
-                    : columnSize(run.id - 3) * (1 + 0.35 * (1 - a))
-                let tile = tiled(run)
-                let swing = reduceMotion ? 0 : (1 - a) * -70
-                Text(run.text.uppercased())
-                    .font(font(size, hero: true, id: run.id))
-                    .foregroundStyle(tile ? ink.tileText : isPair ? sample.rest.opacity(0.95) : sample.sung)
-                    .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
-                    .background { tileBackground(tile, size: size) }
-                    .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: 7, y: 2)
-                    // Column words are drawn tall and narrow.
-                    .scaleEffect(x: isBar || isPair ? 1 : 0.84, y: isBar || isPair ? 1 : 1.12)
-                    .rotationEffect(.degrees(isBar ? tilt * settle : 0))
-                    .rotation3DEffect(.degrees(swing), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.55)
-                    .opacity(min(1, a * 1.6))
-            }
+                let heights = measured.map { $0.height * 0.9 }
+                var cursor = bounds.midY - heights.reduce(0, +) / 2
+                return measured.indices.map { index in
+                    defer { cursor += heights[index] }
+                    return CGPoint(x: edge + gap + measured[index].width / 2, y: cursor + heights[index] / 2)
+                }
+            }) {
+                ForEach(items) { run in
+                    let sample = sample(run, of: total)
+                    let a = arrivals[run.id]
+                    let isPair = run.id < 2, isBar = run.id == 2
+                    let size: CGFloat = isPair ? u * (runs.count > 1 ? 0.95 : 1.3) * (1 - 0.45 * pushed)
+                        : isBar ? u * (3.4 - 1.8 * settle)
+                        : columnSize(run.id - 3) * (1 + 0.3 * (1 - a))
+                    let tile = tiled(run)
+                    Text(run.text.uppercased())
+                        .font(font(size, hero: true, id: run.id))
+                        .foregroundStyle(tile ? ink.tileText : isPair ? sample.rest.opacity(0.95) : sample.sung)
+                        .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stage.width * 0.4)
+                        .background { tileBackground(tile, size: size) }
+                        .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: 7, y: 2)
+                        .scaleEffect(x: isBar || isPair ? 1 : 0.86, y: isBar || isPair ? 1 : 1.1)
+                        // Words glide in along their face, from further out.
+                        .offset(x: reduceMotion ? 0 : (isLeft ? -1 : 1) * (1 - min(a, 1)) * u * 1.2)
+                        .opacity(min(1, a * 1.6))
+                }
+            })
         }
-        // Seen at a slant, so the lower words come towards you.
-        .rotation3DEffect(.degrees(reduceMotion ? 0 : 22), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
-        .rotation3DEffect(.degrees(reduceMotion ? 0 : -16), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+        return ZStack {
+            face(true)
+                .rotation3DEffect(.degrees(faceAngle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.8)
+            face(false)
+                .rotation3DEffect(.degrees(-faceAngle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.8)
+        }
+        // Looked at from a little above.
+        .rotation3DEffect(.degrees(reduceMotion ? 0 : 9), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
         .scaleEffect(fit)
-        // At the end of the line the whole fold shrinks into the top left
-        // corner, where the next line finds it as a small cluster.
-        .scaleEffect(1 - 0.74 * leaving)
-        .offset(x: -stageSize.width * 0.41 * leaving, y: -stageSize.height * 0.4 * leaving)
-        .opacity(1 - Easing.smoothstep((leaving - 0.8) / 0.2))
-        .overlay(alignment: .topLeading) { cornerCluster }
-    }
-
-    /// The previous line, small and tilted in the top left corner.
-    private var cornerCluster: some View {
-        let shown = Array(prior.suffix(6))
-        let rise = Easing.smoothstep((time - (words.first?.start ?? 0) + 0.2) / 0.6)
-        return VStack(alignment: .leading, spacing: -unit * 0.05) {
-            ForEach(Array(shown.enumerated()), id: \.offset) { index, word in
-                Text(word.uppercased())
-                    .font(font(unit * (0.3 + 0.03 * CGFloat(index)), hero: true, id: 40 + index))
-                    .foregroundStyle(ink.base.rest.opacity(0.8))
-                    .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
-            }
-        }
-        .rotationEffect(.degrees(reduceMotion ? 0 : -8), anchor: .topLeading)
-        .padding(.leading, stageSize.width * 0.04).padding(.top, stageSize.height * 0.05)
-        .opacity(shown.isEmpty ? 0 : rise * (1 - leave))
-        .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
+        .opacity(1 - Easing.smoothstep((leaving - 0.7) / 0.3))
     }
 
     // MARK: Broadside
@@ -279,10 +247,9 @@ struct StageLyricView: View {
     }
 
     private func broadside(_ runs: [StageRun], total: Int) -> some View {
-        // Soft arrivals (no overshoot) and a camera that glides: each move
-        // starts a little before its word and takes most of a second.
-        let arrivals = runs.map { Self.glide((time - ($0.start - 0.06)) / 0.5) }
-        let moves = runs.map { Self.glide((time - ($0.start - 0.2)) / 0.85) }
+        // Snappy: each word springs in and the strip jumps along with it.
+        let arrivals = runs.map { Self.arrive($0, at: time, over: 0.4) }
+        let moves = arrivals
         let little = runs.map { isLittle($0.text) }
         let bigSize = unit * 1.7, smallSize = unit * 0.52
         let hard = unit * 0.05
@@ -294,16 +261,20 @@ struct StageLyricView: View {
             var cursor: CGFloat = 0
             var previousBig: Int?
             var bigOrder: [Int] = []
+            var littlesSinceBig = 0
             for index in measured.indices {
-                if little[index], let prior = previousBig {
+                // The first little word after a big one lies across it; any
+                // more follow it in the row rather than piling on top.
+                if little[index], let prior = previousBig, littlesSinceBig == 0 {
                     xs[index] = xs[prior] + measured[prior].width * 0.2
                     ys[index] = bounds.midY + measured[prior].height * 0.2
+                    littlesSinceBig += 1
                     continue
                 }
                 let width = measured[index].width
                 xs[index] = cursor + width / 2
                 cursor += width + (little[index] ? unit * 0.2 : unit * 0.45)
-                if !little[index] { previousBig = index; bigOrder.append(index) }
+                if little[index] { littlesSinceBig += 1 } else { previousBig = index; bigOrder.append(index); littlesSinceBig = 0 }
             }
             // The strip glides so the newest big word reaches the centre.
             var camera = bigOrder.first.map { xs[$0] } ?? 0
@@ -325,8 +296,8 @@ struct StageLyricView: View {
                         .padding(.horizontal, labelSize * 0.34).padding(.vertical, labelSize * 0.16)
                         .background(ink.tileColour, in: RoundedRectangle(cornerRadius: 3))
                         .rotationEffect(.degrees(run.id.isMultiple(of: 2) ? -3 : 2.5))
-                        .scaleEffect(reduceMotion ? 1 : 0.85 + 0.15 * a)
-                        .opacity(a)
+                        .scaleEffect(reduceMotion ? 1 : 0.8 + 0.2 * a)
+                        .opacity(min(1, a * 1.6))
                 } else {
                     let tile = tiled(run)
                     ZStack {
@@ -336,8 +307,8 @@ struct StageLyricView: View {
                     .font(font(bigSize, hero: true, id: run.id))
                     .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
                     .background { tileBackground(tile, size: bigSize) }
-                    .scaleEffect(reduceMotion ? 1 : 0.92 + 0.08 * a)
-                    .opacity(a)
+                    .scaleEffect(reduceMotion ? 1 : 0.86 + 0.14 * a)
+                    .opacity(min(1, a * 1.6))
                 }
             }
         }
@@ -349,18 +320,36 @@ struct StageLyricView: View {
 
     // MARK: Portal
     //
-    // The word being sung sits in a solid pill with a small arrow badge, tilted
-    // as it arrives and settling flat. The words before it drift up and away as
-    // smaller, paler pills.
+    // The word being sung sits in a solid pill with a small badge, tilted as it
+    // arrives and settling flat. The words before it drift away as smaller,
+    // paler pills. Nothing repeats: every line leans a different way, and every
+    // word comes from its own direction with its own tilt, shape and badge.
+
+    /// A steady 0...1 for a line (`word` nil) or one of its words and a salt.
+    private func chance(_ word: Int?, _ salt: Int) -> Double {
+        var value = UInt64(truncatingIfNeeded: abs(seed) &* 2654435761 &+ (word ?? 977) &* 40503 &+ salt &* 9973)
+        value ^= value >> 13; value = value &* 0x2545F4914F6CDD1D; value ^= value >> 29
+        return Double(value % 10_000) / 10_000
+    }
+
+    private static let badges = ["arrow.up.right", "arrow.right", "sparkle", "play.fill", "plus", "bolt.fill"]
 
     private func portal(_ runs: [StageRun], total: Int) -> some View {
         let arrivals = runs.map { Self.arrive($0, at: time, over: 0.5) }
         let settled = runs.map { Self.glide((time - ($0.start - 0.05)) / 0.6) }
         let ranks = runs.indices.map { i in settled[(i + 1)...].reduce(0, +) }
+        // Which way this line's trail runs, and where the pills sit.
+        let flipX: CGFloat = chance(nil, 1) < 0.5 ? 1 : -1
+        let flipY: CGFloat = chance(nil, 2) < 0.7 ? 1 : -1
+        let reach = 0.8 + 0.5 * chance(nil, 3)
+        let shiftX = (chance(nil, 4) - 0.5) * 0.24 * stageSize.width
+        let lift = stageSize.height * (flipY > 0 ? 0.1 + 0.1 * chance(nil, 5) : -0.1 - 0.08 * chance(nil, 5))
+        let badge = Self.badges[Int(chance(nil, 6) * Double(Self.badges.count)) % Self.badges.count]
         let trail: [CGPoint] = [
-            CGPoint(x: 0, y: 0), CGPoint(x: -0.1 * stageSize.width, y: -0.2 * stageSize.height),
-            CGPoint(x: 0.11 * stageSize.width, y: -0.3 * stageSize.height),
-            CGPoint(x: -0.04 * stageSize.width, y: -0.38 * stageSize.height),
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: -0.1 * stageSize.width * flipX * reach, y: -0.2 * stageSize.height * flipY * reach),
+            CGPoint(x: 0.11 * stageSize.width * flipX * reach, y: -0.3 * stageSize.height * flipY * reach),
+            CGPoint(x: -0.04 * stageSize.width * flipX * reach, y: -0.38 * stageSize.height * flipY * reach),
         ]
         func along(_ rank: Double) -> CGPoint {
             let capped = min(max(rank, 0), Double(trail.count - 1))
@@ -369,18 +358,17 @@ struct StageLyricView: View {
             return CGPoint(x: trail[low].x + (trail[high].x - trail[low].x) * f, y: trail[low].y + (trail[high].y - trail[low].y) * f)
         }
         let leaving = leave
-        let lift = stageSize.height * 0.12
         let drift = reduceMotion ? 0.0 : 1.0
         return StageLayout(place: { measured, bounds in
             measured.indices.map { index in
                 let p = along(ranks[index])
-                // Everything floats a little, each pill on its own rhythm.
-                let bob = CGFloat(sin(time * 1.5 + Double(index) * 1.3)) * unit * 0.07 * drift
-                let sway = CGFloat(cos(time * 1.1 + Double(index) * 0.9)) * unit * 0.05 * drift
-                // The sung pill slides in from low and right as it arrives.
+                let bob = CGFloat(sin(time * (1.2 + 0.6 * chance(index, 7)) + Double(index) * 1.3)) * unit * 0.07 * drift
+                let sway = CGFloat(cos(time * (0.9 + 0.5 * chance(index, 8)) + Double(index) * 0.9)) * unit * 0.05 * drift
+                // Each pill comes in from its own direction.
+                let heading = chance(index, 9) * 2 * .pi
                 let rise = CGFloat(1 - settled[index])
-                return CGPoint(x: bounds.midX + p.x + sway + rise * bounds.width * 0.05 * drift,
-                               y: bounds.midY + lift + p.y + bob + rise * bounds.height * 0.07 * drift)
+                return CGPoint(x: bounds.midX + shiftX + p.x + sway + rise * CGFloat(cos(heading)) * bounds.width * 0.07 * drift,
+                               y: bounds.midY + lift + p.y + bob + rise * CGFloat(sin(heading)) * bounds.height * 0.1 * drift)
             }
         }) {
             ForEach(runs) { run in
@@ -388,39 +376,52 @@ struct StageLyricView: View {
                 let eased = settled[run.id]
                 let rank = ranks[run.id]
                 let sample = sample(run, of: total)
-                let size = unit * 1.35 * max(0.4, 1 - 0.4 * min(rank, 1.5))
                 let live = rank < 0.5
                 let tile = tiled(run)
-                let tilt = reduceMotion ? 0 : (1 - eased) * 9 + sin(time * 1.1 + Double(run.id)) * 1.6
+                let size = unit * (1.2 + 0.3 * chance(run.id, 10)) * max(0.4, 1 - 0.4 * min(rank, 1.5))
+                // Shapes run from nearly square to a full capsule; some pills are only outlined.
+                let corner = size * (0.24 + 0.26 * chance(run.id, 11))
+                let outlined = live && chance(run.id, 12) < 0.25 && !tile
+                let badgeSide = chance(run.id, 13)
+                let tiltAmount = 4 + 10 * chance(run.id, 14)
+                let tiltSign: Double = chance(run.id, 15) < 0.5 ? 1 : -1
+                let tilt = reduceMotion ? 0 : (1 - eased) * tiltAmount * tiltSign + sin(time * 1.1 + Double(run.id)) * 1.6
+                let badgeView = Image(systemName: badge)
+                    .font(.system(size: size * 0.34, weight: .bold))
+                    .rotationEffect(.degrees(reduceMotion ? 0 : (1 - eased) * -90 * tiltSign))
+                    .foregroundStyle(outlined ? ink.tileColour : ink.tileText)
+                    .frame(width: size * 0.62, height: size * 0.62)
+                    .background(Circle().fill(outlined ? ink.tileColour.opacity(0.2) : ink.tileColour.opacity(live ? 1 : 0.35)))
+                    .opacity(live ? 1 : 0)
+                    .frame(width: live ? size * 0.62 : 0)
                 HStack(spacing: size * 0.3) {
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: size * 0.34, weight: .bold))
-                        .rotationEffect(.degrees(reduceMotion ? 0 : (1 - eased) * -90))
-                        .foregroundStyle(ink.tileText)
-                        .frame(width: size * 0.62, height: size * 0.62)
-                        .background(Circle().fill(ink.tileColour.opacity(live ? 1 : 0.35)))
-                        .opacity(live ? 1 : 0)
-                        .frame(width: live ? size * 0.62 : 0)
+                    if badgeSide < 0.6 { badgeView }
                     Text(run.text)
                         .font(font(size, hero: true, id: run.id))
-                        .foregroundStyle(live || tile ? ink.tileText : sample.rest.opacity(0.85))
+                        .foregroundStyle(outlined ? ink.tileColour : live || tile ? ink.tileText : sample.rest.opacity(0.85))
                         .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
+                    if badgeSide >= 0.6 && badgeSide < 0.85 { badgeView }
                 }
                 .padding(.horizontal, size * 0.5).padding(.vertical, size * 0.26)
                 .background {
                     ZStack {
                         // A soft ripple swells off the pill as it lands.
                         if live, !reduceMotion {
-                            RoundedRectangle(cornerRadius: size * 0.42, style: .continuous)
+                            RoundedRectangle(cornerRadius: corner, style: .continuous)
                                 .fill(ink.tileColour.opacity(0.5 * (1 - eased)))
                                 .blur(radius: size * 0.16)
                                 .scaleEffect(1 + 0.3 * eased)
                         }
-                        RoundedRectangle(cornerRadius: size * 0.42, style: .continuous)
-                            .fill(live ? ink.tileColour : tile ? ink.tileColour : sample.rest.opacity(0.16))
+                        if outlined {
+                            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                                .strokeBorder(ink.tileColour, lineWidth: max(2, size * 0.07))
+                        } else {
+                            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                                .fill(live ? ink.tileColour : tile ? ink.tileColour : sample.rest.opacity(0.16))
+                        }
                     }
                 }
-                .shadow(color: .black.opacity(live ? 0.2 : 0), radius: 9, y: 4)
+                .shadow(color: .black.opacity(live && !outlined ? 0.2 : 0), radius: 9, y: 4)
                 // It squashes as it lands, then settles.
                 .scaleEffect(x: reduceMotion ? 1 : 1 + 0.07 * (1 - min(a, 1)), y: reduceMotion ? 1 : 1 - 0.07 * (1 - min(a, 1)))
                 .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * min(a, 1.05))

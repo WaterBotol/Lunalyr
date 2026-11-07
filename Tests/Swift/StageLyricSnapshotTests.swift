@@ -76,3 +76,26 @@ final class HingeSnapshotTests: XCTestCase {
         try NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/hinge.png"))
     }
 }
+
+@MainActor
+final class PortalVarietyTests: XCTestCase {
+    func testPortalSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] else { return }
+        let text = "Rain over the city can fly".split(separator: " ")
+        let words = text.enumerated().map { i, w in LyricsFetcher.Word(text: String(w), start: 1 + Double(i) * 0.7, end: 1.6 + Double(i) * 0.7) }
+        let sheet = LazyVGrid(columns: [GridItem(.fixed(640)), GridItem(.fixed(640)), GridItem(.fixed(640))], spacing: 2) {
+            ForEach(Array(0..<6), id: \.self) { seed in
+                ZStack {
+                    LinearGradient(colors: [Color(red: 0.16, green: 0.1, blue: 0.3), Color(red: 0.05, green: 0.05, blue: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LyricLineView(words: words, time: 3.9, stageSize: CGSize(width: 640, height: 300), baseSize: 40, mood: .neutral,
+                                  composition: .portal, seed: seed, lineEnd: 9, exitStart: 9, glue: [Bool](repeating: false, count: words.count))
+                        .frame(width: 640, height: 300)
+                }.frame(width: 640, height: 300).environment(\.lyricInk, LyricInk())
+            }
+        }.frame(width: 1924)
+        let renderer = ImageRenderer(content: sheet)
+        renderer.scale = 0.5
+        let image = try XCTUnwrap(renderer.nsImage)
+        try NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/portal.png"))
+    }
+}

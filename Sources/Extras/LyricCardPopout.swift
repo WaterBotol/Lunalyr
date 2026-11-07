@@ -41,8 +41,31 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var background: LyricCardBackground? { didSet { schedulePreview() } }
     /// Sound chosen to go under the MP4 (any audio file, or a video's own sound).
     @Published var soundFile: URL?
-    @Published var keepSound: Bool {
-        didSet { UserDefaults.standard.set(keepSound, forKey: Keys.sound) }
+    enum SoundChoice: String, CaseIterable, Identifiable {
+        case none, song, video, file
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .none: return "None"
+            case .song: return "The song"
+            case .video: return "Video’s sound"
+            case .file: return "A file"
+            }
+        }
+    }
+    @Published var soundChoice: SoundChoice {
+        didSet { UserDefaults.standard.set(soundChoice.rawValue, forKey: Keys.sound) }
+    }
+    /// The song's own sound for the selected lines, once fetched or recorded.
+    @Published var songClip: SongAudioClip?
+    /// The stretch of the song the selected lines need.
+    @Published var songRange: ClosedRange<Double>?
+    @Published var songStatus = ""
+    @Published var songBusy = false
+    private var songTask: Task<Void, Never>?
+    var songNeedsFetching: Bool {
+        guard let range = songRange else { return true }
+        return songClip.map { !$0.covers(range) } ?? true
     }
 
     private var previewTask: Task<Void, Never>?
@@ -53,7 +76,7 @@ final class LyricCardPopoutModel: ObservableObject {
         aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? .portrait
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
-        keepSound = defaults.object(forKey: Keys.sound) as? Bool ?? true
+        soundChoice = SoundChoice(rawValue: defaults.string(forKey: Keys.sound) ?? "") ?? .video
         if let path = defaults.string(forKey: Keys.background), FileManager.default.fileExists(atPath: path) {
             Task { [weak self] in
                 let loaded = await LyricCardBackground.load(URL(fileURLWithPath: path))
@@ -73,6 +96,35 @@ final class LyricCardPopoutModel: ObservableObject {
         setBackground(url)
     }
 
+    /// Gets the song's own sound for the selected lines: from its file if the
+    /// player has a plain one, otherwise by playing those lines once and recording.
+    func fetchSong() {
+        guard !songBusy, let range = songRange else { return }
+        songBusy = true
+        songStatus = "Looking for the song’s file…"
+        songTask = Task { [weak self] in
+            defer { Task { @MainActor in self?.songBusy = false } }
+            if let file = await SongAudioSource.localFile() {
+                self?.songClip = SongAudioClip(url: file, songStart: 0, songEnd: .infinity)
+                self?.songStatus = "Using the song’s own file."
+                return
+            }
+            do {
+                let clip = try await SongAudioSource.record(range: range) { text in
+                    Task { @MainActor in self?.songStatus = text }
+                }
+                self?.songClip = clip
+                self?.songStatus = "Recorded the song."
+            } catch is CancellationError {
+                self?.songStatus = "Cancelled."
+            } catch {
+                self?.songStatus = error.localizedDescription
+            }
+        }
+    }
+
+    func cancelSong() { songTask?.cancel() }
+
     func chooseSound() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio, .movie]
@@ -82,12 +134,14 @@ final class LyricCardPopoutModel: ObservableObject {
         panel.prompt = "Use This Sound"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         soundFile = url
+        soundChoice = .file
     }
 
     /// Dropped or chosen files: audio goes under the card, anything else behind it.
     func accept(_ url: URL) {
         if let type = UTType(filenameExtension: url.pathExtension.lowercased()), type.conforms(to: .audio) {
             soundFile = url
+            soundChoice = .file
         } else {
             setBackground(url)
         }
@@ -152,8 +206,9 @@ final class LyricCardPopoutModel: ObservableObject {
                                                rows: selection.sorted(), aspect: aspect)
         content?.background = background
         content?.backgroundStill = background?.first
-        content?.keepBackgroundSound = keepSound
-        content?.soundFile = soundFile
+        content?.keepBackgroundSound = soundChoice == .video
+        content?.soundFile = soundChoice == .file ? soundFile : nil
+        content?.songAudio = soundChoice == .song && !songNeedsFetching ? songClip : nil
         return content
     }
 
@@ -162,6 +217,7 @@ final class LyricCardPopoutModel: ObservableObject {
         previewTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 120_000_000)
             guard let self, !Task.isCancelled, var content = self.content() else { self?.preview = nil; return }
+            self.songRange = LyricCard.songRange(content)
             content.pages = [content.stillPage]
             self.preview = LyricCard.image(content, scale: 0.4)
         }
@@ -298,22 +354,45 @@ struct LyricCardPopoutView: View {
                 if model.background != nil { Button("Remove") { model.clearBackground() }.controlSize(.small) }
                 Button("Choose…") { model.chooseBackground() }.controlSize(.small)
             }
-            if let background = model.background, background.kind == .video, background.hasAudio {
-                Toggle("Keep the video’s sound in the MP4", isOn: $model.keepSound).controlSize(.small)
+            Text("Sound (MP4 only)").lunalyrText(.groupTitle)
+            Picker("", selection: $model.soundChoice) {
+                ForEach(LyricCardPopoutModel.SoundChoice.allCases) { Text($0.title).tag($0) }
             }
-            Text("Sound").lunalyrText(.groupTitle)
-            HStack(spacing: 8) {
-                Text(model.soundFile?.lastPathComponent
-                     ?? (model.background?.kind == .video && model.background?.hasAudio == true && model.keepSound
-                         ? "The video’s own sound" : "None"))
-                    .lineLimit(1).truncationMode(.middle)
-                    .foregroundStyle(model.soundFile == nil && !(model.background?.hasAudio == true && model.keepSound) ? .secondary : .primary)
-                Spacer(minLength: 0)
-                if model.soundFile != nil { Button("Remove") { model.soundFile = nil }.controlSize(.small) }
-                Button("Choose…") { model.chooseSound() }.controlSize(.small)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            switch model.soundChoice {
+            case .none:
+                Text("The MP4 will be silent.").lunalyrText(.caption)
+            case .song:
+                HStack(spacing: 8) {
+                    Text(model.songStatus.isEmpty
+                         ? (model.songNeedsFetching ? "Not fetched for these lines yet" : "Ready for these lines")
+                         : model.songStatus)
+                        .lineLimit(2).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    if model.songBusy {
+                        Button("Cancel") { model.cancelSong() }.controlSize(.small)
+                    } else {
+                        Button(model.songNeedsFetching ? "Get the song’s sound" : "Redo") { model.fetchSong() }
+                            .controlSize(.small).disabled(model.songRange == nil)
+                    }
+                }
+                Text("Uses the song’s own file when it has one. Otherwise it plays the selected lines once and records them, which takes as long as they last. You’ll hear it, and macOS may ask to allow audio recording.")
+                    .lunalyrText(.caption)
+            case .video:
+                Text(model.background?.hasAudio == true ? "The background video’s own sound plays under the card."
+                     : "Choose a video with sound as the background.").lunalyrText(.caption)
+            case .file:
+                HStack(spacing: 8) {
+                    Text(model.soundFile?.lastPathComponent ?? "No file chosen")
+                        .lineLimit(1).truncationMode(.middle)
+                        .foregroundStyle(model.soundFile == nil ? .secondary : .primary)
+                    Spacer(minLength: 0)
+                    Button("Choose…") { model.chooseSound() }.controlSize(.small)
+                }
+                Text("Any audio file, or a video to take the sound from. You can drop one on the preview.").lunalyrText(.caption)
             }
-            Text("Sound goes into the MP4. A GIF can’t carry sound, so make an MP4 when you want it. Drop an audio file on the preview to add it.")
-                .lunalyrText(.caption)
+            Text("A GIF can’t carry sound, so make an MP4 when you want it.").lunalyrText(.caption)
             if let background = model.background, background.isAnimated {
                 Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption)
             } else if model.background == nil {
