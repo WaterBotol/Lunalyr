@@ -95,11 +95,15 @@ enum LocalLyricBridge {
         let keys = sidecar.rows.map(lyricKey)
         var paired: [Int: Int] = [:]
         var used = Set<Int>()
-        for tolerance in [0.18, 1.0] {
+        // Exact text first, then near copies up to two seconds apart: files from
+        // two services are rarely synced to the same instant, and an unpaired
+        // line-timed copy would show the whole line before the word-timed one.
+        for (tolerance, fuzzy) in [(0.18, false), (1.0, false), (2.0, true)] {
             for (index, line) in lrc.enumerated() where !line.isInstrumental && paired[index] == nil {
                 let key = lyricKey(line)
                 if let row = sidecar.matchingIndex(at: line.start, within: tolerance, where: {
-                    !used.contains($0) && !sidecar.rows[$0].isInstrumental && keys[$0] == key
+                    !used.contains($0) && !sidecar.rows[$0].isInstrumental
+                        && (keys[$0] == key || (fuzzy && LyricLineIndex.sameLyric(line.text, sidecar.rows[$0].text)))
                 }) {
                     paired[index] = row
                     used.insert(row)

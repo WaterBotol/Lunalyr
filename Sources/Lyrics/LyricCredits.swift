@@ -47,6 +47,16 @@ enum LyricCredits {
             if result[index].credit == true { inCredits = true; continue }
             if result[index].isInstrumental { continue }
             let text = result[index].text
+            // "[Verse 1]", "[ Chorus ]", "Verse 3]": section labels, not sung.
+            if isSectionLabel(text) {
+                result[index].isInstrumental = true
+                result[index].text = ""
+                result[index].words = []
+                result[index].wordTimed = false
+                result[index].romanization = nil
+                result[index].translation = nil
+                continue
+            }
             var credit = isCredit(text, inCredits: inCredits)
             if !credit, inCredits, names.isHeading(text) { credit = true }
             // A bare title or artist line heading the credits.
@@ -57,6 +67,17 @@ enum LyricCredits {
             if credit { inCredits = true; convert(index) } else { inCredits = false }
         }
         return markingTitleHeader(result)
+    }
+
+    private static let sectionWords = "verse|chorus|pre-?chorus|post-?chorus|bridge|intro|outro|hook|refrain|interlude|instrumental|solo|breakdown|drop|ad-?libs?"
+
+    /// A bracketed section label ("[Verse 1]", "[Chorus: Name]", "Verse 3]").
+    /// A bare "Chorus" is left alone: it could be sung.
+    static func isSectionLabel(_ text: String) -> Bool {
+        let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = line.first, let last = line.last, "[【(（".contains(first) || "]】)）".contains(last) else { return false }
+        let pattern = "^[\\[【(（]?\\s*(\(sectionWords))\\b[^\\]】)）]*[\\]】)）]?$"
+        return line.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// The playing song's names, and the ways a lyric file repeats them in
