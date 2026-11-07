@@ -27,35 +27,89 @@ enum LyricCredits {
     /// Every source's lines, whichever parser made them: credits the parsers
     /// did not already set apart (KPoe, LRCLIB's lyrics files, a cached
     /// result) are flagged here, in song order. Safe to run again.
-    static func flagging(_ lines: [LyricsFetcher.Line]) -> [LyricsFetcher.Line] {
+    static func flagging(_ lines: [LyricsFetcher.Line], title: String = "", artist: String = "") -> [LyricsFetcher.Line] {
+        let names = TrackNames(title: title, artist: artist)
         var result = lines
+        func convert(_ index: Int) {
+            result[index].isInstrumental = true
+            result[index].words = []
+            result[index].wordTimed = false
+            result[index].romanization = nil
+            result[index].translation = nil
+            result[index].credit = true
+            result[index].end = result[index].start + 0.01
+        }
+        func nextSung(after index: Int) -> Int? {
+            result.indices.dropFirst(index + 1).first { !result[$0].isInstrumental || result[$0].credit == true }
+        }
         var inCredits = true
         for index in result.indices {
             if result[index].credit == true { inCredits = true; continue }
             if result[index].isInstrumental { continue }
-            if isCredit(result[index].text, inCredits: inCredits) {
-                inCredits = true
-                result[index].isInstrumental = true
-                result[index].words = []
-                result[index].wordTimed = false
-                result[index].romanization = nil
-                result[index].translation = nil
-                result[index].credit = true
-                result[index].end = result[index].start + 0.01
-            } else {
-                inCredits = false
+            let text = result[index].text
+            var credit = isCredit(text, inCredits: inCredits)
+            if !credit, inCredits, names.isHeading(text) { credit = true }
+            // A bare title or artist line heading the credits.
+            if !credit, inCredits, names.isLoneName(text), let next = nextSung(after: index),
+               result[next].credit == true || isCredit(result[next].text, inCredits: true) || names.isHeading(result[next].text) {
+                credit = true
             }
+            if credit { inCredits = true; convert(index) } else { inCredits = false }
         }
         return markingTitleHeader(result)
     }
 
+    /// The playing song's names, and the ways a lyric file repeats them in
+    /// its heading: "Title - Artist", "Artist - Title", "Title (Artist)",
+    /// "Title by Artist", "Artist: Title", "Title / Artist".
+    struct TrackNames {
+        let title: String
+        let artist: String
+        let primaryArtist: String
+
+        init(title: String, artist: String) {
+            self.title = LyricQuery.normalize(title)
+            self.artist = LyricQuery.normalize(artist)
+            // "Yot Club & Someone", "A, B", "A feat. B": the first name.
+            let first = artist.components(separatedBy: CharacterSet(charactersIn: ",&;/、")).first ?? artist
+            let lead = first.components(separatedBy: " feat").first?.components(separatedBy: " ft").first ?? first
+            self.primaryArtist = LyricQuery.normalize(lead)
+        }
+
+        private var usable: Bool { !title.isEmpty }
+
+        /// A line carrying both the title and the artist and little else.
+        func isHeading(_ text: String) -> Bool {
+            guard usable, !primaryArtist.isEmpty else { return false }
+            let line = LyricQuery.normalize(text)
+            guard line.count <= title.count + artist.count + 14,
+                  Self.contains(line, title), Self.contains(line, primaryArtist) else { return false }
+            return true
+        }
+
+        /// A line that is only the title, or only the artist.
+        func isLoneName(_ text: String) -> Bool {
+            guard usable else { return false }
+            let line = LyricQuery.normalize(text)
+            return !line.isEmpty && (line == title || line == artist || line == primaryArtist)
+        }
+
+        /// Whole-word containment on normalised text.
+        private static func contains(_ line: String, _ phrase: String) -> Bool {
+            !phrase.isEmpty && " \(line) ".contains(" \(phrase) ")
+        }
+
+        func isEither(_ text: String) -> Bool { isHeading(text) || isLoneName(text) }
+    }
+
     /// Unsynced lyrics have no time to show a credit at, so the ones opening
     /// the text (and the heading above them) are dropped.
-    static func droppingLeadingCredits(_ lines: [String]) -> [String] {
+    static func droppingLeadingCredits(_ lines: [String], title: String = "", artist: String = "") -> [String] {
+        let names = TrackNames(title: title, artist: artist)
         func blank(_ text: String) -> Bool { text.trimmingCharacters(in: .whitespaces).isEmpty }
         var index = lines.firstIndex { !blank($0) } ?? lines.count
         // "Title - Artist" heading right above the credits.
-        if index < lines.count, lines[index].contains(" - ") || lines[index].contains(" – "),
+        if index < lines.count, lines[index].contains(" - ") || lines[index].contains(" – ") || names.isHeading(lines[index]),
            let next = lines[(index + 1)...].first(where: { !blank($0) }), isCredit(next, inCredits: true) {
             index += 1
         }

@@ -30,10 +30,33 @@ enum LyricCreditCues {
 
     /// One cue per credit line. Credits that share a time (or have none to
     /// speak of) arrive one after another instead of piling up.
-    static func cues(in lines: [LyricsFetcher.Line]) -> [Cue] {
+    static func cues(in lines: [LyricsFetcher.Line], title: String = "", artist: String = "") -> [Cue] {
         var cues: [Cue] = []
         var cursor = 0.0
+        // The song's title and artist appear once: the lyric file's own
+        // heading if it has one, else one made here. Further headings, bare
+        // names and repeated credits are dropped.
+        let names = LyricCredits.TrackNames(title: title, artist: artist)
+        var credits: [LyricsFetcher.Line] = []
+        var seenHeading = false
+        var seenText = Set<String>()
         for line in lines where line.credit == true {
+            if names.isHeading(line.text) {
+                guard !seenHeading else { continue }
+                seenHeading = true
+            } else if names.isLoneName(line.text) {
+                continue
+            }
+            guard seenText.insert(LyricQuery.normalize(line.text)).inserted else { continue }
+            credits.append(line)
+        }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty, !seenHeading {
+            let artistName = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            let heading = artistName.isEmpty ? trimmedTitle : "\(trimmedTitle) - \(artistName)"
+            credits.insert(LyricsFetcher.Line(start: 0.4, end: 0.41, text: heading, words: [], isInstrumental: true, credit: true), at: 0)
+        }
+        for line in credits {
             let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty, line.start.isFinite else { continue }
             let start = max(line.start, cursor)

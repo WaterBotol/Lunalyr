@@ -69,4 +69,50 @@ final class CreditsLayerTests: XCTestCase {
         let plain = LyricsViewModel.presentation(of: .plain(["Human Nature - Yot Club", "Lyrics by: A B", "", "Always felt"], .init(precision: "Plain", source: "x")), repairingGaps: false)
         XCTAssertEqual(plain.plainLines, ["Always felt"])
     }
+
+    func testTrackHeadingVariantsAreCredits() {
+        func line(_ text: String, _ start: Double) -> LyricsFetcher.Line {
+            LyricsFetcher.Line(start: start, end: start + 2, text: text, words: [], isInstrumental: false)
+        }
+        for heading in ["Human Nature - Yot Club", "Yot Club - Human Nature", "Human Nature (Yot Club)", "Human Nature by Yot Club",
+                        "Yot Club: Human Nature", "HUMAN NATURE / YOT CLUB", "Human Nature – Yot Club & Friends"] {
+            let shown = LyricCredits.flagging([line(heading, 0), line("Always felt like you", 5)], title: "Human Nature", artist: "Yot Club")
+            XCTAssertEqual(shown[0].credit, true, heading)
+            XCTAssertNil(shown[1].credit)
+        }
+    }
+
+    func testALoneTitleOnlyCountsAheadOfCredits() {
+        func line(_ text: String, _ start: Double) -> LyricsFetcher.Line {
+            LyricsFetcher.Line(start: start, end: start + 2, text: text, words: [], isInstrumental: false)
+        }
+        let heading = LyricCredits.flagging([line("Human Nature", 0), line("Produced by: A B", 1), line("Hello", 5)], title: "Human Nature", artist: "Yot Club")
+        XCTAssertEqual(heading.map { $0.credit == true }, [true, true, false])
+        let chorus = LyricCredits.flagging([line("Hello", 0), line("Human Nature", 5), line("Hello again", 9)], title: "Human Nature", artist: "Yot Club")
+        XCTAssertTrue(chorus.allSatisfy { $0.credit != true })
+        let bare = LyricCredits.flagging([line("Human Nature", 0), line("Hello", 5)], title: "Human Nature", artist: "Yot Club")
+        XCTAssertTrue(bare.allSatisfy { $0.credit != true })
+    }
+
+    func testEverySongOpensWithItsTitleAndArtist() {
+        let none = LyricsFetcher.parseLRC("[00:12.00]Hello\n[00:16.00]World", trackDuration: 30)
+        let cues = LyricCreditCues.cues(in: none, title: "Human Nature", artist: "Yot Club")
+        XCTAssertEqual(cues.map(\.text), ["Human Nature - Yot Club"])
+        // Not added twice when the lyrics carry it.
+        let listed = LyricsFetcher.parseLRC("[00:00.00]Yot Club - Human Nature\n[00:00.50]Produced by: A B\n[00:12.00]Hello", trackDuration: 30)
+        let flagged = LyricCredits.flagging(listed, title: "Human Nature", artist: "Yot Club")
+        XCTAssertEqual(LyricCreditCues.cues(in: flagged, title: "Human Nature", artist: "Yot Club").count, 2)
+    }
+
+    func testTitleAndArtistShowOnlyOnce() {
+        func credit(_ text: String, _ start: Double) -> LyricsFetcher.Line {
+            LyricsFetcher.Line(start: start, end: start + 0.01, text: text, words: [], isInstrumental: true, credit: true)
+        }
+        let lines = [credit("Human Nature", 0), credit("Human Nature - Yot Club", 0.5), credit("Yot Club - Human Nature", 1),
+                     credit("Yot Club", 1.5), credit("Produced by: A B", 2), credit("Produced by: A B", 3)]
+        let cues = LyricCreditCues.cues(in: lines, title: "Human Nature", artist: "Yot Club")
+        XCTAssertEqual(cues.map(\.text), ["Human Nature - Yot Club", "Produced by: A B"])
+        let bare = LyricCreditCues.cues(in: [credit("Human Nature", 0), credit("Yot Club", 1)], title: "Human Nature", artist: "Yot Club")
+        XCTAssertEqual(bare.map(\.text), ["Human Nature - Yot Club"])
+    }
 }

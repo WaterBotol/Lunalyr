@@ -304,7 +304,8 @@ struct LyricLayer: View {
     @ViewBuilder
     private func creditsOverlay(_ scene: SceneLines, time: Double) -> some View {
         if LyricCreditCues.isOn {
-            let cues = LyricCreditCues.cues(in: scene.lines)
+            let cues = LyricCreditCues.cues(in: scene.lines, title: nowPlaying.current?.title ?? "",
+                                            artist: nowPlaying.current?.artist ?? "")
             if !cues.isEmpty {
                 let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
                 CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
