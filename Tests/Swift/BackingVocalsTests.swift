@@ -54,4 +54,22 @@ final class BackingVocalsTests: XCTestCase {
         XCTAssertGreaterThan(BackingVocalLayer.level(of: group, at: 11.5), 0)
         XCTAssertEqual(BackingVocalLayer.level(of: group, at: 13), 0)
     }
+
+    func testGroupsKeepTheirWordsWithoutBrackets() {
+        let split = BackingVocals.split(words([("Go", 0), ("(oh", 0.4), ("oh)", 0.7), ("now", 1)]), glue: [false, false, false, false])
+        XCTAssertEqual(split.backing[0].words.map(\.text), ["oh", "oh"])
+        XCTAssertEqual(split.backing[0].words[1].start, 0.7, accuracy: 0.001)
+        XCTAssertEqual(split.backing[0].glue.count, 2)
+    }
+
+    func testBackingWordsNeverAnimateInTheRollingLayouts() {
+        for lead in [LyricComposition.spoken, .cascade, .cutout] {
+            XCTAssertEqual(BackingVocals.style(forLead: lead, chosen: nil), .editorial, "\(lead)")
+        }
+        for lead in BackingVocals.choices {
+            XCTAssertEqual(BackingVocals.style(forLead: lead, chosen: nil), lead)
+        }
+        XCTAssertEqual(BackingVocals.style(forLead: .cutout, chosen: .echo), .echo)
+        XCTAssertFalse(BackingVocals.choices.contains { $0.arrivalOnly })
+    }
 }

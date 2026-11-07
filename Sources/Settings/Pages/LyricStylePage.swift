@@ -54,6 +54,7 @@ struct LyricStylePage: View {
 
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
     @AppStorage(BackingVocals.settingKey) private var backingLayer = true
+    @AppStorage(BackingVocals.styleKey) private var backingStyle = ""
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
@@ -87,7 +88,14 @@ struct LyricStylePage: View {
             }
             RememberedStyleNote(aspect: .layout)
             Toggle("Backing vocals in the background", isOn: $backingLayer)
-            InspectorCaption("Bracketed backing words like (oh oh) are drawn small and soft behind the lead, easing in and lingering, instead of flashing past at full size.")
+            if backingLayer {
+                ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
+                           selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition(rawValue: $0)?.title ?? "The lead’s layout") }) {
+                    Text("The lead’s layout").tag("")
+                    ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
+                }
+            }
+            InspectorCaption("Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.")
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)
             if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
                 InspectorCaption(note)

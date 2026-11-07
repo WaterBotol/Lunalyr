@@ -20,6 +20,29 @@ enum BackingVocals {
         var text: String
         var start: Double
         var end: Double
+        /// The group's words without their brackets, to animate like any lyric.
+        var words: [LyricsFetcher.Word] = []
+        var glue: [Bool] = []
+    }
+
+    // MARK: Which layout the backing words animate in
+
+    static let styleKey = "custom.backingVocalStyle"
+    /// The layouts a backing group can animate in: the ones that set words
+    /// loose or link them, not the three that roll a line in (Spoken,
+    /// Cascade and Cutout), which would take over the stage.
+    static let choices: [LyricComposition] = [.scattered, .constellation, .constellationEditorial, .echo, .editorial]
+
+    /// The saved choice, or nil to follow the lead's layout.
+    static var chosenStyle: LyricComposition? {
+        UserDefaults.standard.string(forKey: styleKey).flatMap(LyricComposition.init(rawValue:)).flatMap { choices.contains($0) ? $0 : nil }
+    }
+
+    /// What a group animates in: the choice, else the lead's own layout,
+    /// except that the rolling three become Editorial.
+    static func style(forLead lead: LyricComposition, chosen: LyricComposition? = chosenStyle) -> LyricComposition {
+        if let chosen { return chosen }
+        return choices.contains(lead) ? lead : .editorial
     }
 
     struct Split {
@@ -44,11 +67,17 @@ enum BackingVocals {
 
         func flush() {
             guard !current.isEmpty else { return }
-            let joined = LyricRuns.text(current, glue: currentGlue)
-            let text = joined.filter { !opens.contains($0) && !closes.contains($0) }
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty, let first = current.first, let last = current.last {
-                groups.append(Group(id: groups.count, text: text, start: first.start, end: last.end))
+            var shown: [LyricsFetcher.Word] = [], shownGlue: [Bool] = []
+            for (offset, word) in current.enumerated() {
+                let text = word.text.filter { !opens.contains($0) && !closes.contains($0) }
+                guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+                shown.append(LyricsFetcher.Word(text: text, start: word.start, end: word.end))
+                shownGlue.append(shown.count > 1 && currentGlue[offset])
+            }
+            if let first = shown.first, let last = shown.last {
+                let text = LyricRuns.text(shown, glue: shownGlue).trimmingCharacters(in: .whitespacesAndNewlines)
+                groups.append(Group(id: groups.count, text: text, start: first.start, end: last.end,
+                                    words: shown, glue: shownGlue))
             }
             current = []
             currentGlue = []
@@ -79,7 +108,8 @@ enum BackingVocals {
     }
 }
 
-/// The backing groups of one line, drawn small, dim and behind the lead.
+/// The backing groups of one line, animated like any lyric (in the chosen
+/// layout) but small, dim and behind the lead.
 struct BackingVocalLayer: View {
     let groups: [BackingVocals.Group]
     let time: Double
@@ -88,7 +118,6 @@ struct BackingVocalLayer: View {
     let seed: Int
     let composition: LyricComposition
     let mood: TrackMood
-    @Environment(\.lyricInk) private var ink
     @Environment(\.lyricReduceMotion) private var reduceMotion
 
     /// How long a group is held at least, however brief the singing was.
@@ -97,19 +126,20 @@ struct BackingVocalLayer: View {
     private static let fadeOut = 0.9
 
     var body: some View {
+        let style = BackingVocals.style(forLead: composition)
+        let box = CGSize(width: stageSize.width * 0.6, height: stageSize.height * 0.26)
         ZStack {
             ForEach(groups) { group in
                 let level = Self.level(of: group, at: time)
                 if level > 0.004 {
-                    let sample = ink.sample(slot: unit(group.id, 7), seed: UInt64(abs(seed) &+ group.id))
-                    Text(verbatim: group.text)
-                        .font(font)
-                        .foregroundStyle(sample.rest)
+                    let hold = max(group.end, group.start + Self.minimumHold)
+                    LyricLineView(words: group.words, time: time, stageSize: box, baseSize: baseSize * 0.5, mood: mood,
+                                  composition: style, seed: seed &+ group.id, presence: 1,
+                                  lineEnd: hold, exitStart: hold, glue: group.glue)
+                        .frame(width: box.width, height: box.height)
                         .opacity(0.62 * level)
-                        .scaleEffect(0.94 + 0.06 * min(1, level * 1.6))
-                        .blur(radius: reduceMotion ? 0 : (1 - level) * 3)
-                        .position(position(of: group))
                         .shadow(color: .black.opacity(0.3 * level), radius: 6)
+                        .position(position(of: group))
                 }
             }
         }
@@ -128,17 +158,6 @@ struct BackingVocalLayer: View {
         return 1 - Easing.smoothstep((time - hold) / fadeOut)
     }
 
-    private var font: Font {
-        switch composition {
-        case .editorial, .constellationEditorial:
-            return .system(size: baseSize * 0.48, weight: .regular, design: .serif).italic()
-        case .cutout:
-            return .system(size: baseSize * 0.42, weight: .semibold, design: .rounded)
-        default:
-            return Settings.shared.lyricFont(size: baseSize * 0.46, hero: false, mood: mood)
-        }
-    }
-
     /// A steady 0...1 per group and salt, so a group keeps its place.
     private func unit(_ index: Int, _ salt: Int) -> Double {
         var value = UInt64(truncatingIfNeeded: abs(seed) &* 2654435761 &+ index &* 40503 &+ salt &* 9973)
@@ -150,9 +169,9 @@ struct BackingVocalLayer: View {
     /// where the lead sits, drifting slowly.
     private func position(of group: BackingVocals.Group) -> CGPoint {
         let top = (group.id + abs(seed)).isMultiple(of: 2)
-        let x = 0.16 + 0.68 * unit(group.id, 1)
-        let y = top ? 0.10 + 0.14 * unit(group.id, 2) : 0.78 + 0.14 * unit(group.id, 3)
-        let drift = reduceMotion ? 0 : sin(time * 0.45 + Double(group.id)) * Double(baseSize) * 0.09
+        let x = 0.30 + 0.40 * unit(group.id, 1)
+        let y = top ? 0.14 + 0.08 * unit(group.id, 2) : 0.80 + 0.07 * unit(group.id, 3)
+        let drift = reduceMotion ? 0 : sin(time * 0.45 + Double(group.id)) * Double(baseSize) * 0.07
         return CGPoint(x: stageSize.width * x, y: stageSize.height * y + drift)
     }
 }
