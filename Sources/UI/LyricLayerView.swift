@@ -506,7 +506,7 @@ struct LyricLayer: View {
     /// them -- for as long as it is drawn, however many lines start under
     /// it. Rolling stages already stack their words.
     private func heldShift(_ row: Int, in lines: [LyricsFetcher.Line], time: Double) -> Double? {
-        guard LyricPhraseTiming.isHeld(row, in: lines), !composition(at: row).arrivalOnly else { return nil }
+        guard LyricPhraseTiming.isHeld(row, in: lines), !composition(at: row).arrivalOnly, !composition(at: row).fillsStage else { return nil }
         return vc_settle(time - lines[row + 1].start, 0.45)
     }
 
@@ -612,7 +612,8 @@ struct LyricLayer: View {
                     ? translationSize * 2.7 + baseSize * 0.3 : 0
                 let fit = LyricLineStack.Fit(available: composition.hasConnections
                     ? CGSize(width: stageSize.width * 0.92, height: stageSize.height * 0.86)
-                    : stageSize, userScale: rolls ? 1 : userScale, neutral: rolls ? 1 : 0.75)
+                    : stageSize, userScale: rolls || composition.fillsStage ? 1 : userScale,
+                    neutral: rolls || composition.fillsStage ? 1 : 0.75)
                 VStack(spacing: baseSize * 0.2) {
                 Group {
                     if line.wordTimed {
@@ -629,7 +630,7 @@ struct LyricLayer: View {
                         // Reduce Motion: the line fades; it does not slide or swell.
                         let still = rolls || reduceMotion
                         LyricLineView(words: words, time: time, stageSize: stageSize,
-                            baseSize: rolls ? baseSize * 0.75 * userScale : baseSize * densityScale,
+                            baseSize: rolls ? baseSize * 0.75 * userScale : composition.fillsStage ? baseSize * 0.8 * userScale : baseSize * densityScale,
                             mood: mood, composition: composition,
                             seed: rolls ? trackSeed : index, presence: stagePresence * (1 - pose.exit), accent: accent,
                             energy: energy, readings: annotations, lineEnd: line.end,
