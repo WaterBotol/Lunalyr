@@ -189,6 +189,23 @@ struct LyricLineView: View {
     }
 
     var body: some View {
+        // Bracketed backing vocals are lifted out and drawn apart, behind the
+        // lead (see BackingVocals). Only word-timed lines are split.
+        let split = wordTimed && firstRunOnly == nil && BackingVocals.isOn
+            ? BackingVocals.split(words, glue: glue) : nil
+        if let split, !split.backing.isEmpty {
+            ZStack {
+                BackingVocalLayer(groups: split.backing, time: time, stageSize: stageSize, baseSize: baseSize,
+                                  seed: seed, composition: composition, mood: mood)
+                lineBody(words: split.main, glue: split.mainGlue)
+            }
+        } else {
+            lineBody(words: words, glue: glue)
+        }
+    }
+
+    @ViewBuilder
+    private func lineBody(words: [LyricsFetcher.Word], glue: [Bool]) -> some View {
         ZStack {
             // Echo lays repeats of the whole phrase behind the live line, so
             // it has to sit under the words rather than beside them.

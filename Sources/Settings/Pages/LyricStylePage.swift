@@ -53,6 +53,7 @@ struct LyricStylePage: View {
     }
 
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
+    @AppStorage(BackingVocals.settingKey) private var backingLayer = true
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
@@ -85,6 +86,8 @@ struct LyricStylePage: View {
                 }
             }
             RememberedStyleNote(aspect: .layout)
+            Toggle("Backing vocals in the background", isOn: $backingLayer)
+            InspectorCaption("Bracketed backing words like (oh oh) are drawn small and soft behind the lead, easing in and lingering, instead of flashing past at full size.")
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)
             if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
                 InspectorCaption(note)

@@ -99,3 +99,35 @@ final class LyricCardFormatsTests: XCTestCase {
         }
     }
 }
+
+@MainActor
+final class BackingVocalPreviewTests: XCTestCase {
+    /// Writes frames of a line with backing vocals (set LUNALYR_CARD_PREVIEW_DIR) to look at.
+    func testWriteBackingFrames() async throws {
+        guard let path = ProcessInfo.processInfo.environment["LUNALYR_CARD_PREVIEW_DIR"] else { throw XCTSkip("no folder") }
+        let pieces: [(String, Double)] = [("Hold", 10), ("me", 10.4), ("(oh", 10.8), ("oh)", 11.0), ("closer", 11.5), ("tonight", 12.0)]
+        let words = pieces.map { LyricsFetcher.Word(text: $0.0, start: $0.1, end: $0.1 + 0.4) }
+        let line = LyricsFetcher.Line(start: 10, end: 12.6, text: "Hold me (oh oh) closer tonight", words: words,
+                                      isInstrumental: false, wordTimed: true)
+        let art = NSImage(size: NSSize(width: 400, height: 400), flipped: false) { rect in
+            NSGradient(colors: [.systemTeal, .systemIndigo])?.draw(in: rect, angle: 60); return true
+        }
+        for layout in [LyricComposition.editorial, .constellation, .cutout, .spoken] {
+            var content = LyricCard.Content(pages: [.init(words: pieces.map(\.0),
+                animation: LyricCard.Animation(line: line, composition: layout, mood: .neutral, seed: 0))],
+                title: "A Song", artist: "An Artist", artwork: art, palette: LyricCard.palette(for: art), reduceMotion: true)
+            content.aspect = .portrait
+            var elapsed = 0.0, saved = 0
+            await LyricCard.renderFrames(content, scale: 0.5, minimumCadence: 0.1, budget: nil) { image, delay in
+                elapsed += delay
+                if elapsed > 1.0 && saved == 0 || elapsed > 1.9 && saved == 1 {
+                    let rep = NSBitmapImageRep(cgImage: image)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: path).appendingPathComponent("backing-\(layout.rawValue)-\(saved).png"))
+                    saved += 1
+                }
+                return true
+            }
+        }
+    }
+}
