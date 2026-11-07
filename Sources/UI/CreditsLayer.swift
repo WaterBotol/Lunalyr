@@ -106,12 +106,14 @@ struct CreditsLayer: View {
 
     var body: some View {
         let style = BackingVocals.style(forLead: composition)
-        let box = CGSize(width: stageSize.width * 0.7, height: stageSize.height * 0.3)
+        // Thin bands along the top and bottom edges, clear of the middle
+        // of the stage where the lyric sits.
+        let box = CGSize(width: stageSize.width * 0.7, height: stageSize.height * 0.16)
         ZStack {
             ForEach(cues) { cue in
                 let level = LyricCreditCues.level(of: cue, at: time)
                 if level > 0.004 {
-                    LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize, mood: mood,
+                    LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize * 0.72, mood: mood,
                                   composition: style, seed: seed &+ cue.id, presence: 1,
                                   lineEnd: cue.end, exitStart: cue.end, highlightFrom: cue.highlightFrom)
                         .frame(width: box.width, height: box.height)
@@ -120,7 +122,7 @@ struct CreditsLayer: View {
                         // High and low in turn, so one arriving as the last
                         // leaves never sits on it.
                         .position(x: stageSize.width * 0.5,
-                                  y: stageSize.height * (cue.id.isMultiple(of: 2) ? 0.2 : 0.8))
+                                  y: stageSize.height * (cue.id.isMultiple(of: 2) ? 0.1 : 0.9))
                 }
             }
         }
