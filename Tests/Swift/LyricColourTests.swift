@@ -76,8 +76,10 @@ final class LyricColourTests: XCTestCase {
                             for colour in [sample.rest, sample.sung] {
                                 let y = luminance(colour)
                                 let ratio = Perceptual.contrast(y, ink.backdrop)
-                                // Where 4.5:1 is out of reach, the text is as light as it can be.
-                                XCTAssertTrue(ratio >= LyricInk.minimumContrast - 0.02 || y > 0.9,
+                                // Where 3:1 would need white, a colour keeps its tint down to
+                                // 2.5:1 (the dark backing and shadow carry the rest); beyond
+                                // that the text is as light as it can be.
+                                XCTAssertTrue(ratio >= Perceptual.tintedContrast - 0.02 || y > 0.9,
                                     "\(mode) on \(backdrop): \(ratio)")
                             }
                         }

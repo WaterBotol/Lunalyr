@@ -3,7 +3,59 @@ import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// A shareable portrait of a lyric excerpt, the cover and the song.
+/// The shape of a lyric card. Every card is 1080 points on its short side.
+enum CardAspect: String, CaseIterable, Identifiable {
+    case portrait, square, story, landscape
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .portrait: return "4:5"
+        case .square: return "1:1"
+        case .story: return "9:16"
+        case .landscape: return "16:9"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .portrait: return "Portrait"
+        case .square: return "Square"
+        case .story: return "Story"
+        case .landscape: return "Wide"
+        }
+    }
+
+    var size: CGSize {
+        switch self {
+        case .portrait: return CGSize(width: 1080, height: 1350)
+        case .square: return CGSize(width: 1080, height: 1080)
+        case .story: return CGSize(width: 1080, height: 1920)
+        case .landscape: return CGSize(width: 1920, height: 1080)
+        }
+    }
+
+    /// Wide cards put the cover and credits in a column beside the words.
+    var hasSidebar: Bool { self == .landscape }
+}
+
+/// What a lyric card can be saved or copied as.
+enum CardFormat: String, CaseIterable, Identifiable {
+    case mp4, gif, png
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+    var detail: String {
+        switch self {
+        case .mp4: return "Smooth video, full colour"
+        case .gif: return "Loops everywhere"
+        case .png: return "Crisp still image"
+        }
+    }
+}
+
+/// A shareable card of a lyric excerpt, the cover and the song.
 @MainActor
 enum LyricCard {
     struct Page {
@@ -27,14 +79,37 @@ enum LyricCard {
         var highlightCustom: OKLab?
         var reduceMotion = false
         var increaseContrast = false
+        var aspect: CardAspect = .portrait
+
+        var size: CGSize { aspect.size }
+
+        /// A still image holds at most this many lines: more would shrink the
+        /// words until they are hard to read.
+        static let stillLineLimit = 3
+
+        /// The first few selected lines, one under another, for a still image.
+        var stillPage: Page {
+            var words: [String] = []
+            for page in pages.prefix(Self.stillLineLimit) where !page.words.isEmpty {
+                if !words.isEmpty { words.append(LyricCard.lineBreak) }
+                words += page.words
+            }
+            return Page(words: words)
+        }
 
         var hasLyrics: Bool { pages.contains { !$0.words.isEmpty || $0.animation != nil } }
         var hasTrackDetails: Bool { artwork != nil || !title.isEmpty || !artist.isEmpty }
         var lyricStage: CGRect {
-            let top: CGFloat = 84
+            let size = aspect.size
+            if aspect.hasSidebar && hasTrackDetails {
+                let left = LyricCard.inset + LyricCard.sidebarWidth + 56
+                return CGRect(x: left, y: LyricCard.inset, width: size.width - left - LyricCard.inset,
+                              height: size.height - 2 * LyricCard.inset - LyricCard.signatureHeight - 20)
+            }
+            let top: CGFloat = aspect == .landscape ? LyricCard.inset : 84
             let footer = hasTrackDetails ? LyricCard.trackFooterHeight : LyricCard.signatureHeight
-            return CGRect(x: LyricCard.inset, y: top, width: LyricCard.size.width - 2 * LyricCard.inset,
-                          height: LyricCard.size.height - top - LyricCard.inset - footer - 28)
+            return CGRect(x: LyricCard.inset, y: top, width: size.width - 2 * LyricCard.inset,
+                          height: size.height - top - LyricCard.inset - footer - 28)
         }
 
         func inkInputs(vocal: Double) -> LyricInkDirector.Inputs {
@@ -93,21 +168,26 @@ enum LyricCard {
     /// Portrait 4:5, the shape most apps show without cropping.
     static let size = CGSize(width: 1080, height: 1350)
     static let inset: CGFloat = 52
+    /// A word that is really a line break (see `Content.stillPage`).
+    static let lineBreak = "\n"
     static let trackFooterHeight: CGFloat = 224
+    static let sidebarWidth: CGFloat = 440
     static let signatureHeight: CGFloat = 38
     static let lightestScrim = 0.48
     static let rollingHeightInTypeSizes: CGFloat = 2.35
 
     /// The line to share: the one being sung, or the last one sung during
     /// a break, or the start of unsynced lyrics; else just the song.
-    static func currentContent(before: Int, after: Int, composition: LyricComposition?) -> Content? {
+    static func currentContent(before: Int, after: Int, composition: LyricComposition?,
+                               rows: [Int]? = nil, aspect: CardAspect = .portrait) -> Content? {
         let playing = NowPlayingMonitor.shared
         guard let track = playing.current else { return nil }
         let model = LyricsViewModel.shared
         let time = playing.playbackTime() + Settings.shared.lyricOffset + SongOffsets.shared.offset(for: model.currentQuery)
         let display = RomanizationOptions.shared.display
         let lyricRows = model.lines.indices.filter { !model.lines[$0].isInstrumental && !model.lines[$0].text.isEmpty }
-        let indices = selectedRows(lyricRows, active: model.activeLineIndex(at: time), before: before, after: after)
+        let indices = (rows ?? selectedRows(lyricRows, active: model.activeLineIndex(at: time), before: before, after: after))
+            .filter { model.lines.indices.contains($0) }
 
         // This song's own cover, even while the next cover is resolving.
         let artwork = playing.currentTrackArtwork
@@ -125,7 +205,8 @@ enum LyricCard {
             let words = Self.words(of: line, readings: display == .replace ? readings : nil)
             guard !line.words.isEmpty else { return Page(words: words) }
             let layout = composition ?? LyricComposition.selected(settings: .shared, remembered: remembered?.composition,
-                                                                  mood: mood, seed: index)
+                                                                  mood: mood, seed: index,
+                                                                  track: "\(track.artist)|\(track.title)")
             let animation = Animation(line: line, composition: layout, mood: mood,
                                       seed: line.wordTimed && layout.arrivalOnly ? trackSeed : index,
                                       romanized: readings, display: display)
@@ -133,8 +214,8 @@ enum LyricCard {
         }
         if pages.isEmpty {
             let plain = model.plainLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            let rows = selectedRows(Array(plain.indices), active: nil, before: before, after: after)
-            pages = rows.map { Page(words: plain[$0].split(whereSeparator: \.isWhitespace).map(String.init)) }
+            let chosen = rows.map { $0.filter(plain.indices.contains) } ?? selectedRows(Array(plain.indices), active: nil, before: before, after: after)
+            pages = chosen.map { Page(words: plain[$0].split(whereSeparator: \.isWhitespace).map(String.init)) }
         }
         if pages.isEmpty { pages = [Page(words: [])] }
         return Content(pages: pages, title: track.title, artist: track.artist, artwork: artwork,
@@ -142,7 +223,8 @@ enum LyricCard {
                        custom: colours.customColours, speed: colours.speed, strength: colours.strength,
                        highlight: highlights.mode, highlightCustom: highlights.customColour,
                        reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                       increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+                       increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,
+                       aspect: aspect)
     }
 
     /// Counts vocal lines on each side of the lyric currently on screen.
@@ -199,15 +281,22 @@ enum LyricCard {
         return renderer.nsImage
     }
 
-    private static let gifScale: CGFloat = 0.5
+    /// Full card resolution (1080 × 1350). Tests render at half size to stay fast.
+    static let gifScale: CGFloat = 1
 
     private struct GIFFrame {
         let image: CGImage
         let delay: Double
     }
 
-    static func gif(_ content: Content) async -> Data? {
-        guard let frames = await frames(for: content), !Task.isCancelled else { return nil }
+    static func gif(_ content: Content, scale: CGFloat = gifScale) async -> Data? {
+        var collected: [GIFFrame] = []
+        let ok = await renderFrames(content, scale: scale, minimumCadence: 0.08, budget: content.pages.count == 1 ? 90 : 120) { image, delay in
+            collected.append(GIFFrame(image: image, delay: delay))
+            return true
+        }
+        guard ok, !Task.isCancelled else { return nil }
+        let frames = collected
         let encoder = Task.detached(priority: .userInitiated) {
             encodeGIF(frames)
         }
@@ -218,7 +307,14 @@ enum LyricCard {
         }
     }
 
-    private static func frames(for content: Content) async -> [GIFFrame]? {
+    /// Renders the card's animation one frame at a time, handing each to `sink`
+    /// (which says whether to go on), so a long clip never holds every frame
+    /// at once. `budget` caps the frame count by stretching the cadence (the
+    /// GIF's way); nil takes a frame every `minimumCadence`, whatever the length.
+    @discardableResult
+    static func renderFrames(_ content: Content, scale gifScale: CGFloat, minimumCadence: Double, budget: Int?,
+                             progress: ((Double) -> Void)? = nil,
+                             sink: (CGImage, Double) async -> Bool) async -> Bool {
         let stillInk = ink(for: content)
         let stage = content.lyricStage
         let clips = content.pages.enumerated().map { index, page -> (page: Page, start: Double, firstInk: Double?, duration: Double) in
@@ -230,18 +326,19 @@ enum LyricCard {
             }
             return (page, 0, nil, content.pages.count == 1 ? 0.08 : 1.8)
         }
-        guard !clips.isEmpty else { return nil }
+        guard !clips.isEmpty else { return false }
         let timed = clips.filter { $0.firstInk != nil }
         let total = timed.reduce(0) { $0 + $1.duration }
-        let budget = clips.count == 1 ? 90 : 120
         // Reserve frames for every clip, even very short lines. Share the
         // remaining budget across the timed clips in proportion to duration.
-        let cadence = max(0.08, total / Double(max(1, budget - 3 * clips.count)))
+        let cadence = budget.map { max(minimumCadence, total / Double(max(1, $0 - 3 * clips.count))) } ?? minimumCadence
+        let expected = max(1, Int((total / cadence).rounded(.up)) + clips.count)
+        var produced = 0
         let backdrop: CGImage?
         if !timed.isEmpty {
             let renderer = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, hideLyrics: true))
             renderer.scale = gifScale
-            guard let rendered = renderer.cgImage else { return nil }
+            guard let rendered = renderer.cgImage else { return false }
             backdrop = rendered
         } else {
             backdrop = nil
@@ -250,11 +347,9 @@ enum LyricCard {
         for step in 0..<24 {
             _ = director.ink(content.inkInputs(vocal: 0), wall: Double(step) * 0.25)
         }
-        var frames: [GIFFrame] = []
-        frames.reserveCapacity(budget)
         var elapsed = 0.0
         for clip in clips {
-            guard !Task.isCancelled else { return nil }
+            guard !Task.isCancelled else { return false }
             if let animation = clip.page.animation, let firstInk = clip.firstInk, let backdrop {
                 let count = max(3, Int((clip.duration / cadence - 1e-9).rounded(.up)))
                 let step = clip.duration / Double(count)
@@ -263,31 +358,35 @@ enum LyricCard {
                 let lastInk = animation.rolls
                     ? max(firstInk, (animation.words.map(\.end).max() ?? animation.end) + 0.44) : .infinity
                 for index in 0..<count {
-                    guard !Task.isCancelled else { return nil }
+                    guard !Task.isCancelled else { return false }
                     let offset = Double(index) * step
                     let time = min(lastInk, max(firstInk, clip.start + offset))
                     let vocal = animation.line.wordTimed ? OrganicMotion.vocalIntensity(animation.words, at: time) : 0
                     let ink = director.ink(content.inkInputs(vocal: vocal), wall: 6 + elapsed + offset)
-                    let frame = LyricCardFrame(animation: animation, backdrop: backdrop, stage: stage,
+                    let frame = LyricCardFrame(size: content.size, animation: animation, backdrop: backdrop, stage: stage,
                                                time: time, ink: ink, reduceMotion: content.reduceMotion)
                     let renderer = ImageRenderer(content: frame)
                     renderer.scale = gifScale
-                    guard let image = renderer.cgImage else { return nil }
+                    guard let image = renderer.cgImage else { return false }
                     // Round successive boundaries so errors do not accumulate.
                     let delay = ((offset + step) * 100).rounded() - (offset * 100).rounded()
-                    frames.append(GIFFrame(image: image, delay: max(0.02, delay / 100)))
-                    if frames.count.isMultiple(of: 4) { await Task.yield() }
+                    guard await sink(image, max(0.02, delay / 100)) else { return false }
+                    produced += 1
+                    progress?(min(1, Double(produced) / Double(expected)))
+                    if produced.isMultiple(of: 4) { await Task.yield() }
                 }
             } else {
                 let renderer = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, page: clip.page))
                 renderer.scale = gifScale
-                guard let image = renderer.cgImage else { return nil }
-                frames.append(GIFFrame(image: image, delay: clip.duration))
+                guard let image = renderer.cgImage else { return false }
+                guard await sink(image, clip.duration) else { return false }
+                produced += 1
+                progress?(min(1, Double(produced) / Double(expected)))
                 await Task.yield()
             }
             elapsed += clip.duration
         }
-        return frames
+        return true
     }
 
     private nonisolated static func encodeGIF(_ frames: [GIFFrame]) -> Data? {
@@ -334,7 +433,7 @@ enum LyricCard {
     }
 
     /// Keep recent exports available for pasted attachments and drafts.
-    private static func pruneExpiredExports(in directory: URL, keeping current: URL) {
+    static func pruneExpiredExports(in directory: URL, keeping current: URL) {
         let files = FileManager.default
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .contentModificationDateKey]
         let exports = try? files.contentsOfDirectory(at: directory, includingPropertiesForKeys: Array(keys))
@@ -348,6 +447,7 @@ enum LyricCard {
 }
 
 private struct LyricCardFrame: View {
+    let size: CGSize
     let animation: LyricCard.Animation
     let backdrop: CGImage
     let stage: CGRect
@@ -356,7 +456,6 @@ private struct LyricCardFrame: View {
     let reduceMotion: Bool
 
     var body: some View {
-        let size = LyricCard.size
         Image(decorative: backdrop, scale: 1)
             .resizable()
             .frame(width: size.width, height: size.height)
@@ -423,30 +522,45 @@ struct LyricCardView: View {
         var text = Text(verbatim: "")
         for (index, word) in shown.words.enumerated() {
             let slot = count > 1 ? Double(index) / Double(count - 1) : 0.5
-            if index > 0 { text = text + Text(verbatim: " ") }
+            if word == LyricCard.lineBreak { text = text + Text(verbatim: "\n"); continue }
+            if index > 0, shown.words[index - 1] != LyricCard.lineBreak { text = text + Text(verbatim: " ") }
             text = text + Text(verbatim: word).foregroundStyle(ink.sample(slot: slot, seed: UInt64(index)).sung)
         }
         return text
     }
 
     var body: some View {
-        let size = LyricCard.size
+        let size = content.size
         let stage = content.lyricStage
+        let sidebar = content.aspect.hasSidebar && content.hasLyrics && content.hasTrackDetails
         ZStack {
             backdrop
-            VStack(spacing: 0) {
-                if !content.hasLyrics {
+            if sidebar {
+                VStack(alignment: .leading, spacing: 36) {
                     Spacer(minLength: 0)
-                    trackPortrait
+                    if let artwork = content.artwork { cover(artwork, size: LyricCard.sidebarWidth) }
+                    credits(titleSize: 56, artistSize: 36, alignment: .leading)
+                    Spacer(minLength: 0)
+                    signature
                 }
-                Spacer(minLength: 0)
-                if content.hasLyrics && content.hasTrackDetails {
-                    trackFooter
-                } else {
-                    signature.frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(width: LyricCard.sidebarWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(LyricCard.inset)
+            } else {
+                VStack(spacing: 0) {
+                    if !content.hasLyrics {
+                        Spacer(minLength: 0)
+                        trackPortrait
+                    }
+                    Spacer(minLength: 0)
+                    if content.hasLyrics && content.hasTrackDetails {
+                        trackFooter
+                    } else {
+                        signature.frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
+                .padding(LyricCard.inset)
             }
-            .padding(LyricCard.inset)
             if !hideLyrics && !shown.words.isEmpty {
                 lyrics(in: stage.size)
                     .frame(width: stage.width, height: stage.height)
@@ -461,7 +575,7 @@ struct LyricCardView: View {
     }
 
     private var backdrop: some View {
-        let size = LyricCard.size
+        let size = content.size
         return ZStack {
             content.palette.gradient
             if let artwork = content.artwork {

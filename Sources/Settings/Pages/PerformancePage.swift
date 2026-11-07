@@ -32,6 +32,7 @@ struct PerformancePage: View {
             DesktopInteractionSection()
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 }
 

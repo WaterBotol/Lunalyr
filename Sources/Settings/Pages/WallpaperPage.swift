@@ -44,6 +44,7 @@ struct WallpaperPage: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
     }
 

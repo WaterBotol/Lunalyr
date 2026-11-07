@@ -497,7 +497,8 @@ struct LyricLayer: View {
     /// means Match the music even if a fixed layout is set globally.
     private func composition(at index: Int) -> LyricComposition {
         LyricComposition.selected(settings: settings,
-            remembered: memory.remembered(for: nowPlaying.current)?.style.composition, mood: mood, seed: index)
+            remembered: memory.remembered(for: nowPlaying.current)?.style.composition, mood: mood, seed: index,
+            track: nowPlaying.current.map { "\($0.artist)|\($0.title)" })
     }
 
     /// The next line may be previewed once the current line's last word

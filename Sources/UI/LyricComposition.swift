@@ -118,9 +118,10 @@ enum LyricComposition: String, CaseIterable, Identifiable {
 
     /// A remembered "automatic" choice takes precedence over a global layout.
     @MainActor
-    static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int) -> Self {
+    static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int,
+                         track: String? = nil) -> Self {
         if let remembered { return Self(rawValue: remembered) ?? matching(mood, seed: seed) }
-        return settings.resolvedComposition(for: mood, seed: seed)
+        return settings.resolvedComposition(for: mood, seed: seed, track: track)
     }
 
     /// Which composition suits a track, when the choice is left automatic.
@@ -188,6 +189,23 @@ struct LyricLineView: View {
     }
 
     var body: some View {
+        // Bracketed backing vocals are lifted out and drawn apart, behind the
+        // lead (see BackingVocals). Only word-timed lines are split.
+        let split = wordTimed && firstRunOnly == nil && BackingVocals.isOn
+            ? BackingVocals.split(words, glue: glue) : nil
+        if let split, !split.backing.isEmpty {
+            ZStack {
+                BackingVocalLayer(groups: split.backing, time: time, stageSize: stageSize, baseSize: baseSize,
+                                  seed: seed, composition: composition, mood: mood)
+                lineBody(words: split.main, glue: split.mainGlue)
+            }
+        } else {
+            lineBody(words: words, glue: glue)
+        }
+    }
+
+    @ViewBuilder
+    private func lineBody(words: [LyricsFetcher.Word], glue: [Bool]) -> some View {
         ZStack {
             // Echo lays repeats of the whole phrase behind the live line, so
             // it has to sit under the words rather than beside them.
@@ -278,17 +296,21 @@ struct ConstellationLines: View {
             Canvas { context, size in
                 // Anchors belong to fixed slots outside time-driven transforms.
                 // The graph stays identical as words enter, fill and swell.
-                let keys = (0..<count).filter { anchors[$0] != nil }
-                let boxes = keys.compactMap { index -> VCBox? in
-                    guard let anchor = anchors[index] else { return nil }
+                // A word with no usable box yet (it has just been laid out, or
+                // has zero size mid-transition) is left out; the others keep
+                // their links instead of every link vanishing for a frame.
+                var keys: [Int] = []
+                var boxes: [VCBox] = []
+                for index in 0..<count {
+                    guard let anchor = anchors[index] else { continue }
                     let inset = insets.indices.contains(index) ? insets[index] : .zero
                     let rect = proxy[anchor].insetBy(dx: inset.width, dy: inset.height)
-                    guard rect.width.isFinite, rect.height.isFinite,
-                          rect.width > 0, rect.height > 0 else { return nil }
-                    return VCBox(x: Double(rect.minX), y: Double(rect.minY),
-                                 width: Double(rect.width), height: Double(rect.height))
+                    guard rect.width.isFinite, rect.height.isFinite, rect.width > 0, rect.height > 0 else { continue }
+                    keys.append(index)
+                    boxes.append(VCBox(x: Double(rect.minX), y: Double(rect.minY),
+                                       width: Double(rect.width), height: Double(rect.height)))
                 }
-                guard boxes.count == keys.count, boxes.count > 1, boxes.count <= 64 else { return }
+                guard boxes.count > 1, boxes.count <= 64 else { return }
                 guard opacity > 0 else { return }
                 let viewport = VCBox(x: 0, y: 0, width: Double(size.width), height: Double(size.height))
                 let links = connectionCache.segments(boxes: boxes, viewport: viewport)
@@ -411,5 +433,99 @@ struct EchoBackdrop: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+
+// MARK: - A new layout for every song
+
+/// With the layout on Match the music, each new song takes the next layout in
+/// a rotation you set up: which layouts take part, and how many songs in a
+/// row each one gets (0 leaves it out). Layouts that don't suit a song's
+/// energy are skipped for that song. A song keeps its layout for as long as
+/// the app runs, so replaying it looks the same. "Change layout every song"
+/// off brings back the older choice by energy alone.
+@MainActor
+final class LyricLayoutRotation: ObservableObject {
+    static let shared = LyricLayoutRotation()
+    static let enabledKey = "custom.rotateLayouts"
+    private static let countsKey = "custom.rotateLayoutCounts"
+    private static let cursorKey = "custom.rotateLayoutsCursor"
+    static let maximumCount = 5
+
+    /// The order songs step through: contrasting looks sit next to each other.
+    static let order: [LyricComposition] = [
+        .cutout, .constellation, .editorial, .spoken, .echo, .cascade, .scattered, .constellationEditorial,
+    ]
+
+    private let defaults: UserDefaults
+    private var assigned: [String: LyricComposition] = [:]
+    private var cursor: Int
+
+    /// Songs in a row per layout; a layout missing here gets 1.
+    @Published private(set) var counts: [LyricComposition: Int]
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        cursor = defaults.integer(forKey: Self.cursorKey)
+        let saved = defaults.dictionary(forKey: Self.countsKey) as? [String: Int] ?? [:]
+        counts = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
+            LyricComposition(rawValue: key).map { ($0, min(max(value, 0), Self.maximumCount)) }
+        })
+    }
+
+    var isEnabled: Bool {
+        defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+    }
+
+    func count(for layout: LyricComposition) -> Int { counts[layout] ?? 1 }
+
+    func setCount(_ value: Int, for layout: LyricComposition) {
+        counts[layout] = min(max(value, 0), Self.maximumCount)
+        defaults.set(Dictionary(uniqueKeysWithValues: counts.map { ($0.key.rawValue, $0.value) }), forKey: Self.countsKey)
+    }
+
+    /// The layouts in turn, each as many times as its count says.
+    var sequence: [LyricComposition] {
+        Self.order.flatMap { Array(repeating: $0, count: count(for: $0)) }
+    }
+
+    /// Layouts that read well for a song of this energy: slow songs skip the
+    /// fast, busy ones, and the busiest songs skip the slowest.
+    static func suits(_ layout: LyricComposition, mood: TrackMood) -> Bool {
+        switch layout {
+        case .cascade, .constellation, .constellationEditorial: return mood.energy >= 0.3
+        case .echo: return mood.energy <= 0.8
+        default: return true
+        }
+    }
+
+    func layout(for track: String, mood: TrackMood) -> LyricComposition {
+        if let existing = assigned[track] { return existing }
+        let turns = sequence
+        guard !turns.isEmpty else {
+            // Every layout is switched off: fall back to the energy match.
+            return LyricComposition.matching(mood, seed: Self.stableSeed(track))
+        }
+        var pick = turns[(cursor + 1) % turns.count], at = (cursor + 1) % turns.count
+        for step in 1...turns.count {
+            let index = (cursor + step) % turns.count
+            if Self.suits(turns[index], mood: mood) { pick = turns[index]; at = index; break }
+        }
+        cursor = at
+        defaults.set(cursor, forKey: Self.cursorKey)
+        assigned[track] = pick
+        return pick
+    }
+
+    private static func stableSeed(_ text: String) -> Int { TrackMood.seed(title: text, artist: "") }
+
+    /// For tests.
+    func reset() {
+        assigned = [:]
+        cursor = 0
+        counts = [:]
+        defaults.removeObject(forKey: Self.cursorKey)
+        defaults.removeObject(forKey: Self.countsKey)
     }
 }

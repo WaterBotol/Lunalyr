@@ -32,6 +32,14 @@ enum NetEaseLyricsProvider {
         return nil
     }
 
+    /// The catalogue entry a search settles on, without fetching its lyrics
+    /// (AMLL's database is addressed by NetEase song id).
+    static func matchSong(title: String, artist: String, duration: Double) async -> MatchedSong? {
+        guard !Task.isCancelled else { return nil }
+        _ = await songID(title: title, artist: artist, duration: duration)
+        return recorder?.song
+    }
+
     // MARK: - Search
 
     /// The catalogue entry a search settled on. The fetcher ranks and labels

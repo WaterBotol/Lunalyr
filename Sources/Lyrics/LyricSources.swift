@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 
 enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
-    case appleMusicCache, lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH
+    case appleMusicCache, lyricsPlus, netEase, qqMusic, kugou, lrclib, lyrimuse, kuwo, lyricsOVH, amll
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -15,6 +15,7 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .lrclib: return "LRCLIB"
         case .kuwo: return "Kuwo Music"
         case .lyricsOVH: return "lyrics.ovh"
+        case .amll: return "AMLL TTML DB"
         case .lyrimuse: return "Lyrimuse · local files"
         }
     }
@@ -23,9 +24,11 @@ enum LyricSourceID: String, CaseIterable, Identifiable, Codable {
         case .appleMusicCache: return "Word or line timing from Music on this Mac"
         case .lyricsPlus: return "Word / syllable timing"
         case .netEase: return "Word or line timing"
-        case .qqMusic, .kugou, .kuwo: return "Line timing"
+        case .qqMusic, .kuwo: return "Line timing"
+        case .kugou: return "Word or line timing"
         case .lrclib: return "Word or line timing"
         case .lyricsOVH: return "Plain text fallback"
+        case .amll: return "Word / syllable timing"
         case .lyrimuse: return "LRC / TTML / YRC + readings, translations"
         }
     }
@@ -80,7 +83,8 @@ final class LyricSourceOptions: ObservableObject {
         /// v7: Music's own lyrics and LRCLIB lead word and mixed timing.
         /// v8: Lyrics+ keeps each syllable of an unspaced (Japanese,
         /// Chinese, Thai) line, which it had joined into one word.
-        static let cachePolicy = "v8"
+        /// v9: AMLL's word-timed database and Kugou's word-timed KRC.
+        static let cachePolicy = "v9"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
@@ -98,7 +102,7 @@ final class LyricSourceOptions: ObservableObject {
     @Published var mode: Mode {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: "custom.lyricMatchMode") }
     }
-    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .lyricsPlus, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+    static let recommendedOrder: [LyricSourceID] = [.appleMusicCache, .lyrimuse, .lyricsPlus, .amll, .netEase, .lrclib, .qqMusic, .kugou, .kuwo, .lyricsOVH]
     // "custom.preferWordTiming" and "custom.preferWordTimedLRCLIB" are no
     // longer read: word and mixed timing always rank first, with LRCLIB
     // after Music's own lyrics. Stored values are left as they are.
@@ -118,8 +122,14 @@ final class LyricSourceOptions: ObservableObject {
         var unique: [LyricSourceID] = []
         for item in saved + Self.recommendedOrder where !unique.contains(item) { unique.append(item) }
         order = unique
-        enabled = Set((d.stringArray(forKey: "custom.lyricSources") ?? LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache }.map(\.rawValue))
+        var chosen = Set((d.stringArray(forKey: "custom.lyricSources") ?? LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache }.map(\.rawValue))
             .compactMap(LyricSourceID.init(rawValue:)))
+        // A source added after someone saved their choices starts switched on, once.
+        if !d.bool(forKey: "custom.lyricSourcesSeenAMLL") {
+            chosen.insert(.amll)
+            d.set(true, forKey: "custom.lyricSourcesSeenAMLL")
+        }
+        enabled = chosen
         mode = Mode(rawValue: d.string(forKey: "custom.lyricMatchMode") ?? "") ?? .smart
         repairQQGaps = d.object(forKey: "custom.repairQQGaps") as? Bool ?? true
     }
@@ -448,6 +458,19 @@ enum LyricHTTP {
             throw Failure(message: "Unexpected response format")
         }
         return value
+    }
+    /// A plain-text GET (a few lyric files are served as text, not JSON).
+    static func fetchText(_ address: String, session: URLSession = .shared) async throws -> String {
+        try Task.checkCancellation()
+        guard let url = URL(string: address) else { throw Failure(message: "Invalid service address") }
+        var request = URLRequest(url: url, timeoutInterval: 8)
+        request.setValue("Lunalyr/0.5 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw Failure(message: "Service response: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+        guard data.count <= 2_000_000, let text = String(data: data, encoding: .utf8) else { throw Failure(message: "Unexpected response format") }
+        return text
     }
     static func string(_ value: Any?) -> String? {
         if let string = value as? String { return string }

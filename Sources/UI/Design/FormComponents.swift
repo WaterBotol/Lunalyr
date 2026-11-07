@@ -244,8 +244,8 @@ extension PanelSectionHeader where Accessory == EmptyView {
     }
 }
 
-/// A Settings page's icon: a white SF Symbol on a coloured rounded square,
-/// as System Settings draws its own. Decorative: the row's title names it.
+/// A Settings page's icon: a violet SF Symbol on a soft violet rounded square,
+/// one calm colour for every page (`tint` is kept for callers). Decorative: the row's title names it.
 struct SettingsIcon: View {
     let symbol: String
     let tint: Color
@@ -254,12 +254,12 @@ struct SettingsIcon: View {
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: size * 0.56, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.lunalyrAccentText)
             .frame(width: size, height: size)
             .background(
                 RoundedRectangle(cornerRadius: LunalyrDesign.Radius.badge * size / LunalyrDesign.Size.sidebarIcon,
                                  style: .continuous)
-                    .fill(tint.gradient)
+                    .fill(Color.lunalyrAccent.opacity(0.18))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: LunalyrDesign.Radius.badge * size / LunalyrDesign.Size.sidebarIcon,

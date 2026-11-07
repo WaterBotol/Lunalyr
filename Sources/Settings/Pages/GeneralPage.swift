@@ -22,6 +22,11 @@ struct GeneralPage: View {
                 InspectorCaption("Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
             }
             .id(SettingsAnchor.players)
+            Section("Appearance") {
+                SettingsStylePicker()
+                    .padding(.vertical, LunalyrDesign.Spacing.xSmall)
+                InspectorCaption("How Lunalyr’s own windows look: Settings, the menu-bar panel and the welcome.")
+            }
             Section("Startup") {
                 Toggle("Launch at login", isOn: $s.launchAtLogin)
                 if let error = s.launchAtLoginError {
@@ -56,6 +61,7 @@ struct GeneralPage: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
     }
 

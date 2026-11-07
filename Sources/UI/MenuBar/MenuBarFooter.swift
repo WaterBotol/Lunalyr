@@ -17,14 +17,14 @@ struct MenuBarFooter: View {
             .padding(.horizontal, 8)
             .padding(.bottom, LunalyrDesign.Spacing.hairline)
             Button(LunalyrExtras.Titles.settings) { models.resolved.navigation.openSettings() }
-                .buttonStyle(MenuRowButtonStyle(shortcut: "⌘,"))
+                .buttonStyle(MenuRowButtonStyle(symbol: "gearshape", shortcut: "⌘,"))
                 .keyboardShortcut(",", modifiers: .command)
             Button("Check for Updates…") { updates.check() }
-                .buttonStyle(MenuRowButtonStyle())
+                .buttonStyle(MenuRowButtonStyle(symbol: "arrow.triangle.2.circlepath"))
                 .disabled(updates.buttonDisabled)
                 .help(updates.buttonDisabled ? "Available once the update service has started" : "")
             Button("Quit Lunalyr") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(MenuRowButtonStyle(shortcut: "⌘Q"))
+                .buttonStyle(MenuRowButtonStyle(symbol: "power", shortcut: "⌘Q"))
                 .keyboardShortcut("q", modifiers: .command)
         }
         // The rows' highlight reaches into the panel's margins, as a menu's

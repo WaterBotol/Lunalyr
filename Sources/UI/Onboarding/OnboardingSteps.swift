@@ -18,6 +18,8 @@ struct WelcomeStep: View {
                 .padding(.bottom, LunalyrDesign.Spacing.xxLarge)
             OnboardingHeader(step: .welcome, title: OnboardingCopy.welcomeTitle, message: OnboardingCopy.welcome,
                              focus: focus)
+            SettingsStylePicker()
+                .padding(.top, LunalyrDesign.Spacing.large)
         }
     }
 }
