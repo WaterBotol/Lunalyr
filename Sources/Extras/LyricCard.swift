@@ -183,7 +183,7 @@ enum LyricCard {
     static let lineBreak = "\n"
     static let trackFooterHeight: CGFloat = 224
     static let sidebarWidth: CGFloat = 440
-    static let signatureHeight: CGFloat = 38
+    static let signatureHeight: CGFloat = 44
     static let lightestScrim = 0.48
     static let rollingHeightInTypeSizes: CGFloat = 2.35
 
@@ -693,11 +693,14 @@ struct LyricCardView: View {
     }
 
     private var signature: some View {
-        Text("Lunalyr")
-            .font(.system(size: 28, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.68))
-            .fixedSize()
-            .frame(height: LyricCard.signatureHeight)
+        HStack(spacing: 10) {
+            LunalyrMark(size: 40)
+            Text("Lunalyr")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+                .fixedSize()
+        }
+        .frame(height: LyricCard.signatureHeight)
     }
 
     private func lyrics(in stage: CGSize) -> some View {

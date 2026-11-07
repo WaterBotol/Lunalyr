@@ -29,7 +29,7 @@ final class StageLyricSnapshotTests: XCTestCase {
     }
 
     func testEveryStageLayoutDraws() throws {
-        let kinds: [LyricComposition] = LyricComposition.allCases.filter(\.fillsStage).filter { ![.hinge, .broadside, .portal].contains($0) }
+        let kinds: [LyricComposition] = LyricComposition.allCases.filter(\.fillsStage).filter { ![.hinge, .portal].contains($0) }
         XCTAssertFalse(kinds.isEmpty)
         let times: [Double] = [1.4, 2.3, 3.2, 4.2, 5.4, 6.7]
         let sheet = VStack(spacing: 2) {
@@ -121,5 +121,28 @@ final class FastPortalTests: XCTestCase {
         renderer.scale = 0.5
         let image = try XCTUnwrap(renderer.nsImage)
         try NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/fast.png"))
+    }
+}
+
+@MainActor
+final class CardLogoSnapshotTests: XCTestCase {
+    func testCardSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] else { return }
+        let words = "But I ignored your call".split(separator: " ").enumerated().map { i, w in
+            LyricsFetcher.Word(text: String(w), start: 10 + Double(i) * 0.3, end: 10.28 + Double(i) * 0.3)
+        }
+        let line = LyricsFetcher.Line(start: 10, end: 12, text: "But I ignored your call", words: words, isInstrumental: false, wordTimed: true)
+        let animation = LyricCard.Animation(line: line, composition: .editorial, mood: .neutral, seed: 0)
+        let art = NSImage(size: NSSize(width: 400, height: 400), flipped: false) { rect in
+            NSGradient(colors: [.systemOrange, .systemPurple])?.draw(in: rect, angle: 60); return true
+        }
+        var content = LyricCard.Content(pages: [.init(words: words.map(\.text), animation: animation)], title: "A Song",
+                                        artist: "An Artist", artwork: art, palette: LyricCard.palette(for: art), reduceMotion: true)
+        content.aspect = .portrait
+        let png = try XCTUnwrap(LyricCard.stillPNG(content, scale: 0.5))
+        try png.write(to: URL(fileURLWithPath: dir + "/card.png"))
+        content.aspect = .landscape
+        let wide = try XCTUnwrap(LyricCard.stillPNG(content, scale: 0.5))
+        try wide.write(to: URL(fileURLWithPath: dir + "/card-wide.png"))
     }
 }
