@@ -63,9 +63,19 @@ enum LyricCreditCues {
             let spell = min(3.5, 0.2 * Double(text.count))
             // From its last word arriving to leaving takes half what it used to.
             let hold = 0.2 + max(0.4, spell) + (minimumHold + min(5.0, Double(text.count) * 0.12) - 0.2 - max(0.4, spell)) / 2
-            let words = LyricsFetcher.distributeWords(in: text, from: start + 0.2, to: start + 0.2 + max(0.4, spell))
-            guard !words.isEmpty else { continue }
             let opening = hasHeading && position == 0
+            var words = LyricsFetcher.distributeWords(in: text, from: start + 0.2, to: start + 0.2 + max(0.4, spell))
+            if opening, !artistName.isEmpty {
+                // The title is sung through, then the artist's words light up
+                // and stay lit for as long as the cue is up.
+                let titleEnd = start + 0.2 + max(0.4, spell) * 0.55
+                let titleWords = LyricsFetcher.distributeWords(in: trimmedTitle, from: start + 0.2, to: titleEnd)
+                let artistWords = LyricsFetcher.distributeWords(in: artistName, from: titleEnd + 0.15, to: titleEnd + 0.15 + max(0.4, spell) * 0.45)
+                    .map { LyricsFetcher.Word(text: $0.text, start: $0.start, end: start + hold) }
+                let dash = LyricsFetcher.Word(text: "-", start: titleEnd, end: titleEnd + 0.15)
+                words = titleWords + [dash] + artistWords
+            }
+            guard !words.isEmpty else { continue }
             cues.append(Cue(id: cues.count, text: text, start: start, end: start + hold, words: words,
                             title: opening ? trimmedTitle : nil, artist: opening && !artistName.isEmpty ? artistName : nil))
         }
@@ -89,9 +99,6 @@ struct CreditsLayer: View {
     let seed: Int
     let composition: LyricComposition
     let mood: TrackMood
-    /// The lyric colour, and the colour the artist's name is picked out in.
-    var ink: Color = .white
-    var accent: Color = .yellow
 
     var body: some View {
         let style = BackingVocals.style(forLead: composition)
@@ -100,16 +107,9 @@ struct CreditsLayer: View {
             ForEach(cues) { cue in
                 let level = LyricCreditCues.level(of: cue, at: time)
                 if level > 0.004 {
-                    Group {
-                        if let artist = cue.artist {
-                            CreditHeading(title: cue.title ?? "", artist: artist, age: time - cue.start, baseSize: baseSize,
-                                          mood: mood, ink: ink, accent: accent)
-                        } else {
-                            LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize, mood: mood,
-                                          composition: style, seed: seed &+ cue.id, presence: 1,
-                                          lineEnd: cue.end, exitStart: cue.end)
-                        }
-                    }
+                    LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize, mood: mood,
+                                  composition: style, seed: seed &+ cue.id, presence: 1,
+                                  lineEnd: cue.end, exitStart: cue.end)
                         .frame(width: box.width, height: box.height)
                         .opacity(level)
                         .shadow(color: .black.opacity(0.3 * level), radius: 6)
@@ -126,28 +126,3 @@ struct CreditsLayer: View {
     }
 }
 
-/// "Title - Artist": the title in the lyric colour, the artist picked out in
-/// the accent colour and a heavier weight, arriving a moment after it.
-struct CreditHeading: View {
-    let title: String
-    let artist: String
-    /// Seconds since the cue began.
-    let age: Double
-    let baseSize: CGFloat
-    let mood: TrackMood
-    let ink: Color
-    let accent: Color
-
-    var body: some View {
-        let font = Settings.shared.lyricFont(size: baseSize * 0.62, hero: false, mood: mood)
-        let first = Easing.smoothstep((age - 0.15) / 0.6)
-        let second = Easing.smoothstep((age - 0.8) / 0.7)
-        (Text(title).foregroundStyle(ink.opacity(first))
-            + Text("  –  ").foregroundStyle(ink.opacity(0.55 * second))
-            + Text(artist).bold().foregroundStyle(accent.opacity(second)))
-            .font(font)
-            .multilineTextAlignment(.center)
-            .minimumScaleFactor(0.5)
-            .lineLimit(2)
-    }
-}

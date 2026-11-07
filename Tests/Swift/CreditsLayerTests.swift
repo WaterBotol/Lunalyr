@@ -121,4 +121,13 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertEqual(cues.first?.title, "Human Nature")
         XCTAssertEqual(cues.first?.artist, "Yot Club")
     }
+
+    func testArtistWordsStayLitForTheWholeCue() throws {
+        let cue = try XCTUnwrap(LyricCreditCues.cues(in: [], title: "Human Nature", artist: "Yot Club").first)
+        XCTAssertEqual(cue.words.map(\.text), ["Human", "Nature", "-", "Yot", "Club"])
+        let artist = Array(cue.words.suffix(2))
+        XCTAssertTrue(artist.allSatisfy { $0.end >= cue.end - 0.001 })
+        XCTAssertTrue(cue.words.prefix(2).allSatisfy { $0.end < cue.end - 3 })
+        XCTAssertTrue(zip(cue.words, cue.words.dropFirst()).allSatisfy { $0.start <= $1.start })
+    }
 }
