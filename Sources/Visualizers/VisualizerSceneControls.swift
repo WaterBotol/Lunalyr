@@ -14,6 +14,13 @@ struct VisualizerSceneControls: View {
     private var calm: Bool { reduceMotion || safety.dimFlashingLights }
 
     var body: some View {
+        if style == .starTrails {
+            ChoiceMenu("Colours", selection: $preferences.starTrailsColours,
+                       selectedTitle: { $0 == .album ? "Album cover" : "Original \(style.title)" }) {
+                Text("Album cover").tag(VisualizerSceneColours.album)
+                Text("Original \(style.title)").tag(VisualizerSceneColours.original)
+            }
+        }
         ValueSlider("Beat punch", value: $preferences.punch, in: VisualizerPreferences.punchRange,
                     minimumLabel: "Off", maximumLabel: "Strong",
                     format: { calm ? "Off" : SettingsFormat.percent($0) },

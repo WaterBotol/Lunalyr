@@ -358,7 +358,7 @@ struct AudioVisualizerView: NSViewRepresentable {
             guard let simulations = starTrailsSimulations else { return nil }
             let simulation = simulations.advance(sceneTime: sceneTime, clock: now, frame: frame,
                                                  response: response, sensitivity: sensitivity,
-                                                 palette: nil) // Star Trails keeps its original sky; only lyrics follow the cover
+                                                 palette: VisualizerPreferences.shared.starTrailsColours == .album ? palette : nil)
             if starTrailsBuffers.first?.device.registryID != device.registryID {
                 starTrailsBuffers = (0..<3).compactMap {
                     _ in device.makeBuffer(length: StarTrailsLayout.byteCount, options: .storageModeShared)
