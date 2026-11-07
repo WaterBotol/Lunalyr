@@ -75,9 +75,9 @@ enum LunalyrDesign {
     /// Window and panel geometry the three surfaces share.
     enum Layout {
         /// The menu-bar panel's content width.
-        static let menuPanelWidth: CGFloat = 320
+        static let menuPanelWidth: CGFloat = 364
         /// The Settings inspector column beside the preview stage.
-        static let inspectorWidth: CGFloat = 380
+        static let inspectorWidth: CGFloat = 440
         /// Narrower than this, the Settings detail stacks the preview above
         /// the inspector instead of beside it.
         static let stageBesideInspectorMinimum: CGFloat = 760

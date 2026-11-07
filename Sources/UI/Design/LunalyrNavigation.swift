@@ -61,11 +61,20 @@ final class LunalyrNavigation: ObservableObject {
 
     /// Opens Settings, at `destination` when one is given.
     func openSettings(_ destination: SettingsDestination? = nil) {
+        Self.dismissMenuBarPanel()
         if let destination {
             serial += 1
             settingsRequest = SettingsRequest(destination: destination, serial: serial)
         }
         presentSettings()
+    }
+
+    /// Closes the menu-bar panel (a MenuBarExtra window) so it doesn't sit
+    /// over Settings. Does nothing when no panel is open.
+    static func dismissMenuBarPanel() {
+        for window in NSApp?.windows ?? [] where window.isVisible && String(describing: type(of: window)).contains("MenuBarExtra") {
+            window.close()
+        }
     }
 
     /// The page asked for, once: the Settings window calls this when it

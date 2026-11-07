@@ -23,14 +23,16 @@ struct SettingsWindowView: View {
     @State private var scrollSerial = 0
 
     var body: some View {
-        NavigationSplitView {
-            SettingsSidebar(selection: $page)
-        } detail: {
-            SettingsDetail(page: page, previewDisplay: previewDisplay, showsPreview: showsPreview,
-                           largePreview: largePreview, scrollRequest: scrollRequest,
-                           select: { page = $0 })
-                .navigationTitle(page.title)
-                .toolbar { previewToolbar }
+        NavigationStack {
+            VStack(spacing: 0) {
+                SettingsTopNav(selection: $page)
+                Divider()
+                SettingsDetail(page: page, previewDisplay: previewDisplay, showsPreview: showsPreview,
+                               largePreview: largePreview, scrollRequest: scrollRequest,
+                               select: { page = $0 })
+            }
+            .navigationTitle(page.title)
+            .toolbar { previewToolbar }
         }
         .lunalyrTint()
         .frame(minWidth: SettingsWindowController.minimumWidth, minHeight: SettingsWindowController.minimumHeight)
@@ -88,33 +90,60 @@ struct SettingsWindowView: View {
     }
 }
 
-/// The pages, in three sections, each with its badge.
+/// The pages as three tabs along the top (Look, Lyrics, App), and under them,
+/// for a tab with several pages, a row of chips to move between its pages.
 @MainActor
-private struct SettingsSidebar: View {
+private struct SettingsTopNav: View {
     @Binding var selection: SettingsPage
 
+    private var group: SettingsPage.Group {
+        SettingsPage.Group.allCases.first { $0.pages.contains(selection) } ?? .look
+    }
+
     var body: some View {
-        List(selection: $selection) {
-            ForEach(SettingsPage.Group.allCases) { group in
-                Section(group.title) {
+        VStack(spacing: LunalyrDesign.Spacing.small) {
+            HStack(spacing: 2) {
+                ForEach(SettingsPage.Group.allCases) { tab in
+                    Button {
+                        if tab != group { selection = tab.pages[0] }
+                    } label: {
+                        Text(tab.title)
+                            .font(.body.weight(tab == group ? .semibold : .regular))
+                            .foregroundStyle(tab == group ? Color.primary : Color.secondary)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(tab == group ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(tab == group ? .isSelected : [])
+                }
+            }
+            .padding(3)
+            .background(Capsule().fill(.quinary))
+            if group.pages.count > 1 {
+                HStack(spacing: LunalyrDesign.Spacing.small) {
                     ForEach(group.pages) { page in
-                        Label {
-                            Text(page.title)
-                                .lineLimit(nil)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            SettingsIcon(symbol: page.symbol, tint: page.tint)
+                        Button {
+                            selection = page
+                        } label: {
+                            Label(page.title, systemImage: page.symbol)
+                                .font(.callout)
+                                .labelStyle(.titleAndIcon)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .foregroundStyle(page == selection ? Color.lunalyrAccentText : Color.secondary)
+                                .background(Capsule().fill(page == selection ? Color.lunalyrAccent.opacity(0.18) : .clear))
+                                .contentShape(Capsule())
                         }
-                        .tag(page)
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(page == selection ? .isSelected : [])
                     }
                 }
             }
         }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 240)
-        // A settings window keeps its pages in view, as System Settings
-        // does; without the toggle the page's title has the room it needs.
-        .toolbar(removing: .sidebarToggle)
+        .padding(.vertical, LunalyrDesign.Spacing.medium)
+        .frame(maxWidth: .infinity)
     }
 }
 
