@@ -171,6 +171,8 @@ struct LyricLineView: View {
     var glue: [Bool] = []
     /// Line-timed preview: draw only the first word, at this opacity.
     var firstRunOnly: Double?
+    /// Words from this time on always get the Cutout · Highlight tile.
+    var highlightFrom: Double?
     /// Rolling stages: room kept at the foot, the onset after the window,
     /// and each word's place in the song (its colour).
     var bottomInset: CGFloat = 0
@@ -252,7 +254,8 @@ struct LyricLineView: View {
                 exitStart: exitStart,
                 previewSince: previewSince,
                 glue: glue,
-                firstRunOnly: firstRunOnly
+                firstRunOnly: firstRunOnly,
+                highlightFrom: highlightFrom
               )
             }
         }

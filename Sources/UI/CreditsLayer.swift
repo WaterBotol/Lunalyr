@@ -24,6 +24,8 @@ enum LyricCreditCues {
         /// artist picked out.
         var title: String? = nil
         var artist: String? = nil
+        /// From this time the artist's words are tiled with Cutout · Highlight.
+        var highlightFrom: Double? = nil
     }
 
     /// Time between one credit arriving and the next, and how long each stays.
@@ -64,6 +66,7 @@ enum LyricCreditCues {
             // From its last word arriving to leaving takes half what it used to.
             let hold = 0.2 + max(0.4, spell) + (minimumHold + min(5.0, Double(text.count) * 0.12) - 0.2 - max(0.4, spell)) / 2
             let opening = hasHeading && position == 0
+            var highlightFrom: Double?
             var words = LyricsFetcher.distributeWords(in: text, from: start + 0.2, to: start + 0.2 + max(0.4, spell))
             if opening, !artistName.isEmpty {
                 // The title is sung through, then the artist's words light up
@@ -71,13 +74,14 @@ enum LyricCreditCues {
                 let titleEnd = start + 0.2 + max(0.4, spell) * 0.55
                 let titleWords = LyricsFetcher.distributeWords(in: trimmedTitle, from: start + 0.2, to: titleEnd)
                 let artistWords = LyricsFetcher.distributeWords(in: artistName, from: titleEnd + 0.15, to: titleEnd + 0.15 + max(0.4, spell) * 0.45)
-                    .map { LyricsFetcher.Word(text: $0.text, start: $0.start, end: start + hold) }
                 let dash = LyricsFetcher.Word(text: "-", start: titleEnd, end: titleEnd + 0.15)
                 words = titleWords + [dash] + artistWords
+                highlightFrom = artistWords.first?.start
             }
             guard !words.isEmpty else { continue }
             cues.append(Cue(id: cues.count, text: text, start: start, end: start + hold, words: words,
-                            title: opening ? trimmedTitle : nil, artist: opening && !artistName.isEmpty ? artistName : nil))
+                            title: opening ? trimmedTitle : nil, artist: opening && !artistName.isEmpty ? artistName : nil,
+                            highlightFrom: highlightFrom))
         }
         return cues
     }
@@ -109,7 +113,7 @@ struct CreditsLayer: View {
                 if level > 0.004 {
                     LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize, mood: mood,
                                   composition: style, seed: seed &+ cue.id, presence: 1,
-                                  lineEnd: cue.end, exitStart: cue.end)
+                                  lineEnd: cue.end, exitStart: cue.end, highlightFrom: cue.highlightFrom)
                         .frame(width: box.width, height: box.height)
                         .opacity(level)
                         .shadow(color: .black.opacity(0.3 * level), radius: 6)

@@ -122,12 +122,13 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertEqual(cues.first?.artist, "Yot Club")
     }
 
-    func testArtistWordsStayLitForTheWholeCue() throws {
+    func testArtistWordsAreMarkedForTheHighlightTile() throws {
         let cue = try XCTUnwrap(LyricCreditCues.cues(in: [], title: "Human Nature", artist: "Yot Club").first)
         XCTAssertEqual(cue.words.map(\.text), ["Human", "Nature", "-", "Yot", "Club"])
-        let artist = Array(cue.words.suffix(2))
-        XCTAssertTrue(artist.allSatisfy { $0.end >= cue.end - 0.001 })
-        XCTAssertTrue(cue.words.prefix(2).allSatisfy { $0.end < cue.end - 3 })
+        XCTAssertEqual(cue.highlightFrom, cue.words[3].start)
+        XCTAssertTrue(cue.words.prefix(3).allSatisfy { $0.start < (cue.highlightFrom ?? 0) })
         XCTAssertTrue(zip(cue.words, cue.words.dropFirst()).allSatisfy { $0.start <= $1.start })
+        let credit = LyricsFetcher.Line(start: 1, end: 1.01, text: "Produced by: A B", words: [], isInstrumental: true, credit: true)
+        XCTAssertNil(LyricCreditCues.cues(in: [credit], title: "Human Nature", artist: "Yot Club")[1].highlightFrom)
     }
 }
