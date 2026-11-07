@@ -199,15 +199,16 @@ enum LyricCard {
         return renderer.nsImage
     }
 
-    private static let gifScale: CGFloat = 0.5
+    /// Full card resolution (1080 × 1350). Tests render at half size to stay fast.
+    static let gifScale: CGFloat = 1
 
     private struct GIFFrame {
         let image: CGImage
         let delay: Double
     }
 
-    static func gif(_ content: Content) async -> Data? {
-        guard let frames = await frames(for: content), !Task.isCancelled else { return nil }
+    static func gif(_ content: Content, scale: CGFloat = gifScale) async -> Data? {
+        guard let frames = await frames(for: content, scale: scale), !Task.isCancelled else { return nil }
         let encoder = Task.detached(priority: .userInitiated) {
             encodeGIF(frames)
         }
@@ -218,7 +219,7 @@ enum LyricCard {
         }
     }
 
-    private static func frames(for content: Content) async -> [GIFFrame]? {
+    private static func frames(for content: Content, scale gifScale: CGFloat) async -> [GIFFrame]? {
         let stillInk = ink(for: content)
         let stage = content.lyricStage
         let clips = content.pages.enumerated().map { index, page -> (page: Page, start: Double, firstInk: Double?, duration: Double) in
