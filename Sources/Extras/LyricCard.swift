@@ -80,6 +80,10 @@ enum LyricCard {
         var reduceMotion = false
         var increaseContrast = false
         var aspect: CardAspect = .portrait
+        /// A picture, GIF or video chosen to sit behind the lyrics instead of
+        /// the album colours, and its first frame for stills.
+        var background: LyricCardBackground?
+        var backgroundStill: CGImage?
 
         var size: CGSize { aspect.size }
 
@@ -317,6 +321,7 @@ enum LyricCard {
                              sink: (CGImage, Double) async -> Bool) async -> Bool {
         let stillInk = ink(for: content)
         let stage = content.lyricStage
+        let movingBackground = content.background?.isAnimated == true
         let clips = content.pages.enumerated().map { index, page -> (page: Page, start: Double, firstInk: Double?, duration: Double) in
             let tail = index == content.pages.count - 1 ? 0.32 : 0
             if let animation = page.animation, let firstInk = animation.firstInk {
@@ -324,7 +329,7 @@ enum LyricCard {
                 let span = animation.end - start
                 if span.isFinite, span > 0 { return (page, start, firstInk, span + tail) }
             }
-            return (page, 0, nil, content.pages.count == 1 ? 0.08 : 1.8)
+            return (page, 0, nil, content.pages.count == 1 ? (movingBackground ? 3.0 : 0.08) : 1.8)
         }
         guard !clips.isEmpty else { return false }
         let timed = clips.filter { $0.firstInk != nil }
@@ -350,7 +355,7 @@ enum LyricCard {
         var elapsed = 0.0
         for clip in clips {
             guard !Task.isCancelled else { return false }
-            if let animation = clip.page.animation, let firstInk = clip.firstInk, let backdrop {
+            if let animation = clip.page.animation, let firstInk = clip.firstInk, var backdrop {
                 let count = max(3, Int((clip.duration / cadence - 1e-9).rounded(.up)))
                 let step = clip.duration / Double(count)
                 // Begin after the first word or phrase has started to appear.
@@ -363,12 +368,37 @@ enum LyricCard {
                     let time = min(lastInk, max(firstInk, clip.start + offset))
                     let vocal = animation.line.wordTimed ? OrganicMotion.vocalIntensity(animation.words, at: time) : 0
                     let ink = director.ink(content.inkInputs(vocal: vocal), wall: 6 + elapsed + offset)
+                    if movingBackground, let background = content.background {
+                        let still = await background.frame(at: elapsed + offset)
+                        let plate = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, hideLyrics: true, backgroundImage: still))
+                        plate.scale = gifScale
+                        if let rendered = plate.cgImage { backdrop = rendered }
+                    }
                     let frame = LyricCardFrame(size: content.size, animation: animation, backdrop: backdrop, stage: stage,
                                                time: time, ink: ink, reduceMotion: content.reduceMotion)
                     let renderer = ImageRenderer(content: frame)
                     renderer.scale = gifScale
                     guard let image = renderer.cgImage else { return false }
                     // Round successive boundaries so errors do not accumulate.
+                    let delay = ((offset + step) * 100).rounded() - (offset * 100).rounded()
+                    guard await sink(image, max(0.02, delay / 100)) else { return false }
+                    produced += 1
+                    progress?(min(1, Double(produced) / Double(expected)))
+                    if produced.isMultiple(of: 4) { await Task.yield() }
+                }
+            } else if movingBackground, let background = content.background {
+                // A line with no timing, held over a moving background: its
+                // frames follow the background's.
+                let count = max(1, Int((clip.duration / max(cadence, 0.1) - 1e-9).rounded(.up)))
+                let step = clip.duration / Double(count)
+                for index in 0..<count {
+                    guard !Task.isCancelled else { return false }
+                    let offset = Double(index) * step
+                    let still = await background.frame(at: elapsed + offset)
+                    let renderer = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, page: clip.page,
+                                                                        backgroundImage: still))
+                    renderer.scale = gifScale
+                    guard let image = renderer.cgImage else { return false }
                     let delay = ((offset + step) * 100).rounded() - (offset * 100).rounded()
                     guard await sink(image, max(0.02, delay / 100)) else { return false }
                     produced += 1
@@ -510,6 +540,8 @@ struct LyricCardView: View {
     let ink: LyricInk
     var page: LyricCard.Page?
     var hideLyrics = false
+    /// The frame of a moving background to draw; nil uses the content's still.
+    var backgroundImage: CGImage?
 
     private var shown: LyricCard.Page { page ?? content.pages.first ?? LyricCard.Page(words: []) }
 
@@ -574,20 +606,35 @@ struct LyricCardView: View {
         .environment(\.colorScheme, .dark)
     }
 
+    @ViewBuilder
     private var backdrop: some View {
         let size = content.size
-        return ZStack {
-            content.palette.gradient
-            if let artwork = content.artwork {
-                Image(nsImage: artwork).resizable().scaledToFill()
+        if let picture = backgroundImage ?? content.backgroundStill {
+            ZStack {
+                Color.black
+                Image(decorative: picture, scale: 1).resizable().scaledToFill()
                     .frame(width: size.width, height: size.height)
                     .clipped()
-                    .scaleEffect(1.22)
-                    .blur(radius: 108)
-                    .opacity(0.62)
+                // An even veil, then a deeper one under the credits, so the
+                // lyrics read over any picture.
+                Color.black.opacity(0.42)
+                LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .center, endPoint: .bottom)
             }
-            LinearGradient(colors: [.black.opacity(LyricCard.lightestScrim), .black.opacity(0.64), .black.opacity(0.86)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            .frame(width: size.width, height: size.height)
+        } else {
+            ZStack {
+                content.palette.gradient
+                if let artwork = content.artwork {
+                    Image(nsImage: artwork).resizable().scaledToFill()
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
+                        .scaleEffect(1.22)
+                        .blur(radius: 108)
+                        .opacity(0.62)
+                }
+                LinearGradient(colors: [.black.opacity(LyricCard.lightestScrim), .black.opacity(0.64), .black.opacity(0.86)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
         }
     }
 

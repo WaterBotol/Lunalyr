@@ -19,6 +19,7 @@ final class LyricCardPopoutModel: ObservableObject {
     private enum Keys {
         static let aspect = "custom.lyricCardAspect"
         static let formats = "custom.lyricCardFormats"
+        static let background = "custom.lyricCardBackgroundPath"
     }
 
     @Published var rows: [Row] = []
@@ -34,6 +35,8 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var status = ""
     @Published var title = ""
     @Published var artist = ""
+    /// A picture, GIF or video behind the lyrics; nil keeps the album look.
+    @Published var background: LyricCardBackground? { didSet { schedulePreview() } }
 
     private var previewTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
@@ -43,6 +46,43 @@ final class LyricCardPopoutModel: ObservableObject {
         aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? .portrait
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
+        if let path = defaults.string(forKey: Keys.background), FileManager.default.fileExists(atPath: path) {
+            Task { [weak self] in
+                let loaded = await LyricCardBackground.load(URL(fileURLWithPath: path))
+                self?.background = loaded
+            }
+        }
+    }
+
+    func chooseBackground() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = LyricCardBackground.contentTypes
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a picture, GIF or video to put behind the lyrics"
+        panel.prompt = "Use as Background"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setBackground(url)
+    }
+
+    func setBackground(_ url: URL) {
+        status = "Loading background…"
+        Task { [weak self] in
+            let loaded = await LyricCardBackground.load(url)
+            guard let self else { return }
+            if let loaded {
+                self.background = loaded
+                UserDefaults.standard.set(url.path, forKey: Keys.background)
+                self.status = ""
+            } else {
+                self.status = "Couldn’t open that file as a background"
+            }
+        }
+    }
+
+    func clearBackground() {
+        background = nil
+        UserDefaults.standard.removeObject(forKey: Keys.background)
     }
 
     var hasSong: Bool { NowPlayingMonitor.shared.current != nil }
@@ -80,8 +120,11 @@ final class LyricCardPopoutModel: ObservableObject {
 
     private func content() -> LyricCard.Content? {
         guard !selection.isEmpty else { return nil }
-        return LyricCard.currentContent(before: 0, after: 0, composition: LunalyrExtras.shared.lyricCardComposition,
-                                        rows: selection.sorted(), aspect: aspect)
+        var content = LyricCard.currentContent(before: 0, after: 0, composition: LunalyrExtras.shared.lyricCardComposition,
+                                               rows: selection.sorted(), aspect: aspect)
+        content?.background = background
+        content?.backgroundStill = background?.first
+        return content
     }
 
     private func schedulePreview() {
@@ -160,7 +203,7 @@ struct LyricCardPopoutView: View {
             options
                 .frame(width: 330)
         }
-        .frame(minHeight: 520)
+        .frame(minHeight: 600)
         .styledCanvas()
         .lunalyrTint()
     }
@@ -204,7 +247,30 @@ struct LyricCardPopoutView: View {
                     Text("Pick lines to preview").lunalyrText(.caption)
                 }
             }
-            .frame(height: 250)
+            .frame(height: 210)
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                guard let provider = providers.first else { return false }
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    Task { @MainActor in model.setBackground(url) }
+                }
+                return true
+            }
+
+            Text("Background").lunalyrText(.groupTitle)
+            HStack(spacing: 8) {
+                Text(model.background?.name ?? "Album colours")
+                    .lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(model.background == nil ? .secondary : .primary)
+                Spacer(minLength: 0)
+                if model.background != nil { Button("Remove") { model.clearBackground() }.controlSize(.small) }
+                Button("Choose…") { model.chooseBackground() }.controlSize(.small)
+            }
+            if let background = model.background, background.isAnimated {
+                Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption)
+            } else if model.background == nil {
+                Text("Pick or drop a picture, GIF or video.").lunalyrText(.caption)
+            }
 
             Text("Shape").lunalyrText(.groupTitle)
             HStack(spacing: 8) {
@@ -279,7 +345,7 @@ final class LyricCardPopoutController {
             let window = NSWindow(contentViewController: host)
             window.title = "Lyric Card"
             window.styleMask = [.titled, .closable, .resizable]
-            window.setContentSize(NSSize(width: 700, height: 580))
+            window.setContentSize(NSSize(width: 700, height: 680))
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window
