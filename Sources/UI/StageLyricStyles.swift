@@ -11,7 +11,7 @@ import SwiftUI
 
 extension LyricComposition {
     /// Layouts drawn by `StageLyricView`.
-    var fillsStage: Bool { [.hinge, .broadside, .portal, .mosaic, .reverb, .torque, .fable].contains(self) }
+    var fillsStage: Bool { [.hinge, .broadside, .portal, .mosaic, .torque, .fable].contains(self) }
 }
 
 /// One glued run of a line: "beau" "ti" "ful" is a single run, shown
@@ -156,7 +156,6 @@ struct StageLyricView: View {
                 case .hinge: hinge(shown, total: runs.count)
                 case .broadside: broadside(shown, total: runs.count)
                 case .mosaic: mosaic(shown, total: runs.count)
-                case .reverb: reverb(shown, total: runs.count)
                 case .torque: torque(shown, total: runs.count)
                 case .fable: fable(shown, total: runs.count)
                 default: portal(shown, total: runs.count)
@@ -510,7 +509,7 @@ struct StageLyricView: View {
     }
 }
 
-// MARK: - Mosaic, Reverb, Torque and Fable
+// MARK: - Mosaic, Torque and Fable
 
 extension StageLyricView {
     // MARK: Mosaic
@@ -529,149 +528,108 @@ extension StageLyricView {
         let stage = stageSize
         return StageLayout(place: { measured, bounds in
             measured.indices.map { index in
+                // One continuous path: the word sits where it landed, then glides into the stack.
                 let rank = ranks[index]
-                if rank >= 0.5 {
-                    // The words before sit in a small stack up the left of the stage.
-                    let slot = min(3, rank)
-                    return CGPoint(x: bounds.midX - bounds.width * 0.2 + CGFloat(index % 2) * bounds.width * 0.04,
-                                   y: bounds.minY + bounds.height * 0.12 + CGFloat(slot - 1) * unit * 0.85)
-                }
+                let settle = CGFloat(Self.glide(min(rank, 1.2) / 1.2))
                 let sway = (chance(index, 21) - 0.5) * 0.24 * bounds.width
-                return CGPoint(x: bounds.midX + sway, y: bounds.midY + (chance(index, 22) - 0.5) * 0.16 * bounds.height)
+                let home = CGPoint(x: bounds.midX + sway, y: bounds.midY + (chance(index, 22) - 0.5) * 0.16 * bounds.height)
+                let slot = CGFloat(min(3, max(rank, 1)))
+                let stack = CGPoint(x: bounds.midX - bounds.width * 0.2 + CGFloat(index % 2) * bounds.width * 0.04,
+                                    y: bounds.minY + bounds.height * 0.12 + (slot - 1) * unit * 0.85)
+                return CGPoint(x: home.x + (stack.x - home.x) * settle, y: home.y + (stack.y - home.y) * settle)
             }
         }) {
             ForEach(runs) { run in
                 let a = arrivals[run.id]
                 let rank = ranks[run.id]
+                let settle = Self.glide(min(rank, 1.2) / 1.2)
                 let sample = sample(run, of: total)
-                let live = rank < 0.5
                 let tile = tiled(run)
-                if !live {
+                let side: Double = chance(run.id, 23) < 0.5 ? 1 : -1
+                ZStack {
+                    // The big setting, shrinking and dimming as the next word takes over.
+                    Group {
+                        if kinds[run.id] == 0 {
+                            // Huge, running off the edge, with a star beside it.
+                            let size = unit * 3.0
+                            ZStack(alignment: .topTrailing) {
+                                Text(run.revealed(at: time))
+                                    .font(font(size, hero: true, id: run.id))
+                                    .foregroundStyle(tile ? ink.tileText : sample.sung)
+                                    .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
+                                    .background { tileBackground(tile, size: size) }
+                                    .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                                Star4().fill(ink.tileColour).frame(width: size * 0.32, height: size * 0.32)
+                                    .rotationEffect(.degrees(reduceMotion ? 0 : time * 40))
+                                    .offset(x: size * 0.1, y: -size * 0.12)
+                            }
+                            .offset(x: reduceMotion ? 0 : (1 - min(a, 1)) * stage.width * 0.35 * side)
+                        } else if kinds[run.id] == 1 {
+                            // White on a colour bar, laid across a pale panel.
+                            let size = unit * 2.3
+                            let wipe = reduceMotion ? 1 : Self.glide((time - (run.start - 0.04)) / (0.32 / lineSpeed))
+                            let word = Text(run.revealed(at: time))
+                                .font(font(size, hero: true, id: run.id))
+                                .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
+                            let tilt = (chance(run.id, 28) - 0.5) * 5
+                            ZStack {
+                                // The pale panel behind, a little off-square, arriving a beat after the bar.
+                                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.9))
+                                    .padding(.horizontal, -size * 0.55).padding(.vertical, -size * 0.34)
+                                    .rotationEffect(.degrees(-tilt * 0.8))
+                                    .offset(x: size * 0.12, y: size * 0.1)
+                                    .opacity(Self.glide((time - (run.start + 0.05)) / 0.3))
+                                    .scaleEffect(x: 0.6 + 0.4 * Self.glide((time - (run.start + 0.05)) / 0.3), y: 1)
+                                // The bar wipes across, then the word lands on it.
+                                word.hidden()
+                                    .padding(.horizontal, size * 0.28).padding(.vertical, size * 0.06)
+                                    .background {
+                                        ink.tileColour
+                                            .mask(alignment: side > 0 ? .leading : .trailing) {
+                                                GeometryReader { box in Rectangle().frame(width: box.size.width * wipe) }
+                                            }
+                                    }
+                                    .rotationEffect(.degrees(tilt))
+                                word.foregroundStyle(ink.tileText)
+                                    .rotationEffect(.degrees(tilt))
+                                    .opacity(Self.glide((time - (run.start + 0.1)) / 0.2))
+                                    .offset(x: reduceMotion ? 0 : CGFloat(1 - wipe) * size * 0.5 * side)
+                                Star4().fill(Color.white).frame(width: size * 0.3, height: size * 0.3)
+                                    .shadow(color: .black.opacity(0.2), radius: 3)
+                                    .rotationEffect(.degrees(reduceMotion ? 0 : time * 50))
+                                    .offset(x: side * size * 0.1, y: -size * 0.62)
+                                    .scaleEffect(wipe)
+                            }
+                            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                        } else {
+                            // Letter by letter, each on its own baseline.
+                            let size = unit * 2.4
+                            HStack(spacing: size * 0.02) {
+                                ForEach(Array(run.text.enumerated()), id: \.offset) { index, character in
+                                    let reveal = Self.glide((time - (run.start + Double(index) * 0.05)) / 0.25)
+                                    Text(String(character))
+                                        .font(font(size * (0.85 + 0.3 * CGFloat(chance(run.id * 31 + index, 24))), hero: true, id: run.id))
+                                        .foregroundStyle(sample.sung)
+                                        .offset(y: CGFloat(chance(run.id * 31 + index, 25) - 0.5) * size * 0.28 + CGFloat(1 - reveal) * size * 0.3)
+                                        .rotationEffect(.degrees((chance(run.id * 31 + index, 26) - 0.5) * 22))
+                                        .opacity(reveal)
+                                }
+                            }
+                            .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.8)
+                            .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                        }
+                    }
+                    .scaleEffect(1 - 0.72 * settle)
+                    .opacity(min(1, a * 1.6) * (1 - Easing.smoothstep(settle * 1.6 - 0.2)))
+                    // The small version it becomes, fading in as the big one fades out.
                     Text(run.revealed(at: time))
                         .font(font(unit * 0.6, hero: true, id: run.id))
                         .foregroundStyle(sample.rest.opacity(0.75 * max(0, 1 - (rank - 1.5) * 0.6)))
                         .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
-                } else if kinds[run.id] == 0 {
-                    // Huge, running off the edge, with a star beside it.
-                    let size = unit * 3.0
-                    ZStack(alignment: .topTrailing) {
-                        Text(run.revealed(at: time))
-                            .font(font(size, hero: true, id: run.id))
-                            .foregroundStyle(tile ? ink.tileText : sample.sung)
-                            .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
-                            .background { tileBackground(tile, size: size) }
-                            .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
-                        Star4().fill(ink.tileColour).frame(width: size * 0.32, height: size * 0.32)
-                            .rotationEffect(.degrees(reduceMotion ? 0 : time * 40))
-                            .offset(x: size * 0.1, y: -size * 0.12)
-                    }
-                    .offset(x: reduceMotion ? 0 : (1 - min(a, 1)) * stage.width * 0.35 * (chance(run.id, 23) < 0.5 ? 1 : -1))
-                    .opacity(min(1, a * 1.6))
-                } else if kinds[run.id] == 1 {
-                    // Cut in two and slid apart, then pushed back together.
-                    let size = unit * 2.6
-                    let slide = reduceMotion ? 0 : (1 - min(a, 1)) * size * 0.9
-                    let cut = chance(run.id, 27) < 0.5 ? 0.46 : 0.58
-                    let word = Text(run.revealed(at: time))
-                        .font(font(size, hero: true, id: run.id))
-                        .foregroundStyle(sample.sung)
-                        .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.8)
-                    ZStack {
-                        word.mask(alignment: .top) { Rectangle().frame(height: size * cut * 1.2).frame(maxHeight: .infinity, alignment: .top) }
-                            .offset(x: -slide - size * 0.04)
-                        word.mask(alignment: .bottom) { Rectangle().frame(height: size * (1 - cut) * 1.2).frame(maxHeight: .infinity, alignment: .bottom) }
-                            .offset(x: slide + size * 0.04)
-                    }
-                    .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
-                    .opacity(min(1, a * 1.6))
-                } else {
-                    // Letter by letter, each on its own baseline.
-                    let size = unit * 2.4
-                    HStack(spacing: size * 0.02) {
-                        ForEach(Array(run.text.enumerated()), id: \.offset) { index, character in
-                            let reveal = Self.glide((time - (run.start + Double(index) * 0.05)) / 0.25)
-                            Text(String(character))
-                                .font(font(size * (0.85 + 0.3 * CGFloat(chance(run.id * 31 + index, 24))), hero: true, id: run.id))
-                                .foregroundStyle(sample.sung)
-                                .offset(y: CGFloat(chance(run.id * 31 + index, 25) - 0.5) * size * 0.28 + CGFloat(1 - reveal) * size * 0.3)
-                                .rotationEffect(.degrees((chance(run.id * 31 + index, 26) - 0.5) * 22))
-                                .opacity(reveal)
-                        }
-                    }
-                    .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.8)
-                    .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                        .opacity(Easing.smoothstep(settle * 1.6 - 0.5))
                 }
             }
         }
-        .opacity(1 - leaving)
-    }
-
-    // MARK: Reverb
-    //
-    // Each word rushes in from the front, big and blurred, and lands with a
-    // ripple of echoes. When the next word comes it leans back: it shrinks,
-    // blurs and fades into the distance as it rises, and settles in the plain
-    // line of sung words above.
-
-    fileprivate func reverb(_ runs: [StageRun], total: Int) -> some View {
-        let speed = lineSpeed
-        let arrivals = runs.map { Self.glide((time - ($0.start - 0.04)) / (0.42 / speed)) }
-        let ranks = runs.indices.map { i in arrivals[(i + 1)...].reduce(0, +) }
-        let leaving = leave
-        let stage = stageSize
-        let size = unit * 2.0
-        return ZStack {
-            // The line of sung words, filling in as each word goes to the back.
-            HStack(spacing: unit * 0.28) {
-                ForEach(runs) { run in
-                    Text(run.revealed(at: time))
-                        .font(font(unit * 0.62, hero: false, id: run.id))
-                        .foregroundStyle(ink.base.rest.opacity(0.85))
-                        .lineLimit(1)
-                        .opacity(Easing.smoothstep((ranks[run.id] - 0.55) / 0.7))
-                }
-            }
-            .frame(maxWidth: stage.width * 0.8).minimumScaleFactor(0.4)
-            .offset(y: -size * 0.95)
-            ForEach(runs) { run in
-                let rank = ranks[run.id]
-                if rank < 1.3 {
-                    let arrive = arrivals[run.id]
-                    let back = Self.glide(rank)
-                    let sample = sample(run, of: total)
-                    let tile = tiled(run)
-                    let tilt = reduceMotion ? 0 : -3.5 + sin(time * 1.3 + Double(run.id)) * 1.2
-                    ZStack {
-                        // Echoes ripple out from the word as it lands, then keep a slow pulse while it is sung.
-                        ForEach(0..<3, id: \.self) { ring in
-                            let cycle = reduceMotion ? 0.0 : ((time - run.start) * 1.0 - Double(ring) * 0.3)
-                            let grow = cycle < 0 ? 0 : cycle.truncatingRemainder(dividingBy: 1)
-                            let fade = (cycle < 0 || rank > 0.3) ? 0 : (1 - grow)
-                            Text(run.revealed(at: time))
-                                .font(font(size, hero: true, id: run.id))
-                                .foregroundStyle(sample.sung.opacity(0.5 * fade))
-                                .scaleEffect(1 + 0.25 * grow)
-                                .rotationEffect(.degrees(Double(ring - 1) * 2.4 * grow))
-                        }
-                        Text(run.revealed(at: time))
-                            .font(font(size, hero: true, id: run.id))
-                            .foregroundStyle(tile ? ink.tileText : sample.sung)
-                            .background { tileBackground(tile, size: size) }
-                            .shadow(color: .black.opacity(0.3), radius: 7, y: 3)
-                    }
-                    .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stage.width * 0.78)
-                    .rotationEffect(.degrees(tilt))
-                    // Coming in: from the front, large and out of focus.
-                    .scaleEffect(reduceMotion ? 1 : (1 + 0.7 * (1 - arrive)) * (1 - 0.4 * back))
-                    .blur(radius: reduceMotion ? 0 : size * (0.12 * (1 - arrive) + 0.07 * back))
-                    // Going back: it leans away, rises and fades.
-                    .rotation3DEffect(.degrees(reduceMotion ? 0 : -50 * back), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
-                    .offset(y: reduceMotion ? 0 : -size * 0.6 * back + size * 0.1 * (1 - arrive))
-                    .opacity(arrive * (1 - 0.9 * back))
-                }
-            }
-        }
-        .frame(width: stage.width, height: stage.height)
         .opacity(1 - leaving)
     }
 
@@ -704,7 +662,9 @@ extension StageLyricView {
                 let live = rank < 0.5
                 let size = unit * max(0.55, 2.0 - 0.38 * min(rank, 3.5))
                 let tile = tiled(run)
-                let twist = reduceMotion ? 0 : (1 - min(a, 1)) * 110 * (run.id.isMultiple(of: 2) ? 1 : -1)
+                // The word's own wringing, unless another word entrance has been chosen.
+                let entrance = chosenEntrance(run, progress: a, size: size)
+                let twist = reduceMotion || !entrance.native ? 0 : (1 - min(a, 1)) * 110 * (run.id.isMultiple(of: 2) ? 1 : -1)
                 // Wrung and loosened again, all the while it is held.
                 let breathe = reduceMotion ? 0 : sin(time * 2.1 + Double(run.id) * 1.7) * (live ? 11 : 5)
                 let wander = reduceMotion ? 0 : CGFloat(sin(time * 1.3 + Double(run.id) * 2.3)) * unit * (live ? 0.14 : 0.08)
@@ -728,7 +688,10 @@ extension StageLyricView {
                 .rotationEffect(.degrees(reduceMotion ? 0 : (live ? -4 : min(rank, 2) * 3 * (run.id.isMultiple(of: 2) ? 1 : -1))))
                 .rotation3DEffect(.degrees(twist + breathe), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
                 .rotation3DEffect(.degrees(breathe * 0.5), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
-                .offset(x: wander)
+                .rotation3DEffect(.degrees(entrance.fold), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
+                .rotationEffect(.degrees(entrance.spin))
+                .scaleEffect(entrance.scale)
+                .offset(x: wander + entrance.offset.width, y: entrance.offset.height)
                 .blur(radius: reduceMotion ? 0 : size * 0.07 * (1 - min(a, 1)))
                 .opacity(min(1, a * 1.6) * max(0, 1 - max(0, rank - 3) * 0.8))
             }
@@ -754,13 +717,24 @@ extension StageLyricView {
         let stage = stageSize
         let leaving = leave
         let drift = reduceMotion ? 0.0 : 1.0
+        // Every line gets its own shape, accent, favourite arrival and lean.
+        let shape = Int(chance(nil, 50) * 4) % 4
+        let accent = Int(chance(nil, 51) * 4) % 4
+        let favourite = Int(chance(nil, 52) * 3) % 3
+        let lean = (chance(nil, 53) - 0.5) * 7
+        let scale = 0.9 + 0.3 * chance(nil, 54)
+        // Where the newest word sits, and the step to each older one.
+        let origin: (x: CGFloat, y: CGFloat) = [(0.14, 0.3), (-0.14, 0.3), (0.0, 0.3), (0.2, 0.18)][shape]
+        let step: (x: CGFloat, y: CGFloat) = [(-0.13, -0.2), (0.13, -0.2), (0.0, -0.18), (-0.2, -0.09)][shape]
         return StageLayout(place: { measured, bounds in
             measured.indices.map { index in
                 // The steps close up a little further back, so a long line stays on the stage.
                 let raw = CGFloat(ranks[index])
                 let r = raw <= 3 ? raw : 3 + (raw - 3) * 0.35
-                var x = bounds.midX + bounds.width * 0.14 - bounds.width * 0.13 * r + sin(r * 0.8) * bounds.width * 0.025
-                var y = bounds.midY + bounds.height * 0.3 - bounds.height * 0.2 * r
+                var x = bounds.midX + bounds.width * (origin.x + step.x * r) + sin(r * 0.8) * bounds.width * 0.025
+                // The zigzag column swings from side to side as it climbs.
+                if shape == 2 { x += CGFloat(sin(Double(r) * 1.5 + 0.6)) * bounds.width * 0.15 }
+                var y = bounds.midY + bounds.height * (origin.y + step.y * r)
                 x += CGFloat(sin(time * 0.9 + Double(index) * 1.9)) * unit * 0.2 * drift
                 y += CGFloat(cos(time * 0.7 + Double(index) * 1.3)) * unit * 0.15 * drift
                 // New words swing in along an arc from up and to the left.
@@ -775,9 +749,9 @@ extension StageLyricView {
                 let rank = ranks[run.id]
                 let sample = sample(run, of: total)
                 let newest = rank < 0.5
-                let size = unit * max(0.55, 1.4 - 0.24 * min(rank, 3.6))
+                let size = unit * scale * max(0.55, 1.4 - 0.24 * min(rank, 3.6))
                 let tile = tiled(run)
-                let kind = Int(chance(run.id, 40) * 3) % 3
+                let kind = chance(run.id, 42) < 0.55 ? favourite : Int(chance(run.id, 40) * 3) % 3
                 let colour: Color = tile ? ink.tileText : newest ? sample.sung : sample.rest.opacity(max(0.45, 0.85 - 0.1 * rank))
                 let word = Text(run.revealed(at: time))
                     .font(font(size, hero: true, id: run.id))
@@ -817,17 +791,65 @@ extension StageLyricView {
                                 .scaleEffect(reduceMotion ? 1 : 1 + 0.25 * (1 - a))
                         }
                     }
-                    if chance(run.id, 41) < 0.28 {
+                    if accent == 0 && chance(run.id, 41) < 0.3 {
                         Star4().fill(ink.tileColour).frame(width: size * 0.5, height: size * 0.5)
                             .rotationEffect(.degrees(reduceMotion ? 0 : (1 - a) * 160 + time * 22))
                             .scaleEffect(a)
+                    }
+                }
+                .background {
+                    // A soft glow of the accent colour behind the newest word.
+                    if newest {
+                        Ellipse().fill(ink.tileColour.opacity(0.28)).frame(width: size * 3.2, height: size * 1.5)
+                            .blur(radius: size * 0.45).opacity(a)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if newest && accent == 1 {
+                        // A brush stroke underneath, drawn left to right.
+                        Capsule().fill(ink.tileColour)
+                            .frame(width: size * 2.4 * CGFloat(Self.glide((time - run.start) / 0.35)), height: size * 0.07)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .offset(y: size * 0.16)
+                    } else if newest && accent == 2 {
+                        // A loose ring that swells round it.
+                        Capsule().stroke(ink.tileColour, lineWidth: max(2, size * 0.04))
+                            .frame(width: size * 3.0, height: size * 1.1)
+                            .rotationEffect(.degrees(-4))
+                            .scaleEffect(0.8 + 0.2 * a).opacity(a * 0.9)
+                            .offset(y: size * 0.1)
                     }
                 }
                 .shadow(color: .black.opacity(0.25), radius: 5, y: 2)
                 .opacity(min(1, a * 1.7) * max(0, 1 - max(0, rank - 4.2) * 0.8))
             }
         }
+        .rotationEffect(.degrees(reduceMotion ? 0 : lean))
         .opacity(1 - leaving)
+    }
+
+    /// What a word does when the viewer chose a particular entrance rather than
+    /// leaving it to the layout. `native` means the layout's own motion stays.
+    fileprivate func chosenEntrance(_ run: StageRun, progress a: Double, size: CGFloat)
+        -> (native: Bool, offset: CGSize, scale: CGFloat, spin: Double, fold: Double) {
+        let left = 1 - min(a, 1)
+        let side: CGFloat = run.id.isMultiple(of: 2) ? 1 : -1
+        let none = (native: true, offset: CGSize.zero, scale: CGFloat(1), spin: 0.0, fold: 0.0)
+        if reduceMotion { return none }
+        switch settings.arrival(in: composition, for: LyricsFetcher.Word(text: run.text, start: run.start, end: run.end)) {
+        case .lift:
+            return (false, CGSize(width: 0, height: CGFloat(left) * size * 0.7), 1, 0, 0)
+        case .pop:
+            return (false, .zero, CGFloat(0.55 + 0.45 * min(a, 1.25)), 0, 0)
+        case .orbit:
+            return (false, CGSize(width: side * CGFloat(left) * size * 0.9, height: -CGFloat(left) * size * 0.35), 1, 12 * left * Double(side), 0)
+        case .glide:
+            return (false, CGSize(width: side * CGFloat(left) * size * 1.5, height: 0), 1, 0, 0)
+        case .unfold:
+            return (false, .zero, 1, 0, -85 * left)
+        default:
+            return none
+        }
     }
 
     /// Arrival for the stage layouts that live in extensions.
