@@ -118,9 +118,10 @@ enum LyricComposition: String, CaseIterable, Identifiable {
 
     /// A remembered "automatic" choice takes precedence over a global layout.
     @MainActor
-    static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int) -> Self {
+    static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int,
+                         track: String? = nil) -> Self {
         if let remembered { return Self(rawValue: remembered) ?? matching(mood, seed: seed) }
-        return settings.resolvedComposition(for: mood, seed: seed)
+        return settings.resolvedComposition(for: mood, seed: seed, track: track)
     }
 
     /// Which composition suits a track, when the choice is left automatic.
@@ -416,4 +417,65 @@ struct EchoBackdrop: View {
         }
         .allowsHitTesting(false)
     }
+}
+
+
+// MARK: - A new layout for every song
+
+/// With the layout on Match the music, each new song takes the next layout
+/// in a fixed rotation (skipping any that don't suit the song's energy), and
+/// keeps it for as long as the app runs, so replaying a song looks the same.
+/// "Change layout every song" in Lyric style turns it off, which brings back
+/// the older choice by energy alone.
+@MainActor
+final class LyricLayoutRotation {
+    static let shared = LyricLayoutRotation()
+    static let enabledKey = "custom.rotateLayouts"
+    private static let lastKey = "custom.rotateLayoutsLast"
+
+    /// The order songs step through: contrasting looks sit next to each other.
+    static let order: [LyricComposition] = [
+        .cutout, .constellation, .editorial, .spoken, .echo, .cascade, .scattered, .constellationEditorial,
+    ]
+
+    private let defaults: UserDefaults
+    private var assigned: [String: LyricComposition] = [:]
+    private var last: LyricComposition?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        last = defaults.string(forKey: Self.lastKey).flatMap(LyricComposition.init(rawValue:))
+    }
+
+    var isEnabled: Bool {
+        defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+    }
+
+    /// Layouts that read well for a song of this energy: slow songs skip the
+    /// fast, busy ones, and the busiest songs skip the slowest.
+    static func suits(_ layout: LyricComposition, mood: TrackMood) -> Bool {
+        switch layout {
+        case .cascade, .constellation, .constellationEditorial: return mood.energy >= 0.3
+        case .echo: return mood.energy <= 0.8
+        default: return true
+        }
+    }
+
+    func layout(for track: String, mood: TrackMood) -> LyricComposition {
+        if let existing = assigned[track] { return existing }
+        let order = Self.order
+        let start = last.flatMap { order.firstIndex(of: $0) } ?? -1
+        var pick = order[(start + 1) % order.count]
+        for step in 1...order.count {
+            let candidate = order[(start + step) % order.count]
+            if Self.suits(candidate, mood: mood) { pick = candidate; break }
+        }
+        assigned[track] = pick
+        last = pick
+        defaults.set(pick.rawValue, forKey: Self.lastKey)
+        return pick
+    }
+
+    /// For tests.
+    func reset() { assigned = [:]; last = nil; defaults.removeObject(forKey: Self.lastKey) }
 }

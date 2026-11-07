@@ -465,8 +465,12 @@ final class Settings: ObservableObject {
 
     /// How to arrange a lyric line, honouring an override or letting the
     /// track choose.
-    func resolvedComposition(for mood: TrackMood, seed: Int) -> LyricComposition {
-        lyricComposition ?? LyricComposition.matching(mood, seed: seed)
+    func resolvedComposition(for mood: TrackMood, seed: Int, track: String? = nil) -> LyricComposition {
+        if let lyricComposition { return lyricComposition }
+        if let track, LyricLayoutRotation.shared.isEnabled {
+            return LyricLayoutRotation.shared.layout(for: track, mood: mood)
+        }
+        return LyricComposition.matching(mood, seed: seed)
     }
 
     /// Which GPU effect to run, if the current mode uses one. Calmer effects

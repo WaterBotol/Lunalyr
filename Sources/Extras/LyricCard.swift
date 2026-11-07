@@ -125,7 +125,8 @@ enum LyricCard {
             let words = Self.words(of: line, readings: display == .replace ? readings : nil)
             guard !line.words.isEmpty else { return Page(words: words) }
             let layout = composition ?? LyricComposition.selected(settings: .shared, remembered: remembered?.composition,
-                                                                  mood: mood, seed: index)
+                                                                  mood: mood, seed: index,
+                                                                  track: "\(track.artist)|\(track.title)")
             let animation = Animation(line: line, composition: layout, mood: mood,
                                       seed: line.wordTimed && layout.arrivalOnly ? trackSeed : index,
                                       romanized: readings, display: display)

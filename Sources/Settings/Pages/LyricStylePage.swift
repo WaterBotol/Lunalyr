@@ -52,6 +52,8 @@ struct LyricStylePage: View {
         .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
     }
 
+    @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
+
     private var layout: some View {
         Section("Layout") {
             ChoiceMenu("Layout", selection: $s.lyricComposition, selectedTitle: { $0?.title ?? "Match the music" }) {
@@ -59,6 +61,10 @@ struct LyricStylePage: View {
                 ForEach(LyricComposition.allCases) { Text($0.title).tag(Optional($0)) }
             }
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
+            if automatic {
+                Toggle("Change layout every song", isOn: $rotateLayouts)
+                InspectorCaption("Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
+            }
             RememberedStyleNote(aspect: .layout)
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)
             if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
