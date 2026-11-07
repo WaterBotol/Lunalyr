@@ -23,10 +23,10 @@ enum LyricCreditCues {
     }
 
     /// Time between one credit arriving and the next, and how long each stays.
-    static let stagger = 2.6
-    static let minimumHold = 3.4
+    static let stagger = 8.0
+    static let minimumHold = 11.0
     static let fadeIn = 0.5
-    static let fadeOut = 0.9
+    static let fadeOut = 1.5
 
     /// One cue per credit line. Credits that share a time (or have none to
     /// speak of) arrive one after another instead of piling up.
@@ -38,8 +38,8 @@ enum LyricCreditCues {
             guard !text.isEmpty, line.start.isFinite else { continue }
             let start = max(line.start, cursor)
             cursor = start + stagger
-            let hold = minimumHold + min(2.0, Double(text.count) * 0.04)
-            let spell = min(1.6, 0.1 * Double(text.count))
+            let hold = minimumHold + min(5.0, Double(text.count) * 0.12)
+            let spell = min(3.5, 0.2 * Double(text.count))
             let words = LyricsFetcher.distributeWords(in: text, from: start + 0.2, to: start + 0.2 + max(0.4, spell))
             guard !words.isEmpty else { continue }
             cues.append(Cue(id: cues.count, text: text, start: start, end: start + hold, words: words))
