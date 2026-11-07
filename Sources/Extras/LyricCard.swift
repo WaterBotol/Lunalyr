@@ -84,6 +84,8 @@ enum LyricCard {
         /// the album colours, and its first frame for stills.
         var background: LyricCardBackground?
         var backgroundStill: CGImage?
+        /// Carries a video background's own sound into the MP4.
+        var keepBackgroundSound = true
 
         var size: CGSize { aspect.size }
 

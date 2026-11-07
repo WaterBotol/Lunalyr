@@ -20,6 +20,7 @@ final class LyricCardPopoutModel: ObservableObject {
         static let aspect = "custom.lyricCardAspect"
         static let formats = "custom.lyricCardFormats"
         static let background = "custom.lyricCardBackgroundPath"
+        static let sound = "custom.lyricCardBackgroundSound"
     }
 
     @Published var rows: [Row] = []
@@ -37,6 +38,9 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var artist = ""
     /// A picture, GIF or video behind the lyrics; nil keeps the album look.
     @Published var background: LyricCardBackground? { didSet { schedulePreview() } }
+    @Published var keepSound: Bool {
+        didSet { UserDefaults.standard.set(keepSound, forKey: Keys.sound) }
+    }
 
     private var previewTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
@@ -46,6 +50,7 @@ final class LyricCardPopoutModel: ObservableObject {
         aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? .portrait
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
+        keepSound = defaults.object(forKey: Keys.sound) as? Bool ?? true
         if let path = defaults.string(forKey: Keys.background), FileManager.default.fileExists(atPath: path) {
             Task { [weak self] in
                 let loaded = await LyricCardBackground.load(URL(fileURLWithPath: path))
@@ -124,6 +129,7 @@ final class LyricCardPopoutModel: ObservableObject {
                                                rows: selection.sorted(), aspect: aspect)
         content?.background = background
         content?.backgroundStill = background?.first
+        content?.keepBackgroundSound = keepSound
         return content
     }
 
@@ -265,6 +271,9 @@ struct LyricCardPopoutView: View {
                 Spacer(minLength: 0)
                 if model.background != nil { Button("Remove") { model.clearBackground() }.controlSize(.small) }
                 Button("Choose…") { model.chooseBackground() }.controlSize(.small)
+            }
+            if let background = model.background, background.kind == .video, background.hasAudio {
+                Toggle("Keep the video’s sound in the MP4", isOn: $model.keepSound).controlSize(.small)
             }
             if let background = model.background, background.isAnimated {
                 Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption)

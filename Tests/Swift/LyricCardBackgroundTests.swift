@@ -113,4 +113,47 @@ final class LyricCardBackgroundTests: XCTestCase {
         let loaded = await LyricCardBackground.load(url)
         XCTAssertNil(loaded)
     }
+
+    private func tone(seconds: Double) throws -> URL {
+        let url = folder.appendingPathComponent("tone.m4a")
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+        let file = try AVAudioFile(forWriting: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100,
+                                                               AVNumberOfChannelsKey: 1])
+        let frames = AVAudioFrameCount(44100 * seconds)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        buffer.frameLength = frames
+        for i in 0..<Int(frames) { buffer.floatChannelData![0][i] = Float(sin(Double(i) * 2 * .pi * 440 / 44100)) * 0.3 }
+        try file.write(from: buffer)
+        return url
+    }
+
+    func testAVideoBackgroundsSoundIsCarriedIntoTheMP4AndLooped() async throws {
+        // A background video with a 0.6 s tone under it.
+        let silent = folder.appendingPathComponent("silent.mp4")
+        let made = await LyricCard.video(content(), to: silent)
+        XCTAssertTrue(made)
+        let muxed = await LyricCard.addSound(from: try tone(seconds: 0.6), to: silent)
+        XCTAssertTrue(muxed)
+        let loaded = await LyricCardBackground.load(silent)
+        let background = try XCTUnwrap(loaded)
+        XCTAssertTrue(background.hasAudio)
+
+        var card = content()
+        card.background = background
+        card.backgroundStill = background.first
+        let directory = folder.appendingPathComponent("out")
+        let files = await LyricCard.export(card, formats: [.mp4], to: directory)
+        let file = try XCTUnwrap(files.first?.1)
+        let asset = AVURLAsset(url: file)
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audio.count, 1)
+        let sound = try await audio[0].load(.timeRange).duration.seconds
+        let video = try await asset.load(.duration).seconds
+        XCTAssertEqual(sound, video, accuracy: 0.3)
+
+        card.keepBackgroundSound = false
+        let quiet = await LyricCard.export(card, formats: [.mp4], to: folder.appendingPathComponent("quiet"))
+        let silentTracks = try await AVURLAsset(url: try XCTUnwrap(quiet.first?.1)).loadTracks(withMediaType: .audio)
+        XCTAssertTrue(silentTracks.isEmpty)
+    }
 }

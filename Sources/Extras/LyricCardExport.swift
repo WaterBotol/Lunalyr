@@ -91,6 +91,51 @@ extension LyricCard {
         return writer.status == .completed
     }
 
+    /// Lays `soundURL`'s audio under the finished video at `videoURL`, looping
+    /// it (or cutting it) to the video's length, and replaces the file. The
+    /// video is copied, not re-encoded. False, with the file untouched, when
+    /// there is no sound or it cannot be carried into an MP4.
+    @discardableResult
+    static func addSound(from soundURL: URL, to videoURL: URL) async -> Bool {
+        let video = AVURLAsset(url: videoURL)
+        let sound = AVURLAsset(url: soundURL)
+        guard let videoTrack = try? await video.loadTracks(withMediaType: .video).first,
+              let soundTrack = try? await sound.loadTracks(withMediaType: .audio).first,
+              let length = try? await video.load(.duration), length.seconds > 0,
+              let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return false }
+        let composition = AVMutableComposition()
+        guard let outVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
+              let outSound = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        else { return false }
+        do {
+            try outVideo.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: videoTrack, at: .zero)
+            var cursor = CMTime.zero
+            while cursor < length {
+                let piece = CMTimeMinimum(soundLength, CMTimeSubtract(length, cursor))
+                try outSound.insertTimeRange(CMTimeRange(start: .zero, duration: piece), of: soundTrack, at: cursor)
+                cursor = CMTimeAdd(cursor, piece)
+            }
+        } catch { return false }
+        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else { return false }
+        let output = videoURL.deletingLastPathComponent().appendingPathComponent("sound-\(UUID().uuidString).mp4")
+        session.outputURL = output
+        session.outputFileType = .mp4
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            session.exportAsynchronously { done.resume() }
+        }
+        guard session.status == .completed else {
+            try? FileManager.default.removeItem(at: output)
+            return false
+        }
+        do {
+            _ = try FileManager.default.replaceItemAt(videoURL, withItemAt: output)
+            return true
+        } catch {
+            try? FileManager.default.removeItem(at: output)
+            return false
+        }
+    }
+
     private static func pixelBuffer(from image: CGImage, size: CGSize, pool: CVPixelBufferPool?) -> CVPixelBuffer? {
         var buffer: CVPixelBuffer?
         if let pool {
@@ -127,7 +172,13 @@ extension LyricCard {
             case .gif:
                 if let data = await gif(content), (try? data.write(to: file, options: .atomic)) != nil { made.append((format, file)) }
             case .mp4:
-                if await video(content, to: file, progress: share) { made.append((format, file)) }
+                if await video(content, to: file, progress: share) {
+                    made.append((format, file))
+                    if content.keepBackgroundSound, let background = content.background, background.kind == .video, background.hasAudio {
+                        // Best effort: the card stays silent if the sound cannot be carried over.
+                        _ = await addSound(from: background.url, to: file)
+                    }
+                }
             }
             share(1)
         }

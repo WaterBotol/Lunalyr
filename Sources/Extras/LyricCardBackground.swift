@@ -20,6 +20,8 @@ final class LyricCardBackground: @unchecked Sendable {
     let duration: Double
     /// The first frame, used for stills and the preview.
     let first: CGImage
+    /// Whether a video background carries sound.
+    let hasAudio: Bool
 
     private let source: CGImageSource?
     private let delays: [Double]
@@ -30,9 +32,9 @@ final class LyricCardBackground: @unchecked Sendable {
     var isAnimated: Bool { kind != .image }
     var name: String { url.lastPathComponent }
 
-    private init(url: URL, kind: Kind, duration: Double, first: CGImage, source: CGImageSource? = nil,
+    private init(url: URL, kind: Kind, duration: Double, first: CGImage, hasAudio: Bool = false, source: CGImageSource? = nil,
                  delays: [Double] = [], generator: AVAssetImageGenerator? = nil) {
-        self.url = url; self.kind = kind; self.duration = duration; self.first = first
+        self.url = url; self.kind = kind; self.duration = duration; self.first = first; self.hasAudio = hasAudio
         self.source = source; self.delays = delays; self.generator = generator
     }
 
@@ -82,7 +84,9 @@ final class LyricCardBackground: @unchecked Sendable {
         generator.requestedTimeToleranceBefore = tolerance
         generator.requestedTimeToleranceAfter = tolerance
         guard let first = try? await generator.image(at: .zero).image else { return nil }
-        return LyricCardBackground(url: url, kind: .video, duration: length.seconds, first: first, generator: generator)
+        let sound = ((try? await asset.loadTracks(withMediaType: .audio)) ?? []).isEmpty == false
+        return LyricCardBackground(url: url, kind: .video, duration: length.seconds, first: first, hasAudio: sound,
+                                   generator: generator)
     }
 
     /// The frame showing `time` seconds in, looping when the clip is shorter.
