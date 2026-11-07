@@ -277,24 +277,18 @@ struct ExtrasInspector: View {
                 }
             }
             Section("Share") {
-                ChoiceMenu("Lines before", selection: $extras.lyricCardLinesBefore, selectedTitle: { String($0) }) {
-                    ForEach(LunalyrExtras.lyricCardLineRange, id: \.self) { Text(String($0)).tag($0) }
-                }
-                ChoiceMenu("Lines after", selection: $extras.lyricCardLinesAfter, selectedTitle: { String($0) }) {
-                    ForEach(LunalyrExtras.lyricCardLineRange, id: \.self) { Text(String($0)).tag($0) }
-                }
-                ChoiceMenu("GIF layout", selection: $extras.lyricCardComposition,
+                ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
                            selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
                     Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
                     ForEach(LyricComposition.allCases) { Text($0.title).tag(Optional($0)) }
                 }
                 LabeledContent {
-                    Button(LunalyrExtras.Titles.copyCard) { extras.copyLyricCard() }
+                    Button("Open Lyric Card…") { extras.copyLyricCard() }
                         .disabled(playing.current == nil)
                 } label: {
                     Text("Lyric card")
                 }
-                InspectorCaption("Copies a GIF with the cover and the selected lines. Synced lyrics play in order, starting with the first selected line.")
+                InspectorCaption("Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
                 if playing.current == nil {
                     DisabledReason("A card can be copied while a song is playing.")
                 }
