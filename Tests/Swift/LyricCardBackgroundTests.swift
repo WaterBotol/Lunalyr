@@ -156,4 +156,40 @@ final class LyricCardBackgroundTests: XCTestCase {
         let silentTracks = try await AVURLAsset(url: try XCTUnwrap(quiet.first?.1)).loadTracks(withMediaType: .audio)
         XCTAssertTrue(silentTracks.isEmpty)
     }
+
+    func testAnyAudioFileCanBeLaidUnderTheMP4EvenWhenItNeedsEncoding() async throws {
+        // A WAV cannot be copied into an MP4, so it has to be encoded.
+        let wav = folder.appendingPathComponent("tone.wav")
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+        var file: AVAudioFile? = try AVAudioFile(forWriting: wav, settings: format.settings)
+        let frames = AVAudioFrameCount(44100 * 0.5)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        buffer.frameLength = frames
+        for i in 0..<Int(frames) { buffer.floatChannelData![0][i] = Float(sin(Double(i) * 2 * .pi * 330 / 44100)) * 0.3 }
+        try file?.write(from: buffer)
+        file = nil // closes the file
+
+        var card = content()
+        card.soundFile = wav
+        XCTAssertEqual(card.soundSource, wav)
+        let directory = folder.appendingPathComponent("wavout")
+        var notes: [String] = []
+        let files = await LyricCard.export(card, formats: [.mp4], to: directory, notes: { notes.append($0) })
+        XCTAssertTrue(notes.isEmpty, "\(notes)")
+        let asset = AVURLAsset(url: try XCTUnwrap(files.first?.1))
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audio.count, 1)
+        let video = try await asset.load(.duration).seconds
+        let sound = try await audio[0].load(.timeRange).duration.seconds
+        XCTAssertEqual(sound, video, accuracy: 0.4)
+    }
+
+    func testAFileWithNoSoundIsReportedNotSilentlyIgnored() async throws {
+        var card = content()
+        card.soundFile = folder.appendingPathComponent("missing.m4a")
+        var notes: [String] = []
+        _ = await LyricCard.export(card, formats: [.mp4], to: folder.appendingPathComponent("none"), notes: { notes.append($0) })
+        XCTAssertEqual(notes.count, 1)
+        XCTAssertTrue(notes[0].contains("missing.m4a"))
+    }
 }

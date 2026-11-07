@@ -48,3 +48,31 @@ final class StageLyricSnapshotTests: XCTestCase {
     }
 }
 
+@MainActor
+final class HingeSnapshotTests: XCTestCase {
+    func testHingeSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] else { return }
+        let text = "Dance under stars rain over the city can fly".split(separator: " ")
+        let words = text.enumerated().map { i, w in LyricsFetcher.Word(text: String(w), start: 1 + Double(i) * 0.6, end: 1.5 + Double(i) * 0.6) }
+        let times: [Double] = [1.3, 2.0, 2.5, 3.0, 3.6, 4.4, 5.2, 6.4]
+        let sheet = LazyVGrid(columns: [GridItem(.fixed(760)), GridItem(.fixed(760))], spacing: 2) {
+            ForEach(times, id: \.self) { t in
+                ZStack {
+                    Color(red: 0.99, green: 0.98, blue: 0.97)
+                    LyricLineView(words: words, time: t, stageSize: CGSize(width: 760, height: 420), baseSize: 40, mood: .neutral,
+                                  composition: .hinge, seed: 3, lineEnd: 9, exitStart: 9,
+                                  glue: [Bool](repeating: false, count: words.count))
+                        .environment(\.lyricInk, { var i = LyricInk(); i.base = LyricInkSample(rest: Color(red: 0.6, green: 0.3, blue: 0.33), sung: Color(red: 0.6, green: 0.3, blue: 0.33), glow: .clear, reading: .gray, sweeps: false); return i }())
+                        .frame(width: 760, height: 420)
+                    Text(String(format: "%.1fs", t)).font(.system(size: 12)).foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(6)
+                }.frame(width: 760, height: 420)
+            }
+        }.frame(width: 1522)
+        let renderer = ImageRenderer(content: sheet)
+        renderer.scale = 0.5
+        let image = try XCTUnwrap(renderer.nsImage)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/hinge.png"))
+    }
+}

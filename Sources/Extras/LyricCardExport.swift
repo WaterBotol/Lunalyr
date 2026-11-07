@@ -14,6 +14,15 @@ import UniformTypeIdentifiers
 // whole song costs no more memory than one line. PNG is one crisp still of
 // all the selected lines, drawn at twice the card's size.
 
+extension LyricCard.Content {
+    /// Where the MP4's sound comes from, if anywhere.
+    var soundSource: URL? {
+        if let soundFile { return soundFile }
+        guard keepBackgroundSound, let background, background.kind == .video, background.hasAudio else { return nil }
+        return background.url
+    }
+}
+
 extension LyricCard {
     static let videoFramesPerSecond = 30.0
 
@@ -116,14 +125,22 @@ extension LyricCard {
                 cursor = CMTimeAdd(cursor, piece)
             }
         } catch { return false }
-        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else { return false }
         let output = videoURL.deletingLastPathComponent().appendingPathComponent("sound-\(UUID().uuidString).mp4")
-        session.outputURL = output
-        session.outputFileType = .mp4
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            session.exportAsynchronously { done.resume() }
+        // Copy the video as it is; if the sound will not go into an MP4 as it
+        // is (WAV, MP3, some phone formats), encode the lot instead.
+        var done = false
+        for preset in [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality] where !done {
+            guard let session = AVAssetExportSession(asset: composition, presetName: preset) else { continue }
+            try? FileManager.default.removeItem(at: output)
+            session.outputURL = output
+            session.outputFileType = .mp4
+            await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
+                session.exportAsynchronously { finished.resume() }
+            }
+            done = session.status == .completed
+            if !done { print("LYRIC-SOUND preset \(preset) failed: \(String(describing: session.error))") }
         }
-        guard session.status == .completed else {
+        guard done else {
             try? FileManager.default.removeItem(at: output)
             return false
         }
@@ -157,6 +174,7 @@ extension LyricCard {
 
     /// Makes each chosen format, writing them to `directory`. Returns the files made.
     static func export(_ content: Content, formats: Set<CardFormat>, to directory: URL,
+                       notes: @escaping (String) -> Void = { _ in },
                        progress: @escaping (Double) -> Void = { _ in }) async -> [(CardFormat, URL)] {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
@@ -174,9 +192,11 @@ extension LyricCard {
             case .mp4:
                 if await video(content, to: file, progress: share) {
                     made.append((format, file))
-                    if content.keepBackgroundSound, let background = content.background, background.kind == .video, background.hasAudio {
-                        // Best effort: the card stays silent if the sound cannot be carried over.
-                        _ = await addSound(from: background.url, to: file)
+                    if let source = content.soundSource {
+                        // Best effort: the card stays silent, and says so, if the sound cannot be carried over.
+                        if !(await addSound(from: source, to: file)) {
+                            notes("The MP4 has no sound: couldn’t read the audio in \(source.lastPathComponent)")
+                        }
                     }
                 }
             }

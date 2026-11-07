@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - The lyric card window
 //
@@ -38,6 +39,8 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var artist = ""
     /// A picture, GIF or video behind the lyrics; nil keeps the album look.
     @Published var background: LyricCardBackground? { didSet { schedulePreview() } }
+    /// Sound chosen to go under the MP4 (any audio file, or a video's own sound).
+    @Published var soundFile: URL?
     @Published var keepSound: Bool {
         didSet { UserDefaults.standard.set(keepSound, forKey: Keys.sound) }
     }
@@ -68,6 +71,26 @@ final class LyricCardPopoutModel: ObservableObject {
         panel.prompt = "Use as Background"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         setBackground(url)
+    }
+
+    func chooseSound() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio, .movie]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a sound for the MP4: an audio file, or a video whose sound to use"
+        panel.prompt = "Use This Sound"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        soundFile = url
+    }
+
+    /// Dropped or chosen files: audio goes under the card, anything else behind it.
+    func accept(_ url: URL) {
+        if let type = UTType(filenameExtension: url.pathExtension.lowercased()), type.conforms(to: .audio) {
+            soundFile = url
+        } else {
+            setBackground(url)
+        }
     }
 
     func setBackground(_ url: URL) {
@@ -130,6 +153,7 @@ final class LyricCardPopoutModel: ObservableObject {
         content?.background = background
         content?.backgroundStill = background?.first
         content?.keepBackgroundSound = keepSound
+        content?.soundFile = soundFile
         return content
     }
 
@@ -169,11 +193,13 @@ final class LyricCardPopoutModel: ObservableObject {
         status = "Making your card…"
         let directory = folder ?? LyricCard.exportDirectory
         exportTask = Task { [weak self] in
-            let files = await LyricCard.export(content, formats: chosen, to: directory) { value in
+            var warnings: [String] = []
+            let files = await LyricCard.export(content, formats: chosen, to: directory, notes: { warnings.append($0) }) { value in
                 Task { @MainActor in self?.progress = value }
             }
             guard let self, !Task.isCancelled else { return }
             self.progress = nil
+            defer { if !warnings.isEmpty { self.status += "\n" + warnings.joined(separator: "\n") } }
             guard !files.isEmpty else { self.status = "Couldn’t make the card"; return }
             let names = files.map { $0.0.title }.joined(separator: ", ")
             if folder == nil {
@@ -258,7 +284,7 @@ struct LyricCardPopoutView: View {
                 guard let provider = providers.first else { return false }
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url else { return }
-                    Task { @MainActor in model.setBackground(url) }
+                    Task { @MainActor in model.accept(url) }
                 }
                 return true
             }
@@ -275,6 +301,19 @@ struct LyricCardPopoutView: View {
             if let background = model.background, background.kind == .video, background.hasAudio {
                 Toggle("Keep the video’s sound in the MP4", isOn: $model.keepSound).controlSize(.small)
             }
+            Text("Sound").lunalyrText(.groupTitle)
+            HStack(spacing: 8) {
+                Text(model.soundFile?.lastPathComponent
+                     ?? (model.background?.kind == .video && model.background?.hasAudio == true && model.keepSound
+                         ? "The video’s own sound" : "None"))
+                    .lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(model.soundFile == nil && !(model.background?.hasAudio == true && model.keepSound) ? .secondary : .primary)
+                Spacer(minLength: 0)
+                if model.soundFile != nil { Button("Remove") { model.soundFile = nil }.controlSize(.small) }
+                Button("Choose…") { model.chooseSound() }.controlSize(.small)
+            }
+            Text("Sound goes into the MP4. A GIF can’t carry sound, so make an MP4 when you want it. Drop an audio file on the preview to add it.")
+                .lunalyrText(.caption)
             if let background = model.background, background.isAnimated {
                 Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption)
             } else if model.background == nil {

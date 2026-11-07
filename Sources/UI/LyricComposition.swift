@@ -180,6 +180,8 @@ struct LyricLineView: View {
     var firstRunOnly: Double?
     /// Words from this time on always get the Cutout · Highlight tile.
     var highlightFrom: Double?
+    /// The previous line's words, for layouts that keep them in view.
+    var prior: [String] = []
     /// Rolling stages: room kept at the foot, the onset after the window,
     /// and each word's place in the song (its colour).
     var bottomInset: CGFloat = 0
@@ -240,7 +242,8 @@ struct LyricLineView: View {
             }
             if composition.fillsStage {
                 StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
-                               composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly)
+                               composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly,
+                               prior: prior)
             } else if composition.arrivalOnly {
                 SpokenTypographyView(words: words, time: time, baseSize: baseSize, mood: mood,
                                      composition: composition, seed: seed, accent: accent, energy: energy, readings: readings,

@@ -86,6 +86,9 @@ enum LyricCard {
         var backgroundStill: CGImage?
         /// Carries a video background's own sound into the MP4.
         var keepBackgroundSound = true
+        /// A sound to put under the MP4: any audio file, or a video whose sound is
+        /// taken. It takes the place of a video background's own sound.
+        var soundFile: URL?
 
         var size: CGSize { aspect.size }
 
