@@ -576,29 +576,12 @@ final class StarTrailsTests: XCTestCase {
         }
     }
 
-    func testAlbumTrailsStayDistinctAndBrightAgainstTheSky() throws {
-        let singleHue = stride(from: 0.0, to: 1.0, by: 1.0 / 12).map { hue in
-            AlbumWallpaperPalette(grid: Array(repeating: SIMD3(hue, 0.9, 0.85), count: 9))
+    func testAlbumTrailsKeepTheirOriginalColours() throws {
+        let covers = [RenderPalette.warm, .blue, .vivid, .earth, .bw].compactMap(\.palette)
+        XCTAssertFalse(covers.isEmpty)
+        for cover in covers {
+            XCTAssertEqual(StarTrailsSky.album(cover).trails, StarTrailsSky.original.trails)
         }
-        let varied = [RenderPalette.warm, .blue, .vivid, .earth].compactMap(\.palette)
-        for cover in singleHue + varied {
-            let sky = try XCTUnwrap(AlbumColourHarmony(cover.artworkStops.map {
-                Perceptual.oklab(sRGB: SIMD3<Double>($0))
-            }).backgroundHue)
-            let trails = StarTrailsSky.album(cover).trails.map { core in
-                let rgb = SIMD3(core.x, core.y, core.z)
-                XCTAssertEqual(core.w, 1)
-                let contrast = Perceptual.contrast(Perceptual.luminance(sRGB: rgb), StarTrailsSky.brightNebulaLuminance)
-                XCTAssertGreaterThanOrEqual(contrast, 2.99)
-                XCTAssertGreaterThan(max(rgb.x, rgb.y, rgb.z) - min(rgb.x, rgb.y, rgb.z), 0.38)
-                return Perceptual.oklab(sRGB: rgb)
-            }
-            XCTAssertGreaterThan(LyricHighlight.hueDistance(trails[0].hue, trails[1].hue), .pi * 0.55)
-            for trail in trails {
-                XCTAssertGreaterThan(LyricHighlight.hueDistance(trail.hue, sky), .pi * 0.6)
-            }
-        }
-        XCTAssertEqual(sky(.bw).trails, StarTrailsSky.original.trails)
     }
 
     @MainActor

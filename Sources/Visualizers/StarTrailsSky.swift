@@ -36,15 +36,8 @@ struct StarTrailsSky: Equatable {
             let tint = luminance > 0.0005 ? linear * (gain / luminance) : SIMD3(repeating: gain)
             return SIMD4(tint.x, tint.y, tint.z, 1)
         }
-        let harmony = AlbumColourHarmony(palette.artworkStops.map { Perceptual.oklab(sRGB: SIMD3<Double>($0)) })
-        // Two sides of a triad, with room to match a nearby cover accent
-        // while staying at least 100 degrees away from the sky and each other.
-        let turn = 2 * Double.pi / 3
-        let trails = [turn, -turn].enumerated().map { index, turn in
-            guard let hue = harmony.accentHue(turn: turn, tolerance: .pi / 18) else { return originalTrails[index] }
-            let core = Perceptual.sRGB(vividCore(hue: hue))
-            return SIMD4(core.x, core.y, core.z, 1)
-        }
+        // Only the sky follows the cover: the trails keep their original colours.
+        let trails = originalTrails
         return StarTrailsSky(colours: tints + trails)
     }
 
