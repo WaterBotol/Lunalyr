@@ -20,6 +20,10 @@ enum LyricCreditCues {
         var start: Double
         var end: Double
         var words: [LyricsFetcher.Word]
+        /// Set on the opening "Title - Artist" cue, which is drawn with the
+        /// artist picked out.
+        var title: String? = nil
+        var artist: String? = nil
     }
 
     /// Time between one credit arriving and the next, and how long each stays.
@@ -33,30 +37,25 @@ enum LyricCreditCues {
     static func cues(in lines: [LyricsFetcher.Line], title: String = "", artist: String = "") -> [Cue] {
         var cues: [Cue] = []
         var cursor = 0.0
-        // The song's title and artist appear once: the lyric file's own
-        // heading if it has one, else one made here. Further headings, bare
-        // names and repeated credits are dropped.
+        // The song's title and artist open every song, once, drawn here:
+        // the lyric file's own headings, bare names and repeated credits
+        // are dropped in its favour.
         let names = LyricCredits.TrackNames(title: title, artist: artist)
         var credits: [LyricsFetcher.Line] = []
-        var seenHeading = false
         var seenText = Set<String>()
         for line in lines where line.credit == true {
-            if names.isHeading(line.text) {
-                guard !seenHeading else { continue }
-                seenHeading = true
-            } else if names.isLoneName(line.text) {
-                continue
-            }
+            guard !names.isHeading(line.text), !names.isLoneName(line.text) else { continue }
             guard seenText.insert(LyricQuery.normalize(line.text)).inserted else { continue }
             credits.append(line)
         }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTitle.isEmpty, !seenHeading {
-            let artistName = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let artistName = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasHeading = !trimmedTitle.isEmpty
+        if hasHeading {
             let heading = artistName.isEmpty ? trimmedTitle : "\(trimmedTitle) - \(artistName)"
             credits.insert(LyricsFetcher.Line(start: 0.4, end: 0.41, text: heading, words: [], isInstrumental: true, credit: true), at: 0)
         }
-        for line in credits {
+        for (position, line) in credits.enumerated() {
             let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty, line.start.isFinite else { continue }
             let start = max(line.start, cursor)
@@ -66,7 +65,9 @@ enum LyricCreditCues {
             let hold = 0.2 + max(0.4, spell) + (minimumHold + min(5.0, Double(text.count) * 0.12) - 0.2 - max(0.4, spell)) / 2
             let words = LyricsFetcher.distributeWords(in: text, from: start + 0.2, to: start + 0.2 + max(0.4, spell))
             guard !words.isEmpty else { continue }
-            cues.append(Cue(id: cues.count, text: text, start: start, end: start + hold, words: words))
+            let opening = hasHeading && position == 0
+            cues.append(Cue(id: cues.count, text: text, start: start, end: start + hold, words: words,
+                            title: opening ? trimmedTitle : nil, artist: opening && !artistName.isEmpty ? artistName : nil))
         }
         return cues
     }
@@ -88,6 +89,9 @@ struct CreditsLayer: View {
     let seed: Int
     let composition: LyricComposition
     let mood: TrackMood
+    /// The lyric colour, and the colour the artist's name is picked out in.
+    var ink: Color = .white
+    var accent: Color = .yellow
 
     var body: some View {
         let style = BackingVocals.style(forLead: composition)
@@ -96,9 +100,16 @@ struct CreditsLayer: View {
             ForEach(cues) { cue in
                 let level = LyricCreditCues.level(of: cue, at: time)
                 if level > 0.004 {
-                    LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize, mood: mood,
-                                  composition: style, seed: seed &+ cue.id, presence: 1,
-                                  lineEnd: cue.end, exitStart: cue.end)
+                    Group {
+                        if let artist = cue.artist {
+                            CreditHeading(title: cue.title ?? "", artist: artist, age: time - cue.start, baseSize: baseSize,
+                                          mood: mood, ink: ink, accent: accent)
+                        } else {
+                            LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize, mood: mood,
+                                          composition: style, seed: seed &+ cue.id, presence: 1,
+                                          lineEnd: cue.end, exitStart: cue.end)
+                        }
+                    }
                         .frame(width: box.width, height: box.height)
                         .opacity(level)
                         .shadow(color: .black.opacity(0.3 * level), radius: 6)
@@ -112,5 +123,31 @@ struct CreditsLayer: View {
         .frame(width: stageSize.width, height: stageSize.height)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// "Title - Artist": the title in the lyric colour, the artist picked out in
+/// the accent colour and a heavier weight, arriving a moment after it.
+struct CreditHeading: View {
+    let title: String
+    let artist: String
+    /// Seconds since the cue began.
+    let age: Double
+    let baseSize: CGFloat
+    let mood: TrackMood
+    let ink: Color
+    let accent: Color
+
+    var body: some View {
+        let font = Settings.shared.lyricFont(size: baseSize * 0.62, hero: false, mood: mood)
+        let first = Easing.smoothstep((age - 0.15) / 0.6)
+        let second = Easing.smoothstep((age - 0.8) / 0.7)
+        (Text(title).foregroundStyle(ink.opacity(first))
+            + Text("  –  ").foregroundStyle(ink.opacity(0.55 * second))
+            + Text(artist).bold().foregroundStyle(accent.opacity(second)))
+            .font(font)
+            .multilineTextAlignment(.center)
+            .minimumScaleFactor(0.5)
+            .lineLimit(2)
     }
 }

@@ -115,4 +115,10 @@ final class CreditsLayerTests: XCTestCase {
         let bare = LyricCreditCues.cues(in: [credit("Human Nature", 0), credit("Yot Club", 1)], title: "Human Nature", artist: "Yot Club")
         XCTAssertEqual(bare.map(\.text), ["Human Nature - Yot Club"])
     }
+
+    func testOpeningCueNamesTheArtistForHighlighting() {
+        let cues = LyricCreditCues.cues(in: [], title: "Human Nature", artist: "Yot Club")
+        XCTAssertEqual(cues.first?.title, "Human Nature")
+        XCTAssertEqual(cues.first?.artist, "Yot Club")
+    }
 }

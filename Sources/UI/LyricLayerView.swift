@@ -291,7 +291,7 @@ struct LyricLayer: View {
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
                 .overlay {
-                    creditsOverlay(lines, time: time)
+                    creditsOverlay(lines, time: time, ink: ink)
                 }
                 .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
@@ -302,7 +302,7 @@ struct LyricLayer: View {
     }
 
     @ViewBuilder
-    private func creditsOverlay(_ scene: SceneLines, time: Double) -> some View {
+    private func creditsOverlay(_ scene: SceneLines, time: Double, ink: LyricInk) -> some View {
         if LyricCreditCues.isOn {
             let cues = LyricCreditCues.cues(in: scene.lines, title: nowPlaying.current?.title ?? "",
                                             artist: nowPlaying.current?.artist ?? "")
@@ -310,7 +310,7 @@ struct LyricLayer: View {
                 let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
                 CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
                              baseSize: baseSize, seed: nowPlaying.current.map { "\($0.artist)|\($0.title)".hashValue } ?? 0,
-                             composition: composition(at: first), mood: mood)
+                             composition: composition(at: first), mood: mood, ink: ink.base.rest, accent: accent)
             }
         }
     }
