@@ -422,16 +422,19 @@ struct EchoBackdrop: View {
 
 // MARK: - A new layout for every song
 
-/// With the layout on Match the music, each new song takes the next layout
-/// in a fixed rotation (skipping any that don't suit the song's energy), and
-/// keeps it for as long as the app runs, so replaying a song looks the same.
-/// "Change layout every song" in Lyric style turns it off, which brings back
-/// the older choice by energy alone.
+/// With the layout on Match the music, each new song takes the next layout in
+/// a rotation you set up: which layouts take part, and how many songs in a
+/// row each one gets (0 leaves it out). Layouts that don't suit a song's
+/// energy are skipped for that song. A song keeps its layout for as long as
+/// the app runs, so replaying it looks the same. "Change layout every song"
+/// off brings back the older choice by energy alone.
 @MainActor
-final class LyricLayoutRotation {
+final class LyricLayoutRotation: ObservableObject {
     static let shared = LyricLayoutRotation()
     static let enabledKey = "custom.rotateLayouts"
-    private static let lastKey = "custom.rotateLayoutsLast"
+    private static let countsKey = "custom.rotateLayoutCounts"
+    private static let cursorKey = "custom.rotateLayoutsCursor"
+    static let maximumCount = 5
 
     /// The order songs step through: contrasting looks sit next to each other.
     static let order: [LyricComposition] = [
@@ -440,15 +443,34 @@ final class LyricLayoutRotation {
 
     private let defaults: UserDefaults
     private var assigned: [String: LyricComposition] = [:]
-    private var last: LyricComposition?
+    private var cursor: Int
+
+    /// Songs in a row per layout; a layout missing here gets 1.
+    @Published private(set) var counts: [LyricComposition: Int]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        last = defaults.string(forKey: Self.lastKey).flatMap(LyricComposition.init(rawValue:))
+        cursor = defaults.integer(forKey: Self.cursorKey)
+        let saved = defaults.dictionary(forKey: Self.countsKey) as? [String: Int] ?? [:]
+        counts = Dictionary(uniqueKeysWithValues: saved.compactMap { key, value in
+            LyricComposition(rawValue: key).map { ($0, min(max(value, 0), Self.maximumCount)) }
+        })
     }
 
     var isEnabled: Bool {
         defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+    }
+
+    func count(for layout: LyricComposition) -> Int { counts[layout] ?? 1 }
+
+    func setCount(_ value: Int, for layout: LyricComposition) {
+        counts[layout] = min(max(value, 0), Self.maximumCount)
+        defaults.set(Dictionary(uniqueKeysWithValues: counts.map { ($0.key.rawValue, $0.value) }), forKey: Self.countsKey)
+    }
+
+    /// The layouts in turn, each as many times as its count says.
+    var sequence: [LyricComposition] {
+        Self.order.flatMap { Array(repeating: $0, count: count(for: $0)) }
     }
 
     /// Layouts that read well for a song of this energy: slow songs skip the
@@ -463,19 +485,30 @@ final class LyricLayoutRotation {
 
     func layout(for track: String, mood: TrackMood) -> LyricComposition {
         if let existing = assigned[track] { return existing }
-        let order = Self.order
-        let start = last.flatMap { order.firstIndex(of: $0) } ?? -1
-        var pick = order[(start + 1) % order.count]
-        for step in 1...order.count {
-            let candidate = order[(start + step) % order.count]
-            if Self.suits(candidate, mood: mood) { pick = candidate; break }
+        let turns = sequence
+        guard !turns.isEmpty else {
+            // Every layout is switched off: fall back to the energy match.
+            return LyricComposition.matching(mood, seed: Self.stableSeed(track))
         }
+        var pick = turns[(cursor + 1) % turns.count], at = (cursor + 1) % turns.count
+        for step in 1...turns.count {
+            let index = (cursor + step) % turns.count
+            if Self.suits(turns[index], mood: mood) { pick = turns[index]; at = index; break }
+        }
+        cursor = at
+        defaults.set(cursor, forKey: Self.cursorKey)
         assigned[track] = pick
-        last = pick
-        defaults.set(pick.rawValue, forKey: Self.lastKey)
         return pick
     }
 
+    private static func stableSeed(_ text: String) -> Int { TrackMood.seed(title: text, artist: "") }
+
     /// For tests.
-    func reset() { assigned = [:]; last = nil; defaults.removeObject(forKey: Self.lastKey) }
+    func reset() {
+        assigned = [:]
+        cursor = 0
+        counts = [:]
+        defaults.removeObject(forKey: Self.cursorKey)
+        defaults.removeObject(forKey: Self.countsKey)
+    }
 }

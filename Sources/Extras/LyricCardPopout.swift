@@ -241,6 +241,10 @@ struct LyricCardPopoutView: View {
                 }
             }
 
+            if model.formats.contains(.png) && model.selection.count > LyricCard.Content.stillLineLimit {
+                Text("The PNG shows the first \(LyricCard.Content.stillLineLimit) lines. MP4 and GIF play them all.")
+                    .lunalyrText(.caption)
+            }
             Spacer(minLength: 0)
             if let progress = model.progress {
                 ProgressView(value: progress)

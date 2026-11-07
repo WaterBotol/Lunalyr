@@ -74,6 +74,19 @@ final class LyricCardFormatsTests: XCTestCase {
         XCTAssertNotNil(board.pasteboardItems?.last?.data(forType: .png), "the PNG also travels as image data")
     }
 
+    func testAStillHoldsAtMostThreeLinesOneUnderAnother() {
+        var many = content(aspect: .portrait)
+        let page = many.pages[0]
+        many.pages = (0..<6).map { index in LyricCard.Page(words: ["Line", "\(index)"], animation: page.animation) }
+        let still = many.stillPage
+        XCTAssertEqual(still.words.filter { $0 == LyricCard.lineBreak }.count, 2)
+        XCTAssertEqual(still.words.filter { $0 == "Line" }.count, 3)
+        XCTAssertFalse(still.words.contains("3"))
+        var one = many
+        one.pages = [many.pages[0]]
+        XCTAssertFalse(one.stillPage.words.contains(LyricCard.lineBreak))
+    }
+
     /// Writes one PNG per shape (set LUNALYR_CARD_PREVIEW_DIR) to look at.
     func testWritePreviews() throws {
         guard let path = ProcessInfo.processInfo.environment["LUNALYR_CARD_PREVIEW_DIR"]

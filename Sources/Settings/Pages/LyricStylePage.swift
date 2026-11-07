@@ -53,6 +53,7 @@ struct LyricStylePage: View {
     }
 
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
+    @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
         Section("Layout") {
@@ -64,6 +65,24 @@ struct LyricStylePage: View {
             if automatic {
                 Toggle("Change layout every song", isOn: $rotateLayouts)
                 InspectorCaption("Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
+                if rotateLayouts {
+                    DisclosureGroup("Layouts in the rotation") {
+                        ForEach(LyricLayoutRotation.order) { layout in
+                            Stepper(value: Binding(get: { rotation.count(for: layout) },
+                                                   set: { rotation.setCount($0, for: layout) }),
+                                    in: 0...LyricLayoutRotation.maximumCount) {
+                                HStack {
+                                    Text(layout.title)
+                                    Spacer()
+                                    Text(rotation.count(for: layout) == 0 ? "Never"
+                                         : rotation.count(for: layout) == 1 ? "1 song" : "\(rotation.count(for: layout)) songs in a row")
+                                        .lunalyrText(.caption)
+                                }
+                            }
+                        }
+                        InspectorCaption("How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
+                    }
+                }
             }
             RememberedStyleNote(aspect: .layout)
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)

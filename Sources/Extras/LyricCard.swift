@@ -83,9 +83,18 @@ enum LyricCard {
 
         var size: CGSize { aspect.size }
 
-        /// All the selected lines as one page, for a still image.
+        /// A still image holds at most this many lines: more would shrink the
+        /// words until they are hard to read.
+        static let stillLineLimit = 3
+
+        /// The first few selected lines, one under another, for a still image.
         var stillPage: Page {
-            Page(words: pages.flatMap(\.words))
+            var words: [String] = []
+            for page in pages.prefix(Self.stillLineLimit) where !page.words.isEmpty {
+                if !words.isEmpty { words.append(LyricCard.lineBreak) }
+                words += page.words
+            }
+            return Page(words: words)
         }
 
         var hasLyrics: Bool { pages.contains { !$0.words.isEmpty || $0.animation != nil } }
@@ -159,6 +168,8 @@ enum LyricCard {
     /// Portrait 4:5, the shape most apps show without cropping.
     static let size = CGSize(width: 1080, height: 1350)
     static let inset: CGFloat = 52
+    /// A word that is really a line break (see `Content.stillPage`).
+    static let lineBreak = "\n"
     static let trackFooterHeight: CGFloat = 224
     static let sidebarWidth: CGFloat = 440
     static let signatureHeight: CGFloat = 38
@@ -511,7 +522,8 @@ struct LyricCardView: View {
         var text = Text(verbatim: "")
         for (index, word) in shown.words.enumerated() {
             let slot = count > 1 ? Double(index) / Double(count - 1) : 0.5
-            if index > 0 { text = text + Text(verbatim: " ") }
+            if word == LyricCard.lineBreak { text = text + Text(verbatim: "\n"); continue }
+            if index > 0, shown.words[index - 1] != LyricCard.lineBreak { text = text + Text(verbatim: " ") }
             text = text + Text(verbatim: word).foregroundStyle(ink.sample(slot: slot, seed: UInt64(index)).sung)
         }
         return text

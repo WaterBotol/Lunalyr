@@ -80,3 +80,55 @@ final class UnknownGenreMoodTests: XCTestCase {
         XCTAssertGreaterThan(known.energy, 0.5)
     }
 }
+
+
+@MainActor
+final class LayoutRotationChoiceTests: XCTestCase {
+    private func rotation() -> LyricLayoutRotation {
+        LyricLayoutRotation(defaults: UserDefaults(suiteName: "LayoutRotationChoiceTests.\(UUID().uuidString)")!)
+    }
+
+    func testALayoutSetToZeroNeverAppears() {
+        let rotation = rotation()
+        rotation.setCount(0, for: .cutout)
+        rotation.setCount(0, for: .echo)
+        var seen = Set<LyricComposition>()
+        for index in 0..<40 { seen.insert(rotation.layout(for: "A|\(index)", mood: .neutral)) }
+        XCTAssertFalse(seen.contains(.cutout))
+        XCTAssertFalse(seen.contains(.echo))
+        XCTAssertTrue(seen.contains(.editorial))
+    }
+
+    func testACountOfThreeGivesThatLayoutThreeSongsInARow() {
+        let rotation = rotation()
+        for layout in LyricComposition.allCases { rotation.setCount(layout == .editorial ? 3 : 0, for: layout) }
+        rotation.setCount(1, for: .spoken)
+        let picks = (0..<8).map { rotation.layout(for: "S|\($0)", mood: .neutral) }
+        XCTAssertEqual(picks.prefix(4).filter { $0 == .editorial }.count, 3)
+        XCTAssertEqual(Set(picks), [.editorial, .spoken])
+        XCTAssertEqual(picks.filter { $0 == .editorial }.count, 6)
+    }
+
+    func testOnlyOneLayoutChosenMeansEverySongGetsIt() {
+        let rotation = rotation()
+        for layout in LyricComposition.allCases { rotation.setCount(layout == .cutout ? 1 : 0, for: layout) }
+        for index in 0..<6 { XCTAssertEqual(rotation.layout(for: "O|\(index)", mood: .neutral), .cutout) }
+    }
+
+    func testSwitchingEveryLayoutOffFallsBackToTheEnergyMatch() {
+        let rotation = rotation()
+        for layout in LyricComposition.allCases { rotation.setCount(0, for: layout) }
+        XCTAssertNoThrow(rotation.layout(for: "X|1", mood: .neutral))
+    }
+
+    func testTheChoicesSurviveARelaunch() {
+        let suite = UserDefaults(suiteName: "LayoutRotationChoiceTests.\(UUID().uuidString)")!
+        let first = LyricLayoutRotation(defaults: suite)
+        first.setCount(4, for: .echo)
+        first.setCount(0, for: .cascade)
+        let second = LyricLayoutRotation(defaults: suite)
+        XCTAssertEqual(second.count(for: .echo), 4)
+        XCTAssertEqual(second.count(for: .cascade), 0)
+        XCTAssertEqual(second.count(for: .cutout), 1)
+    }
+}
