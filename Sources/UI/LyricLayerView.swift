@@ -632,7 +632,7 @@ struct LyricLayer: View {
                         let lineBase: CGFloat = rolls ? baseSize * 0.75 * userScale
                             : composition.fillsStage ? baseSize * 0.8 * userScale : baseSize * densityScale
                         let lineSeed = rolls ? trackSeed : index
-                        let lineExit: Double = rolls || previewing ? .infinity : pose.exitStart
+                        let lineExit: Double = rolls || previewing ? .infinity : Self.stageExitStart(line, pose: pose)
                         let lineView = LyricLineView(words: words, time: time, stageSize: stageSize,
                             baseSize: lineBase,
                             mood: mood, composition: composition,
@@ -703,6 +703,16 @@ struct LyricLayer: View {
     /// Its preview is the same layout with only the first word showing, so
     /// that word appears exactly where it will be rather than mid-screen
     /// over the line still being sung.
+    /// When a stage layout starts clearing its line. These layouts show every
+    /// word sung so far at once, so a line that lingers (a long gap before the
+    /// next one, or a source whose line end is the next line's start) would
+    /// sit there fully built; leave a moment after the last word instead.
+    static func stageExitStart(_ line: LyricsFetcher.Line, pose: LyricPhraseTiming) -> Double {
+        let sung = line.words.map(\.end).max() ?? line.end
+        let held = max(line.start + 1.5, min(sung, line.start + 8)) + 1.2
+        return min(pose.exitStart, held)
+    }
+
     private func lineTimedLyric(_ line: LyricsFetcher.Line, words: [LyricsFetcher.Word], time: Double,
                                 pose: LyricPhraseTiming, stageSize: CGSize, composition: LyricComposition,
                                 seed: Int, previewing: Bool,
@@ -723,6 +733,7 @@ struct LyricLayer: View {
             baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, settings.lyricScale))) : base, mood: mood,
             composition: stage ? composition : .scattered, seed: seed, presence: pose.presence, readings: annotations,
             wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
+            exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
             glue: glue, firstRunOnly: previewing ? previewOpacity : nil)
             .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
                 direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : pose.presence * (1 - 0.5 * yield),

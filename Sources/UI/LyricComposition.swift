@@ -549,3 +549,28 @@ final class LyricLayoutRotation: ObservableObject {
         defaults.removeObject(forKey: Self.countsKey)
     }
 }
+
+/// Layouts gathered by the feel they give a song, for the pickers.
+enum LyricCompositionGroup: String, CaseIterable, Identifiable {
+    case calm = "Calm", bold = "Bold", playful = "Playful"
+    var id: String { rawValue }
+
+    var layouts: [LyricComposition] {
+        switch self {
+        case .calm: return [.scattered, .constellation, .constellationEditorial, .editorial, .spoken]
+        case .bold: return [.echo, .cascade, .hinge, .broadside, .torque]
+        case .playful: return [.cutout, .portal, .mosaic, .fable]
+        }
+    }
+}
+
+/// The layout choices in the pickers, under a heading for each group.
+struct LyricCompositionOptions: View {
+    var body: some View {
+        ForEach(LyricCompositionGroup.allCases) { group in
+            Section(group.rawValue) {
+                ForEach(group.layouts) { Text($0.title).tag(Optional($0)) }
+            }
+        }
+    }
+}

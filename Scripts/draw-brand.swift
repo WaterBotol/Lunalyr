@@ -11,8 +11,13 @@ import Foundation
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 
 func draw(size: Int, template: Bool, destination: String) throws {
-    let image = NSImage(size: NSSize(width: size, height: size))
-    image.lockFocus()
+    // Exactly `size` pixels square, whatever the screen's scale.
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8,
+                               samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                               bytesPerRow: 0, bitsPerPixel: 0)!
+    rep.size = NSSize(width: size, height: size)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let flip = NSAffineTransform()
     flip.translateX(by: 0, yBy: CGFloat(size))
     flip.scaleX(by: CGFloat(size) / 1024, yBy: -CGFloat(size) / 1024)
@@ -57,8 +62,7 @@ func draw(size: Int, template: Bool, destination: String) throws {
         }
         star.close(); star.fill()
     }
-    image.unlockFocus()
-    let rep = NSBitmapImageRep(data: image.tiffRepresentation!)!
+    NSGraphicsContext.restoreGraphicsState()
     try rep.representation(using: .png, properties: [:])!.write(to: root.appendingPathComponent(destination))
 }
 

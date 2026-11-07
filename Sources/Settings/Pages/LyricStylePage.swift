@@ -62,7 +62,7 @@ struct LyricStylePage: View {
         Section("Layout") {
             ChoiceMenu("Layout", selection: $s.lyricComposition, selectedTitle: { $0?.title ?? "Match the music" }) {
                 Text("Match the music").tag(Optional<LyricComposition>.none)
-                ForEach(LyricComposition.allCases) { Text($0.title).tag(Optional($0)) }
+                LyricCompositionOptions()
             }
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
             if automatic {

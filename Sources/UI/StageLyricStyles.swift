@@ -145,7 +145,7 @@ struct StageLyricView: View {
         return min(3, max(1, 0.5 / max(median, 0.1)))
     }
 
-    private var leave: Double { reduceMotion ? 0 : Easing.smoothstep((time - exitStart) / 0.5) }
+    private var leave: Double { Easing.smoothstep((time - exitStart) / 0.5) }
 
     var body: some View {
         if firstRunOnly == nil {
