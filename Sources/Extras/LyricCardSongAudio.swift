@@ -117,9 +117,12 @@ enum SongAudioSource {
         let origin = monitor.playbackTime()
         let preRoll = 1.0
         let recorder = try SongAudioRecorder()
+        // After a good recording the song carries on from where it ended; if
+        // it fails or is cancelled it goes back to where it was.
+        var recorded = false
         defer {
             recorder.stop()
-            monitor.seek(to: origin)
+            if !recorded { monitor.seek(to: origin) }
             if !wasPlaying && monitor.isPlaying { monitor.playPause() }
         }
         update("Starting the song…")
@@ -150,6 +153,7 @@ enum SongAudioSource {
         guard let written = try recorder.finish(to: file) else {
             throw Failure.notRecordable("Nothing was heard. Allow Lunalyr to record system audio, and turn the volume up.")
         }
+        recorded = true
         return SongAudioClip(url: written, songStart: songStart, songEnd: songStart + recorder.seconds)
     }
 }
