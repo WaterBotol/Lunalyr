@@ -93,6 +93,11 @@ enum LyricCreditCues {
         if time <= cue.end { return 1 }
         return 1 - Easing.smoothstep((time - cue.end) / fadeOut)
     }
+
+    /// 0 while the cue is up, then 0...1 as it leaves.
+    static func exitProgress(of cue: Cue, at time: Double) -> Double {
+        time <= cue.end ? 0 : Easing.smoothstep((time - cue.end) / fadeOut)
+    }
 }
 
 struct CreditsLayer: View {
@@ -117,6 +122,8 @@ struct CreditsLayer: View {
                                   composition: style, seed: seed &+ cue.id, presence: 1,
                                   lineEnd: cue.end, exitStart: cue.end, highlightFrom: cue.highlightFrom)
                         .frame(width: box.width, height: box.height)
+                        .layerExit(cue.title != nil ? .title : .credit(towardTop: cue.id.isMultiple(of: 2)),
+                                   progress: LyricCreditCues.exitProgress(of: cue, at: time), size: box.height)
                         .opacity(level)
                         .shadow(color: .black.opacity(0.3 * level), radius: 6)
                         // High and low in turn, so one arriving as the last

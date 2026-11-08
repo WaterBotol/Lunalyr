@@ -118,7 +118,10 @@ struct StageLyricView: View {
     }
 
     private func font(_ size: CGFloat, hero: Bool, id: Int) -> Font {
-        settings.lyricFont(size: size, hero: hero, mood: mood, seed: UInt64(abs(seed &+ id)))
+        // "Add Editorial typography": about a third of the words (by the amount set) take the
+        // contrasting face, as in the other layouts. The same words every time for a line.
+        let alternate = settings.editorialTypography && chance(id, 60) < 0.34 && chance(id, 61) < settings.editorialAmount
+        return settings.lyricFont(size: size, hero: hero, mood: mood, seed: UInt64(abs(seed &+ id)), alternate: alternate)
     }
 
     private func sample(_ run: StageRun, of count: Int) -> LyricInkSample {

@@ -43,6 +43,12 @@ struct StarTrailsSound: Equatable {
     var kickOnsets: UInt32 = 0, snareOnsets: UInt32 = 0, hatOnsets: UInt32 = 0
     var kickTime: Double?, snareTime: Double?, hatTime: Double?
     var level = 0.0
+    /// The sung word that began most recently: a serial (0 = none), when it began on the
+    /// simulation's wall clock (nil = now), how far along its line it sits (0…1) and how
+    /// strongly it is sung (0…1). Vocal stars light word by word from it.
+    var wordSerial: UInt32 = 0
+    var wordTime: Double?
+    var wordFraction = 0.5, wordStrength = 0.7
 
     /// Sensitivity shaping: identity at 1, `1 − (1 − x)^s` otherwise.
     static func shaped(_ x: Float, sensitivity: Double) -> Double {
@@ -106,7 +112,9 @@ enum StarTrailsLayout {
     static let trailSamples = 56, asteroids = 10
     static let sky = trail + 2 * trailSamples              // 184: StarTrailsSky.count colours
     static let skyTints = sky + StarTrailsSky.count        // 195: nine album tints
-    static let float4Count = skyTints + StarTrailsSky.tintCount
+    /// The newest sung word: (serial mod 4096, age s, strength, position along its line).
+    static let word = skyTints + StarTrailsSky.tintCount   // 204
+    static let float4Count = word + 1
     static let byteCount = float4Count * 16
     /// The fragment buffer index the state is bound at.
     static let bufferIndex = 6
@@ -251,6 +259,7 @@ final class StarTrailsSimulation {
     private var onsets: [[Onset]] = [[], [], []]
     private var serial = [0, 0, 0]
     private var lastCount: [UInt32?] = [nil, nil, nil]
+    private var wordSeen: UInt32 = 0, wordT = -Double.infinity, wordFraction = 0.5, wordStrength = 0.0
     private var pending: [[Double]] = [[], [], []]
     private static let pendingCapacity = 16
     private var asteroidRandom: StarTrailsRandom
@@ -317,6 +326,11 @@ final class StarTrailsSimulation {
     }
 
     private func collectOnsets() {
+        if sound.wordSerial != 0, sound.wordSerial != wordSeen {
+            wordSeen = sound.wordSerial
+            wordT = min(wall, max(sound.wordTime ?? wall, wall - 0.25))
+            wordFraction = min(1, max(0, sound.wordFraction)); wordStrength = min(1, max(0, sound.wordStrength))
+        }
         for k in 0..<3 {
             let count: UInt32, time: Double?
             switch k {
@@ -598,6 +612,7 @@ final class StarTrailsSimulation {
             live[k] = Float(lit)
         }
         st[L.live] = live
+        st[L.word] = SIMD4<Float>(Float(wordSeen % 4096), Float(min(wall - wordT, 30)), Float(wordStrength), Float(wordFraction))
         skyColours.write(into: st + L.sky)
         for (i, a) in asteroids.enumerated() {
             let fade = Self.smoothstep(0, 0.8, a.age) * (1 - Self.smoothstep(a.life - 0.8, a.life, a.age))
@@ -644,7 +659,16 @@ final class StarTrailsSimulations {
     /// whose colours the sky takes (nil: the original violet sky).
     @discardableResult
     func advance(sceneTime: Double, clock: Double, frame: AudioSnapshot, response: VisualizerResponse,
-                 sensitivity: Double, palette: AlbumWallpaperPalette? = nil) -> StarTrailsSimulation {
+                 sensitivity: Double, palette: AlbumWallpaperPalette? = nil,
+                 word: StarTrailsLyricWord? = nil) -> StarTrailsSimulation {
+        func sound(wallNow: Double) -> StarTrailsSound {
+            var sound = StarTrailsSound.from(frame, sensitivity: sensitivity, wallNow: wallNow)
+            if let word {
+                sound.wordSerial = word.serial; sound.wordTime = wallNow - word.age
+                sound.wordFraction = word.fraction; sound.wordStrength = word.strength
+            }
+            return sound
+        }
         if palette != self.palette {
             self.palette = palette
             sky = palette.map(StarTrailsSky.album) ?? .original
@@ -655,7 +679,7 @@ final class StarTrailsSimulations {
             made.punch = VisualizerPreferences.clampedPunch(response.punch)
             simulation = made
             lastSceneTime = sceneTime; lastClock = clock
-            made.advance(wallDelta: 0, motionDelta: 0, sound: .from(frame, sensitivity: sensitivity, wallNow: made.wall))
+            made.advance(wallDelta: 0, motionDelta: 0, sound: sound(wallNow: made.wall))
             return made
         }
         guard sceneTime != lastSceneTime else { return simulation }
@@ -665,8 +689,7 @@ final class StarTrailsSimulations {
         lastSceneTime = sceneTime; lastClock = clock
         simulation.calmTarget = response.calm ? 1 : 0
         simulation.punch = VisualizerPreferences.clampedPunch(response.punch)
-        let sound = StarTrailsSound.from(frame, sensitivity: sensitivity, wallNow: simulation.wall + wallDelta)
-        simulation.advance(wallDelta: wallDelta, motionDelta: motionDelta, sound: sound)
+        simulation.advance(wallDelta: wallDelta, motionDelta: motionDelta, sound: sound(wallNow: simulation.wall + wallDelta))
         return simulation
     }
 }

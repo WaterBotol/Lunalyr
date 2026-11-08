@@ -28,6 +28,25 @@ final class StageLyricSnapshotTests: XCTestCase {
         .environment(\.lyricInk, LyricInk())
     }
 
+    /// Editorial typography reaches the stage layouts: the sheet is written for a look.
+    func testEditorialTypographyDrawsInStageLayouts() throws {
+        let settings = Settings.shared
+        let before = (settings.editorialTypography, settings.editorialAmount)
+        settings.editorialTypography = true; settings.editorialAmount = 1
+        defer { settings.editorialTypography = before.0; settings.editorialAmount = before.1 }
+        let kinds: [LyricComposition] = [.broadside, .mosaic, .torque, .fable]
+        let sheet = VStack(spacing: 2) {
+            ForEach(kinds) { kind in HStack(spacing: 2) { ForEach([2.3, 3.2, 4.2, 5.4], id: \.self) { self.cell(kind, at: $0) } } }
+        }
+        let renderer = ImageRenderer(content: sheet)
+        renderer.scale = 0.5
+        let image = try XCTUnwrap(renderer.nsImage)
+        if let directory = ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] {
+            let rep = NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation))
+            try rep?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: directory + "/editorial.png"))
+        }
+    }
+
     func testEveryStageLayoutDraws() throws {
         let kinds: [LyricComposition] = LyricComposition.allCases.filter(\.fillsStage).filter { ![.hinge, .portal].contains($0) }
         XCTAssertFalse(kinds.isEmpty)
