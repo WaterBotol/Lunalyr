@@ -26,6 +26,10 @@ final class LyricCardPopoutModel: ObservableObject {
 
     @Published var rows: [Row] = []
     @Published var selection: Set<Int> = [] { didSet { schedulePreview() } }
+    /// The card's layout; nil follows the wallpaper. Shared with Settings → Share → Card layout.
+    @Published var layout: LyricComposition? {
+        didSet { LunalyrExtras.shared.lyricCardComposition = layout; schedulePreview() }
+    }
     @Published var aspect: CardAspect {
         didSet { UserDefaults.standard.set(aspect.rawValue, forKey: Keys.aspect); schedulePreview() }
     }
@@ -77,6 +81,7 @@ final class LyricCardPopoutModel: ObservableObject {
     init() {
         let defaults = UserDefaults.standard
         aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? .portrait
+        layout = LunalyrExtras.shared.lyricCardComposition
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
         soundChoice = SoundChoice(rawValue: defaults.string(forKey: Keys.sound) ?? "") ?? .video
@@ -177,6 +182,7 @@ final class LyricCardPopoutModel: ObservableObject {
         exportTask?.cancel()
         progress = nil
         status = ""
+        if layout != LunalyrExtras.shared.lyricCardComposition { layout = LunalyrExtras.shared.lyricCardComposition }
         let playing = NowPlayingMonitor.shared
         title = playing.current?.title ?? ""
         artist = playing.current?.artist ?? ""
@@ -205,7 +211,7 @@ final class LyricCardPopoutModel: ObservableObject {
 
     private func content() -> LyricCard.Content? {
         guard !selection.isEmpty else { return nil }
-        var content = LyricCard.currentContent(before: 0, after: 0, composition: LunalyrExtras.shared.lyricCardComposition,
+        var content = LyricCard.currentContent(before: 0, after: 0, composition: layout,
                                                rows: selection.sorted(), aspect: aspect)
         content?.background = background
         content?.backgroundStill = background?.first
@@ -351,6 +357,11 @@ struct LyricCardPopoutView: View {
                     Task { @MainActor in model.accept(url) }
                 }
                 return true
+            }
+
+            ChoiceMenu("Layout", selection: $model.layout, selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
+                Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
+                LyricCompositionOptions()
             }
 
             Text("Background").lunalyrText(.groupTitle)
