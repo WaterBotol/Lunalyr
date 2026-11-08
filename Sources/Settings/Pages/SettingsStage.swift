@@ -54,7 +54,7 @@ struct SettingsStage: View {
                    value: showsAccessBanner)
         .padding(LunalyrDesign.Spacing.window)
         .frame(maxWidth: .infinity, maxHeight: stacked == nil ? .infinity : nil)
-        .background(Color.lunalyrStage)
+        .background(Color.lunalyrCanvas(SettingsStyleStore.shared.style))
         .focusSection()
     }
 }

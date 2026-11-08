@@ -11,7 +11,7 @@ final class SettingsWindowController: NSObject {
     /// Low enough for a 13-inch MacBook Air at its largest text size, with
     /// the Dock showing.
     static let minimumHeight: CGFloat = 420
-    static let minimumWidth: CGFloat = 700
+    static let minimumWidth: CGFloat = 860
     /// Where AppKit keeps the frame between openings.
     private static let frameName = "custom.settingsWindow"
     static let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]

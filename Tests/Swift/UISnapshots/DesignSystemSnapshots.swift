@@ -11,6 +11,8 @@ extension UISnapshotCatalogue {
     static var designSystem: [UISnapshotCase] {
         let every: [UISnapshotRenderer.Look] = [.light, .dark, .lightContrast, .darkContrast]
         return [
+            UISnapshotCase("design/style-gallery", note: "Calm and Bold: every component, every state",
+                           chrome: .plain, size: .fitting(width: 1080), looks: every, view: { _ in StyleGallery() }),
             UISnapshotCase("design/tokens", note: "colours, status, type scale", chrome: .plain, size: .fitting(width: 640),
                            looks: every, view: { _ in DesignTokensGallery() }),
             UISnapshotCase("design/status", note: "StatusBanner and StatusChip", chrome: .plain, size: .fitting(width: 420),

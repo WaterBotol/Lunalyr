@@ -24,8 +24,8 @@ struct SettingsWindowView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                SettingsTopNav(selection: $page)
+            HStack(spacing: 0) {
+                SettingsSidebar(selection: $page)
                 Divider()
                 SettingsDetail(page: page, previewDisplay: previewDisplay, showsPreview: showsPreview,
                                largePreview: largePreview, scrollRequest: scrollRequest,
@@ -88,63 +88,6 @@ struct SettingsWindowView: View {
         } else {
             scrollRequest = nil
         }
-    }
-}
-
-/// The pages as three tabs along the top (Look, Lyrics, App), and under them,
-/// for a tab with several pages, a row of chips to move between its pages.
-@MainActor
-private struct SettingsTopNav: View {
-    @Binding var selection: SettingsPage
-
-    private var group: SettingsPage.Group {
-        SettingsPage.Group.allCases.first { $0.pages.contains(selection) } ?? .look
-    }
-
-    var body: some View {
-        VStack(spacing: LunalyrDesign.Spacing.small) {
-            HStack(spacing: 2) {
-                ForEach(SettingsPage.Group.allCases) { tab in
-                    Button {
-                        if tab != group { selection = tab.pages[0] }
-                    } label: {
-                        Text(tab.title)
-                            .font(.body.weight(tab == group ? .semibold : .regular))
-                            .foregroundStyle(tab == group ? Color.primary : Color.secondary)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(tab == group ? AnyShapeStyle(Color.lunalyrAccent.opacity(0.22)) : AnyShapeStyle(.clear)))
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(tab == group ? .isSelected : [])
-                }
-            }
-            .padding(3)
-            .styledSurface(radius: 20)
-            if group.pages.count > 1 {
-                HStack(spacing: LunalyrDesign.Spacing.small) {
-                    ForEach(group.pages) { page in
-                        Button {
-                            selection = page
-                        } label: {
-                            Label(page.title, systemImage: page.symbol)
-                                .font(.callout)
-                                .labelStyle(.titleAndIcon)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .foregroundStyle(page == selection ? Color.lunalyrAccentText : Color.secondary)
-                                .background(Capsule().fill(page == selection ? Color.lunalyrAccent.opacity(0.18) : .clear))
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(page == selection ? .isSelected : [])
-                    }
-                }
-            }
-        }
-        .padding(.vertical, LunalyrDesign.Spacing.medium)
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -226,7 +169,8 @@ private struct SettingsDetail: View {
             case .covers: CoversPage()
             case .lyrics: TimingPage()
             case .readings: ReadingsPage()
-            case .general: GeneralPage(scrollRequest: scrollRequest)
+            case .players: MusicPlayersPage(scrollRequest: scrollRequest)
+            case .general: GeneralPage()
             case .extras: ExtrasInspector()
             case .share: ShareInspector()
             case .performance: PerformancePage()

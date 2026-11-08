@@ -205,9 +205,12 @@ extension UISnapshotCatalogue {
                                scene.settings.motionExclusions = [VersoCustom.Settings.exclusionKey(artist: "Lunar Tides", album: "Night Bloom"),
                                                                   VersoCustom.Settings.exclusionKey(artist: "The Quiet Hours", album: "Paper Lanterns")]
                            }, view: settingsWindow),
-            UISnapshotCase("settings/general-denied", note: "General with Music refused: the access row's fix",
-                           chrome: .settingsWindow, size: .settingsWindow, player: .denied,
+            UISnapshotCase("settings/general-pilot", note: "General in the chosen look, with the sidebar",
+                           chrome: .settingsWindow, size: .settingsWindow, player: .playing,
                            prepare: { $0.showSettingsPage("general") }, view: settingsWindow),
+            UISnapshotCase("settings/general-denied", note: "Music players with Music refused: the access row's fix",
+                           chrome: .settingsWindow, size: .settingsWindow, player: .denied,
+                           prepare: { $0.showSettingsPage("players") }, view: settingsWindow),
             UISnapshotCase("settings/general-needs-consent", note: "General before macOS has asked about Music",
                            chrome: .settingsWindow, size: .settingsWindow, player: .needsConsent,
                            prepare: { $0.navigation.openSettings(.players) }, view: settingsWindow),
@@ -265,6 +268,7 @@ struct SettingsInspectorProbe: View {
             case .covers: CoversPage()
             case .lyrics: TimingPage()
             case .readings: ReadingsPage()
+            case .players: MusicPlayersPage()
             case .general: GeneralPage()
             case .extras: ExtrasInspector()
             case .share: ShareInspector()

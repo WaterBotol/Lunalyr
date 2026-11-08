@@ -7,7 +7,7 @@ import SwiftUI
 /// pages had before the rework, so a page remembered by an earlier version
 /// still opens; General is the only new one.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case wallpaper, typography, covers, lyrics, readings, general, extras, share, performance, about
+    case wallpaper, typography, covers, lyrics, readings, players, general, extras, share, performance, about
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .covers: return "Animated covers"
         case .lyrics: return "Timing & sources"
         case .readings: return "Romanisation"
+        case .players: return "Music players"
         case .general: return "General"
         case .extras: return "Menu bar & shortcuts"
         case .share: return "Discord & lyric card"
@@ -35,6 +36,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .lyrics: return "clock.fill"
         case .readings: return "character.book.closed.fill"
         case .general: return "gearshape.fill"
+        case .players: return "music.note"
         case .extras: return "command"
         case .share: return "square.and.arrow.up.fill"
         case .performance: return "leaf.fill"
@@ -52,6 +54,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .readings: return .teal
         case .general, .extras, .about: return .gray
         case .share: return .purple
+        case .players: return .red
         case .performance: return .green
         }
     }
@@ -62,27 +65,51 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     /// The sidebar's three sections.
     enum Group: String, CaseIterable, Identifiable {
-        case look, lyrics, connect, lunalyr
+        case look, words, app
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .look: return "Look"
-            case .lyrics: return "Lyrics"
-            case .connect: return "Connect"
-            case .lunalyr: return "App"
+            case .words: return "Words"
+            case .app: return "App"
             }
         }
 
         var pages: [SettingsPage] {
             switch self {
             case .look: return [.wallpaper, .typography, .covers]
-            case .lyrics: return [.lyrics, .readings]
-            case .connect: return [.extras, .share]
-            case .lunalyr: return [.general, .performance, .about]
+            case .words: return [.lyrics, .readings]
+            case .app: return [.players, .general, .extras, .share, .performance, .about]
             }
         }
+    }
+
+    /// What a person might type to find this page: setting names and the
+    /// words they use for them.
+    var searchTerms: [String] {
+        switch self {
+        case .wallpaper: return ["background", "visualiser", "visualizer", "music response", "desktop picture", "image", "video", "gradient", "darkening", "effects", "audio", "sensitivity"]
+        case .typography: return ["layout", "font", "typeface", "size", "colour", "color", "highlight", "text", "style", "echo", "cascade", "editorial", "animation", "entrance", "align"]
+        case .covers: return ["animated cover", "album art", "motion artwork", "apple music"]
+        case .lyrics: return ["timing", "offset", "late", "early", "sync", "sources", "lyrics", "search", "lrclib", "musixmatch", "word by word"]
+        case .readings: return ["romanisation", "romanization", "pinyin", "translation", "japanese", "korean", "readings"]
+        case .players: return ["player", "spotify", "music app", "automation", "permission", "access", "apple music", "tidal"]
+        case .general: return ["appearance", "look", "theme", "calm", "bold", "launch at login", "startup", "updates", "welcome", "version"]
+        case .extras: return ["menu bar", "shortcut", "hotkey", "keyboard", "hide lyrics", "pause wallpaper", "mirroring", "line"]
+        case .share: return ["discord", "rich presence", "lyric card", "gif", "mp4", "png", "share", "copy", "save", "status"]
+        case .performance: return ["performance", "battery", "power", "frame rate", "gpu", "low power", "energy", "fps"]
+        case .about: return ["about", "credits", "licence", "license", "version", "website"]
+        }
+    }
+
+    /// Whether `query` (several words allowed) finds this page.
+    func matches(_ query: String) -> Bool {
+        let words = query.lowercased().split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return true }
+        let haystack = ([title] + searchTerms).joined(separator: " ").lowercased()
+        return words.allSatisfy { haystack.contains($0) }
     }
 
     /// The page another surface's destination opens.
@@ -95,7 +122,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .readings: self = .readings
         case .performance: self = .performance
         case .menuBarAndShortcuts: self = .extras
-        case .general, .players: self = .general
+        case .players: self = .players
+        case .general: self = .general
         case .about: self = .about
         }
     }

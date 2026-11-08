@@ -99,12 +99,12 @@ final class SettingsWindowTests: XCTestCase {
     /// Pages remembered by earlier versions still open, and every place
     /// another surface links to lands on a page.
     func testStoredPagesAndDestinationsStillOpen() {
-        for name in ["wallpaper", "typography", "lyrics", "readings", "covers", "performance", "extras", "share", "about"] {
+        for name in ["wallpaper", "typography", "lyrics", "readings", "covers", "performance", "extras", "share", "players", "about"] {
             XCTAssertNotNil(SettingsPage(rawValue: name), "a page remembered as \(name) no longer opens")
         }
         XCTAssertEqual(SettingsPage(.musicResponse), .wallpaper)
         XCTAssertEqual(SettingsAnchor(.musicResponse), .musicResponse)
-        XCTAssertEqual(SettingsPage(.players), .general)
+        XCTAssertEqual(SettingsPage(.players), .players)
         XCTAssertEqual(SettingsAnchor(.players), .players)
         XCTAssertEqual(SettingsPage(.timing), .lyrics)
         XCTAssertEqual(SettingsPage(.menuBarAndShortcuts), .extras)
