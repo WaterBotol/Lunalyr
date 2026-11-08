@@ -434,12 +434,16 @@ struct StageLyricView: View {
         }
         let leaving = leave
         // Quick songs get less float and a shorter run-in, so the eye can follow.
-        let drift = reduceMotion ? 0.0 : 1.0 / speed
+        let drift: CGFloat = reduceMotion ? 0 : CGFloat(1 / speed)
         return StageLayout(place: { measured, bounds in
-            measured.indices.map { index in
+            measured.indices.map { index -> CGPoint in
                 let p = along(ranks[index])
-                let bob = CGFloat(sin(time * (1.2 + 0.6 * chance(index, 7)) + Double(index) * 1.3)) * unit * 0.07 * drift
-                let sway = CGFloat(cos(time * (0.9 + 0.5 * chance(index, 8)) + Double(index) * 0.9)) * unit * 0.05 * drift
+                let bobRate: Double = 1.2 + 0.6 * chance(index, 7)
+                let bobPhase: Double = time * bobRate + Double(index) * 1.3
+                let bob: CGFloat = CGFloat(sin(bobPhase)) * unit * 0.07 * drift
+                let swayRate: Double = 0.9 + 0.5 * chance(index, 8)
+                let swayPhase: Double = time * swayRate + Double(index) * 0.9
+                let sway: CGFloat = CGFloat(cos(swayPhase)) * unit * 0.05 * drift
                 // Each pill comes in from its own direction.
                 let heading = chance(index, 9) * 2 * .pi
                 let rise = CGFloat(1 - settled[index])
