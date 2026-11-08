@@ -42,7 +42,14 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var title = ""
     @Published var artist = ""
     /// A picture, GIF or video behind the lyrics; nil keeps the album look.
-    @Published var background: LyricCardBackground? { didSet { schedulePreview() } }
+    @Published var background: LyricCardBackground? {
+        didSet {
+            // The lyrics' colours and transitions follow the background's own colours, not the album's.
+            backgroundPalette = background.map { LyricCard.palette(for: NSImage(cgImage: $0.first, size: .zero)) }
+            schedulePreview()
+        }
+    }
+    private var backgroundPalette: AlbumWallpaperPalette?
     /// Sound chosen to go under the MP4 (any audio file, or a video's own sound).
     @Published var soundFile: URL?
     enum SoundChoice: String, CaseIterable, Identifiable {
@@ -214,6 +221,7 @@ final class LyricCardPopoutModel: ObservableObject {
         var content = LyricCard.currentContent(before: 0, after: 0, composition: layout,
                                                rows: selection.sorted(), aspect: aspect)
         content?.background = background
+        if let backgroundPalette { content?.palette = backgroundPalette }
         content?.backgroundStill = background?.first
         content?.keepBackgroundSound = soundChoice == .video
         content?.soundFile = soundChoice == .file ? soundFile : nil

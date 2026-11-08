@@ -55,7 +55,7 @@ final class LyricCardFormatsTests: XCTestCase {
         let tracks = try await asset.loadTracks(withMediaType: .video)
         let track = try XCTUnwrap(tracks.first)
         let size = try await track.load(.naturalSize)
-        XCTAssertEqual(size, CGSize(width: 1080, height: 1080))
+        XCTAssertEqual(size, CGSize(width: 720, height: 720), "MP4s are two thirds of the card size")
         let duration = try await asset.load(.duration).seconds
         XCTAssertGreaterThan(duration, 1.5)
         let rate = try await track.load(.nominalFrameRate)

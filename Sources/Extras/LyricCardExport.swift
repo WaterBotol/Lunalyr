@@ -25,6 +25,8 @@ extension LyricCard.Content {
 
 extension LyricCard {
     static let videoFramesPerSecond = 30.0
+    /// MP4s are 720 pixels on their short side (a third smaller than the card): sharp on a phone, small to send.
+    static let videoScale: CGFloat = 2.0 / 3.0
 
     /// One crisp PNG of the selected lines together.
     static func stillPNG(_ content: Content, scale: CGFloat = 2) -> Data? {
@@ -39,9 +41,9 @@ extension LyricCard {
         return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
-    /// An H.264 video of the card's animation at its full size.
+    /// An H.264 video of the card's animation at `videoScale` of its size.
     static func video(_ content: Content, to url: URL, progress: ((Double) -> Void)? = nil) async -> Bool {
-        let pixels = CGSize(width: content.size.width, height: content.size.height)
+        let pixels = CGSize(width: (content.size.width * videoScale).rounded(), height: (content.size.height * videoScale).rounded())
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return false }
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -53,7 +55,7 @@ extension LyricCard {
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
             ],
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 9_000_000,
+                AVVideoAverageBitRateKey: 4_000_000,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoMaxKeyFrameIntervalKey: 60,
             ],
@@ -70,7 +72,7 @@ extension LyricCard {
         writer.startSession(atSourceTime: .zero)
 
         var time = 0.0
-        let ok = await renderFrames(content, scale: 1, minimumCadence: 1 / videoFramesPerSecond, budget: nil,
+        let ok = await renderFrames(content, scale: videoScale, minimumCadence: 1 / videoFramesPerSecond, budget: nil,
                                     progress: progress) { image, delay in
             guard let buffer = pixelBuffer(from: image, size: pixels, pool: adaptor.pixelBufferPool) else {
                 print("LYRIC-MP4 no pixel buffer")
