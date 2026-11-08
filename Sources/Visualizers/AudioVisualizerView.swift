@@ -358,7 +358,10 @@ struct AudioVisualizerView: NSViewRepresentable {
             guard let simulations = starTrailsSimulations else { return nil }
             let simulation = simulations.advance(sceneTime: sceneTime, clock: now, frame: frame,
                                                  response: response, sensitivity: sensitivity,
-                                                 palette: VisualizerPreferences.shared.starTrailsColours == .album ? palette : nil)
+                                                 palette: VisualizerPreferences.shared.starTrailsColours == .album ? palette : nil,
+                                                 word: StarTrailsLyricWord.newest(
+                                                    in: LyricsViewModel.shared.lines,
+                                                    at: NowPlayingMonitor.shared.playbackTime() + Settings.shared.lyricOffset))
             if starTrailsBuffers.first?.device.registryID != device.registryID {
                 starTrailsBuffers = (0..<3).compactMap {
                     _ in device.makeBuffer(length: StarTrailsLayout.byteCount, options: .storageModeShared)

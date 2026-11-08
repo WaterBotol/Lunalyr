@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a white crescent moon with a line of text across its dark centre">
+  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a white crescent moon on violet with a highlighted lyric line across its opening and a small spark">
 </p>
 
 <h1 align="center">Lunalyr</h1>
@@ -54,10 +54,97 @@ Lunalyr is free to use. It started as a fork of [Verso](https://github.com/AkkiC
   </tr>
 </table>
 
+## Layouts
+
+Every layout, set to the same lyric. Pick one in **Settings → Lyrics**, or let **Match the music** choose per song. These clips are rendered from Lunalyr's own layout code over a sample background; on your desktop they sit over your wallpaper.
+
+### Calm
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-scattered.webp" alt="Scattered layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+    <td width="50%"><img src="docs/images/layouts/layout-constellation.webp" alt="Constellation layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Scattered</b></td>
+    <td align="center"><b>Constellation</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-constellationEditorial.webp" alt="Constellation + Editorial layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+    <td width="50%"><img src="docs/images/layouts/layout-editorial.webp" alt="Editorial layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Constellation + Editorial</b></td>
+    <td align="center"><b>Editorial</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-spoken.webp" alt="Spoken layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Spoken</b></td>
+  </tr>
+</table>
+
+### Bold
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-echo.webp" alt="Echo layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+    <td width="50%"><img src="docs/images/layouts/layout-cascade.webp" alt="Cascade layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Echo</b></td>
+    <td align="center"><b>Cascade</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-hinge.webp" alt="Hinge layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+    <td width="50%"><img src="docs/images/layouts/layout-broadside.webp" alt="Broadside layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Hinge</b></td>
+    <td align="center"><b>Broadside</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-torque.webp" alt="Torque layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Torque</b></td>
+  </tr>
+</table>
+
+### Playful
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-cutout.webp" alt="Cutout layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+    <td width="50%"><img src="docs/images/layouts/layout-portal.webp" alt="Portal layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Cutout</b></td>
+    <td align="center"><b>Portal</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/layouts/layout-mosaic.webp" alt="Mosaic layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+    <td width="50%"><img src="docs/images/layouts/layout-fable.webp" alt="Fable layout: the lyric &quot;we keep dreaming under neon rain&quot; arriving word by word"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Mosaic</b></td>
+    <td align="center"><b>Fable</b></td>
+  </tr>
+</table>
+
+### Lyric cards
+
+<p align="center"><img src="docs/images/lyric-card.webp" width="280" alt="A lyric card: three lyric lines over the album colours, with the Lunalyr mark and name in the corner"></p>
+
+Pick lines from the playing song and make an MP4, GIF or PNG in 4:5, 1:1, 9:16 or 16:9. Put your own picture, GIF or video behind the lyrics, and add sound from the song, the video or an audio file.
+
 ## Features
 
 - **Words in time with the singer.** Word- and syllable-timed lyrics light up as they are sung, with a karaoke sweep and swelling held notes. When a source only has line timing, Lunalyr shows whole lines rather than inventing word timing.
-- **Eight compositions.** Scattered, Constellation, Constellation + Editorial, Echo, Editorial, Spoken, Cascade and Cutout. Each has its own word entrance and an optional faint preview of the next word.
+- **Fourteen compositions in three groups.** Calm: Scattered, Constellation, Constellation + Editorial, Editorial, Spoken. Bold: Echo, Cascade, Hinge, Broadside, Torque. Playful: Cutout, Portal, Mosaic, Fable. Each has its own word entrance and an optional faint preview of the next word, and Editorial typography can be added to any of them.
+- **Credits and the title, in the background.** Producer, writer and other credits from the lyric file are shown instead of hidden, and every song opens with its title and artist. Each leaves its own way: credits lift off, the title blooms away, backing vocals sink.
+- **Lyric cards.** Pick lines from the playing song and make an MP4, GIF or PNG, with your own picture, GIF or video behind them and sound from the song, the video or an audio file.
 - **Wallpapers that match the song.** 27 Metal GPU effects and 18 line patterns tinted from the album art, moving album-colour gradients, Apple Music animated album covers, or an image or looping video of your own. Choose **Your wallpaper** to draw only the lyrics over your existing desktop picture.
 - **Audio-reactive visualisers.** Silk Ribbons, Spectral Aurora, Spectrum Tunnel, Aurora Curtains and Fosfora Aurora respond to your Mac's sound output, analysed on your Mac.
 - **Lyrics from many sources.** Lyrics+ (KPoe), NetEase Cloud Music, LRCLIB, QQ Music, Kugou, Kuwo, lyrics.ovh and local lyric exports, picked by an *Accuracy first* match. Per-song timing offsets, manual search and LRC/TTML import cover the rest.

@@ -508,8 +508,9 @@ final class LyricHighlightTests: XCTestCase {
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
             for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
                 guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-                if abs(pixel.redComponent - target.redComponent) < 0.06, abs(pixel.greenComponent - target.greenComponent) < 0.06,
-                   abs(pixel.blueComponent - target.blueComponent) < 0.06 { count += 1 }
+                // A little loose: layers drawn offscreen (masks, shadows, 3D) come out slightly shifted.
+                if abs(pixel.redComponent - target.redComponent) < 0.1, abs(pixel.greenComponent - target.greenComponent) < 0.1,
+                   abs(pixel.blueComponent - target.blueComponent) < 0.1 { count += 1 }
             }
         }
         return count

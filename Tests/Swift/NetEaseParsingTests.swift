@@ -16,7 +16,10 @@ final class NetEaseParsingTests: XCTestCase {
         [19560,2750](19560,270,0)出(19830,270,0)品(20100,270,0)监(20370,270,0)制(20640,270,0)：(20910,270,0)霍(21180,270,0)锦
         [22310,4300](22310,2880,0)都 (25190,310,0)是(25500,290,0)勇(25790,230,0)敢(26020,590,0)的
         """
-        let lines = NetEaseLyricsProvider.parseYRC(yrc)
+        let all = NetEaseLyricsProvider.parseYRC(yrc)
+        XCTAssertTrue(all.filter { $0.credit == true }.allSatisfy { $0.isInstrumental && $0.words.isEmpty })
+        XCTAssertEqual(all.filter { $0.credit == true }.count, 6)
+        let lines = all.filter { $0.credit != true }
         XCTAssertEqual(lines.map(\.text), ["都 是勇敢的"])
         XCTAssertEqual(lines.first?.words.map(\.text), ["都", "是", "勇", "敢", "的"])
         XCTAssertEqual(lines.first?.start ?? 0, 22.31, accuracy: 0.001)
@@ -47,7 +50,9 @@ final class NetEaseParsingTests: XCTestCase {
         [22310,4300](22310,2880,0)都 (25190,310,0)是(25500,290,0)勇(25790,230,0)敢(26020,590,0)的
         [27000,2000](27000,500,0)鼓(27500,0,0)：(27500,500,0)咚(28000,500,0)咚
         """
-        let lines = NetEaseLyricsProvider.parseYRC(yrc)
+        let all = NetEaseLyricsProvider.parseYRC(yrc)
+        XCTAssertEqual(all.filter { $0.credit == true }.count, 4)
+        let lines = all.filter { $0.credit != true }
         XCTAssertEqual(lines.map(\.text), ["都 是勇敢的", "鼓：咚咚"])
     }
 
@@ -132,7 +137,9 @@ final class NetEaseParsingTests: XCTestCase {
         [00:09.480]The club isn't the best place to find a lover
         [00:11.750]So the bar is where I go
         """
-        let lines = LyricsFetcher.parseLRC(lrc, trackDuration: 233)
+        let all = LyricsFetcher.parseLRC(lrc, trackDuration: 233)
+        XCTAssertEqual(all.filter { $0.credit == true }.count, 3)
+        let lines = all.filter { $0.credit != true }
         XCTAssertEqual(lines.map(\.text), ["The club isn't the best place to find a lover", "So the bar is where I go"])
     }
 

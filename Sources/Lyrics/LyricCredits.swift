@@ -15,11 +15,163 @@ enum LyricCredits {
         let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // A line wholly in brackets is a sung aside: "(和声：啦啦啦)".
         if let first = line.first, let last = line.last, "(（".contains(first), ")）".contains(last) { return false }
-        guard let colon = line.prefix(48).firstIndex(where: { $0 == ":" || $0 == "：" }) else { return false }
+        guard let colon = line.prefix(48).firstIndex(where: { $0 == ":" || $0 == "：" }) else {
+            return inCredits && isColonlessCredit(line)
+        }
         let label = line[..<colon].trimmingCharacters(in: CharacterSet.whitespaces.union(brackets))
         guard !label.isEmpty, label.count <= 32,
               let kind = englishRole(label) ?? chineseRole(Array(label)) else { return false }
         return kind == .specific || (inCredits && looksLikeNames(line[line.index(after: colon)...]))
+    }
+
+    /// Every source's lines, whichever parser made them: credits the parsers
+    /// did not already set apart (KPoe, LRCLIB's lyrics files, a cached
+    /// result) are flagged here, in song order. Safe to run again.
+    static func flagging(_ lines: [LyricsFetcher.Line], title: String = "", artist: String = "") -> [LyricsFetcher.Line] {
+        let names = TrackNames(title: title, artist: artist)
+        var result = lines
+        func convert(_ index: Int) {
+            result[index].isInstrumental = true
+            result[index].words = []
+            result[index].wordTimed = false
+            result[index].romanization = nil
+            result[index].translation = nil
+            result[index].credit = true
+            result[index].end = result[index].start + 0.01
+        }
+        func nextSung(after index: Int) -> Int? {
+            result.indices.dropFirst(index + 1).first { !result[$0].isInstrumental || result[$0].credit == true }
+        }
+        var inCredits = true
+        for index in result.indices {
+            if result[index].credit == true { inCredits = true; continue }
+            if result[index].isInstrumental { continue }
+            let text = result[index].text
+            // "[Verse 1]", "[ Chorus ]", "Verse 3]": section labels, not sung.
+            if isSectionLabel(text) {
+                result[index].isInstrumental = true
+                result[index].text = ""
+                result[index].words = []
+                result[index].wordTimed = false
+                result[index].romanization = nil
+                result[index].translation = nil
+                continue
+            }
+            var credit = isCredit(text, inCredits: inCredits)
+            if !credit, inCredits, names.isHeading(text) { credit = true }
+            // A bare title or artist line heading the credits.
+            if !credit, inCredits, names.isLoneName(text), let next = nextSung(after: index),
+               result[next].credit == true || isCredit(result[next].text, inCredits: true) || names.isHeading(result[next].text) {
+                credit = true
+            }
+            if credit { inCredits = true; convert(index) } else { inCredits = false }
+        }
+        return markingTitleHeader(result)
+    }
+
+    private static let sectionWords = "verse|chorus|pre-?chorus|post-?chorus|bridge|intro|outro|hook|refrain|interlude|instrumental|solo|breakdown|drop|ad-?libs?"
+
+    /// A bracketed section label ("[Verse 1]", "[Chorus: Name]", "Verse 3]").
+    /// A bare "Chorus" is left alone: it could be sung.
+    static func isSectionLabel(_ text: String) -> Bool {
+        let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = line.first, let last = line.last, "[【(（".contains(first) || "]】)）".contains(last) else { return false }
+        let pattern = "^[\\[【(（]?\\s*(\(sectionWords))\\b[^\\]】)）]*[\\]】)）]?$"
+        return line.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// The playing song's names, and the ways a lyric file repeats them in
+    /// its heading: "Title - Artist", "Artist - Title", "Title (Artist)",
+    /// "Title by Artist", "Artist: Title", "Title / Artist".
+    struct TrackNames {
+        let title: String
+        let artist: String
+        let primaryArtist: String
+
+        init(title: String, artist: String) {
+            self.title = LyricQuery.normalize(title)
+            self.artist = LyricQuery.normalize(artist)
+            // "Yot Club & Someone", "A, B", "A feat. B": the first name.
+            let first = artist.components(separatedBy: CharacterSet(charactersIn: ",&;/、")).first ?? artist
+            let lead = first.components(separatedBy: " feat").first?.components(separatedBy: " ft").first ?? first
+            self.primaryArtist = LyricQuery.normalize(lead)
+        }
+
+        private var usable: Bool { !title.isEmpty }
+
+        /// A line carrying both the title and the artist and little else.
+        func isHeading(_ text: String) -> Bool {
+            guard usable, !primaryArtist.isEmpty else { return false }
+            let line = LyricQuery.normalize(text)
+            guard line.count <= title.count + artist.count + 14,
+                  Self.contains(line, title), Self.contains(line, primaryArtist) else { return false }
+            return true
+        }
+
+        /// A line that is only the title, or only the artist.
+        func isLoneName(_ text: String) -> Bool {
+            guard usable else { return false }
+            let line = LyricQuery.normalize(text)
+            return !line.isEmpty && (line == title || line == artist || line == primaryArtist)
+        }
+
+        /// Whole-word containment on normalised text.
+        private static func contains(_ line: String, _ phrase: String) -> Bool {
+            !phrase.isEmpty && " \(line) ".contains(" \(phrase) ")
+        }
+
+        func isEither(_ text: String) -> Bool { isHeading(text) || isLoneName(text) }
+    }
+
+    /// Unsynced lyrics have no time to show a credit at, so the ones opening
+    /// the text (and the heading above them) are dropped.
+    static func droppingLeadingCredits(_ lines: [String], title: String = "", artist: String = "") -> [String] {
+        let names = TrackNames(title: title, artist: artist)
+        func blank(_ text: String) -> Bool { text.trimmingCharacters(in: .whitespaces).isEmpty }
+        var index = lines.firstIndex { !blank($0) } ?? lines.count
+        // "Title - Artist" heading right above the credits.
+        if index < lines.count, lines[index].contains(" - ") || lines[index].contains(" – ") || names.isHeading(lines[index]),
+           let next = lines[(index + 1)...].first(where: { !blank($0) }), isCredit(next, inCredits: true) {
+            index += 1
+        }
+        let heading = index
+        while index < lines.count, blank(lines[index]) || isCredit(lines[index], inCredits: true) { index += 1 }
+        return index == heading ? lines : Array(lines[index...])
+    }
+
+    /// Services open the credits with the song's own heading ("Human Nature -
+    /// Yot Club"). That line is not sung either, so when it sits right ahead
+    /// of the credits it becomes one.
+    static func markingTitleHeader(_ lines: [LyricsFetcher.Line]) -> [LyricsFetcher.Line] {
+        guard let index = lines.firstIndex(where: { !$0.isInstrumental }), index + 1 < lines.count,
+              lines[..<index].allSatisfy({ $0.isInstrumental }), lines[index + 1].credit == true, lines[index].start < 20,
+              lines[index].text.contains(" - ") || lines[index].text.contains(" – ") else { return lines }
+        var result = lines
+        result[index].isInstrumental = true
+        result[index].words = []
+        result[index].wordTimed = false
+        result[index].romanization = nil
+        result[index].translation = nil
+        result[index].credit = true
+        result[index].end = result[index].start + 0.01
+        return result
+    }
+
+    /// "Produced by Max Martin", "Written by Tove Lo & Ali Payami": a role
+    /// word, "by", then names, with no colon. Only before the first lyric or
+    /// straight after another credit, and only past-tense roles, so a lyric
+    /// like "Written by the stars" (no names) or later in the song never
+    /// matches.
+    private static func isColonlessCredit(_ line: String) -> Bool {
+        let words = line.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.count >= 3, words.count <= 12,
+              let by = words.prefix(4).firstIndex(where: { $0.lowercased() == "by" }), by >= 1,
+              !words.prefix(by).contains(where: { $0.lowercased() == "by" }) else { return false }
+        let label = words[...by].joined(separator: " ")
+        guard let kind = englishRole(label), kind == .specific,
+              words[..<by].allSatisfy({ englishRoles.contains($0.lowercased()) || englishQualifiers.contains($0.lowercased()) }),
+              words[..<by].contains(where: { $0.lowercased().hasSuffix("ed") || ["written", "prod."].contains($0.lowercased()) }) else { return false }
+        return looksLikeNames(Substring(words[(by + 1)...].joined(separator: " ")))
     }
 
     private enum Kind { case specific, everyday }
@@ -102,7 +254,7 @@ enum LyricCredits {
 
     /// Role words: one of them, with any qualifiers and joins, makes a label.
     private static let englishRoles: Set<String> = [
-        "producer", "producers", "production", "produced", "coproducer", "composer", "composers", "composed",
+        "producer", "producers", "production", "produced", "prod", "prod.", "coproducer", "composer", "composers", "composed",
         "composition", "lyricist", "lyricists", "lyrics", "lyric", "writer", "writers", "written", "songwriter",
         "songwriters", "songwriting", "arranger", "arrangers", "arranged", "arrangement", "arrangements", "engineer",
         "engineers", "engineered", "engineering", "mixer", "mixing", "mixed", "mix", "mastering", "mastered",

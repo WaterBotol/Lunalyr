@@ -137,6 +137,7 @@ struct BackingVocalLayer: View {
                                   composition: style, seed: seed &+ group.id, presence: 1,
                                   lineEnd: hold, exitStart: hold, glue: group.glue)
                         .frame(width: box.width, height: box.height)
+                        .layerExit(.backing, progress: Self.exitProgress(of: group, at: time), size: box.height)
                         .opacity(0.62 * level)
                         .shadow(color: .black.opacity(0.3 * level), radius: 6)
                         .position(position(of: group))
@@ -156,6 +157,12 @@ struct BackingVocalLayer: View {
         if time < start + fadeIn { return Easing.smoothstep((time - start) / fadeIn) }
         if time <= hold { return 1 }
         return 1 - Easing.smoothstep((time - hold) / fadeOut)
+    }
+
+    /// 0 while the group is up, then 0...1 as it leaves.
+    static func exitProgress(of group: BackingVocals.Group, at time: Double) -> Double {
+        let hold = max(group.end, group.start + minimumHold)
+        return time <= hold ? 0 : Easing.smoothstep((time - hold) / fadeOut)
     }
 
     /// A steady 0...1 per group and salt, so a group keeps its place.

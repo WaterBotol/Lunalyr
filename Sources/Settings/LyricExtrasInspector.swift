@@ -280,7 +280,7 @@ struct ExtrasInspector: View {
                 ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
                            selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
                     Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
-                    ForEach(LyricComposition.allCases) { Text($0.title).tag(Optional($0)) }
+                    LyricCompositionOptions()
                 }
                 LabeledContent {
                     Button("Open Lyric Card…") { extras.copyLyricCard() }

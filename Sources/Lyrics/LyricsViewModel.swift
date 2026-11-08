@@ -283,7 +283,8 @@ final class LyricsViewModel: ObservableObject {
     /// Shows `result`, and keeps it to show again when the gap setting changes.
     private func apply(_ result:LyricsFetcher.Result?, repairQQGaps: Bool? = nil) {
         originalResult = result
-        let shown = Self.presentation(of: result, repairingGaps: repairQQGaps ?? LyricSourceOptions.shared.repairQQGaps)
+        let shown = Self.presentation(of: result, repairingGaps: repairQQGaps ?? LyricSourceOptions.shared.repairQQGaps,
+                                    track: currentQuery.map { ($0.title, $0.artist) })
         infersPauses = shown.infersPauses
         plainLines = shown.plainLines
         lines = shown.lines
@@ -312,18 +313,22 @@ final class LyricsViewModel: ObservableObject {
     /// LRC, Kugou, Kuwo, local files, imports) have the breaks after their
     /// lines inferred by `LyricGapTiming`. Word timing and supplied line
     /// ends are never shortened.
-    static func presentation(of result: LyricsFetcher.Result?, repairingGaps repair: Bool) -> Presentation {
+    static func presentation(of result: LyricsFetcher.Result?, repairingGaps repair: Bool,
+                             track: (title: String, artist: String)? = nil) -> Presentation {
+        let (title, artist) = track ?? ("", "")
         switch result {
         case .synced(let value, let source) where !value.isEmpty:
             let qq = source.source.lowercased().contains("qq")
-            let validated = (repair && qq ? QQGapRepair.repair(value) : value).map { original in
+            let validated = (repair && qq ? QQGapRepair.repair(LyricCredits.flagging(value, title: title, artist: artist))
+                                      : LyricCredits.flagging(value, title: title, artist: artist)).map { original in
                 var line = original; line.wordTimed = LyricsFetcher.validWordTiming(original); return line
             }
             let lines = LyricLineIndex.removingMixedTimingCopies(validated)
             return Presentation(lines: lines, provenance: .init(precision: LyricsFetcher.precision(lines), source: source.source),
                                 infersPauses: repair && !qq)
         case .plain(let value, let source) where !value.isEmpty:
-            return Presentation(plainLines: value, provenance: source)
+            let plain = LyricCredits.droppingLeadingCredits(value, title: title, artist: artist)
+            return Presentation(plainLines: plain.isEmpty ? value : plain, provenance: source)
         default:
             return Presentation()
         }

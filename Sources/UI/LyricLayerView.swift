@@ -291,10 +291,27 @@ struct LyricLayer: View {
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
                 .overlay {
+                    creditsOverlay(lines, time: time)
+                }
+                .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
                         InstrumentalInterludeView(cue: cue, accent: accent, baseSize: baseSize)
                     }
                 }
+        }
+    }
+
+    @ViewBuilder
+    private func creditsOverlay(_ scene: SceneLines, time: Double) -> some View {
+        if LyricCreditCues.isOn {
+            let cues = LyricCreditCues.cues(in: scene.lines, title: nowPlaying.current?.title ?? "",
+                                            artist: nowPlaying.current?.artist ?? "")
+            if !cues.isEmpty {
+                let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
+                CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
+                             baseSize: baseSize, seed: nowPlaying.current.map { "\($0.artist)|\($0.title)".hashValue } ?? 0,
+                             composition: composition(at: first), mood: mood)
+            }
         }
     }
 
@@ -489,7 +506,7 @@ struct LyricLayer: View {
     /// them -- for as long as it is drawn, however many lines start under
     /// it. Rolling stages already stack their words.
     private func heldShift(_ row: Int, in lines: [LyricsFetcher.Line], time: Double) -> Double? {
-        guard LyricPhraseTiming.isHeld(row, in: lines), !composition(at: row).arrivalOnly else { return nil }
+        guard LyricPhraseTiming.isHeld(row, in: lines), !composition(at: row).arrivalOnly, !composition(at: row).fillsStage else { return nil }
         return vc_settle(time - lines[row + 1].start, 0.45)
     }
 
@@ -595,7 +612,8 @@ struct LyricLayer: View {
                     ? translationSize * 2.7 + baseSize * 0.3 : 0
                 let fit = LyricLineStack.Fit(available: composition.hasConnections
                     ? CGSize(width: stageSize.width * 0.92, height: stageSize.height * 0.86)
-                    : stageSize, userScale: rolls ? 1 : userScale, neutral: rolls ? 1 : 0.75)
+                    : stageSize, userScale: rolls || composition.fillsStage ? 1 : userScale,
+                    neutral: rolls || composition.fillsStage ? 1 : 0.75)
                 VStack(spacing: baseSize * 0.2) {
                 Group {
                     if line.wordTimed {
@@ -611,19 +629,26 @@ struct LyricLayer: View {
                                                                  scene: scene, live: live) : [:]
                         // Reduce Motion: the line fades; it does not slide or swell.
                         let still = rolls || reduceMotion
-                        LyricLineView(words: words, time: time, stageSize: stageSize,
-                            baseSize: rolls ? baseSize * 0.75 * userScale : baseSize * densityScale,
+                        let lineBase: CGFloat = rolls ? baseSize * 0.75 * userScale
+                            : composition.fillsStage ? baseSize * 0.8 * userScale : baseSize * densityScale
+                        let lineSeed = rolls ? trackSeed : index
+                        let lineExit: Double = rolls || previewing ? .infinity : Self.stageExitStart(line, pose: pose)
+                        let lineView = LyricLineView(words: words, time: time, stageSize: stageSize,
+                            baseSize: lineBase,
                             mood: mood, composition: composition,
-                            seed: rolls ? trackSeed : index, presence: stagePresence * (1 - pose.exit), accent: accent,
+                            seed: lineSeed, presence: stagePresence * (1 - pose.exit), accent: accent,
                             energy: energy, readings: annotations, lineEnd: line.end,
-                            exitStart: rolls || previewing ? .infinity : pose.exitStart,
+                            exitStart: lineExit,
                             previewSince: previewSince,
                             glue: glue,
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:])
+                        let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
+                        let slide: CGFloat = still ? 0 : CGFloat((1 - pose.arrival) * 0.20 - pose.exit * 0.10) * baseSize
+                        lineView
                             .opacity(stagePresence)
-                            .scaleEffect(still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit)
-                            .offset(y: still ? 0 : CGFloat((1 - pose.arrival) * 0.20 - pose.exit * 0.10) * baseSize)
+                            .scaleEffect(swell)
+                            .offset(y: slide)
                     } else {
                         let words = readingOptions.display == .replace ? readings ?? line.words : line.words
                         let glue = glue(index, words: words, scene: scene, live: live)
@@ -678,6 +703,16 @@ struct LyricLayer: View {
     /// Its preview is the same layout with only the first word showing, so
     /// that word appears exactly where it will be rather than mid-screen
     /// over the line still being sung.
+    /// When a stage layout starts clearing its line. These layouts show every
+    /// word sung so far at once, so a line that lingers (a long gap before the
+    /// next one, or a source whose line end is the next line's start) would
+    /// sit there fully built; leave a moment after the last word instead.
+    static func stageExitStart(_ line: LyricsFetcher.Line, pose: LyricPhraseTiming) -> Double {
+        let sung = line.words.map(\.end).max() ?? line.end
+        let held = max(line.start + 1.5, min(sung, line.start + 8)) + 1.2
+        return min(pose.exitStart, held)
+    }
+
     private func lineTimedLyric(_ line: LyricsFetcher.Line, words: [LyricsFetcher.Word], time: Double,
                                 pose: LyricPhraseTiming, stageSize: CGSize, composition: LyricComposition,
                                 seed: Int, previewing: Bool,
@@ -693,9 +728,12 @@ struct LyricLayer: View {
         let pointSize = base * 0.68
         let previewOpacity = vc_word_visibility(time, line.start, line.end, 1, 1, settings.nextWordPreviewLead)
             * Easing.smoothstep((time - previewSince) / 0.16)
-        return LyricLineView(words: words, time: time, stageSize: stageSize, baseSize: base, mood: mood,
-            composition: .scattered, seed: seed, presence: pose.presence, readings: annotations,
+        let stage = composition.fillsStage
+        return LyricLineView(words: words, time: time, stageSize: stageSize,
+            baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, settings.lyricScale))) : base, mood: mood,
+            composition: stage ? composition : .scattered, seed: seed, presence: pose.presence, readings: annotations,
             wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
+            exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
             glue: glue, firstRunOnly: previewing ? previewOpacity : nil)
             .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
                 direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : pose.presence * (1 - 0.5 * yield),

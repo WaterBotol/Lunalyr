@@ -10,8 +10,10 @@
 //   kick  -> warm gold flares that ripple out from two fresh epicentres, low in the sky
 //   snare -> an ice-cyan crackle of x-glinting stars scattered across the sky
 //   hat   -> tiny silver glitter in the dust layer, favouring the upper sky
-//   bass  -> a ladder of blue giants: heavier bass lights more of them, the low sky first
-//   vocal -> rose stars around the lead (pink) craft that shimmer only while the voice sings
+//   bass  -> a ladder of blue giants (4% of the stars), low in the sky: heavier bass lights more
+//   vocal -> rose stars that light word by word as the lyrics are sung, round a point that travels
+//            across the upper sky with the word's place in its line (a sung line sketches a
+//            constellation); a quieter shimmer round the lead craft remains while the voice sings
 //   pad   -> lavender embers inside the clouds; the clouds and the white stars breathe
 //
 // The craft glide on smooth paths; hits are light, never motion: a kick lays a bright
@@ -45,7 +47,7 @@ namespace st {
 #endif
 
 // ------------------------------------------------------------ state layout (float4 slots)
-// Keep in sync with StarTrailsLayout (StarTrailsSimulation.swift; pinned by StarTrailsTests). 204 float4 = 3,264 bytes.
+// Keep in sync with StarTrailsLayout (StarTrailsSimulation.swift; pinned by StarTrailsTests). 205 float4 = 3,280 bytes.
 constant int HDR0 = 0;    // formation centre x, y (H), flight axis (rad: the craft's mean heading), aspect
 constant int HDR1 = 1;    // trail s0 (H), trail ds (H), bright-star scroll, dust-star scroll ([0,256) H along the axis)
 constant int HDR2 = 2;    // morph angle A, morph angle B [0, 2pi), calm 0..1 (ramped), star-light gain
@@ -61,6 +63,7 @@ constant int AST = 52;    // 10 asteroids x 2: (x, y, radius, rotation), (seed, 
 constant int TRAIL = 72;  // 2 trails x 56 samples: (cross offset c, width = 1 + 0.35 x lead, glow, hot)
 constant int SKY = 184;   // 11 reference sky colours (display space): deep sky, cloud ramp x7, wisp, hot wisp, dust tint
 constant int SKYTINT = 195; // 3x3 cover tints (linear RGB), with album strength in W
+constant int LYR = 204;   // newest sung word: (serial mod 4096, age s, strength, position along its line)
 constant int kTrailN = 56;
 constant int kAst = 10;
 constant int kKick0 = 0, kKickN = 6, kSnare0 = 6, kSnareN = 6, kHat0 = 12, kHatN = 8;
@@ -302,8 +305,27 @@ struct StarCtx {
     float stage; float cloud; float calm; float gain;
     float twClock; float pad; float bass; float vocal; float vocalPhase;
     float2 lead;
+    float wordSerial; float wordAge; float wordStrength; float wordFrac;
     float liveKick; float liveSnare; float liveHat;
 };
+
+// Vocal stars light word by word: each sung word lights a fresh handful round a point that
+// travels across the upper sky as the line is sung (left to right by the word's place in its
+// line), so a sung line draws a loose constellation. Stars near the point wait a moment by their
+// distance, so it ripples out; each fades over about a second.
+static float wordLight(uint hs, float2 starP, StarCtx c) {
+    if (c.wordAge > 3.0 || c.wordStrength <= 0.0) return 0.0;
+    uint hw = hashu(hs ^ (uint(c.wordSerial) * 0x9E3779B1u + 0x7F4A7C15u));
+    float jitter = byteOf(hashu(uint(c.wordSerial) * 0x85EBCA6Bu + 0x1234u), 0) - 0.5;
+    float2 anchor = float2((0.16 + 0.68 * c.wordFrac) * c.aspect, 0.72 + 0.16 * jitter);
+    float d = length(starP - anchor);
+    float inside = 1.0 - smoothstep(0.07, 0.24, d);
+    if (inside <= 0.0 || byteOf(hw, 0) > 0.72) return 0.0;
+    float t = c.wordAge - d / 0.9 - 0.05 * byteOf(hw, 1);
+    if (t <= 0.0) return 0.0;
+    float rise = smoothstep(0.0, 0.05, t);
+    return rise * exp(-t / mix(0.35, 0.75, byteOf(hw, 2))) * inside * (0.55 + 0.45 * c.wordStrength);
+}
 
 // Dust layer: 100 cells per H, 80% occupied, one cell lookup (stars kept 1.7 px inside the cell):
 // about 14,000 faint stars on a 16:9 screen, drifting a little slower than the bright stars.
@@ -356,7 +378,7 @@ static float3 dustLayer(StarCtx c, constant float4* s, thread float3& lit) {
 
 // Bright layer: 34 cells per H, 77% occupied, the 2x2 nearest cells so halos up to 14 px never
 // clip: about 1,580 stars. Each has a fixed sound type: kick 30%, snare 18%, vocal 12%,
-// bass giants 2%, and the rest are white stars (two fifths of them pad embers).
+// bass giants 4%, and the rest are white stars (two fifths of them pad embers).
 static float3 brightLayer(StarCtx c, constant float4* s, thread float3& lit) {
     const float cells = 34.0;
     float2 g = float2(c.ps.x, wrapY(c.ps.y + c.skyB)) * cells;
@@ -378,7 +400,7 @@ static float3 brightLayer(StarCtx c, constant float4* s, thread float3& lit) {
             uint h2 = hashu(h ^ 0x02e5be93U);
             uint type = (h2 >> 8) % 100u;
             float mag = BRIGHT_A + BRIGHT_B * r0 * r0 * r0;
-            if (type >= 60u && type < 62u) mag = 0.80;         // bass giants are bright at rest
+            if (type >= 60u && type < 64u) mag = 0.80;         // bass giants are bright at rest
             float rate = 0.0981748 * float(4u + (h2 & 31u));
             float tw = 1.0 - (0.08 + 0.20 * c.pad) * (0.5 + 0.5 * sin(c.twClock * rate + 6.2832 * byteOf(h2, 3)));
             float sigRest = (0.55 + 0.20 * mag) * c.scale;
@@ -401,20 +423,23 @@ static float3 brightLayer(StarCtx c, constant float4* s, thread float3& lit) {
                 coreT = kSnareCore; halo = kSnareHalo; sigLit = 1.4; haloSig = 2.6; haloAmt = 1.1; gainCore = 2.4;
                 glen = byteOf(h2, 2) > 0.35 ? 6.0 : 0.0; diag = true; stageDim = 0.45;
             } else if (type < 60u) {                // vocal: around the lead craft, shimmering while sung
+                // The sustained shimmer around the lead craft stays, quieter: it is what lights
+                // songs without synced lyrics. Sung words light the rest (wordLight).
                 if (c.vocal > 0.04) {
                     float lo = mix(0.10, 0.70, byteOf(h2, 2));
                     float near = 1.0 - smoothstep(0.10, 0.60, length(starP - c.lead));
                     float f = 1.0 + 0.5 * floor(byteOf(h2, 1) * 3.999);    // 1, 1.5, 2, 2.5: exact under the 4 pi wrap
                     float shimmer = 0.55 + 0.45 * sin(c.vocalPhase * f + 6.2832 * byteOf(h2, 0));
-                    l = smoothstep(lo, lo + 0.2, c.vocal) * shimmer * (0.06 + 0.94 * near) * mix(1.0, 0.6, c.calm);
+                    l = 0.4 * smoothstep(lo, lo + 0.2, c.vocal) * shimmer * (0.06 + 0.94 * near) * mix(1.0, 0.6, c.calm);
                 }
+                l = max(l, wordLight(h2, starP, c) * mix(1.0, 0.6, c.calm));
                 coreT = kVocalCore; halo = kVocalHalo; sigLit = 1.55; haloSig = 3.2; haloAmt = 1.25; gainCore = 2.4;
                 stageDim = 0.5;
-            } else if (type < 62u) {                // bass giant: a threshold ladder
+            } else if (type < 64u) {                // bass giant: a threshold ladder, low in the sky
                 float lo = mix(0.22, 0.85, byteOf(h2, 2));
                 float shim = 0.0981748 * float(7u + ((h2 >> 20) & 7u));     // 0.7-1.4 rad/s, exact under the 64 s wrap
                 l = smoothstep(lo, lo + 0.16, c.bass) * (0.9 + 0.1 * sin(c.twClock * shim + byteOf(h2, 0) * 6.2832));
-                l *= (0.45 + 0.55 * (1.0 - smoothstep(0.25, 0.85, starP.y))) * mix(1.0, 0.6, c.calm);
+                l *= (0.2 + 0.8 * (1.0 - smoothstep(0.15, 0.65, starP.y))) * mix(1.0, 0.6, c.calm);   // bass sits low
                 coreT = kBassCore; halo = kBassHalo; sigLit = 2.2; haloSig = 5.5; haloAmt = 0.6; gainCore = 1.2;
                 stageDim = 0.35;
             } else if (byteOf(h2, 2) < 0.40) {      // pad ember: a soft lavender glow inside the clouds
@@ -617,6 +642,8 @@ fragment float4 starTrailsFragment(FSQuadOut in [[stage_in]], constant VizUnifor
     c.stage = stage; c.cloud = neb.cloud; c.calm = calm; c.gain = hdr2.w;
     c.twClock = clk.x; c.pad = env1.y; c.bass = env0.w; c.vocal = env1.x; c.vocalPhase = clk.y;
     c.lead = s[CRAFT].xy;
+    float4 lyr = s[LYR];
+    c.wordSerial = lyr.x; c.wordAge = lyr.y; c.wordStrength = lyr.z; c.wordFrac = lyr.w;
     float4 live = s[LIVE];
     c.liveKick = live.x; c.liveSnare = live.y; c.liveHat = live.z;
     float3 soundLight = float3(0.0);

@@ -66,6 +66,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
         case .spoken: return .glide
         case .cascade: return .lift
         case .cutout: return .cutoutFold
+        case .hinge, .broadside, .portal, .mosaic, .torque, .fable: return .fade
         }
     }
 }
@@ -82,7 +83,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
 /// `ScatteredLyricText`; the rolling layouts use `SpokenTypographyView`.
 /// Both renderers share timestamp-derived word entrances and preview state.
 enum LyricComposition: String, CaseIterable, Identifiable {
-    case scattered, constellation, constellationEditorial, echo, editorial, spoken, cascade, cutout
+    case scattered, constellation, constellationEditorial, echo, editorial, spoken, cascade, cutout, hinge, broadside, portal, mosaic, torque, fable
 
     var id: String { rawValue }
 
@@ -96,6 +97,12 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .spoken: return "Spoken"
         case .cascade: return "Cascade"
         case .cutout: return "Cutout"
+        case .hinge: return "Hinge"
+        case .broadside: return "Broadside"
+        case .portal: return "Portal"
+        case .mosaic: return "Mosaic"
+        case .torque: return "Torque"
+        case .fable: return "Fable"
         }
     }
 
@@ -109,6 +116,12 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .spoken: return "Each sung word takes focus; recent words settle around it."
         case .cascade: return "A moving column of words, arriving with the voice."
         case .cutout: return "Uneven type and album-colour labels, built word by word."
+        case .hinge: return "Heavy words swing in on a hinge and fold into a stack."
+        case .broadside: return "One strip of big type that slides along, with little words as labels."
+        case .portal: return "The sung word in a pill; earlier words drift away as pale ones."
+        case .mosaic: return "A collage: each word set huge, on a colour bar, or letter by letter."
+        case .torque: return "Words wrung into place with a thick edge, stacking upwards."
+        case .fable: return "Words climb a diagonal staircase, each a size up on the last."
         }
     }
 
@@ -171,6 +184,8 @@ struct LyricLineView: View {
     var glue: [Bool] = []
     /// Line-timed preview: draw only the first word, at this opacity.
     var firstRunOnly: Double?
+    /// Words from this time on always get the Cutout · Highlight tile.
+    var highlightFrom: Double?
     /// Rolling stages: room kept at the foot, the onset after the window,
     /// and each word's place in the song (its colour).
     var bottomInset: CGFloat = 0
@@ -229,7 +244,10 @@ struct LyricLineView: View {
                 )
                 .frame(width: 0, height: 0)
             }
-            if composition.arrivalOnly {
+            if composition.fillsStage {
+                StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
+                               composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly)
+            } else if composition.arrivalOnly {
                 SpokenTypographyView(words: words, time: time, baseSize: baseSize, mood: mood,
                                      composition: composition, seed: seed, accent: accent, energy: energy, readings: readings,
                                      stageHeight: stageSize.height, stageHeightInTypeSizes: rollingHeightInTypeSizes, bottomInset: bottomInset, following: following,
@@ -252,7 +270,8 @@ struct LyricLineView: View {
                 exitStart: exitStart,
                 previewSince: previewSince,
                 glue: glue,
-                firstRunOnly: firstRunOnly
+                firstRunOnly: firstRunOnly,
+                highlightFrom: highlightFrom
               )
             }
         }
@@ -455,7 +474,8 @@ final class LyricLayoutRotation: ObservableObject {
 
     /// The order songs step through: contrasting looks sit next to each other.
     static let order: [LyricComposition] = [
-        .cutout, .constellation, .editorial, .spoken, .echo, .cascade, .scattered, .constellationEditorial,
+        .cutout, .hinge, .constellation, .broadside, .editorial, .portal, .spoken, .mosaic, .echo, .torque, .cascade,
+        .fable, .scattered, .constellationEditorial,
     ]
 
     private let defaults: UserDefaults
@@ -527,5 +547,30 @@ final class LyricLayoutRotation: ObservableObject {
         counts = [:]
         defaults.removeObject(forKey: Self.cursorKey)
         defaults.removeObject(forKey: Self.countsKey)
+    }
+}
+
+/// Layouts gathered by the feel they give a song, for the pickers.
+enum LyricCompositionGroup: String, CaseIterable, Identifiable {
+    case calm = "Calm", bold = "Bold", playful = "Playful"
+    var id: String { rawValue }
+
+    var layouts: [LyricComposition] {
+        switch self {
+        case .calm: return [.scattered, .constellation, .constellationEditorial, .editorial, .spoken]
+        case .bold: return [.echo, .cascade, .hinge, .broadside, .torque]
+        case .playful: return [.cutout, .portal, .mosaic, .fable]
+        }
+    }
+}
+
+/// The layout choices in the pickers, under a heading for each group.
+struct LyricCompositionOptions: View {
+    var body: some View {
+        ForEach(LyricCompositionGroup.allCases) { group in
+            Section(group.rawValue) {
+                ForEach(group.layouts) { Text($0.title).tag(Optional($0)) }
+            }
+        }
     }
 }

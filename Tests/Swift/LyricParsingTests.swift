@@ -153,7 +153,9 @@ final class LyricParsingTests: XCTestCase {
         [00:31.000]弹着 吉他 唱歌
         [00:34.000]男：你的 鼓励 是光
         """
-        let lines=LyricsFetcher.parseLRC(text,trackDuration:60)
+        let all=LyricsFetcher.parseLRC(text,trackDuration:60)
+        let lines=all.filter {$0.credit != true}
+        XCTAssertEqual(all.filter {$0.credit == true}.count,6)
         XCTAssertEqual(lines.map(\.text),["都 是勇敢的","我 鼓起勇气 说爱你","弹着 吉他 唱歌","男：你的 鼓励 是光"])
         XCTAssertEqual(lines.first?.start ?? 0,22.29,accuracy:0.001)
     }
@@ -169,8 +171,10 @@ final class LyricParsingTests: XCTestCase {
         [03:50.00]制作人：王五
         [03:51.00]和声：赵六
         """
-        let lines=LyricsFetcher.parseLRC(text,trackDuration:240)
-        XCTAssertEqual(lines.map(\.text),["光年之外 - 邓紫棋","感受停在我发端的指尖","音乐：响起来","鼓：咚咚咚"])
+        let all=LyricsFetcher.parseLRC(text,trackDuration:240)
+        let lines=all.filter {$0.credit != true}
+        XCTAssertEqual(all.filter {$0.credit == true}.map(\.text),["光年之外 - 邓紫棋","作词：邓紫棋","鼓：张三","电吉他：李四","制作人：王五","和声：赵六"])
+        XCTAssertEqual(lines.map(\.text),["感受停在我发端的指尖","音乐：响起来","鼓：咚咚咚"])
     }
     func testCachedLinesWithoutNewFieldsStillDecode() throws {
         let old=#"{"start":1,"end":2,"text":"Hi","words":[{"text":"Hi","start":1,"end":2}],"isInstrumental":false,"wordTimed":true,"romanization":"hai"}"#
