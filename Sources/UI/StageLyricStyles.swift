@@ -191,9 +191,19 @@ struct StageLyricView: View {
         func columnSize(_ j: Int) -> CGFloat { u * min(2.8, 1.2 + 0.24 * CGFloat(j)) * (columnCount > 6 ? 0.85 : 1) }
         let heightSum = (0..<columnCount).map { columnSize($0) * 0.95 }.reduce(0, +)
         // The whole corner grows to fill the stage once it has a bar to hang from.
-        let barWidth = runs.count > 2 ? CGFloat(runs[2].text.count) * u * 1.7 * 0.66 : 0
-        let columnWidth = (0..<columnCount).map { CGFloat(runs[$0 + 3].text.count) * columnSize($0) * 0.66 * 0.84 }.max() ?? 0
-        let structureWidth = max(2 * max(barWidth, columnWidth) + u * 0.3, u * 3)
+        var barWidth: CGFloat = 0
+        if runs.count > 2 {
+            let letters = CGFloat(runs[2].text.count)
+            barWidth = letters * u * 1.7 * 0.66
+        }
+        var columnWidth: CGFloat = 0
+        for j in 0..<columnCount {
+            let letters = CGFloat(runs[j + 3].text.count)
+            let width: CGFloat = letters * columnSize(j) * 0.66 * 0.84
+            columnWidth = max(columnWidth, width)
+        }
+        let widest: CGFloat = max(barWidth, columnWidth)
+        let structureWidth: CGFloat = max(2 * widest + u * 0.3, u * 3)
         let structureHeight = max(heightSum, u * 2.4) + u * 0.8
         let fill: CGFloat = min(2.0, stageSize.width * 0.8 / structureWidth, stageSize.height * 0.78 / structureHeight)
         let fitHeight: CGFloat = min(1, stageSize.height * 0.74 / max(heightSum + u * 0.8, 1))

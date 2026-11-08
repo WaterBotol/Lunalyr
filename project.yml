@@ -27,7 +27,7 @@ targets:
       properties:
         CFBundleDisplayName: Lunalyr
         CFBundleName: Lunalyr
-        CFBundleShortVersionString: 0.7.0
+        CFBundleShortVersionString: 1.0.0
         CFBundleVersion: "21"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026

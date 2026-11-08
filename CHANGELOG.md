@@ -12,7 +12,7 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
-## [0.7.0] - 2026-11-08
+## [1.0.0] - 2026-11-08
 
 Build 21 for macOS 14 and later.
 
@@ -404,8 +404,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.7.0...HEAD
-[0.7.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.7.0
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v1.0.0
 [0.6.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.6.0
 [0.5.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.1
 [0.5.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.0
