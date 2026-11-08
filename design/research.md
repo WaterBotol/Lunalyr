@@ -1,56 +1,92 @@
-# Phase 1: Settings themes, research
+# Settings redesign: research summary (Phase 1)
 
-Scope: Lunalyr's own windows (Settings, menu-bar panel, onboarding, Lyric Card window). These are ordinary opaque macOS windows. The bright, moving wallpaper is shown only in the small live-preview stage, so "readability over bright moving wallpapers" mostly matters for (a) the preview stage's surroundings, and (b) any translucent surface that would sit over the desktop. Scores are 1 (poor) to 5 (excellent). Effort and cost: 5 = cheap.
+Detailed, sourced notes (each claim carries a URL) are in `design/research/`:
 
-## What is already in the app
+| File | Covers |
+|---|---|
+| `neumorphism-clay.md` | Neumorphism, claymorphism: recipes, computed contrast, failure modes |
+| `glass-aurora.md` | Liquid Glass / glassmorphism, aurora and mesh gradients, Apple HIG and API availability |
+| `brutalism-skeuo-chrome.md` | Neubrutalism, neo-skeuomorphism, holographic / chrome |
+| `layout-ia.md` | Apple HIG and NN/g on settings navigation; real settings screens; two candidate sidebars |
+| `current-settings-audit.md` | Every control in today's Settings, 15 task walk-throughs, top-10 problems, 63 screenshots |
 
-`SettingsStyle.swift` ships two looks, **Soft** (neumorphic) and **Clay** (claymorphic), with a Settings and welcome picker. Both keep the violet accent for selection and drop shadows under Increase Contrast. There is no written spec or style gallery, and the picker shows two plain dots.
+Screenshots of the pages and apps actually opened are in `design/research/img/`.
 
-## The seven styles
+## How good is the evidence
 
-| Style | What it is | Readability over bright, moving wallpaper | Dark mode | Accessibility (contrast, Reduce Transparency) | SwiftUI effort | Perf cost |
+- Pages were actually opened in the browser and screenshots taken, and contrast was computed from real hex values.
+- **Gaps:** no shipped macOS settings window in any of these styles was found; dark-mode values for neubrutalism, clay, chrome and skeuomorphism are derived, not observed; some sources (Dribbble, GitHub, Medium, Macworld) would not load; the layout screenshots are vendor documentation pages, not live app windows; no public benchmark of blur/mesh cost exists, so performance scores are judgement plus Apple's own warning.
+- **Audit gaps:** rendered in the light look only; only Wallpaper (both looks) and Menu bar & shortcuts were viewed directly, the rest are from source.
+
+## Findings on style
+
+| Style | Readability | Dark mode | Accessibility | Effort (5 = easy) | Perf (5 = cheap) | Thumbnail |
 |---|---|---|---|---|---|---|
-| **Neumorphism** | One surface colour; controls look pressed out of it with a light and a dark shadow | 3: opaque, so fine, but low edge contrast | 3: highlights vanish on dark; needs a lifted canvas | 2: edges are about 1.4:1 unless outlined; needs outline + accent for selection | 4: two `shadow`s per surface | 4: static shadows, cached |
-| **Claymorphism** | Puffy pastel shapes, big radii, coloured drop shadow, bright top rim | 4: saturated fills separate from busy backgrounds | 3: pastel loses charm; needs deep-tinted faces | 3: text contrast easy; shape contrast moderate | 3: gradient rim + coloured shadow + big radii | 4 |
-| **Glassmorphism / Apple Liquid Glass** | Translucent, blurred, specular-edged surfaces | 2: depends on what is behind; bright wallpapers wash text out | 4 | 2: Reduce Transparency removes the effect; contrast varies with the backdrop | 4 on macOS 26 (`glassEffect`), 2 below it | 2: live blur of moving content is the costly case |
-| **Neo-skeuomorphism** | Realistic materials: metal, leather, knurled dials, stitched edges | 4 | 3 | 3 | 1: lots of bespoke art/gradients | 3 |
-| **Neubrutalism** | Flat saturated fills, thick black outlines, hard offset shadows, no blur | 5: strongest edges and contrast of any option | 4: inverts cleanly (light outlines, deep fills) | 5: contrast is the style; no transparency to lose | 5: `overlay(stroke)` plus an offset solid shadow | 5: no blur at all |
-| **Holographic / chrome** | Iridescent gradients, metallic highlights | 2: busy against busy | 3 | 2: gradient text/fills fail contrast easily; animation tempting | 2 | 2: animated gradients are costly |
-| **Aurora / mesh gradients** | Soft blurred colour fields behind translucent panels | 3 | 4 | 3: needs a scrim under text | 3 (`MeshGradient` on macOS 15) | 2-3: moving mesh redraws continuously; static is fine |
+| Neumorphism | 2 | 2 | 1 (2 with outlines) | 3 | 4 | 2 |
+| Claymorphism | 3 | 2 | 3 | 2 | 3 | 4 |
+| Glass / Liquid Glass | 1 | 4 | 2 | 4 (macOS 26 only) | 2 | 2 |
+| Aurora / mesh | 2 (4 behind a scrim) | 4 | 2 | 3 | 3 (5 if static bitmap) | 4 |
+| Neubrutalism | 5 | 3 | 4 | 5 | 5 | 5 |
+| Neo-skeuomorphism | 2 | 3 | 2 | 3 | 3 | 2 |
+| Holographic / chrome | 3 | 4 | 3 | 3 | 4 (static) | 4 |
 
-### Notes behind the scores
+Key facts behind the scores:
+- Neumorphism edges measure 1.2-1.7:1, against the 3:1 non-text minimum. CRED, a high-profile adopter, abandoned it in 2022. No shipped macOS app using it as its control language was found.
+- Clay: strong at thumbnail size, but pastel card edges are about 1.1-1.2:1 and white on its violet button is 1.85:1. No proven dark recipe.
+- Apple's HIG says not to use Liquid Glass in the content layer; a settings form is content. Reduce Transparency does not close the contrast gap (NN/g, Infinum). Never animate a mesh gradient beside the already-animated live preview.
+- Neubrutalism (computed on neobrutalism.dev): 2px outline, ~5px radius, 4px hard offset shadow with no blur; black on its blue is 7.0:1 but white on it only 3.0:1, so text colour must be chosen per fill.
+- Chrome/holographic works only as a static accent, never behind text.
 
-- **Neumorphism** is the hardest to make accessible: shadows alone give about 1.4:1, so it has to be paired with a faint outline and the accent for selected states. Lunalyr already does that.
-- **Claymorphism** shares neumorphism's structure (rounded, soft shadows) and differs mainly through colour saturation and the coloured shadow.
-- **Liquid Glass** is excellent in system chrome, but it is a poor fit for a window that must stay light: a live blur over changing content is the exact cost the brief rules out, and Reduce Transparency collapses it into a flat panel, so you design the fallback anyway.
-- **Neubrutalism** is the cheapest and most legible. It is also the least "Mac-like", so it needs restraint (one outline weight, one shadow offset) to avoid looking like a different app.
-- **Holographic** and **aurora** work as accents (a hero banner, an About page), not as a control language.
+## Findings on layout (this is why the cat is lost)
 
-## Thumbnail test
+From the audit of today's Settings:
+1. **No sidebar.** Navigation is two stacked tab rows (Look/Lyrics/App, then chips), so 6 of 9 pages are hidden until the right tab is picked. No search.
+2. **"Menu bar & shortcuts" is a junk drawer**: hide/pause lyrics, menu-bar line, Discord, shortcuts, lyric card. The name hints at two of them.
+3. **"Lyrics" holds no lyric appearance.** Layout, font, colour and size are under Look > Lyric style, which is about three screens long, with Highlight colour split from Text colour.
+4. Lyric size is 1-2 screens down; Global offset is at the bottom of Timing & sources.
+5. Duplicates across pages (power, offsets, hide/pause, lyric card, legibility) and about 40 captions, several 3-4 lines.
+6. The preview stage takes about half the window, leaving a ~360pt control column.
+7. Inconsistent names: Match / Match the music, Effects / GPU effects, Patterns / Line patterns, Visualiser / Visualisers, Lyric card / Copy card, and a Romanisation page holding Translations.
 
-At around 120 px wide, what survives is: (1) hue/saturation of the surface, (2) outline weight, (3) shadow direction and hardness, (4) corner radius.
-
-- Soft vs Clay: both are rounded with soft shadows. They separate on saturation only (grey-blue monochrome vs lilac pastel with a pink-violet shadow). That is distinguishable but is the weakest separation of any pairing that is both good.
-- Soft vs Neubrutalism: differ on outline (none vs thick), shadow (blurred vs hard offset), radius and colour. Unmistakable even at 60 px.
-- Clay vs Neubrutalism: also unmistakable, but both are colourful, so differences are weaker in greyscale.
-- Anything with Glass: its identity is the backdrop, which a thumbnail of an opaque window does not show.
+From the layout research: vertical sidebars scale better than stacked tabs (NN/g); search should be reachable everywhere (Raycast: Cmd-F); show the 14 layouts as a thumbnail grid; keep disclosure to two levels; use info buttons for long explanations; the most-used settings stay one click away and never go under "Advanced". There is no study proving task-based grouping beats object-based, so that choice is judgement.
 
 ## Recommendation
 
-**Pick two: Soft (refined neumorphism) and Bold (neubrutalism).**
+### Themes: two, with different jobs
 
-- They pass the thumbnail test most clearly (quiet and borderless vs thick-outlined and hard-shadowed).
-- Both are static, cheap, and strong on accessibility once Soft keeps its outline.
-- Between them they cover the calm-and-dark and the high-contrast ends.
+Evidence argues against building on soft shadows (neumorphism, clay) as the base, which is what Settings uses today. My recommendation:
 
-**If you want to keep the existing names Soft and Clay**, that is the cheapest route (both already exist) and it works, but it must be spec'd harder than it is today to pass the thumbnail test: Soft stays desaturated and shadow-only with no rim; Clay gets noticeably larger radii (about 1.6x), a saturated fill, a coloured shadow and a bright top rim, so the pair separates even in greyscale.
+1. **Bold** (toned-down neubrutalism): 1.5pt dark outline, 2-3pt hard offset shadow, 6-8pt radii, flat saturated fills, text colour chosen per fill. Best contrast and cheapest to draw.
+2. **Calm** (opaque, flat, native-feeling): system surfaces, hairline borders, one accent, no shadows; optionally a single static aurora header image behind a scrim. Reads differently from Bold at thumbnail size (no outlines vs thick outlines).
 
-Not recommended for the main controls: Liquid Glass (cost, backdrop dependence), holographic and aurora (contrast), neo-skeuomorphism (art cost, dated look). Aurora could still be a one-off hero on About or onboarding later.
+Alternatives:
+- **B. Bold + hardened Clay**: if you want the pastel puffy look kept; needs darker text, 3:1 outlines and a designed dark mode.
+- **C. Keep Soft + Clay** with fixes (outlines at 3:1, accent-filled controls): cheapest, weakest on the evidence.
+
+Names are not fixed; the table above is what matters.
+
+### Layout: sidebar, search, fewer pages
+
+Proposed sidebar (9 pages, 3 groups, always visible):
+
+- **Look**
+  - Background: wallpaper, visualisers and music response, animated covers
+  - Lyrics: layout (thumbnail grid), font, size, text and highlight colour together
+- **Words**
+  - Timing & sources
+  - Translation & romanisation
+- **App**
+  - Music player (which player, Automation access)
+  - Menu bar & shortcuts
+  - Discord & lyric card
+  - General (launch at login, updates, welcome, performance)
+  - About
+
+Plus: a search field that finds any setting, last page restored on reopen, page name in the window title, the preview stage collapsible, captions cut to one line with long explanations behind info buttons, and a single name per concept.
 
 ## Decision needed
 
-1. **Soft + Bold (neubrutalism)**: the most distinct pair (my recommendation).
-2. **Soft + Clay**: keep what exists, with a stricter spec.
-3. Another pair from the table.
+1. Theme pair: **Bold + Calm** (recommended), **Bold + hardened Clay**, or **Soft + Clay with fixes**.
+2. Layout: sidebar as above (recommended) or the five-group object-based variant in `layout-ia.md`.
 
-I'll stop here until you choose.
+After that: Phase 2 spec, Phase 3 style system and gallery, Phase 4 General screen on the new sidebar.
