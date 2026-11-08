@@ -236,10 +236,26 @@ struct ShareInspector: View {
     var body: some View {
         ThemedForm {
             ThemedSection("Discord") {
-                Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
-                InspectorCaption("Needs the Discord desktop app. Shows the line being sung.", more: "Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
+            Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
+            InspectorCaption("Needs the Discord desktop app. Shows the line being sung.",
+                             more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with a Get Lunalyr button for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
+            if extras.showsDiscordPresence {
+                ChoiceSegments("Status shows", selection: $extras.discordStatusText,
+                               cases: DiscordStatusText.allCases, label: \.title)
+                Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
+                Toggle("Show the album cover", isOn: $extras.discordShowsCover)
+                InspectorCaption("Looks the cover up by song and artist.",
+                                 more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown.")
+                Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
+                Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
+                Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
+                ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,
+                            minimumLabel: "With the music", maximumLabel: "Earlier",
+                            format: { String(format: "%.1f s earlier", $0) })
+                InspectorCaption("How far ahead of the music Discord shows the line.")
             }
-            ThemedSection("Share") {
+        }
+        ThemedSection("Share") {
                 ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
                            selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
                     Text("Follow wallpaper").tag(Optional<LyricComposition>.none)

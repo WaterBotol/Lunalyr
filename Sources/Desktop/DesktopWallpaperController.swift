@@ -156,8 +156,12 @@ final class DesktopWallpaperController {
             window.isExcludedFromWindowsMenu = true
 
             let activity = WindowRenderActivity()
-            let hosting = NSHostingView(rootView: NowPlayingView(displayID: displayID, renderActivity: activity)
-                .environmentObject(NowPlayingMonitor.shared))
+            let shade = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+            let hosting = NSHostingView(rootView: ZStack(alignment: .top) {
+                NowPlayingView(displayID: displayID, renderActivity: activity)
+                    .environmentObject(NowPlayingMonitor.shared)
+                MenuBarShade(menuBarHeight: shade)
+            })
             hosting.frame = NSRect(origin: .zero, size: screen.frame.size)
             hosting.autoresizingMask = [.width, .height]
             window.contentView = hosting
@@ -206,5 +210,24 @@ enum WallpaperOpacityPolicy {
         let fadeStart = [changedAt, settledAt ?? changedAt, resumedAt ?? changedAt].max() ?? changedAt
         let due = fadeStart + settleTime
         return now >= due ? .opaque : .wait(due - now)
+    }
+}
+
+/// A faint dark fade along the top edge, beneath the menu bar (see
+/// `DesktopOptions.shadesMenuBar`). Never takes a click.
+@MainActor
+struct MenuBarShade: View {
+    let menuBarHeight: CGFloat
+    @ObservedObject private var options = DesktopOptions.shared
+
+    var body: some View {
+        if options.shadesMenuBar {
+            LinearGradient(colors: [Color.black.opacity(0.42), Color.black.opacity(0.18), .clear],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: max(menuBarHeight, 24) + 36)
+                .frame(maxWidth: .infinity)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }

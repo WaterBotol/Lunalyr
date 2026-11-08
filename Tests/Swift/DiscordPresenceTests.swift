@@ -37,6 +37,49 @@ final class DiscordPresenceTests: XCTestCase {
         XCTAssertEqual(buttons.first?["url"], DiscordPresence.getLunalyrURL)
     }
 
+    func testAnInstrumentalBreakIsShownInTheStatus() {
+        let playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: nil,
+                                              line: DiscordPresence.instrumentalText, start: 0, end: nil)
+        XCTAssertEqual(DiscordPresence.activity(for: playing)["state"] as? String, "♪ Instrumental")
+    }
+
+    func testOptionsChangeWhatIsShared() throws {
+        var options = DiscordOptions()
+        options.showsButton = false
+        options.showsProgress = false
+        options.showsLyric = false
+        options.statusText = .song
+        let playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: "Album", line: "a line",
+                                              start: 10, end: 90, coverURL: "https://example.com/c.jpg", options: options)
+        let activity = DiscordPresence.activity(for: playing)
+        XCTAssertNil(activity["buttons"])
+        XCTAssertNil(activity["timestamps"])
+        XCTAssertEqual(activity["state"] as? String, "Artist")
+        XCTAssertEqual(activity["status_display_type"] as? Int, 2)
+        let assets = try XCTUnwrap(activity["assets"] as? [String: String])
+        XCTAssertEqual(assets["large_image"], "https://example.com/c.jpg")
+        XCTAssertEqual(assets["small_text"], "Lunalyr")
+    }
+
+    func testPausedShowsNoProgressBar() {
+        let playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: nil, line: nil,
+                                              start: 10, end: 90, paused: true)
+        let activity = DiscordPresence.activity(for: playing)
+        XCTAssertNil(activity["timestamps"])
+        XCTAssertEqual(activity["details"] as? String, "Paused · Song · Artist")
+    }
+
+    func testCoverComesFromTheBestMatchingSearchResult() {
+        let reply = """
+        {"results":[{"trackName":"Other Song","artistName":"Someone","artworkUrl100":"https://a/1/100x100bb.jpg"},
+                    {"trackName":"Golden Hour Static","artistName":"Lunar Tides","artworkUrl100":"https://a/2/100x100bb.jpg"}]}
+        """
+        XCTAssertEqual(DiscordPresence.artworkURL(fromSearch: Data(reply.utf8), title: "Golden Hour Static", artist: "Lunar Tides"),
+                       "https://a/2/512x512bb.jpg")
+        XCTAssertNil(DiscordPresence.artworkURL(fromSearch: Data(reply.utf8), title: "Missing", artist: "Nobody"))
+        XCTAssertNil(DiscordPresence.artworkURL(fromSearch: Data("nope".utf8), title: "x", artist: "y"))
+    }
+
     func testBetweenLinesTheStatusShowsTheArtist() {
         let playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: nil, line: nil, start: 0, end: nil)
         let activity = DiscordPresence.activity(for: playing)

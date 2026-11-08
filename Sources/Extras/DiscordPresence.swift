@@ -2,26 +2,56 @@ import AppKit
 import Combine
 import Darwin
 
+/// What the small status under the user's name shows.
+enum DiscordStatusText: String, CaseIterable, Identifiable {
+    case lyric, song, artist
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .lyric: return "Lyric line"
+        case .song: return "Song"
+        case .artist: return "Artist"
+        }
+    }
+}
+
+/// What the user chose to share. Part of the activity, so a change sends it again.
+struct DiscordOptions: Equatable {
+    var statusText: DiscordStatusText = .lyric
+    var showsLyric = true
+    var showsCover = true
+    var showsButton = true
+    var showsProgress = true
+    var showsWhenPaused = false
+    /// How far ahead of the music the line is read, so it lands as it is sung.
+    var lyricLead: Double = 2.5
+}
+
 /// Shows what is playing on the user's Discord profile (Rich Presence).
 ///
 /// Discord's desktop app listens on a local Unix socket
 /// (`$TMPDIR/discord-ipc-N`); this speaks its small framed-JSON protocol
-/// directly, so there is no library, no login and no network traffic from
-/// Lunalyr. Off by default. Nothing is sent unless the user turns it on, and
-/// the activity is cleared when playback stops or the feature is switched off.
+/// directly, so there is no library and no login. Off by default. Nothing is
+/// sent unless the user turns it on, and the activity is cleared when
+/// playback stops or the feature is switched off.
 ///
-/// - The small status under the user's name shows the line being sung
-///   (`status_display_type` = state); the full profile card shows the song
-///   and artist, the line, the album on hover and a progress bar.
+/// - The small status under the user's name shows the line being sung (or the
+///   song or artist, by choice); the full profile card shows the song and
+///   artist, the line, the album on hover, the cover and a progress bar.
+/// - The album cover is found on Apple's public search (title and artist
+///   only) and cached; without one, the Lunalyr icon is shown.
 /// - Discord allows five updates per twenty seconds: updates are spaced out,
 ///   so a very fast song skips some lines rather than being refused.
+/// - Discord never shows a person their own buttons; others see them.
 @MainActor
 final class DiscordPresence {
     nonisolated static let applicationID = "1568919234367717506"
     static let getLunalyrURL = "https://github.com/WaterBotol/Lunalyr/releases/latest"
     static let iconURL = "https://raw.githubusercontent.com/WaterBotol/Lunalyr/main/Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png"
     /// Shortest gap between two activity updates.
-    static let minimumUpdateGap: TimeInterval = 4
+    static let minimumUpdateGap: TimeInterval = 3
     /// How often the line is checked while a song plays.
     static let tickInterval: TimeInterval = 0.5
     /// How often a missing Discord is looked for again.
@@ -59,27 +89,51 @@ final class DiscordPresence {
         /// When the song would have started and ends, in Unix seconds.
         var start: Int
         var end: Int?
+        var paused = false
+        var coverURL: String?
+        var options = DiscordOptions()
     }
 
     /// The activity object for SET_ACTIVITY.
     static func activity(for playing: Playing) -> [String: Any] {
+        let options = playing.options
         var hover = playing.artist
         if let album = playing.album, !album.isEmpty { hover += " — \(album)" }
+        let song = playing.artist.isEmpty ? playing.title : "\(playing.title) · \(playing.artist)"
+        let fallback = playing.artist.isEmpty ? playing.title : playing.artist
+        let lyric = options.showsLyric ? playing.line : nil
+
+        var state = lyric ?? fallback
+        var displayType = 1   // 0 name, 1 state, 2 details
+        switch options.statusText {
+        case .lyric: break
+        case .song: displayType = 2
+        case .artist:
+            state = fallback
+        }
+        var assets: [String: Any] = ["large_text": field(hover)]
+        if options.showsCover, let cover = playing.coverURL {
+            assets["large_image"] = cover
+            assets["small_image"] = iconURL
+            assets["small_text"] = "Lunalyr"
+        } else {
+            assets["large_image"] = iconURL
+        }
         var activity: [String: Any] = [
             "type": 2,                       // Listening
-            // 1 = the small status shows `state`, the lyric line.
-            "status_display_type": 1,
-            "details": field(playing.artist.isEmpty ? playing.title : "\(playing.title) · \(playing.artist)"),
-            "state": field(playing.line ?? (playing.artist.isEmpty ? playing.title : playing.artist)),
-            "assets": [
-                "large_image": iconURL,
-                "large_text": field(hover),
-            ],
-            "buttons": [["label": "Get Lunalyr", "url": getLunalyrURL]],
+            "status_display_type": displayType,
+            "details": field(playing.paused ? "Paused · \(song)" : song),
+            "state": field(playing.paused ? fallback : state),
+            "assets": assets,
         ]
-        var timestamps: [String: Any] = ["start": playing.start]
-        if let end = playing.end { timestamps["end"] = end }
-        activity["timestamps"] = timestamps
+        if options.showsButton {
+            activity["buttons"] = [["label": "Get Lunalyr", "url": getLunalyrURL]]
+        }
+        if options.showsProgress && !playing.paused {
+            var timestamps: [String: Any] = ["start": playing.start]
+            if let end = playing.end { timestamps["end"] = end }
+            activity["timestamps"] = timestamps
+        }
         return activity
     }
 
@@ -87,6 +141,24 @@ final class DiscordPresence {
         var args: [String: Any] = ["pid": Int(pid)]
         if let activity { args["activity"] = activity }
         return ["cmd": "SET_ACTIVITY", "args": args, "nonce": nonce]
+    }
+
+    /// The cover of the best match in an Apple search reply (iTunes Search
+    /// API), at a size Discord shows well, or nil if no result is the song.
+    nonisolated static func artworkURL(fromSearch data: Data, title: String, artist: String) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = object["results"] as? [[String: Any]] else { return nil }
+        let wantTitle = title.lowercased()
+        let wantArtist = artist.lowercased()
+        for result in results {
+            let name = (result["trackName"] as? String ?? "").lowercased()
+            let by = (result["artistName"] as? String ?? "").lowercased()
+            guard !name.isEmpty, name.contains(wantTitle) || wantTitle.contains(name),
+                  wantArtist.isEmpty || by.contains(wantArtist) || wantArtist.contains(by),
+                  let art = result["artworkUrl100"] as? String else { continue }
+            return art.replacingOccurrences(of: "100x100bb", with: "512x512bb")
+        }
+        return nil
     }
 
     // MARK: - State
@@ -100,6 +172,9 @@ final class DiscordPresence {
     /// The timestamps already shown, so a line change does not move the bar.
     private var anchor: (start: Int, trackKey: String)?
     private var running = false
+    /// Cover URLs by song; nil inside means looked up and not found.
+    private var covers: [String: String?] = [:]
+    private var lookingUp: Set<String> = []
 
     init(extras: LunalyrExtras) {
         self.extras = extras
@@ -109,11 +184,12 @@ final class DiscordPresence {
         guard !running else { return }
         running = true
         let monitor = NowPlayingMonitor.shared
-        let sources: [AnyPublisher<Void, Never>] = [
+        var sources: [AnyPublisher<Void, Never>] = [
             monitor.$current.map { _ in () }.eraseToAnyPublisher(),
             monitor.$isPlaying.map { _ in () }.eraseToAnyPublisher(),
             LyricsViewModel.shared.$lines.map { _ in () }.eraseToAnyPublisher(),
         ]
+        if let extras { sources.append(extras.objectWillChange.eraseToAnyPublisher()) }
         Publishers.MergeMany(sources)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.update() }
@@ -139,10 +215,35 @@ final class DiscordPresence {
         anchor = nil
     }
 
+    private var options: DiscordOptions { extras?.discordOptions ?? DiscordOptions() }
+
+    /// What is shown for a break in the singing.
+    static let instrumentalText = "♪ Instrumental"
+
+    /// The line being sung `lead` seconds from now, `instrumentalText` in an
+    /// intro or a break, or nil without timed lyrics.
+    private func line(lead: Double, extras: LunalyrExtras) -> String? {
+        guard extras.lyricsVisible, !extras.wallpaperPaused else { return nil }
+        let model = LyricsViewModel.shared
+        guard let first = model.lines.first else { return nil }
+        let time = NowPlayingMonitor.shared.playbackTime() + Settings.shared.lyricOffset
+            + SongOffsets.shared.offset(for: model.currentQuery) + lead
+        guard let index = model.activeLineIndex(at: time), model.lines.indices.contains(index) else {
+            return time < first.start ? Self.instrumentalText : nil
+        }
+        let line = model.lines[index]
+        let words = RomanizationOptions.shared.display == .replace ? model.romanized[index] : nil
+        let text = (words.map { $0.map(\.text).joined(separator: " ") } ?? line.text)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let finished = time > line.end + 1.5 && index + 1 < model.lines.count
+        return line.isInstrumental || finished || text.isEmpty ? Self.instrumentalText : text
+    }
+
     private func currentPlaying() -> Playing? {
         let monitor = NowPlayingMonitor.shared
-        guard monitor.isPlaying, let track = monitor.current, !track.isAdvert,
-              !track.title.isEmpty else { return nil }
+        let options = options
+        guard let track = monitor.current, !track.isAdvert, !track.title.isEmpty,
+              monitor.isPlaying || options.showsWhenPaused else { return nil }
         let position = monitor.playbackTime()
         let now = Int(Date().timeIntervalSince1970)
         let key = "\(track.title)|\(track.artist)|\(track.album ?? "")"
@@ -151,15 +252,39 @@ final class DiscordPresence {
         if let anchor, anchor.trackKey == key, abs(anchor.start - start) <= 3 { start = anchor.start }
         anchor = (start, key)
         let end = track.duration > 0 ? start + Int(track.duration) : nil
-        var line: String?
-        if let extras, extras.lyricsVisible, !extras.wallpaperPaused {
-            let text = MenuBarLyricTicker.currentText(limit: 128, extras: extras)
-            if let text, text != "♪", text != MenuBarLyricTicker.pausedText, text != MenuBarLyricTicker.hiddenText {
-                line = text
-            }
+        let text = monitor.isPlaying ? extras.flatMap { line(lead: options.lyricLead, extras: $0) } : nil
+        return Playing(title: track.title, artist: track.artist, album: track.album, line: text,
+                       start: start, end: end, paused: !monitor.isPlaying,
+                       coverURL: options.showsCover ? cover(for: track, key: key) : nil, options: options)
+    }
+
+    /// The cached cover, starting a lookup the first time a song is seen.
+    private func cover(for track: NowPlayingMonitor.Track, key: String) -> String? {
+        if let known = covers[key] { return known }
+        guard !lookingUp.contains(key) else { return nil }
+        lookingUp.insert(key)
+        let title = track.title, artist = track.artist
+        Task { [weak self] in
+            let url = await Self.lookUpCover(title: title, artist: artist)
+            guard let self else { return }
+            covers[key] = .some(url)
+            lookingUp.remove(key)
+            update()
         }
-        return Playing(title: track.title, artist: track.artist, album: track.album,
-                       line: line, start: start, end: end)
+        return nil
+    }
+
+    nonisolated private static func lookUpCover(title: String, artist: String) async -> String? {
+        var components = URLComponents(string: "https://itunes.apple.com/search")
+        components?.queryItems = [URLQueryItem(name: "term", value: "\(artist) \(title)"),
+                                  URLQueryItem(name: "media", value: "music"),
+                                  URLQueryItem(name: "entity", value: "song"),
+                                  URLQueryItem(name: "limit", value: "8")]
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        return artworkURL(fromSearch: data, title: title, artist: artist)
     }
 
     private func update() {

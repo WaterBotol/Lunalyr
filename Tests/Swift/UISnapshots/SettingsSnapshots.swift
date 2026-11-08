@@ -205,6 +205,12 @@ extension UISnapshotCatalogue {
                                scene.settings.motionExclusions = [VersoCustom.Settings.exclusionKey(artist: "Lunar Tides", album: "Night Bloom"),
                                                                   VersoCustom.Settings.exclusionKey(artist: "The Quiet Hours", album: "Paper Lanterns")]
                            }, view: settingsWindow),
+            UISnapshotCase("settings/share-discord-on", note: "Discord and lyric card with Rich Presence on",
+                           chrome: .settingsWindow, size: .settingsWindow, player: .playing,
+                           prepare: { scene in
+                               scene.showSettingsPage("share")
+                               scene.extras.showsDiscordPresence = true
+                           }, view: settingsWindow),
             UISnapshotCase("settings/general-pilot", note: "General in the chosen look, with the sidebar",
                            chrome: .settingsWindow, size: .settingsWindow, player: .playing,
                            prepare: { $0.showSettingsPage("general") }, view: settingsWindow),

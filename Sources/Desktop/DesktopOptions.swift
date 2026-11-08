@@ -10,6 +10,7 @@ final class DesktopOptions: ObservableObject {
         static let controlsOnHover = "custom.showControlsOnHover"
         static let automaticTextBacking = "custom.textBackingAutomatic"
         static let textBacking = "custom.textBacking"
+        static let menuBarShade = "custom.menuBarShade"
     }
 
     /// Reveal the transport controls when the pointer rests in the middle of
@@ -27,11 +28,19 @@ final class DesktopOptions: ObservableObject {
         didSet { defaults.set(textBacking, forKey: Keys.textBacking) }
     }
 
+    /// A faint shade along the top edge, under the menu bar, so a bright
+    /// wallpaper does not wash the menu bar out to white (macOS lightens it
+    /// from what is beneath).
+    @Published var shadesMenuBar: Bool {
+        didSet { defaults.set(shadesMenuBar, forKey: Keys.menuBarShade) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
         showsControlsOnHover = defaults.object(forKey: Keys.controlsOnHover) as? Bool ?? true
+        shadesMenuBar = defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
         automaticTextBacking = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? true
         let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? 0.35
         textBacking = stored.isFinite ? min(1, max(0, stored)) : 0.35
@@ -70,6 +79,9 @@ struct LyricBackingSection: View {
                             format: { $0 == 0 ? "None" : SettingsFormat.percent($0) })
             }
             InspectorCaption(caption)
+            Toggle("Shade under the menu bar", isOn: $options.shadesMenuBar)
+            InspectorCaption("Stops bright wallpapers washing the menu bar out.",
+                             more: "macOS lightens the menu bar from whatever is behind it, so a bright cover or picture along the top edge can wash it out to white. This adds a faint dark fade there.")
         }
     }
 

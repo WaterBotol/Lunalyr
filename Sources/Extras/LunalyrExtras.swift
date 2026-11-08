@@ -14,6 +14,13 @@ final class LunalyrExtras: ObservableObject {
         static let menuBarLine = "custom.menuBarLyric"
         static let menuBarLength = "custom.menuBarLyricLength"
         static let discordPresence = "custom.discordPresence"
+        static let discordStatusText = "custom.discordStatusText"
+        static let discordLyric = "custom.discordLyric"
+        static let discordCover = "custom.discordCover"
+        static let discordButton = "custom.discordButton"
+        static let discordProgress = "custom.discordProgress"
+        static let discordPaused = "custom.discordPaused"
+        static let discordLead = "custom.discordLyricLead"
         static let shortcuts = "custom.globalShortcuts"
         static let lyricsHidden = "custom.lyricsHidden"
         /// Where earlier builds kept a pause across launches. Only cleared now.
@@ -69,6 +76,24 @@ final class LunalyrExtras: ObservableObject {
     @Published var showsDiscordPresence: Bool {
         didSet { defaults.set(showsDiscordPresence, forKey: Keys.discordPresence); applyServices() }
     }
+    @Published var discordStatusText: DiscordStatusText {
+        didSet { defaults.set(discordStatusText.rawValue, forKey: Keys.discordStatusText) }
+    }
+    @Published var discordShowsLyric: Bool { didSet { defaults.set(discordShowsLyric, forKey: Keys.discordLyric) } }
+    @Published var discordShowsCover: Bool { didSet { defaults.set(discordShowsCover, forKey: Keys.discordCover) } }
+    @Published var discordShowsButton: Bool { didSet { defaults.set(discordShowsButton, forKey: Keys.discordButton) } }
+    @Published var discordShowsProgress: Bool { didSet { defaults.set(discordShowsProgress, forKey: Keys.discordProgress) } }
+    @Published var discordShowsWhenPaused: Bool { didSet { defaults.set(discordShowsWhenPaused, forKey: Keys.discordPaused) } }
+    /// Seconds the Discord line runs ahead of the music.
+    @Published var discordLyricLead: Double { didSet { defaults.set(discordLyricLead, forKey: Keys.discordLead) } }
+    static let discordLeadRange: ClosedRange<Double> = 0...6
+
+    var discordOptions: DiscordOptions {
+        DiscordOptions(statusText: discordStatusText, showsLyric: discordShowsLyric, showsCover: discordShowsCover,
+                       showsButton: discordShowsButton, showsProgress: discordShowsProgress,
+                       showsWhenPaused: discordShowsWhenPaused, lyricLead: discordLyricLead)
+    }
+
     /// Longest menu-bar line, in characters.
     @Published var menuBarLength: Double {
         didSet { defaults.set(menuBarLength, forKey: Keys.menuBarLength); ticker?.refresh(force: true) }
@@ -187,6 +212,14 @@ final class LunalyrExtras: ObservableObject {
         lyricCardComposition = defaults.string(forKey: Keys.lyricCardComposition).flatMap(LyricComposition.init(rawValue:))
         showsMenuBarLine = defaults.bool(forKey: Keys.menuBarLine)
         showsDiscordPresence = defaults.bool(forKey: Keys.discordPresence)
+        discordStatusText = defaults.string(forKey: Keys.discordStatusText).flatMap(DiscordStatusText.init(rawValue:)) ?? .lyric
+        discordShowsLyric = defaults.object(forKey: Keys.discordLyric) as? Bool ?? true
+        discordShowsCover = defaults.object(forKey: Keys.discordCover) as? Bool ?? true
+        discordShowsButton = defaults.object(forKey: Keys.discordButton) as? Bool ?? true
+        discordShowsProgress = defaults.object(forKey: Keys.discordProgress) as? Bool ?? true
+        discordShowsWhenPaused = defaults.bool(forKey: Keys.discordPaused)
+        let lead = defaults.object(forKey: Keys.discordLead) as? Double ?? 2.5
+        discordLyricLead = lead.isFinite ? min(Self.discordLeadRange.upperBound, max(Self.discordLeadRange.lowerBound, lead)) : 2.5
         let length = defaults.object(forKey: Keys.menuBarLength) as? Double ?? 36
         menuBarLength = length.isFinite ? min(Self.menuBarLengthRange.upperBound, max(Self.menuBarLengthRange.lowerBound, length)) : 36
         shortcutsEnabled = defaults.bool(forKey: Keys.shortcuts)
