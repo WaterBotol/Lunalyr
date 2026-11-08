@@ -59,6 +59,8 @@ if ! xcodebuild -project VersoCustom.xcodeproj -scheme VersoCustom \
   -configuration Release -derivedDataPath "$TASK_BUILD_DIR/DerivedData" \
   -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" build \
   >"$PROJECT_DIR/Build/build.log" 2>&1; then
+  # The compiler's errors come well before the end of a long log.
+  grep -E "error:" "$PROJECT_DIR/Build/build.log" | sort -u | head -n 40 || true
   tail -n 90 "$PROJECT_DIR/Build/build.log"
   echo "Build failed. The full log is in Build/build.log."
   exit 1
