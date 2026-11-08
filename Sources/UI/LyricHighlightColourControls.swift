@@ -15,14 +15,14 @@ struct LyricHighlightColourControls: View {
         ChoiceMenu("Highlight colour", selection: $options.mode, selectedTitle: \.title) {
             ForEach(LyricHighlightMode.allCases) { Text($0.title).tag($0) }
         }
-        Text(options.mode.detail).font(.caption).foregroundStyle(.secondary)
+        InspectorCaption(options.mode.detail)
         if options.mode == .custom {
             ColorPicker("Your highlight colour", selection: Binding(get: { options.customSwatch },
                                                                    set: { options.setCustom($0) }),
                         supportsOpacity: false)
         }
-        Text("Highlights are Cutout's labels, the tiles of the Cutout · Highlight entrance and Cascade's held words. The text on a tile always keeps at least 4.5:1 contrast.")
-            .font(.caption).foregroundStyle(.secondary)
+        InspectorCaption("Used for Cutout labels, tiles and Cascade’s held words.",
+                         more: "Highlights are Cutout's labels, the tiles of the Cutout · Highlight entrance and Cascade's held words. The text on a tile always keeps at least 4.5:1 contrast.")
     }
 }
 

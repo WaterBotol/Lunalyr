@@ -6,7 +6,7 @@ struct LyricColourSection: View {
     @Model(\.colours) private var options
 
     var body: some View {
-        ThemedSection("Text colour") {
+        ThemedSection("Colours") {
             ChoiceMenu("Colour", selection: $options.mode, selectedTitle: \.title) {
                 ForEach(LyricColourMode.choices) { Text($0.title).tag($0) }
             }
@@ -52,9 +52,8 @@ struct LyricColourSection: View {
                         .frame(maxWidth: 180)
                 }
             }
-            InspectorCaption("Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still with Reduce Motion on.")
-        }
-        ThemedSection("Highlight colour") {
+            InspectorCaption("Text backing keeps pastels readable on bright wallpapers.", more: "Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still with Reduce Motion on.")
+            Divider()
             LyricHighlightColourControls()
         }
     }
@@ -109,7 +108,7 @@ struct LyricStyleMemorySection: View {
                     LabeledContent("This \(active.scope.rawValue) uses") {
                         Text(Self.describe(active.style))
                     }
-                    InspectorCaption("Changes above apply to other music until you update or forget this.")
+                    InspectorCaption("Changes apply to other music until you update this.", more: "Changes above apply to other music until you update or forget this.")
                     HStack(spacing: LunalyrDesign.Spacing.small) {
                         Button("Update with the Choices Above") { memory.remember(chosen, for: track, scope: active.scope) }
                         Button("Forget") { memory.forget(for: track, scope: active.scope) }
@@ -123,10 +122,10 @@ struct LyricStyleMemorySection: View {
                     if track.artist.isEmpty {
                         DisabledReason("This song names no artist, so its style can only be remembered for the song.")
                     }
-                    InspectorCaption("Saves the layout and text colour chosen above. A song’s own style wins over its artist’s.")
+                    InspectorCaption("Saves this layout and colour. A song’s own wins.", more: "Saves the layout and text colour chosen above. A song’s own style wins over its artist’s.")
                 }
             } else {
-                InspectorCaption("Play a song to remember a layout and colour for it or its artist.")
+                InspectorCaption("Play a song to remember a style for it.", more: "Play a song to remember a layout and colour for it or its artist.")
             }
             if !memory.songs.isEmpty || !memory.artists.isEmpty {
                 LabeledContent {
@@ -238,7 +237,7 @@ struct ShareInspector: View {
         ThemedForm {
             ThemedSection("Discord") {
                 Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
-                InspectorCaption("Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
+                InspectorCaption("Needs the Discord desktop app. Shows the line being sung.", more: "Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
             }
             ThemedSection("Share") {
                 ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
@@ -252,7 +251,7 @@ struct ShareInspector: View {
                 } label: {
                     Text("Lyric card")
                 }
-                InspectorCaption("Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
+                InspectorCaption("Pick lines, a shape and a format for a shareable card.", more: "Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
                 if playing.current == nil {
                     DisabledReason("A card can be copied while a song is playing.")
                 }
@@ -283,7 +282,7 @@ struct ExtrasInspector: View {
                         .help("Shows the lyrics on every display until mirroring ends")
                 }
                 Toggle("Pause wallpaper", isOn: $extras.wallpaperPaused)
-                InspectorCaption("Freezes every desktop wallpaper, lyrics included, until you resume it or Lunalyr next starts. The preview here keeps moving, so changes can still be judged.")
+                InspectorCaption("Freezes every wallpaper until you resume.", more: "Freezes every desktop wallpaper, lyrics included, until you resume it or Lunalyr next starts. The preview here keeps moving, so changes can still be judged.")
             }
             ThemedSection("Menu bar") {
                 Toggle("Show the current line in the menu bar", isOn: $extras.showsMenuBarLine)
@@ -291,7 +290,7 @@ struct ExtrasInspector: View {
                     ValueSlider("Longest line", value: $extras.menuBarLength, in: LunalyrExtras.menuBarLengthRange, step: 1,
                                 minimumLabel: "Short", maximumLabel: "Long",
                                 format: { "\(Int($0.rounded())) characters" })
-                    InspectorCaption("Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
+                    InspectorCaption("Follows Hide lyrics and Pause.", more: "Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
                 }
             }
             ThemedSection("Keyboard shortcuts") {
@@ -302,9 +301,9 @@ struct ExtrasInspector: View {
                 ForEach(GlobalHotkeys.shortcuts, id: \.action) { shortcut in
                     shortcutRow(shortcut.action)
                 }
-                InspectorCaption(Self.shortcutsCaption)
+                InspectorCaption("Work from any app; switch off any you need elsewhere.", more: Self.shortcutsCaption)
                 if !hotkeys.unavailable.isEmpty && extras.shortcutsEnabled {
-                    InspectorCaption("A shortcut another app already uses is left to that app. Switch it off there, or choose other keys above.")
+                    InspectorCaption("A shortcut another app uses is left to that app.", more: "A shortcut another app already uses is left to that app. Switch it off there, or choose other keys above.")
                 }
                 if NSWorkspace.shared.isVoiceOverEnabled && hotkeys.modifiers == .controlOptionCommand {
                     StatusBanner(.warning, title: "VoiceOver uses these keys",
@@ -368,7 +367,7 @@ struct TranslationSection: View {
     var body: some View {
         ThemedSection("Translations") {
             Toggle("Show translations under lyrics", isOn: $extras.showsTranslations)
-            InspectorCaption("Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Nothing is translated on this Mac or sent anywhere.")
+            InspectorCaption("Shown when the lyric source has a translation.", more: "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Nothing is translated on this Mac or sent anywhere.")
         }
     }
 }

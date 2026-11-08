@@ -561,6 +561,7 @@ struct ThemedForm<Content: View>: View {
         .toggleStyle(ThemedToggleStyle())
         .buttonStyle(ThemedButtonStyle())
         .labeledContentStyle(ThemedLabeledContentStyle())
+        .environment(\.compactCaptions, true)
     }
 }
 

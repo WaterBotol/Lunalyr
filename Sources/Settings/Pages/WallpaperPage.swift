@@ -63,14 +63,14 @@ struct WallpaperPage: View {
             ThemedSection("Your wallpaper") {
                 Text("Only lyrics are drawn over your desktop. Keep using your current macOS wallpaper or wallpaper app; Lunalyr leaves it in place.")
                     .fixedSize(horizontal: false, vertical: true)
-                InspectorCaption("The preview puts your macOS desktop picture behind the lyrics. A wallpaper app’s own artwork can’t be shown there, but stays visible on each monitor.")
+                InspectorCaption("Shows your macOS desktop picture behind the lyrics.", more: "The preview puts your macOS desktop picture behind the lyrics. A wallpaper app’s own artwork can’t be shown there, but stays visible on each monitor.")
             }
         case .custom:
             ThemedSection("Image or video") { importedOptions }
         case .colourOnly:
             ThemedSection("Colour only") {
                 Toggle("Album gradient", isOn: $s.albumGradientWallpaper)
-                InspectorCaption("Blend the colours from across the cover into a slowly moving gradient.")
+                InspectorCaption("Blends the cover’s colours into a moving gradient.", more: "Blend the colours from across the cover into a slowly moving gradient.")
             }
         }
     }

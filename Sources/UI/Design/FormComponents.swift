@@ -21,16 +21,73 @@ import SwiftUI
 //     SettingsIcon(symbol: "photo.artframe", tint: .indigo) // sidebar rows
 
 /// The explanation under a control: what it does, or what it changes.
-/// Secondary, 11 points, wrapping. Pass a `Text` for inline markdown.
+/// Secondary, 11 points, wrapping. Pass a `Text` for inline markdown. A
+/// caption with `more` shows a short line and an ⓘ that opens the rest; in a
+/// settings page (`ThemedForm`), any caption over about 90 characters is cut
+/// the same way, so a page stays short.
 struct InspectorCaption: View {
     private let text: Text
+    private let string: String?
+    private let more: String?
+    @Environment(\.compactCaptions) private var compact
 
-    init(_ string: String) { text = Text(string) }
-    init(_ text: Text) { self.text = text }
+    init(_ string: String) {
+        text = Text(string)
+        self.string = string
+        more = nil
+    }
+
+    init(_ string: String, more: String) {
+        text = Text(string)
+        self.string = string
+        self.more = more
+    }
+
+    init(_ text: Text) {
+        self.text = text
+        string = nil
+        more = nil
+    }
+
+    /// The line to show and the full text behind the ⓘ, if any.
+    static func split(_ string: String, limit: Int = 90) -> (short: String, full: String?) {
+        guard string.count > limit else { return (string, nil) }
+        if let end = string.range(of: ". "), string.distance(from: string.startIndex, to: end.lowerBound) <= limit {
+            return (String(string[..<end.lowerBound]) + ".", string)
+        }
+        let cut = string.prefix(limit - 10)
+        let trimmed = cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? String(cut)
+        return (trimmed + "…", string)
+    }
 
     var body: some View {
-        text.lunalyrText(.caption)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if let more, let string {
+            row(Text(string), full: more)
+        } else if compact, let string, case let split = Self.split(string), let full = split.full {
+            row(Text(split.short), full: full)
+        } else {
+            text.lunalyrText(.caption)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func row(_ shown: Text, full: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            shown.lunalyrText(.caption)
+            ThemedInfoButton(text: full, label: "this setting")
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct CompactCaptionsKey: EnvironmentKey { static let defaultValue = false }
+
+extension EnvironmentValues {
+    /// Set by `ThemedForm`: long captions fold behind an ⓘ.
+    var compactCaptions: Bool {
+        get { self[CompactCaptionsKey.self] }
+        set { self[CompactCaptionsKey.self] = newValue }
     }
 }
 

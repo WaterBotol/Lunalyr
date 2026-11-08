@@ -12,10 +12,10 @@ struct MusicPlayersPage: View {
             ThemedSection("Music players") {
                 ChoiceSegments("Player", selection: $players.choice,
                                cases: Array(PlayerOptions.Choice.allCases), label: \.title)
-                InspectorCaption("Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the other anything.")
+                InspectorCaption("Automatic follows whichever player is playing.", more: "Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the other anything.")
                 PlayerAccessList()
                     .padding(.vertical, LunalyrDesign.Spacing.xSmall)
-                InspectorCaption("Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
+                InspectorCaption("Lunalyr only reads the song and its position.", more: "Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
             }
             .id(SettingsAnchor.players)
         }

@@ -18,8 +18,8 @@ struct ReadingsPage: View {
                 }
                 Toggle("Keep tone marks", isOn: $o.toneMarks)
                 Toggle("Prefer saved readings", isOn: $o.preferSaved)
-                InspectorCaption("Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.")
-                InspectorCaption("Lunalyr can’t generate Jyutping on this Mac. Lyrics written in Cantonese show only readings from the lyric source or an imported reading LRC, never Mandarin pinyin. Cantonese songs in standard written Chinese look like Mandarin, so choose Cantonese for them.")
+                InspectorCaption("Readings follow the original timing.", more: "Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.")
+                InspectorCaption("Cantonese shows only readings from the source.", more: "Lunalyr can’t generate Jyutping on this Mac. Lyrics written in Cantonese show only readings from the lyric source or an imported reading LRC, never Mandarin pinyin. Cantonese songs in standard written Chinese look like Mandarin, so choose Cantonese for them.")
             }
             ThemedSection("Saved readings") {
                 Button("Import Reading LRC…") {
@@ -38,8 +38,8 @@ struct ReadingsPage: View {
                 if let message {
                     InspectorCaption(message)
                 }
-                InspectorCaption("Saved readings are pronunciation guides. Translations are a separate feature and are not generated here.")
-                InspectorCaption("Japanese readings are matched to the lyric’s kana, however they’re spaced. A reading written for other words isn’t shown; Lunalyr’s own reading is used for that line.")
+                InspectorCaption("Saved readings are pronunciation guides.", more: "Saved readings are pronunciation guides. Translations are a separate feature and are not generated here.")
+                InspectorCaption("Japanese readings are matched to the lyric’s kana.", more: "Japanese readings are matched to the lyric’s kana, however they’re spaced. A reading written for other words isn’t shown; Lunalyr’s own reading is used for that line.")
             }
             TranslationSection()
         }

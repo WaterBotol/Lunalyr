@@ -66,7 +66,7 @@ struct TimingPage: View {
                                                           set: { offsets.set($0, for: query) }),
                             in: -10...10, step: 0.05, minimumLabel: "Later", maximumLabel: "Earlier",
                             format: TimingNudge.format, spoken: TimingNudge.spoken)
-                InspectorCaption("Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.")
+                InspectorCaption("Positive offsets bring lyrics in earlier.", more: "Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.")
             } else {
                 Label("Play a song to adjust its timing or find lyrics.", systemImage: "music.note")
                     .labelStyle(CaptionLabelStyle())
@@ -75,11 +75,11 @@ struct TimingPage: View {
                 LabeledContent("Lyrics from", value: provenance.source)
                 LabeledContent("Timing", value: provenance.precision)
                 if provenance.precision == "Mixed timing" {
-                    InspectorCaption("Some lines animate word by word. The other lines appear all at once because they only have a line timestamp.")
+                    InspectorCaption("Some lines animate word by word.", more: "Some lines animate word by word. The other lines appear all at once because they only have a line timestamp.")
                 }
             }
             if model.isRefining {
-                InspectorCaption("Showing the best match so far. Slower sources are still being checked; a better one replaces it between lines.")
+                InspectorCaption("Showing the best match so far.", more: "Showing the best match so far. Slower sources are still being checked; a better one replaces it between lines.")
             }
             if model.pinnedMatch {
                 LabeledContent {
@@ -131,7 +131,7 @@ struct TimingPage: View {
                 }
             }
             if model.sourceStates.values.contains(where: { $0.hasPrefix(LyricsFetcher.notNeeded) }) {
-                InspectorCaption("Sources that couldn’t beat the match showing weren’t asked further. Search asks every source.")
+                InspectorCaption("Search asks every source.", more: "Sources that couldn’t beat the match showing weren’t asked further. Search asks every source.")
             }
             if let status = message ?? model.cacheMessage {
                 InspectorCaption(status)
@@ -166,7 +166,7 @@ struct TimingPage: View {
                           isFirst: options.order.first == source, isLast: options.order.last == source,
                           move: { options.move(source, by: $0) })
             }
-            InspectorCaption("Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
+            InspectorCaption("Online sources receive song metadata.", more: "Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
         }
     }
 

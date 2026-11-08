@@ -67,7 +67,7 @@ struct LyricStylePage: View {
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
             if automatic {
                 Toggle("Change layout every song", isOn: $rotateLayouts)
-                InspectorCaption("Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
+                InspectorCaption("Each new song takes the next layout.", more: "Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
                 if rotateLayouts {
                     DisclosureGroup("Layouts in the rotation") {
                         ForEach(LyricLayoutRotation.order) { layout in
@@ -83,13 +83,13 @@ struct LyricStylePage: View {
                                 }
                             }
                         }
-                        InspectorCaption("How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
+                        InspectorCaption("Songs in a row per layout. 0 leaves one out.", more: "How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
                     }
                 }
             }
             RememberedStyleNote(aspect: .layout)
             Toggle("Show credits in the background", isOn: $showCredits)
-            InspectorCaption("Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.")
+            InspectorCaption("Credit lines appear one at a time behind the lyrics.", more: "Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.")
             Toggle("Backing vocals in the background", isOn: $backingLayer)
             if backingLayer {
                 ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
@@ -98,7 +98,7 @@ struct LyricStylePage: View {
                     ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
                 }
             }
-            InspectorCaption("Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.")
+            InspectorCaption("Bracketed backing words sit small and soft behind the lead.", more: "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.")
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)
             if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
                 InspectorCaption(note)
@@ -151,7 +151,7 @@ struct LyricStylePage: View {
                             .help("Use this family for the lyrics")
                     }
                 }
-                InspectorCaption("Type a family from fonts.google.com or one installed on this Mac.")
+                InspectorCaption("Type a Google Fonts or installed family.", more: "Type a family from fonts.google.com or one installed on this Mac.")
                 if let message = s.googleStatus {
                     InspectorCaption(message)
                 }
