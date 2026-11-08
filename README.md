@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a white crescent moon with a line of text across its dark centre">
+  <img src="Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" height="128" alt="Lunalyr app icon: a white crescent moon on violet with a highlighted lyric line across its opening and a small spark">
 </p>
 
 <h1 align="center">Lunalyr</h1>
@@ -57,7 +57,9 @@ Lunalyr is free to use. It started as a fork of [Verso](https://github.com/AkkiC
 ## Features
 
 - **Words in time with the singer.** Word- and syllable-timed lyrics light up as they are sung, with a karaoke sweep and swelling held notes. When a source only has line timing, Lunalyr shows whole lines rather than inventing word timing.
-- **Eight compositions.** Scattered, Constellation, Constellation + Editorial, Echo, Editorial, Spoken, Cascade and Cutout. Each has its own word entrance and an optional faint preview of the next word.
+- **Fourteen compositions in three groups.** Calm: Scattered, Constellation, Constellation + Editorial, Editorial, Spoken. Bold: Echo, Cascade, Hinge, Broadside, Torque. Playful: Cutout, Portal, Mosaic, Fable. Each has its own word entrance and an optional faint preview of the next word, and Editorial typography can be added to any of them.
+- **Credits and the title, in the background.** Producer, writer and other credits from the lyric file are shown instead of hidden, and every song opens with its title and artist. Each leaves its own way: credits lift off, the title blooms away, backing vocals sink.
+- **Lyric cards.** Pick lines from the playing song and make an MP4, GIF or PNG, with your own picture, GIF or video behind them and sound from the song, the video or an audio file.
 - **Wallpapers that match the song.** 27 Metal GPU effects and 18 line patterns tinted from the album art, moving album-colour gradients, Apple Music animated album covers, or an image or looping video of your own. Choose **Your wallpaper** to draw only the lyrics over your existing desktop picture.
 - **Audio-reactive visualisers.** Silk Ribbons, Spectral Aurora, Spectrum Tunnel, Aurora Curtains and Fosfora Aurora respond to your Mac's sound output, analysed on your Mac.
 - **Lyrics from many sources.** Lyrics+ (KPoe), NetEase Cloud Music, LRCLIB, QQ Music, Kugou, Kuwo, lyrics.ovh and local lyric exports, picked by an *Accuracy first* match. Per-song timing offsets, manual search and LRC/TTML import cover the rest.

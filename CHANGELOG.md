@@ -12,6 +12,30 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [0.7.0] - 2026-11-08
+
+Build 21 for macOS 14 and later.
+
+### Added
+
+- Production credits ("Produced by:", "Lyrics by:", 作词 and the like) are shown in the background instead of being hidden or mistaken for lyrics, at full size and brightness along the top and bottom edges, for about four times longer than before. Credits are recognised in lyrics from every source, including Apple Music's TTML, and bracketed section labels like [Verse 1] are removed.
+- Every song opens once with "Title - Artist", with the artist lit word by word using the Cutout · Highlight tile. Titles and artists repeated in the lyric file are not shown twice.
+- Credits, the title and backing vocals each fade out their own way: credits lift off and soften, the title swells and dissolves, backing vocals sink.
+- Six new lyric layouts: Hinge (text on two faces of a cube corner), Broadside, Portal (varied per line, with hand-drawn outlines), Mosaic, Torque, Fable (a different shape and accent every line). Torque follows whichever word entrance is chosen, and Editorial typography now applies to all of them.
+- Layout pickers are grouped as Calm, Bold and Playful.
+- Lyric cards can use a picture, GIF or video as the background, and an MP4 can carry sound: the background video's, any audio file, or the song itself, recorded as the selected lines play. Apple Music carries on from where the recording ended.
+- A new Lunalyr mark: a crescent moon with a highlighted lyric line. It is the app icon, the menu-bar icon and the credit on lyric cards.
+- Star Trails: each sung word lights a handful of vocal stars, the spot following the word's place in its line, and bass lights large stars low in the sky.
+
+### Changed
+
+- The Lyric Card window scrolls its options, keeps Copy and Save in view, and returns to the front when copying or recording finishes.
+- Stage layouts clear a line shortly after its last word instead of holding it until the next line starts.
+
+### Fixed
+
+- A line no longer flashes before or after the real line when a source supplies the same line with both line and word timing.
+
 ## [0.6.0] - 2026-11-07
 
 Build 20 for macOS 14 and later.
@@ -380,7 +404,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.7.0
 [0.6.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.6.0
 [0.5.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.1
 [0.5.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.0
