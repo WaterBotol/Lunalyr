@@ -26,9 +26,14 @@ Build 21 for macOS 14 and later.
 - Lyric cards can use a picture, GIF or video as the background, and an MP4 can carry sound: the background video's, any audio file, or the song itself, recorded as the selected lines play. Apple Music carries on from where the recording ended.
 - A new Lunalyr mark: a crescent moon with a highlighted lyric line. It is the app icon, the menu-bar icon and the credit on lyric cards.
 - Star Trails: each sung word lights a handful of vocal stars, the spot following the word's place in its line, and bass lights large stars low in the sky.
+- Discord Rich Presence (off by default, in Settings > Share > Discord): the status shows the current lyric, or the song or artist, with the album cover, a progress bar, a "Get Lunalyr" button and "Paused" while paused. Lyrics can run ahead of the music (2.5 s by default) and breaks show "♪ Instrumental".
+- Lyric cards: Song level and Background level sliders for the MP4's sound (the song and a background video's own sound can be mixed), and a Text size slider that applies to every layout.
+- A faint shade under the menu bar, so a bright wallpaper does not whiten it (Wallpaper > Legibility, on by default).
 
 ### Changed
 
+- Settings has a sidebar with search, grouped into Look, Words and App, and two looks, Calm and Bold, with live previews, shorter captions with an info button for the rest, and a new Music players page.
+- Torque centres its stack by weight, so longer lines no longer sit low.
 - The Lyric Card window scrolls its options, keeps Copy and Save in view, and returns to the front when copying or recording finishes.
 - Stage layouts clear a line shortly after its last word instead of holding it until the next line starts.
 

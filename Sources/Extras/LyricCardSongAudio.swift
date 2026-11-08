@@ -44,14 +44,13 @@ extension LyricCard {
         return first...last
     }
 
-    /// Lays the song's sound under the finished video at `videoURL`, window by
-    /// window, and replaces the file. False, with the file untouched, if it can't.
-    @discardableResult
-    static func addSongAudio(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)], to videoURL: URL) async -> Bool {
+    /// The song's sound window by window, ready to lay on a track.
+    static func songLayer(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)], volume: Float = 1) async -> SoundLayer? {
         let source = AVURLAsset(url: clip.url)
         guard !windows.isEmpty, let track = try? await source.loadTracks(withMediaType: .audio).first,
-              let sourceLength = try? await source.load(.duration) else { return false }
-        return await mux(soundOnto: videoURL) { audio, length in
+              let sourceLength = try? await source.load(.duration) else { return nil }
+        return SoundLayer(volume: volume) { audio, length in
+            withExtendedLifetime(source) {}
             var cursor = CMTime.zero
             for window in windows where cursor < length {
                 let from = max(0, window.start - clip.songStart)
@@ -67,6 +66,14 @@ extension LyricCard {
             }
             return true
         }
+    }
+
+    /// Lays the song's sound under the finished video at `videoURL`, window by
+    /// window, and replaces the file. False, with the file untouched, if it can't.
+    @discardableResult
+    static func addSongAudio(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)], to videoURL: URL, volume: Float = 1) async -> Bool {
+        guard let layer = await songLayer(clip, windows: windows, volume: volume) else { return false }
+        return await mux(soundOnto: videoURL, layers: [layer])
     }
 }
 

@@ -15,12 +15,14 @@ import UniformTypeIdentifiers
 // all the selected lines, drawn at twice the card's size.
 
 extension LyricCard.Content {
-    /// Where the MP4's sound comes from, if anywhere.
-    var soundSource: URL? {
-        if let soundFile { return soundFile }
+    /// The background video's own sound, when it has some and it's wanted.
+    var backgroundSoundSource: URL? {
         guard keepBackgroundSound, let background, background.kind == .video, background.hasAudio else { return nil }
         return background.url
     }
+
+    /// Where the MP4's sound comes from, if anywhere.
+    var soundSource: URL? { soundFile ?? backgroundSoundSource }
 }
 
 extension LyricCard {
@@ -102,16 +104,19 @@ extension LyricCard {
         return writer.status == .completed
     }
 
-    /// Lays `soundURL`'s audio under the finished video at `videoURL`, looping
-    /// it (or cutting it) to the video's length, and replaces the file. The
-    /// video is copied, not re-encoded. False, with the file untouched, when
-    /// there is no sound or it cannot be carried into an MP4.
-    @discardableResult
-    static func addSound(from soundURL: URL, to videoURL: URL) async -> Bool {
+    /// One strand of sound under the video: how loud, and how to lay it on a track.
+    struct SoundLayer {
+        var volume: Float
+        var fill: (AVMutableCompositionTrack, CMTime) throws -> Bool
+    }
+
+    /// `soundURL` looped (or cut) to the video's length.
+    static func soundLayer(from soundURL: URL, volume: Float = 1) async -> SoundLayer? {
         let sound = AVURLAsset(url: soundURL)
         guard let soundTrack = try? await sound.loadTracks(withMediaType: .audio).first,
-              let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return false }
-        return await mux(soundOnto: videoURL) { audio, length in
+              let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return nil }
+        return SoundLayer(volume: volume) { audio, length in
+            withExtendedLifetime(sound) {}
             var cursor = CMTime.zero
             while cursor < length {
                 let piece = CMTimeMinimum(soundLength, CMTimeSubtract(length, cursor))
@@ -122,30 +127,56 @@ extension LyricCard {
         }
     }
 
-    /// Builds a composition of the video and whatever `fill` puts on its audio
-    /// track, exports it, and replaces `videoURL` with the result.
-    static func mux(soundOnto videoURL: URL,
-                    fill: (AVMutableCompositionTrack, CMTime) throws -> Bool) async -> Bool {
+    /// Lays `soundURL`'s audio under the finished video at `videoURL`, looping
+    /// it (or cutting it) to the video's length, and replaces the file. False,
+    /// with the file untouched, when there is no sound or it cannot be carried
+    /// into an MP4.
+    @discardableResult
+    static func addSound(from soundURL: URL, to videoURL: URL, volume: Float = 1) async -> Bool {
+        guard let layer = await soundLayer(from: soundURL, volume: volume) else { return false }
+        return await mux(soundOnto: videoURL, layers: [layer])
+    }
+
+    /// Builds a composition of the video and a track per layer, mixed at each
+    /// layer's volume, exports it, and replaces `videoURL` with the result.
+    static func mux(soundOnto videoURL: URL, layers: [SoundLayer]) async -> Bool {
+        guard !layers.isEmpty else { return false }
         let video = AVURLAsset(url: videoURL)
         guard let videoTrack = try? await video.loadTracks(withMediaType: .video).first,
               let length = try? await video.load(.duration), length.seconds > 0 else { return false }
         let composition = AVMutableComposition()
-        guard let outVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
-              let outSound = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        guard let outVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         else { return false }
+        var outSounds: [AVMutableCompositionTrack] = []
+        for _ in layers {
+            guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+            else { return false }
+            outSounds.append(track)
+        }
+        let mix = AVMutableAudioMix()
+        var parameters: [AVMutableAudioMixInputParameters] = []
         do {
             try outVideo.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: videoTrack, at: .zero)
-            guard try fill(outSound, length) else { return false }
+            for (layer, outSound) in zip(layers, outSounds) {
+                guard try layer.fill(outSound, length) else { return false }
+                let parameter = AVMutableAudioMixInputParameters(track: outSound)
+                parameter.setVolume(layer.volume, at: .zero)
+                parameters.append(parameter)
+            }
         } catch { return false }
+        mix.inputParameters = parameters
+        // Plain pass-through only copies; mixing or changing a volume means encoding.
+        let plain = layers.count == 1 && layers[0].volume == 1
         let output = videoURL.deletingLastPathComponent().appendingPathComponent("sound-\(UUID().uuidString).mp4")
         // Copy the video as it is; if the sound will not go into an MP4 as it
         // is (WAV, MP3, some phone formats), encode the lot instead.
         var done = false
-        for preset in [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality] where !done {
+        for preset in (plain ? [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality] : [AVAssetExportPresetHighestQuality]) where !done {
             guard let session = AVAssetExportSession(asset: composition, presetName: preset) else { continue }
             try? FileManager.default.removeItem(at: output)
             session.outputURL = output
             session.outputFileType = .mp4
+            if preset != AVAssetExportPresetPassthrough { session.audioMix = mix }
             await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
                 session.exportAsynchronously { finished.resume() }
             }
@@ -203,18 +234,25 @@ extension LyricCard {
             case .mp4:
                 if await video(content, to: file, progress: share) {
                     made.append((format, file))
+                    var layers: [SoundLayer] = []
+                    let level = Float(content.soundVolume)
                     if let clip = content.songAudio {
-                        let windows = songWindows(content)
                         if let range = songRange(content), !clip.covers(range) {
-                            notes("The MP4 has no sound: the recording doesn’t cover these lines. Record the song again.")
-                        } else if !(await addSongAudio(clip, windows: windows, to: file)) {
-                            notes("The MP4 has no sound: couldn’t use the song’s audio.")
+                            notes("The MP4 has no song: the recording doesn’t cover these lines. Record the song again.")
+                        } else if let layer = await songLayer(clip, windows: songWindows(content), volume: level) {
+                            layers.append(layer)
+                        } else {
+                            notes("The MP4 has no song: couldn’t use the song’s audio.")
                         }
-                    } else if let source = content.soundSource {
-                        // Best effort: the card stays silent, and says so, if the sound cannot be carried over.
-                        if !(await addSound(from: source, to: file)) {
-                            notes("The MP4 has no sound: couldn’t read the audio in \(source.lastPathComponent)")
-                        }
+                    } else if let file = content.soundFile {
+                        if let layer = await soundLayer(from: file, volume: level) { layers.append(layer) }
+                        else { notes("The MP4 has no sound: couldn’t read the audio in \(file.lastPathComponent)") }
+                    }
+                    if let video = content.backgroundSoundSource, content.backgroundVolume > 0 {
+                        if let layer = await soundLayer(from: video, volume: Float(content.backgroundVolume)) { layers.append(layer) }
+                    }
+                    if !layers.isEmpty, !(await mux(soundOnto: file, layers: layers)) {
+                        notes("The MP4 has no sound: couldn’t add it.")
                     }
                 }
             }

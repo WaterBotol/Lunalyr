@@ -22,6 +22,7 @@ final class LyricCardPopoutModel: ObservableObject {
         static let formats = "custom.lyricCardFormats"
         static let background = "custom.lyricCardBackgroundPath"
         static let sound = "custom.lyricCardBackgroundSound"
+        static let textScale = "custom.lyricCardTextScale"
     }
 
     @Published var rows: [Row] = []
@@ -65,8 +66,20 @@ final class LyricCardPopoutModel: ObservableObject {
         }
     }
     @Published var soundChoice: SoundChoice {
-        didSet { UserDefaults.standard.set(soundChoice.rawValue, forKey: Keys.sound) }
+        didSet {
+            UserDefaults.standard.set(soundChoice.rawValue, forKey: Keys.sound)
+            // The video's own sound is the sound with Video; under a song or file it starts off.
+            if soundChoice != oldValue { backgroundVolume = soundChoice == .video ? 1 : 0 }
+        }
     }
+    /// How big the lyrics are on the card, 50 to 110% of the room they have.
+    @Published var textScale: Double {
+        didSet { UserDefaults.standard.set(textScale, forKey: Keys.textScale); schedulePreview() }
+    }
+    /// How loud the song or chosen file is in the MP4 (0 to 1.5).
+    @Published var soundVolume = 1.0
+    /// How loud the background video's own sound is.
+    @Published var backgroundVolume = 1.0
     /// The song's own sound for the selected lines, once fetched or recorded.
     @Published var songClip: SongAudioClip?
     /// The stretch of the song the selected lines need.
@@ -92,6 +105,7 @@ final class LyricCardPopoutModel: ObservableObject {
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
         soundChoice = SoundChoice(rawValue: defaults.string(forKey: Keys.sound) ?? "") ?? .video
+        textScale = defaults.object(forKey: Keys.textScale) as? Double ?? 0.85
         if let path = defaults.string(forKey: Keys.background), FileManager.default.fileExists(atPath: path) {
             Task { [weak self] in
                 let loaded = await LyricCardBackground.load(URL(fileURLWithPath: path))
@@ -223,7 +237,10 @@ final class LyricCardPopoutModel: ObservableObject {
         content?.background = background
         if let backgroundPalette { content?.palette = backgroundPalette }
         content?.backgroundStill = background?.first
-        content?.keepBackgroundSound = soundChoice == .video
+        content?.keepBackgroundSound = soundChoice != .none
+        content?.soundVolume = soundVolume
+        content?.textScale = textScale
+        content?.backgroundVolume = backgroundVolume
         content?.soundFile = soundChoice == .file ? soundFile : nil
         content?.songAudio = soundChoice == .song && !songNeedsFetching ? songClip : nil
         return content
@@ -300,6 +317,16 @@ final class LyricCardPopoutModel: ObservableObject {
 }
 
 struct LyricCardPopoutView: View {
+    private func levelRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double> = 0...1.5) -> some View {
+        HStack(spacing: 8) {
+            Text(title).frame(width: 110, alignment: .leading)
+            Slider(value: value, in: range)
+            Text("\(Int((value.wrappedValue * 100).rounded()))%")
+                .monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+        }
+        .controlSize(.small)
+    }
+
     @ObservedObject var model: LyricCardPopoutModel
     @ObservedObject private var style = SettingsStyleStore.shared
 
@@ -419,12 +446,22 @@ struct LyricCardPopoutView: View {
                 }
                 Text("Any audio file, or a video to take the sound from. You can drop one on the preview.").lunalyrText(.caption)
             }
+            if model.soundChoice == .song || model.soundChoice == .file {
+                levelRow("Song level", value: $model.soundVolume)
+            }
+            if model.soundChoice != .none, model.background?.hasAudio == true {
+                levelRow("Background level", value: $model.backgroundVolume)
+            }
             Text("A GIF can’t carry sound, so make an MP4 when you want it.").lunalyrText(.caption)
             if let background = model.background, background.isAnimated {
                 Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption)
             } else if model.background == nil {
                 Text("Pick or drop a picture, GIF or video.").lunalyrText(.caption)
             }
+
+            Text("Text size").lunalyrText(.groupTitle)
+            levelRow("Lyrics", value: $model.textScale, range: 0.5...1.1)
+            Text("Applies to every layout.").lunalyrText(.caption)
 
             Text("Shape").lunalyrText(.groupTitle)
             HStack(spacing: 8) {

@@ -668,14 +668,27 @@ extension StageLyricView {
         let stage = stageSize
         return StageLayout(place: { measured, bounds in
             // The stack is centred whatever its height.
-            var cursor = bounds.midY + measured.map { $0.height * 0.82 }.reduce(0, +) / 2
-            return measured.indices.reversed().map { index -> (Int, CGPoint) in
+            let heights = measured.map { $0.height * 0.82 }
+            var cursor = bounds.midY + heights.reduce(0, +) / 2
+            var placed = measured.indices.reversed().map { index -> (Int, CGPoint) in
                 let rank = ranks[index]
-                let height = measured[index].height * 0.82
+                let height = heights[index]
                 let y = cursor - height / 2
                 cursor -= height
                 return (index, CGPoint(x: bounds.midX + CGFloat(sin(Double(index) * 2.1 + Double(seed % 5))) * bounds.width * 0.05 * CGFloat(min(rank, 1)), y: y))
-            }.sorted { $0.0 < $1.0 }.map(\.1)
+            }
+            // The newest word is the biggest and sits lowest, so a stack centred
+            // by height still looks bottom-heavy. Centre it by weight instead,
+            // as far as the stage has room to move it.
+            let total = heights.reduce(0, +)
+            let weight = placed.reduce(CGFloat(0)) { $0 + heights[$1.0] * heights[$1.0] }
+            if total > 0, weight > 0 {
+                let centroid = placed.reduce(CGFloat(0)) { $0 + heights[$1.0] * heights[$1.0] * $1.1.y } / weight
+                let room = max(0, (bounds.height - total) / 2)
+                let shift = max(-room, min(room, bounds.midY - centroid))
+                placed = placed.map { ($0.0, CGPoint(x: $0.1.x, y: $0.1.y + shift)) }
+            }
+            return placed.sorted { $0.0 < $1.0 }.map(\.1)
         }) {
             ForEach(runs) { run in
                 let a = arrivals[run.id]

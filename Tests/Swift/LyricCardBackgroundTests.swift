@@ -127,6 +127,20 @@ final class LyricCardBackgroundTests: XCTestCase {
         return url
     }
 
+    func testTwoSoundsAtDifferentLevelsMixIntoOneTrack() async throws {
+        let video = folder.appendingPathComponent("mixed.mp4")
+        let made = await LyricCard.video(content(), to: video)
+        XCTAssertTrue(made)
+        let firstLayer = await LyricCard.soundLayer(from: try tone(seconds: 0.5), volume: 1.0)
+        let secondLayer = await LyricCard.soundLayer(from: try tone(seconds: 0.5), volume: 0.3)
+        let first = try XCTUnwrap(firstLayer)
+        let second = try XCTUnwrap(secondLayer)
+        let muxed = await LyricCard.mux(soundOnto: video, layers: [first, second])
+        XCTAssertTrue(muxed)
+        let audio = try await AVURLAsset(url: video).loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audio.count, 1)
+    }
+
     func testAVideoBackgroundsSoundIsCarriedIntoTheMP4AndLooped() async throws {
         // A background video with a 0.6 s tone under it.
         let silent = folder.appendingPathComponent("silent.mp4")

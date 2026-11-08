@@ -91,6 +91,12 @@ enum LyricCard {
         var soundFile: URL?
         /// The song's own sound for these lines, which wins over any other.
         var songAudio: SongAudioClip?
+        /// How loud the song or chosen file is in the MP4, 0 to 1.5 (1 = as it is).
+        var soundVolume = 1.0
+        /// How big the lyrics are on the card, as a share of the room they have (1 fills it).
+        var textScale = 1.0
+        /// How loud a video background's own sound is, mixed with the above.
+        var backgroundVolume = 1.0
 
         var size: CGSize { aspect.size }
 
@@ -382,7 +388,7 @@ enum LyricCard {
                         if let rendered = plate.cgImage { backdrop = rendered }
                     }
                     let frame = LyricCardFrame(size: content.size, animation: animation, backdrop: backdrop, stage: stage,
-                                               time: time, ink: ink, reduceMotion: content.reduceMotion)
+                                               time: time, ink: ink, reduceMotion: content.reduceMotion, textScale: content.textScale)
                     let renderer = ImageRenderer(content: frame)
                     renderer.scale = gifScale
                     guard let image = renderer.cgImage else { return false }
@@ -491,6 +497,7 @@ private struct LyricCardFrame: View {
     let time: Double
     let ink: LyricInk
     let reduceMotion: Bool
+    var textScale: Double = 1
 
     var body: some View {
         Image(decorative: backdrop, scale: 1)
@@ -537,7 +544,8 @@ private struct LyricCardFrame: View {
                         direction: animation.seed.isMultiple(of: 2) ? 1 : -1, arrival: pose.arrival))
             }
         }
-        .modifier(FittedLyricStage(available: stage, neutral: 1, maximumNaturalScale: rolls ? 1 : 2.6))
+        .modifier(FittedLyricStage(available: CGSize(width: stage.width * textScale, height: stage.height * textScale),
+                                   neutral: 1, maximumNaturalScale: rolls ? 1 : 2.6))
     }
 }
 
@@ -709,7 +717,12 @@ struct LyricCardView: View {
         let point = nominal * min(1, (9 / count).squareRoot() * 1.15)
         let font = Settings.shared.lyricFont(size: point, hero: true, mood: .neutral)
         let rightToLeft = shown.rightToLeft
-        let available = CGSize(width: stage.width * (count < 4 ? 0.82 : 1), height: stage.height)
+        // Long lines are fitted with air above and below, so they sit in the
+        // middle of the stage instead of crowding the credits underneath.
+        let air = min(stage.height * 0.16, 96)
+        let share = CGFloat(content.textScale)
+        let available = CGSize(width: stage.width * (count < 4 ? 0.82 : 0.9) * share,
+                               height: (stage.height - 2 * air) * share)
         return line.font(font)
             .lineSpacing(point * 0.12)
             .multilineTextAlignment(rightToLeft ? .trailing : .leading)
