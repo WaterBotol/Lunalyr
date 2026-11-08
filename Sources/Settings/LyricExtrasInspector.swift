@@ -259,6 +259,10 @@ struct ExtrasInspector: View {
                     InspectorCaption("Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
                 }
             }
+            Section("Discord") {
+                Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
+                InspectorCaption("Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
+            }
             Section("Keyboard shortcuts") {
                 Toggle("Use global shortcuts", isOn: $extras.shortcutsEnabled)
                 ChoiceMenu("Keys", selection: $hotkeys.modifiers, selectedTitle: \.title) {

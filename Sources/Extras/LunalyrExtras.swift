@@ -13,6 +13,7 @@ final class LunalyrExtras: ObservableObject {
     enum Keys {
         static let menuBarLine = "custom.menuBarLyric"
         static let menuBarLength = "custom.menuBarLyricLength"
+        static let discordPresence = "custom.discordPresence"
         static let shortcuts = "custom.globalShortcuts"
         static let lyricsHidden = "custom.lyricsHidden"
         /// Where earlier builds kept a pause across launches. Only cleared now.
@@ -63,6 +64,10 @@ final class LunalyrExtras: ObservableObject {
 
     @Published var showsMenuBarLine: Bool {
         didSet { defaults.set(showsMenuBarLine, forKey: Keys.menuBarLine); applyServices() }
+    }
+    /// Shows the song and the line being sung on the user's Discord profile.
+    @Published var showsDiscordPresence: Bool {
+        didSet { defaults.set(showsDiscordPresence, forKey: Keys.discordPresence); applyServices() }
     }
     /// Longest menu-bar line, in characters.
     @Published var menuBarLength: Double {
@@ -171,6 +176,7 @@ final class LunalyrExtras: ObservableObject {
     private let defaults: UserDefaults
     private var started = false
     private var ticker: MenuBarLyricTicker?
+    private var discord: DiscordPresence?
     private var screenObserver: NSObjectProtocol?
     private var copyCardTask: Task<Void, Never>?
 
@@ -180,6 +186,7 @@ final class LunalyrExtras: ObservableObject {
         lyricCardLinesAfter = Self.clampedCardLineCount(defaults.integer(forKey: Keys.lyricCardLinesAfter))
         lyricCardComposition = defaults.string(forKey: Keys.lyricCardComposition).flatMap(LyricComposition.init(rawValue:))
         showsMenuBarLine = defaults.bool(forKey: Keys.menuBarLine)
+        showsDiscordPresence = defaults.bool(forKey: Keys.discordPresence)
         let length = defaults.object(forKey: Keys.menuBarLength) as? Double ?? 36
         menuBarLength = length.isFinite ? min(Self.menuBarLengthRange.upperBound, max(Self.menuBarLengthRange.lowerBound, length)) : 36
         shortcutsEnabled = defaults.bool(forKey: Keys.shortcuts)
@@ -222,6 +229,13 @@ final class LunalyrExtras: ObservableObject {
         } else {
             ticker?.stop()
             ticker = nil
+        }
+        if showsDiscordPresence {
+            if discord == nil { discord = DiscordPresence(extras: self) }
+            discord?.start()
+        } else {
+            discord?.stop()
+            discord = nil
         }
         GlobalHotkeys.shared.setEnabled(shortcutsEnabled)
     }
