@@ -31,8 +31,8 @@ struct CoversPage: View {
     }
 
     var body: some View {
-        Form {
-            Section("Animated covers") {
+        ThemedForm {
+            ThemedSection("Animated covers") {
                 Toggle("Use animated covers", isOn: $s.useMotionArtwork)
                 if s.useMotionArtwork && s.backgroundMode != .auto {
                     StatusBanner(.info, title: "Covers play with Match the music",
@@ -51,7 +51,7 @@ struct CoversPage: View {
                     InspectorCaption(WorkspaceCopy.reduceMotionCovers)
                 }
             }
-            Section("Framing") {
+            ThemedSection("Framing") {
                 ChoiceMenu("Placement", selection: $s.motionPlacement, selectedTitle: \.title) {
                     ForEach(Settings.MotionPlacement.allCases) { Text($0.title).tag($0) }
                 }
@@ -70,7 +70,7 @@ struct CoversPage: View {
                 }
             }
             if !s.motionExclusions.isEmpty {
-                Section("Excluded albums") {
+                ThemedSection("Excluded albums") {
                     ForEach(s.motionExclusions, id: \.self) { name in
                         let album = name.replacingOccurrences(of: "|", with: " · ")
                         LabeledContent {

@@ -15,14 +15,14 @@ struct LyricStylePage: View {
     private var automatic: Bool { s.lyricComposition == nil }
 
     var body: some View {
-        Form {
+        ThemedForm {
             layout
             typeface
             LyricColourSection()
             wordEntrances
             // Match the music can pick either, so both stay reachable there.
             if style.hasConnections || automatic {
-                Section("Constellation") {
+                ThemedSection("Constellation") {
                     ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
                                 format: SettingsFormat.percent)
                     ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
@@ -33,7 +33,7 @@ struct LyricStylePage: View {
                 }
             }
             if style == .echo || automatic {
-                Section("Echo") {
+                ThemedSection("Echo") {
                     ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
                                 format: SettingsFormat.percent)
                     if automatic {
@@ -41,7 +41,7 @@ struct LyricStylePage: View {
                     }
                 }
             }
-            Section("Instrumental breaks") {
+            ThemedSection("Instrumental breaks") {
                 Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
             }
             LyricStyleMemorySection()
@@ -59,7 +59,7 @@ struct LyricStylePage: View {
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
-        Section("Layout") {
+        ThemedSection("Layout") {
             ChoiceMenu("Layout", selection: $s.lyricComposition, selectedTitle: { $0?.title ?? "Match the music" }) {
                 Text("Match the music").tag(Optional<LyricComposition>.none)
                 LyricCompositionOptions()
@@ -112,7 +112,7 @@ struct LyricStylePage: View {
     }
 
     private var typeface: some View {
-        Section("Typeface") {
+        ThemedSection("Typeface") {
             Toggle("Randomise lyric fonts", isOn: $s.randomizeLyricFonts)
             if s.randomizeLyricFonts {
                 InspectorCaption("Words use a mix of built-in typefaces while this is on.")
@@ -160,7 +160,7 @@ struct LyricStylePage: View {
     }
 
     private var wordEntrances: some View {
-        Section("Word entrances") {
+        ThemedSection("Word entrances") {
             Toggle("Reveal sung words", isOn: Binding(get: { s.revealsWords(in: style) },
                                                        set: { s.wordRevealByStyle[s.wordControlsKey] = $0 }))
                 .disabled(s.requiresWordEntrances(in: style))

@@ -27,10 +27,10 @@ struct TimingPage: View {
     private var query: LyricQuery? { models.resolved.currentQuery }
 
     var body: some View {
-        Form {
+        ThemedForm {
             thisSong
             findLyrics
-            Section("Without synced lyrics") {
+            ThemedSection("Without synced lyrics") {
                 ChoiceMenu("When none are found", selection: $settings.noLyrics, selectedTitle: \.title) {
                     ForEach(Settings.NoLyricsBehaviour.allCases) { Text($0.title).tag($0) }
                 }
@@ -38,7 +38,7 @@ struct TimingPage: View {
             selection
             sources
             localExports
-            Section("Advanced timing") {
+            ThemedSection("Advanced timing") {
                 ValueSlider("Global offset", value: $settings.lyricOffset, in: -3...3, step: 0.05,
                             minimumLabel: "Later", maximumLabel: "Earlier",
                             format: TimingNudge.format, spoken: TimingNudge.spoken)
@@ -56,7 +56,7 @@ struct TimingPage: View {
     // MARK: This song
 
     private var thisSong: some View {
-        Section("This song") {
+        ThemedSection("This song") {
             if let query {
                 TrackSummary(artworkSize: LunalyrDesign.Size.artworkSmall, titleLines: 2)
                 LabeledContent("Lyric timing") {
@@ -96,7 +96,7 @@ struct TimingPage: View {
     // MARK: Find lyrics
 
     private var findLyrics: some View {
-        Section("Find lyrics") {
+        ThemedSection("Find lyrics") {
             TextField("Song title", text: $title, prompt: Text("Title"))
                 .onSubmit(search)
             TextField("Artist", text: $artist, prompt: Text("Artist"))
@@ -142,7 +142,7 @@ struct TimingPage: View {
     // MARK: Sources
 
     private var selection: some View {
-        Section("Selection") {
+        ThemedSection("Selection") {
             ChoiceMenu("Choose by", selection: $options.mode, selectedTitle: \.title) {
                 ForEach(LyricSourceOptions.Mode.allCases) { Text($0.title).tag($0) }
             }
@@ -155,7 +155,7 @@ struct TimingPage: View {
     }
 
     private var sources: some View {
-        Section {
+        ThemedSection("Sources · priority order") {
             ForEach(options.order) { source in
                 SourceRow(source: source, enabled: Binding(
                     get: { options.enabled.contains(source) },
@@ -166,9 +166,6 @@ struct TimingPage: View {
                           isFirst: options.order.first == source, isLast: options.order.last == source,
                           move: { options.move(source, by: $0) })
             }
-        } header: {
-            Text("Sources · priority order")
-        } footer: {
             InspectorCaption("Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
         }
     }
@@ -176,7 +173,7 @@ struct TimingPage: View {
     // MARK: Actions
 
     private var localExports: some View {
-        Section("Local exports") {
+        ThemedSection("Local exports") {
             VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
                 Text("Lyrimuse lyrics folder")
                 Text(local.folder.isEmpty ? "None chosen" : local.folder)

@@ -9,11 +9,10 @@ struct ReadingsPage: View {
     @State private var message: String?
 
     var body: some View {
-        Form {
-            Section("Romanisation") {
-                ChoiceSegments("Display", selection: $o.display) {
-                    ForEach(RomanizationOptions.Display.allCases) { Text($0.title).tag($0) }
-                }
+        ThemedForm {
+            ThemedSection("Romanisation") {
+                ChoiceSegments("Display", selection: $o.display,
+                               cases: Array(RomanizationOptions.Display.allCases), label: \.title)
                 ChoiceMenu("Language", selection: $o.language, selectedTitle: \.title) {
                     ForEach(RomanizationOptions.Language.allCases) { Text($0.title).tag($0) }
                 }
@@ -22,7 +21,7 @@ struct ReadingsPage: View {
                 InspectorCaption("Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.")
                 InspectorCaption("Lunalyr can’t generate Jyutping on this Mac. Lyrics written in Cantonese show only readings from the lyric source or an imported reading LRC, never Mandarin pinyin. Cantonese songs in standard written Chinese look like Mandarin, so choose Cantonese for them.")
             }
-            Section("Saved readings") {
+            ThemedSection("Saved readings") {
                 Button("Import Reading LRC…") {
                     // A file that can't be used says why, as on Timing & sources.
                     switch InspectorImport.lyrics(title: "Choose a reading LRC file") {

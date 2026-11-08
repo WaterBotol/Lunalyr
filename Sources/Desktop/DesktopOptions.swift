@@ -47,7 +47,7 @@ struct DesktopInteractionSection: View {
     @Model(\.desktop) private var options
 
     var body: some View {
-        Section("Desktop") {
+        ThemedSection("Desktop") {
             Toggle("Show controls on hover", isOn: $options.showsControlsOnHover)
             InspectorCaption(options.showsControlsOnHover
                  ? "Rest the pointer in the middle of an uncovered desktop to show playback controls. Clicks elsewhere reach the desktop."
@@ -63,7 +63,7 @@ struct LyricBackingSection: View {
     @Model(\.settings) private var settings
 
     var body: some View {
-        Section("Legibility") {
+        ThemedSection("Legibility") {
             Toggle("Automatic text backing", isOn: $options.automaticTextBacking)
             if !options.automaticTextBacking {
                 ValueSlider("Text backing", value: $options.textBacking, in: 0...1, step: 0.01,

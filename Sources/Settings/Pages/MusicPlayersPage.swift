@@ -8,11 +8,10 @@ struct MusicPlayersPage: View {
     @Model(\.players) private var players
 
     var body: some View {
-        Form {
-            Section("Music players") {
-                ChoiceSegments("Player", selection: $players.choice) {
-                    ForEach(PlayerOptions.Choice.allCases) { Text($0.title).tag($0) }
-                }
+        ThemedForm {
+            ThemedSection("Music players") {
+                ChoiceSegments("Player", selection: $players.choice,
+                               cases: Array(PlayerOptions.Choice.allCases), label: \.title)
                 InspectorCaption("Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the other anything.")
                 PlayerAccessList()
                     .padding(.vertical, LunalyrDesign.Spacing.xSmall)

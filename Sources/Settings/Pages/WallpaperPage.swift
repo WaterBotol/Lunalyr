@@ -13,24 +13,20 @@ struct WallpaperPage: View {
     @StateObject private var importer = WallpaperImporter()
 
     var body: some View {
-        Form {
-            Section {
+        ThemedForm {
+            // Above the page's first section, outside its box: what power
+            // saving changed is about the whole page.
+            if let notice = s.powerSavingNotice {
+                PowerSavingBanner(notice: notice, override: { s.overridePowerSaving(notice.constraint) },
+                                  showPerformance: showPerformance)
+            }
+            ThemedSection("Wallpaper") {
                 WallpaperModeGrid(chooseImport: { importer.choose(into: s) })
                 InspectorCaption(s.backgroundMode.summary)
                 // A failed import leaves the type as it was, so its error
                 // shows here rather than in a section that isn't showing.
                 if let message = importer.message, s.backgroundMode != .custom {
                     ImportFailure(message: message)
-                }
-            } header: {
-                // Above the page's first section, outside its box: what power
-                // saving changed is about the whole page.
-                VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xLarge) {
-                    if let notice = s.powerSavingNotice {
-                        PowerSavingBanner(notice: notice, override: { s.overridePowerSaving(notice.constraint) },
-                                          showPerformance: showPerformance)
-                    }
-                    Text("Wallpaper")
                 }
             }
             typeSection
@@ -52,27 +48,27 @@ struct WallpaperPage: View {
     @ViewBuilder private var typeSection: some View {
         switch s.backgroundMode {
         case .auto:
-            Section("Match the music") {
+            ThemedSection("Match the music") {
                 shaderPicker
                 patternPicker
                 InspectorCaption("Match the music picks one of each per song; choose one to pin it.")
             }
         case .shader:
-            Section("GPU effects") { shaderPicker }
+            ThemedSection("GPU effects") { shaderPicker }
         case .pattern:
-            Section("Line patterns") { patternPicker }
+            ThemedSection("Line patterns") { patternPicker }
         case .visualizer:
-            Section("Visualiser") { VisualiserSceneSection() }
+            ThemedSection("Visualiser") { VisualiserSceneSection() }
         case .desktop:
-            Section("Your wallpaper") {
+            ThemedSection("Your wallpaper") {
                 Text("Only lyrics are drawn over your desktop. Keep using your current macOS wallpaper or wallpaper app; Lunalyr leaves it in place.")
                     .fixedSize(horizontal: false, vertical: true)
                 InspectorCaption("The preview puts your macOS desktop picture behind the lyrics. A wallpaper app’s own artwork can’t be shown there, but stays visible on each monitor.")
             }
         case .custom:
-            Section("Image or video") { importedOptions }
+            ThemedSection("Image or video") { importedOptions }
         case .colourOnly:
-            Section("Colour only") {
+            ThemedSection("Colour only") {
                 Toggle("Album gradient", isOn: $s.albumGradientWallpaper)
                 InspectorCaption("Blend the colours from across the cover into a slowly moving gradient.")
             }
@@ -123,7 +119,7 @@ struct WallpaperPage: View {
     }
 
     private var adjustments: some View {
-        Section("Adjustments") {
+        ThemedSection("Adjustments") {
             if s.backgroundMode != .custom {
                 ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
                             format: SettingsFormat.multiplier)
@@ -204,9 +200,8 @@ private struct VisualiserSceneSection: View {
             }) {
                 ForEach(WavefieldWebPreset.catalogue) { Text($0.name).tag($0.id) }
             }
-            ChoiceSegments("Projection", selection: $s.wavefieldProjection) {
-                ForEach(WavefieldProjection.allCases) { Text($0.title).tag($0) }
-            }
+            ChoiceSegments("Projection", selection: $s.wavefieldProjection,
+                           cases: Array(WavefieldProjection.allCases), label: \.title)
             VisualizerColoursPicker(engine: .wavefield)
         }
         if s.audioVisualizerStyle == .wavecore {
@@ -239,7 +234,7 @@ private struct MusicResponseSection: View {
     }
 
     var body: some View {
-        Section("Music response") {
+        ThemedSection("Music response") {
             Toggle("System audio", isOn: Binding(get: { s.audioReactiveEnabled }, set: { enabled in
                 if enabled { audio.start() } else { audio.stop() }
             }))

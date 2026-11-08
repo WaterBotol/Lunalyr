@@ -6,11 +6,10 @@ struct PerformancePage: View {
     @Model(\.settings) private var s
 
     var body: some View {
-        Form {
-            Section("Rendering and power") {
-                ChoiceSegments("Frame rate", selection: $s.animationRate) {
-                    ForEach(Settings.AnimationRate.allCases) { Text($0.title).tag($0) }
-                }
+        ThemedForm {
+            ThemedSection("Rendering and power") {
+                ChoiceSegments("Frame rate", selection: $s.animationRate,
+                               cases: Array(Settings.AnimationRate.allCases), label: \.title)
                 if s.effectiveAnimationRate != s.animationRate {
                     PowerCaption("Power saving is holding animation at \(s.effectiveAnimationRate.title) for now.")
                 }

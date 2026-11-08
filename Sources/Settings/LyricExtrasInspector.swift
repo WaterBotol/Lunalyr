@@ -6,7 +6,7 @@ struct LyricColourSection: View {
     @Model(\.colours) private var options
 
     var body: some View {
-        Section("Text colour") {
+        ThemedSection("Text colour") {
             ChoiceMenu("Colour", selection: $options.mode, selectedTitle: \.title) {
                 ForEach(LyricColourMode.choices) { Text($0.title).tag($0) }
             }
@@ -54,7 +54,7 @@ struct LyricColourSection: View {
             }
             InspectorCaption("Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still with Reduce Motion on.")
         }
-        Section("Highlight colour") {
+        ThemedSection("Highlight colour") {
             LyricHighlightColourControls()
         }
     }
@@ -102,7 +102,7 @@ struct LyricStyleMemorySection: View {
     }
 
     var body: some View {
-        Section("Remember a style") {
+        ThemedSection("Remember a style") {
             Toggle("Use remembered styles", isOn: $memory.enabled)
             if let track = playing.current {
                 if let active = memory.remembered(for: track) {
@@ -235,12 +235,12 @@ struct ShareInspector: View {
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        Form {
-            Section("Discord") {
+        ThemedForm {
+            ThemedSection("Discord") {
                 Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
                 InspectorCaption("Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
             }
-            Section("Share") {
+            ThemedSection("Share") {
                 ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
                            selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
                     Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
@@ -272,8 +272,8 @@ struct ExtrasInspector: View {
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        Form {
-            Section("Lyrics on screen") {
+        ThemedForm {
+            ThemedSection("Lyrics on screen") {
                 Toggle("Hide lyrics", isOn: $extras.lyricsHidden)
                 Toggle("Hide lyrics while a display is mirrored", isOn: $extras.hidesWhileMirroring)
                 InspectorCaption(Self.mirroringNote(mirroring: extras.mirroring, hides: extras.hidesWhileMirroring,
@@ -285,7 +285,7 @@ struct ExtrasInspector: View {
                 Toggle("Pause wallpaper", isOn: $extras.wallpaperPaused)
                 InspectorCaption("Freezes every desktop wallpaper, lyrics included, until you resume it or Lunalyr next starts. The preview here keeps moving, so changes can still be judged.")
             }
-            Section("Menu bar") {
+            ThemedSection("Menu bar") {
                 Toggle("Show the current line in the menu bar", isOn: $extras.showsMenuBarLine)
                 if extras.showsMenuBarLine {
                     ValueSlider("Longest line", value: $extras.menuBarLength, in: LunalyrExtras.menuBarLengthRange, step: 1,
@@ -294,7 +294,7 @@ struct ExtrasInspector: View {
                     InspectorCaption("Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
                 }
             }
-            Section("Keyboard shortcuts") {
+            ThemedSection("Keyboard shortcuts") {
                 Toggle("Use global shortcuts", isOn: $extras.shortcutsEnabled)
                 ChoiceMenu("Keys", selection: $hotkeys.modifiers, selectedTitle: \.title) {
                     ForEach(GlobalHotkeys.Modifiers.allCases) { Text($0.title).tag($0) }
@@ -366,7 +366,7 @@ struct TranslationSection: View {
     @Model(\.extras) private var extras
 
     var body: some View {
-        Section("Translations") {
+        ThemedSection("Translations") {
             Toggle("Show translations under lyrics", isOn: $extras.showsTranslations)
             InspectorCaption("Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Nothing is translated on this Mac or sent anywhere.")
         }

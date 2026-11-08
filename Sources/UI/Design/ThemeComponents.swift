@@ -66,7 +66,8 @@ struct ThemedSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         ThemeReader { style, t in
-            let shape = RoundedRectangle(cornerRadius: radius * style.cornerScale * (style == .bold ? 1 : 1), style: .continuous)
+            // Circular corners: a continuous corner at a pill's full radius overshoots its stroke.
+            let shape = RoundedRectangle(cornerRadius: radius * style.cornerScale, style: .circular)
             let current = state ?? .normal
             let pressed = current == .pressed
             let shadowed = style == .bold && !pressed && current != .disabled
@@ -254,13 +255,79 @@ struct ThemedSegments<Value: Hashable>: View {
 
 // MARK: Slider
 
+/// The track and thumb alone: drag or click to set, arrow keys and VoiceOver
+/// to step. `step` snaps the value.
+struct ThemedSliderTrack: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double?
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.themeForcedState) private var forced
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    private var fraction: Double {
+        let span = range.upperBound - range.lowerBound
+        return span > 0 ? min(1, max(0, (value - range.lowerBound) / span)) : 0
+    }
+
+    private var increment: Double { step ?? (range.upperBound - range.lowerBound) / 20 }
+
+    private func set(_ proposed: Double) {
+        var next = proposed
+        if let step, step > 0 { next = (next / step).rounded() * step }
+        next = min(range.upperBound, max(range.lowerBound, next))
+        if next != value { value = next }
+    }
+
+    var body: some View {
+        ThemeReader { _, t in
+            GeometryReader { proxy in
+                let thumb: CGFloat = 22
+                let travel = max(1, proxy.size.width - thumb)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(nsColor: t.face))
+                        .overlay(Capsule().strokeBorder(Color(nsColor: t.controlEdge), lineWidth: t.outline))
+                        .frame(height: 8)
+                    Capsule().fill(Color.lunalyrAccent)
+                        .frame(width: thumb / 2 + travel * fraction, height: 8)
+                    Color.clear
+                        .frame(width: thumb, height: thumb)
+                        .themedControl(radius: 11, state: forced ?? (enabled ? .normal : .disabled))
+                        .offset(x: travel * fraction)
+                }
+                .frame(height: proxy.size.height)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                    guard enabled else { return }
+                    let f = min(1, max(0, (drag.location.x - thumb / 2) / travel))
+                    set(range.lowerBound + f * (range.upperBound - range.lowerBound))
+                })
+            }
+            .frame(height: 26)
+            .focusable(enabled)
+            .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                guard enabled, press.modifiers.isEmpty else { return .ignored }
+                let forward = layoutDirection == .leftToRight ? KeyEquivalent.rightArrow : .leftArrow
+                set(value + (press.key == forward || press.key == .upArrow ? increment : -increment))
+                return .handled
+            }
+            .accessibilityAdjustableAction { direction in
+                guard enabled else { return }
+                switch direction {
+                case .increment: set(value + increment)
+                case .decrement: set(value - increment)
+                @unknown default: break
+                }
+            }
+        }
+    }
+}
+
 struct ThemedSlider: View {
     let title: String
     @Binding var value: Double
     let range: ClosedRange<Double>
     let format: (Double) -> String
-    @Environment(\.isEnabled) private var enabled
-    @Environment(\.themeForcedState) private var forced
 
     init(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>,
          format: @escaping (Double) -> String) {
@@ -270,52 +337,17 @@ struct ThemedSlider: View {
         self.format = format
     }
 
-    private var fraction: Double {
-        let span = range.upperBound - range.lowerBound
-        return span > 0 ? min(1, max(0, (value - range.lowerBound) / span)) : 0
-    }
-
     var body: some View {
-        ThemeReader { style, t in
+        ThemeReader { _, t in
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(title).foregroundStyle(Color(nsColor: t.ink))
                     Spacer()
                     Text(format(value)).monospacedDigit().foregroundStyle(Color(nsColor: t.secondary))
                 }
-                GeometryReader { proxy in
-                    let thumb: CGFloat = 22
-                    let travel = max(1, proxy.size.width - thumb)
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color(nsColor: t.face))
-                            .overlay(Capsule().strokeBorder(Color(nsColor: t.controlEdge), lineWidth: t.outline))
-                            .frame(height: 8)
-                        Capsule().fill(Color.lunalyrAccent)
-                            .frame(width: thumb / 2 + travel * fraction, height: 8)
-                        Color.clear
-                            .frame(width: thumb, height: thumb)
-                            .themedControl(radius: 11, state: forced ?? (enabled ? .normal : .disabled))
-                            .offset(x: travel * fraction)
-                    }
-                    .frame(height: proxy.size.height)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                        let f = min(1, max(0, (drag.location.x - thumb / 2) / travel))
-                        value = range.lowerBound + f * (range.upperBound - range.lowerBound)
-                    })
-                }
-                .frame(height: 26)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title)
-            .accessibilityValue(format(value))
-            .accessibilityAdjustableAction { direction in
-                let step = (range.upperBound - range.lowerBound) / 20
-                switch direction {
-                case .increment: value = min(range.upperBound, value + step)
-                case .decrement: value = max(range.lowerBound, value - step)
-                @unknown default: break
-                }
+                ThemedSliderTrack(value: $value, range: range)
+                    .accessibilityLabel(title)
+                    .accessibilityValue(format(value))
             }
         }
     }
@@ -504,4 +536,56 @@ struct StyleGallery: View {
 
 #Preview("Style Gallery") {
     StyleGallery()
+}
+
+// MARK: Pages
+
+/// A settings page: cards in a scrolling column, with the look's switches and
+/// buttons applied to every control inside.
+struct ThemedForm<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                content
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollContentBackground(.hidden)
+        .toggleStyle(ThemedToggleStyle())
+        .buttonStyle(ThemedButtonStyle())
+        .labeledContentStyle(ThemedLabeledContentStyle())
+    }
+}
+
+/// Label on the left, value or control on the right, as a form row.
+struct ThemedLabeledContentStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.medium) {
+            configuration.label
+            Spacer(minLength: LunalyrDesign.Spacing.small)
+            configuration.content
+        }
+    }
+}
+
+/// A titled card inside a `ThemedForm`; the stand-in for a form `Section`.
+struct ThemedSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        ThemedCard(title) { content }
+    }
 }

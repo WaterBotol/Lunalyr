@@ -111,28 +111,8 @@ struct ValueSlider: View {
         .padding(.vertical, 2)
     }
 
-    @ViewBuilder private var slider: some View {
-        if let step {
-            // Keep the track free of ticks. Dragging, arrow keys and
-            // accessibility adjustments all use the same saved increment.
-            Slider(value: Binding(get: { value }, set: { set($0, step: step) }), in: range) { Text(title) }
-                .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
-                    guard enabled, press.modifiers.isEmpty else { return .ignored }
-                    let forward = layoutDirection == .leftToRight ? KeyEquivalent.rightArrow : .leftArrow
-                    set(value + (press.key == forward || press.key == .upArrow ? step : -step), step: step)
-                    return .handled
-                }
-                .accessibilityAdjustableAction { direction in
-                    guard enabled else { return }
-                    switch direction {
-                    case .increment: set(value + step, step: step)
-                    case .decrement: set(value - step, step: step)
-                    @unknown default: break
-                    }
-                }
-        } else {
-            Slider(value: $value, in: range) { Text(title) }
-        }
+    private var slider: some View {
+        ThemedSliderTrack(value: $value, range: range, step: step)
     }
 
     private func set(_ proposed: Double, step: Double) {
@@ -184,7 +164,9 @@ struct ChoiceMenu<Selection: Hashable, Options: View>: View {
         } label: {
             Text(selectedTitle(selection))
         }
-        .menuStyle(.borderedButton)
+        .menuStyle(.button)
+        .buttonStyle(ThemedButtonStyle())
+        .menuIndicator(.visible)
         .help(selectedTitle(selection))
         .accessibilityLabel(title)
         .accessibilityValue(selectedTitle(selection))
@@ -192,25 +174,23 @@ struct ChoiceMenu<Selection: Hashable, Options: View>: View {
 }
 
 /// Short lists that are easier to choose from with every option visible.
-struct ChoiceSegments<Selection: Hashable, Options: View>: View {
+struct ChoiceSegments<Selection: Hashable>: View {
     let title: String
     @Binding var selection: Selection
-    let options: Options
+    let cases: [Selection]
+    let label: (Selection) -> String
 
-    init(_ title: String, selection: Binding<Selection>, @ViewBuilder options: () -> Options) {
+    init(_ title: String, selection: Binding<Selection>, cases: [Selection], label: @escaping (Selection) -> String) {
         self.title = title
         _selection = selection
-        self.options = options()
+        self.cases = cases
+        self.label = label
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
             Text(title).accessibilityHidden(true)
-            Picker(title, selection: $selection) { options }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .tint(.lunalyrAccent)
-                .frame(maxWidth: .infinity)
+            ThemedSegments(title, selection: $selection, options: cases.map { ($0, label($0)) })
         }
         .padding(.vertical, 2)
     }
