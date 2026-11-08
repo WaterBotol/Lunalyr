@@ -196,7 +196,9 @@ struct StageLyricView: View {
         let structureWidth = max(2 * max(barWidth, columnWidth) + u * 0.3, u * 3)
         let structureHeight = max(heightSum, u * 2.4) + u * 0.8
         let fill = min(2.0, stageSize.width * 0.8 / structureWidth, stageSize.height * 0.78 / structureHeight)
-        let fit = min(1, stageSize.height * 0.74 / max(heightSum + u * 0.8, 1)) * (1 + (max(fill, 1) - 1) * settle)
+        let fitHeight: CGFloat = min(1, stageSize.height * 0.74 / max(heightSum + u * 0.8, 1))
+        let grow: CGFloat = (max(fill, 1) - 1) * settle
+        let fit: CGFloat = fitHeight * (1 + grow)
         // The fold shuts over most of a second, word by word.
         let leaving = reduceMotion ? 0 : min(max((time - exitStart) / 0.9, 0), 1)
         let faceAngle = reduceMotion ? 0.0 : 52 + (88 - 52) * Easing.smoothstep(leaving)
@@ -431,8 +433,11 @@ struct StageLyricView: View {
                 // Each pill comes in from its own direction.
                 let heading = chance(index, 9) * 2 * .pi
                 let rise = CGFloat(1 - settled[index])
-                return CGPoint(x: bounds.midX + shiftX + p.x + sway + rise * CGFloat(cos(heading)) * bounds.width * 0.07 * drift,
-                               y: bounds.midY + lift + p.y + bob + rise * CGFloat(sin(heading)) * bounds.height * 0.1 * drift)
+                let comeX: CGFloat = rise * CGFloat(cos(heading)) * bounds.width * 0.07 * drift
+                let comeY: CGFloat = rise * CGFloat(sin(heading)) * bounds.height * 0.1 * drift
+                let x: CGFloat = bounds.midX + shiftX + p.x + sway + comeX
+                let y: CGFloat = bounds.midY + lift + p.y + bob + comeY
+                return CGPoint(x: x, y: y)
             }
         }) {
             ForEach(runs) { run in
