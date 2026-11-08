@@ -195,9 +195,9 @@ struct StageLyricView: View {
         let columnWidth = (0..<columnCount).map { CGFloat(runs[$0 + 3].text.count) * columnSize($0) * 0.66 * 0.84 }.max() ?? 0
         let structureWidth = max(2 * max(barWidth, columnWidth) + u * 0.3, u * 3)
         let structureHeight = max(heightSum, u * 2.4) + u * 0.8
-        let fill = min(2.0, stageSize.width * 0.8 / structureWidth, stageSize.height * 0.78 / structureHeight)
+        let fill: CGFloat = min(2.0, stageSize.width * 0.8 / structureWidth, stageSize.height * 0.78 / structureHeight)
         let fitHeight: CGFloat = min(1, stageSize.height * 0.74 / max(heightSum + u * 0.8, 1))
-        let grow: CGFloat = (max(fill, 1) - 1) * settle
+        let grow: CGFloat = (max(fill, 1) - 1) * CGFloat(settle)
         let fit: CGFloat = fitHeight * (1 + grow)
         // The fold shuts over most of a second, word by word.
         let leaving = reduceMotion ? 0 : min(max((time - exitStart) / 0.9, 0), 1)
