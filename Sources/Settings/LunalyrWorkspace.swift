@@ -228,6 +228,7 @@ private struct SettingsDetail: View {
             case .readings: ReadingsPage()
             case .general: GeneralPage(scrollRequest: scrollRequest)
             case .extras: ExtrasInspector()
+            case .share: ShareInspector()
             case .performance: PerformancePage()
             case .about: AboutPage()
             }

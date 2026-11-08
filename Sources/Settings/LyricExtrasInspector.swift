@@ -228,8 +228,43 @@ struct RememberedStyleNote: View {
     }
 }
 
-/// Menu bar & shortcuts: hiding and pausing, the menu-bar line, global
-/// shortcuts and the lyric card.
+/// Discord & lyric card: the places a song is shared from.
+@MainActor
+struct ShareInspector: View {
+    @Model(\.extras) private var extras
+    @Model(\.nowPlaying) private var playing
+
+    var body: some View {
+        Form {
+            Section("Discord") {
+                Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
+                InspectorCaption("Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
+            }
+            Section("Share") {
+                ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
+                           selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
+                    Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
+                    LyricCompositionOptions()
+                }
+                LabeledContent {
+                    Button("Open Lyric Card…") { extras.copyLyricCard() }
+                        .disabled(playing.current == nil)
+                } label: {
+                    Text("Lyric card")
+                }
+                InspectorCaption("Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
+                if playing.current == nil {
+                    DisabledReason("A card can be copied while a song is playing.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+/// Menu bar & shortcuts: hiding and pausing, the menu-bar line and global
+/// shortcuts.
 @MainActor
 struct ExtrasInspector: View {
     @Model(\.extras) private var extras
@@ -259,10 +294,6 @@ struct ExtrasInspector: View {
                     InspectorCaption("Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
                 }
             }
-            Section("Discord") {
-                Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
-                InspectorCaption("Needs the Discord desktop app. Your status shows the line being sung; your profile adds the song, artist, album and progress, with a Get Lunalyr button for others. Nothing is shared while this is off, and it clears when you pause.")
-            }
             Section("Keyboard shortcuts") {
                 Toggle("Use global shortcuts", isOn: $extras.shortcutsEnabled)
                 ChoiceMenu("Keys", selection: $hotkeys.modifiers, selectedTitle: \.title) {
@@ -278,23 +309,6 @@ struct ExtrasInspector: View {
                 if NSWorkspace.shared.isVoiceOverEnabled && hotkeys.modifiers == .controlOptionCommand {
                     StatusBanner(.warning, title: "VoiceOver uses these keys",
                                  message: "With Control-Option as its VO keys, ⌃⌥⌘ and a letter is also a VoiceOver command. Choose ⌃⇧⌘ above, or switch off the shortcuts you need for VoiceOver.")
-                }
-            }
-            Section("Share") {
-                ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
-                           selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
-                    Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
-                    LyricCompositionOptions()
-                }
-                LabeledContent {
-                    Button("Open Lyric Card…") { extras.copyLyricCard() }
-                        .disabled(playing.current == nil)
-                } label: {
-                    Text("Lyric card")
-                }
-                InspectorCaption("Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
-                if playing.current == nil {
-                    DisabledReason("A card can be copied while a song is playing.")
                 }
             }
         }

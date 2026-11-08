@@ -267,6 +267,7 @@ struct SettingsInspectorProbe: View {
             case .readings: ReadingsPage()
             case .general: GeneralPage()
             case .extras: ExtrasInspector()
+            case .share: ShareInspector()
             case .performance: PerformancePage()
             case .about: AboutPage()
             }

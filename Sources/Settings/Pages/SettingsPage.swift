@@ -7,7 +7,7 @@ import SwiftUI
 /// pages had before the rework, so a page remembered by an earlier version
 /// still opens; General is the only new one.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case wallpaper, typography, covers, lyrics, readings, general, extras, performance, about
+    case wallpaper, typography, covers, lyrics, readings, general, extras, share, performance, about
 
     var id: String { rawValue }
 
@@ -20,6 +20,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .readings: return "Romanisation"
         case .general: return "General"
         case .extras: return "Menu bar & shortcuts"
+        case .share: return "Discord & lyric card"
         case .performance: return "Performance"
         case .about: return "About"
         }
@@ -35,6 +36,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .readings: return "character.book.closed.fill"
         case .general: return "gearshape.fill"
         case .extras: return "command"
+        case .share: return "square.and.arrow.up.fill"
         case .performance: return "leaf.fill"
         case .about: return "info.circle.fill"
         }
@@ -49,6 +51,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .lyrics: return .blue
         case .readings: return .teal
         case .general, .extras, .about: return .gray
+        case .share: return .purple
         case .performance: return .green
         }
     }
@@ -59,7 +62,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     /// The sidebar's three sections.
     enum Group: String, CaseIterable, Identifiable {
-        case look, lyrics, lunalyr
+        case look, lyrics, connect, lunalyr
 
         var id: String { rawValue }
 
@@ -67,6 +70,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             switch self {
             case .look: return "Look"
             case .lyrics: return "Lyrics"
+            case .connect: return "Connect"
             case .lunalyr: return "App"
             }
         }
@@ -75,7 +79,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             switch self {
             case .look: return [.wallpaper, .typography, .covers]
             case .lyrics: return [.lyrics, .readings]
-            case .lunalyr: return [.general, .extras, .performance, .about]
+            case .connect: return [.extras, .share]
+            case .lunalyr: return [.general, .performance, .about]
             }
         }
     }
