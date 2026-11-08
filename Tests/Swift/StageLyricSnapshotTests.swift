@@ -47,6 +47,45 @@ final class StageLyricSnapshotTests: XCTestCase {
         }
     }
 
+    /// Animation frames of every layout for the README gallery, written only when
+    /// LUNALYR_GALLERY_DIR is set: <dir>/<layout>/NNN.png at 10 frames a second.
+    func testWriteLayoutGalleryFrames() throws {
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_GALLERY_DIR"] else { return }
+        let words = "we keep dreaming under neon rain".split(separator: " ").enumerated().map { i, w in
+            LyricsFetcher.Word(text: String(w), start: 1 + Double(i) * 0.62, end: 1.55 + Double(i) * 0.62)
+        }
+        let stage = CGSize(width: 640, height: 360)
+        let hues: [Double] = [0.72, 0.58, 0.85, 0.05, 0.62, 0.78, 0.47]
+        for (number, composition) in LyricComposition.allCases.enumerated() {
+            let folder = dir + "/" + composition.rawValue
+            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+            let hue = hues[number % hues.count]
+            var frame = 0
+            var time = 0.9
+            while time < 6.4 {
+                let view = ZStack {
+                    LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.32), Color(hue: hue, saturation: 0.6, brightness: 0.08)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LyricLineView(words: words, time: time, stageSize: stage, baseSize: 46, mood: .neutral,
+                                  composition: composition, seed: 3, lineEnd: 5.4, exitStart: 5.5,
+                                  glue: [Bool](repeating: false, count: words.count))
+                        .frame(width: stage.width, height: stage.height)
+                }
+                .frame(width: stage.width, height: stage.height)
+                .environment(\.colorScheme, .dark)
+                .environment(\.lyricInk, LyricInk())
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 1
+                if let image = renderer.nsImage, let rep = NSBitmapImageRep(data: image.tiffRepresentation ?? Data()) {
+                    try rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: folder + String(format: "/%03d.png", frame)))
+                }
+                frame += 1
+                time += 0.1
+            }
+        }
+    }
+
     func testEveryStageLayoutDraws() throws {
         let kinds: [LyricComposition] = LyricComposition.allCases.filter(\.fillsStage).filter { ![.hinge, .portal].contains($0) }
         XCTAssertFalse(kinds.isEmpty)
