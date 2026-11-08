@@ -244,9 +244,12 @@ extension LyricCard {
                         } else {
                             notes("The MP4 has no song: couldn’t use the song’s audio.")
                         }
-                    } else if let file = content.soundFile {
-                        if let layer = await soundLayer(from: file, volume: level) { layers.append(layer) }
-                        else { notes("The MP4 has no sound: couldn’t read the audio in \(file.lastPathComponent)") }
+                    }
+                    var tracks = content.extraSounds
+                    if let file = content.soundFile { tracks.insert(LyricCard.SoundTrack(url: file, volume: content.soundVolume), at: 0) }
+                    for track in tracks {
+                        if let layer = await soundLayer(from: track.url, volume: Float(track.volume)) { layers.append(layer) }
+                        else { notes("Couldn’t read the audio in \(track.url.lastPathComponent)") }
                     }
                     if let video = content.backgroundSoundSource, content.backgroundVolume > 0 {
                         if let layer = await soundLayer(from: video, volume: Float(content.backgroundVolume)) { layers.append(layer) }

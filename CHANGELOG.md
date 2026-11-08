@@ -27,7 +27,7 @@ Build 21 for macOS 14 and later.
 - A new Lunalyr mark: a crescent moon with a highlighted lyric line. It is the app icon, the menu-bar icon and the credit on lyric cards.
 - Star Trails: each sung word lights a handful of vocal stars, the spot following the word's place in its line, and bass lights large stars low in the sky.
 - Discord Rich Presence (off by default, in Settings > Share > Discord): the status shows the current lyric, or the song or artist, with the album cover, a progress bar, a "Get Lunalyr" button and "Paused" while paused. Lyrics can run ahead of the music (2.5 s by default) and breaks show "♪ Instrumental".
-- Lyric cards: Song level and Background level sliders for the MP4's sound (the song and a background video's own sound can be mixed), and a Text size slider that applies to every layout.
+- Lyric cards: the MP4 can mix several sounds (the song, a background video's own sound and any number of audio files), each with its own level, and a Text size slider applies to every layout. The line picker follows the song when it changes.
 - A faint shade under the menu bar, so a bright wallpaper does not whiten it (Wallpaper > Legibility, on by default).
 
 ### Changed

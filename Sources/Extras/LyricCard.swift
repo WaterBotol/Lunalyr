@@ -65,6 +65,11 @@ enum LyricCard {
         var rightToLeft: Bool { LyricScript.lineIsRightToLeft(words) }
     }
 
+    struct SoundTrack: Equatable {
+        var url: URL
+        var volume = 1.0
+    }
+
     struct Content {
         var pages: [Page]
         var title: String
@@ -89,6 +94,8 @@ enum LyricCard {
         /// A sound to put under the MP4: any audio file, or a video whose sound is
         /// taken. It takes the place of a video background's own sound.
         var soundFile: URL?
+        /// More sounds mixed under the MP4, each at its own level.
+        var extraSounds: [SoundTrack] = []
         /// The song's own sound for these lines, which wins over any other.
         var songAudio: SongAudioClip?
         /// How loud the song or chosen file is in the MP4, 0 to 1.5 (1 = as it is).

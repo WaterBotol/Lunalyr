@@ -127,6 +127,16 @@ final class LyricCardBackgroundTests: XCTestCase {
         return url
     }
 
+    func testSeveralAudioFilesAreMixedIntoTheExportedMP4() async throws {
+        var card = content()
+        card.extraSounds = [LyricCard.SoundTrack(url: try tone(seconds: 0.4), volume: 1),
+                            LyricCard.SoundTrack(url: try tone(seconds: 0.7), volume: 0.4)]
+        let files = await LyricCard.export(card, formats: [.mp4], to: folder.appendingPathComponent("many"))
+        let file = try XCTUnwrap(files.first?.1)
+        let audio = try await AVURLAsset(url: file).loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audio.count, 1)
+    }
+
     func testTwoSoundsAtDifferentLevelsMixIntoOneTrack() async throws {
         let video = folder.appendingPathComponent("mixed.mp4")
         let made = await LyricCard.video(content(), to: video)
