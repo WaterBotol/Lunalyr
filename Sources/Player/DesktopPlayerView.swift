@@ -73,20 +73,23 @@ struct DesktopPlayerView: View {
     private var strip: some View {
         if maskRender {
             Color.black.opacity(0.3)
+        } else if model.queue.isEmpty, let now = nowPlaying.current {
+            // A player that shares no queue (Spotify): just what is playing.
+            CoverStrip(items: [PlayerQueueItem(id: "now", title: now.title, artist: now.artist, index: 0, isCurrent: true)],
+                       tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork) { _ in nowPlaying.playPause() }
         } else if model.queue.isEmpty {
             Text(queueMessage).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
                 .shadow(color: .black.opacity(0.6), radius: 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            CoverStrip(items: model.queue, tint: model.player.tint) { entry in
+            CoverStrip(items: model.queue, tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork) { entry in
                 if entry.isCurrent { nowPlaying.playPause() } else { model.play(entry) }
             }
         }
     }
 
     private var queueMessage: String {
-        if case .message(let text) = model.status { return text }
-        return model.player == .spotify ? "Spotify doesn\u{2019}t share what plays next." : "Nothing is playing."
+        return "Nothing is playing."
     }
 
     // MARK: Controls
@@ -155,7 +158,6 @@ struct DesktopPlayerView: View {
             Rectangle().fill(searchFocused ? model.player.tint : .white.opacity(0.3)).frame(height: 1)
         }
         .frame(width: 170)
-        .onChange(of: model.query) { _, text in if !text.isEmpty { model.followNowPlaying() } }
     }
 
     // MARK: Results
@@ -257,6 +259,7 @@ private final class WheelBridge {
 private struct CoverStrip: View {
     let items: [PlayerQueueItem]
     let tint: Color
+    var artwork: NSImage?
     let onTap: (PlayerQueueItem) -> Void
     @State private var focus: String?
     @State private var velocity: CGFloat = 0
@@ -275,7 +278,13 @@ private struct CoverStrip: View {
                 ForEach(items) { item in
                     Button { onTap(item) } label: {
                         VStack(spacing: 6) {
-                            RemoteCover(url: nil, symbol: "music.note", lookup: (item.title, item.artist))
+                            Group {
+                                if item.isCurrent, let artwork {
+                                    Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                                } else {
+                                    RemoteCover(url: nil, symbol: "music.note", lookup: (item.title, item.artist))
+                                }
+                            }
                                 .frame(width: DesktopPlayerView.cover, height: DesktopPlayerView.cover)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(RoundedRectangle(cornerRadius: 12)

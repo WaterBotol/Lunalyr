@@ -20,10 +20,8 @@ final class DesktopPlayerModel: ObservableObject {
             guard player != oldValue else { return }
             defaults.set(player.rawValue, forKey: Self.playerKey)
             results = []
-            queue = []
             status = .idle
             runSearch()
-            refreshQueue()
         }
     }
     @Published var query = ""
@@ -50,6 +48,11 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     var searcher: any PlayerSearching { player.searcher }
+
+    /// The player that is actually playing: the strip shows its songs, whatever
+    /// the search is pointed at. Falls back to the search's player when none is.
+    var playingKind: PlayerKind { NowPlayingMonitor.shared.activePlayer ?? player }
+    private var queueKind: PlayerKind?
 
     /// Whether the player should stay on screen without the pointer: a search
     /// is typed.
@@ -89,7 +92,8 @@ final class DesktopPlayerModel: ObservableObject {
     /// Reloads the strip: the songs before this one, this one, the songs after.
     func refreshQueue() {
         queueTask?.cancel()
-        let searcher = self.searcher
+        let searcher = playingKind.searcher
+        if queueKind != searcher.kind { queue = []; queueKind = searcher.kind }
         queueTask = Task { [weak self] in
             do {
                 let items = try await searcher.queue()
@@ -118,7 +122,7 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     func play(_ item: PlayerQueueItem) {
-        let searcher = self.searcher
+        let searcher = playingKind.searcher
         // The strip moves to the song at once; the player catches up after.
         queue = queue.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
         perform(searcher) { try await searcher.playQueueItem(item) }
