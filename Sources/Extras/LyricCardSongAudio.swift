@@ -44,27 +44,40 @@ extension LyricCard {
         return first...last
     }
 
-    /// The song's sound window by window, ready to lay on a track.
+    /// The song's sound window by window, laid end to end. Where the clip
+    /// doesn't cover a window the sound is silent; it fades out over
+    /// `LyricCardMix.songCutFade` where it stops, whether the video ends first or carries on.
     static func songLayer(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)], volume: Float = 1) async -> SoundLayer? {
         let source = AVURLAsset(url: clip.url)
-        guard !windows.isEmpty, let track = try? await source.loadTracks(withMediaType: .audio).first,
+        guard !windows.isEmpty, (try? await source.loadTracks(withMediaType: .audio).first) != nil,
               let sourceLength = try? await source.load(.duration) else { return nil }
-        return SoundLayer(volume: volume) { audio, length in
-            withExtendedLifetime(source) {}
-            var cursor = CMTime.zero
+        let available = CMTimeGetSeconds(sourceLength)
+        return SoundLayer(volume: volume, role: .song) { length in
+            let rate = LyricCardMix.sampleRate, channels = LyricCardMix.channels
+            let frames = Int((length * rate).rounded())
+            var output = [Float](repeating: 0, count: frames * channels)
+            var cursor = 0.0
+            var lastSound = 0
             for window in windows where cursor < length {
+                // Any part of the window before the clip starts stays silent.
+                let missing = max(0, clip.songStart - window.start)
                 let from = max(0, window.start - clip.songStart)
-                let want = min(window.duration, CMTimeGetSeconds(CMTimeSubtract(length, cursor)))
-                let available = CMTimeGetSeconds(sourceLength) - from
-                let seconds = min(want, available)
-                if seconds > 0.02 {
-                    try audio.insertTimeRange(CMTimeRange(start: CMTime(seconds: from, preferredTimescale: 600),
-                                                          duration: CMTime(seconds: seconds, preferredTimescale: 600)),
-                                              of: track, at: cursor)
+                let want = min(window.duration - missing, length - cursor - missing)
+                let seconds = min(want, available - from)
+                if seconds > 0.02, let samples = await LyricCardMix.decode(clip.url, from: from, seconds: seconds) {
+                    let at = Int(((cursor + missing) * rate).rounded()) * channels
+                    let count = min(samples.count, output.count - at)
+                    if count > 0 {
+                        output.replaceSubrange(at..<(at + count), with: samples[0..<count])
+                        lastSound = (at + count) / channels
+                    }
                 }
-                cursor = CMTimeAdd(cursor, CMTime(seconds: window.duration, preferredTimescale: 600))
+                cursor += window.duration
             }
-            return true
+            // Ending with the video, the MP4's own end fade is enough.
+            let cut = windows.reduce(0) { $0 + $1.duration } > length + 0.01
+            guard lastSound > 0, cut || lastSound < frames - Int(rate * 0.01) else { return Rendered(output) }
+            return Rendered(output, fadeOut: (lastSound, LyricCardMix.songCutFade))
         }
     }
 

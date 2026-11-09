@@ -104,95 +104,137 @@ extension LyricCard {
         return writer.status == .completed
     }
 
-    /// One strand of sound under the video: how loud, and how to lay it on a track.
+    /// One strand of sound under the video: its slider level, what it is, and
+    /// how to render it for a given length.
     struct SoundLayer {
+        enum Role { case song, background, file }
+        /// The slider position, 0 to 1.5 (see `LyricCardMix.decibels(forLevel:)`).
         var volume: Float
-        var fill: (AVMutableCompositionTrack, CMTime) throws -> Bool
+        var role: Role = .file
+        /// The strand's sound for that many seconds; nil when it can't be read.
+        var render: (Double) async -> Rendered?
     }
 
-    /// `soundURL` looped (or cut) to the video's length.
-    static func soundLayer(from soundURL: URL, volume: Float = 1) async -> SoundLayer? {
+    /// A strand's samples, interleaved stereo at `LyricCardMix.sampleRate`,
+    /// and where it fades out, if it stops before the end. The fade is applied
+    /// after the strand's loudness is measured, so it doesn't skew the matching.
+    struct Rendered {
+        var samples: [Float]
+        var fadeOut: (end: Int, seconds: Double)?
+        init(_ samples: [Float], fadeOut: (end: Int, seconds: Double)? = nil) { self.samples = samples; self.fadeOut = fadeOut }
+    }
+
+    /// `soundURL` looped (or cut) to the video's length. A `crossfade` (in
+    /// seconds) overlaps each repeat with the end of the one before, as a
+    /// background video's picture does.
+    static func soundLayer(from soundURL: URL, volume: Float = 1, role: SoundLayer.Role = .file,
+                           crossfade: Double = 0) async -> SoundLayer? {
         let sound = AVURLAsset(url: soundURL)
-        guard let soundTrack = try? await sound.loadTracks(withMediaType: .audio).first,
+        guard (try? await sound.loadTracks(withMediaType: .audio).first) != nil,
               let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return nil }
-        return SoundLayer(volume: volume) { audio, length in
-            withExtendedLifetime(sound) {}
-            var cursor = CMTime.zero
-            while cursor < length {
-                let piece = CMTimeMinimum(soundLength, CMTimeSubtract(length, cursor))
-                try audio.insertTimeRange(CMTimeRange(start: .zero, duration: piece), of: soundTrack, at: cursor)
-                cursor = CMTimeAdd(cursor, piece)
-            }
-            return true
+        return SoundLayer(volume: volume, role: role) { seconds in
+            let frames = Int((seconds * LyricCardMix.sampleRate).rounded())
+            guard let source = await LyricCardMix.decode(soundURL, seconds: min(soundLength.seconds, seconds + 0.05)),
+                  !source.isEmpty else { return nil }
+            return Rendered(LyricCardMix.loop(source, to: frames, crossfade: Int(crossfade * LyricCardMix.sampleRate)))
         }
     }
 
     /// Lays `soundURL`'s audio under the finished video at `videoURL`, looping
     /// it (or cutting it) to the video's length, and replaces the file. False,
-    /// with the file untouched, when there is no sound or it cannot be carried
-    /// into an MP4.
+    /// with the file untouched, when there is no sound.
     @discardableResult
     static func addSound(from soundURL: URL, to videoURL: URL, volume: Float = 1) async -> Bool {
         guard let layer = await soundLayer(from: soundURL, volume: volume) else { return false }
         return await mux(soundOnto: videoURL, layers: [layer])
     }
 
-    /// Builds a composition of the video and a track per layer, mixed at each
-    /// layer's volume, exports it, and replaces `videoURL` with the result.
-    static func mux(soundOnto videoURL: URL, layers: [SoundLayer]) async -> Bool {
+    /// Renders every layer for the video's length, brings each to the same
+    /// loudness, applies its slider level (real gain, above 100% too), ducks
+    /// the song under the background's sound if asked, sums them, fades the
+    /// last `LyricCardMix.endFade` seconds and limits peaks to -1 dBFS. The result is
+    /// written as AAC and laid under the video, which is copied as it is, and
+    /// `videoURL` is replaced. False, with the file untouched, if it can't.
+    static func mux(soundOnto videoURL: URL, layers: [SoundLayer], duck: Bool = false) async -> Bool {
         guard !layers.isEmpty else { return false }
         let video = AVURLAsset(url: videoURL)
         guard let videoTrack = try? await video.loadTracks(withMediaType: .video).first,
               let length = try? await video.load(.duration), length.seconds > 0 else { return false }
-        let composition = AVMutableComposition()
-        guard let outVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
-        else { return false }
-        var outSounds: [AVMutableCompositionTrack] = []
-        for _ in layers {
-            guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-            else { return false }
-            outSounds.append(track)
+        guard let mix = await mixdown(layers, seconds: length.seconds, duck: duck) else { return false }
+        guard let mix else { return true } // every layer turned off: leave the video silent
+        let folder = videoURL.deletingLastPathComponent()
+        let sound = folder.appendingPathComponent("mix-\(UUID().uuidString).m4a")
+        let output = folder.appendingPathComponent("sound-\(UUID().uuidString).mp4")
+        defer {
+            try? FileManager.default.removeItem(at: sound)
+            try? FileManager.default.removeItem(at: output)
         }
-        let mix = AVMutableAudioMix()
-        var parameters: [AVMutableAudioMixInputParameters] = []
+        do { try LyricCardMix.writeAAC(mix, to: sound) } catch { return false }
+        let audio = AVURLAsset(url: sound)
+        let composition = AVMutableComposition()
+        guard let audioTrack = try? await audio.loadTracks(withMediaType: .audio).first,
+              let audioLength = try? await audio.load(.duration),
+              let outVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
+              let outSound = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        else { return false }
         do {
             try outVideo.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: videoTrack, at: .zero)
-            for (layer, outSound) in zip(layers, outSounds) {
-                guard try layer.fill(outSound, length) else { return false }
-                let parameter = AVMutableAudioMixInputParameters(track: outSound)
-                parameter.setVolume(layer.volume, at: .zero)
-                parameters.append(parameter)
-            }
+            try outSound.insertTimeRange(CMTimeRange(start: .zero, duration: CMTimeMinimum(length, audioLength)), of: audioTrack, at: .zero)
         } catch { return false }
-        mix.inputParameters = parameters
-        // Plain pass-through only copies; mixing or changing a volume means encoding.
-        let plain = layers.count == 1 && layers[0].volume == 1
-        let output = videoURL.deletingLastPathComponent().appendingPathComponent("sound-\(UUID().uuidString).mp4")
-        // Copy the video as it is; if the sound will not go into an MP4 as it
-        // is (WAV, MP3, some phone formats), encode the lot instead.
-        var done = false
-        for preset in (plain ? [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality] : [AVAssetExportPresetHighestQuality]) where !done {
-            guard let session = AVAssetExportSession(asset: composition, presetName: preset) else { continue }
-            try? FileManager.default.removeItem(at: output)
-            session.outputURL = output
-            session.outputFileType = .mp4
-            if preset != AVAssetExportPresetPassthrough { session.audioMix = mix }
-            await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
-                session.exportAsynchronously { finished.resume() }
+        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else { return false }
+        session.outputURL = output
+        session.outputFileType = .mp4
+        await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
+            session.exportAsynchronously { finished.resume() }
+        }
+        guard session.status == .completed else { return false }
+        return (try? FileManager.default.replaceItemAt(videoURL, withItemAt: output)) != nil
+    }
+
+    /// The finished mix for `seconds`; .some(nil) when every layer is off, nil when one can't be read.
+    static func mixdown(_ layers: [SoundLayer], seconds: Double, duck: Bool) async -> [Float]?? {
+        let channels = LyricCardMix.channels
+        let frames = Int((seconds * LyricCardMix.sampleRate).rounded())
+        var strands: [(role: SoundLayer.Role, samples: [Float])] = []
+        for layer in layers {
+            let level = LyricCardMix.decibels(forLevel: Double(layer.volume))
+            guard level.isFinite else { continue }
+            guard let rendered = await layer.render(seconds) else { return nil }
+            var samples = rendered.samples
+            if samples.count != frames * channels {
+                samples = Array(samples.prefix(frames * channels))
+                samples += repeatElement(0, count: frames * channels - samples.count)
             }
-            done = session.status == .completed
+            let gain = LyricCardMix.linear(LyricCardMix.matchingGain(for: samples) + level)
+            if let fade = rendered.fadeOut { LyricCardMix.fadeOut(&samples, endingAt: fade.end, seconds: fade.seconds) }
+            samples.withUnsafeMutableBufferPointer { pointer in
+                for index in pointer.indices { pointer[index] *= gain }
+            }
+            strands.append((layer.role, samples))
         }
-        guard done else {
-            try? FileManager.default.removeItem(at: output)
-            return false
+        guard !strands.isEmpty else { return .some(nil) }
+        if duck, let trigger = strands.first(where: { $0.role == .background })?.samples,
+           strands.contains(where: { $0.role == .song }) {
+            let gains = LyricCardMix.duckGains(under: trigger, frames: frames)
+            for index in strands.indices where strands[index].role == .song {
+                strands[index].samples.withUnsafeMutableBufferPointer { pointer in
+                    for frame in 0..<frames {
+                        for channel in 0..<channels { pointer[frame * channels + channel] *= gains[frame] }
+                    }
+                }
+            }
         }
-        do {
-            _ = try FileManager.default.replaceItemAt(videoURL, withItemAt: output)
-            return true
-        } catch {
-            try? FileManager.default.removeItem(at: output)
-            return false
+        var mix = [Float](repeating: 0, count: frames * channels)
+        mix.withUnsafeMutableBufferPointer { out in
+            for strand in strands {
+                strand.samples.withUnsafeBufferPointer { input in
+                    for index in out.indices { out[index] += input[index] }
+                }
+            }
         }
+        LyricCardMix.fadeOut(&mix, endingAt: frames, seconds: LyricCardMix.endFade)
+        LyricCardMix.limit(&mix)
+        return .some(mix)
     }
 
     private static func pixelBuffer(from image: CGImage, size: CGSize, pool: CVPixelBufferPool?) -> CVPixelBuffer? {
@@ -237,9 +279,11 @@ extension LyricCard {
                     var layers: [SoundLayer] = []
                     let level = Float(content.soundVolume)
                     if let clip = content.songAudio {
+                        let windows = songWindows(content)
                         if let range = songRange(content), !clip.covers(range) {
-                            notes("The MP4 has no song: the recording doesn’t cover these lines. Record the song again.")
-                        } else if let layer = await songLayer(clip, windows: songWindows(content), volume: level) {
+                            notes("Parts of these lines aren’t in the song’s recording, so they’re silent. Record the song again.")
+                        }
+                        if let layer = await songLayer(clip, windows: windows, volume: level) {
                             layers.append(layer)
                         } else {
                             notes("The MP4 has no song: couldn’t use the song’s audio.")
@@ -252,9 +296,11 @@ extension LyricCard {
                         else { notes("Couldn’t read the audio in \(track.url.lastPathComponent)") }
                     }
                     if let video = content.backgroundSoundSource, content.backgroundVolume > 0 {
-                        if let layer = await soundLayer(from: video, volume: Float(content.backgroundVolume)) { layers.append(layer) }
+                        if let layer = await soundLayer(from: video, volume: Float(content.backgroundVolume), role: .background) {
+                            layers.append(layer)
+                        }
                     }
-                    if !layers.isEmpty, !(await mux(soundOnto: file, layers: layers)) {
+                    if !layers.isEmpty, !(await mux(soundOnto: file, layers: layers, duck: content.duckSong)) {
                         notes("The MP4 has no sound: couldn’t add it.")
                     }
                 }

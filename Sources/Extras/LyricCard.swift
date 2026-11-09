@@ -98,12 +98,15 @@ enum LyricCard {
         var extraSounds: [SoundTrack] = []
         /// The song's own sound for these lines, which wins over any other.
         var songAudio: SongAudioClip?
-        /// How loud the song or chosen file is in the MP4, 0 to 1.5 (1 = as it is).
+        /// How loud the song or chosen file is in the MP4, as a slider position
+        /// from 0 to 1.5: 1 is level with the other sounds (see `LyricCardMix.decibels(forLevel:)`).
         var soundVolume = 1.0
         /// How big the lyrics are on the card, as a share of the room they have (1 fills it).
         var textScale = 1.0
         /// How loud a video background's own sound is, mixed with the above.
         var backgroundVolume = 1.0
+        /// Lowers the song by 12 dB while the background video's own sound is playing.
+        var duckSong = false
 
         var size: CGSize { aspect.size }
 
