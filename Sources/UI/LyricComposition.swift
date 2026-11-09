@@ -121,7 +121,7 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .portal: return "The sung word in a pill; earlier words drift away as pale ones."
         case .mosaic: return "A collage: each word set huge, on a colour bar, or letter by letter."
         case .torque: return "Words wrung into place with a thick edge, stacking upwards."
-        case .fable: return "Words climb a diagonal staircase, each a size up on the last."
+        case .fable: return "A new shape and accent every line; each word lands its own way."
         }
     }
 
