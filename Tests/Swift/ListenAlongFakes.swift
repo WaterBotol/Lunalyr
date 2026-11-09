@@ -45,6 +45,7 @@ final class FakeListenSocket: ListenSocket, @unchecked Sendable {
     private var waiting: CheckedContinuation<String, Error>?
     private var closed = false
     var isUnknownRoom = false
+    var closeCode: Int?
 
     init(url: URL) { self.url = url }
 
@@ -89,9 +90,10 @@ final class FakeListenSocket: ListenSocket, @unchecked Sendable {
     }
 
     /// The relay closes the socket.
-    func drop(unknownRoom: Bool = false) {
+    func drop(unknownRoom: Bool = false, closeCode: Int? = nil) {
         lock.lock()
         isUnknownRoom = unknownRoom
+        self.closeCode = closeCode
         closed = true
         let waiting = self.waiting
         self.waiting = nil
@@ -126,15 +128,15 @@ final class FakeListenPlayer: ListenPlayerControl {
 
     func reading() -> ListenPlayerReading? { current }
 
-    func play(_ target: ListenPlayTarget, at position: Double, playing: Bool) async -> Bool {
-        log.append("play \(target) at \(String(format: "%.1f", position)) \(playing ? "playing" : "paused")")
+    func play(_ target: ListenPlayTarget, at position: Double) async -> Bool {
+        log.append("play \(target) at \(String(format: "%.1f", position))")
         guard playable, let kind else { return false }
         let id: String
         switch target {
         case .spotify(let spotifyID): id = "spotify:track:\(spotifyID)"
         case .library(let persistentID): id = persistentID
         }
-        current = ListenPlayerReading(kind: kind, title: "", artist: "", trackID: id, position: position, playing: playing)
+        current = ListenPlayerReading(kind: target.kind, title: "", artist: "", trackID: id, position: position, playing: true)
         return true
     }
 
@@ -143,10 +145,13 @@ final class FakeListenPlayer: ListenPlayerControl {
         current?.position = position
     }
 
-    func setPlaying(_ playing: Bool) async {
-        log.append(playing ? "play" : "pause")
-        current?.playing = playing
+    func setPlaying(_ playing: Bool, on kind: PlayerKind) async {
+        log.append("\(playing ? "play" : "pause") \(kind.rawValue)")
+        if current?.kind == kind { current?.playing = playing }
     }
+
+    /// Whether anything was asked to make sound: a song started or resumed.
+    var everPlayed: Bool { log.contains { $0.hasPrefix("play") } }
 
     func shuffle(_ kind: PlayerKind) async -> Bool? { shuffleOn }
 
@@ -171,5 +176,25 @@ extension XCTestCase {
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
         XCTFail(message, file: file, line: line)
+    }
+}
+
+/// Answers "Listen along with …?" when the test says so, and records it.
+@MainActor
+final class FakeListenConfirmer: ListenJoinConfirming {
+    private(set) var asked: [ListenInvite] = []
+    private var pending: CheckedContinuation<Bool, Never>?
+
+    func confirm(_ invite: ListenInvite) async -> Bool {
+        asked.append(invite)
+        return await withCheckedContinuation { pending = $0 }
+    }
+
+    var isAsking: Bool { pending != nil }
+
+    func answer(_ accepted: Bool) {
+        let pending = pending
+        self.pending = nil
+        pending?.resume(returning: accepted)
     }
 }

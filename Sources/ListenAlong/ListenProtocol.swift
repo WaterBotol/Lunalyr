@@ -1,6 +1,6 @@
 import Foundation
 
-/// The listen-along relay protocol, v1 (`listen-protocol.md`, shared with the
+/// The listen-along relay protocol, v1 (`relay/PROTOCOL.md`, shared with the
 /// relay and its web page). Pure: encoding, decoding, addresses and the
 /// timing rules, so every part is tested without a socket.
 enum ListenProtocol {
@@ -24,7 +24,8 @@ enum ListenProtocol {
         }
     }
 
-    /// Line timing only: the word timing stays on the host.
+    /// A lyric line: its timing and text (the word timing stays on the
+    /// host). Sent only while "Share lyrics with listeners" is on.
     struct LyricLine: Codable, Equatable, Sendable {
         var start: Double
         var end: Double
@@ -178,9 +179,54 @@ enum ListenProtocol {
         guard !text.isEmpty else { return nil }
         if !text.contains("://") { text = "https://" + text }
         while text.hasSuffix("/") { text.removeLast() }
-        guard let url = URL(string: text), let scheme = url.scheme?.lowercased(),
-              scheme == "https" || scheme == "http", url.host?.isEmpty == false else { return nil }
+        guard let url = URL(string: text), let scheme = url.scheme?.lowercased(), let host = url.host, !host.isEmpty else { return nil }
+        // The host key travels in the socket address: https only, except
+        // a relay on this Mac (`wrangler dev`).
+        guard scheme == "https" || (scheme == "http" && isLoopback(host)) else { return nil }
         return url
+    }
+
+    /// This Mac: `localhost`, `*.localhost`, 127.0.0.0/8 or ::1.
+    static func isLoopback(_ host: String) -> Bool {
+        let name = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if name == "localhost" || name.hasSuffix(".localhost") || name == "::1" { return true }
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 4 && parts[0] == "127" && parts.allSatisfy { UInt8($0) != nil }
+    }
+
+    // MARK: - Discord join
+
+    /// Longest host name shown, in characters.
+    static let maximumHostNameLength = 32
+
+    /// A host's display name, trimmed, without control characters, and at
+    /// most `maximumHostNameLength` long; nil when nothing is left.
+    static func cleanHostName(_ name: String?) -> String? {
+        guard let name else { return nil }
+        let visible = String(String.UnicodeScalarView(name.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
+        let trimmed = visible.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.count > maximumHostNameLength
+            ? String(trimmed.prefix(maximumHostNameLength - 1)).trimmingCharacters(in: .whitespaces) + "\u{2026}"
+            : trimmed
+    }
+
+    /// Discord's join secret: the room, then "|" and the host's display
+    /// name so the friend is asked "Listen along with <name>?" before
+    /// anything connects. The relay never sees it.
+    static func joinSecret(room: String, hostName: String?) -> String {
+        guard let name = cleanHostName(hostName) else { return room }
+        return "\(room)|\(name)"
+    }
+
+    /// The room and host name in a join secret; a bare room (older builds)
+    /// has no name.
+    static func joinInvite(fromSecret secret: String) -> (room: String, hostName: String?)? {
+        let parts = secret.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let first = parts.first else { return nil }
+        let room = first.trimmingCharacters(in: .whitespaces).lowercased()
+        guard isValidRoom(room) else { return nil }
+        return (room, parts.count > 1 ? cleanHostName(String(parts[1])) : nil)
     }
 
     static func roomsURL(_ base: URL) -> URL { base.appendingPathComponent("rooms") }
@@ -208,6 +254,13 @@ enum ListenProtocol {
 
     /// The close code the relay uses for a room it does not know.
     static let unknownRoomCloseCode = 4404
+    /// The host's key is wrong (the room was made again elsewhere).
+    static let badKeyCloseCode = 4403
+    /// The room already has the most listeners it takes.
+    static let roomFullCloseCode = 4429
+    /// Seconds to wait after the relay answers `POST /rooms` with 429
+    /// (its `Retry-After`).
+    static let roomCreationRetryAfter: TimeInterval = 60
 }
 
 /// Where the host is in the song now, from a state and when it arrived.

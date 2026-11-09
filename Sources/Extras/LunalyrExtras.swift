@@ -25,6 +25,7 @@ final class LunalyrExtras: ObservableObject {
         static let discordJoin = "custom.discordJoinParty"
         static let listenSharing = "custom.listenSharing"
         static let listenRelayURL = "custom.listenRelayURL"
+        static let listenSharesLyrics = "custom.listenSharesLyrics"
         static let shortcuts = "custom.globalShortcuts"
         static let lyricsHidden = "custom.lyricsHidden"
         /// Where earlier builds kept a pause across launches. Only cleared now.
@@ -108,6 +109,11 @@ final class LunalyrExtras: ObservableObject {
     /// "Let friends listen along". Off by default.
     @Published var listenSharing: Bool {
         didSet { defaults.set(listenSharing, forKey: Keys.listenSharing); applyListenAlong() }
+    }
+    /// "Share lyrics with listeners": the lyric lines and their timing go to
+    /// the relay with each song. On by default.
+    @Published var listenSharesLyrics: Bool {
+        didSet { defaults.set(listenSharesLyrics, forKey: Keys.listenSharesLyrics); applyListenAlong() }
     }
     /// The listen-along relay's address. Empty by default, which hides
     /// every listen-along control and connects nothing.
@@ -253,6 +259,7 @@ final class LunalyrExtras: ObservableObject {
         discordOffersJoin = defaults.bool(forKey: Keys.discordJoin)
         listenSharing = defaults.bool(forKey: Keys.listenSharing)
         listenRelayURL = defaults.string(forKey: Keys.listenRelayURL) ?? ""
+        listenSharesLyrics = defaults.object(forKey: Keys.listenSharesLyrics) as? Bool ?? true
         discordLyricLead = lead.isFinite ? min(Self.discordLeadRange.upperBound, max(Self.discordLeadRange.lowerBound, lead)) : 2.5
         let length = defaults.object(forKey: Keys.menuBarLength) as? Double ?? 36
         menuBarLength = length.isFinite ? min(Self.menuBarLengthRange.upperBound, max(Self.menuBarLengthRange.lowerBound, length)) : 36
@@ -310,7 +317,7 @@ final class LunalyrExtras: ObservableObject {
 
     private func applyListenAlong() {
         guard started else { return }
-        ListenAlong.shared.configure(relay: listenRelayURL, sharing: listenSharing)
+        ListenAlong.shared.configure(relay: listenRelayURL, sharing: listenSharing, sharesLyrics: listenSharesLyrics)
     }
 
     private func updateVisibility() {

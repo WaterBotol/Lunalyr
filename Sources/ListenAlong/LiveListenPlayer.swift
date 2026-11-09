@@ -33,22 +33,24 @@ final class LiveListenPlayer: ListenPlayerControl {
 
     // MARK: Scripts (pure, tested)
 
-    nonisolated static func playScript(_ target: ListenPlayTarget, at position: Double, playing: Bool) -> PlayerScript {
+    /// Starts the song and moves to the host's moment. There is no paused
+    /// variant: a paused host's song is not started at all (it would be
+    /// heard from 0:00 before any pause), but when they play.
+    nonisolated static func playScript(_ target: ListenPlayTarget, at position: Double) -> PlayerScript {
         let seek = "set player position to \(PlayerScriptSource.number(position))"
-        let pause = playing ? "" : "\npause"
         switch target {
         case .spotify(let id):
             return PlayerScript(name: "listen.spotify.play", source: PlayerScriptSource.command(PlayerKind.spotify.bundleID, """
             play track \(ScriptText.quoted("spotify:track:\(id)"))
             delay 0.4
-            \(seek)\(pause)
+            \(seek)
             """), cacheable: false)
         case .library(let persistentID):
             return PlayerScript(name: "listen.music.play", source: PlayerScriptSource.command(PlayerKind.appleMusic.bundleID, """
             set theTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(persistentID))
             play theTrack
             delay 0.3
-            \(seek)\(pause)
+            \(seek)
             """), cacheable: false)
         }
     }
@@ -105,10 +107,10 @@ final class LiveListenPlayer: ListenPlayerControl {
 
     // MARK: Control
 
-    func play(_ target: ListenPlayTarget, at position: Double, playing: Bool) async -> Bool {
+    func play(_ target: ListenPlayTarget, at position: Double) async -> Bool {
         guard !AppRuntime.isUnitTesting else { return false }
-        let kind: PlayerKind = { if case .spotify = target { return .spotify } else { return .appleMusic } }()
-        let ok = (try? await ScriptDesk.shared.run(Self.playScript(target, at: position, playing: playing), for: kind, priority: .command)) != nil
+        let kind = target.kind
+        let ok = (try? await ScriptDesk.shared.run(Self.playScript(target, at: position), for: kind, priority: .command)) != nil
         monitor.refresh()
         return ok
     }
@@ -118,11 +120,16 @@ final class LiveListenPlayer: ListenPlayerControl {
         monitor.seek(to: position)
     }
 
-    func setPlaying(_ playing: Bool) async {
+    func setPlaying(_ playing: Bool, on kind: PlayerKind) async {
         guard !AppRuntime.isUnitTesting else { return }
-        guard let kind = monitor.activePlayer ?? kind else { return }
+        guard Self.mayCommand(kind, active: monitor.activePlayer) else { return }
         _ = try? await ScriptDesk.shared.run(Self.playingScript(playing, kind), for: kind, priority: .command)
         monitor.refresh()
+    }
+
+    /// Only Music or Spotify, and only while no other player is the active one.
+    nonisolated static func mayCommand(_ kind: PlayerKind, active: PlayerKind?) -> Bool {
+        (kind == .spotify || kind == .appleMusic) && (active == nil || active == kind)
     }
 
     func shuffle(_ kind: PlayerKind) async -> Bool? {
@@ -147,6 +154,13 @@ final class LiveListenPlayer: ListenPlayerControl {
     /// Gives shuffle back while the app quits, when nothing can be awaited.
     static func restoreShuffleNow(_ kind: PlayerKind) {
         guard !AppRuntime.isUnitTesting else { return }
-        _ = LiveAppleScriptRunner().run(setShuffleScript(true, kind))
+        _ = LiveAppleScriptRunner().run(quitShuffleScript(kind))
+    }
+
+    /// The quit-time shuffle script: given up after a second rather than
+    /// holding the app's exit for the usual reply timeout.
+    nonisolated static func quitShuffleScript(_ kind: PlayerKind) -> PlayerScript {
+        PlayerScript(name: "listen.\(kind.rawValue).shuffle.quit",
+                     source: PlayerScriptSource.withTimeout(1, setShuffleScript(true, kind).source))
     }
 }

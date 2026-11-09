@@ -8,6 +8,8 @@ protocol ListenSocket: AnyObject, Sendable {
     func close()
     /// The relay does not know the room (HTTP 404, or close code 4404).
     var isUnknownRoom: Bool { get }
+    /// The relay's close code once the socket has closed, if it sent one.
+    var closeCode: Int? { get }
 }
 
 protocol ListenSocketOpening: Sendable {
@@ -55,6 +57,11 @@ final class LiveListenSocket: ListenSocket, @unchecked Sendable {
         guard let task else { return false }
         if (task.response as? HTTPURLResponse)?.statusCode == 404 { return true }
         return task.closeCode.rawValue == ListenProtocol.unknownRoomCloseCode
+    }
+
+    var closeCode: Int? {
+        guard let code = task?.closeCode.rawValue, code != URLSessionWebSocketTask.CloseCode.invalid.rawValue else { return nil }
+        return code
     }
 
     /// Sends one message and waits at most `timeout` for it to go: for the

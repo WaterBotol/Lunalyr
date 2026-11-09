@@ -64,6 +64,22 @@ struct MenuBarListenAlong: View {
                     .accessibilityLabel("Stop listening along")
                 Spacer(minLength: 0)
             }
+            if let hold = follower.hold {
+                HStack(spacing: 6) {
+                    Image(systemName: hold == .paused ? "pause.circle" : "play.circle")
+                        .foregroundStyle(.secondary)
+                    Text(Self.holdTitle(hold))
+                        .font(.callout)
+                    Text("\u{00B7}").foregroundStyle(.secondary)
+                    Button(Self.holdAction(hold)) { follower.resume() }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .accessibilityLabel(hold == .paused ? "Resume listening along" : "Play along")
+                    Spacer(minLength: 0)
+                }
+                InspectorCaption(hold == .paused ? "You changed the music, so nothing is sent to your player until you resume."
+                                                 : "Your player is open. Nothing plays until you click Play.")
+            }
             if let note = follower.note {
                 InspectorCaption(note)
             }
@@ -77,8 +93,16 @@ struct MenuBarListenAlong: View {
     }
 
     private func join() {
-        invalid = !listen.join(code)
+        invalid = !listen.requestJoin(code: code)
         if !invalid { code = "" }
+    }
+
+    static func holdTitle(_ hold: ListenFollower.Hold) -> String {
+        hold == .paused ? "Paused" : "Ready"
+    }
+
+    static func holdAction(_ hold: ListenFollower.Hold) -> String {
+        hold == .paused ? "Resume" : "Play"
     }
 
     static func sharingTitle(listeners: Int) -> String {
