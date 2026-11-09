@@ -46,7 +46,7 @@ final class DesktopOptions: ObservableObject {
     init(defaults: UserDefaults) {
         self.defaults = defaults
         showsControlsOnHover = defaults.object(forKey: Keys.controlsOnHover) as? Bool ?? true
-        showsDesktopPlayer = defaults.object(forKey: Keys.desktopPlayer) as? Bool ?? false
+        showsDesktopPlayer = defaults.object(forKey: Keys.desktopPlayer) as? Bool ?? true
         shadesMenuBar = defaults.object(forKey: Keys.menuBarShade) as? Bool ?? true
         automaticTextBacking = defaults.object(forKey: Keys.automaticTextBacking) as? Bool ?? true
         let stored = defaults.object(forKey: Keys.textBacking) as? Double ?? 0.35
@@ -65,11 +65,13 @@ struct DesktopInteractionSection: View {
     var body: some View {
         ThemedSection("Desktop") {
             Toggle("Desktop player", isOn: $options.showsDesktopPlayer)
-            InspectorCaption("A glass player at the bottom of your main display: search for songs, see what plays next and browse the artist\u{2019}s albums. Choose which player it plays in from the bar.")
+            InspectorCaption("The player at the bottom of your main display: search for songs, see what plays next and browse the artist\u{2019}s albums. It replaces the controls that faded in over the middle of the desktop.")
+            if !options.showsDesktopPlayer {
             Toggle("Show controls on hover", isOn: $options.showsControlsOnHover)
             InspectorCaption(options.showsControlsOnHover
                  ? "Rest the pointer in the middle of an uncovered desktop to show playback controls. Clicks elsewhere reach the desktop."
                  : "The desktop never shows playback controls. Use the menu bar to control playback.")
+            }
         }
     }
 }

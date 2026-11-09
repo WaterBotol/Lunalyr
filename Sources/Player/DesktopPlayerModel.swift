@@ -10,7 +10,7 @@ final class DesktopPlayerModel: ObservableObject {
     static let playerKey = "custom.desktopPlayer.player"
 
     enum Drawer: String, CaseIterable, Identifiable {
-        case albums, queue
+        case queue, albums
         var id: String { rawValue }
         var title: String { self == .albums ? "Albums" : "Up next" }
     }
@@ -42,7 +42,7 @@ final class DesktopPlayerModel: ObservableObject {
     @Published var isExpanded = false {
         didSet { if isExpanded { refreshDrawer() } }
     }
-    @Published var drawer: Drawer = .albums {
+    @Published var drawer: Drawer = .queue {
         didSet { refreshDrawer() }
     }
     @Published var selectedAlbum = 0
@@ -69,6 +69,13 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     var searcher: any PlayerSearching { player.searcher }
+
+    /// Height of what opens above the bar: tall for search results, shorter
+    /// for the cover strips.
+    var drawerHeight: CGFloat {
+        guard isExpanded else { return 0 }
+        return isSearching ? DesktopPlayerView.resultsHeight : DesktopPlayerView.stripHeight
+    }
 
     var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 

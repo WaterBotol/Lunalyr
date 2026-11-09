@@ -35,6 +35,9 @@ final class ControlPanelController {
             .store(in: &cancellables)
         LyricsViewModel.shared.$provenance.sink { [weak self] _ in self?.masksStale = true }
             .store(in: &cancellables)
+        DesktopOptions.shared.$showsDesktopPlayer.removeDuplicates().dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in self?.rebuild() }
+        }.store(in: &cancellables)
         DesktopOptions.shared.$showsControlsOnHover.removeDuplicates().dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in self?.rebuild() }
         }.store(in: &cancellables)
@@ -54,7 +57,8 @@ final class ControlPanelController {
         masks.removeAll()
         // With hover controls switched off there is nothing to show, so no
         // panel sits over the desktop at all.
-        guard DesktopOptions.shared.showsControlsOnHover else { return }
+        // The desktop player replaces these controls.
+        guard DesktopOptions.shared.showsControlsOnHover, !DesktopOptions.shared.showsDesktopPlayer else { return }
         for screen in NSScreen.screens {
             guard let displayID = screen.versoDisplayID else { continue }
             let frame = vc_control_panel_frame(screen.versoFrame).rect

@@ -30,7 +30,8 @@ final class HoverState: ObservableObject {
         guard !started else { return }
         started = true
         let monitor = DesktopCoverageMonitor.shared
-        DesktopOptions.shared.$showsControlsOnHover.removeDuplicates()
+        Publishers.CombineLatest(DesktopOptions.shared.$showsControlsOnHover, DesktopOptions.shared.$showsDesktopPlayer)
+            .map { $0 && !$1 }.removeDuplicates()
             .combineLatest(monitor.$systemHidden.removeDuplicates(), monitor.$hiddenDisplays.removeDuplicates())
             .sink { [weak self] enabled, systemHidden, hidden in
                 // Published before the values change; decide once they have.
