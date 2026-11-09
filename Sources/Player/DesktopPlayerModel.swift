@@ -9,12 +9,6 @@ final class DesktopPlayerModel: ObservableObject {
     static let shared = DesktopPlayerModel()
     static let playerKey = "custom.desktopPlayer.player"
 
-    enum Drawer: String, CaseIterable, Identifiable {
-        case queue, albums
-        var id: String { rawValue }
-        var title: String { self == .albums ? "Albums" : "Up next" }
-    }
-
     enum Status: Equatable {
         case idle, searching
         case message(String)
@@ -27,30 +21,18 @@ final class DesktopPlayerModel: ObservableObject {
             defaults.set(player.rawValue, forKey: Self.playerKey)
             results = []
             queue = []
-            albums = []
             status = .idle
             runSearch()
-            refreshDrawer()
+            refreshQueue()
         }
     }
     @Published var query = ""
     @Published private(set) var results: [PlayerSearchResult] = []
     @Published private(set) var queue: [PlayerQueueItem] = []
-    @Published private(set) var albums: [PlayerAlbum] = []
     @Published private(set) var status: Status = .idle
-    /// Whether the panel is open above the bar.
-    @Published var isExpanded = false {
-        didSet { if isExpanded { refreshDrawer() } }
-    }
-    @Published var drawer: Drawer = .queue {
-        didSet { refreshDrawer() }
-    }
-    @Published var selectedAlbum = 0
-
     private let defaults: UserDefaults
     private var searchTask: Task<Void, Never>?
-    private var drawerTask: Task<Void, Never>?
-    private var albumsArtist: String?
+    private var queueTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
     init(defaults: UserDefaults = .standard) {
@@ -58,28 +40,20 @@ final class DesktopPlayerModel: ObservableObject {
         player = PlayerKind(rawValue: defaults.string(forKey: Self.playerKey) ?? "") ?? .appleMusic
         $query.removeDuplicates().debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.runSearch() }.store(in: &cancellables)
-        // The queue and the albums follow the song.
+        // The strip follows the song.
         NowPlayingMonitor.shared.$current.map { $0?.persistentID ?? $0.map { "\($0.title)|\($0.artist)" } }
             .removeDuplicates().dropFirst()
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self, self.isExpanded else { return }
-                self.refreshDrawer(force: true)
+                self?.refreshQueue()
             }.store(in: &cancellables)
     }
 
     var searcher: any PlayerSearching { player.searcher }
 
-    /// Whether the player should stay on screen without the pointer: it is
-    /// open, or a search is typed.
-    var isPinned: Bool { isExpanded || isSearching }
-
-    /// Height of what opens above the bar: tall for search results, shorter
-    /// for the cover strips.
-    var drawerHeight: CGFloat {
-        guard isExpanded else { return 0 }
-        return isSearching ? DesktopPlayerView.resultsHeight : DesktopPlayerView.stripHeight
-    }
+    /// Whether the player should stay on screen without the pointer: a search
+    /// is typed.
+    var isPinned: Bool { isSearching }
 
     var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -112,44 +86,24 @@ final class DesktopPlayerModel: ObservableObject {
         }
     }
 
-    func refreshDrawer(force: Bool = false) {
-        drawerTask?.cancel()
+    /// Reloads the strip: the songs before this one, this one, the songs after.
+    func refreshQueue() {
+        queueTask?.cancel()
         let searcher = self.searcher
-        switch drawer {
-        case .queue:
-            drawerTask = Task { [weak self] in
-                do {
-                    let items = try await searcher.queue()
-                    guard !Task.isCancelled else { return }
-                    self?.queue = items
-                    self?.status = items.isEmpty && !(self?.isSearching ?? false)
-                        ? .message(searcher.kind == .spotify
-                            ? "Spotify doesn\u{2019}t share what plays next."
-                            : "Nothing is queued after this song.")
-                        : .idle
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    self?.queue = []
-                    self?.status = .message(Self.words(for: error, player: searcher.kind))
-                }
-            }
-        case .albums:
-            guard let artist = NowPlayingMonitor.shared.current?.artist, !artist.isEmpty else {
-                albums = []
-                return
-            }
-            // Only Apple Music's own tracks are looked up in Apple's catalogue.
-            guard searcher.kind == .appleMusic, NowPlayingMonitor.shared.activePlayer == .appleMusic else {
-                albums = []
-                return
-            }
-            if !force, albumsArtist == artist, !albums.isEmpty { return }
-            albumsArtist = artist
-            drawerTask = Task { [weak self] in
-                let found = await searcher.albums(by: artist)
+        queueTask = Task { [weak self] in
+            do {
+                let items = try await searcher.queue()
                 guard !Task.isCancelled else { return }
-                self?.albums = found
-                self?.selectedAlbum = min(found.count / 2, max(found.count - 1, 0))
+                self?.queue = items
+                self?.status = items.isEmpty && !(self?.isSearching ?? false)
+                    ? .message(searcher.kind == .spotify
+                        ? "Spotify doesn\u{2019}t share what plays next."
+                        : "Nothing is playing.")
+                    : .idle
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.queue = []
+                self?.status = .message(Self.words(for: error, player: searcher.kind))
             }
         }
     }
@@ -166,16 +120,9 @@ final class DesktopPlayerModel: ObservableObject {
         perform(searcher) { try await searcher.playQueueItem(item) }
     }
 
-    func play(_ album: PlayerAlbum) {
-        let searcher = self.searcher
-        perform(searcher) { try await searcher.play(album) }
-        collapseAfterPlaying()
-    }
-
     private func collapseAfterPlaying() {
         query = ""
         results = []
-        isExpanded = false
     }
 
     private func perform(_ searcher: any PlayerSearching, _ work: @escaping @Sendable () async throws -> Void) {

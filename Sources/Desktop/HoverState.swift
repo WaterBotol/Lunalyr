@@ -81,7 +81,6 @@ final class HoverState: ObservableObject {
         lastButtons = buttons
         // A resting pointer cannot start a reveal; an active one still needs
         // its linger timed and its controls kept in reach.
-        releasePinIfIdle(location: location)
         guard moved || session.activeDisplayID != 0 else { return }
         let screens = NSScreen.screens
         let displays = screens.compactMap { screen -> VCDisplayFrame? in
@@ -101,7 +100,7 @@ final class HoverState: ObservableObject {
                           blocked ? 1 : 0, held ? 1 : 0, ProcessInfo.processInfo.systemUptime, lingerDuration)
         }
         var active: CGDirectDisplayID? = next == 0 ? nil : next
-        // An open player stays up while its pointer is elsewhere.
+        // A search in progress keeps the player up while the pointer is elsewhere.
         if active == nil, DesktopPlayerModel.shared.isPinned, let pinned = pinnedDisplay ?? activeDisplayID { active = pinned }
         if let active { pinnedDisplay = active }
         if active != activeDisplayID {
@@ -111,26 +110,6 @@ final class HoverState: ObservableObject {
     }
 
     private var pinnedDisplay: CGDirectDisplayID?
-    private var outsideSince: TimeInterval?
-
-    /// An open player with nothing typed closes itself once the pointer has
-    /// been away for a while.
-    private func releasePinIfIdle(location: CGPoint) {
-        let model = DesktopPlayerModel.shared
-        guard model.isPinned, !model.isSearching,
-              let screen = NSScreen.screens.first(where: { $0.versoDisplayID == activeDisplayID }) else {
-            outsideSince = nil
-            return
-        }
-        let panel = vc_control_panel_frame(screen.versoFrame).rect
-        if panel.contains(location) { outsideSince = nil; return }
-        let now = ProcessInfo.processInfo.systemUptime
-        if let since = outsideSince {
-            if now - since > 6 { model.isExpanded = false; outsideSince = nil; pinnedDisplay = nil }
-        } else {
-            outsideSince = now
-        }
-    }
 
     /// The same window keeps the same layer, so a pointer resting over (or
     /// moving within) one window needs one window-server query, not two.

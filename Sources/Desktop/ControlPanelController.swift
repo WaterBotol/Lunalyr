@@ -98,8 +98,9 @@ final class ControlPanelController {
         updatePointer(buttonsHeld: NSEvent.pressedMouseButtons != 0)
     }
 
-    private static func content(displayID: CGDirectDisplayID) -> some View {
+    private static func content(displayID: CGDirectDisplayID, forMask: Bool = false) -> some View {
         DesktopPlayerView(model: DesktopPlayerModel.shared, displayID: displayID)
+            .environment(\.playerMaskRender, forMask)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .environmentObject(NowPlayingMonitor.shared)
     }
@@ -129,7 +130,7 @@ final class ControlPanelController {
         if ControlHitMask.needsRender(usable: entry.map { $0.mask.map { !$0.isEmpty } ?? false }, stale: masksStale,
                                       age: now - (entry?.renderedAt ?? now)) {
             masksStale = false
-            masks[displayID] = (ControlHitMask.render(Self.content(displayID: displayID), size: panel.frame.size), now)
+            masks[displayID] = (ControlHitMask.render(Self.content(displayID: displayID, forMask: true), size: panel.frame.size), now)
         }
         // If the panel could not be rendered (or rendered before its content
         // appeared), keep the controls usable; the mask is retried shortly.

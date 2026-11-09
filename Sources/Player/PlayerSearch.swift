@@ -29,6 +29,8 @@ struct PlayerQueueItem: Identifiable, Equatable, Sendable {
     var artist: String
     /// Position in the current playlist, one-based.
     var index: Int
+    /// The song that is playing now.
+    var isCurrent = false
 }
 
 /// An album by the artist now playing, for the cover-flow.
@@ -264,12 +266,12 @@ struct AppleMusicSearch: PlayerSearching {
         set total to count of tracks of listing
         set upTo to here + 24
         if upTo > total then set upTo to total
-        if here < total then
-        repeat with i from (here + 1) to upTo
+        set fromHere to here - 8
+        if fromHere < 1 then set fromHere to 1
+        repeat with i from fromHere to upTo
         set t to track i of listing
-        set end of rows to {persistent ID of t, name of t, artist of t, i}
+        set end of rows to {persistent ID of t, name of t, artist of t, i, here}
         end repeat
-        end if
         on error number errorNumber
         if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
         end try
@@ -287,7 +289,9 @@ struct AppleMusicSearch: PlayerSearching {
             let fields = row.scriptItems
             guard fields.count >= 4, let id = fields[0].scriptText, let title = fields[1].scriptText,
                   let index = fields[3].scriptNumber else { return nil }
-            return PlayerQueueItem(id: "q-\(id)-\(Int(index))", title: title, artist: fields[2].scriptText ?? "", index: Int(index))
+            let here = fields.count >= 5 ? fields[4].scriptNumber : nil
+            return PlayerQueueItem(id: "q-\(id)-\(Int(index))", title: title, artist: fields[2].scriptText ?? "",
+                                   index: Int(index), isCurrent: here == index)
         }
     }
 
