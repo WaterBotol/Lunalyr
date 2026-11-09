@@ -167,16 +167,12 @@ final class DesktopPlayerModel: ObservableObject {
     func play(_ item: PlayerQueueItem) {
         let searcher = playingKind.searcher
         // The strip moves to the song at once; the player catches up after.
-        if let pid = item.persistentID, item.index == 0 {
-            // Played earlier: it is in the library, play it by its id.
-            let result = PlayerSearchResult(id: item.id, kind: .song, title: item.title, artist: item.artist, album: "",
-                                            artworkURL: nil, target: .libraryTrack(persistentID: pid), inLibrary: true)
-            perform(searcher) { try await searcher.play(result) }
-        } else {
+        // It plays inside the playlist that is playing, which carries on after it.
+        if fetched.contains(where: { $0.id == item.id }) {
             fetched = fetched.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
             recompose()
-            perform(searcher) { try await searcher.playQueueItem(item) }
         }
+        perform(searcher) { try await searcher.playQueueItem(item) }
         Task { [weak self] in
             for delay in [900, 2500] as [UInt64] {
                 try? await Task.sleep(nanoseconds: delay * 1_000_000)

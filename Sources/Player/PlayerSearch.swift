@@ -241,13 +241,24 @@ struct AppleMusicSearch: PlayerSearching {
         return components.url
     }
 
+    /// Plays a song inside the playlist that is playing, so the playlist
+    /// carries on after it; a song from elsewhere plays from the library.
+    static func playInContext(persistentID id: String) -> String {
+        """
+        set pl to current playlist
+        try
+        set theTrack to first track of pl whose persistent ID is \(ScriptText.quoted(id))
+        on error
+        set theTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
+        end try
+        play theTrack
+        """
+    }
+
     func play(_ result: PlayerSearchResult) async throws {
         switch result.target {
         case .libraryTrack(let id):
-            try await run("play", """
-            set theTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
-            play theTrack
-            """)
+            try await run("play", Self.playInContext(persistentID: id))
         case .address(let url):
             try await open(url)
         case .spotifySearch:
@@ -311,9 +322,14 @@ struct AppleMusicSearch: PlayerSearching {
     }
 
     func playQueueItem(_ item: PlayerQueueItem) async throws {
-        try await run("queue-play", """
-        play track \(item.index) of current playlist
-        """)
+        if let id = item.persistentID {
+            try await run("queue-play", Self.playInContext(persistentID: id))
+        } else {
+            try await run("queue-play", """
+            set pl to current playlist
+            play track \(item.index) of pl
+            """)
+        }
     }
 
     func albums(by artist: String) async -> [PlayerAlbum] {
