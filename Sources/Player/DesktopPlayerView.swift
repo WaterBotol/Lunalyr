@@ -197,7 +197,8 @@ struct DesktopPlayerView: View {
         Button { model.play(result) } label: {
             HStack(spacing: 10) {
                 RemoteCover(url: result.artworkURL, symbol: result.kind == .album ? "square.stack" : "music.note",
-                            lookup: result.artworkURL == nil && model.player == .appleMusic ? (result.title, result.artist) : nil)
+                            lookup: result.artworkURL == nil && model.player == .appleMusic ? (result.title, result.artist) : nil,
+                            persistentID: { if case .libraryTrack(let id) = result.target { return id } else { return nil } }())
                     .frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(result.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
@@ -289,10 +290,10 @@ private struct CoverStrip: View {
                     Button { onTap(item) } label: {
                         VStack(spacing: 6) {
                             Group {
-                                if item.isCurrent, let artwork {
+                                if item.isCurrent, item.persistentID == nil, let artwork {
                                     Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
                                 } else {
-                                    RemoteCover(url: nil, symbol: "music.note", lookup: (item.title, item.artist))
+                                    RemoteCover(url: nil, symbol: "music.note", lookup: (item.title, item.artist), persistentID: item.persistentID)
                                 }
                             }
                                 .frame(width: DesktopPlayerView.cover, height: DesktopPlayerView.cover)
@@ -396,28 +397,68 @@ private struct CoverStrip: View {
     }
 }
 
-/// Covers found by name, once each, for songs that carry no cover address.
-/// Only the song's own title and artist are sent, and only for Apple Music.
+/// A song's own cover, straight from the Music library: the exact artwork of
+/// that track, not a guess by name.
+enum LibraryArtwork {
+    private static let cache = NSCache<NSString, NSImage>()
+
+    static func image(persistentID id: String) async -> NSImage? {
+        if let hit = cache.object(forKey: id as NSString) { return hit }
+        let source = PlayerScriptSource.query(AppleMusicSearch.bundleID, """
+        try
+        set t to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
+        if (count of artworks of t) is 0 then return {"ok", ""}
+        return {"ok", data of artwork 1 of t}
+        on error
+        return {"ok", ""}
+        end try
+        """)
+        guard let reply = try? await ScriptDesk.shared.run(
+            PlayerScript(name: "desktop-player.artwork", source: source, cacheable: false), for: .appleMusic),
+            reply.scriptItems.count >= 2, reply.scriptItems[1].data.count > 100,
+            let image = NSImage(data: reply.scriptItems[1].data) else { return nil }
+        cache.setObject(image, forKey: id as NSString)
+        return image
+    }
+}
+
+/// Covers found by name, once each, for songs that carry neither a cover
+/// address nor a library id. Only a result whose title and artist match
+/// exactly is accepted; otherwise the tile stays plain rather than show the
+/// wrong album. Only the song's own title and artist are sent.
 enum CoverLookup {
     private static let cache = NSCache<NSString, NSURL>()
+
+    private static func normal(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+    }
 
     static func url(title: String, artist: String) async -> URL? {
         let key = "\(title)|\(artist)".lowercased() as NSString
         if let hit = cache.object(forKey: key) { return hit as URL }
-        guard let url = AppleMusicSearch.searchURL("\(title) \(artist)", entity: "song", limit: 1),
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let first = AppleMusicSearch.parseCatalogue(data).first, let art = first.artworkURL else { return nil }
+        guard let url = AppleMusicSearch.searchURL("\(title) \(artist)", entity: "song", limit: 8),
+              let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        let wantTitle = normal(title), wantArtist = normal(artist)
+        let match = AppleMusicSearch.parseCatalogue(data).first {
+            $0.kind == .song && normal($0.title) == wantTitle
+                && (wantArtist.isEmpty || normal($0.artist).contains(wantArtist) || wantArtist.contains(normal($0.artist)))
+        }
+        guard let art = match?.artworkURL else { return nil }
         let large = URL(string: art.absoluteString.replacingOccurrences(of: "200x200", with: "400x400")) ?? art
         cache.setObject(large as NSURL, forKey: key)
         return large
     }
 }
 
-/// A cover that downloads itself, with a plain tile while it does.
+/// A cover that downloads itself, with a plain tile while it does. Order of
+/// trust: its own address, the library's artwork for that exact track, then
+/// an exact-match lookup by name.
 struct RemoteCover: View {
     let url: URL?
     let symbol: String
     var lookup: (String, String)?
+    var persistentID: String?
     @State private var image: NSImage?
 
     var body: some View {
@@ -431,8 +472,12 @@ struct RemoteCover: View {
         }
         .animation(.easeOut(duration: 0.25), value: image)
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .task(id: "\(url?.absoluteString ?? "")|\(lookup?.0 ?? "")|\(lookup?.1 ?? "")") {
+        .task(id: "\(url?.absoluteString ?? "")|\(persistentID ?? "")|\(lookup?.0 ?? "")|\(lookup?.1 ?? "")") {
             image = nil
+            if url == nil, let persistentID, let art = await LibraryArtwork.image(persistentID: persistentID) {
+                image = art
+                return
+            }
             var address = url
             if address == nil, let lookup { address = await CoverLookup.url(title: lookup.0, artist: lookup.1) }
             guard let address, let (data, _) = try? await URLSession.shared.data(from: address) else { return }

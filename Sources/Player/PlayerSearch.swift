@@ -122,7 +122,7 @@ enum ScriptText {
 
 struct AppleMusicSearch: PlayerSearching {
     var kind: PlayerKind { .appleMusic }
-    private static let bundleID = "com.apple.Music"
+    static let bundleID = "com.apple.Music"
 
     func search(_ query: String) async throws -> [PlayerSearchResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
