@@ -167,6 +167,7 @@ final class MusicVideoResolver {
     private let now: () -> Date
     private let uptime: () -> TimeInterval
     private let sleep: (TimeInterval) async -> Void
+    private let parse: @Sendable (Data) async -> [YouTubeSearchPage.Result]
     private(set) var rateLimit: MusicVideoRateLimit
     /// Waits longer than this are not sat out: the lookup reports
     /// `.rateLimited` and is tried again later.
@@ -176,7 +177,8 @@ final class MusicVideoResolver {
          links: MusicVideoLinks, rateLimit: MusicVideoRateLimit = MusicVideoRateLimit(),
          now: @escaping () -> Date = Date.init,
          uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-         sleep: @escaping (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }) {
+         sleep: @escaping (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
+         parse: @escaping @Sendable (Data) async -> [YouTubeSearchPage.Result] = { await YouTubeSearchPage.resultsOffMainActor($0) }) {
         self.library = library
         self.playability = playability
         self.http = http
@@ -186,6 +188,7 @@ final class MusicVideoResolver {
         self.now = now
         self.uptime = uptime
         self.sleep = sleep
+        self.parse = parse
     }
 
     func resolve(_ song: MusicVideoSong, online: Bool) async -> MusicVideoResolution {
@@ -202,6 +205,8 @@ final class MusicVideoResolver {
         if let pasted = links.videoID(for: key) { return .found(.youTube(pasted)) }
         guard online else { return .missing(libraryMiss) }
         if let cached = cache.lookup(key, now: now()) { return cached }
+        // Skipped past while the library was asked: nothing is sent.
+        guard !Task.isCancelled else { return .missing(.lookupFailed) }
         let result = await searchYouTube(song)
         cache.store(result, for: key, now: now())
         return result
@@ -225,7 +230,8 @@ final class MusicVideoResolver {
                 return .missing(.lookupFailed)
             }
             let data = try await fetch(url)
-            let results = YouTubeSearchPage.results(fromHTML: String(decoding: data, as: UTF8.self))
+            // About a megabyte of HTML and JSON: read off the main actor.
+            let results = await parse(data)
             guard !results.isEmpty else { return .missing(.lookupFailed) }
             if let video = YouTubeSearchPage.officialVideo(in: results, title: song.title, artist: song.artist) {
                 return .found(.youTube(video.videoID))
@@ -238,11 +244,15 @@ final class MusicVideoResolver {
         }
     }
 
-    /// One rate-limited GET of a 200 reply.
+    /// One rate-limited GET of a 200 reply. A lookup cancelled (the song
+    /// skipped) before or while it waited its turn sends nothing and uses
+    /// no slot, so rapid skipping cannot use up the allowance.
     private func fetch(_ url: URL) async throws -> Data {
+        try Task.checkCancellation()
         let wait = rateLimit.delay(at: uptime())
         if wait > longestWait { throw FetchError.rateLimited }
         if wait > 0 { await sleep(wait) }
+        try Task.checkCancellation()
         rateLimit.record(at: uptime())
         let (data, response) = try await http.get(url)
         switch response.statusCode {

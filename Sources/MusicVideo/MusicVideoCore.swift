@@ -95,6 +95,14 @@ enum YouTubeSearchPage {
         return components?.url
     }
 
+    /// `results(fromHTML:)` on a background thread, never the main actor:
+    /// the page is about a megabyte. `parser` is a seam for tests.
+    static func resultsOffMainActor(_ data: Data,
+                                    parser: @escaping @Sendable (String) -> [Result] = { results(fromHTML: $0) })
+        async -> [Result] {
+        await Task.detached(priority: .utility) { parser(String(decoding: data, as: UTF8.self)) }.value
+    }
+
     /// Video results in the page's `ytInitialData`, in page order.
     static func results(fromHTML html: String) -> [Result] {
         guard let json = initialData(in: html),
@@ -314,8 +322,23 @@ enum MusicVideoMiss: Equatable, Sendable {
     case rateLimited
     /// The lookup failed (offline, or a service did not answer).
     case lookupFailed
+    /// YouTube's player did not load or stopped (offline, blocked, a
+    /// passing player error). Passing: never cached, tried again later.
+    case playerUnreachable
+    /// The library's own file would not play here.
+    case localFileFailed
     /// Live radio, adverts and streams have no video.
     case notASong
+}
+
+/// How a player that could not show a video failed.
+enum MusicVideoPlaybackFailure: Equatable, Sendable {
+    /// YouTube refused the video for good here (not embeddable, removed,
+    /// a bad ID): remembered for the song.
+    case refused
+    /// Something passing (offline, a player error, no answer in time):
+    /// not remembered, tried again later.
+    case transient
 }
 
 enum MusicVideoResolution: Equatable, Sendable {

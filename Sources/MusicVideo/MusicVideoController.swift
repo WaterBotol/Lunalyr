@@ -141,12 +141,25 @@ final class MusicVideoController: ObservableObject {
         await lookup?.value
     }
 
-    /// The player could not show the video: YouTube refused to embed it,
-    /// or the file would not play. The wallpaper falls back for this song.
-    func reportPlaybackFailure(of source: MusicVideoSource) {
+    /// The player could not show the video, and the wallpaper falls back
+    /// for this song. Only a report about the video on screen counts.
+    /// - YouTube refused it for good: remembered, unless it is the user's
+    ///   own pasted link (kept, so they can fix it).
+    /// - Something passing (offline, no answer in time, player error 5):
+    ///   nothing is remembered, and the song is tried once more later.
+    /// - The library's own file would not play: said as such.
+    func reportPlaybackFailure(of source: MusicVideoSource, _ failure: MusicVideoPlaybackFailure = .refused) {
         guard let song, case .showing(let showing, _) = status, showing == source else { return }
-        if case .youTube = source { resolver.markNotEmbeddable(song) }
-        status = .missing(.notEmbeddable, title: song.title)
+        switch (source, failure) {
+        case (.local, _):
+            status = .missing(.localFileFailed, title: song.title)
+        case (.youTube, .transient):
+            status = .missing(.playerUnreachable, title: song.title)
+            if retried != song.key { scheduleRetry(song) }
+        case (.youTube(let id), .refused):
+            if resolver.links.videoID(for: song.key) != id { resolver.markNotEmbeddable(song) }
+            status = .missing(.notEmbeddable, title: song.title)
+        }
     }
 
     /// Whether a surface shows `source` or falls back: the Settings preview
@@ -179,9 +192,13 @@ final class MusicVideoController: ObservableObject {
         return true
     }
 
+    /// Forgets the pasted link and whatever was remembered for the song
+    /// (a "can't be embedded" left by that link would otherwise block the
+    /// search for a week).
     func clearPastedLink() {
         guard let song else { return }
         resolver.links.remove(song.key)
+        resolver.cache.remove(song.key)
         relook(song)
     }
 
@@ -240,6 +257,10 @@ final class MusicVideoController: ObservableObject {
             case .rateLimited: return "Too many lookups just now; trying again shortly. \(instead)"
             case .lookupFailed: return "Couldn’t search YouTube just now. \(instead) You can paste a YouTube link for it below."
             case .notASong: return "Radio and adverts have no video. \(instead)"
+            case .playerUnreachable:
+                return "Couldn’t load YouTube’s player for “\(title)” just now; trying again shortly. \(instead)"
+            case .localFileFailed:
+                return "The library’s video for “\(title)” wouldn’t play here. \(instead)"
             }
         }
     }
