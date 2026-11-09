@@ -114,6 +114,7 @@ struct NowPlayingView: View {
     private var musicVideoHere: MusicVideoSource? {
         MusicVideoController.placement(source: musicVideo.source(for: nowPlaying.current), preview: isSettingsPreview,
                                        heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
+                                       choice: settings.musicVideoDisplays, displays: mainDisplay.displays,
                                        display: effectDisplay, mainDisplay: mainDisplay.id)
     }
 

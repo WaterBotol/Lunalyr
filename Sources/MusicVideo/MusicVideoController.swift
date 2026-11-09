@@ -162,17 +162,20 @@ final class MusicVideoController: ObservableObject {
         }
     }
 
-    /// Whether a surface shows `source` or falls back: the Settings preview
-    /// shows it (a still for YouTube), and with "Heavy scenes on main display
-    /// only" on, only the main display plays it, as with the web scenes.
+    /// Whether a surface shows `source` or falls back. The Settings preview
+    /// shows it (a still for YouTube). On the desktop, "Show the video on"
+    /// decides; until the user picks, it follows "Heavy scenes on main
+    /// display only", as the web scenes do. A picked display that is
+    /// unplugged hands the video to the main display.
     nonisolated static func placement(source: MusicVideoSource?, preview: Bool, heavyScenesOnMainDisplayOnly: Bool,
+                                      choice: MusicVideoDisplayChoice = .followHeavyScenes,
+                                      displays: [MusicVideoDisplay] = [],
                                       display: CGDirectDisplayID?, mainDisplay: CGDirectDisplayID) -> MusicVideoSource? {
         guard let source else { return nil }
-        switch WebVisualizerView.placement(preview: preview, heavyScenesOnMainDisplayOnly: heavyScenesOnMainDisplayOnly,
-                                           display: display, mainDisplay: mainDisplay) {
-        case .preview, .live: return source
-        case .standIn: return nil
-        }
+        if preview { return source }
+        guard let display else { return source }
+        return MusicVideoDisplays.shows(choice, heavyScenesOnMainDisplayOnly: heavyScenesOnMainDisplayOnly,
+                                        display: display, main: mainDisplay, connected: displays) ? source : nil
     }
 
     // MARK: Pasted links

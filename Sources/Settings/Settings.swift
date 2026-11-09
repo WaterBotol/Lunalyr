@@ -141,6 +141,11 @@ final class Settings: ObservableObject {
     @Published var musicVideoDim: Double { didSet { store(musicVideoDim, "custom.musicVideoDim") } }
     /// Blur radius in points.
     @Published var musicVideoBlur: Double { didSet { store(musicVideoBlur, "custom.musicVideoBlur") } }
+    /// Which displays play the video. Follows "Heavy scenes on main display
+    /// only" until the user picks; a pick overrides it for the video only.
+    @Published var musicVideoDisplays: MusicVideoDisplayChoice {
+        didSet { store(musicVideoDisplays.stored, MusicVideoDisplayChoice.key) }
+    }
     static let musicVideoDimRange: ClosedRange<Double> = 0...0.85
     static let musicVideoBlurRange: ClosedRange<Double> = 0...24
     @Published var albumGradientWallpaper: Bool { didSet { store(albumGradientWallpaper, "custom.albumGradientWallpaper") } }
@@ -326,6 +331,7 @@ final class Settings: ObservableObject {
         musicVideoDim = min(Self.musicVideoDimRange.upperBound,
                             max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35))
         musicVideoBlur = min(Self.musicVideoBlurRange.upperBound, max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0))
+        musicVideoDisplays = MusicVideoDisplayChoice(stored: d.object(forKey: MusicVideoDisplayChoice.key))
         albumGradientWallpaper = d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true
         patternStyle = (d.object(forKey: "patternStyle") as? Int).flatMap(BackgroundStyle.init(rawValue:))
         shaderStyle = (d.string(forKey: "shaderStyle")).flatMap(ShaderStyle.init(rawValue:))
