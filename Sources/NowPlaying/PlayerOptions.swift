@@ -9,6 +9,7 @@ final class PlayerOptions: ObservableObject {
     static let shared = PlayerOptions()
     static let key = "custom.player"
     static let webKey = "custom.player.webPlayers"
+    static let localKey = "custom.player.localPlayers"
 
     enum Choice: String, CaseIterable, Identifiable {
         case automatic, appleMusic, spotify, vlc, swinsian, vox, safari, chrome, arc, brave, edge
@@ -44,10 +45,11 @@ final class PlayerOptions: ObservableObject {
             }
         }
 
-        /// The players this choice follows, web players aside: Automatic's
-        /// browsers depend on `followsWebPlayers` (`PlayerOptions.players`).
+        /// The players this choice follows. Automatic's: Music and Spotify
+        /// here; its local-file players and browsers depend on
+        /// `followsLocalPlayers` and `followsWebPlayers` (`PlayerOptions.players`).
         var players: [PlayerKind] {
-            kind.map { [$0] } ?? PlayerKind.apps
+            kind.map { [$0] } ?? PlayerKind.musicApps
         }
 
         /// The choice that follows `kind` and nothing else.
@@ -57,13 +59,15 @@ final class PlayerOptions: ObservableObject {
 
         /// What a picker offers: Automatic, each installed player, and the
         /// current choice even if its app has gone. Music and Spotify always,
-        /// as before; browsers only while web players are on or chosen.
-        static func offered(installed: Set<PlayerKind>, current: Choice, webPlayers: Bool) -> [Choice] {
+        /// as before; VLC, Swinsian and VOX only while local players are on,
+        /// and browsers only while web players are on (or either is chosen).
+        static func offered(installed: Set<PlayerKind>, current: Choice, webPlayers: Bool,
+                            localPlayers: Bool) -> [Choice] {
             allCases.filter { choice in
                 guard choice != current, let kind = choice.kind else { return true }
                 switch kind.family {
                 case .musicApp: return true
-                case .localFiles: return installed.contains(kind)
+                case .localFiles: return localPlayers && installed.contains(kind)
                 case .browser: return webPlayers && installed.contains(kind)
                 }
             }
@@ -82,34 +86,83 @@ final class PlayerOptions: ObservableObject {
         didSet { defaults.set(followsWebPlayers, forKey: Self.webKey) }
     }
 
+    /// Whether Automatic also follows VLC, Swinsian and VOX. Off by default,
+    /// for everyone who had Automatic before as well: following one asks
+    /// macOS for permission to control it, and what plays there is often a
+    /// personal video whose file name would go to lyric services.
+    @Published var followsLocalPlayers: Bool {
+        didSet { defaults.set(followsLocalPlayers, forKey: Self.localKey) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         choice = Choice(rawValue: defaults.string(forKey: Self.key) ?? "") ?? .automatic
         followsWebPlayers = defaults.bool(forKey: Self.webKey)
+        followsLocalPlayers = defaults.bool(forKey: Self.localKey)
     }
 
-    /// The players a choice follows.
-    nonisolated static func players(for choice: Choice, webPlayers: Bool) -> [PlayerKind] {
+    /// The players a choice follows. Automatic: Music and Spotify, plus the
+    /// local-file players and browsers that are turned on.
+    nonisolated static func players(for choice: Choice, webPlayers: Bool, localPlayers: Bool) -> [PlayerKind] {
         guard choice == .automatic else { return choice.players }
-        return webPlayers ? PlayerKind.allCases : PlayerKind.apps
+        return PlayerKind.allCases.filter { kind in
+            switch kind.family {
+            case .musicApp: return true
+            case .localFiles: return localPlayers
+            case .browser: return webPlayers
+            }
+        }
     }
 
     /// The players followed now.
-    var followedPlayers: [PlayerKind] { Self.players(for: choice, webPlayers: followsWebPlayers) }
+    var followedPlayers: [PlayerKind] {
+        Self.players(for: choice, webPlayers: followsWebPlayers, localPlayers: followsLocalPlayers)
+    }
 
     /// The players to follow, as they change.
     var playersPublisher: AnyPublisher<[PlayerKind], Never> {
-        $choice.combineLatest($followsWebPlayers)
-            .map { Self.players(for: $0, webPlayers: $1) }
+        $choice.combineLatest($followsWebPlayers, $followsLocalPlayers)
+            .map { Self.players(for: $0, webPlayers: $1, localPlayers: $2) }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
-    /// Players installed on this Mac. Never asks anything of them.
-    static var installedPlayers: Set<PlayerKind> {
-        Set(PlayerKind.allCases.filter { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleID) != nil })
+    /// Players installed on this Mac. Never asks anything of them. Looked
+    /// up at most once a minute (`InstalledPlayers`), not on every redraw.
+    nonisolated static var installedPlayers: Set<PlayerKind> { InstalledPlayers.shared.current }
+}
+
+/// Which players are installed, from Launch Services, remembered for a
+/// while: a view body may ask on every redraw, and each answer costs one
+/// lookup per player.
+final class InstalledPlayers: @unchecked Sendable {
+    static let shared = InstalledPlayers()
+
+    private let lifetime: TimeInterval
+    private let now: @Sendable () -> TimeInterval
+    private let isInstalled: @Sendable (PlayerKind) -> Bool
+    private let lock = NSLock()
+    private var cached: (players: Set<PlayerKind>, at: TimeInterval)?
+
+    init(lifetime: TimeInterval = 60,
+         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         isInstalled: @escaping @Sendable (PlayerKind) -> Bool = {
+             NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleID) != nil
+         }) {
+        self.lifetime = lifetime
+        self.now = now
+        self.isInstalled = isInstalled
+    }
+
+    var current: Set<PlayerKind> {
+        lock.lock(); defer { lock.unlock() }
+        let time = now()
+        if let cached, time - cached.at < lifetime, time >= cached.at { return cached.players }
+        let players = Set(PlayerKind.allCases.filter(isInstalled))
+        cached = (players, time)
+        return players
     }
 }
 
@@ -120,7 +173,8 @@ struct PlayerChoicePicker: View {
     var body: some View {
         Picker("Player", selection: $options.choice) {
             ForEach(PlayerOptions.Choice.offered(installed: PlayerOptions.installedPlayers, current: options.choice,
-                                                 webPlayers: options.followsWebPlayers)) { Text($0.title).tag($0) }
+                                                 webPlayers: options.followsWebPlayers,
+                                                 localPlayers: options.followsLocalPlayers)) { Text($0.title).tag($0) }
         }
         .pickerStyle(.menu)
         .help("Which music player Lunalyr follows")

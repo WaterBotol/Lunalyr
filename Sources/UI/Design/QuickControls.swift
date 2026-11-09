@@ -373,7 +373,8 @@ struct LunalyrPlayerPicker: View {
     var body: some View {
         Picker(title, selection: $options.choice) {
             ForEach(PlayerOptions.Choice.offered(installed: Set(models.resolved.installedPlayers), current: options.choice,
-                                                 webPlayers: options.followsWebPlayers)) { Text($0.title).tag($0) }
+                                                 webPlayers: options.followsWebPlayers,
+                                                 localPlayers: options.followsLocalPlayers)) { Text($0.title).tag($0) }
         }
         .pickerStyle(.menu)
         .help("Which music player Lunalyr follows")

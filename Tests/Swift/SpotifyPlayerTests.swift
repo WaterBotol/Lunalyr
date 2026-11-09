@@ -368,8 +368,8 @@ class SpotifyPlayerTests: XCTestCase {
         XCTAssertEqual(PlayerOptions(defaults: isolated).choice, .spotify)
         isolated.set("winamp", forKey: "custom.player")
         XCTAssertEqual(PlayerOptions(defaults: isolated).choice, .automatic)
-        XCTAssertEqual(PlayerOptions.Choice.automatic.players, [.appleMusic, .spotify, .vlc, .swinsian, .vox],
-                       "Automatic follows browsers only once web players are on")
+        XCTAssertEqual(PlayerOptions.Choice.automatic.players, [.appleMusic, .spotify],
+                       "Automatic follows local players and browsers only once they are turned on")
         XCTAssertEqual(PlayerOptions.Choice.appleMusic.players, [.appleMusic])
 
         var received: [[PlayerKind]] = []

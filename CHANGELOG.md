@@ -17,7 +17,7 @@ When merging, keep every entry and combine duplicate headings.
 - Listen-along relay (`relay/`): a Cloudflare Worker with one Durable Object per room that passes the host's song, position and lyric timing to up to 50 listeners, following `relay/PROTOCOL.md`. It runs on Cloudflare's free plan; `relay/README.md` explains how to deploy your own and where its URL goes in Lunalyr.
 - A web listen-along page at `/listen/<room>` on the relay: the host's song, cover and lyrics with the current line lit, and a "Start listening" button that plays the song in Spotify's embedded player in time with the host. It links to Apple Music, YouTube Music and song.link as alternatives, and works on phones in light and dark.
 - More music sources. YouTube Music, SoundCloud and Amazon Music playing in Safari, Chrome, Arc, Brave or Edge, read by running a small script in the music tab (Settings > Music players > Follow web players in browsers, off by default). This needs the browser's "Allow JavaScript from Apple Events"; when it is off, Lunalyr says how to turn it on in that browser and never changes it itself. Only tabs on the services' own addresses are read (music.youtube.com, soundcloud.com and Amazon Music's country sites, over HTTPS); a tab that only mentions one in its address is never sent a script. Play/pause, next, previous and seeking work through the page's own buttons, in the tab being followed (found again by its id, and checked to still be that service), and nowhere else. With several music tabs, the one playing is followed, and stays followed while another starts; a tab that stops answering is skipped without holding up the others.
-- VLC, Swinsian and VOX for music files on this Mac, followed under Automatic like Music and Spotify. Lyrics are looked up from the title, artist and length as for the others; VLC's title line ("Artist - Title") or the file name is split into title and artist.
+- VLC, Swinsian and VOX for music files on this Mac (Settings > Music players > Follow VLC, Swinsian and VOX, off by default and shown only when one is installed; each can also be chosen alone). Lyrics are looked up from the title, artist and length as for the others; VLC's title line ("Artist - Title") or the file name is split into title and artist. Leading track numbers ("01 Song", "1-03 Song") are dropped, while titles that start with a number, such as "99 Luftballons", keep it.
 - The desktop player's switch shows only the players that are installed, open or playing, and a web player under the service's name. Players without a queue or search show just the song playing.
 - Listen along: with a listen-along relay set (Settings › Share, empty by
   default, which hides all of it), "Let friends listen along" shares what you
@@ -35,7 +35,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
-- The Player picker lists only installed players. Automatic follows browsers only with web players turned on.
+- The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
 - Clicking a song in the desktop player builds the "Lunalyr Queue" in short steps: from the library in one copy, from a playlist about 20 songs at a time, so lyrics and progress keep updating while it is built.
 
 ## [1.0.0] - 2026-11-08

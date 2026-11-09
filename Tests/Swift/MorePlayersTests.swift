@@ -550,17 +550,23 @@ final class PlayerSourceChoiceTests: XCTestCase {
             XCTAssertEqual(PlayerOptions.Choice.only(kind).kind, kind)
             XCTAssertEqual(PlayerOptions.Choice.only(kind).players, [kind])
         }
-        XCTAssertEqual(PlayerOptions.players(for: .automatic, webPlayers: false), PlayerKind.apps)
-        XCTAssertEqual(PlayerOptions.players(for: .automatic, webPlayers: true), PlayerKind.allCases)
-        XCTAssertEqual(PlayerOptions.players(for: .safari, webPlayers: false), [.safari])
+        XCTAssertEqual(PlayerOptions.players(for: .automatic, webPlayers: false, localPlayers: true), PlayerKind.apps)
+        XCTAssertEqual(PlayerOptions.players(for: .automatic, webPlayers: true, localPlayers: true), PlayerKind.allCases)
+        XCTAssertEqual(PlayerOptions.players(for: .automatic, webPlayers: false, localPlayers: false), [.appleMusic, .spotify])
+        XCTAssertEqual(PlayerOptions.players(for: .safari, webPlayers: false, localPlayers: false), [.safari])
+        XCTAssertEqual(PlayerOptions.players(for: .vlc, webPlayers: false, localPlayers: false), [.vlc],
+                       "Choosing VLC alone is opting in")
     }
 
     func testPickersOfferOnlyWhatIsInstalled() {
-        let offered = PlayerOptions.Choice.offered(installed: [.appleMusic, .vlc, .safari, .chrome], current: .automatic, webPlayers: false)
+        let installed: Set<PlayerKind> = [.appleMusic, .vlc, .safari, .chrome]
+        let offered = PlayerOptions.Choice.offered(installed: installed, current: .automatic, webPlayers: false, localPlayers: true)
         XCTAssertEqual(offered, [.automatic, .appleMusic, .spotify, .vlc])
-        let web = PlayerOptions.Choice.offered(installed: [.appleMusic, .vlc, .safari, .chrome], current: .automatic, webPlayers: true)
+        let web = PlayerOptions.Choice.offered(installed: installed, current: .automatic, webPlayers: true, localPlayers: true)
         XCTAssertEqual(web, [.automatic, .appleMusic, .spotify, .vlc, .safari, .chrome])
-        XCTAssertTrue(PlayerOptions.Choice.offered(installed: [], current: .vox, webPlayers: false).contains(.vox),
+        let neither = PlayerOptions.Choice.offered(installed: installed, current: .automatic, webPlayers: false, localPlayers: false)
+        XCTAssertEqual(neither, [.automatic, .appleMusic, .spotify], "VLC is offered once local players are on")
+        XCTAssertTrue(PlayerOptions.Choice.offered(installed: [], current: .vox, webPlayers: false, localPlayers: false).contains(.vox),
                       "The current choice stays offered")
     }
 

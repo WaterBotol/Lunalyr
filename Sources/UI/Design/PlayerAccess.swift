@@ -73,10 +73,11 @@ struct PlayerAccessList: View {
 
     init() {}
 
-    /// Installed players, with browsers only while they are followed: a
-    /// browser's row would otherwise offer to ask for control of it.
+    /// Installed players, with browsers and local-file players only while
+    /// they are followed: their rows would otherwise offer to ask for
+    /// control of an app Lunalyr was not asked to follow.
     static func shown(installed: [PlayerKind], followed: [PlayerKind]) -> [PlayerKind] {
-        installed.filter { !$0.isBrowser || followed.contains($0) }
+        installed.filter { $0.family == .musicApp || followed.contains($0) }
     }
 
     var body: some View {

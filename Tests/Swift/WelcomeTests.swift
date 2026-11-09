@@ -10,12 +10,13 @@ final class WelcomeTests: XCTestCase {
 
     @MainActor
     func testTheWelcomeExplainsThePromptAndTheWayBack() {
-        XCTAssertTrue(OnboardingCopy.permissionNote.contains("macOS asks"))
+        let note = OnboardingCopy.permissionNote(installed: PlayerKind.allCases)
+        XCTAssertTrue(note.contains("macOS asks"))
         for kind in PlayerKind.apps {
-            XCTAssertTrue(OnboardingCopy.permissionNote.contains(kind.displayName))
+            XCTAssertTrue(note.contains(kind.displayName))
         }
         for service in WebService.allCases {
-            XCTAssertTrue(OnboardingCopy.permissionNote.contains(service.displayName))
+            XCTAssertTrue(note.contains(service.displayName))
         }
         XCTAssertTrue(OnboardingCopy.menuBarNote.contains("notch"))
         XCTAssertTrue(OnboardingCopy.menuBarNote.contains("Applications"))
