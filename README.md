@@ -298,12 +298,16 @@ By default, **Accuracy first** rejects results whose title, artist or duration d
 
 ### What stays on your Mac
 
-Lunalyr has no accounts, analytics or telemetry. It reads the current track from Music through AppleScript and does not access your library or Apple Account. Audio for the visualisers is analysed in memory on your Mac: nothing is recorded, saved or uploaded, and the microphone is never used.
+Lunalyr has no accounts, analytics or telemetry and does not access your Apple Account. It reads the current track from Music, or Spotify, through AppleScript. Audio for the visualisers is analysed in memory on your Mac: nothing is recorded, saved or uploaded, and the microphone is never used.
+
+The desktop player (**Show player on hover**) also works with your Music library, on your Mac: it searches the library for what you type, reads the covers of the songs in its strip from the library, and shows the playing playlist around the current song. When you click a song in the strip, it makes a playlist called "Lunalyr Queue" with that song and the ones after it, copied from your library, and plays it. It replaces only the "Lunalyr Queue" playlist it made itself; it never deletes or changes anything else in your library, and never adds songs to it. Songs from other sources, such as Apple Music playlists or radio, simply play.
 
 Lunalyr contacts these services:
 
 - **Lyric sources you have enabled** receive the song's title and artist; some also receive the album and duration.
 - **Apple's iTunes Search API** receives the artist with the album or song title for each new album you play, so Lunalyr can look for an animated cover. If it finds the album, Lunalyr also loads its public Apple Music page. This happens even when **Use animated covers** is off. The API is also used to find artwork that Music does not provide. Animated covers stream from Apple's servers while they are shown.
+- **Apple's iTunes Search API** also receives, from the desktop player, the words you type in its search box (for Apple Music songs and albums), and the title and artist of a song in the strip whose cover is not in your library.
+- **Discord**, only when **Show what I'm listening to on Discord** is on, receives through its desktop app on your Mac the song, artist and album, the line being sung (or what you chose to show) and the progress. These appear on your profile for others. With **Show the album cover**, the cover is found on Apple's iTunes Search API, which receives the song's title and artist. With **Show a Play this song button**, your profile shows a public song.link address for the song: built from Spotify's own track ID, or, for Apple Music, from the same Apple search (only when the result is exactly that song). With both the cover and the button off, nothing is sent to Apple for Discord. song.link is not contacted by Lunalyr, only by whoever clicks the button.
 - **Google Fonts** supplies the default interface and lyric typeface, Manrope, and any Google Font you choose. Downloaded fonts are kept on your Mac.
 - **GitHub** serves update information, only when you click **Check for updates…**. Automatic checks are off, and no system profile is sent.
 
