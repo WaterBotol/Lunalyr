@@ -1,0 +1,20 @@
+# Lunalyr listen-along relay. See README.md for deploy steps and PROTOCOL.md
+# for the wire format.
+name = "lunalyr-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# One Durable Object per listening room. SQLite-backed classes are the kind
+# available on the Workers Free plan.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# The worker does not log anything itself; this only keeps Cloudflare's own
+# request log off so no room URLs are retained there either.
+[observability]
+enabled = false

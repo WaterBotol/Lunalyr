@@ -12,6 +12,11 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+
+- Listen-along relay (`relay/`): a Cloudflare Worker with one Durable Object per room that passes the host's song, position and lyric timing to up to 50 listeners, following `relay/PROTOCOL.md`. It runs on Cloudflare's free plan; `relay/README.md` explains how to deploy your own and where its URL goes in Lunalyr.
+- A web listen-along page at `/listen/<room>` on the relay: the host's song, cover and lyrics with the current line lit, and a "Start listening" button that plays the song in Spotify's embedded player in time with the host. It links to Apple Music, YouTube Music and song.link as alternatives, and works on phones in light and dark.
+
 ## [1.0.0] - 2026-11-08
 
 Build 21 for macOS 14 and later.
