@@ -36,6 +36,7 @@ When merging, keep every entry and combine duplicate headings.
 ### Changed
 
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on.
+- Clicking a song in the desktop player builds the "Lunalyr Queue" in short steps: from the library in one copy, from a playlist about 20 songs at a time, so lyrics and progress keep updating while it is built.
 
 ## [1.0.0] - 2026-11-08
 
