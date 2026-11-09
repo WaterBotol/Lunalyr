@@ -132,7 +132,10 @@ final class Settings: ObservableObject {
         }
     }
     /// Off by default: looking a video up online sends the song's title
-    /// and artist to Apple's search, song.link and YouTube.
+    /// and artist to YouTube's search page (www.youtube.com); nothing goes
+    /// to Apple or song.link. Any YouTube video shown, found or pasted,
+    /// plays in YouTube's embedded player (`iframe_api` from www.youtube.com,
+    /// the video from youtube-nocookie.com), with this on or off.
     @Published var musicVideoOnline: Bool { didSet { store(musicVideoOnline, "custom.musicVideoOnline") } }
     /// How much the video is darkened, 0...`musicVideoDimRange` upper bound.
     @Published var musicVideoDim: Double { didSet { store(musicVideoDim, "custom.musicVideoDim") } }
