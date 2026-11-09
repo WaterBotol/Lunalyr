@@ -24,6 +24,7 @@ export const CLOSE_UNKNOWN_ROOM = 4404;
 export const CLOSE_BAD_KEY = 4403;
 export const CLOSE_ROOM_FULL = 4429;
 export const CLOSE_REPLACED = 4000;
+export const CLOSE_LISTENER_SENT = 4400;
 
 type StateMessage = Record<string, unknown> & { type: "state" };
 
@@ -195,8 +196,13 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    // Listeners have nothing to say; anything they send is ignored.
-    if (!this.ctx.getTags(ws).includes(HOST_TAG)) return;
+    // Listeners have nothing to say. Each message would wake (and bill) this
+    // object, so a listener that sends anything is disconnected at once.
+    if (!this.ctx.getTags(ws).includes(HOST_TAG)) {
+      safeClose(ws, CLOSE_LISTENER_SENT, "listeners may not send");
+      this.notifyListenerCount(ws);
+      return;
+    }
     if (byteLength(message) > MAX_MESSAGE_BYTES) return;
 
     let parsed: unknown;

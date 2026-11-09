@@ -242,12 +242,39 @@ describe("state relay", () => {
     expect(got.track.title).toBe("Blinding Lights");
   });
 
-  it("ignores messages from listeners and unknown host message types", async () => {
+  it("closes a listener that sends anything (close 4400) and never relays it", async () => {
     const { room, hostKey } = await createRoom();
     const host = await open(`/rooms/${room}/host?key=${hostKey}`);
     const a = await open(`/rooms/${room}/listen`);
     const b = await open(`/rooms/${room}/listen`);
+    await host.next((m) => m.type === "listeners" && m.count === 2);
     a.send(state(99));
+    expect((await a.closed).code).toBe(4400);
+    // The host hears the count drop, and the other listener is untouched.
+    expect((await host.next((m) => m.type === "listeners")).count).toBe(1);
+    host.send(state(1));
+    expect((await b.next((m) => m.type === "state")).seq).toBe(1);
+    expect(b.messages.some((m) => m.seq === 99)).toBe(false);
+    expect(b.isClosed()).toBe(false);
+    // The room's cached state is the host's, not the listener's.
+    const res = await worker.fetch(`${BASE}/rooms/${room}/state`);
+    expect((await res.json<Json>()).seq).toBe(1);
+  });
+
+  it("closes a listener that sends binary or junk too", async () => {
+    const { room } = await createRoom();
+    const a = await open(`/rooms/${room}/listen`);
+    a.ws.send(new Uint8Array([1, 2, 3]));
+    expect((await a.closed).code).toBe(4400);
+    const b = await open(`/rooms/${room}/listen`);
+    b.send("x");
+    expect((await b.closed).code).toBe(4400);
+  });
+
+  it("ignores unknown host message types", async () => {
+    const { room, hostKey } = await createRoom();
+    const host = await open(`/rooms/${room}/host?key=${hostKey}`);
+    const b = await open(`/rooms/${room}/listen`);
     host.send({ type: "something-else" });
     host.send("not json");
     host.send(state(1));
