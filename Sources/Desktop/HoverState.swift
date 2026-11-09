@@ -101,7 +101,10 @@ final class HoverState: ObservableObject {
         }
         var active: CGDirectDisplayID? = next == 0 ? nil : next
         // A search in progress keeps the player up while the pointer is elsewhere.
-        if active == nil, DesktopPlayerModel.shared.isPinned, let pinned = pinnedDisplay ?? activeDisplayID { active = pinned }
+        // Forget a display that has been unplugged since.
+        if let pinned = pinnedDisplay, !displays.contains(where: { $0.displayID == pinned }) { pinnedDisplay = nil }
+        if active == nil, DesktopPlayerModel.shared.isPinned, let pinned = pinnedDisplay ?? activeDisplayID,
+           displays.contains(where: { $0.displayID == pinned }) { active = pinned }
         if let active { pinnedDisplay = active }
         if active != activeDisplayID {
             withAnimation(.easeOut(duration: 0.3)) { activeDisplayID = active }

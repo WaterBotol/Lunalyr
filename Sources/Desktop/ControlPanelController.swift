@@ -98,6 +98,29 @@ final class ControlPanelController {
         updatePointer(buttonsHeld: NSEvent.pressedMouseButtons != 0)
     }
 
+    /// Gives the keyboard back to the app in front. A click on the player
+    /// (a cover, the search box) makes its panel key while Lunalyr stays in
+    /// the background; left like that, typing on the desktop (Finder's
+    /// type-to-select) would keep going to the panel. Ordering the panel out
+    /// and straight back in hands key status back without activating
+    /// anything. Never during a click, which would lose its mouse-up.
+    /// Not verified against a live session.
+    func releaseKeyboard(attempt: Int = 0) {
+        guard panels.values.contains(where: \.isKeyWindow) else { return }
+        guard NSEvent.pressedMouseButtons == 0 else {
+            if attempt < 20 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    MainActor.assumeIsolated { self?.releaseKeyboard(attempt: attempt + 1) }
+                }
+            }
+            return
+        }
+        for panel in panels.values where panel.isKeyWindow {
+            panel.orderOut(nil)
+            panel.orderFrontRegardless()
+        }
+    }
+
     private static func content(displayID: CGDirectDisplayID, forMask: Bool = false) -> some View {
         DesktopPlayerView(model: DesktopPlayerModel.shared, displayID: displayID)
             .environment(\.playerMaskRender, forMask)

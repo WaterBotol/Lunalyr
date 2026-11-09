@@ -69,7 +69,15 @@ struct DesktopPlayerView: View {
         }
         .onChange(of: shown) { _, now in
             recenter += 1
-            if now { model.refreshQueue() }
+            if now {
+                model.refreshQueue()
+            } else {
+                searchFocused = false
+                if !maskRender { ControlPanelController.shared.releaseKeyboard() }
+            }
+        }
+        .onChange(of: searchFocused) { _, focused in
+            if !focused, !maskRender { ControlPanelController.shared.releaseKeyboard() }
         }
     }
 
