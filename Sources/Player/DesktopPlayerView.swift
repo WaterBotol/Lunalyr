@@ -544,7 +544,8 @@ final class ArtworkBatcher: @unchecked Sendable {
 enum CoverLookup {
     private static let cache = NSCache<NSString, NSURL>()
 
-    private static func normal(_ text: String) -> String {
+    /// Case, accents, spaces and punctuation ignored.
+    static func normal(_ text: String) -> String {
         text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
             .components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
     }

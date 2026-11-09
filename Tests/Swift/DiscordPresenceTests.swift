@@ -133,4 +133,49 @@ final class DiscordPresenceTests: XCTestCase {
         let match = DiscordPresence.searchMatch(fromSearch: Data(reply.utf8), title: "Golden Hour Static", artist: "Lunar Tides")
         XCTAssertEqual(match, DiscordPresence.SearchMatch(cover: "https://a/2/512x512bb.jpg", trackID: 1440857781))
     }
+
+    func testANearMissGivesACoverButNoPublicLink() {
+        let reply = """
+        {"results":[{"trackId":1,"trackName":"Love","artistName":"Taylor Swift","artworkUrl100":"https://a/1/100x100bb.jpg"},
+                    {"trackId":2,"trackName":"Love Story (Live)","artistName":"Taylor Swift","artworkUrl100":"https://a/2/100x100bb.jpg"},
+                    {"trackId":3,"trackName":"Love Story","artistName":"Taylor Swift Tribute Band","artworkUrl100":"https://a/3/100x100bb.jpg"}]}
+        """
+        let match = DiscordPresence.searchMatch(fromSearch: Data(reply.utf8), title: "Love Story", artist: "Taylor Swift")
+        XCTAssertEqual(match?.cover, "https://a/1/512x512bb.jpg", "a loose match is still fine for the cover")
+        XCTAssertNil(match?.trackID, "none of these is the song, so no link is published")
+        XCTAssertNil(DiscordPresence.songLink(spotifyURI: nil, appleTrackID: match?.trackID))
+    }
+
+    func testTheLinkNeedsTheSameTitleAndPrimaryArtist() {
+        let reply = """
+        {"results":[{"trackId":7,"trackName":"This Is What You Came For","artistName":"Calvin Harris & Rihanna","artworkUrl100":"https://a/7/100x100bb.jpg"}]}
+        """
+        let match = DiscordPresence.searchMatch(fromSearch: Data(reply.utf8), title: "This Is What You Came For",
+                                                artist: "Calvin Harris feat. Rihanna")
+        XCTAssertEqual(match?.trackID, 7)
+        XCTAssertEqual(DiscordPresence.primaryArtist("Calvin Harris feat. Rihanna"), "calvinharris")
+        XCTAssertEqual(DiscordPresence.primaryArtist("Beyoncé"), "beyonce")
+    }
+
+    func testWithTheCoverOffAppleIsNotAskedUnlessTheSongButtonWasTurnedOn() {
+        let name = "LunalyrTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(false, forKey: LunalyrExtras.Keys.discordCover)
+        let extras = LunalyrExtras(defaults: defaults)
+        // An existing user who had switched the cover off: the new button follows it.
+        XCTAssertFalse(extras.discordShowsSongButton)
+        XCTAssertFalse(DiscordPresence.needsAppleSearch(extras.discordOptions, spotifyURI: nil), "an Apple Music song")
+        // Turned on by the user: the Apple Music song's link is looked up.
+        extras.discordShowsSongButton = true
+        XCTAssertTrue(DiscordPresence.needsAppleSearch(extras.discordOptions, spotifyURI: nil))
+        XCTAssertFalse(DiscordPresence.needsAppleSearch(extras.discordOptions, spotifyURI: "spotify:track:abc"),
+                       "Spotify's own link needs no search")
+        XCTAssertEqual(defaults.object(forKey: LunalyrExtras.Keys.discordSongButton) as? Bool, true)
+        // A new user: cover and button both on.
+        let freshName = "LunalyrTests.\(UUID().uuidString)"
+        let fresh = UserDefaults(suiteName: freshName)!
+        defer { fresh.removePersistentDomain(forName: freshName) }
+        XCTAssertTrue(LunalyrExtras(defaults: fresh).discordShowsSongButton)
+    }
 }

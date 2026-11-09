@@ -245,11 +245,11 @@ struct ShareInspector: View {
                 Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
                 Toggle("Show the album cover", isOn: $extras.discordShowsCover)
                 InspectorCaption("Looks the cover up by song and artist.",
-                                 more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown.")
+                                 more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown. The Play this song button uses the same search for Apple Music songs; with both off, nothing is sent to Apple.")
                 Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
                 Toggle("Show a Play this song button", isOn: $extras.discordShowsSongButton)
                 InspectorCaption("Opens the song on Spotify, Apple Music, YouTube Music and more.",
-                                 more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or from the same Apple search as the cover. Others see it; Discord never shows you your own buttons.")
+                                 more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or, for Apple Music, from the same Apple search as the cover (sent only the song title and artist), and only when the result is exactly that song. Until you change it, this follows Show the album cover. Others see it; Discord never shows you your own buttons.")
                 Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
                 Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
                 ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,

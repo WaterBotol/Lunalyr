@@ -179,22 +179,43 @@ final class DiscordPresence {
     }
 
     /// The best match's cover and Apple catalogue ID, or nil if no result is the song.
+    /// A loose match is close enough for the cover; the ID becomes a public
+    /// "Play this song" link, so it is taken only from a result whose title
+    /// and primary artist are the song's own, once normalised.
     nonisolated static func searchMatch(fromSearch data: Data, title: String, artist: String) -> SearchMatch? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let results = object["results"] as? [[String: Any]] else { return nil }
         let wantTitle = title.lowercased()
         let wantArtist = artist.lowercased()
+        let exactTitle = CoverLookup.normal(title), exactArtist = primaryArtist(artist)
+        var cover: String?
+        var trackID: Int?
         for result in results {
-            let name = (result["trackName"] as? String ?? "").lowercased()
-            let by = (result["artistName"] as? String ?? "").lowercased()
-            guard !name.isEmpty, name.contains(wantTitle) || wantTitle.contains(name),
-                  wantArtist.isEmpty || by.contains(wantArtist) || wantArtist.contains(by) else { continue }
-            let cover = (result["artworkUrl100"] as? String)?.replacingOccurrences(of: "100x100bb", with: "512x512bb")
-            let id = (result["trackId"] as? NSNumber)?.intValue
-            guard cover != nil || id != nil else { continue }
-            return SearchMatch(cover: cover, trackID: id)
+            let rawName = result["trackName"] as? String ?? "", rawBy = result["artistName"] as? String ?? ""
+            let name = rawName.lowercased(), by = rawBy.lowercased()
+            guard !name.isEmpty else { continue }
+            let exact = !exactTitle.isEmpty && !exactArtist.isEmpty
+                && CoverLookup.normal(rawName) == exactTitle && primaryArtist(rawBy) == exactArtist
+            let loose = (name.contains(wantTitle) || wantTitle.contains(name))
+                && (wantArtist.isEmpty || by.contains(wantArtist) || wantArtist.contains(by))
+            guard exact || loose else { continue }
+            if cover == nil {
+                cover = (result["artworkUrl100"] as? String)?.replacingOccurrences(of: "100x100bb", with: "512x512bb")
+            }
+            if trackID == nil, exact { trackID = (result["trackId"] as? NSNumber)?.intValue }
+            if cover != nil, trackID != nil { break }
         }
-        return nil
+        return cover == nil && trackID == nil ? nil : SearchMatch(cover: cover, trackID: trackID)
+    }
+
+    /// The first-named artist, normalised: "Calvin Harris feat. Rihanna",
+    /// "Calvin Harris & Rihanna" and "calvin harris" all give "calvinharris".
+    nonisolated static func primaryArtist(_ artist: String) -> String {
+        var name = " \(artist.lowercased()) "
+        for separator in [",", ";", "/", " & ", " + ", " x ", " × ", " and ", " with ", " feat.", " feat ", " ft.", " ft ", " featuring "] {
+            if let range = name.range(of: separator) { name = String(name[..<range.lowerBound]) }
+        }
+        return CoverLookup.normal(name)
     }
 
     // MARK: - State
@@ -208,9 +229,13 @@ final class DiscordPresence {
     /// The timestamps already shown, so a line change does not move the bar.
     private var anchor: (start: Int, trackKey: String)?
     private var running = false
-    /// Search results by song; nil inside means looked up and not found.
-    private var matches: [String: SearchMatch?] = [:]
+    /// Search results by song.
+    private var matches: [String: SearchMatch] = [:]
+    /// Songs whose lookup failed or found nothing, and when: asked again
+    /// after `lookupRetry`, so a network blip does not last the session.
+    private var misses: [String: Date] = [:]
     private var lookingUp: Set<String> = []
+    static let lookupRetry: TimeInterval = 600
 
     init(extras: LunalyrExtras) {
         self.extras = extras
@@ -290,7 +315,7 @@ final class DiscordPresence {
         let end = track.duration > 0 ? start + Int(track.duration) : nil
         let text = monitor.isPlaying ? extras.flatMap { line(lead: options.lyricLead, extras: $0) } : nil
         let spotifyURI = track.persistentID.flatMap { $0.hasPrefix("spotify:track:") ? $0 : nil }
-        let needsSearch = options.showsCover || (options.showsSongButton && spotifyURI == nil)
+        let needsSearch = Self.needsAppleSearch(options, spotifyURI: spotifyURI)
         let found = needsSearch ? match(for: track, key: key) : nil
         let songURL = options.showsSongButton ? Self.songLink(spotifyURI: spotifyURI, appleTrackID: found?.trackID) : nil
         return Playing(title: track.title, artist: track.artist, album: track.album, line: text,
@@ -298,16 +323,25 @@ final class DiscordPresence {
                        coverURL: options.showsCover ? found?.cover : nil, songURL: songURL, options: options)
     }
 
+    /// Whether Apple's search is asked at all: for the cover, or for the
+    /// link of a song Spotify has not given one for. With the cover off the
+    /// song button is off too unless the user turned it on themselves
+    /// (`LunalyrExtras.discordShowsSongButton`).
+    nonisolated static func needsAppleSearch(_ options: DiscordOptions, spotifyURI: String?) -> Bool {
+        options.showsCover || (options.showsSongButton && spotifyURI == nil)
+    }
+
     /// The cached search result, starting a lookup the first time a song is seen.
     private func match(for track: NowPlayingMonitor.Track, key: String) -> SearchMatch? {
         if let known = matches[key] { return known }
+        if let missed = misses[key], Date().timeIntervalSince(missed) < Self.lookupRetry { return nil }
         guard !lookingUp.contains(key) else { return nil }
         lookingUp.insert(key)
         let title = track.title, artist = track.artist
         Task { [weak self] in
             let found = await Self.lookUp(title: title, artist: artist)
             guard let self else { return }
-            matches[key] = .some(found)
+            if let found { matches[key] = found; misses[key] = nil } else { misses[key] = Date() }
             lookingUp.remove(key)
             update()
         }

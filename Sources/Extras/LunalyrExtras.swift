@@ -83,7 +83,18 @@ final class LunalyrExtras: ObservableObject {
     @Published var discordShowsLyric: Bool { didSet { defaults.set(discordShowsLyric, forKey: Keys.discordLyric) } }
     @Published var discordShowsCover: Bool { didSet { defaults.set(discordShowsCover, forKey: Keys.discordCover) } }
     @Published var discordShowsButton: Bool { didSet { defaults.set(discordShowsButton, forKey: Keys.discordButton) } }
-    @Published var discordShowsSongButton: Bool { didSet { defaults.set(discordShowsSongButton, forKey: Keys.discordSongButton) } }
+    /// The user's own choice for the song button, nil until they make one.
+    @Published private var discordSongButtonChoice: Bool? {
+        didSet { defaults.set(discordSongButtonChoice, forKey: Keys.discordSongButton) }
+    }
+    /// Until the user flips it, the song button follows Show the cover: an
+    /// Apple Music song's link needs the same Apple search as the cover, and
+    /// someone who turned the cover off to keep titles from Apple must not
+    /// have that search turned back on by an update.
+    var discordShowsSongButton: Bool {
+        get { discordSongButtonChoice ?? discordShowsCover }
+        set { discordSongButtonChoice = newValue }
+    }
     @Published var discordShowsProgress: Bool { didSet { defaults.set(discordShowsProgress, forKey: Keys.discordProgress) } }
     @Published var discordShowsWhenPaused: Bool { didSet { defaults.set(discordShowsWhenPaused, forKey: Keys.discordPaused) } }
     /// Seconds the Discord line runs ahead of the music.
@@ -218,7 +229,7 @@ final class LunalyrExtras: ObservableObject {
         discordShowsLyric = defaults.object(forKey: Keys.discordLyric) as? Bool ?? true
         discordShowsCover = defaults.object(forKey: Keys.discordCover) as? Bool ?? true
         discordShowsButton = defaults.object(forKey: Keys.discordButton) as? Bool ?? true
-        discordShowsSongButton = defaults.object(forKey: Keys.discordSongButton) as? Bool ?? true
+        discordSongButtonChoice = defaults.object(forKey: Keys.discordSongButton) as? Bool
         discordShowsProgress = defaults.object(forKey: Keys.discordProgress) as? Bool ?? true
         discordShowsWhenPaused = defaults.bool(forKey: Keys.discordPaused)
         let lead = defaults.object(forKey: Keys.discordLead) as? Double ?? 2.5
