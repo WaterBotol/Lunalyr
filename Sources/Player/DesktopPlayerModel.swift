@@ -143,7 +143,7 @@ final class DesktopPlayerModel: ObservableObject {
                 // the strip already shows rather than emptying it.
                 if items.isEmpty, !self.fetched.isEmpty { return }
                 self.shuffleOn = snapshot.shuffle
-                                self.fetched = items
+                self.fetched = items
                 self.recompose()
                 self.status = items.isEmpty && !self.isSearching
                     ? .message(searcher.kind == .spotify
@@ -165,6 +165,7 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     func play(_ item: PlayerQueueItem) {
+        guard item.isPlayable else { return }
         let searcher = playingKind.searcher
         // The strip moves to the song at once; the player catches up after.
         // It plays inside the playlist that is playing, which carries on after it.

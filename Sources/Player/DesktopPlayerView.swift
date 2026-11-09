@@ -310,6 +310,7 @@ private struct CoverStrip: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(!item.isPlayable)
                     .id(item.id)
                     .scrollTransition(axis: .horizontal) { content, phase in
                         let edge = abs(phase.value)

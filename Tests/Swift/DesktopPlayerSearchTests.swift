@@ -70,13 +70,85 @@ final class DesktopPlayerSearchTests: XCTestCase {
 }
 
 final class DesktopPlayerQueueScriptTests: XCTestCase {
-    func testPlayInContextBuildsOnlyLunalyrsOwnPlaylist() {
-        let script = AppleMusicSearch.playInContext(persistentID: "AB12")
-        XCTAssertTrue(script.contains("\"AB12\""))
-        // The only playlist it may delete is its own, by exact name.
-        XCTAssertTrue(script.contains("delete (every user playlist whose name is \"Lunalyr Queue\")"))
+    private let deleteByName = "every user playlist whose name"
+
+    func testPreparingDeletesOnlyLeftoversLunalyrMadeAndChecksEachOne() {
+        let script = AppleMusicSearch.prepareQueue(persistentID: "AB12", index: 7, leftovers: ["0A1B", "2C3D"])
+        XCTAssertFalse(script.contains(deleteByName), "never selects playlists by name")
+        for id in ["0A1B", "2C3D"] {
+            XCTAssertTrue(script.contains("first user playlist whose persistent ID is \"\(id)\""))
+        }
+        XCTAssertEqual(script.components(separatedBy: "delete ownList").count, 3, "one guarded delete per leftover")
+        XCTAssertTrue(script.contains("if class of ownList is user playlist then"), "a folder playlist is not deleted")
+        XCTAssertTrue(script.contains("if smart of ownList is false then"), "a smart playlist is not deleted")
+        XCTAssertTrue(script.contains("considering case\nif ownName is \"Lunalyr Queue (new)\" then delete ownList"))
+        XCTAssertTrue(script.contains("make new user playlist with properties {name:\"Lunalyr Queue (new)\"}"))
+        XCTAssertTrue(script.contains("set candidate to track 7 of src"), "the clicked copy of a song that is listed twice")
         XCTAssertFalse(script.contains("delete track"))
-        XCTAssertFalse(script.contains("delete (every track"))
+    }
+
+    func testPreparingWithNothingLeftOverDeletesNothing() {
+        let script = AppleMusicSearch.prepareQueue(persistentID: "AB12", index: nil, leftovers: [])
+        XCTAssertFalse(script.contains("delete"))
+        XCTAssertFalse(script.contains("set candidate"))
+    }
+
+    func testOnlyLibrarySourcesAreCopiedOthersJustPlay() throws {
+        let script = AppleMusicSearch.prepareQueue(persistentID: "AB12", index: nil, leftovers: [])
+        XCTAssertTrue(script.contains("if sourceClass is library playlist or sourceClass is user playlist then set queueable to true"))
+        XCTAssertTrue(script.contains("if inSource and inLibrary then"))
+        XCTAssertTrue(script.contains("play srcTrack"))
+        // The playlist is made only after the plain-play way out has returned.
+        let played = try XCTUnwrap(script.range(of: "return {\"ok\", \"played\"}"))
+        let made = try XCTUnwrap(script.range(of: "make new user playlist"))
+        XCTAssertLessThan(played.lowerBound, made.lowerBound)
+    }
+
+    func testBuildingCopiesLibrarySongsAndCleansUpAfterAFailure() {
+        let script = AppleMusicSearch.buildQueue(persistentID: "AB12", index: 3, into: "FFEE", replacing: "0A1B")
+        XCTAssertFalse(script.contains(deleteByName))
+        XCTAssertTrue(script.contains("duplicate (first track of library playlist 1 whose persistent ID is wantedID) to newList"),
+                      "only the library's own copy of a song is copied")
+        XCTAssertFalse(script.contains("duplicate (track"))
+        // A failure deletes the half-built playlist, by its ID and exact name, then raises the error again.
+        let failure = script.components(separatedBy: "on error buildText number buildNumber").last ?? ""
+        XCTAssertTrue(failure.contains("first user playlist whose persistent ID is \"FFEE\""))
+        XCTAssertTrue(failure.contains("if ownName is \"Lunalyr Queue (new)\" then delete ownList"))
+        XCTAssertTrue(failure.contains("error buildText number buildNumber"), "the error is raised again, unchanged by the clean-up")
+        // The previous queue goes only by its own ID and exact name, case included.
+        XCTAssertTrue(script.contains("first user playlist whose persistent ID is \"0A1B\""))
+        XCTAssertTrue(script.contains("considering case\nif ownName is \"Lunalyr Queue\" then delete ownList"))
+        XCTAssertTrue(script.contains("if smart of ownList is false then"))
+        XCTAssertTrue(script.contains("if class of ownList is user playlist then"))
+        XCTAssertFalse(script.contains("delete track"))
+        XCTAssertFalse(script.contains("delete (every"))
+    }
+
+    func testBuildingWithoutAnEarlierQueueDeletesOnlyOnFailure() {
+        let script = AppleMusicSearch.buildQueue(persistentID: "AB12", index: nil, into: "FFEE", replacing: nil)
+        XCTAssertEqual(script.components(separatedBy: "delete ownList").count, 2)
+        XCTAssertFalse(script.contains("\"Lunalyr Queue\" then delete"))
+    }
+
+    func testTheStoreKeepsOnlyMusicStyleIDs() {
+        let name = "LunalyrTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = QueuePlaylistStore(defaults: defaults)
+        XCTAssertNil(store.queueID)
+        XCTAssertEqual(store.pendingIDs, [])
+        store.queueID = "0A1B2C3D4E5F6A7B"
+        store.pendingIDs = ["FFEE", "not an id\" then delete", ""]
+        XCTAssertEqual(QueuePlaylistStore(defaults: defaults).queueID, "0A1B2C3D4E5F6A7B")
+        XCTAssertEqual(store.pendingIDs, ["FFEE"])
+        store.queueID = nil
+        XCTAssertNil(store.queueID)
+    }
+
+    func testSongsWithoutALibraryIDCannotBeClicked() {
+        XCTAssertFalse(PlayerQueueItem(id: "h-1", title: "Radio", artist: "", index: 0).isPlayable)
+        XCTAssertTrue(PlayerQueueItem(id: "h-2", title: "Song", artist: "", index: 0, persistentID: "AB12").isPlayable)
+        XCTAssertTrue(PlayerQueueItem(id: "now", title: "Now", artist: "", index: 0, isCurrent: true).isPlayable)
     }
 }
 

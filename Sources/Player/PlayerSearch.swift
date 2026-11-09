@@ -33,6 +33,11 @@ struct PlayerQueueItem: Identifiable, Equatable, Sendable {
     var isCurrent = false
     /// The Music library's id for the song, when it has one.
     var persistentID: String?
+
+    /// Whether clicking it does anything: the song playing pauses or plays,
+    /// any other needs its library ID to be found again. A song that played
+    /// from a stream or the radio has none.
+    var isPlayable: Bool { isCurrent || persistentID != nil }
 }
 
 /// What a player says is queued: the current playlist around the song, and
@@ -234,6 +239,47 @@ final class ScriptDesk: @unchecked Sendable {
     }
 }
 
+/// The persistent IDs of the playlists Lunalyr made in Music: the queue it
+/// plays from, and any half-built one a failure may have left. These are the
+/// only playlists it ever deletes.
+struct QueuePlaylistStore: @unchecked Sendable {
+    static let queueKey = "custom.desktopPlayer.queuePlaylistID"
+    static let pendingKey = "custom.desktopPlayer.pendingQueuePlaylistIDs"
+
+    var defaults: UserDefaults = .standard
+
+    var queueID: String? {
+        get { defaults.string(forKey: Self.queueKey).flatMap(Self.valid) }
+        nonmutating set { defaults.set(newValue, forKey: Self.queueKey) }
+    }
+
+    var pendingIDs: [String] {
+        get { (defaults.stringArray(forKey: Self.pendingKey) ?? []).compactMap(Self.valid) }
+        nonmutating set { defaults.set(newValue, forKey: Self.pendingKey) }
+    }
+
+    /// Music's persistent IDs are hexadecimal.
+    static func valid(_ id: String) -> String? {
+        !id.isEmpty && id.count <= 32 && id.allSatisfy(\.isHexDigit) ? id : nil
+    }
+}
+
+/// Runs async jobs one after another, in the order they were started.
+final class SerialFlow: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tail: Task<Void, Never>?
+
+    func run(_ work: @escaping @Sendable () async throws -> Void) async throws {
+        let task: Task<Void, Error> = lock.withLock {
+            let previous = tail
+            let task = Task { _ = await previous?.value; try await work() }
+            tail = Task { _ = try? await task.value }
+            return task
+        }
+        try await task.value
+    }
+}
+
 /// Escapes text for an AppleScript string literal.
 enum ScriptText {
     static func quoted(_ text: String) -> String {
@@ -374,58 +420,204 @@ struct AppleMusicSearch: PlayerSearching {
     /// it are copied, in order, into a playlist of Lunalyr's own, which is
     /// played from its start: the playlist carries on, and shuffle still works.
     /// A song that is not in the playing playlist plays from the library.
+    ///
+    /// Only playlists Lunalyr made are ever deleted: their persistent IDs are
+    /// kept (`QueuePlaylistStore`), and one is deleted only while it is still
+    /// a plain user playlist (not a folder, not smart) with exactly the name
+    /// Lunalyr gave it, case included.
     static let queuePlaylistName = "Lunalyr Queue"
+    static let buildingPlaylistName = queuePlaylistName + " (new)"
+    /// Songs copied at most.
+    static let queueLength = 150
 
-    static func playInContext(persistentID id: String) -> String {
-        let name = ScriptText.quoted(queuePlaylistName)
-        let building = ScriptText.quoted(queuePlaylistName + " (new)")
-        return """
-        set src to current playlist
-        set wasShuffle to shuffle enabled
-        set found to true
+    var store = QueuePlaylistStore()
+
+    /// Deletes the playlist with this persistent ID, but only if it is still
+    /// one Lunalyr made: a plain user playlist named exactly `name`.
+    static func deleteOwnPlaylist(_ id: String, named name: String) -> String {
+        """
         try
-        set theTrack to first track of src whose persistent ID is \(ScriptText.quoted(id))
-        on error
-        set found to false
-        end try
-        if not found then
-        set theTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
-        play theTrack
-        return
+        set ownList to (first user playlist whose persistent ID is \(ScriptText.quoted(id)))
+        if class of ownList is user playlist then
+        if smart of ownList is false then
+        set ownName to name of ownList
+        considering case
+        if ownName is \(ScriptText.quoted(name)) then delete ownList
+        end considering
         end if
-        set n to index of theTrack
+        end if
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        """
+    }
+
+    /// Finds the clicked song in the playing playlist as `srcTrack`: at its
+    /// place in the strip when that is still the song (a playlist can hold the
+    /// same song twice), else its first copy.
+    private static func locate(_ id: String, index: Int?) -> String {
+        let quotedID = ScriptText.quoted(id)
+        var lines = ["set src to current playlist"]
+        if let index, index > 0 {
+            lines += [
+                "try",
+                "set candidate to track \(index) of src",
+                "if persistent ID of candidate is \(quotedID) then",
+                "set srcTrack to candidate",
+                "set inSource to true",
+                "end if",
+                "on error number errorNumber",
+                "if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber",
+                "end try",
+            ]
+        }
+        lines += [
+            "if not inSource then",
+            "set srcTrack to first track of src whose persistent ID is \(quotedID)",
+            "set inSource to true",
+            "end if",
+        ]
+        return lines.joined(separator: "\n")
+    }
+
+    /// Step one. Plays the song directly when a queue cannot (or should not)
+    /// be built; otherwise clears up any half-built queue Lunalyr left behind,
+    /// makes a new one and returns its persistent ID.
+    ///
+    /// Only a source made of library songs is copied. `duplicate` into a user
+    /// playlist adds a song that is not in the library to it (with Music's
+    /// default "Add songs to Library when adding to playlists"), so an Apple
+    /// Music playlist, radio or a catalogue song falls back to a plain `play`.
+    /// Not verified live: the hard rules forbid driving Music, so how Music
+    /// treats every kind of source here is untested.
+    static func prepareQueue(persistentID id: String, index: Int?, leftovers: [String]) -> String {
+        let cleanUp = leftovers.map { deleteOwnPlaylist($0, named: buildingPlaylistName) }.joined(separator: "\n")
+        return """
+        set inSource to false
+        try
+        \(locate(id, index: index))
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        set inLibrary to false
+        try
+        set libTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
+        set inLibrary to true
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        set queueable to false
+        if inSource and inLibrary then
+        set sourceClass to class of src
+        if sourceClass is library playlist or sourceClass is user playlist then set queueable to true
+        end if
+        if not queueable then
+        if inSource then
+        play srcTrack
+        else if inLibrary then
+        play libTrack
+        else
+        error number -1728
+        end if
+        return {"ok", "played"}
+        end if
+        \(cleanUp)
+        set newList to make new user playlist with properties {name:\(ScriptText.quoted(buildingPlaylistName))}
+        return {"ok", "made", persistent ID of newList}
+        """
+    }
+
+    /// Step two. Copies the song and the ones after it (wrapping round, up
+    /// to `queueLength`) into the new playlist, each as the library's own
+    /// copy, so nothing is added to the library. A failure deletes the
+    /// half-built playlist and then raises the error. Then the previous
+    /// queue is deleted, the new one takes its name and plays. Replies
+    /// `{"ok", n}`, where n is a playback error number, or 0.
+    static func buildQueue(persistentID id: String, index: Int?, into newID: String, replacing oldID: String?) -> String {
+        let replace = oldID.map { deleteOwnPlaylist($0, named: queuePlaylistName) } ?? ""
+        return """
+        set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
+        set wasShuffle to shuffle enabled
+        try
+        set inSource to false
+        \(locate(id, index: index))
+        set n to index of srcTrack
         set total to count of tracks of src
-        set endAt to n + 149
+        set endAt to n + \(queueLength - 1)
         if endAt > total then set endAt to total
-        set tp to make new user playlist with properties {name:\(building)}
-        repeat with i from n to endAt
-        duplicate (track i of src) to tp
-        end repeat
-        set room to 150 - (endAt - n + 1)
+        set wanted to (persistent ID of tracks n thru endAt of src) as list
+        set room to \(queueLength) - (endAt - n + 1)
         if n > 1 and room > 0 then
         set upTo to n - 1
         if upTo > room then set upTo to room
-        repeat with i from 1 to upTo
-        duplicate (track i of src) to tp
-        end repeat
+        set wanted to wanted & ((persistent ID of tracks 1 thru upTo of src) as list)
         end if
+        repeat with idItem in wanted
+        set wantedID to contents of idItem
         try
-        delete (every user playlist whose name is \(name))
+        duplicate (first track of library playlist 1 whose persistent ID is wantedID) to newList
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
         end try
-        set name of tp to \(name)
+        end repeat
+        on error buildText number buildNumber
+        try
+        \(deleteOwnPlaylist(newID, named: buildingPlaylistName))
+        end try
+        error buildText number buildNumber
+        end try
+        \(replace)
+        set name of newList to \(ScriptText.quoted(queuePlaylistName))
+        set playError to 0
+        try
         set shuffle enabled to false
-        play tp
+        play newList
         delay 0.6
         set shuffle enabled to wasShuffle
         delay 0.4
         if shuffle enabled is not wasShuffle then set shuffle enabled to wasShuffle
+        on error number errorNumber
+        set playError to errorNumber
+        try
+        set shuffle enabled to wasShuffle
+        end try
+        end try
+        return {"ok", playError}
         """
+    }
+
+    /// One click at a time: a second click's clean-up must not delete the
+    /// first click's playlist while that one is still being filled.
+    private static let queueFlow = SerialFlow()
+
+    func playInContext(persistentID id: String, index: Int?) async throws {
+        let store = store
+        try await Self.queueFlow.run {
+            let prepared = try await ScriptDesk.shared.run(for: .appleMusic, priority: .command) {
+                PlayerScript(name: "desktop-player.queue-prepare", source: PlayerScriptSource.query(Self.bundleID,
+                    Self.prepareQueue(persistentID: id, index: index, leftovers: store.pendingIDs)), cacheable: false)
+            }
+            let items = prepared.scriptItems
+            guard items.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
+            guard items.count >= 3, items[1].scriptText == "made", let newID = items[2].scriptText, !newID.isEmpty else { return }
+            // The script deleted every earlier leftover it was given.
+            store.pendingIDs = [newID]
+            let built = try await ScriptDesk.shared.run(for: .appleMusic, priority: .command) {
+                PlayerScript(name: "desktop-player.queue-build", source: PlayerScriptSource.query(Self.bundleID,
+                    Self.buildQueue(persistentID: id, index: index, into: newID, replacing: store.queueID)), cacheable: false)
+            }
+            let reply = built.scriptItems
+            guard reply.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
+            store.queueID = newID
+            store.pendingIDs = []
+            if reply.count >= 2, let playError = reply[1].scriptNumber, playError != 0 { throw PlayerSearchError.failed }
+        }
     }
 
     func play(_ result: PlayerSearchResult) async throws {
         switch result.target {
         case .libraryTrack(let id):
-            try await run("play", Self.playInContext(persistentID: id))
+            try await playInContext(persistentID: id, index: nil)
         case .address(let url):
             try await open(url)
         case .spotifySearch:
@@ -489,15 +681,11 @@ struct AppleMusicSearch: PlayerSearching {
         }
     }
 
+    /// A song without a library ID (a stream, a radio track) cannot be found
+    /// again; the strip does not offer it (`PlayerQueueItem.isPlayable`).
     func playQueueItem(_ item: PlayerQueueItem) async throws {
-        if let id = item.persistentID {
-            try await run("queue-play", Self.playInContext(persistentID: id))
-        } else {
-            try await run("queue-play", """
-            set pl to current playlist
-            play track \(item.index) of pl
-            """)
-        }
+        guard let id = item.persistentID else { throw PlayerSearchError.failed }
+        try await playInContext(persistentID: id, index: item.index > 0 ? item.index : nil)
     }
 
     func albums(by artist: String) async -> [PlayerAlbum] {
