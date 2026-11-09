@@ -246,7 +246,8 @@ struct LyricLineView: View {
             }
             if composition.fillsStage {
                 StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
-                               composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly)
+                               composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly,
+                               readings: readings)
             } else if composition.arrivalOnly {
                 SpokenTypographyView(words: words, time: time, baseSize: baseSize, mood: mood,
                                      composition: composition, seed: seed, accent: accent, energy: energy, readings: readings,

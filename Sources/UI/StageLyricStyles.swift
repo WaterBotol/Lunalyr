@@ -20,6 +20,8 @@ struct StageRun: Equatable, Identifiable {
     struct Part: Equatable {
         var text: String
         var start: Double
+        /// The lyric word this part was cut from, for looking up its reading.
+        var source: TimedWordKey? = nil
     }
 
     var id: Int
@@ -42,11 +44,11 @@ struct StageRun: Equatable, Identifiable {
                 var last = runs.removeLast()
                 last.text += text
                 last.end = max(last.end, word.end)
-                last.parts.append(Part(text: text, start: word.start))
+                last.parts.append(Part(text: text, start: word.start, source: word.presentationID))
                 runs.append(last)
             } else {
                 runs.append(StageRun(id: runs.count, text: text, start: word.start, end: max(word.end, word.start),
-                                     parts: [Part(text: text, start: word.start)]))
+                                     parts: [Part(text: text, start: word.start, source: word.presentationID)]))
             }
         }
         return runs
@@ -94,8 +96,11 @@ struct StageLyricView: View {
     let seed: Int
     var exitStart: Double = .infinity
     var firstRunOnly: Double?
+    /// "Below lyrics" readings by word (see `LyricReadingPairs`).
+    var readings: [TimedWordKey: String] = [:]
 
-    @ObservedObject private var settings = Settings.shared
+    /// The shared settings in the app; tests pass an isolated instance.
+    @ObservedObject var settings: Settings = .shared
     @Environment(\.lyricInk) private var ink
     @Environment(\.lyricReduceMotion) private var reduceMotion
 
