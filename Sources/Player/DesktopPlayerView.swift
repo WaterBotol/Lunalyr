@@ -398,27 +398,141 @@ private struct CoverStrip: View {
 }
 
 /// A song's own cover, straight from the Music library: the exact artwork of
-/// that track, not a guess by name.
+/// that track, not a guess by name. Covers asked for together (a strip
+/// coming into view) are read in one script; a cover scrolled away before its
+/// turn is not read at all.
 enum LibraryArtwork {
     private static let cache = NSCache<NSString, NSImage>()
+    private static let batcher = ArtworkBatcher(desk: .shared)
 
     static func image(persistentID id: String) async -> NSImage? {
         if let hit = cache.object(forKey: id as NSString) { return hit }
-        let source = PlayerScriptSource.query(AppleMusicSearch.bundleID, """
-        try
-        set t to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
-        if (count of artworks of t) is 0 then return {"ok", ""}
-        return {"ok", data of artwork 1 of t}
-        on error
-        return {"ok", ""}
-        end try
-        """)
-        guard let reply = try? await ScriptDesk.shared.run(
-            PlayerScript(name: "desktop-player.artwork", source: source, cacheable: false), for: .appleMusic),
-            reply.scriptItems.count >= 2, reply.scriptItems[1].data.count > 100,
-            let image = NSImage(data: reply.scriptItems[1].data) else { return nil }
+        guard let data = await batcher.data(for: id), data.count > 100, let image = NSImage(data: data) else { return nil }
         cache.setObject(image, forKey: id as NSString)
         return image
+    }
+
+    /// Covers read at most per script, so one reply stays a sensible size.
+    static let batchSize = 8
+
+    /// Reads the artwork of each track by persistent ID. A track that is
+    /// gone or has no artwork is left out; anything worse (a timeout) ends
+    /// the script, rather than waiting for every cover in turn.
+    static func script(for ids: [String]) -> PlayerScript {
+        let list = ids.map(ScriptText.quoted).joined(separator: ", ")
+        let source = PlayerScriptSource.query(AppleMusicSearch.bundleID, """
+        set found to {}
+        repeat with idItem in {\(list)}
+        set wantedID to contents of idItem
+        try
+        set t to first track of library playlist 1 whose persistent ID is wantedID
+        if (count of artworks of t) > 0 then set end of found to {wantedID, data of artwork 1 of t}
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        end repeat
+        return {"ok", found}
+        """)
+        return PlayerScript(name: "desktop-player.artwork", source: source, cacheable: false)
+    }
+
+    static func parse(_ reply: NSAppleEventDescriptor) -> [String: Data] {
+        let items = reply.scriptItems
+        guard items.first?.scriptText == "ok", items.count >= 2 else { return [:] }
+        var covers: [String: Data] = [:]
+        for row in items[1].scriptItems {
+            let fields = row.scriptItems
+            guard fields.count >= 2, let id = fields[0].scriptText else { continue }
+            covers[id] = fields[1].data
+        }
+        return covers
+    }
+}
+
+/// Gathers cover requests into batches for `ScriptDesk`.
+final class ArtworkBatcher: @unchecked Sendable {
+    private let desk: ScriptDesk
+    private let lock = NSLock()
+    /// Who waits for each track's cover.
+    private var waiters: [String: [UUID: CheckedContinuation<Data?, Never>]] = [:]
+    /// Tracks asked for, oldest first, not yet in a script.
+    private var order: [String] = []
+    private var inFlight: [String] = []
+    private var scheduled = false
+
+    init(desk: ScriptDesk) {
+        self.desk = desk
+    }
+
+    func data(for id: String) async -> Data? {
+        let token = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
+                add(id, token, continuation)
+            }
+        } onCancel: {
+            remove(id, token)
+        }
+    }
+
+    private func add(_ id: String, _ token: UUID, _ continuation: CheckedContinuation<Data?, Never>) {
+        if Task.isCancelled { continuation.resume(returning: nil); return }
+        lock.lock()
+        if waiters[id] == nil, !inFlight.contains(id) { order.append(id) }
+        waiters[id, default: [:]][token] = continuation
+        let start = !scheduled
+        scheduled = true
+        lock.unlock()
+        if start { Task { await flush() } }
+    }
+
+    private func remove(_ id: String, _ token: UUID) {
+        lock.lock()
+        let continuation = waiters[id]?.removeValue(forKey: token)
+        if waiters[id]?.isEmpty == true { waiters[id] = nil }
+        lock.unlock()
+        continuation?.resume(returning: nil)
+    }
+
+    /// The tracks still wanted, oldest first, for the script about to run.
+    private func takeBatch() -> PlayerScript? {
+        lock.lock(); defer { lock.unlock() }
+        order.removeAll { waiters[$0] == nil }
+        let ids = Array(order.prefix(LibraryArtwork.batchSize))
+        order.removeFirst(ids.count)
+        inFlight = ids
+        return ids.isEmpty ? nil : LibraryArtwork.script(for: ids)
+    }
+
+    /// Hands each waiter its cover (nil when there was none); true while more are wanted.
+    private func settle(_ covers: [String: Data]) -> Bool {
+        lock.lock()
+        var done: [(CheckedContinuation<Data?, Never>, Data?)] = []
+        for id in inFlight {
+            for continuation in (waiters.removeValue(forKey: id) ?? [:]).values { done.append((continuation, covers[id])) }
+        }
+        inFlight = []
+        order.removeAll { waiters[$0] == nil }
+        let more = !order.isEmpty
+        if !more { scheduled = false }
+        lock.unlock()
+        for (continuation, data) in done { continuation.resume(returning: data) }
+        return more
+    }
+
+    private func flush() async {
+        // A strip comes into view a few covers at a time; let them gather.
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        while true {
+            let covers: [String: Data]
+            if let reply = try? await desk.run(for: .appleMusic, priority: .artwork, polling: true, make: { [self] in takeBatch() }) {
+                covers = LibraryArtwork.parse(reply)
+            } else {
+                covers = [:]
+            }
+            let more = settle(covers)
+            guard more else { return }
+        }
     }
 }
 
@@ -478,6 +592,7 @@ struct RemoteCover: View {
                 image = art
                 return
             }
+            guard !Task.isCancelled else { return }
             var address = url
             if address == nil, let lookup { address = await CoverLookup.url(title: lookup.0, artist: lookup.1) }
             guard let address, let (data, _) = try? await URLSession.shared.data(from: address) else { return }

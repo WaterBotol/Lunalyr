@@ -280,6 +280,16 @@ final class NowPlayingMonitor: ObservableObject {
         for kind in pollablePlayers { requestRead(kind) }
     }
 
+    /// The monitor's own serial script queue, lent to the desktop player:
+    /// NSAppleScript is not documented as safe on two threads at once, so
+    /// every Apple event Lunalyr sends goes out from this one queue.
+    nonisolated var scriptLane: ScriptLane {
+        let connection = connection, scheduler = scheduler
+        return ScriptLane { script, kind, polling, done in
+            scheduler.background { done(connection.run(script, on: kind, polling: polling)) }
+        }
+    }
+
     // MARK: - Transport
 
     func playPause() { send(.playPause) }

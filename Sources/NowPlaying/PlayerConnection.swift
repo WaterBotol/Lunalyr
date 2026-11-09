@@ -181,6 +181,15 @@ final class PlayerConnection: @unchecked Sendable {
         }
     }
 
+    /// One of the desktop player's scripts (a search, the queue, covers, a
+    /// play). Goes through the same consent ledger as everything else, so
+    /// it is held back exactly when a re-sync would be. `polling`: a read
+    /// that a back-off after a timeout may skip; a play the user asked for
+    /// is not.
+    func run(_ script: PlayerScript, on kind: PlayerKind, polling: Bool) -> Result<NSAppleEventDescriptor, ScriptFailure> {
+        exchange(script, with: kind, polling: polling).outcome
+    }
+
     /// Seconds a command may wait to be sent: more than the re-syncs queued
     /// ahead of it normally take, less than a hung player's timeout or
     /// anyone's answer to macOS's prompt.

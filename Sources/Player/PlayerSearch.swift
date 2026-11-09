@@ -78,30 +78,157 @@ extension PlayerKind {
     }
 }
 
-/// Runs one-off scripts on a private serial queue: a search must never wait
-/// behind (or hold up) the monitor's polling queue.
-final class ScriptDesk: @unchecked Sendable {
-    static let shared = ScriptDesk()
-    private let queue = DispatchQueue(label: "lunalyr.desktop-player.scripts", qos: .userInitiated)
-    private let runner = LiveAppleScriptRunner()
+/// Sends one script to a player and hands back its reply. Live, this is the
+/// monitor's own serial script queue (`NowPlayingMonitor.scriptLane`).
+struct ScriptLane: Sendable {
+    let send: @Sendable (PlayerScript, PlayerKind, Bool,
+                         @escaping @Sendable (Result<NSAppleEventDescriptor, ScriptFailure>) -> Void) -> Void
 
-    func run(_ script: PlayerScript, for kind: PlayerKind) async throws -> NSAppleEventDescriptor {
-        try await withCheckedThrowingContinuation { continuation in
-            queue.async {
-                switch self.runner.run(script) {
-                case .success(let reply):
-                    if reply.scriptItems.first?.scriptText == "notRunning" || reply.stringValue == "notRunning" {
-                        continuation.resume(throwing: PlayerSearchError.notRunning(kind))
-                    } else {
-                        continuation.resume(returning: reply)
-                    }
-                case .failure(let failure):
-                    switch PlayerResponse<Bool>(failureCode: failure.code) {
-                    case .blocked: continuation.resume(throwing: PlayerSearchError.blocked(kind))
-                    case .notRunning: continuation.resume(throwing: PlayerSearchError.notRunning(kind))
-                    default: continuation.resume(throwing: PlayerSearchError.failed)
-                    }
-                }
+    init(_ send: @escaping @Sendable (PlayerScript, PlayerKind, Bool,
+                                      @escaping @Sendable (Result<NSAppleEventDescriptor, ScriptFailure>) -> Void) -> Void) {
+        self.send = send
+    }
+}
+
+/// The desktop player's scripts, waiting their turn. They run on the
+/// monitor's script queue (there is no second AppleScript thread), one at a
+/// time, so whatever waits here can still be reordered: a play goes ahead of
+/// a search, a search ahead of a queue read, and covers come last. A job
+/// whose task was cancelled while it waited (a cover scrolled away) is
+/// dropped without being sent.
+final class ScriptDesk: @unchecked Sendable {
+    enum Priority: Int, Comparable, Sendable {
+        case artwork, read, search, command
+        static func < (a: Priority, b: Priority) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    static let shared = ScriptDesk { await NowPlayingMonitor.shared.scriptLane }
+
+    private struct Job {
+        let id: Int
+        let kind: PlayerKind
+        let priority: Priority
+        let polling: Bool
+        /// Builds the script as it is about to go; nil when there is nothing left to send.
+        let make: @Sendable () -> PlayerScript?
+        let finish: @Sendable (Result<NSAppleEventDescriptor, Error>) -> Void
+    }
+
+    private let resolveLane: @Sendable () async -> ScriptLane
+    private let lock = NSLock()
+    private var lane: ScriptLane?
+    private var waiting: [Job] = []
+    private var busy = false
+    private var nextID = 0
+    /// Jobs cancelled before they were queued, or while they ran.
+    private var cancelled: Set<Int> = []
+
+    init(lane: @escaping @Sendable () async -> ScriptLane) {
+        resolveLane = lane
+    }
+
+    /// Jobs not yet sent, for tests.
+    var waitingCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return waiting.count
+    }
+
+    func run(_ script: PlayerScript, for kind: PlayerKind, priority: Priority,
+             polling: Bool = false) async throws -> NSAppleEventDescriptor {
+        try await run(for: kind, priority: priority, polling: polling) { script }
+    }
+
+    /// `make` is called only when the job reaches the front of the queue, so
+    /// it can gather work that piled up meanwhile (several covers at once).
+    func run(for kind: PlayerKind, priority: Priority, polling: Bool = false,
+             make: @escaping @Sendable () -> PlayerScript?) async throws -> NSAppleEventDescriptor {
+        let lane = await currentLane()
+        let id: Int = {
+            lock.lock(); defer { lock.unlock() }
+            nextID &+= 1
+            return nextID
+        }()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<NSAppleEventDescriptor, Error>) in
+                enqueue(Job(id: id, kind: kind, priority: priority, polling: polling, make: make,
+                            finish: { continuation.resume(with: $0) }), lane: lane)
+            }
+        } onCancel: {
+            cancel(id)
+        }
+    }
+
+    private func currentLane() async -> ScriptLane {
+        if let known = (lock.withLock { lane }) { return known }
+        let resolved = await resolveLane()
+        lock.withLock { if lane == nil { lane = resolved } }
+        return resolved
+    }
+
+    private func enqueue(_ job: Job, lane: ScriptLane) {
+        lock.lock()
+        if job.priority != .command, cancelled.remove(job.id) != nil {
+            lock.unlock()
+            job.finish(.failure(CancellationError()))
+            return
+        }
+        waiting.append(job)
+        lock.unlock()
+        pump(lane)
+    }
+
+    /// A command the user asked for still goes; anything else waiting is dropped.
+    private func cancel(_ id: Int) {
+        lock.lock()
+        var dropped: Job?
+        if let index = waiting.firstIndex(where: { $0.id == id }) {
+            if waiting[index].priority != .command { dropped = waiting.remove(at: index) }
+        } else {
+            cancelled.insert(id)
+        }
+        lock.unlock()
+        dropped?.finish(.failure(CancellationError()))
+    }
+
+    private func pump(_ lane: ScriptLane) {
+        while true {
+            lock.lock()
+            guard !busy, !waiting.isEmpty else { lock.unlock(); return }
+            // Highest priority first; first come, first served within one.
+            var best = 0
+            for index in waiting.indices.dropFirst() where waiting[index].priority > waiting[best].priority {
+                best = index
+            }
+            let job = waiting.remove(at: best)
+            busy = true
+            lock.unlock()
+            guard let script = job.make() else {
+                lock.withLock { busy = false; cancelled.remove(job.id) }
+                job.finish(.failure(CancellationError()))
+                continue
+            }
+            lane.send(script, job.kind, job.polling) { [self] outcome in
+                lock.withLock { busy = false; cancelled.remove(job.id) }
+                job.finish(Self.reply(outcome, for: job.kind))
+                pump(lane)
+            }
+            return
+        }
+    }
+
+    static func reply(_ outcome: Result<NSAppleEventDescriptor, ScriptFailure>,
+                      for kind: PlayerKind) -> Result<NSAppleEventDescriptor, Error> {
+        switch outcome {
+        case .success(let reply):
+            if reply.scriptItems.first?.scriptText == "notRunning" || reply.stringValue == "notRunning" {
+                return .failure(PlayerSearchError.notRunning(kind))
+            }
+            return .success(reply)
+        case .failure(let failure):
+            switch PlayerResponse<Bool>(failureCode: failure.code) {
+            case .blocked: return .failure(PlayerSearchError.blocked(kind))
+            case .notRunning: return .failure(PlayerSearchError.notRunning(kind))
+            default: return .failure(PlayerSearchError.failed)
             }
         }
     }
@@ -168,7 +295,8 @@ struct AppleMusicSearch: PlayerSearching {
         return {"ok", hits}
         """)
         let reply = try await ScriptDesk.shared.run(
-            PlayerScript(name: "desktop-player.library-search", source: source, cacheable: false), for: .appleMusic)
+            PlayerScript(name: "desktop-player.library-search", source: source, cacheable: false), for: .appleMusic,
+            priority: .search)
         return Self.parseLibrary(reply)
     }
 
@@ -341,7 +469,8 @@ struct AppleMusicSearch: PlayerSearching {
         return {"ok", rows, shuffling}
         """)
         let reply = try await ScriptDesk.shared.run(
-            PlayerScript(name: "desktop-player.queue", source: source, cacheable: false), for: .appleMusic)
+            PlayerScript(name: "desktop-player.queue", source: source, cacheable: false), for: .appleMusic,
+            priority: .read, polling: true)
         let items = reply.scriptItems
         let shuffle = items.count >= 3 && items[2].booleanValue
         return PlayerQueueSnapshot(items: Self.parseQueue(reply), shuffle: shuffle)
@@ -414,7 +543,7 @@ struct AppleMusicSearch: PlayerSearching {
     private func run(_ name: String, _ body: String) async throws {
         let script = PlayerScript(name: "desktop-player.\(name)", source: PlayerScriptSource.command(Self.bundleID, body),
                                   cacheable: false)
-        _ = try await ScriptDesk.shared.run(script, for: .appleMusic)
+        _ = try await ScriptDesk.shared.run(script, for: .appleMusic, priority: .command)
     }
 }
 
@@ -451,7 +580,7 @@ struct SpotifySearch: PlayerSearching {
         case .address(let url):
             let script = PlayerScript(name: "desktop-player.spotify-open", source: PlayerScriptSource.command(kind.bundleID,
                 "play track \(ScriptText.quoted(url.absoluteString))"), cacheable: false)
-            _ = try await ScriptDesk.shared.run(script, for: .spotify)
+            _ = try await ScriptDesk.shared.run(script, for: .spotify, priority: .command)
         default:
             throw PlayerSearchError.failed
         }

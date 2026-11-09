@@ -79,3 +79,91 @@ final class DesktopPlayerQueueScriptTests: XCTestCase {
         XCTAssertFalse(script.contains("delete (every track"))
     }
 }
+
+final class ScriptDeskTests: XCTestCase {
+    /// Stands in for the monitor's script queue: records what was sent and
+    /// answers only when told to.
+    private final class FakeLane: @unchecked Sendable {
+        private let lock = NSLock()
+        private var sent: [String] = []
+        private var pending: [@Sendable (Result<NSAppleEventDescriptor, ScriptFailure>) -> Void] = []
+
+        var lane: ScriptLane {
+            ScriptLane { script, _, _, done in
+                self.lock.withLock {
+                    self.sent.append(script.name)
+                    self.pending.append(done)
+                }
+            }
+        }
+
+        var sentNames: [String] { lock.withLock { sent } }
+
+        func answerNext() {
+            let done = lock.withLock { pending.removeFirst() }
+            done(.success(NSAppleEventDescriptor(string: "ok")))
+        }
+    }
+
+    private func until(_ condition: () -> Bool) async throws {
+        for _ in 0..<1000 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 2_000_000)
+        }
+        XCTFail("timed out")
+    }
+
+    func testPlaysGoAheadOfCoversAndCancelledCoversAreNeverSent() async throws {
+        let fake = FakeLane()
+        let desk = ScriptDesk { fake.lane }
+        func job(_ name: String, _ priority: ScriptDesk.Priority) -> Task<String, Error> {
+            Task {
+                _ = try await desk.run(PlayerScript(name: name, source: ""), for: .appleMusic, priority: priority)
+                return name
+            }
+        }
+        let first = job("queue", .read)
+        try await until { fake.sentNames == ["queue"] }
+        let cover = job("cover", .artwork)
+        try await until { desk.waitingCount == 1 }
+        let scrolledAway = job("scrolled-away", .artwork)
+        try await until { desk.waitingCount == 2 }
+        let play = job("play", .command)
+        try await until { desk.waitingCount == 3 }
+        scrolledAway.cancel()
+        try await until { desk.waitingCount == 2 }
+
+        for count in 2...3 {
+            fake.answerNext()
+            try await until { fake.sentNames.count == count }
+        }
+        fake.answerNext()
+        XCTAssertEqual(fake.sentNames, ["queue", "play", "cover"], "one at a time, the play first, the dropped cover never")
+        let names = try await [first.value, play.value, cover.value]
+        XCTAssertEqual(names, ["queue", "play", "cover"])
+        do {
+            _ = try await scrolledAway.value
+            XCTFail("a cancelled cover is dropped")
+        } catch is CancellationError {}
+    }
+
+    func testANotRunningReplyAndARefusalBecomeSearchErrors() {
+        let notRunning = ScriptDesk.reply(.success(.scriptList([NSAppleEventDescriptor(string: "notRunning")])), for: .appleMusic)
+        XCTAssertThrowsError(try notRunning.get()) { XCTAssertEqual($0 as? PlayerSearchError, .notRunning(.appleMusic)) }
+        let refused = ScriptDesk.reply(.failure(ScriptFailure(code: AppleEventCode.notPermitted)), for: .spotify)
+        XCTAssertThrowsError(try refused.get()) { XCTAssertEqual($0 as? PlayerSearchError, .blocked(.spotify)) }
+    }
+
+    func testCoversAreReadInOneScript() {
+        let script = LibraryArtwork.script(for: ["AB12", "CD\"34"])
+        XCTAssertTrue(script.source.contains("{\"AB12\", \"CD\\\"34\"}"))
+        XCTAssertEqual(script.source.components(separatedBy: "tell application").count, 2, "one script, one tell block")
+        XCTAssertFalse(script.cacheable)
+
+        let text = { (s: String) in NSAppleEventDescriptor(string: s) }
+        let image = NSAppleEventDescriptor(descriptorType: typeData, data: Data(repeating: 7, count: 200))!
+        let reply = NSAppleEventDescriptor.scriptList([text("ok"), .scriptList([.scriptList([text("AB12"), image])])])
+        XCTAssertEqual(LibraryArtwork.parse(reply)["AB12"]?.count, 200)
+        XCTAssertNil(LibraryArtwork.parse(reply)["CD34"])
+    }
+}
