@@ -32,9 +32,15 @@ struct MusicVideoSection: View {
                                  manual: controller.offsetOrigin == .manual,
                                  nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
                 VideoTimingOrigin(label: MusicVideoController.timingLabel(origin: controller.offsetOrigin,
-                                                                          syncing: controller.syncing),
-                                  canResync: controller.canResync, resync: { controller.resync() })
+                                                                          syncing: controller.syncing,
+                                                                          listening: controller.listening),
+                                  canResync: controller.canResync, resync: { controller.resync() },
+                                  tapTitle: MusicVideoTapSync.buttonTitle(controller.tapState),
+                                  canTap: controller.canTapSync, tap: { controller.tapSyncButton() })
             }
+        }
+        if let note = MusicVideoTapSync.note(controller.tapState) {
+            InspectorCaption(note)
         }
         InspectorCaption("For this song: how far into the video the song begins. Lunalyr sets it by itself when it can; a nudge of yours always wins.",
                          more: Self.timingDetail)
@@ -61,7 +67,7 @@ struct MusicVideoSection: View {
         }
     }
 
-    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. For YouTube videos Lunalyr reads the video’s captions (with Search YouTube on) and matches them to the song’s timed lyrics; for videos in your Music library it compares the video’s soundtrack with the song as it plays, while the visualisers’ system audio is already on. Otherwise a video longer than the song is guessed to have that much intro (Estimated). Re-sync forgets your nudge and looks again."
+    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. For YouTube videos Lunalyr reads the video’s captions (with Search YouTube on) and matches them to the song’s timed lyrics; for videos in your Music library it compares the video’s soundtrack with the song as it plays. If the visualisers’ System audio is switched on and has worked on this Mac before, Lunalyr turns its capture on for up to 25 seconds to do this, once per song and video, then off again; the audio is analysed on this Mac and nothing is recorded or sent. Otherwise a video longer than the song is guessed to have that much intro (Estimated). Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. Re-sync forgets your nudge and looks again."
     static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
     static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube."
 }
@@ -145,18 +151,25 @@ struct VideoTimingNudge: View {
     }
 }
 
-/// Where the video timing came from, and Re-sync.
+/// Where the video timing came from, Tap to sync and Re-sync.
 @MainActor
 struct VideoTimingOrigin: View {
     let label: String?
     let canResync: Bool
     let resync: () -> Void
+    var tapTitle = "Tap to sync"
+    var canTap = false
+    var tap: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 6) {
             if let label {
                 Text(label).font(.caption).foregroundStyle(.secondary)
             }
+            Button(tapTitle, action: tap)
+                .controlSize(.small)
+                .disabled(!canTap)
+                .help("Click, then press any key the moment the singing starts in the video")
             Button("Re-sync", action: resync)
                 .controlSize(.small)
                 .disabled(!canResync)

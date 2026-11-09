@@ -38,10 +38,36 @@ private final class FakeAutoSync: MusicVideoAutoSyncing {
         return captionResults.isEmpty ? .unavailable : captionResults.removeFirst()
     }
 
+    /// The audio alignment never finishes by itself: only the time limit ends it.
+    var audioHangs = false
+
     func audioOffset(url: URL, song: MusicVideoSong) async -> MusicVideoAutoResult {
         audioCalls.append(url)
+        if audioHangs {
+            while !Task.isCancelled { await Task.yield() }
+            return .unavailable
+        }
         return audioResults.isEmpty ? .unavailable : audioResults.removeFirst()
     }
+}
+
+/// Brief listening without any audio: records what the controller asked for.
+@MainActor
+private final class FakeListener: MusicVideoBriefListening {
+    /// Music playing, power not spared, permission already granted.
+    var mayListen = true
+    private(set) var starts: [TimeInterval] = []
+    private(set) var stops = 0
+    /// A listen is running (started and not stopped).
+    var running: Bool { starts.count > stops }
+
+    func start(for seconds: TimeInterval) -> Bool {
+        XCTAssertTrue(mayListen, "never started without permission")
+        starts.append(seconds)
+        return true
+    }
+
+    func stop() { stops += 1 }
 }
 
 /// A small deterministic generator, so the synthetic signals repeat.
@@ -373,9 +399,14 @@ final class MusicVideoSyncTests: XCTestCase {
     // MARK: Controller
 
     private func controller(_ resolver: MusicVideoResolver, _ autoSync: FakeAutoSync,
-                            offsets: MusicVideoOffsets? = nil) -> MusicVideoController {
+                            offsets: MusicVideoOffsets? = nil, listener: FakeListener? = nil,
+                            songClock: @escaping @MainActor () -> (time: Double, playing: Bool) = { (0, true) },
+                            lyrics: @escaping @MainActor (MusicVideoSong) -> [MusicVideoLyricLine]? = { _ in nil },
+                            uptime: @escaping () -> TimeInterval = { 0 },
+                            sleep: @escaping (TimeInterval) async -> Void = { _ in }) -> MusicVideoController {
         let controller = MusicVideoController(resolver: resolver, offsets: offsets ?? MusicVideoOffsets(defaults: defaults),
-                                              autoSync: autoSync, now: { [start] in start }, sleep: { _ in })
+                                              autoSync: autoSync, listener: listener, songClock: songClock,
+                                              lyrics: lyrics, uptime: uptime, now: { [start] in start }, sleep: sleep)
         controller.refineDelay = 0
         return controller
     }
@@ -481,5 +512,228 @@ final class MusicVideoSyncTests: XCTestCase {
         await controller.settle()
         XCTAssertEqual(controller.offsetOrigin, .none)
         XCTAssertNil(MusicVideoOffsets(defaults: defaults).automaticEntry(for: song.key, video: "file:\(url.path)", now: start))
+    }
+
+    // MARK: Brief listening
+
+    private let libraryURL = URL(fileURLWithPath: "/Music/Media/Music Videos/Blinding Lights.m4v")
+
+    func testALibraryVideoWithoutAnOffsetListensBrieflyOnceAndStops() async {
+        let autoSync = FakeAutoSync()
+        autoSync.audioResults = [.found(10, .audio)]
+        let listener = FakeListener()
+        let controller = controller(resolver(library: NoLibrary(video: libraryURL)), autoSync, listener: listener)
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertEqual(listener.starts, [MusicVideoController.listenLimit], "up to about 25 s")
+        XCTAssertEqual(listener.stops, 1, "stopped again on success")
+        XCTAssertFalse(controller.listening)
+        XCTAssertEqual(autoSync.audioCalls, [libraryURL], "no refine pass after a brief listen")
+        XCTAssertEqual(controller.currentOffset, 10)
+        XCTAssertEqual(controller.offsetOrigin, .audio)
+    }
+
+    func testABriefListenStopsAtTheTimeLimit() async {
+        let autoSync = FakeAutoSync()
+        autoSync.audioHangs = true
+        let listener = FakeListener()
+        var slept: [TimeInterval] = []
+        let controller = controller(resolver(library: NoLibrary(video: libraryURL)), autoSync, listener: listener,
+                                    sleep: { slept.append($0) })
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertTrue(slept.contains(MusicVideoController.listenLimit))
+        XCTAssertEqual(listener.starts.count, 1)
+        XCTAssertFalse(listener.running, "capture is stopped at the time limit")
+        XCTAssertFalse(controller.listening)
+        XCTAssertFalse(controller.syncing)
+        XCTAssertEqual(controller.offsetOrigin, .none)
+    }
+
+    func testABriefListenHappensOncePerSongAndVideo() async {
+        let autoSync = FakeAutoSync()
+        let listener = FakeListener()
+        let controller = controller(resolver(library: NoLibrary(video: libraryURL)), autoSync, listener: listener)
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertEqual(listener.starts.count, 1)
+        // Nothing usable was found; the song plays again.
+        controller.update(track: nil, enabled: true, online: false)
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertEqual(listener.starts.count, 1, "not again for the same song and video")
+        XCTAssertFalse(listener.running)
+        // Re-sync is the user asking: it may listen again.
+        controller.resync()
+        await controller.settle()
+        XCTAssertEqual(listener.starts.count, 2)
+        XCTAssertFalse(listener.running)
+    }
+
+    func testNoBriefListenWithoutPermissionOrWithAnOffset() async {
+        let autoSync = FakeAutoSync()
+        let listener = FakeListener()
+        listener.mayListen = false
+        let controller = controller(resolver(library: NoLibrary(video: libraryURL)), autoSync, listener: listener)
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertTrue(listener.starts.isEmpty, "no permission (or nothing playing): no capture")
+        XCTAssertFalse(controller.listening)
+
+        let suite = "LunalyrTests.MusicVideoSync.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let offsets = MusicVideoOffsets(defaults: UserDefaults(suiteName: suite)!)
+        offsets.set(4, for: song.key)
+        let allowed = FakeListener()
+        let manual = self.controller(resolver(library: NoLibrary(video: libraryURL)), FakeAutoSync(), offsets: offsets,
+                                     listener: allowed)
+        manual.update(track: track, enabled: true, online: false)
+        await manual.settle()
+        XCTAssertTrue(allowed.starts.isEmpty, "the user's offset needs no listening")
+
+        let youTube = resolver()
+        youTube.links.set("dQw4w9WgXcQ", for: song.key)
+        let other = FakeListener()
+        let video = self.controller(youTube, FakeAutoSync(), listener: other)
+        video.update(track: track, enabled: true, online: true)
+        await video.settle()
+        XCTAssertTrue(other.starts.isEmpty, "YouTube videos are never listened to")
+    }
+
+    func testTimingLabelStates() {
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: .none, syncing: true, listening: true),
+                       "Listening to line up the video…")
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: .estimated, syncing: true, listening: true),
+                       "Listening to line up the video…")
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: .estimated, syncing: true), "Estimated; syncing…")
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: .none, syncing: true), "Syncing…")
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: .audio, syncing: false), "Synced automatically")
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: .manual, syncing: false, listening: true), "Offset set by you")
+        XCTAssertNil(MusicVideoController.timingLabel(origin: .none, syncing: false))
+    }
+
+    // MARK: Tap to sync
+
+    private let sungLines = [MusicVideoLyricLine(start: 15, text: "I've been tryna call"),
+                             MusicVideoLyricLine(start: 20, text: "I've been on my own for long enough"),
+                             MusicVideoLyricLine(start: 58, text: "I said, ooh, I'm blinded by the lights"),
+                             MusicVideoLyricLine(start: 62.5, text: "No, I can't sleep until I feel your touch"),
+                             MusicVideoLyricLine(start: 67, text: "I said, ooh, I'm drowning in the night")]
+
+    func testTapLineChoiceAndMaths() {
+        XCTAssertEqual(MusicVideoTapSync.reactionTime, 0.2)
+        XCTAssertEqual(MusicVideoTapSync.line(in: sungLines, reference: 30, firstLine: true)?.start, 15,
+                       "armed before the singing: the first line, wherever the video is")
+        XCTAssertEqual(MusicVideoTapSync.line(in: sungLines, reference: 3, firstLine: false)?.start, 15)
+        XCTAssertEqual(MusicVideoTapSync.line(in: sungLines, reference: 62.7, firstLine: false)?.start, 62.5, "just passed")
+        XCTAssertEqual(MusicVideoTapSync.line(in: sungLines, reference: 61, firstLine: false)?.start, 62.5, "upcoming")
+        XCTAssertEqual(MusicVideoTapSync.line(in: sungLines, reference: 59, firstLine: false)?.start, 58)
+        XCTAssertEqual(MusicVideoTapSync.line(in: sungLines, reference: 300, firstLine: false)?.start, 67)
+        XCTAssertNil(MusicVideoTapSync.line(in: [], reference: 3, firstLine: true))
+        XCTAssertTrue(MusicVideoTapSync.armedBeforeFirstLine(songTime: 2, lines: sungLines))
+        XCTAssertFalse(MusicVideoTapSync.armedBeforeFirstLine(songTime: 16, lines: sungLines))
+        XCTAssertEqual(MusicVideoTapSync.offset(videoTimeAtTap: 23.6, lineStart: 15), 8.4, accuracy: 1e-9,
+                       "the reaction time is taken off the tap")
+        XCTAssertEqual(MusicVideoTapSync.averaged([8.4, 8.6]), 8.5)
+        XCTAssertNil(MusicVideoTapSync.averaged([]))
+        XCTAssertEqual(MusicVideoTapSync.describe(8.4), "Video starts 8.4 s ahead")
+        XCTAssertEqual(MusicVideoTapSync.describe(-2), "Video starts 2.0 s behind")
+        XCTAssertEqual(MusicVideoTapSync.describe(0.01), "Video starts with the song")
+    }
+
+    func testTapToSyncSetsTheUsersOffsetAndASecondTapRefinesIt() async {
+        let resolver = resolver()
+        resolver.links.set("dQw4w9WgXcQ", for: song.key)
+        var songTime = 2.0, clock: TimeInterval = 100
+        let lines = sungLines
+        let controller = controller(resolver, FakeAutoSync(), songClock: { (songTime, true) },
+                                    lyrics: { _ in lines }, uptime: { clock })
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertTrue(controller.canTapSync)
+        XCTAssertEqual(MusicVideoTapSync.buttonTitle(controller.tapState), "Tap to sync")
+
+        // Armed during the intro: the tap marks where the singing starts.
+        controller.tapSyncButton()
+        XCTAssertEqual(controller.tapState, .armed(firstLine: true))
+        XCTAssertEqual(MusicVideoTapSync.buttonTitle(controller.tapState), "Tap now")
+        XCTAssertEqual(MusicVideoTapSync.note(controller.tapState),
+                       "Watch the video. Press any key, or Tap now, the moment the singing starts in the video. Esc cancels.")
+        // The singing starts 23.4 s into the video; the tap lands 0.2 s later.
+        songTime = 23.6
+        controller.noteVideoSample(time: 23.5, playing: true, of: .youTube("dQw4w9WgXcQ"))
+        clock += 0.1
+        controller.tapSyncButton()
+        XCTAssertEqual(controller.currentOffset, 8.4, accuracy: 1e-9)
+        XCTAssertEqual(controller.offsetOrigin, .manual, "the tap beats anything automatic")
+        XCTAssertEqual(MusicVideoController.timingLabel(origin: controller.offsetOrigin, syncing: false), "Offset set by you")
+        XCTAssertEqual(controller.tapState, .done(offset: 8.4, taps: 1, firstLine: true))
+        XCTAssertEqual(MusicVideoTapSync.note(controller.tapState),
+                       "Video starts 8.4 s ahead, from where the singing starts. Tap again to refine.")
+        XCTAssertEqual(MusicVideoTapSync.buttonTitle(controller.tapState), "Tap again")
+
+        // Later in the song: the next line sung in the video. The video now
+        // runs 8.4 s ahead; that line really starts 8.6 s in.
+        songTime = 60
+        controller.tapSyncButton()
+        XCTAssertEqual(controller.tapState, .armed(firstLine: false))
+        XCTAssertEqual(MusicVideoTapSync.note(controller.tapState),
+                       "Watch the video. Press any key, or Tap now, when the next line is sung in the video. Esc cancels.")
+        clock += 10
+        songTime = 62.9
+        controller.noteVideoSample(time: 71.3, playing: true, of: .youTube("dQw4w9WgXcQ"))
+        controller.tap()
+        XCTAssertEqual(controller.currentOffset, 8.5, accuracy: 1e-9, "the two taps are averaged")
+        XCTAssertEqual(controller.tapState, .done(offset: 8.5, taps: 2, firstLine: false))
+        XCTAssertEqual(MusicVideoTapSync.note(controller.tapState),
+                       "Video starts 8.5 s ahead, from the next line sung in the video. Averaged over 2 taps.")
+
+        // A nudge starts the taps over.
+        controller.nudgeOffset(by: 0.5)
+        XCTAssertEqual(controller.tapState, .idle)
+        XCTAssertEqual(controller.currentOffset, 9.0, accuracy: 1e-9)
+    }
+
+    func testTapWithoutAVideoSampleUsesTheSyncedPosition() async {
+        let resolver = resolver()
+        resolver.links.set("dQw4w9WgXcQ", for: song.key)
+        var songTime = 1.0
+        let lines = sungLines
+        let controller = controller(resolver, FakeAutoSync(), songClock: { (songTime, true) }, lyrics: { _ in lines })
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        controller.beginTapSync()
+        // With no offset yet the video is kept at the song's own time.
+        songTime = 23.6
+        controller.tap()
+        XCTAssertEqual(controller.currentOffset, 8.4, accuracy: 1e-9)
+    }
+
+    func testTapToSyncNeedsLyricsPlaybackAndAVideo() async {
+        let resolver = resolver()
+        resolver.links.set("dQw4w9WgXcQ", for: song.key)
+        var lines: [MusicVideoLyricLine]? = nil
+        var playing = true
+        let controller = controller(resolver, FakeAutoSync(), songClock: { (5, playing) }, lyrics: { _ in lines })
+        XCTAssertFalse(controller.canTapSync, "nothing showing")
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        controller.beginTapSync()
+        XCTAssertEqual(controller.tapState, .failed(.noLyrics))
+        XCTAssertEqual(MusicVideoTapSync.note(controller.tapState),
+                       "Tap to sync needs this song’s timed lyrics, and they haven’t loaded.")
+        lines = sungLines
+        playing = false
+        controller.beginTapSync()
+        XCTAssertEqual(controller.tapState, .failed(.notPlaying))
+        playing = true
+        controller.beginTapSync()
+        controller.cancelTapSync()
+        XCTAssertEqual(controller.tapState, .idle)
+        XCTAssertFalse(controller.offsets.hasManual(song.key), "cancelled: nothing set")
+        controller.beginTapSync()
+        controller.update(track: nil, enabled: true, online: false)
+        XCTAssertEqual(controller.tapState, .idle, "a song change ends it")
+        XCTAssertFalse(controller.canTapSync)
     }
 }
