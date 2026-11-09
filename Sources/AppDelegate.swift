@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HoverState.shared.start()
         AudioReactiveController.shared.resumeIfEnabled()
         LunalyrExtras.shared.start()
+        MusicVideoController.shared.start()
         AppUpdates.shared.startIfConfigured()
         if !Settings.shared.hasOnboarded {
             // Onboarding explains the permission prompt before anything can

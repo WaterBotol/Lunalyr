@@ -94,8 +94,11 @@ final class Settings: ObservableObject {
     }
 
     enum BackgroundMode: String, CaseIterable, Identifiable {
-        case auto, pattern, shader, colourOnly, visualizer, desktop, custom
+        case auto, pattern, shader, colourOnly, visualizer, desktop, custom, musicVideo
         var id: String { rawValue }
+
+        /// What "Music video" can fall back to: every other type.
+        static let musicVideoFallbacks: [BackgroundMode] = allCases.filter { $0 != .musicVideo }
 
         var title: String {
             switch self {
@@ -106,13 +109,37 @@ final class Settings: ObservableObject {
             case .desktop: return "Your wallpaper"
             case .custom: return "Imported image or video"
             case .colourOnly: return "Colour only"
+            case .musicVideo: return "Music video"
             }
         }
     }
 
     @Published var fontChoice: FontChoice { didSet { store(fontChoice.rawValue, "fontChoice") } }
     @Published var googleFontFamily: String { didSet { store(googleFontFamily, "googleFontFamily") } }
-    @Published var backgroundMode: BackgroundMode { didSet { store(backgroundMode.rawValue, "backgroundMode") } }
+    @Published var backgroundMode: BackgroundMode {
+        didSet {
+            // Music video falls back to whatever was chosen before it.
+            if backgroundMode == .musicVideo, oldValue != .musicVideo { musicVideoFallback = oldValue }
+            store(backgroundMode.rawValue, "backgroundMode")
+        }
+    }
+    /// What "Music video" shows when a song has no video, and on displays
+    /// that "Heavy scenes on main display only" keeps it off. Never itself.
+    @Published var musicVideoFallback: BackgroundMode {
+        didSet {
+            if musicVideoFallback == .musicVideo { musicVideoFallback = .auto; return }
+            store(musicVideoFallback.rawValue, "custom.musicVideoFallback")
+        }
+    }
+    /// Off by default: looking a video up online sends the song's title
+    /// and artist to Apple's search, song.link and YouTube.
+    @Published var musicVideoOnline: Bool { didSet { store(musicVideoOnline, "custom.musicVideoOnline") } }
+    /// How much the video is darkened, 0...`musicVideoDimRange` upper bound.
+    @Published var musicVideoDim: Double { didSet { store(musicVideoDim, "custom.musicVideoDim") } }
+    /// Blur radius in points.
+    @Published var musicVideoBlur: Double { didSet { store(musicVideoBlur, "custom.musicVideoBlur") } }
+    static let musicVideoDimRange: ClosedRange<Double> = 0...0.85
+    static let musicVideoBlurRange: ClosedRange<Double> = 0...24
     @Published var albumGradientWallpaper: Bool { didSet { store(albumGradientWallpaper, "custom.albumGradientWallpaper") } }
     /// `nil` means let the track pick within the mode.
     @Published var patternStyle: BackgroundStyle? { didSet { store(patternStyle?.rawValue, "patternStyle") } }
@@ -290,6 +317,12 @@ final class Settings: ObservableObject {
         fontChoice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
         googleFontFamily = d.string(forKey: "googleFontFamily") ?? ""
         backgroundMode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? .auto
+        let fallback = BackgroundMode(rawValue: d.string(forKey: "custom.musicVideoFallback") ?? "") ?? .auto
+        musicVideoFallback = fallback == .musicVideo ? .auto : fallback
+        musicVideoOnline = d.bool(forKey: "custom.musicVideoOnline")
+        musicVideoDim = min(Self.musicVideoDimRange.upperBound,
+                            max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35))
+        musicVideoBlur = min(Self.musicVideoBlurRange.upperBound, max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0))
         albumGradientWallpaper = d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true
         patternStyle = (d.object(forKey: "patternStyle") as? Int).flatMap(BackgroundStyle.init(rawValue:))
         shaderStyle = (d.string(forKey: "shaderStyle")).flatMap(ShaderStyle.init(rawValue:))

@@ -67,6 +67,8 @@ struct WallpaperPage: View {
             }
         case .custom:
             ThemedSection("Image or video") { importedOptions }
+        case .musicVideo:
+            ThemedSection("Music video") { MusicVideoSection() }
         case .colourOnly:
             ThemedSection("Colour only") {
                 Toggle("Album gradient", isOn: $s.albumGradientWallpaper)
@@ -120,7 +122,7 @@ struct WallpaperPage: View {
 
     private var adjustments: some View {
         ThemedSection("Adjustments") {
-            if s.backgroundMode != .custom {
+            if s.backgroundMode != .custom && s.backgroundMode != .musicVideo {
                 ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
                             format: SettingsFormat.multiplier)
                 if s.backgroundMode != .visualizer || s.audioVisualizerStyle != .light3D || s.light3DColours == .album {

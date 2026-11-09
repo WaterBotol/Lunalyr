@@ -31,6 +31,7 @@ When merging, keep every entry and combine duplicate headings.
 - Discord: while sharing, the profile shows a Listen along button (the web
   page) beside Get Lunalyr. "Show a Join button on Discord" swaps the buttons
   for a Join party instead, since Discord refuses both at once.
+- A new wallpaper type, Music video: the playing song's music video behind the lyrics, muted, filled to the screen and kept in time with the song (play, pause and seeks are followed; drift is corrected past about a third of a second). A video in your Music library is used first. With "Search YouTube for videos" on (off by default; sends the title and artist to YouTube), the official video is found on YouTube's search page and played in YouTube's privacy-enhanced player; each song's answer is remembered. A YouTube link can be pasted for any song. Songs without a video show the type chosen before Music video (or one picked in Settings), with a short note in Settings only. Per-song video timing for intros, plus Video dimming and Video blur. "Heavy scenes on main display only" keeps the video to the main display, and the video pauses whenever the wallpaper is covered or paused.
 
 ### Changed
 

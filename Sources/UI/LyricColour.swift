@@ -454,6 +454,10 @@ enum LyricBackdrop {
                     + 0.18 * LyricLegibility.encoded(min(1, field)))
             }
             return LyricLegibility.darkened(picture, by: min(1, 0.12 * strength))
+        case .musicVideo:
+            // Unmeasured footage under the video's dimming and the scrim.
+            let footage = min(1, max(0, measured ?? LyricLegibility.unknownBackdropLuminance))
+            return LyricLegibility.darkened(footage, by: min(1, 0.12 * strength))
         case .colourOnly where measured != nil:
             return LyricLegibility.darkened(measured ?? field, by: WallpaperShade.scrimAtStage(strength: strength))
         case .visualizer:
