@@ -39,9 +39,11 @@ final class DesktopWallpaperController {
         // Only "Your wallpaper" draws over the existing desktop. Every other
         // mode paints an opaque black base, so its window can be opaque too:
         // the window server then skips blending the desktop picture beneath.
-        modeCancellable = Settings.shared.$backgroundMode.removeDuplicates().sink { [weak self] mode in
-            Task { @MainActor [weak self] in self?.applyOpacity(for: mode) }
-        }
+        modeCancellable = Settings.shared.$backgroundMode.removeDuplicates()
+            .combineLatest(Settings.shared.$musicVideoFallback.removeDuplicates())
+            .sink { [weak self] mode, _ in
+                Task { @MainActor [weak self] in self?.applyOpacity(for: mode) }
+            }
         // A paused wallpaper cannot run its fade; resuming lets it finish.
         pauseCancellable = LunalyrExtras.shared.$wallpaperPaused.removeDuplicates().dropFirst().sink { [weak self] paused in
             guard !paused else { return }
@@ -49,7 +51,12 @@ final class DesktopWallpaperController {
         }
     }
 
-    static func needsTransparency(_ mode: Settings.BackgroundMode) -> Bool { mode == .desktop }
+    /// Music video falling back to Your wallpaper needs the desktop to show
+    /// through whenever a song has no video, so its windows stay clear too.
+    static func needsTransparency(_ mode: Settings.BackgroundMode,
+                                  musicVideoFallback: Settings.BackgroundMode = .auto) -> Bool {
+        mode == .desktop || (mode == .musicVideo && musicVideoFallback == .desktop)
+    }
 
     private var pendingOpacity: DispatchWorkItem?
     /// The mode whose windows turn opaque once its wallpaper has faded in.
@@ -59,7 +66,7 @@ final class DesktopWallpaperController {
         pendingOpacity?.cancel()
         pendingOpacity = nil
         opacityChange = nil
-        guard !Self.needsTransparency(mode) else {
+        guard !Self.needsTransparency(mode, musicVideoFallback: Settings.shared.musicVideoFallback) else {
             // Transparent at once, so the outgoing wallpaper can fade away
             // over the desktop instead of cutting to black.
             for surface in surfaces.values { Self.configureOpacity(surface.window, mode: mode) }
@@ -105,7 +112,7 @@ final class DesktopWallpaperController {
     }
 
     private static func configureOpacity(_ window: NSWindow, mode: Settings.BackgroundMode) {
-        let opaque = !needsTransparency(mode)
+        let opaque = !needsTransparency(mode, musicVideoFallback: Settings.shared.musicVideoFallback)
         guard window.isOpaque != opaque else { return }
         window.isOpaque = opaque
         window.backgroundColor = opaque ? .black : .clear

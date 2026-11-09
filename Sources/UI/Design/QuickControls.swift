@@ -28,6 +28,7 @@ extension Settings.BackgroundMode {
         case .visualizer: return "waveform"
         case .desktop: return "menubar.dock.rectangle"
         case .custom: return "photo"
+        case .musicVideo: return "play.rectangle"
         }
     }
 
@@ -41,13 +42,14 @@ extension Settings.BackgroundMode {
         case .visualizer: return "Visualiser"
         case .desktop: return "Your wallpaper"
         case .custom: return "Image or video"
+        case .musicVideo: return "Music video"
         }
     }
 
     /// The looks Lunalyr draws, in the order the grid shows them.
     static let generated: [Settings.BackgroundMode] = [.auto, .visualizer, .shader, .pattern, .colourOnly]
     /// The looks that start from the user's own picture.
-    static let own: [Settings.BackgroundMode] = [.desktop, .custom]
+    static let own: [Settings.BackgroundMode] = [.desktop, .custom, .musicVideo]
 
     /// One line on what the type draws, for help tags and onboarding.
     var summary: String {
@@ -59,13 +61,14 @@ extension Settings.BackgroundMode {
         case .visualizer: return "Scenes that move with the music itself, with System audio on."
         case .desktop: return "Keep your own wallpaper and show lyrics and instrumental cues over it."
         case .custom: return "A picture or video of your own behind the lyrics."
+        case .musicVideo: return "The song’s music video behind the lyrics, muted and in time with the song."
         }
     }
 }
 
 /// Every wallpaper type as a tile, the chosen one lit: one click to change
-/// the look. The five Lunalyr draws sit in a row of small tiles, the two
-/// that start from your own picture in a row of wide ones beneath. While
+/// the look. The five Lunalyr draws sit in a row of small tiles, the three
+/// that start from something else (your picture, a file, the song's video) in a row of wide ones beneath. While
 /// power saving draws something other than the choice, a leaf marks the
 /// tile it draws. Imported image or video with nothing imported yet calls
 /// `chooseImport` instead (Settings opens its file panel; the menu opens
