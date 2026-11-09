@@ -20,14 +20,21 @@ When merging, keep every entry and combine duplicate headings.
 - VLC, Swinsian and VOX for music files on this Mac, followed under Automatic like Music and Spotify. Lyrics are looked up from the title, artist and length as for the others; VLC's title line ("Artist - Title") or the file name is split into title and artist.
 - The desktop player's switch shows only the players that are installed, open or playing, and a web player under the service's name. Players without a queue or search show just the song playing.
 - Listen along: with a listen-along relay set (Settings › Share, empty by
-  default, which hides all of it), "Let friends listen along" shares what you
-  play: the song, play and pause, the position and the lyrics' line timing.
-  Friends with Lunalyr follow on their own Spotify (any song) or Music (songs
-  in their library), in time, paused when you pause, and get their shuffle
-  back when they stop. Join from Discord or with a code or link in the
-  menu-bar panel, which shows "Listening along with … · Stop" and how many
-  are listening to you. A song that can't be played offers its song.link
-  page instead.
+  default, which hides all of it; https only, except a relay on this Mac),
+  "Let friends listen along" shares what you play: the song, play and pause,
+  the position, your Discord display name while Discord is on, and, with
+  "Share lyrics with listeners" (on by default), the lyric lines with their
+  timing. Anyone with the link or code can read these, as Settings says.
+  Sharing never sends titles to Apple. Friends with Lunalyr follow on their
+  own Spotify (any song) or Music (songs in their library), in time, and get
+  their shuffle back when they stop. Joining from Discord or with a code or
+  link in the menu-bar panel first asks "Listen along with …?"; nothing
+  connects or plays until they accept. Pausing, a media key, unplugging
+  headphones, sleep, another song or another player pauses following
+  ("Paused · Resume" in the menu-bar panel) and nothing is resumed without a
+  click; a player opened after joining waits for Play; a friend's song is
+  never started while they are paused. A song that can't be played offers
+  its song.link page instead, and a full room says so.
 - Discord: while sharing, the profile shows a Listen along button (the web
   page) beside Get Lunalyr. "Show a Join button on Discord" swaps the buttons
   for a Join party instead, since Discord refuses both at once.
