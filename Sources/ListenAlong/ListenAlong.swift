@@ -6,11 +6,13 @@ import Combine
 /// setting (`listenRelayURL`); with none set, nothing here runs or shows.
 ///
 /// - Sharing ("Let friends listen along", off by default) makes a room on
-///   the relay and sends the song, play/pause and position, and the lyrics'
-///   line timing once per song. Discord gets a Join party or a Listen along
-///   button for it (`DiscordPresence`).
-/// - Following starts from Discord's Join or a code typed in the menu, and
-///   ends on Stop, when the host stops sharing, or on quit.
+///   the relay and sends the song, play/pause and position, the Discord
+///   display name, and (with "Share lyrics with listeners", on by default)
+///   the lyric lines with their timing once per song. Discord gets a Join
+///   party or a Listen along button for it (`DiscordPresence`).
+/// - Following starts from Discord's Join or a code typed in the menu, only
+///   once the user accepts "Listen along with <name>?", and ends on Stop,
+///   when the host stops sharing, or on quit.
 @MainActor
 final class ListenAlong: ObservableObject {
     static let shared = ListenAlong()
@@ -20,8 +22,21 @@ final class ListenAlong: ObservableObject {
     @Published private(set) var host: ListenHost?
     @Published private(set) var follower: ListenFollower?
     /// The Discord user's display name, from Discord's READY, sent as the
-    /// host's name so friends see who they follow.
+    /// host's name so friends see who they follow. Cleared when Discord
+    /// presence is turned off.
     var discordUserName: String?
+    /// "Share lyrics with listeners": the lyric lines go to the relay.
+    private(set) var sharesLyrics = true
+    /// The invitation being asked about, so a second one waits its turn.
+    @Published private(set) var asking: ListenInvite?
+
+    private let sockets: any ListenSocketOpening
+    private let makePlayer: @MainActor () -> any ListenPlayerControl
+    private let confirmer: any ListenJoinConfirming
+    /// Off in a test host: the shared instance never reaches a relay.
+    private let connects: Bool
+    /// Off for tests' own instances: no monitor, timer or quit observer.
+    private let observesPlayback: Bool
 
     private var timer: Timer?
     private var changes: Set<AnyCancellable> = []
@@ -31,7 +46,21 @@ final class ListenAlong: ObservableObject {
     private var started = false
     private var quitObserver: NSObjectProtocol?
 
-    private init() {}
+    private convenience init() {
+        let live = !AppRuntime.isUnitTesting
+        self.init(sockets: LiveListenSockets(), makePlayer: { LiveListenPlayer() }, confirmer: AlertListenJoinConfirmer(),
+                  connects: live, observesPlayback: live)
+    }
+
+    /// Tests make their own, over fake sockets, player and confirmation.
+    init(sockets: any ListenSocketOpening, makePlayer: @escaping @MainActor () -> any ListenPlayerControl,
+         confirmer: any ListenJoinConfirming, connects: Bool, observesPlayback: Bool) {
+        self.sockets = sockets
+        self.makePlayer = makePlayer
+        self.confirmer = confirmer
+        self.connects = connects
+        self.observesPlayback = observesPlayback
+    }
 
     var isAvailable: Bool { base != nil }
     var room: String? { sharing ? host?.room : nil }
@@ -46,13 +75,15 @@ final class ListenAlong: ObservableObject {
     /// What Discord shows for the room, while sharing.
     var discordParty: DiscordPresence.ListenParty? {
         guard let room else { return nil }
-        return DiscordPresence.ListenParty(room: room, listeners: listeners, webURL: webPageURL?.absoluteString)
+        return DiscordPresence.ListenParty(room: room, listeners: listeners, webURL: webPageURL?.absoluteString,
+                                           hostName: discordUserName)
     }
 
     /// Applies the settings. Called by `LunalyrExtras` once it has started.
-    func configure(relay: String, sharing: Bool) {
+    func configure(relay: String, sharing: Bool, sharesLyrics: Bool = true) {
         // A test host never reaches a relay or the user's players.
-        guard !AppRuntime.isUnitTesting else { return }
+        guard connects else { return }
+        self.sharesLyrics = sharesLyrics
         let base = ListenProtocol.base(relay)
         if base != self.base {
             host?.end()
@@ -76,6 +107,7 @@ final class ListenAlong: ObservableObject {
 
     private func startIfNeeded() {
         let needed = base != nil && (sharing || follower != nil)
+        guard observesPlayback else { return }
         if needed, !started {
             started = true
             let monitor = NowPlayingMonitor.shared
@@ -125,16 +157,15 @@ final class ListenAlong: ObservableObject {
             return ListenHostSnapshot(track: nil, playing: false, position: 0, hostName: discordUserName)
         }
         let spotifyId = ListenProtocol.spotifyID(fromURI: current.persistentID)
-        // Apple's catalogue ID, from the search Discord already made; a
-        // Music song is looked up here too. A Spotify song is never sent to
-        // Apple just for this.
-        let lookUp = monitor.activePlayer == .appleMusic
+        // Apple's catalogue ID, only when Discord's cover or song button
+        // already looked the song up: sharing never sends a title to Apple.
         let appleId = CatalogueMatches.shared.match(title: current.title, artist: current.artist, album: current.album,
-                                                    lookUpIfMissing: lookUp)?.trackID
+                                                    lookUpIfMissing: false)?.trackID
         let track = ListenProtocol.Track(title: current.title, artist: current.artist, album: current.album,
                                          duration: current.duration, spotifyId: spotifyId, appleId: appleId, isrc: nil)
         return ListenHostSnapshot(track: track, playing: monitor.isPlaying, position: monitor.playbackTime(),
-                                  lyrics: lyricsTrack == current ? lyrics(for: current) : [], hostName: discordUserName)
+                                  lyrics: sharesLyrics && lyricsTrack == current ? lyrics(for: current) : [],
+                                  hostName: ListenProtocol.cleanHostName(discordUserName))
     }
 
     /// Line timing as the user sees it: shifted by their offsets.
@@ -154,28 +185,67 @@ final class ListenAlong: ObservableObject {
 
     // MARK: Following
 
-    /// Follows a room: from Discord's Join secret or a typed code or link.
+    /// Asks "Listen along with <name>?" for a Discord Join secret, and
+    /// follows only if the user accepts. False when it isn't a room.
     @discardableResult
-    func join(_ input: String) -> Bool {
-        guard let base, let room = ListenProtocol.room(fromInput: input) else { return false }
-        if room == host?.room { return false }   // one's own room
-        if follower?.room == room, follower?.phase == .following { return true }
+    func requestJoin(discordSecret secret: String) -> Bool {
+        guard let invite = ListenProtocol.joinInvite(fromSecret: secret) else { return false }
+        return requestJoin(ListenInvite(room: invite.room, hostName: invite.hostName))
+    }
+
+    /// The same for a code or link typed in the menu.
+    @discardableResult
+    func requestJoin(code: String) -> Bool {
+        guard let room = ListenProtocol.room(fromInput: code) else { return false }
+        return requestJoin(ListenInvite(room: room, hostName: nil))
+    }
+
+    private func requestJoin(_ invite: ListenInvite) -> Bool {
+        guard base != nil else { return false }
+        if invite.room == host?.room { return false }   // one's own room
+        if follower?.room == invite.room { return true }
+        guard asking == nil else { return true }
+        asking = invite
+        Task { [weak self] in
+            guard let self else { return }
+            let accepted = await self.confirmer.confirm(invite)
+            self.asking = nil
+            if accepted { self.join(room: invite.room) }
+        }
+        return true
+    }
+
+    /// Follows a room the user has agreed to join. Nothing connects or
+    /// plays before this.
+    private func join(room: String) {
+        guard let base, room != host?.room else { return }
+        if follower?.room == room, follower?.phase == .following { return }
         stopFollowing()
-        let follower = ListenFollower(room: room, base: base, player: LiveListenPlayer())
-        follower.onEnd = { [weak self] phase in
-            guard let self, let current = self.follower, current === follower else { return }
+        let follower = ListenFollower(room: room, base: base, sockets: sockets, player: makePlayer())
+        follower.onEnd = { [weak self, weak follower] phase in
+            guard let self, let follower, let current = self.follower, current === follower else { return }
             let name = current.displayName
+            let connected = current.everConnected
             self.follower = nil
             self.followerChanges = nil
             self.startIfNeeded()
-            LunalyrExtras.shared.post(phase == .ended ? "\(name.prefix(1).uppercased() + name.dropFirst()) stopped sharing"
-                                                       : "That listen-along has ended", symbol: "person.2.slash")
+            LunalyrExtras.shared.post(Self.endNote(phase, name: name, connected: connected), symbol: "person.2.slash")
         }
         self.follower = follower
         followerChanges = follower.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         follower.start()
         startIfNeeded()
-        return true
+    }
+
+    /// What the wallpaper says when following ends without a Stop.
+    static func endNote(_ phase: ListenFollower.Phase, name: String, connected: Bool) -> String {
+        switch phase {
+        case .ended: return "\(name.prefix(1).uppercased() + name.dropFirst()) stopped sharing"
+        case .full: return "That listen-along is full"
+        case .notFound where !connected:
+            return "Couldn\u{2019}t find that listen-along \u{2014} it may have ended, or uses another relay"
+        default: return "That listen-along has ended"
+        }
     }
 
     func stopFollowing() {
@@ -196,5 +266,41 @@ final class ListenAlong: ObservableObject {
             }
             follower.stop()
         }
+    }
+}
+
+/// An invitation to follow a room, before the user has said yes.
+struct ListenInvite: Equatable, Sendable {
+    var room: String
+    /// The host's display name, from a Discord join secret; nil for a code.
+    var hostName: String?
+
+    var question: String {
+        if let hostName { return "Listen along with \(hostName)?" }
+        return "Listen along with room \(room)?"
+    }
+
+    static let explanation = "Lunalyr will play what they play on your Music or Spotify, in time with them. Pausing or changing the song yourself pauses listening along until you resume it from the menu bar."
+    static let acceptTitle = "Listen Along"
+    static let declineTitle = "Not Now"
+}
+
+/// Asks the user about an invitation. Injected: tests answer it themselves.
+@MainActor
+protocol ListenJoinConfirming {
+    func confirm(_ invite: ListenInvite) async -> Bool
+}
+
+/// An alert in front of everything; only "Listen Along" accepts.
+struct AlertListenJoinConfirmer: ListenJoinConfirming {
+    func confirm(_ invite: ListenInvite) async -> Bool {
+        guard !AppRuntime.isUnitTesting else { return false }
+        let alert = NSAlert()
+        alert.messageText = invite.question
+        alert.informativeText = ListenInvite.explanation
+        alert.addButton(withTitle: ListenInvite.acceptTitle)
+        alert.addButton(withTitle: ListenInvite.declineTitle).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }

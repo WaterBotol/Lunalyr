@@ -120,6 +120,40 @@ final class ListenProtocolTests: XCTestCase {
                        "ws://127.0.0.1:8787/rooms/abc123defg/listen")
     }
 
+    func testOnlyARelayOnThisMacMayUsePlainHTTP() {
+        // The host key goes in the socket address: never in cleartext off this Mac.
+        XCTAssertNil(ListenProtocol.base("http://relay.example.com"))
+        XCTAssertNil(ListenProtocol.base("HTTP://relay.example.com"))
+        XCTAssertNil(ListenProtocol.base("http://localhost.example.com"))
+        XCTAssertNil(ListenProtocol.base("http://127.0.0.1.example.com"))
+        XCTAssertNil(ListenProtocol.base("http://10.0.0.2:8787"))
+        XCTAssertNotNil(ListenProtocol.base("http://localhost:8787"))
+        XCTAssertNotNil(ListenProtocol.base("http://relay.localhost:8787"))
+        XCTAssertNotNil(ListenProtocol.base("http://[::1]:8787"))
+        XCTAssertNotNil(ListenProtocol.base("http://127.0.0.1"))
+        XCTAssertNotNil(ListenProtocol.base("https://relay.example.com"))
+        XCTAssertEqual(ListenProtocol.base("relay.example.com")?.scheme, "https")
+    }
+
+    func testJoinSecretsCarryTheHostsNameCleanedAndCapped() throws {
+        XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: "Tommy"), "abc123defg|Tommy")
+        XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: "  "), "abc123defg")
+        XCTAssertEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: nil), "abc123defg")
+        let invite = try XCTUnwrap(ListenProtocol.joinInvite(fromSecret: "abc123defg|Tommy"))
+        XCTAssertEqual(invite.room, "abc123defg")
+        XCTAssertEqual(invite.hostName, "Tommy")
+        let bare = try XCTUnwrap(ListenProtocol.joinInvite(fromSecret: "abc123defg"))
+        XCTAssertNil(bare.hostName, "an older build's secret is just the room")
+        XCTAssertNil(ListenProtocol.joinInvite(fromSecret: "nope|Tommy"))
+        XCTAssertNil(ListenProtocol.joinInvite(fromSecret: ""))
+        let long = String(repeating: "x", count: 200)
+        let capped = try XCTUnwrap(ListenProtocol.cleanHostName(long))
+        XCTAssertEqual(capped.count, ListenProtocol.maximumHostNameLength)
+        XCTAssertLessThanOrEqual(ListenProtocol.joinSecret(room: "abc123defg", hostName: long).count, 128, "Discord's secret limit")
+        XCTAssertEqual(ListenProtocol.cleanHostName("To\u{0}m\nmy"), "Tommy")
+        XCTAssertEqual(ListenProtocol.joinInvite(fromSecret: "abc123defg|A|B")?.hostName, "A|B")
+    }
+
     // MARK: Timing
 
     func testPositionCountsTheRelaysAgeAndTheTimeSinceArrival() {
@@ -270,6 +304,8 @@ final class DiscordListenAlongTests: XCTestCase {
         XCTAssertEqual(sentParty["id"] as? String, "abc123defg")
         XCTAssertEqual(sentParty["size"] as? [Int], [3, 51])
         XCTAssertEqual(activity["secrets"] as? [String: String], ["join": "abc123defg"])
+        let named = DiscordPresence.ListenParty(room: "abc123defg", listeners: 2, webURL: nil, hostName: "Tommy")
+        XCTAssertEqual(self.activity(party: named, join: true)["secrets"] as? [String: String], ["join": "abc123defg|Tommy"])
         XCTAssertNotNil(DiscordPresence.frame(.frame, DiscordPresence.setActivityPayload(activity, pid: 1, nonce: "n")))
     }
 
@@ -314,14 +350,18 @@ final class ListenMatchingTests: XCTestCase {
     }
 
     func testScriptsQuoteWhatTheyAreGivenAndNeverLaunchAPlayer() {
-        let play = LiveListenPlayer.playScript(.library(persistentID: "A\"B"), at: 63.25, playing: false).source
+        let play = LiveListenPlayer.playScript(.library(persistentID: "A\"B"), at: 63.25).source
         XCTAssertTrue(play.hasPrefix("if application id \"com.apple.Music\" is not running then return \"notRunning\""))
         XCTAssertTrue(play.contains(#"whose persistent ID is "A\"B""#))
         XCTAssertTrue(play.contains("set player position to 63.250"))
-        XCTAssertTrue(play.contains("\npause"))
-        let spotify = LiveListenPlayer.playScript(.spotify(id: "abc"), at: 1, playing: true).source
+        let spotify = LiveListenPlayer.playScript(.spotify(id: "abc"), at: 1).source
         XCTAssertTrue(spotify.contains(#"play track "spotify:track:abc""#))
+        // No script starts a song only to pause it (that is heard).
+        XCTAssertFalse(play.contains("\npause"))
         XCTAssertFalse(spotify.contains("\npause"))
+        let quit = LiveListenPlayer.quitShuffleScript(.appleMusic).source
+        XCTAssertTrue(quit.contains("with timeout of 1 seconds"))
+        XCTAssertTrue(quit.contains("set shuffle enabled to true"))
         let search = LiveListenPlayer.librarySearchScript("Back \"Last\" Stop").source
         XCTAssertTrue(search.contains(#"for "Back \"Last\" Stop" only songs"#))
         XCTAssertTrue(LiveListenPlayer.setShuffleScript(true, .spotify).source.contains("set shuffling to true"))
@@ -379,7 +419,7 @@ final class ListenSessionTests: XCTestCase {
 
         socket.push(stateText(position: 60, age: 500, lyrics: [.init(start: 1, end: 2, text: "line")]))
         await waitUntil { player.log.contains { $0.hasPrefix("play spotify") } }
-        XCTAssertEqual(player.log.first { $0.hasPrefix("play") }, "play spotify(id: \"0VjIjW4GlUZAMYd2vXMi3b\") at 60.5 playing")
+        XCTAssertEqual(player.log.first { $0.hasPrefix("play") }, "play spotify(id: \"0VjIjW4GlUZAMYd2vXMi3b\") at 60.5")
         XCTAssertEqual(follower.phase, .following)
         XCTAssertEqual(follower.displayName, "Tommy")
         XCTAssertEqual(follower.lyrics.count, 1)
@@ -416,7 +456,8 @@ final class ListenSessionTests: XCTestCase {
         await waitUntil { player.current != nil && player.log.contains("shuffle off") }
         clock.advance(5)
         socket.push(stateText(playing: false, position: 15))
-        await waitUntil { player.log.contains("pause") }
+        await waitUntil { player.log.contains("pause spotify") }
+        XCTAssertNil(follower.hold, "Lunalyr's own pause is not the user's")
 
         socket.push(#"{"type":"ended"}"#)
         await waitUntil { endedWith == .ended }
@@ -478,7 +519,7 @@ final class ListenSessionTests: XCTestCase {
         XCTAssertFalse(player.log.contains { $0.hasPrefix("play") })
     }
 
-    func testWithNoPlayerOpenItWaitsAndPlaysOnceOneIs() async throws {
+    func testWithNoPlayerOpenItWaitsAndOpeningOneNeedsAPlayClick() async throws {
         let player = FakeListenPlayer()
         player.kind = nil
         let (follower, sockets) = makeFollower(player, clock: ListenTestClock())
@@ -486,14 +527,20 @@ final class ListenSessionTests: XCTestCase {
         try XCTUnwrap(sockets.opened.first).push(stateText(position: 10))
         await waitUntil { follower.note == "Open Music or Spotify to listen along" }
         player.kind = .spotify
-        follower.sync()
-        await waitUntil { player.log.contains { $0.hasPrefix("play spotify") } }
+        for _ in 0..<3 { follower.sync() }
+        try await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(follower.hold, .ready)
         XCTAssertNil(follower.note)
+        XCTAssertFalse(player.everPlayed, "opening a player never starts the host's song by itself")
+
+        follower.resume()
+        await waitUntil { player.log.contains { $0.hasPrefix("play spotify") } }
+        XCTAssertNil(follower.hold)
     }
 
     func testTheLivePlayerSendsNothingFromATestHost() async {
         let live = LiveListenPlayer()
-        let played = await live.play(.spotify(id: "abc"), at: 1, playing: true)
+        let played = await live.play(.spotify(id: "abc"), at: 1)
         XCTAssertFalse(played)
         let shuffle = await live.shuffle(.appleMusic)
         XCTAssertNil(shuffle)

@@ -16,6 +16,14 @@ enum ListenPlayTarget: Equatable, Sendable {
     case spotify(id: String)
     case library(persistentID: String)
 
+    /// The only player a command for this song may go to.
+    var kind: PlayerKind {
+        switch self {
+        case .spotify: return .spotify
+        case .library: return .appleMusic
+        }
+    }
+
     /// Whether the player is on this song now.
     func matches(_ reading: ListenPlayerReading) -> Bool {
         switch self {
@@ -43,9 +51,13 @@ protocol ListenPlayerControl: AnyObject {
     /// The service the follower listens on: the one playing, or the one open.
     var kind: PlayerKind? { get }
     func reading() -> ListenPlayerReading?
-    func play(_ target: ListenPlayTarget, at position: Double, playing: Bool) async -> Bool
+    /// Starts `target` at `position`, playing. Never called while the host
+    /// is paused: a song is never started just to be paused again.
+    func play(_ target: ListenPlayTarget, at position: Double) async -> Bool
     func seek(to position: Double) async
-    func setPlaying(_ playing: Bool) async
+    /// Plays or pauses `kind` only -- the player the followed song was
+    /// started on -- and never whichever player happens to be active.
+    func setPlaying(_ playing: Bool, on kind: PlayerKind) async
     func shuffle(_ kind: PlayerKind) async -> Bool?
     func setShuffle(_ on: Bool, _ kind: PlayerKind) async
     func searchLibrary(title: String) async -> [LibraryCandidate]
@@ -89,6 +101,12 @@ enum ListenTrackMatching {
 
 /// The listening side: follows one room's host on the follower's own
 /// service -- the same song, at the same moment, paused when they pause.
+///
+/// The follower's player stays the user's. Lunalyr remembers what it last
+/// told the player to do; any play-state or song change it didn't make (a
+/// pause, a media key, headphones unplugged, sleep, another song, another
+/// player) pauses following (`hold == .paused`, "Paused · Resume" in the
+/// menu) and nothing is asserted again until the user clicks Resume.
 @MainActor
 final class ListenFollower: ObservableObject {
     enum Phase: Equatable {
@@ -97,10 +115,22 @@ final class ListenFollower: ObservableObject {
         case ended
         /// The room is unknown or gone.
         case notFound
+        /// The room has the most listeners it takes.
+        case full
+    }
+
+    /// Why following is on hold: nothing is sent to the player until the
+    /// user clicks.
+    enum Hold: Equatable {
+        /// A player opened after the join had to wait for one: Play starts it.
+        case ready
+        /// The user paused or changed the music themselves: Resume.
+        case paused
     }
 
     @Published private(set) var phase: Phase = .connecting
     @Published private(set) var hostName: String?
+    @Published private(set) var hold: Hold?
     /// A short note: the song can't be played here, no player is open.
     @Published private(set) var note: String?
     @Published private(set) var lyrics: [ListenProtocol.LyricLine] = []
@@ -114,6 +144,15 @@ final class ListenFollower: ObservableObject {
     static let tickInterval: TimeInterval = 2
     /// Seconds after a command before the player's own reading is trusted.
     static let settleTime: TimeInterval = 3
+    /// A song that stops matching this close to the host's end ran out on
+    /// its own (a library copy can be up to 10 s shorter), not a skip.
+    static let naturalEndMargin: Double = 12
+
+    /// What Lunalyr last told the player: the song, and playing or paused.
+    struct Expectation: Equatable {
+        var target: ListenPlayTarget
+        var playing: Bool
+    }
 
     private let socketURL: URL?
     private let sockets: any ListenSocketOpening
@@ -125,12 +164,16 @@ final class ListenFollower: ObservableObject {
     private var failures = 0
     private var latest: ListenProtocol.State?
     private var receivedAt: TimeInterval = 0
+    /// The host's song on this Mac's service, once found.
     private(set) var target: ListenPlayTarget?
+    /// What the player was last told; nil until Lunalyr has started a song.
+    private(set) var expected: Expectation?
     /// The song being matched, so a heartbeat during the lookup doesn't
     /// start another.
     private var matching: ListenProtocol.Track?
     private var lastCommandAt: TimeInterval = -.infinity
-    /// No player was open for the song: tried again once one is.
+    /// No player was open for the song: once one is, following waits for
+    /// a Play click (`Hold.ready`) rather than starting by itself.
     private var waitingForPlayer = false
     private var savedShuffle: (kind: PlayerKind, on: Bool)?
     private var stopped = false
@@ -147,10 +190,11 @@ final class ListenFollower: ObservableObject {
     }
 
     var displayName: String {
-        let name = hostName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return name.isEmpty ? "a friend" : name
+        ListenProtocol.cleanHostName(hostName) ?? "a friend"
     }
 
+    /// Connects. Called once the user has accepted the invitation, which is
+    /// their Play click for the first song.
     func start() {
         connect()
     }
@@ -164,7 +208,8 @@ final class ListenFollower: ObservableObject {
             while !Task.isCancelled {
                 do {
                     let text = try await socket.receive()
-                    guard let self, let incoming = ListenProtocol.decode(text) else { continue }
+                    guard let self else { return }
+                    guard let incoming = ListenProtocol.decode(text) else { continue }
                     self.failures = 0
                     self.receive(incoming)
                 } catch {
@@ -178,6 +223,10 @@ final class ListenFollower: ObservableObject {
     private func socketFailed(_ failed: any ListenSocket) {
         guard socket === failed, !stopped else { return }
         socket = nil
+        if failed.closeCode == ListenProtocol.roomFullCloseCode {
+            finish(.full)
+            return
+        }
         if failed.isUnknownRoom {
             finish(.notFound)
             return
@@ -192,6 +241,9 @@ final class ListenFollower: ObservableObject {
         }
     }
 
+    /// Whether a state ever arrived: an unknown room then means it ended.
+    var everConnected: Bool { latest != nil }
+
     /// One message from the relay.
     func receive(_ incoming: ListenProtocol.Incoming) {
         guard !stopped else { return }
@@ -205,16 +257,17 @@ final class ListenFollower: ObservableObject {
     private func apply(_ state: ListenProtocol.State) {
         let wasConnecting = phase == .connecting
         phase = .following
-        if let name = state.host?.name { hostName = name }
-        let previous = latest
+        if let name = ListenProtocol.cleanHostName(state.host?.name) { hostName = name }
         latest = state
         receivedAt = clock()
-        if wasConnecting { Task { await self.saveShuffle() } }
+        if wasConnecting, hold == nil { Task { await self.saveShuffle() } }
         guard let incoming = state.track else {
             track = nil
             lyrics = []
             target = nil
-            if previous?.playing == true { command { await $0.player.setPlaying(false) } }
+            note = nil
+            songPageURL = nil
+            sync()
             return
         }
         if let lines = state.lyrics { lyrics = lines }
@@ -229,10 +282,12 @@ final class ListenFollower: ObservableObject {
         note = nil
         songPageURL = nil
         waitingForPlayer = false
-        startTrack(incoming)
+        // On hold, the song is looked for when the user resumes.
+        if hold == nil { startTrack(incoming) }
     }
 
-    /// Finds the host's song on the follower's service and plays it.
+    /// Finds the host's song on the follower's service; `sync` plays it
+    /// once the host is playing.
     private func startTrack(_ song: ListenProtocol.Track) {
         guard matching.map({ !$0.isSameSong(as: song) }) ?? true else { return }
         matching = song
@@ -241,20 +296,17 @@ final class ListenFollower: ObservableObject {
             let found = await self.findTarget(for: song)
             guard !self.stopped, let current = self.track, current.isSameSong(as: song) else { self.matching = nil; return }
             self.matching = nil
+            guard self.hold == nil else { return }
             guard let found else {
                 self.waitingForPlayer = self.player.kind == nil
                 self.note = Self.unavailableNote(for: song, on: self.player.kind)
                 self.songPageURL = self.player.kind == nil ? nil : Self.songPage(for: song)
+                // A song still playing from before is paused, not left on.
+                self.sync()
                 return
             }
             self.target = found
-            guard let state = self.latest else { return }
-            let position = ListenClock.position(of: state, receivedAt: self.receivedAt, now: self.clock())
-            self.lastCommandAt = self.clock()
-            if await !self.player.play(found, at: position, playing: state.playing) {
-                self.note = "Couldn\u{2019}t play \u{201C}\(song.title)\u{201D} \u{2014} still following"
-            }
-            self.lastCommandAt = self.clock()
+            self.sync()
         }
     }
 
@@ -296,33 +348,94 @@ final class ListenFollower: ObservableObject {
             .map { .library(persistentID: $0.persistentID) }
     }
 
-    /// Brings the player back in line: the song, play or pause, and the
-    /// position when it is more than `ListenDrift.threshold` out.
+    /// Brings the player in line with the host -- the song, play or pause,
+    /// and the position when it is more than `ListenDrift.threshold` out --
+    /// after first checking that the player is still where Lunalyr left it.
     func sync() {
-        if !stopped, waitingForPlayer, target == nil, matching == nil, player.kind != nil, let track {
-            waitingForPlayer = false
-            note = nil
-            Task { await self.saveShuffle() }
-            startTrack(track)
+        guard !stopped, hold == nil, matching == nil, let state = latest else { return }
+        if waitingForPlayer {
+            // A player opened: wait for the user's Play, never start by itself.
+            if player.kind != nil {
+                waitingForPlayer = false
+                note = nil
+                hold = .ready
+            }
             return
         }
-        guard !stopped, let state = latest, let target, matching == nil else { return }
         let now = clock()
         guard now - lastCommandAt >= Self.settleTime else { return }
-        let expected = ListenClock.position(of: state, receivedAt: receivedAt, now: now)
-        guard let reading = player.reading() else { return }
-        guard target.matches(reading) else {
-            // The player moved on (the song ended early, or a skip): back.
-            command { _ = await $0.player.play(target, at: expected, playing: state.playing) }
+        let hostPosition = ListenClock.position(of: state, receivedAt: receivedAt, now: now)
+        if let expected {
+            let reading = player.reading()
+            if let reading, expected.target.matches(reading), reading.playing == expected.playing {
+                // Still where Lunalyr left it.
+            } else if expected.playing, state.playing, ranOut(hostPosition: hostPosition) {
+                // The song ended a little before the host's: the host's next
+                // one is started when it comes, not this one again.
+                self.expected = nil
+                self.target = nil
+                return
+            } else {
+                pauseFollowing()
+                return
+            }
+        }
+        if let target, expected?.target != target {
+            // Never started while the host is paused (that would be heard
+            // before the pause): it starts when they play.
+            if state.playing {
+                expected = Expectation(target: target, playing: true)
+                command { await $0.player.play(target, at: hostPosition) } failed: { follower in
+                    // Not tried again until the host's next song.
+                    follower.expected = nil
+                    follower.target = nil
+                    follower.note = "Couldn\u{2019}t play \u{201C}\(follower.track?.title ?? "the song")\u{201D} \u{2014} still following"
+                }
+                return
+            }
+        }
+        guard let current = expected else { return }
+        let shouldPlay = state.playing && current.target == target
+        if current.playing != shouldPlay {
+            expected?.playing = shouldPlay
+            let kind = current.target.kind
+            command { await $0.player.setPlaying(shouldPlay, on: kind) }
             return
         }
-        if reading.playing != state.playing {
-            command { await $0.player.setPlaying(state.playing) }
-            return
-        }
-        if state.playing, case .seek(let to) = ListenDrift.decide(expected: expected, actual: reading.position) {
+        if shouldPlay, let reading = player.reading(),
+           case .seek(let to) = ListenDrift.decide(expected: hostPosition, actual: reading.position) {
             command { await $0.player.seek(to: to) }
         }
+    }
+
+    /// Whether the followed song is at (or past) its end on the host.
+    private func ranOut(hostPosition: Double) -> Bool {
+        guard let duration = track?.duration, duration > 0 else { return false }
+        return hostPosition >= duration - Self.naturalEndMargin
+    }
+
+    /// The user took the player back: stop sending it anything until they
+    /// click Resume, and give their shuffle back.
+    private func pauseFollowing() {
+        hold = .paused
+        expected = nil
+        note = nil
+        restoreShuffle()
+    }
+
+    /// The user's Play or Resume click: following starts again from the
+    /// host's current song and moment.
+    func resume() {
+        guard !stopped, hold != nil else { return }
+        hold = nil
+        note = nil
+        songPageURL = nil
+        expected = nil
+        target = nil
+        waitingForPlayer = false
+        lastCommandAt = -.infinity
+        Task { await self.saveShuffle() }
+        if let track { startTrack(track) } else { sync() }
     }
 
     private func command(_ work: @escaping @MainActor (ListenFollower) async -> Void) {
@@ -334,13 +447,33 @@ final class ListenFollower: ObservableObject {
         }
     }
 
+    private func command(_ work: @escaping @MainActor (ListenFollower) async -> Bool,
+                         failed: @escaping @MainActor (ListenFollower) -> Void) {
+        lastCommandAt = clock()
+        Task { [weak self] in
+            guard let self else { return }
+            let ok = await work(self)
+            self.lastCommandAt = self.clock()
+            if !ok, !self.stopped { failed(self) }
+        }
+    }
+
     private func saveShuffle() async {
         guard savedShuffle == nil, let kind = player.kind, let on = await player.shuffle(kind) else { return }
-        guard !stopped else { return }
+        guard !stopped, hold != .paused, savedShuffle == nil else { return }
         savedShuffle = (kind, on)
         // Off while following, so a song that ends before the host's next
         // state doesn't jump somewhere random.
         if on { await player.setShuffle(false, kind) }
+    }
+
+    private func restoreShuffle() {
+        guard let saved = savedShuffle else { return }
+        savedShuffle = nil
+        if saved.on {
+            let player = player
+            Task { await player.setShuffle(true, saved.kind) }
+        }
     }
 
     private func finish(_ phase: Phase) {
@@ -358,10 +491,7 @@ final class ListenFollower: ObservableObject {
         reconnectTask?.cancel()
         socket?.close()
         socket = nil
-        if let saved = savedShuffle, saved.on {
-            let player = player
-            Task { await player.setShuffle(true, saved.kind) }
-        }
+        restoreShuffle()
     }
 
     /// Whose shuffle to restore while the app quits, when nothing can be awaited.

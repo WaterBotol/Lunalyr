@@ -67,7 +67,10 @@ final class ListenHost: ObservableObject {
             creating = false
             guard !ended else { return }
             guard let reply, (200..<300).contains(reply.1), let created = ListenProtocol.roomCreated(from: reply.0) else {
-                retryLater { $0.createRoom() }
+                // Rate limited: wait as long as the relay asks, not the
+                // usual back-off that starts at a second.
+                let wait = reply?.1 == 429 ? ListenProtocol.roomCreationRetryAfter : nil
+                retryLater(after: wait) { $0.createRoom() }
                 return
             }
             room = created.room
@@ -105,8 +108,9 @@ final class ListenHost: ObservableObject {
         socket = nil
         connected = false
         listeners = 0
-        if failed.isUnknownRoom {
-            // The room expired: a new one, with a new code.
+        if failed.isUnknownRoom || failed.closeCode == ListenProtocol.badKeyCloseCode {
+            // The room expired, or no longer takes this key: a new one,
+            // with a new code, rather than the same key every minute.
             room = nil
             hostKey = nil
             retryLater { host in
@@ -117,9 +121,13 @@ final class ListenHost: ObservableObject {
         }
     }
 
-    private func retryLater(_ work: @escaping @MainActor (ListenHost) -> Void) {
+    /// Seconds before the pending retry; tests read it.
+    private(set) var retryDelay: TimeInterval?
+
+    private func retryLater(after wait: TimeInterval? = nil, _ work: @escaping @MainActor (ListenHost) -> Void) {
         failures += 1
-        let delay = ListenBackoff.delay(afterFailures: failures)
+        let delay = max(wait ?? 0, ListenBackoff.delay(afterFailures: failures))
+        retryDelay = delay
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1e9))

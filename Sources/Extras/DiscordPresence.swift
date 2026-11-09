@@ -111,6 +111,9 @@ final class DiscordPresence {
         var listeners: Int
         /// The relay's web listen-along page for the room.
         var webURL: String?
+        /// The user's Discord display name, carried in the join secret so a
+        /// friend is asked "Listen along with <name>?".
+        var hostName: String? = nil
     }
 
     /// Party size: the host plus up to 50 listeners (the relay's limit).
@@ -167,7 +170,7 @@ final class DiscordPresence {
             // currently be sent with buttons"): the Join replaces them.
             activity["party"] = ["id": party.room,
                                  "size": [min(partyCapacity, max(1, party.listeners + 1)), partyCapacity]] as [String: Any]
-            activity["secrets"] = ["join": party.room]
+            activity["secrets"] = ["join": ListenProtocol.joinSecret(room: party.room, hostName: party.hostName)]
         } else {
             var buttons: [[String: String]] = []
             if let web = playing.party?.webURL {
@@ -343,6 +346,8 @@ final class DiscordPresence {
     }
 
     func stop() {
+        // The name goes with the presence: sharing doesn't send it after.
+        ListenAlong.shared.discordUserName = nil
         guard running else { return }
         running = false
         timer?.invalidate()
@@ -420,8 +425,8 @@ final class DiscordPresence {
             let listen = ListenAlong.shared
             if !listen.isAvailable {
                 extras?.post("To listen along, add a listen-along relay in Settings › Share", symbol: "person.2")
-            } else {
-                listen.join(secret)
+            } else if !listen.requestJoin(discordSecret: secret) {
+                extras?.post("That Discord invite isn\u{2019}t a listen-along room", symbol: "person.2.slash")
             }
         case .joinRequest(let userID, _):
             guard ListenAlong.shared.room != nil else { return }
@@ -508,6 +513,20 @@ final class DiscordTransport: @unchecked Sendable {
     /// keeps them; while there are any, the socket is read continuously.
     private var subscriptions: [String] = []
     private var listening = false
+    /// Bumped on every start, so a stop and start inside one read interval
+    /// leaves one loop, not two.
+    private var generation = 0
+    /// Read loops running; tests read it.
+    private var loops = 0
+    /// Off in tests: the loop never touches Discord's socket.
+    private let connects: Bool
+
+    init(connects: Bool = !AppRuntime.isUnitTesting) {
+        self.connects = connects
+    }
+
+    /// How many read loops are running (one at most).
+    var runningLoops: Int { queue.sync { loops } }
     /// Called on the transport's queue for each event Discord sends.
     var onEvent: (@Sendable (DiscordPresence.Event) -> Void)?
 
@@ -520,8 +539,10 @@ final class DiscordTransport: @unchecked Sendable {
             subscriptions = events
             guard !listening else { return }
             listening = true
+            generation += 1
             if fd >= 0 { subscribe() }
-            readLoop()
+            loops += 1
+            readLoop(generation)
         }
     }
 
@@ -532,14 +553,14 @@ final class DiscordTransport: @unchecked Sendable {
         }
     }
 
-    private func readLoop() {
-        guard listening else { return }
+    private func readLoop(_ token: Int) {
+        guard listening, token == generation else { loops -= 1; return }
         if fd < 0 {
-            if Date().timeIntervalSince(lastFailure) >= DiscordPresence.reconnectInterval, !connect() { lastFailure = Date() }
+            if connects, Date().timeIntervalSince(lastFailure) >= DiscordPresence.reconnectInterval, !connect() { lastFailure = Date() }
         } else {
             drain()
         }
-        queue.asyncAfter(deadline: .now() + Self.readInterval) { [self] in readLoop() }
+        queue.asyncAfter(deadline: .now() + Self.readInterval) { [self] in readLoop(token) }
     }
 
     private func subscribe() {

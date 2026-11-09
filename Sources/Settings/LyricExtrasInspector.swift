@@ -279,9 +279,12 @@ struct ShareInspector: View {
             if extras.listenAlongAvailable {
                 Toggle("Let friends listen along", isOn: $extras.listenSharing)
                 InspectorCaption("Friends with Lunalyr play what you play, in time, on their own Music or Spotify.",
-                                 more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify or Apple ID, play and pause, the position and the lyrics\u{2019} line timing, and keeps only the latest. Off when you turn this off or quit.")
+                                 more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify ID, play and pause, the position, your Discord display name (while Discord is on) and, with Share lyrics with listeners, the lyric lines with their timing. Apple\u{2019}s ID is included only when the Discord cover or song button already looked the song up; sharing never sends titles to Apple. The relay keeps only the latest state, and anyone with the link or code can read it. Off when you turn this off or quit.")
                 if extras.listenSharing {
                     ListenSharingStatus(listen: .shared)
+                    Toggle("Share lyrics with listeners", isOn: $extras.listenSharesLyrics)
+                    InspectorCaption("Sends the lyric text with its timing, so friends and the web page can show it.",
+                                     more: "The lines you see, with their timing, go to your relay once per song. Anyone with the link or code can read them. Turn this off to share only the song.")
                     if extras.showsDiscordPresence {
                         Toggle("Show a Join button on Discord", isOn: $extras.discordOffersJoin)
                         InspectorCaption("Replaces your Discord buttons while you share.",
