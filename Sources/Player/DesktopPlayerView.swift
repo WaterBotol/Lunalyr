@@ -212,17 +212,64 @@ struct DesktopPlayerView: View {
     }
 }
 
+private struct StripOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// Turns the mouse wheel's up and down into sideways scrolling over the
+/// panel's strip, which only listens to sideways movement on its own.
+private final class WheelBridge {
+    private var monitor: Any?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard let window = event.window, window.title == ControlPanelController.windowTitle,
+                  event.scrollingDeltaX == 0, event.scrollingDeltaY != 0, !event.hasPreciseScrollingDeltas,
+                  var view = window.contentView?.hitTest(event.locationInWindow) else { return event }
+            while !(view is NSScrollView) {
+                guard let up = view.superview else { return event }
+                view = up
+            }
+            guard let scroll = view as? NSScrollView, let document = scroll.documentView else { return event }
+            let clip = scroll.contentView
+            let widest = max(0, document.frame.width - clip.bounds.width)
+            let x = min(max(clip.bounds.origin.x - event.scrollingDeltaY * 24, 0), widest)
+            clip.setBoundsOrigin(NSPoint(x: x, y: clip.bounds.origin.y))
+            scroll.reflectScrolledClipView(clip)
+            return nil
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    deinit { stop() }
+}
+
 /// A row of covers that scrolls sideways with the trackpad or the wheel,
-/// opening on the song that is playing. Click a cover to play it.
+/// opening on the song that is playing. Click a cover to play it. The faster
+/// it scrolls, the more the covers bend, blur and brighten, like light
+/// passing through thick glass.
 private struct CoverStrip: View {
     let items: [PlayerQueueItem]
     let tint: Color
     let onTap: (PlayerQueueItem) -> Void
     @State private var focus: String?
+    @State private var velocity: CGFloat = 0
+    @State private var lastOffset: CGFloat?
+    @State private var lastTime: TimeInterval = 0
+    @State private var decay: Task<Void, Never>?
+    @State private var wheel = WheelBridge()
 
     private var currentID: String? { items.first(where: \.isCurrent)?.id ?? items.first?.id }
 
     var body: some View {
+        let bend = max(-1, min(1, velocity / 1800))
+        let strength = abs(bend)
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 14) {
                 ForEach(items) { item in
@@ -245,20 +292,56 @@ private struct CoverStrip: View {
                     .buttonStyle(.plain)
                     .id(item.id)
                     .scrollTransition(axis: .horizontal) { content, phase in
-                        content
-                            .scaleEffect(phase.isIdentity ? 1 : 0.84)
+                        let edge = abs(phase.value)
+                        return content
+                            .scaleEffect((phase.isIdentity ? 1 : 0.84) - 0.1 * strength * edge)
                             .opacity(phase.isIdentity ? 1 : 0.6)
-                            .rotation3DEffect(.degrees(phase.value * -28), axis: (0, 1, 0), perspective: 0.6)
+                            .rotation3DEffect(.degrees(phase.value * (-28 - 34 * strength)), axis: (0, 1, 0), perspective: 0.6)
+                            // Squeezed towards the middle, like a lens, and
+                            // blurred and lit by how fast it moves.
+                            .offset(x: -phase.value * strength * 34)
+                            .blur(radius: strength * (2 + 5 * edge))
+                            .brightness(strength * 0.12 * (1 - edge))
+                            .saturation(1 + strength * 0.25)
                     }
                 }
             }
             .scrollTargetLayout()
             .padding(.horizontal, (DesktopPlayerView.width - DesktopPlayerView.cover) / 2)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: StripOffsetKey.self, value: proxy.frame(in: .named("strip")).minX)
+            })
         }
+        .coordinateSpace(name: "strip")
+        .onPreferenceChange(StripOffsetKey.self) { measured(offset: $0) }
         .scrollPosition(id: $focus, anchor: .center)
         .scrollTargetBehavior(.viewAligned)
-        .onAppear { focus = currentID }
-        .onChange(of: currentID) { _, id in withAnimation(.smooth(duration: 0.4)) { focus = id } }
+        .task(id: "\(currentID ?? "")|\(items.count)") {
+            // The row is laid out lazily; give it a moment before centring.
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.smooth(duration: 0.4)) { focus = currentID }
+        }
+        .onAppear { wheel.start() }
+        .onDisappear { wheel.stop() }
+    }
+
+    private func measured(offset: CGFloat) {
+        let now = ProcessInfo.processInfo.systemUptime
+        defer { lastOffset = offset; lastTime = now }
+        guard let last = lastOffset, now > lastTime else { return }
+        let instant = (offset - last) / CGFloat(now - lastTime)
+        guard instant.isFinite else { return }
+        withAnimation(.easeOut(duration: 0.12)) { velocity = velocity * 0.6 + instant * 0.4 }
+        decay?.cancel()
+        decay = Task { @MainActor in
+            while abs(velocity) > 12 {
+                try? await Task.sleep(nanoseconds: 33_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.1)) { velocity *= 0.82 }
+            }
+            velocity = 0
+        }
     }
 }
 

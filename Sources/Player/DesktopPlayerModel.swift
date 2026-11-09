@@ -93,17 +93,19 @@ final class DesktopPlayerModel: ObservableObject {
         queueTask = Task { [weak self] in
             do {
                 let items = try await searcher.queue()
-                guard !Task.isCancelled else { return }
-                self?.queue = items
-                self?.status = items.isEmpty && !(self?.isSearching ?? false)
+                guard !Task.isCancelled, let self else { return }
+                // A player between two songs answers with nothing; keep what
+                // the strip already shows rather than emptying it.
+                if items.isEmpty, !self.queue.isEmpty { return }
+                self.queue = items
+                self.status = items.isEmpty && !self.isSearching
                     ? .message(searcher.kind == .spotify
                         ? "Spotify doesn\u{2019}t share what plays next."
                         : "Nothing is playing.")
                     : .idle
             } catch {
-                guard !Task.isCancelled else { return }
-                self?.queue = []
-                self?.status = .message(Self.words(for: error, player: searcher.kind))
+                guard !Task.isCancelled, let self else { return }
+                if self.queue.isEmpty { self.status = .message(Self.words(for: error, player: searcher.kind)) }
             }
         }
     }
@@ -117,7 +119,15 @@ final class DesktopPlayerModel: ObservableObject {
 
     func play(_ item: PlayerQueueItem) {
         let searcher = self.searcher
+        // The strip moves to the song at once; the player catches up after.
+        queue = queue.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
         perform(searcher) { try await searcher.playQueueItem(item) }
+        Task { [weak self] in
+            for delay in [900, 2500] as [UInt64] {
+                try? await Task.sleep(nanoseconds: delay * 1_000_000)
+                self?.refreshQueue()
+            }
+        }
     }
 
     private func collapseAfterPlaying() {
