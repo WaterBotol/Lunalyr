@@ -470,7 +470,7 @@ struct NowPlayingView: View {
                 // Reduce Motion holds the video still, as it does an imported one.
                 MusicVideoBackground(source: source, paused: renderingPaused || reduceMotion,
                                      dim: settings.musicVideoDim, blur: settings.musicVideoBlur,
-                                     preview: isSettingsPreview)
+                                     preview: isSettingsPreview, standIn: cover.gradient)
                 scrim
                 textBacking(backing, presence: stage, size: size)
             }

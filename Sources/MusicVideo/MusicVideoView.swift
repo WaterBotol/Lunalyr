@@ -12,10 +12,14 @@ struct MusicVideoBackground: View {
     let dim: Double
     let blur: Double
     var preview = false
+    /// Under the video: what shows while a YouTube player is not playing
+    /// (it is hidden then, so none of YouTube's overlays can show).
+    var standIn: LinearGradient = LinearGradient(colors: [.black], startPoint: .top, endPoint: .bottom)
 
     var body: some View {
         ZStack {
             Color.black
+            standIn.ignoresSafeArea()
             // Never a real player inside the unit-test host: no file, no
             // network, nothing that could make a sound.
             if !AppRuntime.isUnitTesting {
@@ -325,6 +329,8 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         let configuration = YouTubeEmbed.configuration()
         configuration.userContentController.add(WeakScriptHandler(coordinator), name: YouTubeEmbed.messageName)
         let view = BackgroundYouTubeView(frame: .zero, configuration: configuration)
+        // Hidden until the player says it is playing.
+        view.alphaValue = 0
         view.underPageBackgroundColor = .black
         view.allowsMagnification = false
         view.navigationDelegate = coordinator
@@ -393,34 +399,72 @@ enum YouTubeEmbed {
 
     /// `page` numbers each load, so a message from a page that has since
     /// been replaced is told apart from the current one's.
-    static func html(videoID: String, start: Double, page: Int = 0) -> String {
+    /// How much larger than the screen the player is drawn (and clipped):
+    /// enough to push YouTube's title bar (top left) and logo (bottom right)
+    /// off the edges. The video is aspect-filled anyway.
+    static let overscan = 1.25
+
+    /// The player is visible only while it plays (state 1). Paused, ended,
+    /// cued, unstarted or buffering, YouTube draws its title bar and a big
+    /// play or pause button over the video; the wallpaper shows its stand-in
+    /// instead.
+    static func showsVideo(state: Int) -> Bool { state == 1 }
+
+    /// The same rule from a sync sample: playing, not buffering.
+    static func showsVideo(sample: MusicVideoDrift.Sample) -> Bool { sample.videoPlaying && !sample.buffering }
+
+    /// The interface language for the player's own text: the system's.
+    static func playerLanguage(_ locale: Locale = .current) -> String {
+        let code = locale.language.languageCode?.identifier.lowercased() ?? "en"
+        return (2...3).contains(code.count) && code.allSatisfy({ $0.isASCII && $0.isLetter }) ? code : "en"
+    }
+
+    static func html(videoID: String, start: Double, page: Int = 0, language: String = playerLanguage()) -> String {
         precondition(YouTubeVideoID.isValid(videoID))
         let startSecond = max(0, Int(start.isFinite ? start : 0))
+        let language = language.allSatisfy({ $0.isASCII && $0.isLetter }) && !language.isEmpty ? language : "en"
         return """
         <!doctype html><html><head><meta charset="utf-8">
         <style>
         html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
         #frame{position:absolute;left:50%;top:50%;width:max(100vw,177.78vh);height:max(100vh,56.25vw);
-        transform:translate(-50%,-50%);pointer-events:none}
-        #frame iframe,#player{width:100%;height:100%;border:0}
+        transform:translate(-50%,-50%) scale(\(overscan));pointer-events:none;opacity:0;transition:opacity .5s}
+        #frame iframe,#player{width:100%;height:100%;border:0;pointer-events:none}
         </style></head><body><div id="frame"><div id="player"></div></div>
         <script>
-        var player = null, ready = false;
+        var player = null, ready = false, blurScale = 1;
         function post(type, value) {
           try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value,
                 video: '\(videoID)', page: \(page)}); } catch (e) {}
+        }
+        function visibleFor(state) { return state === 1; }
+        function show(state) {
+          document.getElementById('frame').style.opacity = visibleFor(state) ? '1' : '0';
+        }
+        function hideCaptions() {
+          if (!player) return;
+          try { player.unloadModule('captions'); } catch (e) {}
+          try { player.unloadModule('cc'); } catch (e) {}
+          try { player.setOption('captions', 'track', {}); } catch (e) {}
         }
         function onYouTubeIframeAPIReady() {
           player = new YT.Player('player', {
             width: '100%', height: '100%', videoId: '\(videoID)',
             host: 'https://www.youtube-nocookie.com',
             playerVars: {autoplay: 0, mute: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3,
-                         rel: 0, playsinline: 1, loop: 0, cc_load_policy: 0, start: \(startSecond),
-                         origin: window.location.origin},
+                         rel: 0, playsinline: 1, loop: 0, cc_load_policy: 0, hl: '\(language)',
+                         modestbranding: 1, start: \(startSecond), origin: window.location.origin},
             events: {
-              onReady: function (event) { ready = true; event.target.mute(); post('ready', 0); },
-              onError: function (event) { post('error', event.data); },
-              onStateChange: function (event) { if (event.data === 1 || event.data === 3) { player.mute(); } }
+              onReady: function (event) { ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0); },
+              onError: function (event) { show(-1); post('error', event.data); },
+              onApiChange: function () { hideCaptions(); },
+              onStateChange: function (event) {
+                var state = event.data;
+                if (state === 1 || state === 3) { player.mute(); }
+                if (state === -1 || state === 1 || state === 5) { hideCaptions(); }
+                show(state);
+                post('state', state);
+              }
             }
           });
         }
@@ -434,7 +478,7 @@ enum YouTubeEmbed {
         window.lunalyrBlur = function (px) {
           var frame = document.getElementById('frame');
           frame.style.filter = px > 0 ? 'blur(' + px + 'px)' : '';
-          frame.style.transform = px > 0 ? 'translate(-50%,-50%) scale(1.04)' : 'translate(-50%,-50%)';
+          frame.style.transform = 'translate(-50%,-50%) scale(' + (\(overscan) * (px > 0 ? 1.04 : 1)) + ')';
         };
         </script>
         <script src="https://www.youtube.com/iframe_api"></script>
@@ -493,6 +537,8 @@ final class YouTubeEmbedSession {
         enum Kind: Equatable {
             case ready
             case error(Int)
+            /// The IFrame API's player state changed.
+            case state(Int)
             case other
         }
         var kind: Kind
@@ -510,6 +556,7 @@ final class YouTubeEmbedSession {
             switch type {
             case "ready": kind = .ready
             case "error": kind = .error((body["value"] as? NSNumber)?.intValue ?? 0)
+            case "state": kind = .state((body["value"] as? NSNumber)?.intValue ?? -1)
             default: kind = .other
             }
             video = body["video"] as? String
@@ -526,6 +573,8 @@ final class YouTubeEmbedSession {
         case load(videoID: String, page: Int)
         /// Tell the controller the video could not be shown.
         case fail(videoID: String, MusicVideoPlaybackFailure)
+        /// Show the player (it is playing) or hide it (anything else).
+        case visible(Bool)
     }
 
     private(set) var videoID: String?
@@ -592,6 +641,8 @@ final class YouTubeEmbedSession {
         case .error(let code):
             guard let failure = YouTubeEmbed.failure(forError: code) else { return .none }
             return fail(failure)
+        case .state(let state):
+            return failed ? .visible(false) : .visible(YouTubeEmbed.showsVideo(state: state))
         case .other:
             return .none
         }
@@ -669,9 +720,24 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                                                    videoDuration: nil) ?? 0
             navigation = view.loadHTMLString(YouTubeEmbed.html(videoID: videoID, start: start, page: page),
                                              baseURL: YouTubeEmbed.baseURL)
+        case .visible(let visible):
+            setVisible(visible)
         case .fail(let videoID, let failure):
+            setVisible(false)
             run("window.lunalyrPause && window.lunalyrPause()")
             MusicVideoController.shared.reportPlaybackFailure(of: .youTube(videoID), failure)
+        }
+    }
+
+    /// The whole web view fades with the player's state, so nothing of
+    /// YouTube's (title bar, play or pause button) shows over the stand-in.
+    private func setVisible(_ visible: Bool) {
+        guard let view else { return }
+        let alpha: CGFloat = visible ? 1 : 0
+        guard view.alphaValue != alpha else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = visible ? 0.5 : 0.15
+            view.animator().alphaValue = alpha
         }
     }
 
@@ -697,12 +763,14 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
         guard session.ready, let view else { done(nil, nil); return }
-        view.callAsyncJavaScript("return window.lunalyrSample()", arguments: [:], in: nil, in: .page) { result in
+        view.callAsyncJavaScript("return window.lunalyrSample()", arguments: [:], in: nil, in: .page) { [weak self] result in
             MainActor.assumeIsolated {
                 guard case .success(let value) = result, let (sample, duration) = YouTubeEmbed.sample(from: value) else {
                     done(nil, nil)
                     return
                 }
+                // Also from each sample, in case a state message was missed.
+                if let self { self.setVisible(self.session.ready && YouTubeEmbed.showsVideo(sample: sample)) }
                 done(sample, duration)
             }
         }
