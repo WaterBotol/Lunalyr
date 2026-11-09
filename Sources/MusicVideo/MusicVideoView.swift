@@ -286,6 +286,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         }
         playerLayer.opacity = 0
         player.replaceCurrentItem(with: item)
+        loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
     }
 
     private func reveal() {
@@ -729,6 +730,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     func attach(_ view: WKWebView, videoID: String) {
         self.view = view
+        loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
         perform(session.attach(videoID))
     }
 

@@ -46,6 +46,9 @@ final class AudioPCMProcessor: @unchecked Sendable {
     private let deliveryQueue: DispatchQueue?
     private let onReport: (Report) -> Void
     private let target: VisualizerAudio
+    /// Also told each pass's left channel, as energy frames, for the
+    /// music video's audio alignment. Nil in tests.
+    private let envelope: AudioEnvelopeRecorder?
     // Owned by the analysis queue (or by the caller of `drain` while the
     // worker is stopped, as in tests).
     private var left = VCAudioState(), right = VCAudioState()
@@ -63,12 +66,13 @@ final class AudioPCMProcessor: @unchecked Sendable {
 
     /// `deliveryQueue: nil` reports synchronously from `drain`, for tests.
     init(target: VisualizerAudio = .shared, deliveryQueue: DispatchQueue? = .main,
-         onReport: @escaping (Report) -> Void) {
+         envelope: AudioEnvelopeRecorder? = nil, onReport: @escaping (Report) -> Void) {
         guard let ring = vc_audio_ring_create(Int32(Self.ringCapacity)) else {
             fatalError("Could not allocate the audio ring.")
         }
         self.ring = ring
         self.target = target
+        self.envelope = envelope
         self.deliveryQueue = deliveryQueue
         self.onReport = onReport
         leftSamples = .allocate(capacity: Self.chunkFrames)
@@ -213,6 +217,7 @@ final class AudioPCMProcessor: @unchecked Sendable {
 
     private func analyse(_ count: Int, info: VCAudioRingInfo, now: Double) {
         let stereo = info.channels > 1, rate = info.sample_rate
+        envelope?.append(leftSamples, count: count, sampleRate: rate, now: now)
         let a = vc_audio_process(&left, leftSamples, Int32(count), 1, rate)
         let b = stereo ? vc_audio_process(&right, rightSamples, Int32(count), 1, rate) : a
         levels = VCAudioLevels(rms: max(a.rms, b.rms), bass: max(a.bass, b.bass),

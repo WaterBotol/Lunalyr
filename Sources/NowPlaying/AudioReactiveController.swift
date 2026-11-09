@@ -400,7 +400,8 @@ final class AudioReactiveController: ObservableObject {
         methodLabel = tap ? "System audio" : !compatibility ? "Screen recording compatibility"
             : userInitiated ? "Compatibility capture" : "Compatibility · automatic recovery"
         setState(.connecting, reason.isEmpty ? "Connecting audio…" : reason)
-        let processor = AudioPCMProcessor(target: environment.visualizer) { [weak self] report in
+        let processor = AudioPCMProcessor(target: environment.visualizer,
+                                          envelope: AppRuntime.isUnitTesting ? nil : .shared) { [weak self] report in
             MainActor.assumeIsolated { self?.receive(report, generation: generation) }
         }
         self.processor = processor
