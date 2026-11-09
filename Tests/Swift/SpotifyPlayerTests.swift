@@ -174,7 +174,7 @@ class SpotifyPlayerTests: XCTestCase {
 
         choice.send(PlayerKind.allCases)
         h.scheduler.drain()
-        XCTAssertEqual(h.monitor.followedPlayers, [.appleMusic, .spotify])
+        XCTAssertEqual(h.monitor.followedPlayers, PlayerKind.allCases)
         XCTAssertTrue(music.log.contains("music.read"))
     }
 
@@ -368,7 +368,8 @@ class SpotifyPlayerTests: XCTestCase {
         XCTAssertEqual(PlayerOptions(defaults: isolated).choice, .spotify)
         isolated.set("winamp", forKey: "custom.player")
         XCTAssertEqual(PlayerOptions(defaults: isolated).choice, .automatic)
-        XCTAssertEqual(PlayerOptions.Choice.automatic.players, [.appleMusic, .spotify])
+        XCTAssertEqual(PlayerOptions.Choice.automatic.players, [.appleMusic, .spotify, .vlc, .swinsian, .vox],
+                       "Automatic follows browsers only once web players are on")
         XCTAssertEqual(PlayerOptions.Choice.appleMusic.players, [.appleMusic])
 
         var received: [[PlayerKind]] = []

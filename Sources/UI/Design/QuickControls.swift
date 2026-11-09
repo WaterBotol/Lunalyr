@@ -361,6 +361,7 @@ struct MenuRowButtonStyle: ButtonStyle {
 struct LunalyrPlayerPicker: View {
     var title: String
     @Model(\.players) private var options
+    @Environment(\.lunalyrModels) private var models
 
     init(title: String = "Player") {
         self.title = title
@@ -368,7 +369,8 @@ struct LunalyrPlayerPicker: View {
 
     var body: some View {
         Picker(title, selection: $options.choice) {
-            ForEach(PlayerOptions.Choice.allCases) { Text($0.title).tag($0) }
+            ForEach(PlayerOptions.Choice.offered(installed: Set(models.resolved.installedPlayers), current: options.choice,
+                                                 webPlayers: options.followsWebPlayers)) { Text($0.title).tag($0) }
         }
         .pickerStyle(.menu)
         .help("Which music player Lunalyr follows")

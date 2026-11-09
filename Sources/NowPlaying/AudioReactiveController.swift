@@ -290,7 +290,7 @@ final class AudioReactiveController: ObservableObject {
     private var playback: AudioPlayback {
         let player = musicPlaying ? environment.activePlayer() : nil
         return AudioPlayback(playerPlaying: musicPlaying, playerName: player?.displayName,
-            playerOutputHere: player.flatMap { outputActivity.isRunningOutput(bundleID: $0.bundleID) },
+            playerOutputHere: player?.outputBundleID.flatMap { outputActivity.isRunningOutput(bundleID: $0) },
             anyOutput: outputActivity.isActive)
     }
 

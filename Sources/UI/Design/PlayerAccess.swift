@@ -68,17 +68,25 @@ final class PlayerAccessModel: ObservableObject {
 struct PlayerAccessList: View {
     @Environment(\.lunalyrModels) private var models
     @Model(\.nowPlaying) private var playing
+    @Model(\.players) private var players
     @StateObject private var access = PlayerAccessModel()
 
     init() {}
 
+    /// Installed players, with browsers only while they are followed: a
+    /// browser's row would otherwise offer to ask for control of it.
+    static func shown(installed: [PlayerKind], followed: [PlayerKind]) -> [PlayerKind] {
+        installed.filter { !$0.isBrowser || followed.contains($0) }
+    }
+
     var body: some View {
         let models = models.resolved
+        let shown = Self.shown(installed: models.installedPlayers, followed: players.followedPlayers)
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
             if models.installedPlayers.isEmpty {
                 InspectorCaption("Neither Music nor Spotify is installed on this Mac.")
             }
-            ForEach(models.installedPlayers) { kind in
+            ForEach(shown) { kind in
                 PlayerAccessRow(kind: kind, status: access.status(of: kind),
                                 allow: {
                                     playing.requestAutomationAccess(for: kind)
@@ -86,13 +94,13 @@ struct PlayerAccessList: View {
                                 openSettings: { models.navigation.openSystemSettings(.automation) })
             }
         }
-        .task { await access.refresh(models.installedPlayers, monitor: playing) }
+        .task(id: shown) { await access.refresh(shown, monitor: playing) }
         // Back from System Settings, or after macOS's prompt was answered.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await access.refresh(models.installedPlayers, monitor: playing) }
+            Task { await access.refresh(shown, monitor: playing) }
         }
         .onChange(of: playing.automation) { _, _ in
-            Task { await access.refresh(models.installedPlayers, monitor: playing) }
+            Task { await access.refresh(shown, monitor: playing) }
         }
     }
 }
