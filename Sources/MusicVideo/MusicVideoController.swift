@@ -30,6 +30,10 @@ final class MusicVideoController: ObservableObject {
     }
 
     @Published private(set) var status: Status = .off
+    /// The pasted link for the playing song looks like a still image (the
+    /// cover over the audio). It plays anyway: the user chose it.
+    @Published private(set) var pastedLooksStill = false
+    static let pastedStillNote = "This video looks like a still image, probably the cover over the audio. It plays because you chose it."
     let offsets: MusicVideoOffsets
     private let resolver: MusicVideoResolver
     private var song: MusicVideoSong?
@@ -39,6 +43,7 @@ final class MusicVideoController: ObservableObject {
     private var enabled = false
     private var online = false
     private var lookup: Task<Void, Never>?
+    private var stillCheck: Task<Void, Never>?
     private var retry: Task<Void, Never>?
     /// Each song is retried once after a passing failure, not every minute.
     private var retried: String?
@@ -94,6 +99,8 @@ final class MusicVideoController: ObservableObject {
         guard changed else { return }
         playingKey = playing
         song = next
+        stillCheck?.cancel()
+        pastedLooksStill = false
         lookup?.cancel()
         retry?.cancel()
         guard enabled else { status = .off; return }
@@ -117,7 +124,9 @@ final class MusicVideoController: ObservableObject {
 
     private func apply(_ result: MusicVideoResolution, for song: MusicVideoSong) {
         switch result {
-        case .found(let source): status = .showing(source, title: song.title)
+        case .found(let source):
+            status = .showing(source, title: song.title)
+            if case .youTube(let id) = source, resolver.links.videoID(for: song.key) == id { checkPastedStill(id, song) }
         case .missing(let miss):
             status = .missing(miss, title: song.title)
             if (miss == .rateLimited || miss == .lookupFailed) && retried != song.key { scheduleRetry(song) }
@@ -136,9 +145,21 @@ final class MusicVideoController: ObservableObject {
         }
     }
 
-    /// Waits for the lookup in flight, for tests.
+    /// The note only; the pasted video is never replaced.
+    private func checkPastedStill(_ id: String, _ song: MusicVideoSong) {
+        stillCheck?.cancel()
+        stillCheck = Task { [weak self] in
+            guard let self else { return }
+            let still = await self.resolver.pastedLooksStill(id)
+            guard !Task.isCancelled, self.song?.key == song.key, self.resolver.links.videoID(for: song.key) == id else { return }
+            self.pastedLooksStill = still == true
+        }
+    }
+
+    /// Waits for the lookup in flight (and a pasted link's still check), for tests.
     func settle() async {
         await lookup?.value
+        await stillCheck?.value
     }
 
     /// The player could not show the video, and the wallpaper falls back
@@ -206,6 +227,8 @@ final class MusicVideoController: ObservableObject {
     }
 
     private func relook(_ song: MusicVideoSong) {
+        stillCheck?.cancel()
+        pastedLooksStill = false
         lookup?.cancel()
         retry?.cancel()
         objectWillChange.send()

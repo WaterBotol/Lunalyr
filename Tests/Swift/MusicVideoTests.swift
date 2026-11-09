@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import WebKit
 import XCTest
 @testable import VersoCustom
@@ -25,6 +26,8 @@ private struct FakePlayability: MusicVideoPlayability {
 private final class FakeHTTP: MusicVideoHTTP, @unchecked Sendable {
     struct Reply { var status: Int; var body: Data; var headers: [String: String] = [:] }
     var replies: [String: Reply] = [:]
+    /// Replies for one exact URL, ahead of `replies` by host.
+    var byURL: [String: Reply] = [:]
     var failing: Set<String> = []
     private(set) var urls: [URL] = []
 
@@ -32,7 +35,7 @@ private final class FakeHTTP: MusicVideoHTTP, @unchecked Sendable {
         urls.append(url)
         let host = url.host ?? ""
         if failing.contains(host) { throw URLError(.notConnectedToInternet) }
-        let reply = replies[host] ?? Reply(status: 404, body: Data())
+        let reply = byURL[url.absoluteString] ?? replies[host] ?? Reply(status: 404, body: Data())
         let response = HTTPURLResponse(url: url, statusCode: reply.status, httpVersion: nil, headerFields: reply.headers)!
         return (reply.body, response)
     }
@@ -120,7 +123,8 @@ final class MusicVideoTests: XCTestCase {
         http.replies["www.youtube.com"] = officialPage()
         let result = await resolver(http: http).resolve(song, online: true)
         XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
-        XCTAssertEqual(http.hosts(), ["www.youtube.com"])
+        XCTAssertEqual(http.hosts().first, "www.youtube.com")
+        XCTAssertEqual(Set(http.hosts()), ["www.youtube.com", "i.ytimg.com"], "plus the video's own frames")
         let query = try XCTUnwrap(URLComponents(url: http.urls[0], resolvingAgainstBaseURL: false))
         XCTAssertEqual(query.queryItems?.first?.value, "The Weeknd Blinding Lights official music video")
     }
@@ -439,7 +443,7 @@ final class MusicVideoTests: XCTestCase {
         controller.clearPastedLink()
         await controller.settle()
         XCTAssertNil(controller.source(for: track))
-        XCTAssertTrue(http.urls.isEmpty)
+        XCTAssertFalse(http.hosts().contains("www.youtube.com"), "no search; only the pasted video's frames")
     }
 
     func testOffsetsArePerSongAndPersist() async {
@@ -836,5 +840,175 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertEqual(configuration.httpCookieAcceptPolicy, .never)
         XCTAssertFalse(configuration.httpShouldSetCookies)
         XCTAssertEqual(configuration.urlCache?.diskCapacity ?? 0, 0, "nothing cached on disk")
+    }
+
+    // MARK: Still-image uploads
+
+    /// A 120×90 greyscale frame like YouTube's: 4:3 with letterbox bars,
+    /// the 16:9 picture drawn by `pixel`, plus optional JPEG-like noise.
+    private static func frame(noise: Int = 0, seed: UInt32 = 1, _ pixel: (Int, Int) -> Int) -> Data {
+        let width = 120, height = 90, top = 11, bottom = 79
+        var state = seed
+        var bytes = [UInt8](repeating: 0, count: width * height)
+        for y in 0..<height {
+            for x in 0..<width where y >= top && y < bottom {
+                var value = pixel(x, y - top)
+                if noise > 0 {
+                    state = state &* 1_103_515_245 &+ 12_345
+                    value += Int(state >> 16) % (2 * noise + 1) - noise
+                }
+                bytes[y * width + x] = UInt8(max(0, min(255, value)))
+            }
+        }
+        let provider = CGDataProvider(data: Data(bytes) as CFData)!
+        let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: width,
+                            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: 0),
+                            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        let data = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, image, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return data as Data
+    }
+
+    /// The album cover: a fixed pattern.
+    private static func cover(noise: Int = 0, seed: UInt32 = 1) -> Data {
+        frame(noise: noise, seed: seed) { x, y in (x * 2 + y * 3) % 200 + 20 }
+    }
+
+    /// A shot with a bright figure at `at` on a dark stage.
+    private static func shot(at position: Int) -> Data {
+        frame { x, y in (x >= position && x < position + 30 && y >= 15 && y < 50) ? 230 : 30 }
+    }
+
+    private func fingerprints(_ frames: [Data]) -> [[UInt8]] {
+        frames.compactMap(MusicVideoStillFrames.fingerprint)
+    }
+
+    func testStillFramesAreToldFromMovingOnes() {
+        XCTAssertEqual(MusicVideoStillFrames.isStill(fingerprints([Self.cover(), Self.cover(), Self.cover()])), true)
+        XCTAssertEqual(MusicVideoStillFrames.isStill(fingerprints([
+            Self.cover(noise: 6, seed: 1), Self.cover(noise: 6, seed: 2), Self.cover(noise: 6, seed: 3),
+        ])), true, "compression noise on one still is still a still")
+        XCTAssertEqual(MusicVideoStillFrames.isStill(fingerprints([Self.shot(at: 5), Self.shot(at: 45), Self.shot(at: 85)])),
+                       false)
+        XCTAssertEqual(MusicVideoStillFrames.isStill(fingerprints([Self.cover(), Self.cover(), Self.shot(at: 45)])), false,
+                       "one different frame is enough")
+        XCTAssertNil(MusicVideoStillFrames.isStill(fingerprints([Self.cover(), Self.cover()])))
+        XCTAssertNil(MusicVideoStillFrames.fingerprint(Data("not an image".utf8)))
+        let print = MusicVideoStillFrames.fingerprint(Self.cover())
+        XCTAssertEqual(print?.count, 16 * 9)
+        XCTAssertGreaterThan(print?.min() ?? 0, 0, "the letterbox bars are cropped off")
+        XCTAssertEqual(MusicVideoStillFrames.frameURLs(for: "4NRXx6U8ABQ").map(\.absoluteString), [
+            "https://i.ytimg.com/vi/4NRXx6U8ABQ/1.jpg", "https://i.ytimg.com/vi/4NRXx6U8ABQ/2.jpg",
+            "https://i.ytimg.com/vi/4NRXx6U8ABQ/3.jpg",
+        ])
+        XCTAssertTrue(MusicVideoStillFrames.frameURLs(for: "bad").isEmpty)
+    }
+
+    private func serveFrames(_ http: FakeHTTP, _ id: String, _ frames: [Data]) {
+        for (url, data) in zip(MusicVideoStillFrames.frameURLs(for: id), frames) {
+            http.byURL[url.absoluteString] = .init(status: 200, body: data)
+        }
+    }
+
+    private var stillFrames: [Data] { [Self.cover(), Self.cover(noise: 3, seed: 7), Self.cover()] }
+    private var movingFrames: [Data] { [Self.shot(at: 5), Self.shot(at: 45), Self.shot(at: 85)] }
+
+    func testSearchSkipsAStillUploadForTheNextCandidate() async {
+        let http = FakeHTTP()
+        http.replies["www.youtube.com"] = .init(status: 200, body: Fixtures.searchPage([
+            ("AAAAAAAAAAA", "The Weeknd - Blinding Lights (Official Music Video)", "The Weeknd"),
+            ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "The Weeknd"),
+        ]))
+        serveFrames(http, "AAAAAAAAAAA", stillFrames)
+        serveFrames(http, "4NRXx6U8ABQ", movingFrames)
+        let resolver = resolver(http: http)
+        let result = await resolver.resolve(song, online: true)
+        XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(resolver.cache.still("AAAAAAAAAAA", now: now), true, "the verdict is kept per video")
+        XCTAssertEqual(resolver.cache.still("4NRXx6U8ABQ", now: now), false)
+        XCTAssertEqual(resolver.rateLimit.sent.count, 3, "the search, then one slot per frame set")
+
+        // Another song turning up the same uploads: no frames fetched again.
+        resolver.cache.remove(song.key)
+        let before = http.urls.count
+        _ = await resolver.resolve(song, online: true)
+        XCTAssertEqual(http.urls.count, before + 1, "only the search page")
+    }
+
+    func testOnlyStillUploadsIsAMissRememberedLikeNone() async {
+        let http = FakeHTTP()
+        let ids = ["AAAAAAAAAAA", "BBBBBBBBBBB", "CCCCCCCCCCC", "DDDDDDDDDDD"]
+        http.replies["www.youtube.com"] = .init(status: 200, body: Fixtures.searchPage(
+            ids.map { ($0, "The Weeknd - Blinding Lights (Official Video)", "The Weeknd") }))
+        for id in ids.prefix(3) { serveFrames(http, id, stillFrames) }
+        serveFrames(http, "DDDDDDDDDDD", movingFrames)
+        let resolver = resolver(http: http)
+        let result = await resolver.resolve(song, online: true)
+        XCTAssertEqual(result, .missing(.notFound), "three stills: no video, the wallpaper falls back")
+        XCTAssertFalse(http.urls.contains { $0.absoluteString.contains("DDDDDDDDDDD") }, "at most three are checked")
+        XCTAssertEqual(resolver.cache.lookup(song.key, now: Date(timeIntervalSince1970: 1_800_000_000)), .missing(.notFound))
+    }
+
+    func testUnreadableFramesGiveTheVideoTheBenefitOfTheDoubt() async {
+        let http = FakeHTTP()
+        http.replies["www.youtube.com"] = officialPage()
+        let resolver = resolver(http: http)
+        let result = await resolver.resolve(song, online: true)
+        XCTAssertEqual(result, .found(.youTube("4NRXx6U8ABQ")))
+        XCTAssertNil(resolver.cache.still("4NRXx6U8ABQ", now: Date(timeIntervalSince1970: 1_800_000_000)),
+                     "not judged, so not remembered")
+    }
+
+    func testFoundVideosFromBeforeTheStillCheckAreLookedUpAgain() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        defaults.set([song.key: ["at": now.timeIntervalSince1970, "video": "4NRXx6U8ABQ"]], forKey: MusicVideoCache.key)
+        XCTAssertNil(MusicVideoCache(defaults: defaults).lookup(song.key, now: now))
+        let cache = MusicVideoCache(defaults: defaults)
+        cache.store(.found(.youTube("4NRXx6U8ABQ")), for: song.key, now: now)
+        XCTAssertEqual(MusicVideoCache(defaults: defaults).lookup(song.key, now: now), .found(.youTube("4NRXx6U8ABQ")))
+    }
+
+    func testAudioAndArtTrackUploadsAreRejectedAndMusicVideoRanksFirst() {
+        let rejected = ["Blinding Lights (Official Audio)", "Blinding Lights (Audio)", "Blinding Lights [Audio Only]",
+                        "Blinding Lights (Visualizer)", "Blinding Lights (Official Visualiser)",
+                        "Blinding Lights (Lyric Video)", "Blinding Lights LYRICS", "Blinding Lights (Art Track)"]
+        for title in rejected {
+            let results = [YouTubeSearchPage.Result(videoID: "AAAAAAAAAAA", title: title, channel: "The Weeknd")]
+            XCTAssertNil(YouTubeSearchPage.officialVideo(in: results, title: "Blinding Lights", artist: "The Weeknd"), title)
+        }
+        let results = [
+            YouTubeSearchPage.Result(videoID: "AAAAAAAAAAA", title: "Blinding Lights (Official Video)", channel: "The Weeknd"),
+            YouTubeSearchPage.Result(videoID: "BBBBBBBBBBB", title: "Blinding Lights (Official Music Video)", channel: "The Weeknd"),
+            YouTubeSearchPage.Result(videoID: "CCCCCCCCCCC", title: "Blinding Lights", channel: "The Weeknd"),
+        ]
+        XCTAssertEqual(YouTubeSearchPage.officialVideos(in: results, title: "Blinding Lights", artist: "The Weeknd")
+            .map(\.videoID), ["BBBBBBBBBBB", "AAAAAAAAAAA", "CCCCCCCCCCC"])
+    }
+
+    func testPastedStillLinkPlaysButSettingsSaysSo() async {
+        let http = FakeHTTP()
+        serveFrames(http, "4NRXx6U8ABQ", stillFrames)
+        let controller = MusicVideoController(resolver: resolver(http: http), offsets: MusicVideoOffsets(defaults: defaults))
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertTrue(controller.usePastedLink("https://youtu.be/4NRXx6U8ABQ"))
+        await controller.settle()
+        XCTAssertEqual(controller.source(for: track), .youTube("4NRXx6U8ABQ"), "the user's choice plays")
+        XCTAssertTrue(controller.pastedLooksStill)
+        XCTAssertFalse(http.hosts().contains("www.youtube.com"))
+        controller.clearPastedLink()
+        XCTAssertFalse(controller.pastedLooksStill)
+
+        let moving = FakeHTTP()
+        serveFrames(moving, "BBBBBBBBBBB", movingFrames)
+        let other = MusicVideoController(resolver: resolver(http: moving), offsets: MusicVideoOffsets(defaults: defaults))
+        other.update(track: track, enabled: true, online: false)
+        await other.settle()
+        XCTAssertTrue(other.usePastedLink("BBBBBBBBBBB"))
+        await other.settle()
+        XCTAssertFalse(other.pastedLooksStill)
     }
 }

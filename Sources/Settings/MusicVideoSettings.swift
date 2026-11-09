@@ -82,6 +82,9 @@ private struct PastedVideoLink: View {
             DisabledReason("That isn’t a YouTube video link.")
         } else if let link = controller.pastedLink {
             InspectorCaption("This song uses \(link).")
+            if controller.pastedLooksStill {
+                InspectorCaption(MusicVideoController.pastedStillNote)
+            }
         }
     }
 

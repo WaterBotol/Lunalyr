@@ -112,18 +112,30 @@ enum YouTubeSearchPage {
         return found
     }
 
-    /// The official video among `results`: the title names the song, the
-    /// channel or title the artist, and it is not a lyric, audio, live or
-    /// cover upload (unless the song's own title says so). Titles saying
-    /// "official video" rank first.
+    /// The official video among `results`: the first of `officialVideos`.
     static func officialVideo(in results: [Result], title: String, artist: String) -> Result? {
+        officialVideos(in: results, title: title, artist: artist).first
+    }
+
+    /// Words in a title that mark an upload as something other than the
+    /// video (whole words, any case): audio and art tracks, lyric and
+    /// visualiser uploads, which are mostly a still cover, and live,
+    /// cover and edited versions. Allowed when the song's own title has them.
+    static let excludedWords = ["lyric", "lyrics", "audio", "official audio", "audio only", "art track",
+                                "visualizer", "visualiser", "live", "cover", "karaoke", "instrumental", "reaction",
+                                "remix", "sped up", "slowed", "8d", "nightcore", "tutorial"]
+
+    /// Candidate official videos among `results`, best first: the title
+    /// names the song, the channel or title the artist, and it is none of
+    /// `excludedWords`. "Official music video" ranks above "official
+    /// video", which ranks above "official" or "music video"; ties keep
+    /// YouTube's order.
+    static func officialVideos(in results: [Result], title: String, artist: String) -> [Result] {
         let song = LyricQuery.normalize(title)
         let singer = LyricQuery.normalize(artist)
-        guard !song.isEmpty else { return nil }
-        let excluded = ["lyric", "lyrics", "audio", "visualizer", "visualiser", "live", "cover", "karaoke",
-                        "instrumental", "reaction", "remix", "sped up", "slowed", "8d", "nightcore", "tutorial"]
-        var best: (result: Result, score: Int)?
-        for result in results.prefix(12) {
+        guard !song.isEmpty else { return [] }
+        var ranked: [(result: Result, score: Int, index: Int)] = []
+        for (index, result) in results.prefix(12).enumerated() {
             let name = LyricQuery.normalize(result.title)
             let channel = LyricQuery.normalize(result.channel)
             guard containsWords(name, song) else { continue }
@@ -132,14 +144,15 @@ enum YouTubeSearchPage {
                     .contains(singer.replacingOccurrences(of: " ", with: ""))))
             guard byArtist else { continue }
             guard !channel.hasSuffix(" topic") else { continue }
-            if excluded.contains(where: { containsWords(name, $0) && !containsWords(song, $0) }) { continue }
+            if excludedWords.contains(where: { containsWords(name, $0) && !containsWords(song, $0) }) { continue }
             var score = 1
-            if containsWords(name, "official video") || containsWords(name, "official music video") { score += 3 }
+            if containsWords(name, "official music video") { score += 4 }
+            else if containsWords(name, "official video") { score += 3 }
             else if containsWords(name, "official") || containsWords(name, "music video") || containsWords(name, "mv") { score += 1 }
             if channel.hasSuffix("vevo") || containsWords(channel, singer) { score += 1 }
-            if best == nil || score > best!.score { best = (result, score) }
+            ranked.append((result, score, index))
         }
-        return best?.result
+        return ranked.sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }.map(\.result)
     }
 
     /// Whole-word containment on normalised text.
