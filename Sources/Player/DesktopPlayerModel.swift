@@ -174,7 +174,7 @@ final class DesktopPlayerModel: ObservableObject {
         }
         perform(searcher) { try await searcher.playQueueItem(item) }
         Task { [weak self] in
-            for delay in [900, 2500] as [UInt64] {
+            for delay in [900, 2500, 5000] as [UInt64] {
                 try? await Task.sleep(nanoseconds: delay * 1_000_000)
                 self?.refreshQueue()
             }

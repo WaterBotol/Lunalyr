@@ -68,3 +68,14 @@ final class DesktopPlayerSearchTests: XCTestCase {
         XCTAssertEqual(SpotifySearch.searchAddress("lil baby")?.absoluteString, "spotify:search:lil%20baby")
     }
 }
+
+final class DesktopPlayerQueueScriptTests: XCTestCase {
+    func testPlayInContextBuildsOnlyLunalyrsOwnPlaylist() {
+        let script = AppleMusicSearch.playInContext(persistentID: "AB12")
+        XCTAssertTrue(script.contains("\"AB12\""))
+        // The only playlist it may delete is its own, by exact name.
+        XCTAssertTrue(script.contains("delete (every user playlist whose name is \"Lunalyr Queue\")"))
+        XCTAssertFalse(script.contains("delete track"))
+        XCTAssertFalse(script.contains("delete (every track"))
+    }
+}

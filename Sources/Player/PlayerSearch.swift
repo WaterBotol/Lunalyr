@@ -241,17 +241,56 @@ struct AppleMusicSearch: PlayerSearching {
         return components.url
     }
 
-    /// Plays a song inside the playlist that is playing, so the playlist
-    /// carries on after it; a song from elsewhere plays from the library.
+    /// Music plays one song alone when told to play it out of a playlist, and
+    /// has no way to start a playlist part-way. So the song and the ones after
+    /// it are copied, in order, into a playlist of Lunalyr's own, which is
+    /// played from its start: the playlist carries on, and shuffle still works.
+    /// A song that is not in the playing playlist plays from the library.
+    static let queuePlaylistName = "Lunalyr Queue"
+
     static func playInContext(persistentID id: String) -> String {
-        """
-        set pl to current playlist
+        let name = ScriptText.quoted(queuePlaylistName)
+        let building = ScriptText.quoted(queuePlaylistName + " (new)")
+        return """
+        set src to current playlist
+        set wasShuffle to shuffle enabled
+        set found to true
         try
-        set theTrack to first track of pl whose persistent ID is \(ScriptText.quoted(id))
+        set theTrack to first track of src whose persistent ID is \(ScriptText.quoted(id))
         on error
-        set theTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
+        set found to false
         end try
+        if not found then
+        set theTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
         play theTrack
+        return
+        end if
+        set n to index of theTrack
+        set total to count of tracks of src
+        set endAt to n + 149
+        if endAt > total then set endAt to total
+        set tp to make new user playlist with properties {name:\(building)}
+        repeat with i from n to endAt
+        duplicate (track i of src) to tp
+        end repeat
+        set room to 150 - (endAt - n + 1)
+        if n > 1 and room > 0 then
+        set upTo to n - 1
+        if upTo > room then set upTo to room
+        repeat with i from 1 to upTo
+        duplicate (track i of src) to tp
+        end repeat
+        end if
+        try
+        delete (every user playlist whose name is \(name))
+        end try
+        set name of tp to \(name)
+        set shuffle enabled to false
+        play tp
+        delay 0.6
+        set shuffle enabled to wasShuffle
+        delay 0.4
+        if shuffle enabled is not wasShuffle then set shuffle enabled to wasShuffle
         """
     }
 
