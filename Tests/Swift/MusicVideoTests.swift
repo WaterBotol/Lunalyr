@@ -497,10 +497,10 @@ final class MusicVideoTests: XCTestCase {
         ]
         XCTAssertEqual(AppleMusicVideoLibrary.pick(hits, for: song), URL(fileURLWithPath: "/b.m4v"))
         XCTAssertNil(AppleMusicVideoLibrary.pick([hits[0]], for: song))
-        let script = AppleMusicVideoLibrary.script(title: "Say \"Hi\"")
+        let script = AppleMusicVideoLibrary.script
         XCTAssertTrue(script.contains("video kind is music video"))
         XCTAssertTrue(script.contains("is not running then return"), "never launches Music")
-        XCTAssertTrue(script.contains(#"\"Hi\""#))
+        XCTAssertFalse(script.contains("name contains"), "one list per session, not a search per song")
     }
 
     func testEmbedPageIsMutedInlineAndCannotNavigateAway() {
@@ -517,5 +517,84 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertEqual(sample?.1, 240)
         XCTAssertNil(YouTubeEmbed.sample(from: nil))
         XCTAssertTrue(YouTubeEmbed.fatalErrors.contains(150))
+    }
+
+    // MARK: Round 2 review: library list per Music session (R2-6)
+
+    private final class Reads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        var count: Int { lock.withLock { value } }
+        func add() { lock.withLock { value += 1 } }
+    }
+
+    private final class Box<T>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: T
+        init(_ value: T) { stored = value }
+        var value: T {
+            get { lock.withLock { stored } }
+            set { lock.withLock { stored = newValue } }
+        }
+    }
+
+    func testLibraryListIsReadOncePerMusicSession() async {
+        let reads = Reads()
+        let session = Box<String?>("pid-1")
+        let mayRead = Box(true)
+        let answer = Box<[AppleMusicVideoLibrary.Hit]?>([
+            .init(title: "Blinding Lights", artist: "The Weeknd", path: "/b.m4v"),
+            .init(title: "Save Your Tears", artist: "The Weeknd", path: "/s.m4v"),
+        ])
+        let clock = Box<TimeInterval>(0)
+        let library = AppleMusicVideoLibrary(mayRead: { mayRead.value }, session: { session.value },
+                                             reader: { reads.add(); return answer.value }, uptime: { clock.value })
+        let first = await library.localVideo(for: song)
+        XCTAssertEqual(first, URL(fileURLWithPath: "/b.m4v"))
+        var other = song
+        other.title = "Save Your Tears"
+        let second = await library.localVideo(for: other)
+        XCTAssertEqual(second, URL(fileURLWithPath: "/s.m4v"))
+        other.title = "Starboy"
+        let none = await library.localVideo(for: other)
+        XCTAssertNil(none)
+        XCTAssertEqual(reads.count, 1, "song changes match against the session's list")
+
+        session.value = "pid-2"
+        _ = await library.localVideo(for: song)
+        XCTAssertEqual(reads.count, 2, "Music opened again: read again")
+        clock.value = AppleMusicVideoLibrary.listLifetime + 1
+        _ = await library.localVideo(for: song)
+        XCTAssertEqual(reads.count, 3, "an old list is refreshed")
+
+        answer.value = nil
+        session.value = "pid-3"
+        let failed = await library.localVideo(for: song)
+        XCTAssertNil(failed)
+        _ = await library.localVideo(for: song)
+        XCTAssertEqual(reads.count, 5, "a failed read is not kept")
+
+        session.value = nil
+        _ = await library.localVideo(for: song)
+        mayRead.value = false
+        session.value = "pid-4"
+        _ = await library.localVideo(for: song)
+        XCTAssertEqual(reads.count, 5, "nothing is read with Music closed or not allowed")
+    }
+
+    func testConcurrentSongChangesShareOneLibraryRead() async {
+        let reads = Reads()
+        let library = AppleMusicVideoLibrary(mayRead: { true }, session: { "pid" }, reader: {
+            reads.add()
+            try? await Task.sleep(for: .milliseconds(20))
+            return [.init(title: "Blinding Lights", artist: "The Weeknd", path: "/b.m4v")]
+        }, uptime: { 0 })
+        async let a = library.localVideo(for: song)
+        async let b = library.localVideo(for: song)
+        let (first, second) = await (a, b)
+        XCTAssertEqual(first, URL(fileURLWithPath: "/b.m4v"))
+        XCTAssertEqual(second, first)
+        XCTAssertEqual(reads.count, 1)
+        XCTAssertEqual(AppleMusicVideoLibrary.priority, .artwork, "the library read waits behind everything else")
     }
 }
