@@ -19,7 +19,7 @@ struct AppleMusicVideoLibrary: MusicVideoLibrary {
         do {
             reply = try await ScriptDesk.shared.run(
                 PlayerScript(name: "music-video.library", source: Self.script(title: song.title), cacheable: false),
-                for: .appleMusic)
+                for: .appleMusic, priority: .read)
         } catch {
             return nil
         }
