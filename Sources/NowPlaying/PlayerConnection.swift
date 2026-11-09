@@ -161,7 +161,7 @@ final class PlayerConnection: @unchecked Sendable {
                 return response
             case .failed:
                 last = response
-            case .notRunning, .blocked:
+            case .notRunning, .blocked, .javaScriptOff:
                 return response
             }
         }

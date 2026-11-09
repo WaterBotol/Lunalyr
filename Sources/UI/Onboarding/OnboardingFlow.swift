@@ -109,7 +109,7 @@ final class OnboardingFlow: ObservableObject {
     /// refused just answers.
     var playersToAsk: [PlayerKind] {
         let monitor = models.nowPlaying
-        let followed = models.players.choice.players
+        let followed = models.players.followedPlayers
         return models.installedPlayers.filter { kind in
             followed.contains(kind) && monitor.runningPlayers.contains(kind)
                 && monitor.automation[kind] != .granted && monitor.automation[kind] != .denied
@@ -139,7 +139,7 @@ enum OnboardingCopy {
     /// What macOS is about to ask, what to answer, and what Lunalyr does
     /// with the access (inventory B7).
     static var permissionNote: String {
-        "Lunalyr follows what’s playing in \(PlayerKind.names(PlayerKind.allCases)). The first time it reads a player, macOS asks whether Lunalyr may control it: allow it. Lunalyr only reads the song and its position, and controls playback only when you use its buttons."
+        "Lunalyr follows what’s playing in \(PlayerKind.apps.map(\.displayName).joined(separator: ", ")), and in YouTube Music, SoundCloud and Amazon Music in your browser once you turn web players on in Settings. The first time it reads a player, macOS asks whether Lunalyr may control it: allow it. Lunalyr only reads the song and its position, and controls playback only when you use its buttons."
     }
     static let followCaption = "Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the other anything."
 

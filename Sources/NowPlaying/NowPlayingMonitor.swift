@@ -77,6 +77,9 @@ final class NowPlayingMonitor: ObservableObject {
     /// What macOS Automation allows, per player, once known.
     @Published private(set) var automation: [PlayerKind: AutomationAccess] = [:]
     @Published private(set) var runningPlayers: Set<PlayerKind> = []
+    /// Browsers that answered, but whose music tabs could not be read
+    /// because "Allow JavaScript from Apple Events" is off in them.
+    @Published private(set) var javaScriptOff: Set<PlayerKind> = []
     /// The players Lunalyr follows (Settings › Player); others are never sent anything.
     @Published private(set) var followedPlayers: [PlayerKind] = PlayerKind.allCases
     /// Whether the re-sync timer is (meant to be) running.
@@ -85,6 +88,12 @@ final class NowPlayingMonitor: ObservableObject {
     var currentTrackArtwork: NSImage? {
         guard let current, let artworkTrack, artworkTrack.isSameTrack(as: current) else { return nil }
         return artwork
+    }
+
+    /// Followed browsers with a music tab open that cannot be read until the
+    /// user allows JavaScript from Apple Events (`WebScriptingNotice`).
+    var webScriptingBlocked: [PlayerKind] {
+        followedPlayers.filter { runningPlayers.contains($0) && javaScriptOff.contains($0) && !isBlocked($0) }
     }
 
     /// Running players that macOS will not let Lunalyr read.
@@ -132,8 +141,12 @@ final class NowPlayingMonitor: ObservableObject {
 
     var canControlPlayback: Bool { transportTarget != nil }
 
-    /// "Play a song in Music", naming the players Lunalyr follows.
-    var idlePrompt: String { "Play a song in \(PlayerKind.names(followedPlayers))" }
+    /// "Play a song in Music", naming the players Lunalyr follows that are
+    /// installed (all of them followed if none is).
+    var idlePrompt: String {
+        let installed = followedPlayers.filter { environment.isInstalled($0.bundleID) }
+        return "Play a song in \(PlayerKind.names(installed.isEmpty ? followedPlayers : installed))"
+    }
 
     /// What the wallpaper, its hover controls and VoiceOver say while
     /// nothing is current: that macOS keeps Lunalyr from reading the player
@@ -216,6 +229,8 @@ final class NowPlayingMonitor: ObservableObject {
 
     /// Every player re-sync tick; idle or background players every fifth.
     private static let idlePollEvery = 5
+    /// Every other tick for idle players that post no notifications.
+    private static let quietPollEvery = 2
     /// Nudges lyrics slightly ahead of the raw clock. An Apple event only
     /// tells us where the player *was*, and the audio itself is buffered a
     /// little behind that, so a small lead lands the highlight on the beat
@@ -248,7 +263,7 @@ final class NowPlayingMonitor: ObservableObject {
             mayAsk.formUnion(PlayerKind.allCases.filter { environment.isRunning($0.bundleID) })
         }
         environment.startObserving(
-            notifications: PlayerKind.allCases.map(\.notificationName),
+            notifications: PlayerKind.allCases.compactMap(\.notificationName),
             events: PlayerEnvironmentEvents(
                 launched: { [weak self] id in self?.applicationLaunched(id) },
                 terminated: { [weak self] id in self?.applicationTerminated(id) },
@@ -629,6 +644,7 @@ final class NowPlayingMonitor: ObservableObject {
             seeking[kind] = nil
             cleared.remove(kind)
             forgetAccess(kind)
+            javaScriptOff.remove(kind)
         }
         // Choosing one player in particular is asking Lunalyr to read it.
         if ordered.count == 1 { mayAsk.formUnion(ordered) }
@@ -646,6 +662,7 @@ final class NowPlayingMonitor: ObservableObject {
         // Privacy & Security in between.
         cleared.remove(kind)
         forgetAccess(kind)
+        javaScriptOff.remove(kind)
         notifiedPlaying.remove(kind)
         connection.reset(kind)
         forget(kind)
@@ -709,8 +726,25 @@ final class NowPlayingMonitor: ObservableObject {
             // Answered: access works, whatever a check said before.
             vouched.remove(kind)
             contradicted.remove(kind)
+            if javaScriptOff.contains(kind) { javaScriptOff.remove(kind) }
             if setAutomation(.granted, for: kind) { updatePolling() }
             return value
+        case .javaScriptOff:
+            // The browser answered, so Automation is allowed; its pages are
+            // not. Idle until the user turns the setting on: it is still
+            // asked now and then, and the first reading clears this.
+            vouched.remove(kind)
+            contradicted.remove(kind)
+            if !javaScriptOff.contains(kind) { javaScriptOff.insert(kind) }
+            if setAutomation(.granted, for: kind) { updatePolling() }
+            if snapshots[kind]?.track != nil || snapshots[kind] == nil {
+                epochs.advance(kind)
+                snapshots[kind] = PlayerSnapshot(state: .stopped)
+                activity[kind] = nil
+                seeking[kind] = nil
+                publish(fix: nil)
+            }
+            return nil
         case .notRunning:
             if !environment.isRunning(kind.bundleID), runningPlayers.contains(kind) { runningPlayers.remove(kind) }
             forget(kind)
@@ -904,8 +938,11 @@ final class NowPlayingMonitor: ObservableObject {
     /// case a notification went missing.
     func tick() {
         ticks &+= 1
+        // Players that announce nothing are asked more often while idle:
+        // asking is the only way to notice them start.
         for kind in pollablePlayers
-        where kind == activePlayer || snapshots[kind] == nil || ticks % Self.idlePollEvery == 0 {
+        where kind == activePlayer || snapshots[kind] == nil
+            || ticks % (kind.pollsForChanges ? Self.quietPollEvery : Self.idlePollEvery) == 0 {
             requestPosition(kind)
         }
     }

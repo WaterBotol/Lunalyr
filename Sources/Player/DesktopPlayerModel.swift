@@ -8,6 +8,8 @@ import SwiftUI
 final class DesktopPlayerModel: ObservableObject {
     static let shared = DesktopPlayerModel()
     static let playerKey = "custom.desktopPlayer.player"
+    /// Players installed on this Mac, looked up once.
+    static let installed: Set<PlayerKind> = PlayerOptions.installedPlayers
 
     enum Status: Equatable {
         case idle, searching
@@ -146,9 +148,7 @@ final class DesktopPlayerModel: ObservableObject {
                 self.fetched = items
                 self.recompose()
                 self.status = items.isEmpty && !self.isSearching
-                    ? .message(searcher.kind == .spotify
-                        ? "Spotify doesn\u{2019}t share what plays next."
-                        : "Nothing is playing.")
+                    ? .message(Self.emptyQueueMessage(for: searcher.kind))
                     : .idle
             } catch {
                 guard !Task.isCancelled, let self else { return }
@@ -195,8 +195,31 @@ final class DesktopPlayerModel: ObservableObject {
         }
     }
 
+    /// Under an empty strip. Only Music shares what plays next.
+    nonisolated static func emptyQueueMessage(for kind: PlayerKind) -> String {
+        kind == .appleMusic ? "Nothing is playing." : "\(kind.shortName) doesn\u{2019}t share what plays next."
+    }
+
+    /// The players the switch offers: Music and Spotify where installed, a
+    /// local-file player while it runs, a browser once a web player was seen
+    /// in it -- and always the one playing and the one selected. Only
+    /// followed players, which are the only ones Lunalyr may talk to.
+    nonisolated static func switchKinds(installed: Set<PlayerKind>, running: Set<PlayerKind>, followed: [PlayerKind],
+                                        webSeen: Set<PlayerKind>, active: PlayerKind?, selected: PlayerKind) -> [PlayerKind] {
+        PlayerKind.allCases.filter { kind in
+            if kind == active || kind == selected { return true }
+            guard followed.contains(kind) else { return false }
+            switch kind.family {
+            case .musicApp: return installed.contains(kind)
+            case .localFiles: return installed.contains(kind) && running.contains(kind)
+            case .browser: return running.contains(kind) && webSeen.contains(kind)
+            }
+        }
+    }
+
     nonisolated static func words(for error: Error, player: PlayerKind) -> String {
         switch error as? PlayerSearchError {
+        case .unsupported: return "\(player.shortName) has no search Lunalyr can use."
         case .notRunning: return "Open \(player.displayName) first, then try again."
         case .blocked: return "Allow Lunalyr to control \(player.displayName) in System Settings \u{203A} Privacy & Security \u{203A} Automation."
         default: return "\(player.displayName) did not answer. Try again."

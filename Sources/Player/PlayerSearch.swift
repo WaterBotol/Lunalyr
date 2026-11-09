@@ -50,6 +50,8 @@ struct PlayerQueueSnapshot: Equatable, Sendable {
 enum PlayerSearchError: Error, Equatable, Sendable {
     case notRunning(PlayerKind)
     case blocked(PlayerKind)
+    /// The player offers nothing to search (a local-file player).
+    case unsupported(PlayerKind)
     case failed
 }
 
@@ -68,6 +70,8 @@ extension PlayerKind {
         switch self {
         case .appleMusic: return AppleMusicSearch()
         case .spotify: return SpotifySearch()
+        case .vlc, .swinsian, .vox: return NoSearch(kind: self)
+        case .safari, .chrome, .arc, .brave, .edge: return WebPlayerSearch(kind: self)
         }
     }
 }
@@ -726,4 +730,55 @@ struct SpotifySearch: PlayerSearching {
 
     func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
     func playQueueItem(_ item: PlayerQueueItem) async throws {}
+}
+
+// MARK: - Local-file players
+
+/// VLC, Swinsian and VOX share no library search or queue through their
+/// dictionaries: the strip shows just the song playing.
+struct NoSearch: PlayerSearching {
+    let kind: PlayerKind
+
+    func search(_ query: String) async throws -> [PlayerSearchResult] { throw PlayerSearchError.unsupported(kind) }
+    func play(_ result: PlayerSearchResult) async throws { throw PlayerSearchError.unsupported(kind) }
+    func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
+    func playQueueItem(_ item: PlayerQueueItem) async throws {}
+    func albums(by artist: String) async -> [PlayerAlbum] { [] }
+    func play(_ album: PlayerAlbum) async throws {}
+}
+
+// MARK: - Web players
+
+/// A web player has no search or queue Lunalyr can read, so, as for
+/// Spotify, a search opens the service's own search page -- in the browser
+/// it plays in, and only when the user picks the result.
+struct WebPlayerSearch: PlayerSearching {
+    let kind: PlayerKind
+    var memory: WebTabMemory = .shared
+
+    /// The service last followed in this browser; YouTube Music before any.
+    var service: WebService { memory.entry(for: kind)?.service ?? .youTubeMusic }
+
+    func search(_ query: String) async throws -> [PlayerSearchResult] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, let url = service.searchURL(trimmed) else { return [] }
+        return [PlayerSearchResult(
+            id: "web-search", kind: .song, title: "Search \(service.displayName) for \u{201C}\(trimmed)\u{201D}",
+            artist: "Opens in \(kind.shortBrowserName)", album: "", artworkURL: nil, target: .address(url), inLibrary: false)]
+    }
+
+    func play(_ result: PlayerSearchResult) async throws {
+        // The test host never opens anything in a real browser.
+        guard !AppRuntime.isUnitTesting else { throw PlayerSearchError.failed }
+        guard case .address(let url) = result.target, url.scheme == "https",
+              let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: kind.bundleID) else { throw PlayerSearchError.failed }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        _ = try await NSWorkspace.shared.open([url], withApplicationAt: app, configuration: configuration)
+    }
+
+    func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
+    func playQueueItem(_ item: PlayerQueueItem) async throws {}
+    func albums(by artist: String) async -> [PlayerAlbum] { [] }
+    func play(_ album: PlayerAlbum) async throws {}
 }

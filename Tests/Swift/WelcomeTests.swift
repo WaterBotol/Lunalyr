@@ -11,8 +11,11 @@ final class WelcomeTests: XCTestCase {
     @MainActor
     func testTheWelcomeExplainsThePromptAndTheWayBack() {
         XCTAssertTrue(OnboardingCopy.permissionNote.contains("macOS asks"))
-        for kind in PlayerKind.allCases {
+        for kind in PlayerKind.apps {
             XCTAssertTrue(OnboardingCopy.permissionNote.contains(kind.displayName))
+        }
+        for service in WebService.allCases {
+            XCTAssertTrue(OnboardingCopy.permissionNote.contains(service.displayName))
         }
         XCTAssertTrue(OnboardingCopy.menuBarNote.contains("notch"))
         XCTAssertTrue(OnboardingCopy.menuBarNote.contains("Applications"))

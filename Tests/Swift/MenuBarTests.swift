@@ -212,7 +212,9 @@ final class MenuBarTests: XCTestCase {
     @MainActor
     func testTheIdlePromptNamesThePlayersFollowed() {
         let h = PlayerHarness(running: [])
-        XCTAssertEqual(h.monitor.idlePrompt, "Play a song in \(PlayerKind.names(PlayerKind.allCases))")
+        XCTAssertEqual(h.monitor.idlePrompt, "Play a song in Music or Spotify", "Only installed players are named")
+        h.environment.installed.insert("com.apple.Safari")
+        XCTAssertEqual(h.monitor.idlePrompt, "Play a song in Music or Spotify or a web player")
         XCTAssertEqual(PlayerKind.names([.appleMusic]), "Music")
     }
 }

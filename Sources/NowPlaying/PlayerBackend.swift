@@ -10,13 +10,53 @@ import AppKit
 enum PlayerKind: String, CaseIterable, Identifiable, Sendable {
     case appleMusic
     case spotify
+    /// Local-file players with an AppleScript dictionary.
+    case vlc
+    case swinsian
+    case vox
+    /// Browsers, for YouTube Music, SoundCloud and Amazon Music tabs: read
+    /// by running a small script in the page (`WebPlayerBackend`), which
+    /// each browser allows only with "Allow JavaScript from Apple Events".
+    case safari
+    case chrome
+    case arc
+    case brave
+    case edge
 
     var id: String { rawValue }
+
+    /// The kinds of source, which decide where a player is offered.
+    enum Family: Sendable {
+        /// A music app with its own library or service (Music, Spotify).
+        case musicApp
+        /// A player of files on this Mac.
+        case localFiles
+        /// A browser playing a web player.
+        case browser
+    }
+
+    var family: Family {
+        switch self {
+        case .appleMusic, .spotify: return .musicApp
+        case .vlc, .swinsian, .vox: return .localFiles
+        case .safari, .chrome, .arc, .brave, .edge: return .browser
+        }
+    }
+
+    var isBrowser: Bool { family == .browser }
 
     var bundleID: String {
         switch self {
         case .appleMusic: return "com.apple.Music"
         case .spotify: return "com.spotify.client"
+        case .vlc: return "org.videolan.vlc"
+        case .swinsian: return "com.swinsian.Swinsian"
+        case .vox: return "com.coppertino.Vox"
+        case .safari: return "com.apple.Safari"
+        case .chrome: return "com.google.Chrome"
+        case .arc: return "company.thebrowser.Browser"
+        case .brave: return "com.brave.Browser"
+        case .edge: return "com.microsoft.edgemac"
         }
     }
 
@@ -25,27 +65,61 @@ enum PlayerKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .appleMusic: return "Music"
         case .spotify: return "Spotify"
+        case .vlc: return "VLC"
+        case .swinsian: return "Swinsian"
+        case .vox: return "VOX"
+        case .safari: return "Safari"
+        case .chrome: return "Google Chrome"
+        case .arc: return "Arc"
+        case .brave: return "Brave Browser"
+        case .edge: return "Microsoft Edge"
         }
     }
 
-    /// Distributed notification the player posts on every track or state change.
-    var notificationName: String {
+    /// Distributed notification the player posts on every track or state
+    /// change. The others say nothing, so they are polled (`pollsForChanges`).
+    var notificationName: String? {
         switch self {
         case .appleMusic: return "com.apple.Music.playerInfo"
         case .spotify: return "com.spotify.client.PlaybackStateChanged"
+        default: return nil
         }
     }
+
+    /// A player that announces nothing: a track starting or changing is
+    /// noticed only by asking, so it is asked more often while idle.
+    var pollsForChanges: Bool { notificationName == nil }
+
+    /// The app whose processes play its audio, for telling whether it plays
+    /// on this Mac. Browsers play from shared engine processes (WebKit's GPU
+    /// process for Safari) that cannot be told apart reliably, so nil.
+    var outputBundleID: String? { isBrowser ? nil : bundleID }
 
     var backend: any PlayerBackend {
         switch self {
         case .appleMusic: return MusicBackend()
         case .spotify: return SpotifyBackend()
+        case .vlc: return VLCBackend()
+        case .swinsian: return SwinsianBackend()
+        case .vox: return VoxBackend()
+        case .safari, .chrome, .arc, .brave, .edge: return WebPlayerBackend(browser: self)
         }
     }
 
-    /// "Music", "Music or Spotify"...
+    /// Players followed under Automatic. Browsers only when web players are
+    /// turned on (`PlayerOptions.followsWebPlayers`): every Mac has Safari
+    /// open, and following it unasked would raise "Lunalyr wants to control
+    /// Safari" for someone who never plays music in it.
+    static var apps: [PlayerKind] { allCases.filter { !$0.isBrowser } }
+
+    static var browsers: [PlayerKind] { allCases.filter(\.isBrowser) }
+
+    /// "Music", "Music or Spotify"... Browsers are named once, as the web
+    /// players they stand for.
     static func names(_ kinds: [PlayerKind]) -> String {
-        kinds.map(\.displayName).joined(separator: " or ")
+        var names = kinds.filter { !$0.isBrowser }.map(\.displayName)
+        if kinds.contains(where: \.isBrowser) { names.append("a web player") }
+        return names.joined(separator: " or ")
     }
 }
 
@@ -140,6 +214,10 @@ enum PlayerResponse<Value: Sendable>: Sendable {
     case notRunning
     /// macOS Automation access is off or undecided for this player.
     case blocked(AutomationAccess)
+    /// A browser answered, but its "Allow JavaScript from Apple Events" is
+    /// off, so no web player in it can be read. Only the user can turn it
+    /// on; Lunalyr says how (`WebScriptingNotice`) and never touches it.
+    case javaScriptOff
     /// Anything else: timeouts, a busy player, an unexpected reply.
     case failed(Int)
 
@@ -276,16 +354,21 @@ enum PlayerScriptSource {
 
     /// Reads an expression that may legitimately be unavailable, leaving
     /// `missing value` rather than failing the whole script.
-    static func optional(_ variable: String, _ expression: String) -> String {
+    static func optional(_ variable: String, _ expression: String, tolerating codes: String = tolerated) -> String {
         """
         set \(variable) to missing value
         try
         set \(variable) to \(expression)
         on error number errorNumber
-        if errorNumber is not in \(tolerated) then error number errorNumber
+        if errorNumber is not in \(codes) then error number errorNumber
         end try
         """
     }
+
+    /// `tolerated`, and an undefined variable (-2753): what a term a player's
+    /// version lacks compiles to. For players whose dictionaries Lunalyr
+    /// could not check against every version.
+    static let toleratedUnknownTerms = "{-1728, -1700, -1708, -1719, -10000, -2753}"
 
     /// The player state as plain text. Comparing enumerators inside the
     /// tell block does not depend on how the dictionary coerces them.

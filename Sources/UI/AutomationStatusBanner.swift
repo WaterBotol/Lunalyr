@@ -79,6 +79,15 @@ struct AutomationStatusBanner: View {
             }
             // The user may have just changed the setting.
             .onAppear { playing.recheckAutomation() }
+        } else if let notice = WebScriptingNotice.notice(for: playing) {
+            // A browser Lunalyr may control, whose pages it may not run a
+            // script in. Only the user can change that, so this only says how.
+            StatusBanner(.info, title: notice.title, message: notice.message, symbol: "curlybraces", density: density) {
+                if let other = playing.playerToFollowInstead(of: notice.browser) {
+                    Button("Follow \(other.displayName) Only") { players.choice = .only(other) }
+                        .help("Lunalyr stops reading \(notice.browser.displayName).")
+                }
+            }
         }
     }
 

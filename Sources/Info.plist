@@ -23,7 +23,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Lunalyr reads the playing song and its position from Music or Spotify to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.</string>
+	<string>Lunalyr reads the playing song and its position from Music, Spotify, VLC, Swinsian, VOX or a web player in your browser to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.</string>
 	<key>NSHumanReadableCopyright</key>

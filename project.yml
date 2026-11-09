@@ -31,7 +31,7 @@ targets:
         CFBundleVersion: "21"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026
-        NSAppleEventsUsageDescription: Lunalyr reads the playing song and its position from Music or Spotify to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.
+        NSAppleEventsUsageDescription: Lunalyr reads the playing song and its position from Music, Spotify, VLC, Swinsian, VOX or a web player in your browser to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.
         NSAudioCaptureUsageDescription: Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.
         SUFeedURL: "https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml"
         SUPublicEDKey: "7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY="

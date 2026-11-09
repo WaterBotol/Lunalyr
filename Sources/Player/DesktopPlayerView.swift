@@ -6,10 +6,32 @@ extension PlayerKind {
         switch self {
         case .appleMusic: return Color(red: 0.98, green: 0.26, blue: 0.40)
         case .spotify: return Color(red: 0.12, green: 0.84, blue: 0.38)
+        case .vlc: return Color(red: 1.0, green: 0.53, blue: 0.0)
+        case .swinsian: return Color(red: 0.35, green: 0.62, blue: 1.0)
+        case .vox: return Color(red: 0.98, green: 0.36, blue: 0.22)
+        case .safari, .chrome, .arc, .brave, .edge:
+            return WebTabMemory.shared.entry(for: self)?.service.tint ?? Color(red: 0.62, green: 0.70, blue: 1.0)
         }
     }
 
-    var shortName: String { self == .appleMusic ? "Apple Music" : "Spotify" }
+    /// The switch's label: the web player last seen in a browser, else "Web".
+    var shortName: String {
+        switch self {
+        case .appleMusic: return "Apple Music"
+        case .safari, .chrome, .arc, .brave, .edge: return WebTabMemory.shared.entry(for: self)?.service.displayName ?? "Web"
+        default: return displayName
+        }
+    }
+}
+
+extension WebService {
+    var tint: Color {
+        switch self {
+        case .youTubeMusic: return Color(red: 1.0, green: 0.2, blue: 0.2)
+        case .soundCloud: return Color(red: 1.0, green: 0.47, blue: 0.1)
+        case .amazonMusic: return Color(red: 0.15, green: 0.82, blue: 0.85)
+        }
+    }
 }
 
 /// Set while the hit mask is drawn: scroll views come out blank in an image,
@@ -138,7 +160,7 @@ struct DesktopPlayerView: View {
     /// Both players side by side; the one in use is lit in its own colour.
     private var playerSwitch: some View {
         HStack(spacing: 14) {
-            ForEach(PlayerKind.allCases) { kind in
+            ForEach(switchKinds) { kind in
                 let on = kind == model.player
                 Button { model.player = kind } label: {
                     VStack(spacing: 3) {
@@ -149,10 +171,18 @@ struct DesktopPlayerView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Search and play in \(kind.shortName)")
+                .help(kind.isBrowser ? "\(kind.shortName) in \(kind.shortBrowserName)" : "Search and play in \(kind.shortName)")
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.player)
+    }
+
+    private var switchKinds: [PlayerKind] {
+        DesktopPlayerModel.switchKinds(
+            installed: DesktopPlayerModel.installed, running: nowPlaying.runningPlayers,
+            followed: nowPlaying.followedPlayers,
+            webSeen: Set(PlayerKind.browsers.filter { WebTabMemory.shared.entry(for: $0) != nil }),
+            active: nowPlaying.activePlayer, selected: model.player)
     }
 
     /// A small field with a hairline under it, not a pill.
