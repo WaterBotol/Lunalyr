@@ -77,12 +77,20 @@ final class MainDisplayMonitor: ObservableObject {
     static let shared = MainDisplayMonitor()
 
     @Published private(set) var id: CGDirectDisplayID
+    /// The connected displays, for the music video's display choice.
+    @Published private(set) var displays: [MusicVideoDisplay]
     private let current: () -> CGDirectDisplayID
+    private let list: () -> [MusicVideoDisplay]
     private let observers = NotificationTokens()
 
-    init(center: NotificationCenter = .default, current: @escaping () -> CGDirectDisplayID = { CGMainDisplayID() }) {
+    init(center: NotificationCenter = .default,
+         list: (() -> [MusicVideoDisplay])? = nil,
+         current: @escaping () -> CGDirectDisplayID = { CGMainDisplayID() }) {
+        let list = list ?? { MusicVideoDisplays.connected() }
         self.current = current
+        self.list = list
         id = current()
+        displays = list()
         observers.observe(NSApplication.didChangeScreenParametersNotification, on: center) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -91,6 +99,8 @@ final class MainDisplayMonitor: ObservableObject {
     func refresh() {
         let now = current()
         if id != now { id = now }
+        let connected = list()
+        if displays != connected { displays = connected }
     }
 }
 

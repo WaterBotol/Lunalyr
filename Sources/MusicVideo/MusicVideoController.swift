@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CoreGraphics
 import Foundation
@@ -30,6 +31,10 @@ final class MusicVideoController: ObservableObject {
     }
 
     @Published private(set) var status: Status = .off
+    /// The pasted link for the playing song looks like a still image (the
+    /// cover over the audio). It plays anyway: the user chose it.
+    @Published private(set) var pastedLooksStill = false
+    static let pastedStillNote = "This video looks like a still image, probably the cover over the audio. It plays because you chose it."
     let offsets: MusicVideoOffsets
     private let resolver: MusicVideoResolver
     private var song: MusicVideoSong?
@@ -39,6 +44,7 @@ final class MusicVideoController: ObservableObject {
     private var enabled = false
     private var online = false
     private var lookup: Task<Void, Never>?
+    private var stillCheck: Task<Void, Never>?
     private var retry: Task<Void, Never>?
     /// Each song is retried once after a passing failure, not every minute.
     private var retried: String?
@@ -94,6 +100,8 @@ final class MusicVideoController: ObservableObject {
         guard changed else { return }
         playingKey = playing
         song = next
+        stillCheck?.cancel()
+        pastedLooksStill = false
         lookup?.cancel()
         retry?.cancel()
         guard enabled else { status = .off; return }
@@ -117,7 +125,9 @@ final class MusicVideoController: ObservableObject {
 
     private func apply(_ result: MusicVideoResolution, for song: MusicVideoSong) {
         switch result {
-        case .found(let source): status = .showing(source, title: song.title)
+        case .found(let source):
+            status = .showing(source, title: song.title)
+            if case .youTube(let id) = source, resolver.links.videoID(for: song.key) == id { checkPastedStill(id, song) }
         case .missing(let miss):
             status = .missing(miss, title: song.title)
             if (miss == .rateLimited || miss == .lookupFailed) && retried != song.key { scheduleRetry(song) }
@@ -136,30 +146,93 @@ final class MusicVideoController: ObservableObject {
         }
     }
 
-    /// Waits for the lookup in flight, for tests.
+    /// The note only; the pasted video is never replaced.
+    private func checkPastedStill(_ id: String, _ song: MusicVideoSong) {
+        stillCheck?.cancel()
+        stillCheck = Task { [weak self] in
+            guard let self else { return }
+            let still = await self.resolver.pastedLooksStill(id)
+            guard !Task.isCancelled, self.song?.key == song.key, self.resolver.links.videoID(for: song.key) == id else { return }
+            self.pastedLooksStill = still == true
+        }
+    }
+
+    /// Waits for the lookup in flight (and a pasted link's still check), for tests.
     func settle() async {
         await lookup?.value
+        await stillCheck?.value
     }
 
-    /// The player could not show the video: YouTube refused to embed it,
-    /// or the file would not play. The wallpaper falls back for this song.
-    func reportPlaybackFailure(of source: MusicVideoSource) {
+    /// The player could not show the video, and the wallpaper falls back
+    /// for this song. Only a report about the video on screen counts.
+    /// - YouTube refused it for good: remembered, unless it is the user's
+    ///   own pasted link (kept, so they can fix it).
+    /// - Something passing (offline, no answer in time, player error 5):
+    ///   nothing is remembered, and the song is tried once more later.
+    /// - The library's own file would not play: said as such.
+    func reportPlaybackFailure(of source: MusicVideoSource, _ failure: MusicVideoPlaybackFailure = .refused) {
         guard let song, case .showing(let showing, _) = status, showing == source else { return }
-        if case .youTube = source { resolver.markNotEmbeddable(song) }
-        status = .missing(.notEmbeddable, title: song.title)
+        switch (source, failure) {
+        case (.local, _):
+            status = .missing(.localFileFailed, title: song.title)
+        case (.youTube, .transient):
+            status = .missing(.playerUnreachable, title: song.title)
+            if retried != song.key { scheduleRetry(song) }
+        case (.youTube(let id), .refused):
+            if resolver.links.videoID(for: song.key) != id { resolver.markNotEmbeddable(song) }
+            status = .missing(.notEmbeddable, title: song.title)
+        }
     }
 
-    /// Whether a surface shows `source` or falls back: the Settings preview
-    /// shows it (a still for YouTube), and with "Heavy scenes on main display
-    /// only" on, only the main display plays it, as with the web scenes.
+    /// Whether a surface shows `source` or falls back. The Settings preview
+    /// shows it (a still for YouTube). On the desktop, "Show the video on"
+    /// decides; until the user picks, it follows "Heavy scenes on main
+    /// display only", as the web scenes do. A picked display that is
+    /// unplugged hands the video to the main display.
     nonisolated static func placement(source: MusicVideoSource?, preview: Bool, heavyScenesOnMainDisplayOnly: Bool,
+                                      choice: MusicVideoDisplayChoice = .followHeavyScenes,
+                                      displays: [MusicVideoDisplay] = [],
                                       display: CGDirectDisplayID?, mainDisplay: CGDirectDisplayID) -> MusicVideoSource? {
         guard let source else { return nil }
-        switch WebVisualizerView.placement(preview: preview, heavyScenesOnMainDisplayOnly: heavyScenesOnMainDisplayOnly,
-                                           display: display, mainDisplay: mainDisplay) {
-        case .preview, .live: return source
-        case .standIn: return nil
+        if preview { return source }
+        guard let display else { return source }
+        return MusicVideoDisplays.shows(choice, heavyScenesOnMainDisplayOnly: heavyScenesOnMainDisplayOnly,
+                                        display: display, main: mainDisplay, connected: displays) ? source : nil
+    }
+
+    // MARK: Open on YouTube
+
+    /// The YouTube video on screen for the playing song, nil for a library
+    /// video or none.
+    var showingYouTubeID: String? {
+        if case .showing(.youTube(let id), _) = status { return id }
+        return nil
+    }
+
+    /// A watch link for a video at the song's position, offset included:
+    /// `https://www.youtube.com/watch?v=<id>&t=<seconds>s` (no `t` at 0).
+    nonisolated static func watchURL(videoID: String, songTime: Double, offset: Double) -> URL? {
+        guard YouTubeVideoID.isValid(videoID) else { return nil }
+        let at = MusicVideoTiming.videoTime(songTime: songTime, offset: offset, videoDuration: nil) ?? 0
+        let seconds = Int(max(0, at.rounded(.down)))
+        var components = URLComponents(string: "https://www.youtube.com/watch")!
+        components.queryItems = [URLQueryItem(name: "v", value: videoID)]
+            + (seconds > 0 ? [URLQueryItem(name: "t", value: "\(seconds)s")] : [])
+        return components.url
+    }
+
+    /// The video on screen, where the song is now.
+    var watchURL: URL? {
+        showingYouTubeID.flatMap {
+            Self.watchURL(videoID: $0, songTime: NowPlayingMonitor.shared.playbackTime(), offset: currentOffset)
         }
+    }
+
+    /// Opens the video on screen in the browser. Only ever called from the
+    /// user's click on "Open video on YouTube"; never inside the test host.
+    func openOnYouTube(open: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+        guard !AppRuntime.isUnitTesting, let url = watchURL else { return }
+        open(url)
     }
 
     // MARK: Pasted links
@@ -179,13 +252,19 @@ final class MusicVideoController: ObservableObject {
         return true
     }
 
+    /// Forgets the pasted link and whatever was remembered for the song
+    /// (a "can't be embedded" left by that link would otherwise block the
+    /// search for a week).
     func clearPastedLink() {
         guard let song else { return }
         resolver.links.remove(song.key)
+        resolver.cache.remove(song.key)
         relook(song)
     }
 
     private func relook(_ song: MusicVideoSong) {
+        stillCheck?.cancel()
+        pastedLooksStill = false
         lookup?.cancel()
         retry?.cancel()
         objectWillChange.send()
@@ -240,6 +319,10 @@ final class MusicVideoController: ObservableObject {
             case .rateLimited: return "Too many lookups just now; trying again shortly. \(instead)"
             case .lookupFailed: return "Couldn’t search YouTube just now. \(instead) You can paste a YouTube link for it below."
             case .notASong: return "Radio and adverts have no video. \(instead)"
+            case .playerUnreachable:
+                return "Couldn’t load YouTube’s player for “\(title)” just now; trying again shortly. \(instead)"
+            case .localFileFailed:
+                return "The library’s video for “\(title)” wouldn’t play here. \(instead)"
             }
         }
     }

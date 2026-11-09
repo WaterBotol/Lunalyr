@@ -14,6 +14,7 @@ struct MenuBarWallpaperControls: View {
     @Model(\.hotkeys) private var hotkeys
     @Model(\.nowPlaying) private var playing
     @Environment(\.lunalyrModels) private var models
+    @ObservedObject private var musicVideo = MusicVideoController.shared
 
     var body: some View {
         let navigation = models.resolved.navigation
@@ -29,6 +30,12 @@ struct MenuBarWallpaperControls: View {
             // The panel never opens a file panel: Image or video with nothing
             // imported yet goes to Settings, which has the importer.
             WallpaperModeGrid(chooseImport: { navigation.openSettings(.wallpaper) })
+            if settings.backgroundMode == .musicVideo, musicVideo.showingYouTubeID != nil {
+                Button("Open video on YouTube") { musicVideo.openOnYouTube() }
+                    .buttonStyle(.link)
+                    .controlSize(.small)
+                    .help("Opens the video in your browser at the song’s position")
+            }
             if settings.backgroundMode == .visualizer {
                 MenuBarPickerRow("Scene") {
                     Picker("Scene", selection: $settings.audioVisualizerStyle) {

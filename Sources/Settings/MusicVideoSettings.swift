@@ -8,19 +8,22 @@ struct MusicVideoSection: View {
     @Model(\.settings) private var s
     @ObservedObject private var controller = MusicVideoController.shared
     @ObservedObject private var visualizer = VisualizerPreferences.shared
+    @ObservedObject private var screens = MainDisplayMonitor.shared
 
     var body: some View {
         if let note = MusicVideoController.note(for: controller.status, online: s.musicVideoOnline,
                                                 fallback: s.musicVideoFallback.title) {
             InspectorCaption(note)
         }
+        if controller.showingYouTubeID != nil {
+            Button("Open video on YouTube") { controller.openOnYouTube() }
+                .buttonStyle(.link)
+                .help("Opens the video in your browser at the song’s position")
+        }
         Toggle("Search YouTube for videos", isOn: $s.musicVideoOnline)
         InspectorCaption(Self.privacyCaption, more: Self.privacyDetail)
         ChoiceMenu("Without a video", selection: $s.musicVideoFallback, selectedTitle: \.title) {
             ForEach(Settings.BackgroundMode.musicVideoFallbacks) { Text($0.title).tag($0) }
-        }
-        if visualizer.heavyScenesOnMainDisplayOnly {
-            InspectorCaption("“Heavy scenes on main display only” is on, so other displays show \(s.musicVideoFallback.title).")
         }
         PastedVideoLink(controller: controller)
         LabeledContent("Video timing") {
@@ -28,10 +31,27 @@ struct MusicVideoSection: View {
                              nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
         }
         InspectorCaption("For this song: how far into the video the song begins. Raise it when the video opens with a scene before the music.")
+        displayChoice
         ValueSlider("Video dimming", value: $s.musicVideoDim, in: Settings.musicVideoDimRange, step: 0.01,
                     format: SettingsFormat.percent)
         ValueSlider("Video blur", value: $s.musicVideoBlur, in: Settings.musicVideoBlurRange, step: 0.5,
                     format: { String(format: "%.0f pt", $0) })
+    }
+
+    /// "Show the video on", beside dimming and blur.
+    @ViewBuilder private var displayChoice: some View {
+        let heavy = visualizer.heavyScenesOnMainDisplayOnly
+        let connected = screens.displays
+        ChoiceMenu("Show the video on", selection: $s.musicVideoDisplays,
+                   selectedTitle: { MusicVideoDisplays.title($0, heavyScenesOnMainDisplayOnly: heavy, connected: connected) }) {
+            ForEach(MusicVideoDisplays.options(selected: s.musicVideoDisplays, connected: connected), id: \.self) { choice in
+                Text(MusicVideoDisplays.title(choice, heavyScenesOnMainDisplayOnly: heavy, connected: connected)).tag(choice)
+            }
+        }
+        if let caption = MusicVideoDisplays.caption(s.musicVideoDisplays, heavyScenesOnMainDisplayOnly: heavy,
+                                                    connected: connected, fallback: s.musicVideoFallback.title) {
+            InspectorCaption(caption)
+        }
     }
 
     static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
@@ -67,6 +87,9 @@ private struct PastedVideoLink: View {
             DisabledReason("That isn’t a YouTube video link.")
         } else if let link = controller.pastedLink {
             InspectorCaption("This song uses \(link).")
+            if controller.pastedLooksStill {
+                InspectorCaption(MusicVideoController.pastedStillNote)
+            }
         }
     }
 

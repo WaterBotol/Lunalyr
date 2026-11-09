@@ -50,15 +50,36 @@ struct MusicVideoBackground: View {
     }
 }
 
-/// The YouTube video's own still, for the Settings preview.
-private struct YouTubeThumbnail: View {
+/// The YouTube video's own still, for the Settings preview. Fetched on
+/// the music video's ephemeral session (no cookies, nothing on disk), not
+/// `URLSession.shared` as `AsyncImage` would.
+struct YouTubeThumbnail: View {
     let videoID: String
+    @State private var image: NSImage?
+
+    static func url(for videoID: String) -> URL? {
+        guard YouTubeVideoID.isValid(videoID) else { return nil }
+        return URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg")
+    }
+
+    /// The still's image, or nil. `http` is a seam for tests.
+    static func load(_ videoID: String, http: MusicVideoHTTP = URLSessionMusicVideoHTTP()) async -> NSImage? {
+        guard let url = url(for: videoID), let (data, response) = try? await http.get(url),
+              response.statusCode == 200 else { return nil }
+        return NSImage(data: data)
+    }
 
     var body: some View {
-        AsyncImage(url: URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg")) { image in
-            image.resizable().aspectRatio(contentMode: .fill)
-        } placeholder: {
+        ZStack {
             Color.black
+            if let image {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            }
+        }
+        .task(id: videoID) {
+            image = nil
+            let loaded = await Self.load(videoID)
+            if !Task.isCancelled { image = loaded }
         }
     }
 }
@@ -301,9 +322,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let coordinator = context.coordinator
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.mediaTypesRequiringUserActionForPlayback = []
+        let configuration = YouTubeEmbed.configuration()
         configuration.userContentController.add(WeakScriptHandler(coordinator), name: YouTubeEmbed.messageName)
         let view = BackgroundYouTubeView(frame: .zero, configuration: configuration)
         view.underPageBackgroundColor = .black
@@ -339,6 +358,19 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
 enum YouTubeEmbed {
     static let messageName = "lunalyrVideo"
 
+    /// The web view's settings. Silence does not rest on YouTube alone:
+    /// WebKit plays only muted media without a gesture (`.audio`), and no
+    /// gesture can happen because the view takes no clicks, so anything
+    /// that turns audible (an ad, an API change) is paused by WebKit. No
+    /// AirPlay, no stored website data.
+    static func configuration() -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.mediaTypesRequiringUserActionForPlayback = .audio
+        configuration.allowsAirPlayForMediaPlayback = false
+        return configuration
+    }
+
     /// The page's own origin. YouTube's embedded player wants a referrer
     /// that names the app embedding it; an HTML string has none of its own.
     static var baseURL: URL {
@@ -349,8 +381,19 @@ enum YouTubeEmbed {
     /// error, 100 removed or private, 101/150 not embeddable, 152/153 the
     /// embed refused for this page.
     static let fatalErrors: Set<Int> = [2, 5, 100, 101, 150, 152, 153]
+    /// Of those, the passing one: an HTML5 player error, which may well
+    /// not happen next time. Never remembered for the song.
+    static let transientErrors: Set<Int> = [5]
 
-    static func html(videoID: String, start: Double) -> String {
+    /// What a player error means for the song, nil when it is not fatal.
+    static func failure(forError code: Int) -> MusicVideoPlaybackFailure? {
+        guard fatalErrors.contains(code) else { return nil }
+        return transientErrors.contains(code) ? .transient : .refused
+    }
+
+    /// `page` numbers each load, so a message from a page that has since
+    /// been replaced is told apart from the current one's.
+    static func html(videoID: String, start: Double, page: Int = 0) -> String {
         precondition(YouTubeVideoID.isValid(videoID))
         let startSecond = max(0, Int(start.isFinite ? start : 0))
         return """
@@ -364,7 +407,8 @@ enum YouTubeEmbed {
         <script>
         var player = null, ready = false;
         function post(type, value) {
-          try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value}); } catch (e) {}
+          try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value,
+                video: '\(videoID)', page: \(page)}); } catch (e) {}
         }
         function onYouTubeIframeAPIReady() {
           player = new YT.Player('player', {
@@ -376,7 +420,7 @@ enum YouTubeEmbed {
             events: {
               onReady: function (event) { ready = true; event.target.mute(); post('ready', 0); },
               onError: function (event) { post('error', event.data); },
-              onStateChange: function (event) { if (event.data === 1) { player.mute(); } }
+              onStateChange: function (event) { if (event.data === 1 || event.data === 3) { player.mute(); } }
             }
           });
         }
@@ -386,7 +430,7 @@ enum YouTubeEmbed {
         };
         window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
         window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
-        window.lunalyrSeek = function (t) { if (ready) player.seekTo(t, true); };
+        window.lunalyrSeek = function (t) { if (ready) { player.mute(); player.seekTo(t, true); } };
         window.lunalyrBlur = function (px) {
           var frame = document.getElementById('frame');
           frame.style.filter = px > 0 ? 'blur(' + px + 'px)' : '';
@@ -404,6 +448,13 @@ enum YouTubeEmbed {
         guard mainFrame else { return true }
         guard let url else { return false }
         return url.scheme == "about" || (url.host == baseURL.host && url.scheme == baseURL.scheme)
+    }
+
+    /// Whether a script message comes from the page Lunalyr loaded: its
+    /// main frame at its own origin. YouTube's frames (or anything they
+    /// load) may also reach the handler; they are not listened to.
+    static func trusts(mainFrame: Bool, scheme: String, host: String) -> Bool {
+        mainFrame && scheme.lowercased() == baseURL.scheme && host.lowercased() == baseURL.host
     }
 
     /// The IFrame API's player state: 1 playing, 3 buffering, -1 unstarted.
@@ -427,13 +478,166 @@ private final class WeakScriptHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+/// The YouTube page's life, apart from WebKit so it can be tested: which
+/// page is current, whether its player answered in time, which messages
+/// to believe, and how often a crashed page is reloaded.
+@MainActor
+final class YouTubeEmbedSession {
+    /// The player has this long to say it is ready; otherwise YouTube is
+    /// taken as unreachable for now (offline, blocked, a consent wall).
+    static let readyTimeout: TimeInterval = 12
+    /// Reloads after the web content process quits, per video.
+    static let reloadLimit = 2
+
+    struct Message: Equatable {
+        enum Kind: Equatable {
+            case ready
+            case error(Int)
+            case other
+        }
+        var kind: Kind
+        var video: String?
+        var page: Int?
+
+        init(kind: Kind, video: String?, page: Int?) {
+            self.kind = kind
+            self.video = video
+            self.page = page
+        }
+
+        init?(body: Any) {
+            guard let body = body as? [String: Any], let type = body["type"] as? String else { return nil }
+            switch type {
+            case "ready": kind = .ready
+            case "error": kind = .error((body["value"] as? NSNumber)?.intValue ?? 0)
+            default: kind = .other
+            }
+            video = body["video"] as? String
+            page = (body["page"] as? NSNumber)?.intValue
+        }
+    }
+
+    /// What the coordinator does next.
+    enum Effect: Equatable {
+        case none
+        /// The player answered: apply the blur and check the video.
+        case ready
+        /// Load the page for this video, numbered `page`.
+        case load(videoID: String, page: Int)
+        /// Tell the controller the video could not be shown.
+        case fail(videoID: String, MusicVideoPlaybackFailure)
+    }
+
+    private(set) var videoID: String?
+    private(set) var page = 0
+    private(set) var ready = false
+    private(set) var reloads = 0
+    /// Set once a failure was reported for the current page; later news
+    /// about it is ignored.
+    private var failed = false
+    private var timeout: Task<Void, Never>?
+    private let readyTimeout: TimeInterval
+    private let reloadLimit: Int
+    private let sleep: @Sendable (TimeInterval) async -> Void
+    /// Effects that arrive on their own (the ready timeout).
+    var onEffect: (@MainActor (Effect) -> Void)?
+
+    init(readyTimeout: TimeInterval = YouTubeEmbedSession.readyTimeout,
+         reloadLimit: Int = YouTubeEmbedSession.reloadLimit,
+         sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }) {
+        self.readyTimeout = readyTimeout
+        self.reloadLimit = reloadLimit
+        self.sleep = sleep
+    }
+
+    /// A new video: a fresh page, with its own reload allowance.
+    func attach(_ videoID: String) -> Effect {
+        reloads = 0
+        self.videoID = videoID
+        return startPage()
+    }
+
+    private func startPage() -> Effect {
+        guard let videoID else { return .none }
+        page += 1
+        ready = false
+        failed = false
+        timeout?.cancel()
+        let page = self.page, wait = readyTimeout, sleep = self.sleep
+        timeout = Task { [weak self] in
+            await sleep(wait)
+            guard !Task.isCancelled, let self else { return }
+            let effect = self.timedOut(page: page)
+            if effect != .none { self.onEffect?(effect) }
+        }
+        return .load(videoID: videoID, page: page)
+    }
+
+    /// The timeout for `page` ran out.
+    func timedOut(page: Int) -> Effect {
+        guard page == self.page, !ready else { return .none }
+        return fail(.transient)
+    }
+
+    /// A script message. Only the page's own main frame, at its own origin,
+    /// about the current video and page, is listened to.
+    func receive(_ message: Message, trusted: Bool) -> Effect {
+        guard trusted, let videoID, message.video == videoID, message.page == page else { return .none }
+        switch message.kind {
+        case .ready:
+            guard !failed else { return .none }
+            ready = true
+            timeout?.cancel()
+            return .ready
+        case .error(let code):
+            guard let failure = YouTubeEmbed.failure(forError: code) else { return .none }
+            return fail(failure)
+        case .other:
+            return .none
+        }
+    }
+
+    /// The page's own navigation failed (offline, say). A load cancelled
+    /// because the next one replaced it is not a failure.
+    func navigationFailed(_ error: Error) -> Effect {
+        let error = error as NSError
+        if error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled { return .none }
+        if error.domain == "WebKitErrorDomain" && error.code == 102 { return .none }
+        return fail(.transient)
+    }
+
+    /// WebKit's content process quit: reloaded a couple of times per video,
+    /// then given up as a passing failure rather than reloading for ever.
+    func contentProcessTerminated() -> Effect {
+        guard videoID != nil, !failed else { return .none }
+        guard reloads < reloadLimit else { return fail(.transient) }
+        reloads += 1
+        return startPage()
+    }
+
+    private func fail(_ failure: MusicVideoPlaybackFailure) -> Effect {
+        guard let videoID, !failed else { return .none }
+        failed = true
+        ready = false
+        timeout?.cancel()
+        return .fail(videoID: videoID, failure)
+    }
+
+    func stop() {
+        timeout?.cancel()
+        timeout = nil
+        videoID = nil
+    }
+}
+
 @MainActor
 final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler,
                                           MusicVideoPlaybackSurface {
     let loop = MusicVideoSyncLoop()
-    private(set) var videoID: String?
+    let session = YouTubeEmbedSession()
+    var videoID: String? { session.videoID }
     private weak var view: WKWebView?
-    private var ready = false
+    private var navigation: WKNavigation?
     private var blur: Double = -1
 
     /// YouTube takes a moment to resume after a seek.
@@ -442,26 +646,45 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     override init() {
         super.init()
         loop.surface = self
+        session.onEffect = { [weak self] in self?.perform($0) }
     }
 
     func attach(_ view: WKWebView, videoID: String) {
         self.view = view
-        self.videoID = videoID
-        ready = false
-        let start = MusicVideoTiming.videoTime(songTime: NowPlayingMonitor.shared.playbackTime(),
-                                               offset: MusicVideoController.shared.currentOffset, videoDuration: nil) ?? 0
-        view.loadHTMLString(YouTubeEmbed.html(videoID: videoID, start: start), baseURL: YouTubeEmbed.baseURL)
+        perform(session.attach(videoID))
+    }
+
+    private func perform(_ effect: YouTubeEmbedSession.Effect) {
+        switch effect {
+        case .none: break
+        case .ready:
+            let wanted = blur
+            blur = -1
+            setBlur(wanted)
+            loop.tick()
+        case .load(let videoID, let page):
+            guard let view else { return }
+            let start = MusicVideoTiming.videoTime(songTime: NowPlayingMonitor.shared.playbackTime(),
+                                                   offset: MusicVideoController.shared.currentOffset,
+                                                   videoDuration: nil) ?? 0
+            navigation = view.loadHTMLString(YouTubeEmbed.html(videoID: videoID, start: start, page: page),
+                                             baseURL: YouTubeEmbed.baseURL)
+        case .fail(let videoID, let failure):
+            run("window.lunalyrPause && window.lunalyrPause()")
+            MusicVideoController.shared.reportPlaybackFailure(of: .youTube(videoID), failure)
+        }
     }
 
     func setBlur(_ value: Double) {
         guard value != blur else { return }
         blur = value
-        guard ready else { return }
+        guard session.ready else { return }
         run("window.lunalyrBlur(\(max(0, value)))")
     }
 
     func tearDown() {
         loop.stop()
+        session.stop()
         run("window.lunalyrPause && window.lunalyrPause()")
         view = nil
     }
@@ -473,7 +696,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     // MARK: MusicVideoPlaybackSurface
 
     func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
-        guard ready, let view else { done(nil, nil); return }
+        guard session.ready, let view else { done(nil, nil); return }
         view.callAsyncJavaScript("return window.lunalyrSample()", arguments: [:], in: nil, in: .page) { result in
             MainActor.assumeIsolated {
                 guard case .success(let value) = result, let (sample, duration) = YouTubeEmbed.sample(from: value) else {
@@ -492,21 +715,11 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     // MARK: Messages
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
-        switch type {
-        case "ready":
-            ready = true
-            let wanted = blur
-            blur = -1
-            setBlur(wanted)
-            loop.tick()
-        case "error":
-            let code = (body["value"] as? NSNumber)?.intValue ?? 0
-            if YouTubeEmbed.fatalErrors.contains(code), let videoID {
-                MusicVideoController.shared.reportPlaybackFailure(of: .youTube(videoID))
-            }
-        default: break
-        }
+        guard let parsed = YouTubeEmbedSession.Message(body: message.body) else { return }
+        let origin = message.frameInfo.securityOrigin
+        let trusted = message.webView === view
+            && YouTubeEmbed.trusts(mainFrame: message.frameInfo.isMainFrame, scheme: origin.protocol, host: origin.host)
+        perform(session.receive(parsed, trusted: trusted))
     }
 
     // MARK: Navigation
@@ -517,8 +730,17 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         decisionHandler(YouTubeEmbed.allows(mainFrame: main, url: action.request.url) ? .allow : .cancel)
     }
 
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard navigation === self.navigation else { return }
+        perform(session.navigationFailed(error))
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard navigation === self.navigation else { return }
+        perform(session.navigationFailed(error))
+    }
+
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        ready = false
-        if let videoID { attach(webView, videoID: videoID) }
+        perform(session.contentProcessTerminated())
     }
 }
