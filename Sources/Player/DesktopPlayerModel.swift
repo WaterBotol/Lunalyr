@@ -26,7 +26,14 @@ final class DesktopPlayerModel: ObservableObject {
     }
     @Published var query = ""
     @Published private(set) var results: [PlayerSearchResult] = []
+    /// What the strip shows: songs that played, the one playing, what is next.
     @Published private(set) var queue: [PlayerQueueItem] = []
+    /// Shuffle is on, so the order of what comes next is not known.
+    @Published private(set) var shuffleOn = false
+    private var history: [PlayerQueueItem] = []
+    private var fetched: [PlayerQueueItem] = []
+    private var lastTrack: NowPlayingMonitor.Track?
+    private var historyCount = 0
     @Published private(set) var status: Status = .idle
     private let defaults: UserDefaults
     private var searchTask: Task<Void, Never>?
@@ -38,6 +45,9 @@ final class DesktopPlayerModel: ObservableObject {
         player = PlayerKind(rawValue: defaults.string(forKey: Self.playerKey) ?? "") ?? .appleMusic
         $query.removeDuplicates().debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.runSearch() }.store(in: &cancellables)
+        // Songs that finish are remembered, in the order they played.
+        NowPlayingMonitor.shared.$current.sink { [weak self] track in self?.noteTrack(track) }
+            .store(in: &cancellables)
         // The strip follows the song.
         NowPlayingMonitor.shared.$current.map { $0?.persistentID ?? $0.map { "\($0.title)|\($0.artist)" } }
             .removeDuplicates().dropFirst()
@@ -89,19 +99,46 @@ final class DesktopPlayerModel: ObservableObject {
         }
     }
 
+    private func noteTrack(_ track: NowPlayingMonitor.Track?) {
+        defer { lastTrack = track }
+        guard let previous = lastTrack, let track, !previous.title.isEmpty,
+              !(previous.title == track.title && previous.artist == track.artist),
+              NowPlayingMonitor.shared.activePlayer == .appleMusic || NowPlayingMonitor.shared.activePlayer == nil else { return }
+        historyCount += 1
+        history.append(PlayerQueueItem(id: "h-\(historyCount)", title: previous.title, artist: previous.artist,
+                                       index: 0, persistentID: previous.persistentID))
+        if history.count > 12 { history.removeFirst(history.count - 12) }
+        recompose()
+    }
+
+    /// History first (what really played, in order), then the song playing,
+    /// then what the playlist says comes next.
+    private func recompose() {
+        guard let nowIndex = fetched.firstIndex(where: \.isCurrent) else { queue = fetched; return }
+        var before = Array(history.suffix(8)).filter { $0.persistentID == nil || $0.persistentID != fetched[nowIndex].persistentID }
+        // Nothing has played since launch: the playlist's own earlier songs
+        // are the best guess, unless shuffle makes them meaningless.
+        if before.isEmpty && !shuffleOn { before = Array(fetched[..<nowIndex]) }
+        queue = before + [fetched[nowIndex]] + fetched[(nowIndex + 1)...]
+    }
+
     /// Reloads the strip: the songs before this one, this one, the songs after.
     func refreshQueue() {
         queueTask?.cancel()
         let searcher = playingKind.searcher
-        if queueKind != searcher.kind { queue = []; queueKind = searcher.kind }
+        if queueKind != searcher.kind { queue = []; fetched = []; queueKind = searcher.kind }
         queueTask = Task { [weak self] in
             do {
-                let items = try await searcher.queue()
+                let snapshot = try await searcher.queue()
+                let items = snapshot.items
                 guard !Task.isCancelled, let self else { return }
                 // A player between two songs answers with nothing; keep what
                 // the strip already shows rather than emptying it.
-                if items.isEmpty, !self.queue.isEmpty { return }
-                self.queue = items
+                if items.isEmpty, !self.fetched.isEmpty { return }
+                self.shuffleOn = snapshot.shuffle
+                // With shuffle on the playlist's order is not what plays.
+                self.fetched = snapshot.shuffle ? items.filter(\.isCurrent) : items
+                self.recompose()
                 self.status = items.isEmpty && !self.isSearching
                     ? .message(searcher.kind == .spotify
                         ? "Spotify doesn\u{2019}t share what plays next."
@@ -124,8 +161,16 @@ final class DesktopPlayerModel: ObservableObject {
     func play(_ item: PlayerQueueItem) {
         let searcher = playingKind.searcher
         // The strip moves to the song at once; the player catches up after.
-        queue = queue.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
-        perform(searcher) { try await searcher.playQueueItem(item) }
+        if let pid = item.persistentID, item.index == 0 {
+            // Played earlier: it is in the library, play it by its id.
+            let result = PlayerSearchResult(id: item.id, kind: .song, title: item.title, artist: item.artist, album: "",
+                                            artworkURL: nil, target: .libraryTrack(persistentID: pid), inLibrary: true)
+            perform(searcher) { try await searcher.play(result) }
+        } else {
+            fetched = fetched.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
+            recompose()
+            perform(searcher) { try await searcher.playQueueItem(item) }
+        }
         Task { [weak self] in
             for delay in [900, 2500] as [UInt64] {
                 try? await Task.sleep(nanoseconds: delay * 1_000_000)

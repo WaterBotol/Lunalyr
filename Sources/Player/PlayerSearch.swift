@@ -31,6 +31,15 @@ struct PlayerQueueItem: Identifiable, Equatable, Sendable {
     var index: Int
     /// The song that is playing now.
     var isCurrent = false
+    /// The Music library's id for the song, when it has one.
+    var persistentID: String?
+}
+
+/// What a player says is queued: the current playlist around the song, and
+/// whether shuffle is on (when it is, that order is not the play order).
+struct PlayerQueueSnapshot: Equatable, Sendable {
+    var items: [PlayerQueueItem] = []
+    var shuffle = false
 }
 
 /// An album by the artist now playing, for the cover-flow.
@@ -54,7 +63,7 @@ protocol PlayerSearching: Sendable {
     var kind: PlayerKind { get }
     func search(_ query: String) async throws -> [PlayerSearchResult]
     func play(_ result: PlayerSearchResult) async throws
-    func queue() async throws -> [PlayerQueueItem]
+    func queue() async throws -> PlayerQueueSnapshot
     func playQueueItem(_ item: PlayerQueueItem) async throws
     func albums(by artist: String) async -> [PlayerAlbum]
     func play(_ album: PlayerAlbum) async throws
@@ -256,10 +265,14 @@ struct AppleMusicSearch: PlayerSearching {
         """)
     }
 
-    func queue() async throws -> [PlayerQueueItem] {
+    func queue() async throws -> PlayerQueueSnapshot {
         let source = PlayerScriptSource.query(Self.bundleID, """
-        if player state is stopped then return {"ok", {}}
+        if player state is stopped then return {"ok", {}, false}
         set rows to {}
+        set shuffling to false
+        try
+        set shuffling to shuffle enabled
+        end try
         try
         set here to index of current track
         set listing to current playlist
@@ -275,11 +288,13 @@ struct AppleMusicSearch: PlayerSearching {
         on error number errorNumber
         if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
         end try
-        return {"ok", rows}
+        return {"ok", rows, shuffling}
         """)
         let reply = try await ScriptDesk.shared.run(
             PlayerScript(name: "desktop-player.queue", source: source, cacheable: false), for: .appleMusic)
-        return Self.parseQueue(reply)
+        let items = reply.scriptItems
+        let shuffle = items.count >= 3 && items[2].booleanValue
+        return PlayerQueueSnapshot(items: Self.parseQueue(reply), shuffle: shuffle)
     }
 
     static func parseQueue(_ reply: NSAppleEventDescriptor) -> [PlayerQueueItem] {
@@ -291,7 +306,7 @@ struct AppleMusicSearch: PlayerSearching {
                   let index = fields[3].scriptNumber else { return nil }
             let here = fields.count >= 5 ? fields[4].scriptNumber : nil
             return PlayerQueueItem(id: "q-\(id)-\(Int(index))", title: title, artist: fields[2].scriptText ?? "",
-                                   index: Int(index), isCurrent: here == index)
+                                   index: Int(index), isCurrent: here == index, persistentID: id)
         }
     }
 
@@ -387,7 +402,7 @@ struct SpotifySearch: PlayerSearching {
         }
     }
 
-    func queue() async throws -> [PlayerQueueItem] { [] }
+    func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
     func playQueueItem(_ item: PlayerQueueItem) async throws {}
     func albums(by artist: String) async -> [PlayerAlbum] { [] }
     func play(_ album: PlayerAlbum) async throws {}

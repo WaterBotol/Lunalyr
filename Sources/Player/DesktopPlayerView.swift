@@ -38,6 +38,9 @@ struct DesktopPlayerView: View {
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @Environment(\.playerMaskRender) private var maskRender
     @FocusState private var searchFocused: Bool
+    /// Bumped whenever the player appears or goes away, so the strip returns to
+    /// the song that is playing.
+    @State private var recenter = 0
 
     var body: some View {
         let shown = hover.isActive(on: displayID) || model.isPinned
@@ -64,7 +67,10 @@ struct DesktopPlayerView: View {
             searchFocused = false
             model.query = ""
         }
-        .onChange(of: shown) { _, now in if now { model.refreshQueue() } }
+        .onChange(of: shown) { _, now in
+            recenter += 1
+            if now { model.refreshQueue() }
+        }
     }
 
     // MARK: Strip
@@ -76,13 +82,14 @@ struct DesktopPlayerView: View {
         } else if model.queue.isEmpty, let now = nowPlaying.current {
             // A player that shares no queue (Spotify): just what is playing.
             CoverStrip(items: [PlayerQueueItem(id: "now", title: now.title, artist: now.artist, index: 0, isCurrent: true)],
-                       tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork) { _ in nowPlaying.playPause() }
+                       tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork, recenter: recenter) { _ in nowPlaying.playPause() }
         } else if model.queue.isEmpty {
             Text(queueMessage).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
                 .shadow(color: .black.opacity(0.6), radius: 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            CoverStrip(items: model.queue, tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork) { entry in
+            CoverStrip(items: model.queue, tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork,
+                       recenter: recenter, note: model.shuffleOn ? "Shuffle is on, so what plays next isn\u{2019}t known" : nil) { entry in
                 if entry.isCurrent { nowPlaying.playPause() } else { model.play(entry) }
             }
         }
@@ -260,6 +267,8 @@ private struct CoverStrip: View {
     let items: [PlayerQueueItem]
     let tint: Color
     var artwork: NSImage?
+    var recenter = 0
+    var note: String?
     let onTap: (PlayerQueueItem) -> Void
     @State private var focus: String?
     @State private var velocity: CGFloat = 0
@@ -330,6 +339,21 @@ private struct CoverStrip: View {
             try? await Task.sleep(nanoseconds: 80_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(.smooth(duration: 0.4)) { focus = currentID }
+        }
+        .onChange(of: recenter) { _, _ in
+            // Back on the playing song every time, with no visible scroll.
+            focus = nil
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                focus = currentID
+            }
+        }
+        .overlay(alignment: .top) {
+            if let note {
+                Text(note).font(.system(size: 10)).foregroundStyle(.white.opacity(0.8))
+                    .padding(.horizontal, 10).padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
         }
         .onAppear { wheel.start() }
         .onDisappear { wheel.stop() }
