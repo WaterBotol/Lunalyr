@@ -533,6 +533,82 @@ final class AudioCaptureControllerTests: XCTestCase {
     }
 }
 
+// MARK: - Brief listening for the music video
+
+extension AudioCaptureControllerTests {
+    /// The Music video wallpaper: no visualiser chosen, System audio on.
+    @MainActor
+    private func musicVideoWorld() -> CaptureWorld {
+        let world = CaptureWorld()
+        world.preferences.visualiserChosen = false
+        return world
+    }
+
+    @MainActor
+    func testABriefListenNeedsAPermissionAlreadyGranted() async throws {
+        let world = musicVideoWorld()
+        let controller = try makeController(world)
+        defer { controller.stop() }
+        controller.resumeIfEnabled()
+        XCTAssertFalse(controller.running, "paused behind the Music video wallpaper")
+        XCTAssertFalse(controller.mayListenBriefly, "never worked here: it could ask for permission")
+        XCTAssertFalse(controller.listenBriefly(for: 25))
+        await world.settle()
+        XCTAssertTrue(world.requests.isEmpty, "no capture without the permission")
+
+        world.preferences.enabled = false
+        world.captureConfirmed = true
+        XCTAssertFalse(controller.mayListenBriefly, "System audio switched off")
+        world.preferences.enabled = true
+        world.preferences.method = .screenRecording
+        XCTAssertFalse(controller.mayListenBriefly, "compatibility capture needs Screen Recording allowed")
+        world.screenRecordingAllowed = true
+        XCTAssertTrue(controller.mayListenBriefly)
+    }
+
+    @MainActor
+    func testABriefListenCapturesThenStopsAtItsLimitOrWhenEnded() async throws {
+        let world = musicVideoWorld()
+        world.captureConfirmed = true
+        let controller = try makeController(world)
+        defer { controller.stop() }
+        controller.resumeIfEnabled()
+        XCTAssertTrue(controller.listenBriefly(for: 25))
+        XCTAssertTrue(controller.listeningBriefly)
+        await controller.pendingStart?.value
+        XCTAssertTrue(controller.running)
+        XCTAssertFalse(world.requests.first?.userInitiated ?? true, "never a prompting start")
+        let session = try XCTUnwrap(world.sessions.first)
+        world.advance(24)
+        XCTAssertTrue(controller.running)
+        world.advance(1.5)
+        XCTAssertFalse(controller.listeningBriefly)
+        XCTAssertFalse(controller.running, "stopped at the limit")
+        XCTAssertEqual(controller.state, .paused)
+        XCTAssertFalse(session.ioRunning)
+
+        XCTAssertTrue(controller.listenBriefly(for: 25))
+        await controller.pendingStart?.value
+        XCTAssertTrue(controller.running)
+        controller.endBriefListen()
+        XCTAssertFalse(controller.running, "stopped as soon as the alignment is done")
+    }
+
+    @MainActor
+    func testABriefListenStillWaitsForAudioToPlay() async throws {
+        let world = musicVideoWorld()
+        world.captureConfirmed = true
+        world.musicPlaying = false
+        let controller = try makeController(world)
+        defer { controller.stop() }
+        controller.resumeIfEnabled()
+        XCTAssertTrue(controller.listenBriefly(for: 25))
+        await controller.pendingStart?.value
+        XCTAssertFalse(controller.running, "nothing playing: standing by")
+        XCTAssertEqual(controller.state, .standby)
+    }
+}
+
 /// A pretend system for one controller.
 @MainActor
 private final class CaptureWorld {
@@ -546,6 +622,8 @@ private final class CaptureWorld {
     var musicPlaying = true
     var activePlayer: PlayerKind? = .appleMusic
     var screenRecordingAllowed = false
+    /// Capture has delivered audio here before (its permission is granted).
+    var captureConfirmed = false
     /// Thrown by connection attempts.
     var openError: Error?
     /// Connection attempts wait, as behind an open permission prompt.
@@ -585,7 +663,9 @@ private final class CaptureWorld {
             visualizer: visualizer,
             outputLatency: { self.outputLatency },
             webScenes: { self.webScenes },
-            openSession: { try await self.open($0) })
+            openSession: { try await self.open($0) },
+            captureConfirmed: { self.captureConfirmed },
+            confirmCapture: { self.captureConfirmed = true })
     }
 
     var pendingTimers: Int { scheduled.count }

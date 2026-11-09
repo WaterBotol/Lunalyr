@@ -101,6 +101,9 @@ final class AudioReactiveController: ObservableObject {
     private var playingHereSince: Double?
     private var outputWasActive = false
     private var outputLastActiveAt: Double?
+    /// A brief listen runs until this uptime.
+    private var briefListenUntil: Double?
+    private var briefTimer: AnyCancellable?
 
     private var uptime: Double { environment.now() }
 
@@ -147,6 +150,7 @@ final class AudioReactiveController: ObservableObject {
     func stop(disablePreference: Bool = true, message: String = AudioReactiveController.offMessage) {
         tearDownSession()
         recheck = nil
+        briefListenUntil = nil; briefTimer = nil
         userStartedAt = nil; pendingUserStart = false; preferCompatibility = false
         if disablePreference {
             blocked = false
@@ -223,13 +227,51 @@ final class AudioReactiveController: ObservableObject {
         State: \(state); running: \(running); connecting: \(starting); suspended: \(suspended); packets: \(packetsReceived); dropped frames: \(droppedFrames)
         Format: \(formatLabel)
         RMS: \(levels.rms); bass: \(levels.bass); mid: \(levels.mid); treble: \(levels.treble)
-        Demand: output \(output) (process report: \(outputActivity.isActive.map { "\($0)" } ?? "unavailable"); following playback: \(playbackObserved)); displays awake: \(inputs.displaysAwake); visualiser surfaces: \(drawing); wallpaper paused: \(preferences.wallpaperPaused)
+        Demand: output \(output) (process report: \(outputActivity.isActive.map { "\($0)" } ?? "unavailable"); following playback: \(playbackObserved)); displays awake: \(inputs.displaysAwake); brief listen: \(inputs.briefListen); visualiser surfaces: \(drawing); wallpaper paused: \(preferences.wallpaperPaused)
         Player: \(player)
         Alignment: output latency \(milliseconds(environment.outputLatency())); visuals delayed \(milliseconds(environment.visualizer.visualDelay)) to land with the sound
         Visualiser: \(settings.audioVisualizerStyle.title); sensitivity: \(settings.audioSensitivity)
         Web scenes:\(web)
         Status: \(status)
         """
+    }
+
+    // MARK: - Brief listening
+
+    /// Whether a brief listen may start: System audio is on, nothing is
+    /// wrong with it, and its permission is known to be granted (capture
+    /// has delivered audio here before, or Screen Recording is allowed for
+    /// compatibility capture). Never asks.
+    var mayListenBriefly: Bool {
+        let preferences = environment.preferences()
+        guard preferences.enabled, !blocked, !state.needsAttention else { return false }
+        if preferences.method == .screenRecording { return environment.screenRecordingAllowed() }
+        return environment.captureConfirmed()
+    }
+
+    /// A brief listen is under way.
+    var listeningBriefly: Bool { briefListenUntil.map { uptime < $0 } ?? false }
+
+    /// Runs capture for at most `seconds` for the music video's audio
+    /// alignment, as if a visualiser were showing: still only while audio
+    /// plays, the displays are awake and the wallpaper is not paused.
+    /// False, and nothing starts, when `mayListenBriefly` is false.
+    @discardableResult
+    func listenBriefly(for seconds: Double) -> Bool {
+        guard seconds > 0, mayListenBriefly else { return false }
+        briefListenUntil = uptime + seconds
+        briefTimer = environment.schedule(seconds, nil) { [weak self] in self?.endBriefListen() }
+        observeSettings()
+        reconcile()
+        return true
+    }
+
+    /// Ends a brief listen; capture goes back to what the visualisers need.
+    func endBriefListen() {
+        briefTimer = nil
+        guard briefListenUntil != nil else { return }
+        briefListenUntil = nil
+        reconcile()
     }
 
     /// The connection under way, if any, so tests can wait for it.
@@ -307,15 +349,16 @@ final class AudioReactiveController: ObservableObject {
             surfacesHiddenFor: surfacesHiddenSince.map { now - $0 },
             surfacesFrozen: surfacesFrozen,
             outputIdleFor: outputActive ? nil : (outputLastActiveAt.map { now - $0 } ?? .infinity),
-            sinceUserStart: userStartedAt.map { now - $0 })
+            sinceUserStart: userStartedAt.map { now - $0 },
+            briefListen: briefListenUntil.map { now < $0 } ?? false)
     }
 
     /// Brings capture in line with demand. Idempotent; safe to call often.
     private func reconcile() {
         recheck = nil
         let preferences = environment.preferences()
-        observeSystem(preferences.enabled && preferences.visualiserChosen)
         let now = uptime
+        observeSystem(preferences.enabled && (preferences.visualiserChosen || (briefListenUntil.map { now < $0 } ?? false)))
         refreshSurfaces(at: now, preferences)
         var decision = AudioCaptureGate.decide(demand(at: now, preferences))
         if observePlayback(decision.followsPlayback) {
@@ -661,7 +704,10 @@ final class AudioReactiveController: ObservableObject {
     }
 
     private func setState(_ next: AudioCaptureState, _ message: String) {
-        if state != next { state = next }
+        if state != next {
+            state = next
+            if next == .receiving, !environment.captureConfirmed() { environment.confirmCapture() }
+        }
         if status != message { status = message }
     }
 

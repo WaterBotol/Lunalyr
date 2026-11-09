@@ -109,6 +109,11 @@ struct AudioCaptureEnvironment {
     var webScenes: @MainActor () -> String
     /// Opens and starts a session, or throws.
     var openSession: @MainActor (AudioCaptureRequest) async throws -> AudioCaptureSession
+    /// Capture has delivered audio on this Mac before, so its permission is
+    /// granted: a brief listen may start it without raising a prompt.
+    var captureConfirmed: @MainActor () -> Bool = { false }
+    /// Remembers that capture delivered audio.
+    var confirmCapture: @MainActor () -> Void = {}
 }
 
 extension AudioCaptureEnvironment {
@@ -134,8 +139,13 @@ extension AudioCaptureEnvironment {
             visualizer: .shared,
             outputLatency: { OutputLatencyMonitor.shared.latency },
             webScenes: { WebVisualizerDiagnostics.shared.report },
-            openSession: { try await openLiveSession($0) })
+            openSession: { try await openLiveSession($0) },
+            captureConfirmed: { UserDefaults.standard.bool(forKey: confirmedKey) },
+            confirmCapture: { UserDefaults.standard.set(true, forKey: confirmedKey) })
     }
+
+    /// Set once capture has delivered audio on this Mac.
+    static let confirmedKey = "custom.audioCaptureConfirmed"
 
     /// A main-run-loop timer, which also fires while a menu tracks.
     static func scheduleOnMain(after delay: Double, repeating: Double?,
