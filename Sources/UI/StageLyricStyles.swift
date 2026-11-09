@@ -20,6 +20,8 @@ struct StageRun: Equatable, Identifiable {
     struct Part: Equatable {
         var text: String
         var start: Double
+        /// The lyric word this part was cut from, for looking up its reading.
+        var source: TimedWordKey? = nil
     }
 
     var id: Int
@@ -42,11 +44,11 @@ struct StageRun: Equatable, Identifiable {
                 var last = runs.removeLast()
                 last.text += text
                 last.end = max(last.end, word.end)
-                last.parts.append(Part(text: text, start: word.start))
+                last.parts.append(Part(text: text, start: word.start, source: word.presentationID))
                 runs.append(last)
             } else {
                 runs.append(StageRun(id: runs.count, text: text, start: word.start, end: max(word.end, word.start),
-                                     parts: [Part(text: text, start: word.start)]))
+                                     parts: [Part(text: text, start: word.start, source: word.presentationID)]))
             }
         }
         return runs
@@ -94,8 +96,11 @@ struct StageLyricView: View {
     let seed: Int
     var exitStart: Double = .infinity
     var firstRunOnly: Double?
+    /// "Below lyrics" readings by word (see `LyricReadingPairs`).
+    var readings: [TimedWordKey: String] = [:]
 
-    @ObservedObject private var settings = Settings.shared
+    /// The shared settings in the app; tests pass an isolated instance.
+    @ObservedObject var settings: Settings = .shared
     @Environment(\.lyricInk) private var ink
     @Environment(\.lyricReduceMotion) private var reduceMotion
 
@@ -160,7 +165,7 @@ struct StageLyricView: View {
                 case .broadside: broadside(shown, total: runs.count)
                 case .mosaic: mosaic(shown, total: runs.count)
                 case .torque: torque(shown, total: runs.count)
-                case .fable: fable(shown, total: runs.count)
+                case .fable: fable(runs, total: runs.count)
                 default: portal(shown, total: runs.count)
                 }
             }
@@ -738,129 +743,148 @@ extension StageLyricView {
 
     // MARK: Fable
     //
-    // A staircase of words that never stops moving. The newest sits low and to
-    // the right in the accent colour; each word before it steps up and to the
-    // left, smaller and quieter. Words arrive three ways in turn -- a column of
-    // echoes folding into the word, letters spread along an arc that tighten
-    // and straighten, or a blur that pulls into focus -- and everything floats
-    // a little, on its own slow loop, while it is held.
+    // Every line is set in its own shape -- a staircase, an arch, a zigzag, a
+    // wave or a ramp -- and marks the word being sung with its own accent: an
+    // underline, a ring, a tile, a star or corner brackets. Neighbouring lines
+    // never share a shape or an accent, and a line always looks the same
+    // (both come from the line, see `FableStyle`). The whole line is laid out
+    // from its first word, so words land in their final places and nothing
+    // reflows; each word makes a short entrance of its own and then holds
+    // still. The block is fitted inside the stage, readings and all.
 
     fileprivate func fable(_ runs: [StageRun], total: Int) -> some View {
         let speed = lineSpeed
-        let arrivals = runs.map { Self.glide((time - ($0.start - 0.05)) / (0.62 / speed)) }
-        let ranks = runs.indices.map { i in arrivals[(i + 1)...].reduce(0, +) }
-        let stage = stageSize
+        let style = FableStyle.forLine(seed)
+        let rightToLeft = LyricScript.lineIsRightToLeft(runs.map(\.text))
         let leaving = leave
-        let drift = reduceMotion ? 0.0 : 1.0
-        // Every line gets its own shape, accent, favourite arrival and lean.
-        let shape = Int(chance(nil, 50) * 4) % 4
-        let accent = Int(chance(nil, 51) * 4) % 4
-        let favourite = Int(chance(nil, 52) * 3) % 3
-        let lean = (chance(nil, 53) - 0.5) * 7
-        let scale = 0.9 + 0.3 * chance(nil, 54)
-        // Where the newest word sits, and the step to each older one.
-        let origin: (x: CGFloat, y: CGFloat) = [(0.14, 0.3), (-0.14, 0.3), (0.0, 0.3), (0.2, 0.18)][shape]
-        let step: (x: CGFloat, y: CGFloat) = [(-0.13, -0.2), (0.13, -0.2), (0.0, -0.18), (-0.2, -0.09)][shape]
-        return StageLayout(place: { measured, bounds in
-            measured.indices.map { index in
-                // The steps close up a little further back, so a long line stays on the stage.
-                let raw = CGFloat(ranks[index])
-                let r = raw <= 3 ? raw : 3 + (raw - 3) * 0.35
-                var x = bounds.midX + bounds.width * (origin.x + step.x * r) + sin(r * 0.8) * bounds.width * 0.025
-                // The zigzag column swings from side to side as it climbs.
-                if shape == 2 { x += CGFloat(sin(Double(r) * 1.5 + 0.6)) * bounds.width * 0.15 }
-                var y = bounds.midY + bounds.height * (origin.y + step.y * r)
-                x += CGFloat(sin(time * 0.9 + Double(index) * 1.9)) * unit * 0.2 * drift
-                y += CGFloat(cos(time * 0.7 + Double(index) * 1.3)) * unit * 0.15 * drift
-                // New words swing in along an arc from up and to the left.
-                let enter = CGFloat(1 - arrivals[index])
-                x -= enter * bounds.width * 0.1
-                y -= enter * bounds.height * 0.16 + CGFloat(sin(Double(enter) * .pi)) * bounds.height * 0.06
-                return CGPoint(x: x, y: y)
-            }
-        }) {
+        let stage = stageSize
+        // Room kept round the block for shadows, accents and entrances.
+        let margin = max(unit * 0.5, min(stage.width, stage.height) * 0.05)
+        let available = CGSize(width: max(1, stage.width - 2 * margin), height: max(1, stage.height - 2 * margin))
+        let hero = FableStyle.heroIndex(runs.map(\.text))
+        // The word being sung: from its onset until the next word's.
+        let current = runs.lastIndex { time >= $0.start - 0.04 }
+        return FableLayout(shape: style.shape, rightToLeft: rightToLeft, available: available,
+                           gap: unit * 0.08, rowGap: unit * 0.12) {
             ForEach(runs) { run in
-                let a = arrivals[run.id]
-                let rank = ranks[run.id]
-                let sample = sample(run, of: total)
-                let newest = rank < 0.5
-                let size = unit * scale * max(0.55, 1.4 - 0.24 * min(rank, 3.6))
-                let tile = tiled(run)
-                let kind = chance(run.id, 42) < 0.55 ? favourite : Int(chance(run.id, 40) * 3) % 3
-                let colour: Color = tile ? ink.tileText : newest ? sample.sung : sample.rest.opacity(max(0.45, 0.85 - 0.1 * rank))
-                let word = Text(run.revealed(at: time))
-                    .font(font(size, hero: true, id: run.id))
-                    .foregroundStyle(colour)
-                    .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.5)
-                    .background { tileBackground(tile, size: size) }
-                HStack(spacing: size * 0.2) {
-                    Group {
-                        if kind == 0 {
-                            // A column of echoes folds into the word.
-                            ZStack {
-                                ForEach([-2, -1, 1, 2], id: \.self) { k in
-                                    word.opacity(0.3 * (1 - a))
-                                        .offset(y: CGFloat(k) * size * 1.0 * CGFloat(1 - a))
-                                }
-                                word
-                            }
-                        } else if kind == 1 {
-                            // Letters along an arc, tightening and straightening as it lands.
-                            let letters = Array(run.text)
-                            HStack(spacing: size * (0.7 * (1 - a) + 0.02)) {
-                                ForEach(Array(letters.enumerated()), id: \.offset) { index, letter in
-                                    let from = CGFloat(index) - CGFloat(letters.count - 1) / 2
-                                    let shown = Self.glide((time - (run.start - 0.05 + Double(index) * 0.03)) / 0.2)
-                                    Text(String(letter))
-                                        .font(font(size, hero: true, id: run.id))
-                                        .foregroundStyle(newest && a < 1 ? ink.tileColour : colour)
-                                        .rotationEffect(.degrees(Double(from) * 16 * (1 - a)))
-                                        .offset(y: from * from * size * 0.07 * CGFloat(1 - a))
-                                        .opacity(shown)
-                                }
-                            }
-                            .lineLimit(1)
-                        } else {
-                            // A blur pulls into focus.
-                            word.blur(radius: reduceMotion ? 0 : size * 0.22 * (1 - a))
-                                .scaleEffect(reduceMotion ? 1 : 1 + 0.25 * (1 - a))
-                        }
-                    }
-                    if accent == 0 && chance(run.id, 41) < 0.3 {
-                        Star4().fill(ink.tileColour).frame(width: size * 0.5, height: size * 0.5)
-                            .rotationEffect(.degrees(reduceMotion ? 0 : (1 - a) * 160 + time * 22))
-                            .scaleEffect(a)
-                    }
-                }
-                .background {
-                    // A soft glow of the accent colour behind the newest word.
-                    if newest {
-                        Ellipse().fill(ink.tileColour.opacity(0.28)).frame(width: size * 3.2, height: size * 1.5)
-                            .blur(radius: size * 0.45).opacity(a)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if newest && accent == 1 {
-                        // A brush stroke underneath, drawn left to right.
-                        Capsule().fill(ink.tileColour)
-                            .frame(width: size * 2.4 * CGFloat(Self.glide((time - run.start) / 0.35)), height: size * 0.07)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .offset(y: size * 0.16)
-                    } else if newest && accent == 2 {
-                        // A loose ring that swells round it.
-                        Capsule().stroke(ink.tileColour, lineWidth: max(2, size * 0.04))
-                            .frame(width: size * 3.0, height: size * 1.1)
-                            .rotationEffect(.degrees(-4))
-                            .scaleEffect(0.8 + 0.2 * a).opacity(a * 0.9)
-                            .offset(y: size * 0.1)
-                    }
-                }
-                .shadow(color: .black.opacity(0.25), radius: 5, y: 2)
-                .opacity(min(1, a * 1.7) * max(0, 1 - max(0, rank - 4.2) * 0.8))
+                let index = run.id
+                let size = fableSize(run, hero: hero == index, count: runs.count)
+                let a = Self.arriveStage(run, at: time, over: 0.42 / speed)
+                let sungAt = run.start - 0.04
+                let shown = time >= sungAt
+                // How much of the accent this word wears: it comes with the word and
+                // passes to the next one as that is sung. The last word keeps it.
+                let next = runs.indices.contains(index + 1) ? runs[index + 1].start : .infinity
+                let rise = Self.glide((time - sungAt) / 0.18)
+                let fall = next.isFinite ? 1 - Self.glide((time - (next - 0.04)) / 0.3) : 1
+                let wear = shown ? rise * fall : 0
+                let entrance = chosenEntrance(run, progress: a, size: size)
+                let kind = Int(chance(index, 73) * 4) % 4
+                let motion: (offset: CGSize, scale: CGFloat, spin: Double) = reduceMotion || !entrance.native
+                    ? (.zero, 1, 0) : FableStyle.entrance(kind, progress: a, size: size, side: chance(index, 74) < 0.5 ? -1 : 1)
+                fableWord(run, size: size, style: style, wear: wear, rightToLeft: rightToLeft,
+                          sample: sample(run, of: total))
+                    .opacity(shown ? min(1, a * 1.8) * (0.8 + 0.2 * (index == current ? 1 : wear)) : 0)
+                    .rotationEffect(.degrees(reduceMotion ? 0 : (chance(index, 72) - 0.5) * style.shape.tilt))
+                    .rotation3DEffect(.degrees(entrance.fold), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
+                    .rotationEffect(.degrees(motion.spin + entrance.spin), anchor: .bottom)
+                    .scaleEffect(motion.scale * entrance.scale)
+                    .offset(x: motion.offset.width + entrance.offset.width, y: motion.offset.height + entrance.offset.height)
             }
         }
-        .rotationEffect(.degrees(reduceMotion ? 0 : lean))
+        // One shadow for the block, not one per word.
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.3), radius: max(3, unit * 0.08), y: 2)
+        // Long lines and big readings are shrunk to fit, never cut off.
+        .visualEffect { block, geometry in
+            block.scaleEffect(LyricStageFit.scale(content: geometry.size, available: available))
+        }
+        .offset(y: reduceMotion ? 0 : -stage.height * 0.04 * leaving)
         .opacity(1 - leaving)
+        .frame(width: stage.width, height: stage.height)
+    }
+
+    /// A word's size, fixed for the whole line so nothing reflows: the
+    /// longest word is set larger, the little ones a touch smaller.
+    private func fableSize(_ run: StageRun, hero: Bool, count: Int) -> CGFloat {
+        if count <= 2 || hero { return unit * 1.75 }
+        if isLittle(run.text) { return unit * 1.05 }
+        return unit * (1.28 + 0.14 * CGFloat(chance(run.id, 71)))
+    }
+
+    @ViewBuilder
+    private func fableWord(_ run: StageRun, size: CGFloat, style: FableStyle, wear: Double, rightToLeft: Bool,
+                           sample: LyricInkSample) -> some View {
+        let tile = tiled(run)
+        let onTile = style.accent == .tile && !tile
+        let tight = LyricScript.keepsSyllables(run.text)
+        let reading = run.parts.compactMap { $0.source.flatMap { readings[$0] } }.joined(separator: " ")
+        let text = Text(run.revealed(at: time)).font(font(size, hero: true, id: run.id))
+        let word = ZStack {
+            text.foregroundStyle(tile ? ink.tileText : sample.sung)
+                .opacity(onTile ? 1 - wear : 1)
+            if onTile, wear > 0.001 {
+                text.foregroundStyle(ink.tileText).opacity(wear)
+            }
+        }
+        .lineLimit(1).fixedSize()
+        .background { tileBackground(tile, size: size) }
+        .background { if wear > 0.001 { fableAccent(style.accent, size: size, wear: wear, rightToLeft: rightToLeft) } }
+        .overlay(alignment: rightToLeft ? .topLeading : .topTrailing) {
+            if style.accent == .star, wear > 0.001 {
+                Star4().fill(ink.tileColour)
+                    .frame(width: size * 0.42, height: size * 0.42)
+                    .rotationEffect(.degrees(reduceMotion ? 0 : (1 - wear) * 90))
+                    .scaleEffect(wear)
+                    // Within the word's own padding.
+                    .offset(x: (rightToLeft ? -1 : 1) * size * 0.12, y: -size * 0.08)
+            }
+        }
+        VStack(spacing: size * 0.06) {
+            word
+            if !reading.isEmpty {
+                Text(reading)
+                    .font(settings.lyricFont(size: max(12, size * 0.36), hero: false, mood: mood))
+                    .foregroundStyle(sample.rest.opacity(0.9))
+                    .lineLimit(1).fixedSize()
+            }
+        }
+        // Room for the accent, inside the word's own measured box.
+        .padding(.horizontal, size * (tight ? 0.16 : 0.24))
+        .padding(.vertical, size * 0.16)
+    }
+
+    @ViewBuilder
+    private func fableAccent(_ accent: FableStyle.Accent, size: CGFloat, wear: Double, rightToLeft: Bool) -> some View {
+        let colour = ink.tileColour
+        let line = max(2, size * 0.05)
+        switch accent {
+        case .underline:
+            Capsule().fill(colour)
+                .frame(height: line * 1.4)
+                .scaleEffect(x: reduceMotion ? 1 : wear, anchor: rightToLeft ? .trailing : .leading)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .offset(y: size * 0.1)
+                .opacity(wear)
+        case .ring:
+            Capsule().stroke(colour, lineWidth: line)
+                .padding(.horizontal, -size * 0.18).padding(.vertical, -size * 0.1)
+                .rotationEffect(.degrees(-3))
+                .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * wear)
+                .opacity(wear * 0.95)
+        case .tile:
+            RoundedRectangle(cornerRadius: size * 0.14, style: .continuous).fill(colour)
+                .padding(.horizontal, -size * 0.14).padding(.vertical, -size * 0.04)
+                .opacity(wear)
+        case .star:
+            EmptyView()
+        case .brackets:
+            FableBrackets(arm: size * 0.22)
+                .stroke(colour, style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
+                .padding(.horizontal, -size * 0.16).padding(.vertical, -size * 0.06)
+                .scaleEffect(reduceMotion ? 1 : 1.15 - 0.15 * wear)
+                .opacity(wear)
+        }
     }
 
     /// What a word does when the viewer chose a particular entrance rather than
@@ -963,6 +987,233 @@ struct SketchyOutline: Shape {
             path.addQuadCurve(to: middle(points[i], points[(i + 1) % count]), control: points[i])
         }
         path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Fable's parts
+
+/// One Fable line's look: the shape its words are set in and the accent that
+/// marks the word being sung. Chosen by the line, so the same line looks the
+/// same on every render, and arranged so neighbouring lines never share a
+/// shape or an accent; all 25 pairs come round before any repeats.
+struct FableStyle: Equatable {
+    enum Shape: Int, CaseIterable {
+        case staircase, arch, zigzag, wave, ramp
+
+        /// How much of the stage's width a row may take before it wraps.
+        var share: CGFloat {
+            switch self {
+            case .staircase: return 0.7
+            case .arch: return 0.9
+            case .zigzag: return 0.75
+            case .wave: return 0.95
+            case .ramp: return 0.85
+            }
+        }
+
+        /// Most words in a row, so the shape still reads as one.
+        var wordsPerRow: Int {
+            switch self {
+            case .staircase, .zigzag: return 3
+            case .ramp: return 4
+            case .arch: return 5
+            case .wave: return 6
+            }
+        }
+
+        /// The spread of each word's tilt, in degrees.
+        var tilt: Double {
+            switch self {
+            case .arch: return 0
+            case .ramp: return 2
+            default: return 5
+            }
+        }
+    }
+
+    enum Accent: Int, CaseIterable {
+        case underline, ring, tile, star, brackets
+    }
+
+    var shape: Shape
+    var accent: Accent
+
+    static func forLine(_ seed: Int) -> FableStyle {
+        let n = Shape.allCases.count
+        // Floor division, so negative seeds keep the pattern too.
+        let lap = seed >= 0 ? seed / n : -((-seed + n - 1) / n)
+        func wrap(_ value: Int) -> Int { ((value % n) + n) % n }
+        // The accent moves on one more than the shape each lap, so the
+        // pairs shift against each other instead of repeating every five lines.
+        return FableStyle(shape: Shape(rawValue: wrap(seed)) ?? .staircase,
+                          accent: Accent(rawValue: wrap(seed + lap) % Accent.allCases.count) ?? .underline)
+    }
+
+    /// The word set larger: the longest, the first of equals. None for a line
+    /// of one or two words, which are all set large.
+    static func heroIndex(_ texts: [String]) -> Int? {
+        guard texts.count >= 3 else { return nil }
+        var best = 0
+        for (index, text) in texts.enumerated() where text.count > texts[best].count { best = index }
+        return best
+    }
+
+    /// A word's own entrance (one of four), as `progress` runs 0...1 with a
+    /// little overshoot: it drops in, pops up, swings up from its foot, or
+    /// slides in from `side`.
+    static func entrance(_ kind: Int, progress a: Double, size: CGFloat, side: CGFloat)
+        -> (offset: CGSize, scale: CGFloat, spin: Double) {
+        let left = CGFloat(1 - a)
+        switch kind {
+        case 0: return (CGSize(width: 0, height: -left * size * 0.5), 1, 0)
+        case 1: return (.zero, 0.55 + 0.45 * CGFloat(a), 0)
+        case 2: return (.zero, 1, Double(left) * -16 * Double(side))
+        default: return (CGSize(width: side * left * size * 0.6, height: 0), 1, 0)
+        }
+    }
+}
+
+/// Lays a Fable line out in its shape: words in reading order, wrapped into
+/// rows, each row bent into the shape, every word in a box of its own that
+/// nothing else enters. Reports the block's own size; the caller scales it
+/// to fit the stage.
+struct FableLayout: Layout {
+    var shape: FableStyle.Shape
+    var rightToLeft: Bool
+    var available: CGSize
+    var gap: CGFloat
+    var rowGap: CGFloat
+
+    struct Arrangement: Equatable {
+        var size: CGSize
+        /// Each word's box, from the block's top-left corner.
+        var frames: [CGRect]
+        /// The scale the block will be shown at to fit `available`.
+        var scale: CGFloat
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrangement(subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let laid = Self.arrange(sizes, shape: shape, rightToLeft: rightToLeft, available: available, gap: gap, rowGap: rowGap)
+        let origin = CGPoint(x: bounds.midX - laid.size.width / 2, y: bounds.midY - laid.size.height / 2)
+        for (index, subview) in subviews.enumerated() where laid.frames.indices.contains(index) {
+            let frame = laid.frames[index]
+            subview.place(at: CGPoint(x: origin.x + frame.midX, y: origin.y + frame.midY), anchor: .center,
+                          proposal: ProposedViewSize(sizes[index]))
+        }
+    }
+
+    private func arrangement(_ subviews: Subviews) -> Arrangement {
+        Self.arrange(subviews.map { $0.sizeThatFits(.unspecified) }, shape: shape, rightToLeft: rightToLeft,
+                     available: available, gap: gap, rowGap: rowGap)
+    }
+
+    /// Tries a few row widths and keeps the one that can be shown largest.
+    static func arrange(_ sizes: [CGSize], shape: FableStyle.Shape, rightToLeft: Bool, available: CGSize,
+                        gap: CGFloat, rowGap: CGFloat) -> Arrangement {
+        guard !sizes.isEmpty, available.width > 0, available.height > 0 else {
+            return Arrangement(size: .zero, frames: sizes.map { _ in .zero }, scale: 1)
+        }
+        var best: Arrangement?
+        for guess: CGFloat in [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.42, 0.35, 0.28] {
+            var laid = build(sizes, shape: shape, wrap: available.width * shape.share / guess, gap: gap, rowGap: rowGap)
+            laid.scale = LyricStageFit.scale(content: laid.size, available: available)
+            if best == nil || laid.scale > best!.scale + 0.001 { best = laid }
+            if laid.scale >= guess - 0.001 { break }
+        }
+        guard var result = best else { return Arrangement(size: .zero, frames: [], scale: 1) }
+        if rightToLeft {
+            // Right to left: the same shape seen in a mirror, read from the right.
+            result.frames = result.frames.map { CGRect(x: result.size.width - $0.maxX, y: $0.minY, width: $0.width, height: $0.height) }
+        }
+        return result
+    }
+
+    private static func build(_ sizes: [CGSize], shape: FableStyle.Shape, wrap: CGFloat, gap: CGFloat,
+                              rowGap: CGFloat) -> Arrangement {
+        // Rows, by width and by count; a very long line allows more words a row
+        // rather than more than about four rows.
+        let cap = max(shape.wordsPerRow, Int((Double(sizes.count) / 4).rounded(.up)))
+        var rows: [[Int]] = [[]]
+        var width: CGFloat = 0
+        for index in sizes.indices {
+            let row = rows[rows.count - 1]
+            let add = (row.isEmpty ? 0 : gap) + sizes[index].width
+            if !row.isEmpty, width + add > wrap || row.count >= cap {
+                rows.append([index]); width = sizes[index].width
+            } else {
+                rows[rows.count - 1].append(index); width += add
+            }
+        }
+        // No lone word left at the end when the row above can spare one.
+        if rows.count > 1, rows[rows.count - 1].count == 1, rows[rows.count - 2].count >= 3 {
+            let moved = rows[rows.count - 2].removeLast()
+            rows[rows.count - 1].insert(moved, at: 0)
+        }
+        let rowWidths = rows.map { row in row.map { sizes[$0].width }.reduce(0, +) + gap * CGFloat(max(0, row.count - 1)) }
+        let widest = rowWidths.max() ?? 0
+        var frames = [CGRect](repeating: .zero, count: sizes.count)
+        var top: CGFloat = 0
+        var order = 0
+        for (r, row) in rows.enumerated() {
+            let rowHeight = row.map { sizes[$0].height }.max() ?? 0
+            let start: CGFloat
+            switch shape {
+            case .staircase: start = CGFloat(r) * rowHeight * 0.9
+            case .zigzag: start = r.isMultiple(of: 2) ? 0 : max(widest - rowWidths[r], rowHeight * 0.9)
+            default: start = (widest - rowWidths[r]) / 2
+            }
+            let middle = start + rowWidths[r] / 2
+            let half = max(rowWidths[r] / 2, 1)
+            var x = start
+            var placed: [(Int, CGRect)] = []
+            for (j, index) in row.enumerated() {
+                let size = sizes[index]
+                let centre = x + size.width / 2
+                let u = min(1, max(-1, (centre - middle) / half))
+                let dy: CGFloat
+                switch shape {
+                case .staircase: dy = CGFloat(j) * rowHeight * 0.24
+                case .arch: dy = -rowHeight * 0.45 * (1 - u * u)
+                case .zigzag: dy = row.count > 1 ? (j.isMultiple(of: 2) ? -1 : 1) * rowHeight * 0.16 : 0
+                case .wave: dy = CGFloat(sin(Double(order) * 1.25 + 0.4)) * rowHeight * 0.2
+                case .ramp: dy = -(u + 1) / 2 * rowHeight * 0.8
+                }
+                placed.append((index, CGRect(x: x, y: dy - size.height / 2, width: size.width, height: size.height)))
+                x += size.width + gap
+                order += 1
+            }
+            // Each row starts below the lowest point of the one before.
+            let rowTop = placed.map(\.1.minY).min() ?? 0
+            let shift = top - rowTop
+            for (index, rect) in placed { frames[index] = rect.offsetBy(dx: 0, dy: shift) }
+            top = (placed.map(\.1.maxY).max() ?? 0) + shift + rowGap
+        }
+        let box = frames.dropFirst().reduce(frames[0]) { $0.union($1) }
+        return Arrangement(size: box.size, frames: frames.map { $0.offsetBy(dx: -box.minX, dy: -box.minY) }, scale: 1)
+    }
+}
+
+/// Four corner marks round a word.
+struct FableBrackets: Shape {
+    var arm: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let a = min(arm, rect.width / 2, rect.height / 2)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + a)); path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + a, y: rect.minY))
+        path.move(to: CGPoint(x: rect.maxX - a, y: rect.minY)); path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + a))
+        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - a)); path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - a, y: rect.maxY))
+        path.move(to: CGPoint(x: rect.minX + a, y: rect.maxY)); path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - a))
         return path
     }
 }
