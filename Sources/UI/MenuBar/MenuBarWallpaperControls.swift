@@ -36,6 +36,15 @@ struct MenuBarWallpaperControls: View {
                     .controlSize(.small)
                     .help("Opens the video in your browser at the song’s position")
             }
+            if settings.backgroundMode == .musicVideo, musicVideo.canTapSync {
+                Button(MusicVideoTapSync.buttonTitle(musicVideo.tapState)) { musicVideo.tapSyncButton() }
+                    .buttonStyle(.link)
+                    .controlSize(.small)
+                    .help("Click, then press any key the moment the singing starts in the video")
+                if let note = MusicVideoTapSync.note(musicVideo.tapState) {
+                    InspectorCaption(note)
+                }
+            }
             if settings.backgroundMode == .visualizer {
                 MenuBarPickerRow("Scene") {
                     Picker("Scene", selection: $settings.audioVisualizerStyle) {

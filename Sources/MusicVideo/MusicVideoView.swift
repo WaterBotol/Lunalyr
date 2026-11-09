@@ -130,6 +130,8 @@ final class MusicVideoSyncLoop {
     private(set) var surfacePaused = false
     /// Told the video's length once it is known (for the intro estimate).
     var onDuration: ((Double) -> Void)?
+    /// Told each sample of the video's own position (for Tap to sync).
+    var onSample: ((MusicVideoDrift.Sample) -> Void)?
 
     /// Follows the shared now-playing monitor and the playing song's offset.
     convenience init() {
@@ -181,6 +183,7 @@ final class MusicVideoSyncLoop {
             let target = MusicVideoTiming.videoTime(songTime: self.songTime(), offset: self.offset(),
                                                     videoDuration: duration)
             if let duration { self.onDuration?(duration) }
+            self.onSample?(sample)
             let shouldPlay = !self.surfacePaused && self.songPlaying()
             let style = surface.correctionStyle
             if self.corrector?.style != style { self.corrector = MusicVideoCorrector(style: style) }
@@ -287,6 +290,10 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         playerLayer.opacity = 0
         player.replaceCurrentItem(with: item)
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
+        loop.onSample = {
+            MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
+                                                        of: .local(url))
+        }
     }
 
     private func reveal() {
@@ -731,6 +738,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     func attach(_ view: WKWebView, videoID: String) {
         self.view = view
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
+        loop.onSample = {
+            MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
+                                                        of: .youTube(videoID))
+        }
         perform(session.attach(videoID))
     }
 

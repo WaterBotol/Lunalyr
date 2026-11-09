@@ -26,6 +26,7 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
     private let resolver: MusicVideoResolver
     private let lyrics: @MainActor (MusicVideoSong) -> [MusicVideoLyricLine]?
     private let captureReady: @MainActor () -> Bool
+    private let captureActive: @MainActor () -> Bool
     private let songClock: @MainActor () -> (time: Double, playing: Bool)
     private let uptime: () -> TimeInterval
     private let sleep: (TimeInterval) async -> Void
@@ -40,6 +41,7 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
     init(resolver: MusicVideoResolver,
          lyrics: @escaping @MainActor (MusicVideoSong) -> [MusicVideoLyricLine]? = LiveMusicVideoAutoSync.currentLyrics,
          captureReady: @escaping @MainActor () -> Bool = LiveMusicVideoAutoSync.captureIsRunning,
+         captureActive: @escaping @MainActor () -> Bool = LiveMusicVideoAutoSync.captureIsActive,
          songClock: @escaping @MainActor () -> (time: Double, playing: Bool) = {
              (NowPlayingMonitor.shared.playbackTime(), NowPlayingMonitor.shared.isPlaying)
          },
@@ -48,6 +50,7 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
         self.resolver = resolver
         self.lyrics = lyrics
         self.captureReady = captureReady
+        self.captureActive = captureActive
         self.songClock = songClock
         self.uptime = uptime
         self.sleep = sleep
@@ -78,9 +81,10 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
     }
 
     func audioOffset(url: URL, song: MusicVideoSong) async -> MusicVideoAutoResult {
-        // Only while the visualisers' capture already runs and hears audio:
-        // nothing is started here, and no permission is asked for.
-        guard captureReady() else { return .unavailable }
+        // Only while capture runs, for the visualisers or a brief listen the
+        // controller started: nothing is started here, and no permission is
+        // asked for.
+        guard captureActive() else { return .unavailable }
         let video: [Float]
         if let soundtrack, soundtrack.url == url {
             video = soundtrack.onsets
@@ -91,10 +95,11 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
         }
         var waited: TimeInterval = 0
         while waited <= Self.listenWait {
-            if Task.isCancelled || !captureReady() { return .unavailable }
+            if Task.isCancelled || !captureActive() { return .unavailable }
             let clock = songClock()
             let now = uptime()
-            if clock.playing,
+            // A brief listen may still be connecting, or between loud parts.
+            if captureReady(), clock.playing,
                let window = MusicVideoAudioAlign.liveWindow(AudioEnvelopeRecorder.shared.snapshot(), now: now,
                                                             songTimeNow: clock.time, songStartedAt: now - clock.time) {
                 let result = await Task.detached(priority: .utility) {
@@ -102,8 +107,8 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
                 }.value
                 return result.map { .found($0.offset, .audio) } ?? .unavailable
             }
-            await sleep(2)
-            waited += 2
+            await sleep(1)
+            waited += 1
         }
         return .unavailable
     }
@@ -120,6 +125,12 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
             .map { MusicVideoLyricLine(start: $0.start - shift, text: $0.text) }
             .filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
         return lines.isEmpty ? nil : lines
+    }
+
+    /// Capture runs or is starting, or a brief listen is under way.
+    static func captureIsActive() -> Bool {
+        let capture = AudioReactiveController.shared
+        return capture.running || capture.starting || capture.listeningBriefly
     }
 
     static func captureIsRunning() -> Bool {
