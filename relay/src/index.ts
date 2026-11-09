@@ -8,6 +8,40 @@ export { Room };
 
 export interface Env {
   ROOMS: DurableObjectNamespace<Room>;
+  /** Workers rate-limiting binding for `POST /rooms` (see wrangler.toml). */
+  ROOM_CREATE_LIMIT: RateLimit;
+}
+
+/** Room creations allowed per client per minute; must match wrangler.toml. */
+export const ROOMS_PER_MINUTE = 5;
+
+/**
+ * The rate-limit key for a client: its IPv4 address, or the /64 prefix of its
+ * IPv6 address (one home or phone usually gets a whole /64, so keying on the
+ * full address would be trivially sidestepped). The key is hashed so the
+ * address itself never leaves this function; nothing is stored or logged.
+ */
+export async function clientKey(request: Request): Promise<string> {
+  const ip = (request.headers.get("CF-Connecting-IP") ?? "").trim().toLowerCase();
+  const data = new TextEncoder().encode(`lunalyr-rooms:${ipPrefix(ip)}`);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  return Array.from(digest.subarray(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function ipPrefix(ip: string): string {
+  if (!ip.includes(":")) return ip || "unknown";
+  const halves = ip.split("::");
+  if (halves.length > 2) return ip;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  // An embedded IPv4 tail (::ffff:1.2.3.4) takes two groups; it is past /64 anyway.
+  const tailGroups = tail.reduce((n, g) => n + (g.includes(".") ? 2 : 1), 0);
+  const zeros = halves.length === 2 ? Math.max(0, 8 - head.length - tailGroups) : 0;
+  const groups = [...head, ...Array<string>(zeros).fill("0"), ...tail];
+  return groups
+    .slice(0, 4)
+    .map((g) => g.replace(/^0+(?=.)/, ""))
+    .join(":");
 }
 
 export const ROOM_ID_PATTERN = /^[a-z0-9]{10}$/;
@@ -56,7 +90,20 @@ function isWebSocketUpgrade(request: Request): boolean {
 // itself never inserts song data as HTML.
 const PAGE_CSP = ["base-uri 'none'", "form-action 'none'", "object-src 'none'"].join("; ");
 
-async function createRoom(env: Env): Promise<Response> {
+async function createRoom(request: Request, env: Env): Promise<Response> {
+  // Each room is a Durable Object write plus an alarm, so an unthrottled loop
+  // could spend the free plan's daily quota and take the relay down for
+  // everyone. The binding is approximate and per Cloudflare location, which is
+  // enough to stop one client hammering it. If the binding itself fails, let
+  // the request through rather than refusing every host.
+  let allowed = true;
+  try {
+    allowed = (await env.ROOM_CREATE_LIMIT.limit({ key: await clientKey(request) })).success;
+  } catch {
+    allowed = true;
+  }
+  if (!allowed) return json({ error: "rate_limited" }, 429, { "Retry-After": "60" });
+
   // A collision among 36^10 ids is vanishingly unlikely, but retry anyway.
   for (let attempt = 0; attempt < 5; attempt++) {
     const room = newRoomId();
@@ -82,7 +129,7 @@ export default {
 
     if (path === "/rooms" || path === "/rooms/") {
       if (method !== "POST") return json({ error: "method_not_allowed" }, 405, { Allow: "POST" });
-      return createRoom(env);
+      return createRoom(request, env);
     }
 
     const roomMatch = path.match(/^\/rooms\/([^/]+)\/(host|listen|state)$/);

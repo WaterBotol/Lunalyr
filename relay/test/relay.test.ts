@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
-import { ROOM_ID_PATTERN } from "../src/index";
+import { ROOM_ID_PATTERN, ROOMS_PER_MINUTE, ipPrefix } from "../src/index";
 import { MAX_LISTENERS, ROOM_EXPIRY_MS } from "../src/room";
 
 const BASE = "https://relay.test";
@@ -28,8 +28,19 @@ afterEach(() => {
   }
 });
 
+let ipCounter = 0;
+/** A fresh client address per call, so tests don't share a rate-limit bucket. */
+function nextIp(): string {
+  ipCounter++;
+  return `10.${(ipCounter >> 16) & 255}.${(ipCounter >> 8) & 255}.${ipCounter & 255}`;
+}
+
+function postRooms(ip: string): Promise<Response> {
+  return worker.fetch(`${BASE}/rooms`, { method: "POST", headers: { "CF-Connecting-IP": ip } });
+}
+
 async function createRoom(): Promise<{ room: string; hostKey: string }> {
-  const res = await worker.fetch(`${BASE}/rooms`, { method: "POST" });
+  const res = await postRooms(nextIp());
   expect(res.status).toBe(200);
   return res.json();
 }
@@ -345,6 +356,44 @@ describe("limits", () => {
     const got = await listener.next((m) => m.type === "state");
     expect(got.seq).toBe(3);
     expect(host.isClosed()).toBe(false);
+  });
+});
+
+describe("room creation rate limit", () => {
+  it(`allows ${ROOMS_PER_MINUTE} rooms a minute per address, then answers 429`, async () => {
+    const ip = "203.0.113.7";
+    for (let i = 0; i < ROOMS_PER_MINUTE; i++) expect((await postRooms(ip)).status).toBe(200);
+    const res = await postRooms(ip);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("60");
+    expect(await res.json()).toEqual({ error: "rate_limited" });
+    // Another address is unaffected.
+    expect((await postRooms("203.0.113.8")).status).toBe(200);
+  });
+
+  it("counts a whole IPv6 /64 as one client", async () => {
+    for (let i = 0; i < ROOMS_PER_MINUTE; i++) {
+      expect((await postRooms(`2001:db8:aa:1::${(i + 1).toString(16)}`)).status).toBe(200);
+    }
+    expect((await postRooms("2001:0db8:00aa:0001:ffff:1:2:3")).status).toBe(429);
+    expect((await postRooms("2001:db8:aa:2::1")).status).toBe(200);
+  });
+
+  it("does not limit the other routes", async () => {
+    const { room } = await createRoom();
+    for (let i = 0; i < ROOMS_PER_MINUTE * 2; i++) {
+      expect((await worker.fetch(`${BASE}/rooms/${room}/state`)).status).toBe(404);
+    }
+  });
+
+  it("reduces IPv6 addresses to their /64 prefix", () => {
+    expect(ipPrefix("2001:db8::1")).toBe("2001:db8:0:0");
+    expect(ipPrefix("2001:0db8:0000:0001:0:0:0:1")).toBe("2001:db8:0:1");
+    expect(ipPrefix("2001:db8:1:2:3:4:5:6")).toBe("2001:db8:1:2");
+    expect(ipPrefix("::1")).toBe("0:0:0:0");
+    expect(ipPrefix("::ffff:192.0.2.1")).toBe("0:0:0:0");
+    expect(ipPrefix("192.0.2.1")).toBe("192.0.2.1");
+    expect(ipPrefix("")).toBe("unknown");
   });
 });
 

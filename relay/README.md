@@ -6,6 +6,7 @@ It runs on [Cloudflare Workers](https://developers.cloudflare.com/workers/) with
 
 - `src/index.ts`: HTTP routes (`/rooms`, `/rooms/<room>/host|listen|state`, `/listen/<room>`, `/health`)
 - `src/room.ts`: the room (WebSocket Hibernation API, limits, expiry)
+- `wrangler.toml`: the deploy config, including the room-creation rate limit
 - `src/listen.html`: the web listen-along page, served as is (no build step)
 - `PROTOCOL.md`: the wire format shared with the macOS app
 - `test/`: tests that run in the real Workers runtime (`npm test`)
@@ -101,6 +102,32 @@ What this means in practice:
 - Other free-plan limits that matter here: Durable Objects must use SQLite storage (this relay does), and a Worker gets 10 ms of CPU per request (routing takes well under 1 ms).
 
 If you ever outgrow it, the Workers Paid plan raises all of these. Nothing in the relay needs to change.
+
+## Abuse limits
+
+Anyone who knows your relay URL can call it, so the relay protects your daily quota itself:
+
+- **Room creation is rate limited.** `POST /rooms` allows 5 new rooms a minute from one client (one IPv4 address, or one IPv6 `/64` network), and answers `429` with `Retry-After: 60` beyond that. A host creates one room each time sharing starts, so this never gets in the way of normal use. It uses Cloudflare's [Workers rate-limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) (the `[[ratelimits]]` block in `wrangler.toml`), which needs no setup beyond that block. As of November 2026 Cloudflare's docs name no plan restriction for it and it isn't billed separately, so it runs on the free plan. If `wrangler deploy` ever rejects the block, delete it and the relay still works, just without this limit. The address is only hashed into a counter key, never stored or logged. The count is kept separately in each Cloudflare location and is approximate, so it stops one client in a loop, not a determined attacker with many addresses.
+- **Listeners can't send.** A listener connection that sends anything is closed (code `4400`), so it can't keep waking the room.
+- **Hosts** are limited to 5 messages a second and 64 KB a message, and each room to 50 listeners.
+
+### Optional: a WAF rule as an extra layer
+
+Requests the Worker turns away with `429` still count toward the 100,000 a day. A Cloudflare WAF rate-limiting rule stops them before they reach the Worker, so they cost nothing. This needs the relay on **a domain of your own** that's on Cloudflare; WAF rules don't apply to `*.workers.dev` URLs. If you only use `workers.dev`, skip this: the built-in limit above is enough for a personal relay.
+
+1. In the Cloudflare dashboard, open your domain, then **Security > WAF > Rate limiting rules**, and click **Create rule**.
+2. Name it, for example `lunalyr rooms`.
+3. Under **If incoming requests match**, choose **Edit expression** and enter:
+
+   ```
+   (http.request.uri.path eq "/rooms")
+   ```
+
+   On the free plan the expression may only use the path. On a paid plan you can narrow it with `and http.request.method eq "POST"` and your relay's hostname.
+4. **With the same characteristics:** IP. **When rate exceeds:** 3 requests per 10 seconds (on the free plan, 10 seconds is the only period).
+5. **Then take action:** Block, for 10 seconds (the free plan's only duration; longer on paid plans). Click **Deploy**.
+
+The free plan includes one rate-limiting rule. Keep the relay's own limit in place as well; the two work together.
 
 ## Privacy
 
