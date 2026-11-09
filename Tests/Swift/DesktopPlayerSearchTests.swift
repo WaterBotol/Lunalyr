@@ -22,6 +22,10 @@ final class DesktopPlayerSearchTests: XCTestCase {
     func testOnlyAppleAddressesAreOpened() {
         XCTAssertNil(AppleMusicSearch.musicAddress("https://evil.example/a"))
         XCTAssertEqual(AppleMusicSearch.musicAddress("https://music.apple.com/us/album/a/1")?.scheme, "music")
+        XCTAssertNotNil(AppleMusicSearch.musicAddress("https://apple.com/a"))
+        XCTAssertNil(AppleMusicSearch.musicAddress("https://notapple.com/us/album/a/1"), "a host merely ending in apple.com")
+        XCTAssertNil(AppleMusicSearch.musicAddress("https://music.apple.com.evil.example/a"))
+        XCTAssertNil(AppleMusicSearch.musicAddress("not a web address"))
     }
 
     func testSearchURLCarriesOnlyTheTypedWords() throws {
@@ -29,19 +33,6 @@ final class DesktopPlayerSearchTests: XCTestCase {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         XCTAssertEqual(items?.first { $0.name == "term" }?.value, "drip & too hard")
         XCTAssertEqual(url.host, "itunes.apple.com")
-    }
-
-    func testArtistAlbumsKeepOnlyThatArtistWithoutRepeats() {
-        let json = """
-        {"results":[
-         {"collectionId":1,"collectionName":"Harder Than Ever","artistName":"Lil Baby","releaseDate":"2018-10-05T07:00:00Z",
-          "artworkUrl100":"https://x/100x100bb.jpg","collectionViewUrl":"https://music.apple.com/us/album/a/1"},
-         {"collectionId":2,"collectionName":"Harder Than Ever","artistName":"Lil Baby","releaseDate":"2018-10-05T07:00:00Z"},
-         {"collectionId":3,"collectionName":"Other","artistName":"Someone Else","releaseDate":"2019-01-01T00:00:00Z"}]}
-        """
-        let albums = AppleMusicSearch.parseAlbums(Data(json.utf8), artist: "Lil Baby")
-        XCTAssertEqual(albums.map(\.title), ["Harder Than Ever"])
-        XCTAssertEqual(albums.first?.year, "2018")
     }
 
     func testLibraryAndQueueRepliesParse() {

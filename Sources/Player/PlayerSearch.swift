@@ -47,15 +47,6 @@ struct PlayerQueueSnapshot: Equatable, Sendable {
     var shuffle = false
 }
 
-/// An album by the artist now playing, for the cover-flow.
-struct PlayerAlbum: Identifiable, Equatable, Sendable {
-    let id: String
-    var title: String
-    var year: String
-    var artworkURL: URL?
-    var address: URL?
-}
-
 enum PlayerSearchError: Error, Equatable, Sendable {
     case notRunning(PlayerKind)
     case blocked(PlayerKind)
@@ -70,8 +61,6 @@ protocol PlayerSearching: Sendable {
     func play(_ result: PlayerSearchResult) async throws
     func queue() async throws -> PlayerQueueSnapshot
     func playQueueItem(_ item: PlayerQueueItem) async throws
-    func albums(by artist: String) async -> [PlayerAlbum]
-    func play(_ album: PlayerAlbum) async throws
 }
 
 extension PlayerKind {
@@ -410,7 +399,8 @@ struct AppleMusicSearch: PlayerSearching {
 
     /// A catalogue page address in the form the Music app itself opens.
     static func musicAddress(_ web: String) -> URL? {
-        guard var components = URLComponents(string: web), components.host?.hasSuffix("apple.com") == true else { return nil }
+        guard var components = URLComponents(string: web), let host = components.host?.lowercased(),
+              host == "apple.com" || host.hasSuffix(".apple.com") else { return nil }
         components.scheme = "music"
         return components.url
     }
@@ -688,46 +678,6 @@ struct AppleMusicSearch: PlayerSearching {
         try await playInContext(persistentID: id, index: item.index > 0 ? item.index : nil)
     }
 
-    func albums(by artist: String) async -> [PlayerAlbum] {
-        await Self.artistAlbums(artist)
-    }
-
-    static func artistAlbums(_ artist: String) async -> [PlayerAlbum] {
-        let name = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return [] }
-        var components = URLComponents(string: "https://itunes.apple.com/search")
-        components?.queryItems = [
-            URLQueryItem(name: "term", value: name), URLQueryItem(name: "media", value: "music"),
-            URLQueryItem(name: "entity", value: "album"), URLQueryItem(name: "attribute", value: "artistTerm"),
-            URLQueryItem(name: "limit", value: "25"),
-        ]
-        guard let url = components?.url, let (data, _) = try? await URLSession.shared.data(from: url) else { return [] }
-        return parseAlbums(data, artist: name)
-    }
-
-    static func parseAlbums(_ data: Data, artist: String) -> [PlayerAlbum] {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rows = root["results"] as? [[String: Any]] else { return [] }
-        let wanted = artist.lowercased()
-        var seen = Set<String>()
-        return rows.compactMap { row -> PlayerAlbum? in
-            guard let title = row["collectionName"] as? String,
-                  let owner = (row["artistName"] as? String)?.lowercased(),
-                  owner == wanted || owner.contains(wanted) || wanted.contains(owner),
-                  seen.insert(title.lowercased()).inserted else { return nil }
-            let art = (row["artworkUrl100"] as? String).flatMap { URL(string: $0.replacingOccurrences(of: "100x100", with: "300x300")) }
-            let year = (row["releaseDate"] as? String).map { String($0.prefix(4)) } ?? ""
-            let id = (row["collectionId"] as? NSNumber)?.stringValue ?? title
-            return PlayerAlbum(id: id, title: title, year: year, artworkURL: art,
-                               address: (row["collectionViewUrl"] as? String).flatMap(musicAddress))
-        }
-    }
-
-    func play(_ album: PlayerAlbum) async throws {
-        guard let address = album.address else { throw PlayerSearchError.failed }
-        try await open(address)
-    }
-
     private func run(_ name: String, _ body: String) async throws {
         let script = PlayerScript(name: "desktop-player.\(name)", source: PlayerScriptSource.command(Self.bundleID, body),
                                   cacheable: false)
@@ -776,6 +726,4 @@ struct SpotifySearch: PlayerSearching {
 
     func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
     func playQueueItem(_ item: PlayerQueueItem) async throws {}
-    func albums(by artist: String) async -> [PlayerAlbum] { [] }
-    func play(_ album: PlayerAlbum) async throws {}
 }

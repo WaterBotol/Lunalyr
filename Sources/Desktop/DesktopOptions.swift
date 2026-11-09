@@ -59,7 +59,7 @@ struct DesktopInteractionSection: View {
         ThemedSection("Desktop") {
             Toggle("Show player on hover", isOn: $options.showsControlsOnHover)
             InspectorCaption(options.showsControlsOnHover
-                 ? "Rest the pointer in the middle of an uncovered desktop to show the player: search, what plays next and the artist\u{2019}s albums. Clicks elsewhere reach the desktop."
+                 ? "Rest the pointer in the middle of an uncovered desktop to show the player: what played, what plays now and next, and a search. Clicks elsewhere reach the desktop."
                  : "The desktop never shows the player. Use the menu bar to control playback.")
         }
     }
