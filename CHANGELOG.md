@@ -44,6 +44,15 @@ When merging, keep every entry and combine duplicate headings.
 
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
 - Clicking a song in the desktop player builds the "Lunalyr Queue" in short steps: from the library in one copy, from a playlist about 20 songs at a time, so lyrics and progress keep updating while it is built.
+- Fable is rewritten. Each line is set in one of five shapes (staircase, arch, zigzag, wave or ramp) and marks the word being sung with one of five accents (underline, ring, tile, star or corner brackets). The next line always has a different shape and accent, and a line looks the same each time it is drawn. Words land where they will stay and then hold still. Its place in the picker, word entrances, Editorial typography and Cutout · Highlight are unchanged.
+
+### Fixed
+
+- Fable: long lines no longer run off the stage or under the menu bar, and earlier words no longer fade away before the line has been read. Lines are wrapped, then shrunk only if they still do not fit.
+- Fable: Arabic and other joined scripts are no longer split into reversed, unjoined letters, and right-to-left lines read from the right.
+- Fable: with romanisation set to Below, each word's reading now shows under it. Fable used to drop readings that were split by word.
+- Fable: Reduce Motion now stops the swoop-in, the letter spreading and the echo trails as well as the floating; words only fade in.
+- Fable: words no longer drift on a loop the whole time a line is held, the colour and glow no longer snap off the previous word when the next one starts, and a chosen word entrance is now used.
 
 ## [1.0.0] - 2026-11-08
 
