@@ -11,7 +11,11 @@ struct NowPlayingView: View {
     @ObservedObject private var hover = HoverState.shared
     @ObservedObject var settings: Settings = .shared
     /// Passed to the web scenes, so a test can host this view with its own.
-    var visualizerPreferences: VisualizerPreferences = .shared
+    /// Also decides where a music video plays ("Heavy scenes on main
+    /// display only").
+    @ObservedObject var visualizerPreferences: VisualizerPreferences = .shared
+    @ObservedObject private var musicVideo = MusicVideoController.shared
+    @ObservedObject private var mainDisplay = MainDisplayMonitor.shared
     // Read the current envelope on a scheduled frame. Subscribing to every
     // meter publication would trigger extra wallpaper redraws outside it.
     @ObservedObject private var readingOptions = RomanizationOptions.shared
@@ -74,6 +78,8 @@ struct NowPlayingView: View {
         /// `still` shows the cover itself instead of its animation.
         case motion(URL, still: Bool)
         case custom(URL)
+        /// The song's music video, kept on the song's position.
+        case musicVideo(MusicVideoSource)
         /// A new epoch is the same effect restarted on a fresh clock.
         case shader(ShaderStyle, epoch: Int)
         case visualizer(AudioVisualizerStyle)
@@ -86,7 +92,7 @@ struct NowPlayingView: View {
         /// still pictures draw themselves.
         var animatesWithClock: Bool {
             switch self {
-            case .desktop, .motion, .custom: return false
+            case .desktop, .motion, .custom, .musicVideo: return false
             case .shader, .visualizer, .generated, .albumGradient: return true
             }
         }
@@ -95,6 +101,30 @@ struct NowPlayingView: View {
     private var desiredLayer: BackgroundLayer {
         // Read once: on battery each read asks IOKit for the power source.
         let mode = settings.effectiveBackgroundMode
+        if mode == .musicVideo {
+            if let source = musicVideoHere { return .musicVideo(source) }
+            // No video for this song, or kept off this display: whatever
+            // was chosen before Music video, under the same power rules.
+            return layer(for: Settings.effectiveMode(settings.musicVideoFallback, under: settings.powerConstraint))
+        }
+        return layer(for: mode)
+    }
+
+    /// The song's video, when this surface shows it.
+    private var musicVideoHere: MusicVideoSource? {
+        MusicVideoController.placement(source: musicVideo.source(for: nowPlaying.current), preview: isSettingsPreview,
+                                       heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
+                                       display: effectDisplay, mainDisplay: mainDisplay.id)
+    }
+
+    /// The type drawn, with Music video resolved to the video or its fallback.
+    private var drawnMode: Settings.BackgroundMode {
+        let mode = settings.effectiveBackgroundMode
+        guard mode == .musicVideo, musicVideoHere == nil else { return mode }
+        return Settings.effectiveMode(settings.musicVideoFallback, under: settings.powerConstraint)
+    }
+
+    private func layer(for mode: Settings.BackgroundMode) -> BackgroundLayer {
         if mode == .auto,
            let motion = nowPlaying.motionArtwork, settings.motionArtworkEnabled,
            !settings.excludesMotion(artist: nowPlaying.current?.artist,
@@ -374,7 +404,7 @@ struct NowPlayingView: View {
     }
 
     private var backdropSource: BackdropSource {
-        BackdropSource(mode: settings.effectiveBackgroundMode, path: settings.customWallpaperPath,
+        BackdropSource(mode: drawnMode, path: settings.customWallpaperPath,
                        placement: settings.customWallpaperPlacement, screen: viewportSize)
     }
 
@@ -430,6 +460,16 @@ struct NowPlayingView: View {
                 CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement,
                                     paused: renderingPaused || reduceMotion)
                 if hasAlbumPalette { cover.gradient.opacity(0.18).ignoresSafeArea() }
+                scrim
+                textBacking(backing, presence: stage, size: size)
+            }
+
+        case .musicVideo(let source):
+            ZStack {
+                // Reduce Motion holds the video still, as it does an imported one.
+                MusicVideoBackground(source: source, paused: renderingPaused || reduceMotion,
+                                     dim: settings.musicVideoDim, blur: settings.musicVideoBlur,
+                                     preview: isSettingsPreview)
                 scrim
                 textBacking(backing, presence: stage, size: size)
             }
@@ -597,6 +637,10 @@ struct NowPlayingView: View {
         case .custom:
             luminance = backdrop.luminance ?? LyricLegibility.unknownBackdropLuminance
             existing = scrim
+        case .musicVideo:
+            // Footage is unmeasured; the dimming is laid over it before the scrim.
+            luminance = LyricLegibility.unknownBackdropLuminance
+            existing = 1 - (1 - min(1, max(0, settings.musicVideoDim))) * (1 - scrim)
         case .motion:
             luminance = LyricLegibility.coverLuminance(hsbGrid: palette)
             existing = 1 - (1 - min(1, 0.40 * strength)) * 0.5
