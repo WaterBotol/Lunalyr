@@ -93,4 +93,44 @@ final class DiscordPresenceTests: XCTestCase {
         XCTAssertNil((payload["args"] as? [String: Any])?["activity"])
         XCTAssertEqual((payload["args"] as? [String: Any])?["pid"] as? Int, 42)
     }
+
+    func testBothButtonsShowWithThePlaySongButtonFirst() throws {
+        var playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: nil, line: nil, start: 0, end: nil)
+        playing.songURL = "https://song.link/i/123"
+        let buttons = try XCTUnwrap(DiscordPresence.activity(for: playing)["buttons"] as? [[String: String]])
+        XCTAssertEqual(buttons.map { $0["label"] }, ["Play this song", "Get Lunalyr"])
+        XCTAssertEqual(buttons.first?["url"], "https://song.link/i/123")
+        XCTAssertEqual(buttons.last?["url"], DiscordPresence.getLunalyrURL)
+    }
+
+    func testGetLunalyrStaysWhenTheSongIsNotFoundOrItsButtonIsOff() throws {
+        var playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: nil, line: nil, start: 0, end: nil)
+        var buttons = try XCTUnwrap(DiscordPresence.activity(for: playing)["buttons"] as? [[String: String]])
+        XCTAssertEqual(buttons.map { $0["label"] }, ["Get Lunalyr"])
+        playing.songURL = "https://song.link/i/123"
+        playing.options.showsSongButton = false
+        buttons = try XCTUnwrap(DiscordPresence.activity(for: playing)["buttons"] as? [[String: String]])
+        XCTAssertEqual(buttons.map { $0["label"] }, ["Get Lunalyr"])
+        playing.options.showsButton = false
+        XCTAssertNil(DiscordPresence.activity(for: playing)["buttons"])
+    }
+
+    func testSongLinkPrefersSpotifyThenApple() {
+        XCTAssertEqual(DiscordPresence.songLink(spotifyURI: "spotify:track:0VjIjW4GlUZAMYd2vXMi3b", appleTrackID: 5),
+                       "https://song.link/s/0VjIjW4GlUZAMYd2vXMi3b")
+        XCTAssertEqual(DiscordPresence.songLink(spotifyURI: "spotify:local:a:b:c:1", appleTrackID: 1440857781),
+                       "https://song.link/i/1440857781")
+        XCTAssertEqual(DiscordPresence.songLink(spotifyURI: nil, appleTrackID: 42), "https://song.link/i/42")
+        XCTAssertNil(DiscordPresence.songLink(spotifyURI: nil, appleTrackID: nil))
+        XCTAssertNil(DiscordPresence.songLink(spotifyURI: "spotify:track:", appleTrackID: 0))
+    }
+
+    func testSearchMatchCarriesTheAppleTrackID() {
+        let reply = """
+        {"results":[{"trackId":111,"trackName":"Other","artistName":"Someone","artworkUrl100":"https://a/1/100x100bb.jpg"},
+                    {"trackId":1440857781,"trackName":"Golden Hour Static","artistName":"Lunar Tides","artworkUrl100":"https://a/2/100x100bb.jpg"}]}
+        """
+        let match = DiscordPresence.searchMatch(fromSearch: Data(reply.utf8), title: "Golden Hour Static", artist: "Lunar Tides")
+        XCTAssertEqual(match, DiscordPresence.SearchMatch(cover: "https://a/2/512x512bb.jpg", trackID: 1440857781))
+    }
 }

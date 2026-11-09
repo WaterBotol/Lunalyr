@@ -23,6 +23,8 @@ struct DiscordOptions: Equatable {
     var showsLyric = true
     var showsCover = true
     var showsButton = true
+    /// A "Play this song" button: a song.link page with the song on every service.
+    var showsSongButton = true
     var showsProgress = true
     var showsWhenPaused = false
     /// How far ahead of the music the line is read, so it lands as it is sung.
@@ -44,7 +46,9 @@ struct DiscordOptions: Equatable {
 ///   only) and cached; without one, the Lunalyr icon is shown.
 /// - Discord allows five updates per twenty seconds: updates are spaced out,
 ///   so a very fast song skips some lines rather than being refused.
-/// - Discord never shows a person their own buttons; others see them.
+/// - Two buttons, both for others: "Play this song" (a song.link page that
+///   lists the song on Spotify, Apple Music, YouTube Music and more) and
+///   "Get Lunalyr". Discord never shows a person their own buttons.
 @MainActor
 final class DiscordPresence {
     nonisolated static let applicationID = "1568919234367717506"
@@ -91,7 +95,22 @@ final class DiscordPresence {
         var end: Int?
         var paused = false
         var coverURL: String?
+        /// A page that opens the song on any service, when it was found.
+        var songURL: String?
         var options = DiscordOptions()
+    }
+
+    static let playSongLabel = "Play this song"
+
+    /// song.link for a song: from Spotify's own ID when Spotify is playing,
+    /// else from Apple's catalogue ID. Nil for local files and unknown songs.
+    nonisolated static func songLink(spotifyURI: String?, appleTrackID: Int?) -> String? {
+        if let uri = spotifyURI, uri.hasPrefix("spotify:track:") {
+            let id = uri.dropFirst("spotify:track:".count)
+            if !id.isEmpty, id.allSatisfy({ $0.isLetter || $0.isNumber }) { return "https://song.link/s/\(id)" }
+        }
+        if let appleTrackID, appleTrackID > 0 { return "https://song.link/i/\(appleTrackID)" }
+        return nil
     }
 
     /// The activity object for SET_ACTIVITY.
@@ -126,9 +145,14 @@ final class DiscordPresence {
             "state": field(playing.paused ? fallback : state),
             "assets": assets,
         ]
-        if options.showsButton {
-            activity["buttons"] = [["label": "Get Lunalyr", "url": getLunalyrURL]]
+        var buttons: [[String: String]] = []
+        if options.showsSongButton, let song = playing.songURL {
+            buttons.append(["label": playSongLabel, "url": song])
         }
+        if options.showsButton {
+            buttons.append(["label": "Get Lunalyr", "url": getLunalyrURL])
+        }
+        if !buttons.isEmpty { activity["buttons"] = buttons }
         if options.showsProgress && !playing.paused {
             var timestamps: [String: Any] = ["start": playing.start]
             if let end = playing.end { timestamps["end"] = end }
@@ -146,6 +170,16 @@ final class DiscordPresence {
     /// The cover of the best match in an Apple search reply (iTunes Search
     /// API), at a size Discord shows well, or nil if no result is the song.
     nonisolated static func artworkURL(fromSearch data: Data, title: String, artist: String) -> String? {
+        searchMatch(fromSearch: data, title: title, artist: artist)?.cover
+    }
+
+    struct SearchMatch: Equatable, Sendable {
+        var cover: String?
+        var trackID: Int?
+    }
+
+    /// The best match's cover and Apple catalogue ID, or nil if no result is the song.
+    nonisolated static func searchMatch(fromSearch data: Data, title: String, artist: String) -> SearchMatch? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let results = object["results"] as? [[String: Any]] else { return nil }
         let wantTitle = title.lowercased()
@@ -154,9 +188,11 @@ final class DiscordPresence {
             let name = (result["trackName"] as? String ?? "").lowercased()
             let by = (result["artistName"] as? String ?? "").lowercased()
             guard !name.isEmpty, name.contains(wantTitle) || wantTitle.contains(name),
-                  wantArtist.isEmpty || by.contains(wantArtist) || wantArtist.contains(by),
-                  let art = result["artworkUrl100"] as? String else { continue }
-            return art.replacingOccurrences(of: "100x100bb", with: "512x512bb")
+                  wantArtist.isEmpty || by.contains(wantArtist) || wantArtist.contains(by) else { continue }
+            let cover = (result["artworkUrl100"] as? String)?.replacingOccurrences(of: "100x100bb", with: "512x512bb")
+            let id = (result["trackId"] as? NSNumber)?.intValue
+            guard cover != nil || id != nil else { continue }
+            return SearchMatch(cover: cover, trackID: id)
         }
         return nil
     }
@@ -172,8 +208,8 @@ final class DiscordPresence {
     /// The timestamps already shown, so a line change does not move the bar.
     private var anchor: (start: Int, trackKey: String)?
     private var running = false
-    /// Cover URLs by song; nil inside means looked up and not found.
-    private var covers: [String: String?] = [:]
+    /// Search results by song; nil inside means looked up and not found.
+    private var matches: [String: SearchMatch?] = [:]
     private var lookingUp: Set<String> = []
 
     init(extras: LunalyrExtras) {
@@ -253,28 +289,32 @@ final class DiscordPresence {
         anchor = (start, key)
         let end = track.duration > 0 ? start + Int(track.duration) : nil
         let text = monitor.isPlaying ? extras.flatMap { line(lead: options.lyricLead, extras: $0) } : nil
+        let spotifyURI = track.persistentID.flatMap { $0.hasPrefix("spotify:track:") ? $0 : nil }
+        let needsSearch = options.showsCover || (options.showsSongButton && spotifyURI == nil)
+        let found = needsSearch ? match(for: track, key: key) : nil
+        let songURL = options.showsSongButton ? Self.songLink(spotifyURI: spotifyURI, appleTrackID: found?.trackID) : nil
         return Playing(title: track.title, artist: track.artist, album: track.album, line: text,
                        start: start, end: end, paused: !monitor.isPlaying,
-                       coverURL: options.showsCover ? cover(for: track, key: key) : nil, options: options)
+                       coverURL: options.showsCover ? found?.cover : nil, songURL: songURL, options: options)
     }
 
-    /// The cached cover, starting a lookup the first time a song is seen.
-    private func cover(for track: NowPlayingMonitor.Track, key: String) -> String? {
-        if let known = covers[key] { return known }
+    /// The cached search result, starting a lookup the first time a song is seen.
+    private func match(for track: NowPlayingMonitor.Track, key: String) -> SearchMatch? {
+        if let known = matches[key] { return known }
         guard !lookingUp.contains(key) else { return nil }
         lookingUp.insert(key)
         let title = track.title, artist = track.artist
         Task { [weak self] in
-            let url = await Self.lookUpCover(title: title, artist: artist)
+            let found = await Self.lookUp(title: title, artist: artist)
             guard let self else { return }
-            covers[key] = .some(url)
+            matches[key] = .some(found)
             lookingUp.remove(key)
             update()
         }
         return nil
     }
 
-    nonisolated private static func lookUpCover(title: String, artist: String) async -> String? {
+    nonisolated private static func lookUp(title: String, artist: String) async -> SearchMatch? {
         var components = URLComponents(string: "https://itunes.apple.com/search")
         components?.queryItems = [URLQueryItem(name: "term", value: "\(artist) \(title)"),
                                   URLQueryItem(name: "media", value: "music"),
@@ -284,7 +324,7 @@ final class DiscordPresence {
         var request = URLRequest(url: url)
         request.timeoutInterval = 6
         guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
-        return artworkURL(fromSearch: data, title: title, artist: artist)
+        return searchMatch(fromSearch: data, title: title, artist: artist)
     }
 
     private func update() {
