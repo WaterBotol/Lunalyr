@@ -118,7 +118,7 @@ final class DesktopPlayerModel: ObservableObject {
         var before = Array(history.suffix(8)).filter { $0.persistentID == nil || $0.persistentID != fetched[nowIndex].persistentID }
         // Nothing has played since launch: the playlist's own earlier songs
         // are the best guess, unless shuffle makes them meaningless.
-        if before.isEmpty && !shuffleOn { before = Array(fetched[..<nowIndex]) }
+        if before.isEmpty { before = Array(fetched[..<nowIndex]) }
         queue = before + [fetched[nowIndex]] + fetched[(nowIndex + 1)...]
     }
 
@@ -136,8 +136,7 @@ final class DesktopPlayerModel: ObservableObject {
                 // the strip already shows rather than emptying it.
                 if items.isEmpty, !self.fetched.isEmpty { return }
                 self.shuffleOn = snapshot.shuffle
-                // With shuffle on the playlist's order is not what plays.
-                self.fetched = snapshot.shuffle ? items.filter(\.isCurrent) : items
+                                self.fetched = items
                 self.recompose()
                 self.status = items.isEmpty && !self.isSearching
                     ? .message(searcher.kind == .spotify

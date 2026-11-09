@@ -89,7 +89,7 @@ struct DesktopPlayerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             CoverStrip(items: model.queue, tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork,
-                       recenter: recenter, note: model.shuffleOn ? "Shuffle is on, so what plays next isn\u{2019}t known" : nil) { entry in
+                       recenter: recenter, note: model.shuffleOn ? "Shuffle is on: this is the playlist\u{2019}s order" : nil) { entry in
                 if entry.isCurrent { nowPlaying.playPause() } else { model.play(entry) }
             }
         }
@@ -270,7 +270,6 @@ private struct CoverStrip: View {
     var recenter = 0
     var note: String?
     let onTap: (PlayerQueueItem) -> Void
-    @State private var focus: String?
     @State private var velocity: CGFloat = 0
     @State private var lastOffset: CGFloat?
     @State private var lastTime: TimeInterval = 0
@@ -282,6 +281,7 @@ private struct CoverStrip: View {
     var body: some View {
         let bend = max(-1, min(1, velocity / 1800))
         let strength = abs(bend)
+        ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 14) {
                 ForEach(items) { item in
@@ -324,7 +324,6 @@ private struct CoverStrip: View {
                     }
                 }
             }
-            .scrollTargetLayout()
             .padding(.horizontal, (DesktopPlayerView.width - DesktopPlayerView.cover) / 2)
             .background(GeometryReader { proxy in
                 Color.clear.preference(key: StripOffsetKey.self, value: proxy.frame(in: .named("strip")).minX)
@@ -332,20 +331,19 @@ private struct CoverStrip: View {
         }
         .coordinateSpace(name: "strip")
         .onPreferenceChange(StripOffsetKey.self) { measured(offset: $0) }
-        .scrollPosition(id: $focus, anchor: .center)
-        .scrollTargetBehavior(.viewAligned)
         .task(id: "\(currentID ?? "")|\(items.count)") {
             // The row is laid out lazily; give it a moment before centring.
             try? await Task.sleep(nanoseconds: 80_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.smooth(duration: 0.4)) { focus = currentID }
+            guard !Task.isCancelled, let id = currentID else { return }
+            withAnimation(.smooth(duration: 0.4)) { proxy.scrollTo(id, anchor: .center) }
         }
         .onChange(of: recenter) { _, _ in
             // Back on the playing song every time, with no visible scroll.
-            focus = nil
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 60_000_000)
-                focus = currentID
+                for delay in [30, 150] as [UInt64] {
+                    try? await Task.sleep(nanoseconds: delay * 1_000_000)
+                    if let id = currentID { proxy.scrollTo(id, anchor: .center) }
+                }
             }
         }
         .overlay(alignment: .top) {
@@ -354,6 +352,7 @@ private struct CoverStrip: View {
                     .padding(.horizontal, 10).padding(.vertical, 3)
                     .background(.ultraThinMaterial, in: Capsule())
             }
+        }
         }
         .onAppear { wheel.start() }
         .onDisappear { wheel.stop() }
@@ -365,13 +364,14 @@ private struct CoverStrip: View {
         guard let last = lastOffset, now > lastTime else { return }
         let instant = (offset - last) / CGFloat(now - lastTime)
         guard instant.isFinite else { return }
-        withAnimation(.easeOut(duration: 0.12)) { velocity = velocity * 0.6 + instant * 0.4 }
+        let next = velocity * 0.6 + instant * 0.4
+        if abs(next - velocity) > 30 { velocity = next }
         decay?.cancel()
         decay = Task { @MainActor in
             while abs(velocity) > 12 {
                 try? await Task.sleep(nanoseconds: 33_000_000)
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.1)) { velocity *= 0.82 }
+                velocity *= 0.82
             }
             velocity = 0
         }
