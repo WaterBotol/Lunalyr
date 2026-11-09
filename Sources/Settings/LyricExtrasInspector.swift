@@ -238,7 +238,7 @@ struct ShareInspector: View {
             ThemedSection("Discord") {
             Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
             InspectorCaption("Needs the Discord desktop app. Shows the line being sung.",
-                             more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with a Get Lunalyr button for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
+                             more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with Play this song and Get Lunalyr buttons for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
             if extras.showsDiscordPresence {
                 ChoiceSegments("Status shows", selection: $extras.discordStatusText,
                                cases: DiscordStatusText.allCases, label: \.title)
@@ -247,6 +247,9 @@ struct ShareInspector: View {
                 InspectorCaption("Looks the cover up by song and artist.",
                                  more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown.")
                 Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
+                Toggle("Show a Play this song button", isOn: $extras.discordShowsSongButton)
+                InspectorCaption("Opens the song on Spotify, Apple Music, YouTube Music and more.",
+                                 more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or from the same Apple search as the cover. Others see it; Discord never shows you your own buttons.")
                 Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
                 Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
                 ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,
