@@ -267,7 +267,8 @@ final class ListenFollower: ObservableObject {
             return song.spotifyId.map { .spotify(id: $0) }
         case .appleMusic:
             return await libraryHit(title: song.title, artist: song.artist, duration: song.duration)
-        case nil:
+        default:
+            // Browsers and local-file players can't be told to play a song.
             return nil
         }
     }
@@ -277,6 +278,8 @@ final class ListenFollower: ObservableObject {
         case nil: return "Open Music or Spotify to listen along"
         case .spotify: return "\u{201C}\(song.title)\u{201D} isn\u{2019}t on your Spotify \u{2014} still following"
         case .appleMusic: return "\u{201C}\(song.title)\u{201D} isn\u{2019}t in your Music library \u{2014} still following"
+
+        default: return "Listening along needs Music or Spotify \u{2014} still following"
         }
     }
 

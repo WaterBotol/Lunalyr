@@ -743,8 +743,6 @@ struct NoSearch: PlayerSearching {
     func play(_ result: PlayerSearchResult) async throws { throw PlayerSearchError.unsupported(kind) }
     func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
     func playQueueItem(_ item: PlayerQueueItem) async throws {}
-    func albums(by artist: String) async -> [PlayerAlbum] { [] }
-    func play(_ album: PlayerAlbum) async throws {}
 }
 
 // MARK: - Web players
@@ -779,6 +777,4 @@ struct WebPlayerSearch: PlayerSearching {
 
     func queue() async throws -> PlayerQueueSnapshot { PlayerQueueSnapshot() }
     func playQueueItem(_ item: PlayerQueueItem) async throws {}
-    func albums(by artist: String) async -> [PlayerAlbum] { [] }
-    func play(_ album: PlayerAlbum) async throws {}
 }

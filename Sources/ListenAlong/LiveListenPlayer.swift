@@ -17,7 +17,9 @@ final class LiveListenPlayer: ListenPlayerControl {
     }
 
     var kind: PlayerKind? {
-        if let active = monitor.activePlayer { return active }
+        // Only Music and Spotify can be told to play a song; a browser or
+        // local-file player being active falls through to whichever is open.
+        if let active = monitor.activePlayer, active == .spotify || active == .appleMusic { return active }
         if monitor.runningPlayers.contains(.spotify) { return .spotify }
         if monitor.runningPlayers.contains(.appleMusic) { return .appleMusic }
         return nil
@@ -106,7 +108,7 @@ final class LiveListenPlayer: ListenPlayerControl {
     func play(_ target: ListenPlayTarget, at position: Double, playing: Bool) async -> Bool {
         guard !AppRuntime.isUnitTesting else { return false }
         let kind: PlayerKind = { if case .spotify = target { return .spotify } else { return .appleMusic } }()
-        let ok = (try? await ScriptDesk.shared.run(Self.playScript(target, at: position, playing: playing), for: kind)) != nil
+        let ok = (try? await ScriptDesk.shared.run(Self.playScript(target, at: position, playing: playing), for: kind, priority: .command)) != nil
         monitor.refresh()
         return ok
     }
@@ -119,13 +121,13 @@ final class LiveListenPlayer: ListenPlayerControl {
     func setPlaying(_ playing: Bool) async {
         guard !AppRuntime.isUnitTesting else { return }
         guard let kind = monitor.activePlayer ?? kind else { return }
-        _ = try? await ScriptDesk.shared.run(Self.playingScript(playing, kind), for: kind)
+        _ = try? await ScriptDesk.shared.run(Self.playingScript(playing, kind), for: kind, priority: .command)
         monitor.refresh()
     }
 
     func shuffle(_ kind: PlayerKind) async -> Bool? {
         guard !AppRuntime.isUnitTesting else { return nil }
-        guard let reply = try? await ScriptDesk.shared.run(Self.readShuffleScript(kind), for: kind) else { return nil }
+        guard let reply = try? await ScriptDesk.shared.run(Self.readShuffleScript(kind), for: kind, priority: .command) else { return nil }
         let items = reply.scriptItems
         guard items.first?.scriptText == "ok", items.count >= 2 else { return nil }
         return items[1].booleanValue
@@ -133,12 +135,12 @@ final class LiveListenPlayer: ListenPlayerControl {
 
     func setShuffle(_ on: Bool, _ kind: PlayerKind) async {
         guard !AppRuntime.isUnitTesting else { return }
-        _ = try? await ScriptDesk.shared.run(Self.setShuffleScript(on, kind), for: kind)
+        _ = try? await ScriptDesk.shared.run(Self.setShuffleScript(on, kind), for: kind, priority: .command)
     }
 
     func searchLibrary(title: String) async -> [LibraryCandidate] {
         guard !AppRuntime.isUnitTesting else { return [] }
-        guard let reply = try? await ScriptDesk.shared.run(Self.librarySearchScript(title), for: .appleMusic) else { return [] }
+        guard let reply = try? await ScriptDesk.shared.run(Self.librarySearchScript(title), for: .appleMusic, priority: .search) else { return [] }
         return Self.parseLibrary(reply)
     }
 
