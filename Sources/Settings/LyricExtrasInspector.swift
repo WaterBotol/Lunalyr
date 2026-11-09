@@ -227,6 +227,25 @@ struct RememberedStyleNote: View {
     }
 }
 
+/// How many follow the shared room, with its link.
+@MainActor
+struct ListenSharingStatus: View {
+    @ObservedObject var listen: ListenAlong
+
+    var body: some View {
+        LabeledContent {
+            if let link = listen.webPageURL {
+                Button("Copy Link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(link.absoluteString, forType: .string)
+                }
+            }
+        } label: {
+            Text(listen.room == nil ? "Starts when something plays" : MenuBarListenAlong.sharingTitle(listeners: listen.listeners))
+        }
+    }
+}
+
 /// Discord & lyric card: the places a song is shared from.
 @MainActor
 struct ShareInspector: View {
@@ -257,6 +276,22 @@ struct ShareInspector: View {
                             format: { String(format: "%.1f s earlier", $0) })
                 InspectorCaption("How far ahead of the music Discord shows the line.")
             }
+            if extras.listenAlongAvailable {
+                Toggle("Let friends listen along", isOn: $extras.listenSharing)
+                InspectorCaption("Friends with Lunalyr play what you play, in time, on their own Music or Spotify.",
+                                 more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify or Apple ID, play and pause, the position and the lyrics\u{2019} line timing, and keeps only the latest. Off when you turn this off or quit.")
+                if extras.listenSharing {
+                    ListenSharingStatus(listen: .shared)
+                    if extras.showsDiscordPresence {
+                        Toggle("Show a Join button on Discord", isOn: $extras.discordOffersJoin)
+                        InspectorCaption("Replaces your Discord buttons while you share.",
+                                         more: "Discord can\u{2019}t show a Join button and link buttons on the same profile. With this on, friends get Join (it opens their Lunalyr), but not Play this song or Get Lunalyr. With it off, they get Listen along (the web page) and Get Lunalyr; friends with Lunalyr can paste the link into its menu.")
+                    }
+                }
+            }
+            ListenRelayField(relay: $extras.listenRelayURL)
+            InspectorCaption("Listen along needs a relay you run. Leave it empty to turn listen-along off.",
+                             more: "The address of your Lunalyr listen-along relay (a small Cloudflare Worker). With none, listen-along is hidden and nothing connects.")
         }
         ThemedSection("Share") {
                 ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,

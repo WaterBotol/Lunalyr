@@ -48,6 +48,11 @@ struct MenuBarView: View {
             MenuBarWallpaperControls()
                 .menuCard()
                 .focusSection()
+            if extras.listenAlongAvailable {
+                MenuBarListenAlong(listen: .shared)
+                    .menuCard()
+                    .focusSection()
+            }
             MenuBarFooter()
                 .focusSection()
         }

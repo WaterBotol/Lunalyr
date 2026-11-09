@@ -22,6 +22,9 @@ final class LunalyrExtras: ObservableObject {
         static let discordProgress = "custom.discordProgress"
         static let discordPaused = "custom.discordPaused"
         static let discordLead = "custom.discordLyricLead"
+        static let discordJoin = "custom.discordJoinParty"
+        static let listenSharing = "custom.listenSharing"
+        static let listenRelayURL = "custom.listenRelayURL"
         static let shortcuts = "custom.globalShortcuts"
         static let lyricsHidden = "custom.lyricsHidden"
         /// Where earlier builds kept a pause across launches. Only cleared now.
@@ -100,11 +103,25 @@ final class LunalyrExtras: ObservableObject {
     /// Seconds the Discord line runs ahead of the music.
     @Published var discordLyricLead: Double { didSet { defaults.set(discordLyricLead, forKey: Keys.discordLead) } }
     static let discordLeadRange: ClosedRange<Double> = 0...6
+    /// While sharing listen-along, Discord shows Join instead of the buttons.
+    @Published var discordOffersJoin: Bool { didSet { defaults.set(discordOffersJoin, forKey: Keys.discordJoin) } }
+    /// "Let friends listen along". Off by default.
+    @Published var listenSharing: Bool {
+        didSet { defaults.set(listenSharing, forKey: Keys.listenSharing); applyListenAlong() }
+    }
+    /// The listen-along relay's address. Empty by default, which hides
+    /// every listen-along control and connects nothing.
+    @Published var listenRelayURL: String {
+        didSet { defaults.set(listenRelayURL, forKey: Keys.listenRelayURL); applyListenAlong() }
+    }
+    /// A relay is set, so listen-along can be offered.
+    var listenAlongAvailable: Bool { ListenProtocol.base(listenRelayURL) != nil }
 
     var discordOptions: DiscordOptions {
         DiscordOptions(statusText: discordStatusText, showsLyric: discordShowsLyric, showsCover: discordShowsCover,
                        showsButton: discordShowsButton, showsSongButton: discordShowsSongButton, showsProgress: discordShowsProgress,
-                       showsWhenPaused: discordShowsWhenPaused, lyricLead: discordLyricLead)
+                       showsWhenPaused: discordShowsWhenPaused, lyricLead: discordLyricLead,
+                       offersJoin: discordOffersJoin)
     }
 
     /// Longest menu-bar line, in characters.
@@ -233,6 +250,9 @@ final class LunalyrExtras: ObservableObject {
         discordShowsProgress = defaults.object(forKey: Keys.discordProgress) as? Bool ?? true
         discordShowsWhenPaused = defaults.bool(forKey: Keys.discordPaused)
         let lead = defaults.object(forKey: Keys.discordLead) as? Double ?? 2.5
+        discordOffersJoin = defaults.bool(forKey: Keys.discordJoin)
+        listenSharing = defaults.bool(forKey: Keys.listenSharing)
+        listenRelayURL = defaults.string(forKey: Keys.listenRelayURL) ?? ""
         discordLyricLead = lead.isFinite ? min(Self.discordLeadRange.upperBound, max(Self.discordLeadRange.lowerBound, lead)) : 2.5
         let length = defaults.object(forKey: Keys.menuBarLength) as? Double ?? 36
         menuBarLength = length.isFinite ? min(Self.menuBarLengthRange.upperBound, max(Self.menuBarLengthRange.lowerBound, length)) : 36
@@ -285,6 +305,12 @@ final class LunalyrExtras: ObservableObject {
             discord = nil
         }
         GlobalHotkeys.shared.setEnabled(shortcutsEnabled)
+        applyListenAlong()
+    }
+
+    private func applyListenAlong() {
+        guard started else { return }
+        ListenAlong.shared.configure(relay: listenRelayURL, sharing: listenSharing)
     }
 
     private func updateVisibility() {

@@ -29,6 +29,9 @@ struct DiscordOptions: Equatable {
     var showsWhenPaused = false
     /// How far ahead of the music the line is read, so it lands as it is sung.
     var lyricLead: Double = 2.5
+    /// While sharing listen-along: a Join party instead of the buttons.
+    /// Discord refuses an activity with both, so it is opt-in.
+    var offersJoin = false
 }
 
 /// Shows what is playing on the user's Discord profile (Rich Presence).
@@ -98,7 +101,21 @@ final class DiscordPresence {
         /// A page that opens the song on any service, when it was found.
         var songURL: String?
         var options = DiscordOptions()
+        /// The listen-along room being shared, if any.
+        var party: ListenParty?
     }
+
+    /// A shared listen-along room, as Discord shows it.
+    struct ListenParty: Equatable {
+        var room: String
+        var listeners: Int
+        /// The relay's web listen-along page for the room.
+        var webURL: String?
+    }
+
+    /// Party size: the host plus up to 50 listeners (the relay's limit).
+    static let partyCapacity = 51
+    static let listenAlongLabel = "Listen along"
 
     static let playSongLabel = "Play this song"
 
@@ -145,20 +162,82 @@ final class DiscordPresence {
             "state": field(playing.paused ? fallback : state),
             "assets": assets,
         ]
-        var buttons: [[String: String]] = []
-        if options.showsSongButton, let song = playing.songURL {
-            buttons.append(["label": playSongLabel, "url": song])
+        if let party = playing.party, options.offersJoin {
+            // Discord refuses secrets together with buttons ("secrets cannot
+            // currently be sent with buttons"): the Join replaces them.
+            activity["party"] = ["id": party.room,
+                                 "size": [min(partyCapacity, max(1, party.listeners + 1)), partyCapacity]] as [String: Any]
+            activity["secrets"] = ["join": party.room]
+        } else {
+            var buttons: [[String: String]] = []
+            if let web = playing.party?.webURL {
+                buttons.append(["label": listenAlongLabel, "url": web])
+            } else if options.showsSongButton, let song = playing.songURL {
+                buttons.append(["label": playSongLabel, "url": song])
+            }
+            if options.showsButton {
+                buttons.append(["label": "Get Lunalyr", "url": getLunalyrURL])
+            }
+            if !buttons.isEmpty { activity["buttons"] = buttons }
         }
-        if options.showsButton {
-            buttons.append(["label": "Get Lunalyr", "url": getLunalyrURL])
-        }
-        if !buttons.isEmpty { activity["buttons"] = buttons }
         if options.showsProgress && !playing.paused {
             var timestamps: [String: Any] = ["start": playing.start]
             if let end = playing.end { timestamps["end"] = end }
             activity["timestamps"] = timestamps
         }
         return activity
+    }
+
+    // MARK: - Joining (pure, tested)
+
+    /// Discord events Lunalyr acts on.
+    enum Event: Equatable {
+        /// The handshake's reply, with the user's display name.
+        case ready(userName: String?)
+        /// The user clicked Join on a friend's profile: the room to follow.
+        case join(secret: String)
+        /// Someone asked to join the user's party.
+        case joinRequest(userID: String, name: String?)
+        case error(code: Int, message: String)
+    }
+
+    nonisolated static let joinEvents = ["ACTIVITY_JOIN", "ACTIVITY_JOIN_REQUEST"]
+
+    nonisolated static func event(fromFrame body: Data) -> Event? {
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else { return nil }
+        let data = object["data"] as? [String: Any] ?? [:]
+        func name(_ user: [String: Any]?) -> String? {
+            guard let user else { return nil }
+            for key in ["global_name", "username"] {
+                if let text = user[key] as? String, !text.trimmingCharacters(in: .whitespaces).isEmpty { return text }
+            }
+            return nil
+        }
+        switch object["evt"] as? String {
+        case "READY":
+            return .ready(userName: name(data["user"] as? [String: Any]))
+        case "ACTIVITY_JOIN":
+            guard let secret = data["secret"] as? String, !secret.isEmpty else { return nil }
+            return .join(secret: secret)
+        case "ACTIVITY_JOIN_REQUEST":
+            let user = data["user"] as? [String: Any]
+            guard let id = user?["id"] as? String, !id.isEmpty else { return nil }
+            return .joinRequest(userID: id, name: name(user))
+        case "ERROR":
+            return .error(code: (data["code"] as? NSNumber)?.intValue ?? 0, message: data["message"] as? String ?? "")
+        default:
+            return nil
+        }
+    }
+
+    nonisolated static func subscribePayload(_ event: String, nonce: String) -> [String: Any] {
+        ["cmd": "SUBSCRIBE", "evt": event, "args": [String: Any](), "nonce": nonce]
+    }
+
+    /// Lets a friend who asked to join in: the room is open to anyone with
+    /// its code anyway.
+    nonisolated static func acceptJoinPayload(userID: String, nonce: String) -> [String: Any] {
+        ["cmd": "SEND_ACTIVITY_JOIN_INVITE", "args": ["user_id": userID], "nonce": nonce]
     }
 
     static func setActivityPayload(_ activity: [String: Any]?, pid: Int32, nonce: String) -> [String: Any] {
@@ -229,13 +308,6 @@ final class DiscordPresence {
     /// The timestamps already shown, so a line change does not move the bar.
     private var anchor: (start: Int, trackKey: String)?
     private var running = false
-    /// Search results by song.
-    private var matches: [String: SearchMatch] = [:]
-    /// Songs whose lookup failed or found nothing, and when: asked again
-    /// after `lookupRetry`, so a network blip does not last the session.
-    private var misses: [String: Date] = [:]
-    private var lookingUp: Set<String> = []
-    static let lookupRetry: TimeInterval = 600
 
     init(extras: LunalyrExtras) {
         self.extras = extras
@@ -251,6 +323,12 @@ final class DiscordPresence {
             LyricsViewModel.shared.$lines.map { _ in () }.eraseToAnyPublisher(),
         ]
         if let extras { sources.append(extras.objectWillChange.eraseToAnyPublisher()) }
+        sources.append(ListenAlong.shared.objectWillChange.eraseToAnyPublisher())
+        sources.append(CatalogueMatches.shared.$revision.map { _ in () }.eraseToAnyPublisher())
+        transport.onEvent = { [weak self] event in
+            Task { @MainActor in self?.handle(event) }
+        }
+        transport.startListening(for: Self.joinEvents)
         Publishers.MergeMany(sources)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.update() }
@@ -270,6 +348,7 @@ final class DiscordPresence {
         timer?.invalidate()
         timer = nil
         changes.removeAll()
+        transport.stopListening()
         transport.send(Self.setActivityPayload(nil, pid: ProcessInfo.processInfo.processIdentifier, nonce: UUID().uuidString),
                        thenDisconnect: true)
         lastSent = nil
@@ -316,11 +395,12 @@ final class DiscordPresence {
         let text = monitor.isPlaying ? extras.flatMap { line(lead: options.lyricLead, extras: $0) } : nil
         let spotifyURI = track.persistentID.flatMap { $0.hasPrefix("spotify:track:") ? $0 : nil }
         let needsSearch = Self.needsAppleSearch(options, spotifyURI: spotifyURI)
-        let found = needsSearch ? match(for: track, key: key) : nil
+        let found = needsSearch ? CatalogueMatches.shared.match(title: track.title, artist: track.artist, album: track.album) : nil
         let songURL = options.showsSongButton ? Self.songLink(spotifyURI: spotifyURI, appleTrackID: found?.trackID) : nil
         return Playing(title: track.title, artist: track.artist, album: track.album, line: text,
                        start: start, end: end, paused: !monitor.isPlaying,
-                       coverURL: options.showsCover ? found?.cover : nil, songURL: songURL, options: options)
+                       coverURL: options.showsCover ? found?.cover : nil, songURL: songURL, options: options,
+                       party: ListenAlong.shared.discordParty)
     }
 
     /// Whether Apple's search is asked at all: for the cover, or for the
@@ -331,34 +411,24 @@ final class DiscordPresence {
         options.showsCover || (options.showsSongButton && spotifyURI == nil)
     }
 
-    /// The cached search result, starting a lookup the first time a song is seen.
-    private func match(for track: NowPlayingMonitor.Track, key: String) -> SearchMatch? {
-        if let known = matches[key] { return known }
-        if let missed = misses[key], Date().timeIntervalSince(missed) < Self.lookupRetry { return nil }
-        guard !lookingUp.contains(key) else { return nil }
-        lookingUp.insert(key)
-        let title = track.title, artist = track.artist
-        Task { [weak self] in
-            let found = await Self.lookUp(title: title, artist: artist)
-            guard let self else { return }
-            if let found { matches[key] = found; misses[key] = nil } else { misses[key] = Date() }
-            lookingUp.remove(key)
-            update()
+    private func handle(_ event: Event) {
+        guard running else { return }
+        switch event {
+        case .ready(let name):
+            ListenAlong.shared.discordUserName = name
+        case .join(let secret):
+            let listen = ListenAlong.shared
+            if !listen.isAvailable {
+                extras?.post("To listen along, add a listen-along relay in Settings › Share", symbol: "person.2")
+            } else {
+                listen.join(secret)
+            }
+        case .joinRequest(let userID, _):
+            guard ListenAlong.shared.room != nil else { return }
+            transport.send(Self.acceptJoinPayload(userID: userID, nonce: UUID().uuidString))
+        case .error(let code, let message):
+            NSLog("Lunalyr: Discord refused a request (%d): %@", code, message)
         }
-        return nil
-    }
-
-    nonisolated private static func lookUp(title: String, artist: String) async -> SearchMatch? {
-        var components = URLComponents(string: "https://itunes.apple.com/search")
-        components?.queryItems = [URLQueryItem(name: "term", value: "\(artist) \(title)"),
-                                  URLQueryItem(name: "media", value: "music"),
-                                  URLQueryItem(name: "entity", value: "song"),
-                                  URLQueryItem(name: "limit", value: "8")]
-        guard let url = components?.url else { return nil }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 6
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
-        return searchMatch(fromSearch: data, title: title, artist: artist)
     }
 
     private func update() {
@@ -376,13 +446,109 @@ final class DiscordPresence {
     }
 }
 
+/// Apple catalogue matches (cover and track ID) by song, shared by
+/// Discord and listen-along so a song is searched for once.
+@MainActor
+final class CatalogueMatches: ObservableObject {
+    static let shared = CatalogueMatches()
+
+    /// Search results by song.
+    private var matches: [String: DiscordPresence.SearchMatch] = [:]
+    /// Songs whose lookup failed or found nothing, and when: asked again
+    /// after `lookupRetry`, so a network blip does not last the session.
+    private var misses: [String: Date] = [:]
+    private var lookingUp: Set<String> = []
+    static let lookupRetry: TimeInterval = 600
+    /// Bumped when a lookup finishes, so whoever asked can look again.
+    @Published private(set) var revision = 0
+
+    static func key(title: String, artist: String, album: String?) -> String {
+        "\(title)|\(artist)|\(album ?? "")"
+    }
+
+    /// The cached match, starting a lookup the first time a song is seen
+    /// unless `lookUpIfMissing` is false.
+    func match(title: String, artist: String, album: String?, lookUpIfMissing: Bool = true) -> DiscordPresence.SearchMatch? {
+        let key = Self.key(title: title, artist: artist, album: album)
+        if let known = matches[key] { return known }
+        if let missed = misses[key], Date().timeIntervalSince(missed) < Self.lookupRetry { return nil }
+        guard lookUpIfMissing, !lookingUp.contains(key), !AppRuntime.isUnitTesting else { return nil }
+        lookingUp.insert(key)
+        Task { [weak self] in
+            let found = await Self.lookUp(title: title, artist: artist)
+            guard let self else { return }
+            if let found { matches[key] = found; misses[key] = nil } else { misses[key] = Date() }
+            lookingUp.remove(key)
+            revision += 1
+        }
+        return nil
+    }
+
+    nonisolated private static func lookUp(title: String, artist: String) async -> DiscordPresence.SearchMatch? {
+        var components = URLComponents(string: "https://itunes.apple.com/search")
+        components?.queryItems = [URLQueryItem(name: "term", value: "\(artist) \(title)"),
+                                  URLQueryItem(name: "media", value: "music"),
+                                  URLQueryItem(name: "entity", value: "song"),
+                                  URLQueryItem(name: "limit", value: "8")]
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        return DiscordPresence.searchMatch(fromSearch: data, title: title, artist: artist)
+    }
+}
+
 /// The socket to Discord, on its own serial queue. Connects on demand,
 /// remembers the last activity and re-sends it after Discord restarts.
 final class DiscordTransport: @unchecked Sendable {
     private let queue = DispatchQueue(label: "lunalyr.discord-ipc", qos: .utility)
     private var fd: Int32 = -1
     private var lastFailure = Date.distantPast
-    private var pending: [String: Any]?
+    /// Events subscribed to after every handshake, so a Discord restart
+    /// keeps them; while there are any, the socket is read continuously.
+    private var subscriptions: [String] = []
+    private var listening = false
+    /// Called on the transport's queue for each event Discord sends.
+    var onEvent: (@Sendable (DiscordPresence.Event) -> Void)?
+
+    /// How often the socket is read for events while listening.
+    static let readInterval: TimeInterval = 1
+
+    /// Keeps the socket open and read, subscribed to `events`.
+    func startListening(for events: [String]) {
+        queue.async { [self] in
+            subscriptions = events
+            guard !listening else { return }
+            listening = true
+            if fd >= 0 { subscribe() }
+            readLoop()
+        }
+    }
+
+    func stopListening() {
+        queue.async { [self] in
+            listening = false
+            subscriptions = []
+        }
+    }
+
+    private func readLoop() {
+        guard listening else { return }
+        if fd < 0 {
+            if Date().timeIntervalSince(lastFailure) >= DiscordPresence.reconnectInterval, !connect() { lastFailure = Date() }
+        } else {
+            drain()
+        }
+        queue.asyncAfter(deadline: .now() + Self.readInterval) { [self] in readLoop() }
+    }
+
+    private func subscribe() {
+        for event in subscriptions {
+            if let data = DiscordPresence.frame(.frame, DiscordPresence.subscribePayload(event, nonce: UUID().uuidString)) {
+                _ = write(data)
+            }
+        }
+    }
 
     /// Sends a SET_ACTIVITY payload. If Discord is not running it is dropped
     /// and the next update tries again, at most every `reconnectInterval`.
@@ -424,7 +590,10 @@ final class DiscordTransport: @unchecked Sendable {
             guard result == 0 else { close(sock); continue }
             fd = sock
             let hello: [String: Any] = ["v": 1, "client_id": DiscordPresence.applicationID]
-            if let data = DiscordPresence.frame(.handshake, hello), write(data), awaitReady() { return true }
+            if let data = DiscordPresence.frame(.handshake, hello), write(data), awaitReady() {
+                subscribe()
+                return true
+            }
             disconnect()
         }
         return false
@@ -432,9 +601,10 @@ final class DiscordTransport: @unchecked Sendable {
 
     /// Waits (briefly) for Discord's READY reply to the handshake.
     private func awaitReady() -> Bool {
-        guard let reply = readPacket(timeout: 3) else { return false }
-        return reply.opcode == DiscordPresence.Opcode.frame.rawValue
-            && (String(data: reply.body, encoding: .utf8) ?? "").contains("READY")
+        guard let reply = readPacket(timeout: 3), reply.opcode == DiscordPresence.Opcode.frame.rawValue,
+              let event = DiscordPresence.event(fromFrame: reply.body), case .ready = event else { return false }
+        onEvent?(event)
+        return true
     }
 
     private func write(_ data: Data) -> Bool {
@@ -449,10 +619,14 @@ final class DiscordTransport: @unchecked Sendable {
         }
     }
 
-    /// Reads and discards Discord's replies so the socket never fills.
+    /// Reads Discord's replies so the socket never fills, passing on the
+    /// events Lunalyr acts on (joins, errors).
     private func drain() {
         while let packet = readPacket(timeout: 0.05) {
             if packet.opcode == DiscordPresence.Opcode.close.rawValue { disconnect(); return }
+            if packet.opcode == DiscordPresence.Opcode.frame.rawValue, let event = DiscordPresence.event(fromFrame: packet.body) {
+                onEvent?(event)
+            }
             if packet.opcode == DiscordPresence.Opcode.ping.rawValue,
                let pong = DiscordPresence.frame(.pong, (try? JSONSerialization.jsonObject(with: packet.body)) as? [String: Any] ?? [:]) {
                 _ = write(pong)
