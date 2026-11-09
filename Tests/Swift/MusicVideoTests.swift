@@ -1011,4 +1011,31 @@ final class MusicVideoTests: XCTestCase {
         await other.settle()
         XCTAssertFalse(other.pastedLooksStill)
     }
+
+    // MARK: Open on YouTube
+
+    func testWatchLinkStartsAtTheSongsPosition() {
+        XCTAssertEqual(MusicVideoController.watchURL(videoID: "4NRXx6U8ABQ", songTime: 61.9, offset: 4)?.absoluteString,
+                       "https://www.youtube.com/watch?v=4NRXx6U8ABQ&t=65s", "offset included, whole seconds")
+        XCTAssertEqual(MusicVideoController.watchURL(videoID: "4NRXx6U8ABQ", songTime: 0.4, offset: 0)?.absoluteString,
+                       "https://www.youtube.com/watch?v=4NRXx6U8ABQ")
+        XCTAssertEqual(MusicVideoController.watchURL(videoID: "4NRXx6U8ABQ", songTime: 3, offset: -10)?.absoluteString,
+                       "https://www.youtube.com/watch?v=4NRXx6U8ABQ", "before the video's start: from the top")
+        XCTAssertEqual(MusicVideoController.watchURL(videoID: "4NRXx6U8ABQ", songTime: .nan, offset: 0)?.absoluteString,
+                       "https://www.youtube.com/watch?v=4NRXx6U8ABQ")
+        XCTAssertNil(MusicVideoController.watchURL(videoID: "x&t=1", songTime: 10, offset: 0))
+    }
+
+    func testOpenLinkOnlyForYouTubeAndNeverInTests() async {
+        let http = FakeHTTP()
+        http.replies["www.youtube.com"] = officialPage()
+        let youTube = await showingController(http: http, track: track, online: true)
+        XCTAssertEqual(youTube.showingYouTubeID, "4NRXx6U8ABQ")
+        var opened: [URL] = []
+        youTube.openOnYouTube { opened.append($0) }
+        XCTAssertTrue(opened.isEmpty, "nothing is ever opened inside the test host")
+        let library = await showingController(library: FakeLibrary(localURL), track: track, online: false)
+        XCTAssertNil(library.showingYouTubeID, "no YouTube link for a library video")
+        XCTAssertNil(library.watchURL)
+    }
 }

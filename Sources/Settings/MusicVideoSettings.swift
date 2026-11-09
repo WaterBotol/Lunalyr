@@ -15,6 +15,11 @@ struct MusicVideoSection: View {
                                                 fallback: s.musicVideoFallback.title) {
             InspectorCaption(note)
         }
+        if controller.showingYouTubeID != nil {
+            Button("Open video on YouTube") { controller.openOnYouTube() }
+                .buttonStyle(.link)
+                .help("Opens the video in your browser at the song’s position")
+        }
         Toggle("Search YouTube for videos", isOn: $s.musicVideoOnline)
         InspectorCaption(Self.privacyCaption, more: Self.privacyDetail)
         ChoiceMenu("Without a video", selection: $s.musicVideoFallback, selectedTitle: \.title) {

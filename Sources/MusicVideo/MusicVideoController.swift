@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CoreGraphics
 import Foundation
@@ -197,6 +198,41 @@ final class MusicVideoController: ObservableObject {
         guard let display else { return source }
         return MusicVideoDisplays.shows(choice, heavyScenesOnMainDisplayOnly: heavyScenesOnMainDisplayOnly,
                                         display: display, main: mainDisplay, connected: displays) ? source : nil
+    }
+
+    // MARK: Open on YouTube
+
+    /// The YouTube video on screen for the playing song, nil for a library
+    /// video or none.
+    var showingYouTubeID: String? {
+        if case .showing(.youTube(let id), _) = status { return id }
+        return nil
+    }
+
+    /// A watch link for a video at the song's position, offset included:
+    /// `https://www.youtube.com/watch?v=<id>&t=<seconds>s` (no `t` at 0).
+    nonisolated static func watchURL(videoID: String, songTime: Double, offset: Double) -> URL? {
+        guard YouTubeVideoID.isValid(videoID) else { return nil }
+        let at = MusicVideoTiming.videoTime(songTime: songTime, offset: offset, videoDuration: nil) ?? 0
+        let seconds = Int(max(0, at.rounded(.down)))
+        var components = URLComponents(string: "https://www.youtube.com/watch")!
+        components.queryItems = [URLQueryItem(name: "v", value: videoID)]
+            + (seconds > 0 ? [URLQueryItem(name: "t", value: "\(seconds)s")] : [])
+        return components.url
+    }
+
+    /// The video on screen, where the song is now.
+    var watchURL: URL? {
+        showingYouTubeID.flatMap {
+            Self.watchURL(videoID: $0, songTime: NowPlayingMonitor.shared.playbackTime(), offset: currentOffset)
+        }
+    }
+
+    /// Opens the video on screen in the browser. Only ever called from the
+    /// user's click on "Open video on YouTube"; never inside the test host.
+    func openOnYouTube(open: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+        guard !AppRuntime.isUnitTesting, let url = watchURL else { return }
+        open(url)
     }
 
     // MARK: Pasted links
