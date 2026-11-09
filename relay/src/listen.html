@@ -109,7 +109,10 @@ a { color: var(--accent); }
 @media (min-width: 880px) {
   .grid { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); align-items: start; }
   .lyrics-card { position: sticky; top: 16px; }
+  .grid.no-lyrics { grid-template-columns: minmax(0, 480px); justify-content: center; }
 }
+/* A song without lyrics (none found, or the host doesn't share them): just the song. */
+.grid.no-lyrics .lyrics-card { display: none; }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
   box-shadow: var(--shadow); padding: 16px;
@@ -524,6 +527,8 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
       .filter((l) => l && Number.isFinite(Number(l.start)))
       .map((l) => ({ start: Number(l.start), end: Number.isFinite(Number(l.end)) ? Number(l.end) : null, text: String(l.text || "") }))
       .sort((a, b) => a.start - b.start);
+    // Timing without any words (lyric sharing off) has nothing to show.
+    if (!lyrics.some((l) => l.text.trim())) lyrics = [];
     const ol = $("lyrics");
     ol.textContent = "";
     lyrics.forEach((l, i) => {
@@ -533,6 +538,7 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
       ol.appendChild(li);
     });
     $("noLyrics").hidden = lyrics.length > 0;
+    $("main").classList.toggle("no-lyrics", lyrics.length === 0 && !!(state && state.track));
     $("noLyrics").textContent = state && state.track ? "No synced lyrics for this song." : "Lyrics appear here when the host plays a song with synced lyrics.";
     currentLine = -2;
     $("lyricsBox").scrollTop = 0;
