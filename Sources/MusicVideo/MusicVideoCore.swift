@@ -87,6 +87,16 @@ enum YouTubeSearchPage {
         var videoID: String
         var title: String
         var channel: String
+        /// The channel carries YouTube's verified-artist badge (the music
+        /// note), from the result's `ownerBadges`.
+        var verifiedArtist = false
+
+        init(videoID: String, title: String, channel: String, verifiedArtist: Bool = false) {
+            self.videoID = videoID
+            self.title = title
+            self.channel = channel
+            self.verifiedArtist = verifiedArtist
+        }
     }
 
     static func requestURL(title: String, artist: String) -> URL? {
@@ -125,31 +135,36 @@ enum YouTubeSearchPage {
                                 "visualizer", "visualiser", "live", "cover", "karaoke", "instrumental", "reaction",
                                 "remix", "sped up", "slowed", "8d", "nightcore", "tutorial"]
 
-    /// Candidate official videos among `results`, best first: the title
-    /// names the song, the channel or title the artist, and it is none of
-    /// `excludedWords`. "Official music video" ranks above "official
-    /// video", which ranks above "official" or "music video"; ties keep
-    /// YouTube's order.
+    /// Candidate official videos among `results`, best first. Each must:
+    /// - be this song: its title, artist and qualifiers taken off, equals
+    ///   the song title (`MusicVideoTitleMatch`), not merely contains it;
+    /// - come from the artist: the channel is the artist's own (its name
+    ///   is or contains the artist's), a VEVO channel, or carries YouTube's
+    ///   verified-artist badge; never an auto-generated "- Topic" channel;
+    /// - not be a live, concert or fan upload, nor any of `excludedWords`.
+    /// "Official music video" ranks above "official video", which ranks
+    /// above "official" or "music video"; ties keep YouTube's order.
     static func officialVideos(in results: [Result], title: String, artist: String) -> [Result] {
         let song = LyricQuery.normalize(title)
-        let singer = LyricQuery.normalize(artist)
-        guard !song.isEmpty else { return [] }
+        let singers = MusicVideoTitleMatch.artistParts(artist)
+        guard !song.isEmpty, !singers.isEmpty else { return [] }
         var ranked: [(result: Result, score: Int, index: Int)] = []
         for (index, result) in results.prefix(12).enumerated() {
             let name = LyricQuery.normalize(result.title)
             let channel = LyricQuery.normalize(result.channel)
-            guard containsWords(name, song) else { continue }
-            let byArtist = !singer.isEmpty && (containsWords(channel, singer) || containsWords(name, singer)
-                || (channel.hasSuffix("vevo") && channel.replacingOccurrences(of: " ", with: "")
-                    .contains(singer.replacingOccurrences(of: " ", with: ""))))
-            guard byArtist else { continue }
+            let channelKey = CoverLookup.normal(result.channel)
+            guard MusicVideoTitleMatch.matches(videoTitle: result.title, songTitle: title, artist: artist) else { continue }
             guard !channel.hasSuffix(" topic") else { continue }
+            let ownChannel = singers.contains { channelKey == $0 || channelKey.contains($0) }
+            let vevo = channelKey.hasSuffix("vevo")
+            guard ownChannel || vevo || result.verifiedArtist else { continue }
+            if MusicVideoTitleMatch.isLiveOrFanUpload(result.title, songTitle: title) { continue }
             if excludedWords.contains(where: { containsWords(name, $0) && !containsWords(song, $0) }) { continue }
             var score = 1
             if containsWords(name, "official music video") { score += 4 }
             else if containsWords(name, "official video") { score += 3 }
             else if containsWords(name, "official") || containsWords(name, "music video") || containsWords(name, "mv") { score += 1 }
-            if channel.hasSuffix("vevo") || containsWords(channel, singer) { score += 1 }
+            if vevo || ownChannel { score += 1 }
             ranked.append((result, score, index))
         }
         return ranked.sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }.map(\.result)
@@ -177,11 +192,21 @@ enum YouTubeSearchPage {
                let id = renderer["videoId"] as? String, YouTubeVideoID.isValid(id) {
                 let title = text(renderer["title"]) ?? ""
                 let channel = text(renderer["ownerText"]) ?? text(renderer["longBylineText"]) ?? ""
-                found.append(Result(videoID: id, title: title, channel: channel))
+                found.append(Result(videoID: id, title: title, channel: channel,
+                                    verifiedArtist: hasVerifiedArtistBadge(renderer["ownerBadges"])))
             }
             for (key, value) in dictionary where key != "videoRenderer" { collect(value, into: &found) }
         } else if let array = node as? [Any] {
             for value in array { collect(value, into: &found) }
+        }
+    }
+
+    /// `ownerBadges: [{metadataBadgeRenderer: {style: "BADGE_STYLE_TYPE_VERIFIED_ARTIST"}}]`.
+    static func hasVerifiedArtistBadge(_ node: Any?) -> Bool {
+        guard let badges = node as? [Any] else { return false }
+        return badges.contains { badge in
+            guard let renderer = (badge as? [String: Any])?["metadataBadgeRenderer"] as? [String: Any] else { return false }
+            return renderer["style"] as? String == "BADGE_STYLE_TYPE_VERIFIED_ARTIST"
         }
     }
 

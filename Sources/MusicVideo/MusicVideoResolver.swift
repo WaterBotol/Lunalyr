@@ -36,8 +36,10 @@ final class MusicVideoCache {
     static let capacity = 500
     /// Still-image verdicts per YouTube video, kept as long as found videos.
     static let stillKey = "custom.musicVideoStill"
-    /// Found videos stored before the still-image check are looked up again.
-    static let version = 2
+    /// Found videos stored by an older pick are looked up again: 2 added
+    /// the still-image check, 3 the exact song-title match (older picks
+    /// included live and fan uploads and other songs by the artist).
+    static let version = 3
 
     private let defaults: UserDefaults
     private var entries: [String: [String: Any]]

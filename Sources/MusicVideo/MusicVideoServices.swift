@@ -45,7 +45,7 @@ actor AppleMusicVideoLibrary: MusicVideoLibrary {
 
     func localVideo(for song: MusicVideoSong) async -> URL? {
         guard let hits = await videos() else { return nil }
-        return Self.pick(hits.filter { $0.title.localizedCaseInsensitiveContains(song.title) }, for: song)
+        return Self.pick(hits, for: song)
     }
 
     /// The session's list, read once (one read at a time, shared by every
@@ -132,13 +132,16 @@ actor AppleMusicVideoLibrary: MusicVideoLibrary {
         }
     }
 
-    /// The hit that is this song by this artist, the closest title first.
+    /// The hit that is this song by this artist. The title must be the
+    /// same song (`MusicVideoTitleMatch`, the rule the YouTube pick uses),
+    /// never just contain it, and not a live recording unless the song is.
     static func pick(_ hits: [Hit], for song: MusicVideoSong) -> URL? {
         let ranked = hits.compactMap { hit -> (Hit, Double)? in
-            let title = LyricQuery.similarity(hit.title, song.title)
+            guard MusicVideoTitleMatch.matches(videoTitle: hit.title, songTitle: song.title, artist: song.artist),
+                  !MusicVideoTitleMatch.isLiveOrFanUpload(hit.title, songTitle: song.title) else { return nil }
             let artist = song.artist.isEmpty ? 1 : LyricQuery.similarity(hit.artist, song.artist)
-            guard title >= 0.85, artist >= 0.5 else { return nil }
-            return (hit, title + artist)
+            guard artist >= 0.5 else { return nil }
+            return (hit, artist + (CoverLookup.normal(hit.title) == CoverLookup.normal(song.title) ? 1 : 0))
         }
         guard let best = ranked.max(by: { $0.1 < $1.1 }) else { return nil }
         return URL(fileURLWithPath: best.0.path)
