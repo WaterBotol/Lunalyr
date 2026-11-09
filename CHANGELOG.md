@@ -12,6 +12,21 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+
+- Listen along: with a listen-along relay set (Settings › Share, empty by
+  default, which hides all of it), "Let friends listen along" shares what you
+  play: the song, play and pause, the position and the lyrics' line timing.
+  Friends with Lunalyr follow on their own Spotify (any song) or Music (songs
+  in their library), in time, paused when you pause, and get their shuffle
+  back when they stop. Join from Discord or with a code or link in the
+  menu-bar panel, which shows "Listening along with … · Stop" and how many
+  are listening to you. A song that can't be played offers its song.link
+  page instead.
+- Discord: while sharing, the profile shows a Listen along button (the web
+  page) beside Get Lunalyr. "Show a Join button on Discord" swaps the buttons
+  for a Join party instead, since Discord refuses both at once.
+
 ## [1.0.0] - 2026-11-08
 
 Build 21 for macOS 14 and later.
