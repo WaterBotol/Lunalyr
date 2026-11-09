@@ -43,8 +43,10 @@ extension LyricCard {
         return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
-    /// An H.264 video of the card's animation at `videoScale` of its size.
-    static func video(_ content: Content, to url: URL, progress: ((Double) -> Void)? = nil) async -> Bool {
+    /// An H.264 video of the card's animation at `videoScale` of its size,
+    /// lasting as `plan` says (by default `clipPlan(content)`).
+    static func video(_ content: Content, to url: URL, plan: ClipPlan? = nil, progress: ((Double) -> Void)? = nil) async -> Bool {
+        let plan = plan ?? clipPlan(content)
         let pixels = CGSize(width: (content.size.width * videoScale).rounded(), height: (content.size.height * videoScale).rounded())
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return false }
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -75,7 +77,7 @@ extension LyricCard {
 
         var time = 0.0
         let ok = await renderFrames(content, scale: videoScale, minimumCadence: 1 / videoFramesPerSecond, budget: nil,
-                                    progress: progress) { image, delay in
+                                    plan: plan, progress: progress) { image, delay in
             guard let buffer = pixelBuffer(from: image, size: pixels, pool: adaptor.pixelBufferPool) else {
                 print("LYRIC-MP4 no pixel buffer")
                 return false
@@ -274,7 +276,9 @@ extension LyricCard {
             case .gif:
                 if let data = await gif(content), (try? data.write(to: file, options: .atomic)) != nil { made.append((format, file)) }
             case .mp4:
-                if await video(content, to: file, progress: share) {
+                let plan = clipPlan(content)
+                if let note = plan.note { notes(note) }
+                if await video(content, to: file, plan: plan, progress: share) {
                     made.append((format, file))
                     var layers: [SoundLayer] = []
                     let level = Float(content.soundVolume)
@@ -296,7 +300,9 @@ extension LyricCard {
                         else { notes("Couldn’t read the audio in \(track.url.lastPathComponent)") }
                     }
                     if let video = content.backgroundSoundSource, content.backgroundVolume > 0 {
-                        if let layer = await soundLayer(from: video, volume: Float(content.backgroundVolume), role: .background) {
+                        // Repeats with the picture, crossfaded at the same seams.
+                        if let layer = await soundLayer(from: video, volume: Float(content.backgroundVolume), role: .background,
+                                                        crossfade: plan.backgroundLoop?.crossfade ?? 0) {
                             layers.append(layer)
                         }
                     }
