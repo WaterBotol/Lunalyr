@@ -22,25 +22,32 @@ struct DesktopPlayerView: View {
     static let stripHeight: CGFloat = 262
 
     @ObservedObject var model: DesktopPlayerModel
+    let displayID: CGDirectDisplayID
+    @ObservedObject private var hover = HoverState.shared
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @FocusState private var searchFocused: Bool
 
     private static let motion = Animation.smooth(duration: 0.34)
 
     var body: some View {
-        VStack(spacing: 10) {
+        let shown = hover.isActive(on: displayID) || model.isPinned
+        // The bar sits in the middle of the desktop; what opens hangs below it.
+        ZStack {
+            bar
+                .frame(width: Self.width, height: Self.barHeight)
+                .glass(radius: 24, tint: model.player.tint)
             if model.isExpanded {
                 drawer
-                    .frame(height: model.drawerHeight)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)).combined(with: .offset(y: 14)))
+                    .frame(width: Self.width, height: model.drawerHeight)
+                    .offset(y: Self.barHeight / 2 + 10 + model.drawerHeight / 2)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
-            bar
-                .frame(height: Self.barHeight)
-                .glass(radius: 24, tint: model.player.tint)
         }
-        .frame(width: Self.width)
-        .frame(maxHeight: .infinity, alignment: .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.colorScheme, .dark)
+        .opacity(shown ? 1 : 0)
+        .scaleEffect(shown ? 1 : 0.97)
+        .animation(.easeOut(duration: 0.28), value: shown)
         .animation(Self.motion, value: model.isExpanded)
         .animation(Self.motion, value: model.isSearching)
         .onExitCommand {

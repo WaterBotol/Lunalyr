@@ -70,6 +70,10 @@ final class DesktopPlayerModel: ObservableObject {
 
     var searcher: any PlayerSearching { player.searcher }
 
+    /// Whether the player should stay on screen without the pointer: it is
+    /// open, or a search is typed.
+    var isPinned: Bool { isExpanded || isSearching }
+
     /// Height of what opens above the bar: tall for search results, shorter
     /// for the cover strips.
     var drawerHeight: CGFloat {

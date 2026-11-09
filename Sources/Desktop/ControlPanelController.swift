@@ -2,6 +2,13 @@ import AppKit
 import Combine
 import SwiftUI
 
+/// A panel that can take typing without making Lunalyr the frontmost app,
+/// so the player's search box works while another app keeps the focus.
+private final class PlayerPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 /// One non-activating controls panel per display. Panels are click-through
 /// everywhere except over the controls actually drawn on the display being
 /// hovered, so desktop icons, rubber-band selections, context menus and
@@ -33,11 +40,10 @@ final class ControlPanelController {
         // and lyric provenance; redraw the hit mask lazily after any of them.
         NowPlayingMonitor.shared.objectWillChange.sink { [weak self] _ in self?.masksStale = true }
             .store(in: &cancellables)
+        DesktopPlayerModel.shared.objectWillChange.sink { [weak self] _ in self?.masksStale = true }
+            .store(in: &cancellables)
         LyricsViewModel.shared.$provenance.sink { [weak self] _ in self?.masksStale = true }
             .store(in: &cancellables)
-        DesktopOptions.shared.$showsDesktopPlayer.removeDuplicates().dropFirst().sink { [weak self] _ in
-            Task { @MainActor [weak self] in self?.rebuild() }
-        }.store(in: &cancellables)
         DesktopOptions.shared.$showsControlsOnHover.removeDuplicates().dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in self?.rebuild() }
         }.store(in: &cancellables)
@@ -57,12 +63,11 @@ final class ControlPanelController {
         masks.removeAll()
         // With hover controls switched off there is nothing to show, so no
         // panel sits over the desktop at all.
-        // The desktop player replaces these controls.
-        guard DesktopOptions.shared.showsControlsOnHover, !DesktopOptions.shared.showsDesktopPlayer else { return }
+        guard DesktopOptions.shared.showsControlsOnHover else { return }
         for screen in NSScreen.screens {
             guard let displayID = screen.versoDisplayID else { continue }
             let frame = vc_control_panel_frame(screen.versoFrame).rect
-            let panel = NSPanel(
+            let panel = PlayerPanel(
                 contentRect: NSRect(origin: .zero, size: frame.size),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered, defer: false, screen: screen
@@ -94,7 +99,7 @@ final class ControlPanelController {
     }
 
     private static func content(displayID: CGDirectDisplayID) -> some View {
-        MediaControlsView(displayID: displayID)
+        DesktopPlayerView(model: DesktopPlayerModel.shared, displayID: displayID)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .environmentObject(NowPlayingMonitor.shared)
     }

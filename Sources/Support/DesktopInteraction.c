@@ -14,7 +14,7 @@ VCBox vc_hover_hot_zone(VCBox s) {
 }
 VCBox vc_control_panel_frame(VCBox s) {
     if(!valid(s))return (VCBox){0};
-    double width=fmin(400,s.width),height=fmin(330,s.height);
+    double width=fmin(780,s.width),height=fmin(780,s.height);
     return (VCBox){s.x+(s.width-width)/2,s.y+(s.height-height)/2,width,height};
 }
 int vc_display_at_point(const VCDisplayFrame *screens,int count,VCPoint point) {

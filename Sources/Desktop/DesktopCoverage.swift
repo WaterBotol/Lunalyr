@@ -829,7 +829,7 @@ final class DesktopCoverageMonitor: ObservableObject {
                 screen.versoDisplayID.map { (id: $0, frame: screen.frame, visibleFrame: screen.visibleFrame) }
             },
             primaryHeight: primaryHeight, wallpapers: DesktopWallpaperController.shared.wallpaperWindows)
-        let own = DesktopWallpaperController.shared.windowIDs.union(ControlPanelController.shared.windowIDs).union(DesktopPlayerController.shared.windowIDs)
+        let own = DesktopWallpaperController.shared.windowIDs.union(ControlPanelController.shared.windowIDs)
         guard !displays.isEmpty, !own.isEmpty else { return }
         let seeThrough = currentSeeThroughOwners()
         let previous = distrustedCovers
