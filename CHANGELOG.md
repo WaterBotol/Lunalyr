@@ -12,6 +12,16 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+
+- More music sources. YouTube Music, SoundCloud and Amazon Music playing in Safari, Chrome, Arc, Brave or Edge, read by running a small script in the music tab (Settings > Music players > Follow web players in browsers, off by default). This needs the browser's "Allow JavaScript from Apple Events"; when it is off, Lunalyr says how to turn it on in that browser and never changes it itself. Play/pause, next, previous and seeking work through the page. With several music tabs, the one playing is followed, and stays followed while another starts.
+- VLC, Swinsian and VOX for music files on this Mac, followed under Automatic like Music and Spotify. Lyrics are looked up from the title, artist and length as for the others; VLC's title line ("Artist - Title") or the file name is split into title and artist.
+- The desktop player's switch shows only the players that are installed, open or playing, and a web player under the service's name. Players without a queue or search show just the song playing.
+
+### Changed
+
+- The Player picker lists only installed players. Automatic follows browsers only with web players turned on.
+
 ## [1.0.0] - 2026-11-08
 
 Build 21 for macOS 14 and later.
