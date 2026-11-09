@@ -47,6 +47,8 @@ When merging, keep every entry and combine duplicate headings.
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
 - Clicking a song in the desktop player builds the "Lunalyr Queue" in short steps: from the library in one copy, from a playlist about 20 songs at a time, so lyrics and progress keep updating while it is built.
 - Fable is rewritten. Each line is set in one of five shapes (staircase, arch, zigzag, wave or ramp) and marks the word being sung with one of five accents (underline, ring, tile, star or corner brackets). The next line always has a different shape and accent, and a line looks the same each time it is drawn. Words land where they will stay and then hold still. Its place in the picker, word entrances, Editorial typography and Cutout · Highlight are unchanged.
+- Lyric card MP4s with a video background over 2 seconds now last as long as the video (Clip length › Match background, the default). The lines play on their own timing inside it: if they finish early the last line stays up, fading out over the last half second when more than 3 seconds remain; if they run past the end they are cut there and the card window says how many lines won't fit. Match lyrics keeps the old length, looping the video with a 0.3 s crossfade at each seam (its sound loops with it) or cutting it. Pictures, GIFs and clips of 2 seconds or less always match the lyrics. A new Max 60 s option (off by default) caps any MP4. Every MP4's sound now fades out over its last 0.3 s, and the song fades over 0.4 s where it is cut or stops early. GIF and PNG exports are unchanged.
+- The song in a lyric card MP4 is no longer dropped when its recording doesn't cover every selected line: the missing parts are silent and the export still says to record it again.
 
 ### Fixed
 
@@ -55,6 +57,7 @@ When merging, keep every entry and combine duplicate headings.
 - Fable: with romanisation set to Below, each word's reading now shows under it. Fable used to drop readings that were split by word.
 - Fable: Reduce Motion now stops the swoop-in, the letter spreading and the echo trails as well as the floating; words only fade in.
 - Fable: words no longer drift on a loop the whole time a line is held, the colour and glow no longer snap off the previous word when the next one starts, and a chosen word entrance is now used.
+- Lyric card MP4s: the Song level, Background video and sound file sliders now make an audible difference. Each sound is first brought to the same loudness (about -16 LUFS, measured on the part actually used), so a mastered song no longer drowns out a quieter video or phone recording at the same setting. The sliders work in decibels and show them: 100% is level with the others, 50% is -12 dB, 25% is -24 dB, 150% is +12 dB and 0 is off. The mix is rendered by Lunalyr itself, so levels above 100% are real gain, and a look-ahead limiter keeps peaks at -1 dBFS so nothing distorts. Measured on test tones, a song 20 dB louder than the video used to stay 14 dB above it at 50%; now it sits 12 dB below it. A new "Duck the song under the video's sound" option lowers the song by 12 dB while the background video's own sound plays.
 
 ## [1.0.0] - 2026-11-08
 

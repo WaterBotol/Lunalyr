@@ -98,12 +98,19 @@ enum LyricCard {
         var extraSounds: [SoundTrack] = []
         /// The song's own sound for these lines, which wins over any other.
         var songAudio: SongAudioClip?
-        /// How loud the song or chosen file is in the MP4, 0 to 1.5 (1 = as it is).
+        /// How loud the song or chosen file is in the MP4, as a slider position
+        /// from 0 to 1.5: 1 is level with the other sounds (see `LyricCardMix.decibels(forLevel:)`).
         var soundVolume = 1.0
         /// How big the lyrics are on the card, as a share of the room they have (1 fills it).
         var textScale = 1.0
         /// How loud a video background's own sound is, mixed with the above.
         var backgroundVolume = 1.0
+        /// Lowers the song by 12 dB while the background video's own sound is playing.
+        var duckSong = false
+        /// What decides the MP4's length; it applies to a video background over two seconds.
+        var clipLength: ClipLength = .matchBackground
+        /// Keeps the MP4 to 60 seconds, for sharing.
+        var capsLength = false
 
         var size: CGSize { aspect.size }
 
@@ -335,29 +342,26 @@ enum LyricCard {
     /// (which says whether to go on), so a long clip never holds every frame
     /// at once. `budget` caps the frame count by stretching the cadence (the
     /// GIF's way); nil takes a frame every `minimumCadence`, whatever the length.
+    /// With a `plan` (the MP4's way) the frames last exactly `plan.duration`:
+    /// the last line is held (and faded) or the lines are cut, and a looping
+    /// background video is crossfaded at its seams.
     @discardableResult
     static func renderFrames(_ content: Content, scale gifScale: CGFloat, minimumCadence: Double, budget: Int?,
+                             plan: ClipPlan? = nil,
                              progress: ((Double) -> Void)? = nil,
                              sink: (CGImage, Double) async -> Bool) async -> Bool {
         let stillInk = ink(for: content)
         let stage = content.lyricStage
         let movingBackground = content.background?.isAnimated == true
-        let clips = content.pages.enumerated().map { index, page -> (page: Page, start: Double, firstInk: Double?, duration: Double) in
-            let tail = index == content.pages.count - 1 ? 0.32 : 0
-            if let animation = page.animation, let firstInk = animation.firstInk {
-                let start = min(firstInk, max(animation.line.start, firstInk - 0.12))
-                let span = animation.end - start
-                if span.isFinite, span > 0 { return (page, start, firstInk, span + tail) }
-            }
-            return (page, 0, nil, content.pages.count == 1 ? (movingBackground ? 3.0 : 0.08) : 1.8)
-        }
+        let clips = pageClips(content)
         guard !clips.isEmpty else { return false }
         let timed = clips.filter { $0.firstInk != nil }
         let total = timed.reduce(0) { $0 + $1.duration }
+        let end = plan?.duration ?? .infinity
         // Reserve frames for every clip, even very short lines. Share the
         // remaining budget across the timed clips in proportion to duration.
         let cadence = budget.map { max(minimumCadence, total / Double(max(1, $0 - 3 * clips.count))) } ?? minimumCadence
-        let expected = max(1, Int((total / cadence).rounded(.up)) + clips.count)
+        let expected = max(1, Int(((plan?.duration ?? total) / cadence).rounded(.up)) + clips.count)
         var produced = 0
         let backdrop: CGImage?
         if !timed.isEmpty {
@@ -372,24 +376,48 @@ enum LyricCard {
         for step in 0..<24 {
             _ = director.ink(content.inkInputs(vocal: 0), wall: Double(step) * 0.25)
         }
+        func backgroundFrame(_ background: LyricCardBackground, at time: Double) async -> CGImage {
+            if let loop = plan?.backgroundLoop { return await background.frame(at: time, loop: loop) }
+            return await background.frame(at: time)
+        }
+        /// A frame with its lyrics faded towards `plate` (the same frame without them) as the plan asks.
+        func faded(_ image: CGImage, plate: () -> CGImage?, at time: Double) -> CGImage {
+            guard let opacity = plan?.lyricOpacity(at: time), opacity < 1, let plate = plate() else { return image }
+            return LyricCardBackground.blend(plate, image, weight: opacity) ?? image
+        }
+        /// Hands a frame on, cut short at the plan's end. Nil when the sink
+        /// refused it, false once the end is reached.
+        func emit(_ image: CGImage, delay: Double, at time: Double) async -> Bool? {
+            let delay = min(delay, end - time)
+            guard await sink(image, max(0.02, delay)) else { return nil }
+            produced += 1
+            progress?(min(1, Double(produced) / Double(expected)))
+            if produced.isMultiple(of: 4) { await Task.yield() }
+            return time + delay < end - 0.0005
+        }
         var elapsed = 0.0
-        for clip in clips {
+        for (clipIndex, clip) in clips.enumerated() {
             guard !Task.isCancelled else { return false }
+            guard elapsed < end - 0.0005 else { return true }
+            // Under a plan the last page stays up until the end.
+            let shown = plan != nil && clipIndex == clips.count - 1 ? max(clip.duration, end - elapsed) : clip.duration
             if let animation = clip.page.animation, let firstInk = clip.firstInk, var backdrop {
-                let count = max(3, Int((clip.duration / cadence - 1e-9).rounded(.up)))
-                let step = clip.duration / Double(count)
+                let natural = max(3, Int((clip.duration / cadence - 1e-9).rounded(.up)))
+                let step = clip.duration / Double(natural)
+                let count = max(natural, Int((shown / step - 1e-9).rounded(.up)))
                 // Begin after the first word or phrase has started to appear.
                 // Keep the final rolling word in view through any trailing rest.
                 let lastInk = animation.rolls
                     ? max(firstInk, (animation.words.map(\.end).max() ?? animation.end) + 0.44) : .infinity
+                let lastTime = clip.start + Double(natural - 1) * step
                 for index in 0..<count {
                     guard !Task.isCancelled else { return false }
                     let offset = Double(index) * step
-                    let time = min(lastInk, max(firstInk, clip.start + offset))
+                    let time = min(lastInk, max(firstInk, min(lastTime, clip.start + offset)))
                     let vocal = animation.line.wordTimed ? OrganicMotion.vocalIntensity(animation.words, at: time) : 0
                     let ink = director.ink(content.inkInputs(vocal: vocal), wall: 6 + elapsed + offset)
                     if movingBackground, let background = content.background {
-                        let still = await background.frame(at: elapsed + offset)
+                        let still = await backgroundFrame(background, at: elapsed + offset)
                         let plate = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, hideLyrics: true, backgroundImage: still))
                         plate.scale = gifScale
                         if let rendered = plate.cgImage { backdrop = rendered }
@@ -401,40 +429,42 @@ enum LyricCard {
                     guard let image = renderer.cgImage else { return false }
                     // Round successive boundaries so errors do not accumulate.
                     let delay = ((offset + step) * 100).rounded() - (offset * 100).rounded()
-                    guard await sink(image, max(0.02, delay / 100)) else { return false }
-                    produced += 1
-                    progress?(min(1, Double(produced) / Double(expected)))
-                    if produced.isMultiple(of: 4) { await Task.yield() }
+                    let plate = backdrop
+                    let shownImage = faded(image, plate: { plate }, at: elapsed + offset)
+                    guard let more = await emit(shownImage, delay: delay / 100, at: elapsed + offset) else { return false }
+                    if !more { return true }
                 }
             } else if movingBackground, let background = content.background {
                 // A line with no timing, held over a moving background: its
                 // frames follow the background's.
-                let count = max(1, Int((clip.duration / max(cadence, 0.1) - 1e-9).rounded(.up)))
-                let step = clip.duration / Double(count)
+                let count = max(1, Int((shown / max(cadence, 0.1) - 1e-9).rounded(.up)))
+                let step = shown / Double(count)
                 for index in 0..<count {
                     guard !Task.isCancelled else { return false }
                     let offset = Double(index) * step
-                    let still = await background.frame(at: elapsed + offset)
+                    let still = await backgroundFrame(background, at: elapsed + offset)
                     let renderer = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, page: clip.page,
                                                                         backgroundImage: still))
                     renderer.scale = gifScale
                     guard let image = renderer.cgImage else { return false }
                     let delay = ((offset + step) * 100).rounded() - (offset * 100).rounded()
-                    guard await sink(image, max(0.02, delay / 100)) else { return false }
-                    produced += 1
-                    progress?(min(1, Double(produced) / Double(expected)))
-                    if produced.isMultiple(of: 4) { await Task.yield() }
+                    let shownImage = faded(image, plate: {
+                        let plate = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, hideLyrics: true, backgroundImage: still))
+                        plate.scale = gifScale
+                        return plate.cgImage
+                    }, at: elapsed + offset)
+                    guard let more = await emit(shownImage, delay: delay / 100, at: elapsed + offset) else { return false }
+                    if !more { return true }
                 }
             } else {
                 let renderer = ImageRenderer(content: LyricCardView(content: content, ink: stillInk, page: clip.page))
                 renderer.scale = gifScale
                 guard let image = renderer.cgImage else { return false }
-                guard await sink(image, clip.duration) else { return false }
-                produced += 1
-                progress?(min(1, Double(produced) / Double(expected)))
+                guard let more = await emit(image, delay: shown, at: elapsed) else { return false }
+                if !more { return true }
                 await Task.yield()
             }
-            elapsed += clip.duration
+            elapsed += shown
         }
         return true
     }

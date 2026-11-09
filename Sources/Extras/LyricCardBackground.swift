@@ -110,4 +110,30 @@ final class LyricCardBackground: @unchecked Sendable {
             return (try? await generator.image(at: cm).image) ?? first
         }
     }
+
+    /// The frame showing `time` seconds in when the clip repeats as `loop`
+    /// says: inside a seam, the end of one pass blended into the start of the next.
+    func frame(at time: Double, loop: LoopTiming) async -> CGImage {
+        let sample = loop.sample(at: time)
+        let current = await frame(at: sample.position)
+        guard let previous = sample.previous else { return current }
+        let before = await frame(at: previous)
+        return Self.blend(before, current, weight: sample.weight) ?? current
+    }
+
+    /// `top` drawn over `base` at `weight` opacity, at `base`'s size.
+    static func blend(_ base: CGImage, _ top: CGImage, weight: Double) -> CGImage? {
+        guard weight > 0 else { return base }
+        guard weight < 1 else { return top }
+        guard let context = CGContext(data: nil, width: base.width, height: base.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: base.width, height: base.height)
+        context.interpolationQuality = .high
+        context.draw(base, in: rect)
+        context.setAlpha(CGFloat(weight))
+        context.draw(top, in: rect)
+        return context.makeImage()
+    }
 }
