@@ -45,6 +45,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- Music video: pausing the song now leaves the video paused on its current frame instead of switching to the album-colour gradient. A YouTube video is shown as a picture of its last frame (YouTube's own pause button never shows), per display, and plays again from there on resume. After about ten minutes paused, the YouTube player is closed to save power and reopened on resume, with the frame kept on screen meanwhile. Covering or pausing the wallpaper, Reduce Motion, buffering, and times before or after the video still show the gradient.
 - Smoother music video sync. A library video eases small drift away by playing up to 3% faster or slower instead of jumping, and seeks only past 1.5 s. A YouTube video seeks only for drift over a second that lasts, or a jump, and each seek is led by how long that player takes to land one, measured as it plays.
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
 - Clicking a song in the desktop player builds the "Lunalyr Queue" in short steps: from the library in one copy, from a playlist about 20 songs at a time, so lyrics and progress keep updating while it is built.

@@ -13,7 +13,8 @@ struct MusicVideoBackground: View {
     let blur: Double
     var preview = false
     /// Under the video: what shows while a YouTube player is not playing
-    /// (it is hidden then, so none of YouTube's overlays can show).
+    /// (it is hidden then, so none of YouTube's overlays can show), unless
+    /// the user paused the song and its frozen frame shows instead.
     var standIn: LinearGradient = LinearGradient(colors: [.black], startPoint: .top, endPoint: .bottom)
 
     var body: some View {
@@ -104,11 +105,15 @@ protocol MusicVideoPlaybackSurface: AnyObject {
     var correctionStyle: MusicVideoCorrectionStyle { get }
     /// Plays a little faster or slower; only asked of `.rate` players.
     func setVideoRate(_ rate: Double)
+    /// Told on every check, before the sample, why the video is moving or
+    /// not (a user pause holds the frame on YouTube).
+    func noteHold(_ hold: MusicVideoHold)
 }
 
 extension MusicVideoPlaybackSurface {
     var correctionStyle: MusicVideoCorrectionStyle { .seek }
     func setVideoRate(_ rate: Double) {}
+    func noteHold(_ hold: MusicVideoHold) {}
 }
 
 /// Checks the video against the song four times a second and corrects it
@@ -128,6 +133,8 @@ final class MusicVideoSyncLoop {
     private var inFlight = false
     private(set) var corrector: MusicVideoCorrector?
     private(set) var surfacePaused = false
+    /// The video's length, as last sampled.
+    private var lastDuration: Double?
     /// Told the video's length once it is known (for the intro estimate).
     var onDuration: ((Double) -> Void)?
     /// Told each sample of the video's own position (for Tap to sync).
@@ -172,9 +179,19 @@ final class MusicVideoSyncLoop {
         start()
     }
 
+    /// Why the video is moving or not, right now.
+    func hold(videoDuration: Double?) -> MusicVideoHold {
+        let target = MusicVideoTiming.videoTime(songTime: songTime(), offset: offset(), videoDuration: videoDuration)
+        return MusicVideoHold.of(surfacePaused: surfacePaused, songPlaying: songPlaying(), target: target)
+    }
+
     /// One check. Public for tests.
     func tick() {
-        guard !inFlight, let surface else { return }
+        guard let surface else { return }
+        // Before the sample: a closed player (a long pause) has none, and
+        // still needs to hear that the song plays again.
+        surface.noteHold(hold(videoDuration: lastDuration))
+        guard !inFlight else { return }
         inFlight = true
         surface.sample { [weak self] sample, duration in
             guard let self else { return }
@@ -182,7 +199,10 @@ final class MusicVideoSyncLoop {
             guard let sample, let surface = self.surface else { return }
             let target = MusicVideoTiming.videoTime(songTime: self.songTime(), offset: self.offset(),
                                                     videoDuration: duration)
-            if let duration { self.onDuration?(duration) }
+            if let duration {
+                self.lastDuration = duration
+                self.onDuration?(duration)
+            }
             self.onSample?(sample)
             let shouldPlay = !self.surfacePaused && self.songPlaying()
             let style = surface.correctionStyle
@@ -349,7 +369,9 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
 // MARK: - YouTube (IFrame Player API)
 
 /// The YouTube IFrame Player in a WKWebView: muted, no controls, inline,
-/// no looping, no related videos; the sync loop seeks it to the song.
+/// no looping, no related videos; the sync loop seeks it to the song. Its
+/// host also holds the frozen frame shown over it while the user has the
+/// song paused.
 struct YouTubeMusicVideoView: NSViewRepresentable {
     let videoID: String
     let paused: Bool
@@ -357,40 +379,57 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
 
     func makeCoordinator() -> YouTubeMusicVideoCoordinator { YouTubeMusicVideoCoordinator() }
 
-    func makeNSView(context: Context) -> WKWebView {
+    func makeNSView(context: Context) -> YouTubeMusicVideoHostView {
         let coordinator = context.coordinator
-        let configuration = YouTubeEmbed.configuration()
-        configuration.userContentController.add(WeakScriptHandler(coordinator), name: YouTubeEmbed.messageName)
-        let view = BackgroundYouTubeView(frame: .zero, configuration: configuration)
-        // Hidden until the player says it is playing.
-        view.alphaValue = 0
-        view.underPageBackgroundColor = .black
-        view.allowsMagnification = false
-        view.navigationDelegate = coordinator
-        coordinator.attach(view, videoID: videoID)
+        let host = YouTubeMusicVideoHostView(frame: .zero)
+        coordinator.host = host
+        coordinator.attach(videoID: videoID)
         coordinator.loop.setSurfacePaused(paused)
         coordinator.loop.start()
         coordinator.setBlur(blur)
-        return view
+        return host
     }
 
-    func updateNSView(_ view: WKWebView, context: Context) {
+    func updateNSView(_ host: YouTubeMusicVideoHostView, context: Context) {
         let coordinator = context.coordinator
-        if coordinator.videoID != videoID { coordinator.attach(view, videoID: videoID) }
+        if coordinator.videoID != videoID { coordinator.attach(videoID: videoID) }
         coordinator.loop.setSurfacePaused(paused)
         coordinator.setBlur(blur)
     }
 
-    static func dismantleNSView(_ view: WKWebView, coordinator: YouTubeMusicVideoCoordinator) {
+    static func dismantleNSView(_ host: YouTubeMusicVideoHostView, coordinator: YouTubeMusicVideoCoordinator) {
         coordinator.tearDown()
-        view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
-        view.navigationDelegate = nil
-        view.stopLoading()
+    }
+}
+
+/// Holds the player's web view (which a long pause may close and a resume
+/// open again) under the frozen frame. Takes no clicks.
+@MainActor
+final class YouTubeMusicVideoHostView: NSView {
+    let frozenFrame = MusicVideoFrozenFrameView(frame: .zero)
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        frozenFrame.frame = bounds
+        frozenFrame.autoresizingMask = [.width, .height]
+        addSubview(frozenFrame)
     }
 
-    private final class BackgroundYouTubeView: WKWebView {
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    required init?(coder: NSCoder) { nil }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// Under the frozen frame, filling the host.
+    func install(_ webView: WKWebView) {
+        webView.frame = bounds
+        webView.autoresizingMask = [.width, .height]
+        addSubview(webView, positioned: .below, relativeTo: frozenFrame)
     }
+}
+
+private final class BackgroundYouTubeView: WKWebView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// The page and the rules for which navigations it may make.
@@ -440,7 +479,8 @@ enum YouTubeEmbed {
     /// The player is visible only while it plays (state 1). Paused, ended,
     /// cued, unstarted or buffering, YouTube draws its title bar and a big
     /// play or pause button over the video; the wallpaper shows its stand-in
-    /// instead.
+    /// instead, or, when the user paused the song, the frame taken just
+    /// before the pause (`MusicVideoFrozenFrame`).
     static func showsVideo(state: Int) -> Bool { state == 1 }
 
     /// The same rule from a sync sample: playing, not buffering.
@@ -716,10 +756,13 @@ final class YouTubeEmbedSession {
 
 @MainActor
 final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler,
-                                          MusicVideoPlaybackSurface {
+                                          MusicVideoPlaybackSurface, MusicVideoFreezeHost {
     let loop = MusicVideoSyncLoop()
     let session = YouTubeEmbedSession()
-    var videoID: String? { session.videoID }
+    let freeze = MusicVideoFrozenFrame()
+    weak var host: YouTubeMusicVideoHostView?
+    /// The video asked for; kept while a long pause has closed the player.
+    private(set) var videoID: String?
     private weak var view: WKWebView?
     private var navigation: WKNavigation?
     private var blur: Double = -1
@@ -733,16 +776,44 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         super.init()
         loop.surface = self
         session.onEffect = { [weak self] in self?.perform($0) }
+        freeze.host = self
     }
 
-    func attach(_ view: WKWebView, videoID: String) {
-        self.view = view
+    func attach(videoID: String) {
+        if videoID != self.videoID { freeze.reset() }
+        self.videoID = videoID
+        if view == nil { openWebView() }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
         loop.onSample = {
             MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
                                                         of: .youTube(videoID))
         }
         perform(session.attach(videoID))
+    }
+
+    /// A fresh web view in the host, hidden until the player says it plays.
+    private func openWebView() {
+        guard let host else { return }
+        let configuration = YouTubeEmbed.configuration()
+        configuration.userContentController.add(WeakScriptHandler(self), name: YouTubeEmbed.messageName)
+        let view = BackgroundYouTubeView(frame: host.bounds, configuration: configuration)
+        view.alphaValue = 0
+        view.underPageBackgroundColor = .black
+        view.allowsMagnification = false
+        view.navigationDelegate = self
+        host.install(view)
+        self.view = view
+    }
+
+    /// Closes the web view, and with it the page and its player.
+    private func closeWebView() {
+        guard let view else { return }
+        view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
+        view.navigationDelegate = nil
+        view.stopLoading()
+        view.removeFromSuperview()
+        self.view = nil
+        navigation = nil
     }
 
     private func perform(_ effect: YouTubeEmbedSession.Effect) {
@@ -764,14 +835,17 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             setVisible(visible)
         case .fail(let videoID, let failure):
             setVisible(false)
+            freeze.reset()
             run("window.lunalyrPause && window.lunalyrPause()")
             MusicVideoController.shared.reportPlaybackFailure(of: .youTube(videoID), failure)
         }
     }
 
     /// The whole web view fades with the player's state, so nothing of
-    /// YouTube's (title bar, play or pause button) shows over the stand-in.
+    /// YouTube's (title bar, play or pause button) shows over the stand-in
+    /// or the frozen frame.
     private func setVisible(_ visible: Bool) {
+        freeze.notePlayer(showing: visible)
         guard let view else { return }
         let alpha: CGFloat = visible ? 1 : 0
         guard view.alphaValue != alpha else { return }
@@ -791,15 +865,47 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     func tearDown() {
         loop.stop()
         session.stop()
+        freeze.reset()
         run("window.lunalyrPause && window.lunalyrPause()")
-        view = nil
+        closeWebView()
     }
 
     private func run(_ script: String) {
         view?.evaluateJavaScript(script, completionHandler: nil)
     }
 
+    // MARK: MusicVideoFreezeHost
+
+    /// Our own web view's picture, as drawn: the page's crop, overscan and
+    /// blur are in it, and the wallpaper's dimming lies over the host.
+    func captureFrame(_ done: @escaping @MainActor (CGImage?) -> Void) {
+        guard let view, view.bounds.width > 0, view.bounds.height > 0 else { done(nil); return }
+        view.takeSnapshot(with: WKSnapshotConfiguration()) { image, _ in
+            MainActor.assumeIsolated {
+                let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                done(picture.flatMap { MusicVideoFrozenFrame.looksBlank($0) ? nil : $0 })
+            }
+        }
+    }
+
+    func showFrozenFrame(_ image: CGImage) { host?.frozenFrame.show(image) }
+    func hideFrozenFrame(handOver: Bool) { host?.frozenFrame.hide(handOver: handOver) }
+    func sendPause() { run("window.lunalyrPause()") }
+
+    func releasePlayer() {
+        session.stop()
+        run("window.lunalyrPause && window.lunalyrPause()")
+        closeWebView()
+    }
+
+    func recreatePlayer() {
+        guard let videoID else { return }
+        attach(videoID: videoID)
+    }
+
     // MARK: MusicVideoPlaybackSurface
+
+    func noteHold(_ hold: MusicVideoHold) { freeze.noteHold(hold) }
 
     func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
         guard session.ready, let view else { done(nil, nil); return }
@@ -817,7 +923,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     func playVideo() { run("window.lunalyrPlay()") }
-    func pauseVideo() { run("window.lunalyrPause()") }
+    /// A user pause takes the frozen frame first (`MusicVideoFrozenFrame`).
+    func pauseVideo() { freeze.pause() }
     func seekVideo(to seconds: Double) { run("window.lunalyrSeek(\(seconds))") }
 
     // MARK: Messages
