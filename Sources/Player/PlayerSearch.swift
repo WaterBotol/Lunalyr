@@ -668,10 +668,10 @@ struct AppleMusicSearch: PlayerSearching {
         return items[1].scriptItems.compactMap { row -> PlayerQueueItem? in
             let fields = row.scriptItems
             guard fields.count >= 4, let id = fields[0].scriptText, let title = fields[1].scriptText,
-                  let index = fields[3].scriptNumber else { return nil }
-            let here = fields.count >= 5 ? fields[4].scriptNumber : nil
-            return PlayerQueueItem(id: "q-\(id)-\(Int(index))", title: title, artist: fields[2].scriptText ?? "",
-                                   index: Int(index), isCurrent: here == index, persistentID: id)
+                  let index = Int(scriptValue: fields[3].scriptNumber) else { return nil }
+            let here = fields.count >= 5 ? Int(scriptValue: fields[4].scriptNumber) : nil
+            return PlayerQueueItem(id: "q-\(id)-\(index)", title: title, artist: fields[2].scriptText ?? "",
+                                   index: index, isCurrent: here == index, persistentID: id)
         }
     }
 

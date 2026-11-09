@@ -308,7 +308,8 @@ final class WebPlayerParsingTests: XCTestCase {
         XCTAssertTrue(seek.source.contains("sec=83.250"))
         XCTAssertTrue(seek.source.contains(#"set targetKey to "5""#))
         let first = WebPlayerScript.command(.safari, tab: nil, action: .playPause)
-        XCTAssertTrue(first.source.contains(#"set targetKey to """#), "Before any tab is followed, the first music tab")
+        XCTAssertFalse(first.source.contains("targetKey"), "Before any tab is followed, the first music tab")
+        XCTAssertTrue(first.source.contains(WebPlayerScript.matchCondition))
     }
 
     func testEachBrowserIsToldHowToAllowJavaScript() {

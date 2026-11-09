@@ -429,6 +429,15 @@ extension NSAppleEventDescriptor {
     }
 }
 
+extension Int {
+    /// A number from a script reply as a whole number, cut toward zero; nil
+    /// for NaN, infinity or anything out of range, where `Int(_:)` traps.
+    init?(scriptValue value: Double?) {
+        guard let value, value.isFinite, let whole = Int(exactly: value.rounded(.towardZero)) else { return nil }
+        self = whole
+    }
+}
+
 extension PlayerBackend {
     /// Whether the player's own notification says it started or carries on
     /// playing. Both players post "Player State" = "Playing".
