@@ -11,8 +11,10 @@ struct MusicPlayersPage: View {
     var body: some View {
         let installed = Set(models.resolved.installedPlayers)
         let offered = PlayerOptions.Choice.offered(installed: installed, current: players.choice,
-                                                   webPlayers: players.followsWebPlayers)
+                                                   webPlayers: players.followsWebPlayers,
+                                                   localPlayers: players.followsLocalPlayers)
         let browsers = PlayerKind.browsers.filter(installed.contains)
+        let localPlayers = PlayerKind.localPlayers.filter(installed.contains)
         ThemedForm {
             ThemedSection("Music players") {
                 if offered.count <= 4 {
@@ -23,6 +25,10 @@ struct MusicPlayersPage: View {
                     }
                 }
                 InspectorCaption("Automatic follows whichever player is playing.", more: "Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the others anything.")
+                if !localPlayers.isEmpty || players.followsLocalPlayers {
+                    Toggle(Self.localTitle(localPlayers), isOn: $players.followsLocalPlayers)
+                    InspectorCaption(Self.localCaption, more: Self.localDetail)
+                }
                 Toggle("Follow web players in browsers", isOn: $players.followsWebPlayers)
                 InspectorCaption(Self.webCaption, more: Self.webDetail(browsers))
                 PlayerAccessList()
@@ -35,6 +41,14 @@ struct MusicPlayersPage: View {
         .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
     }
+
+    /// "Follow VLC and VOX": the local-file players on this Mac.
+    static func localTitle(_ installed: [PlayerKind]) -> String {
+        "Follow " + OnboardingCopy.list((installed.isEmpty ? PlayerKind.localPlayers : installed).map(\.displayName))
+    }
+
+    static let localCaption = "Lyrics are looked up by the title or file name playing."
+    static let localDetail = "Lunalyr reads the title playing in VLC, Swinsian or VOX, or the file name when there is no title, and looks its lyrics up with lyric services such as LRCLIB under that name. Leave this off if you play personal videos in them."
 
     static let webCaption = "YouTube Music, SoundCloud and Amazon Music in Safari, Chrome, Arc, Brave or Edge."
 

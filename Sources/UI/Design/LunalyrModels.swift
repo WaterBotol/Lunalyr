@@ -95,9 +95,7 @@ final class LunalyrModels {
         settings: .shared, colours: .shared, highlightColours: .shared, styleMemory: .shared, extras: .shared, hotkeys: .shared,
         desktop: .shared, players: .shared, visualizer: .shared, offsets: .shared, nowPlaying: .shared,
         audio: .shared, updates: .shared, navigation: .shared,
-        installedPlayers: PlayerKind.allCases.filter {
-            NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundleID) != nil
-        })
+        installedPlayers: PlayerKind.allCases.filter(PlayerOptions.installedPlayers.contains))
 
     /// The recording playing now, as lyrics and offsets key it; nil with
     /// nothing current. Paused counts as current.

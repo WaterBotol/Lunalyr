@@ -106,13 +106,22 @@ enum PlayerKind: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Players followed under Automatic. Browsers only when web players are
-    /// turned on (`PlayerOptions.followsWebPlayers`): every Mac has Safari
-    /// open, and following it unasked would raise "Lunalyr wants to control
-    /// Safari" for someone who never plays music in it.
+    /// Every player that is an app of its own, not a browser. Automatic
+    /// follows browsers only when web players are turned on
+    /// (`PlayerOptions.followsWebPlayers`): every Mac has Safari open, and
+    /// following it unasked would raise "Lunalyr wants to control Safari"
+    /// for someone who never plays music in it. The same goes for the
+    /// local-file players (`PlayerOptions.followsLocalPlayers`).
     static var apps: [PlayerKind] { allCases.filter { !$0.isBrowser } }
 
     static var browsers: [PlayerKind] { allCases.filter(\.isBrowser) }
+
+    /// Music and Spotify: what Automatic always follows.
+    static var musicApps: [PlayerKind] { allCases.filter { $0.family == .musicApp } }
+
+    /// VLC, Swinsian and VOX: followed under Automatic only once turned on
+    /// (`PlayerOptions.followsLocalPlayers`).
+    static var localPlayers: [PlayerKind] { allCases.filter { $0.family == .localFiles } }
 
     /// "Music", "Music or Spotify"... Browsers are named once, as the web
     /// players they stand for.
@@ -426,6 +435,15 @@ extension NSAppleEventDescriptor {
 
     static var missingValue: NSAppleEventDescriptor {
         NSAppleEventDescriptor(typeCode: DescriptorCode.missingValue)
+    }
+}
+
+extension Int {
+    /// A number from a script reply as a whole number, cut toward zero; nil
+    /// for NaN, infinity or anything out of range, where `Int(_:)` traps.
+    init?(scriptValue value: Double?) {
+        guard let value, value.isFinite, let whole = Int(exactly: value.rounded(.towardZero)) else { return nil }
+        self = whole
     }
 }
 

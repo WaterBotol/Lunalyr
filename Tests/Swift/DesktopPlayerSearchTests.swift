@@ -96,29 +96,37 @@ final class DesktopPlayerQueueScriptTests: XCTestCase {
     }
 
     func testBuildingCopiesLibrarySongsAndCleansUpAfterAFailure() {
-        let script = AppleMusicSearch.buildQueue(persistentID: "AB12", index: 3, into: "FFEE", replacing: "0A1B")
-        XCTAssertFalse(script.contains(deleteByName))
-        XCTAssertTrue(script.contains("duplicate (first track of library playlist 1 whose persistent ID is wantedID) to newList"),
+        let collect = AppleMusicSearch.collectQueue(persistentID: "AB12", index: 3, into: "FFEE")
+        let fill = AppleMusicSearch.fillQueue(["0A", "0B"], into: "FFEE")
+        for script in [collect, fill] {
+            XCTAssertFalse(script.contains(deleteByName))
+            XCTAssertFalse(script.contains("duplicate (track"))
+            // A failure deletes the half-built playlist, by its ID and exact name, then raises the error again.
+            let failure = script.components(separatedBy: "on error buildText number buildNumber").last ?? ""
+            XCTAssertTrue(failure.contains("first user playlist whose persistent ID is \"FFEE\""))
+            XCTAssertTrue(failure.contains("if ownName is \"Lunalyr Queue (new)\" then delete ownList"))
+            XCTAssertTrue(failure.contains("error buildText number buildNumber"), "the error is raised again, unchanged by the clean-up")
+            XCTAssertFalse(script.contains("delete track"))
+        }
+        XCTAssertTrue(fill.contains("duplicate (first track of library playlist 1 whose persistent ID is wantedID) to newList"),
                       "only the library's own copy of a song is copied")
-        XCTAssertFalse(script.contains("duplicate (track"))
-        // A failure deletes the half-built playlist, by its ID and exact name, then raises the error again.
-        let failure = script.components(separatedBy: "on error buildText number buildNumber").last ?? ""
-        XCTAssertTrue(failure.contains("first user playlist whose persistent ID is \"FFEE\""))
-        XCTAssertTrue(failure.contains("if ownName is \"Lunalyr Queue (new)\" then delete ownList"))
-        XCTAssertTrue(failure.contains("error buildText number buildNumber"), "the error is raised again, unchanged by the clean-up")
         // The previous queue goes only by its own ID and exact name, case included.
-        XCTAssertTrue(script.contains("first user playlist whose persistent ID is \"0A1B\""))
-        XCTAssertTrue(script.contains("considering case\nif ownName is \"Lunalyr Queue\" then delete ownList"))
-        XCTAssertTrue(script.contains("if smart of ownList is false then"))
-        XCTAssertTrue(script.contains("if class of ownList is user playlist then"))
-        XCTAssertFalse(script.contains("delete track"))
-        XCTAssertFalse(script.contains("delete (every"))
+        let finish = AppleMusicSearch.finishQueue(into: "FFEE", replacing: "0A1B")
+        XCTAssertFalse(finish.contains(deleteByName))
+        XCTAssertTrue(finish.contains("first user playlist whose persistent ID is \"0A1B\""))
+        XCTAssertTrue(finish.contains("considering case\nif ownName is \"Lunalyr Queue\" then delete ownList"))
+        XCTAssertTrue(finish.contains("if smart of ownList is false then"))
+        XCTAssertTrue(finish.contains("if class of ownList is user playlist then"))
+        XCTAssertFalse(finish.contains("delete track"))
+        XCTAssertFalse(finish.contains("delete (every"))
     }
 
     func testBuildingWithoutAnEarlierQueueDeletesOnlyOnFailure() {
-        let script = AppleMusicSearch.buildQueue(persistentID: "AB12", index: nil, into: "FFEE", replacing: nil)
-        XCTAssertEqual(script.components(separatedBy: "delete ownList").count, 2)
-        XCTAssertFalse(script.contains("\"Lunalyr Queue\" then delete"))
+        let finish = AppleMusicSearch.finishQueue(into: "FFEE", replacing: nil)
+        XCTAssertFalse(finish.contains("delete"))
+        let collect = AppleMusicSearch.collectQueue(persistentID: "AB12", index: nil, into: "FFEE")
+        XCTAssertEqual(collect.components(separatedBy: "delete ownList").count, 2)
+        XCTAssertFalse(collect.contains("\"Lunalyr Queue\" then delete"))
     }
 
     func testTheStoreKeepsOnlyMusicStyleIDs() {

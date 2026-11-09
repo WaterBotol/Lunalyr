@@ -425,6 +425,8 @@ struct AppleMusicSearch: PlayerSearching {
     static let queueLength = 150
 
     var store = QueuePlaylistStore()
+    /// Where the queue's scripts wait their turn; tests give their own.
+    var desk: ScriptDesk = .shared
 
     /// Deletes the playlist with this persistent ID, but only if it is still
     /// one Lunalyr made: a plain user playlist named exactly `name`.
@@ -521,17 +523,19 @@ struct AppleMusicSearch: PlayerSearching {
         """
     }
 
-    /// Step two. Copies the song and the ones after it (wrapping round, up
-    /// to `queueLength`) into the new playlist, each as the library's own
-    /// copy, so nothing is added to the library. A failure deletes the
-    /// half-built playlist and then raises the error. Then the previous
-    /// queue is deleted, the new one takes its name and plays. Replies
-    /// `{"ok", n}`, where n is a playback error number, or 0.
-    static func buildQueue(persistentID id: String, index: Int?, into newID: String, replacing oldID: String?) -> String {
-        let replace = oldID.map { deleteOwnPlaylist($0, named: queuePlaylistName) } ?? ""
-        return """
+    /// Step two. Finds the song and the ones after it (wrapping round, up to
+    /// `queueLength`) and copies them into the new playlist, each as the
+    /// library's own copy, so nothing is added to the library. From the
+    /// library itself that is one ranged `duplicate` each way round, a single
+    /// event however many songs. From a user playlist, which may hold songs
+    /// that aren't in the library, it replies `{"ok", "ids", {…}}` instead,
+    /// and the songs are copied by `fillQueue`, `queueChunk` at a time, each
+    /// its own script, so the monitor's polls run in between. Otherwise
+    /// `{"ok", "copied"}`. A failure deletes the half-built playlist and then
+    /// raises the error.
+    static func collectQueue(persistentID id: String, index: Int?, into newID: String) -> String {
+        """
         set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
-        set wasShuffle to shuffle enabled
         try
         set inSource to false
         \(locate(id, index: index))
@@ -539,14 +543,36 @@ struct AppleMusicSearch: PlayerSearching {
         set total to count of tracks of src
         set endAt to n + \(queueLength - 1)
         if endAt > total then set endAt to total
-        set wanted to (persistent ID of tracks n thru endAt of src) as list
         set room to \(queueLength) - (endAt - n + 1)
+        set upTo to 0
         if n > 1 and room > 0 then
         set upTo to n - 1
         if upTo > room then set upTo to room
-        set wanted to wanted & ((persistent ID of tracks 1 thru upTo of src) as list)
         end if
-        repeat with idItem in wanted
+        if class of src is library playlist then
+        duplicate tracks n thru endAt of src to newList
+        if upTo > 0 then duplicate tracks 1 thru upTo of src to newList
+        return {"ok", "copied"}
+        end if
+        set wanted to (persistent ID of tracks n thru endAt of src) as list
+        if upTo > 0 then set wanted to wanted & ((persistent ID of tracks 1 thru upTo of src) as list)
+        return {"ok", "ids", wanted}
+        \(cleanUpOnFailure(newID))
+        """
+    }
+
+    /// Songs `fillQueue` copies in one script: short enough that a poll
+    /// never waits long behind it.
+    static let queueChunk = 20
+
+    /// Copies these songs, by their library copies, into the new playlist.
+    /// A song no longer in the library is skipped. Replies `{"ok"}`.
+    static func fillQueue(_ ids: [String], into newID: String) -> String {
+        let list = "{" + ids.compactMap(QueuePlaylistStore.valid).map(ScriptText.quoted).joined(separator: ", ") + "}"
+        return """
+        set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
+        try
+        repeat with idItem in \(list)
         set wantedID to contents of idItem
         try
         duplicate (first track of library playlist 1 whose persistent ID is wantedID) to newList
@@ -554,12 +580,34 @@ struct AppleMusicSearch: PlayerSearching {
         if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
         end try
         end repeat
+        \(cleanUpOnFailure(newID))
+        return {"ok"}
+        """
+    }
+
+    /// Closes a `try` opened at the top of a step: on any error the
+    /// half-built playlist is deleted, by its ID and exact name, and the
+    /// error raised again unchanged.
+    private static func cleanUpOnFailure(_ newID: String) -> String {
+        """
         on error buildText number buildNumber
         try
         \(deleteOwnPlaylist(newID, named: buildingPlaylistName))
         end try
         error buildText number buildNumber
         end try
+        """
+    }
+
+    /// The last step. The previous queue is deleted, the new one takes its
+    /// name and plays from its start with shuffle off for the moment, then
+    /// shuffle is put back. Replies `{"ok", n}`, where n is a playback error
+    /// number, or 0.
+    static func finishQueue(into newID: String, replacing oldID: String?) -> String {
+        let replace = oldID.map { deleteOwnPlaylist($0, named: queuePlaylistName) } ?? ""
+        return """
+        set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
+        set wasShuffle to shuffle enabled
         \(replace)
         set name of newList to \(ScriptText.quoted(queuePlaylistName))
         set playError to 0
@@ -580,31 +628,49 @@ struct AppleMusicSearch: PlayerSearching {
         """
     }
 
+    /// One step of building the queue, as a command: its reply's items once
+    /// it says "ok".
+    private static func sendQueueStep(_ name: String, _ body: String, desk: ScriptDesk) async throws -> [NSAppleEventDescriptor] {
+        let reply = try await desk.run(for: .appleMusic, priority: .command) {
+            PlayerScript(name: "desktop-player.\(name)", source: PlayerScriptSource.query(bundleID, body), cacheable: false)
+        }
+        let items = reply.scriptItems
+        guard items.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
+        return items
+    }
+
+    /// `ids` in runs of `queueChunk`, in order.
+    static func chunks(_ ids: [String]) -> [[String]] {
+        stride(from: 0, to: ids.count, by: queueChunk).map { Array(ids[$0..<min($0 + queueChunk, ids.count)]) }
+    }
+
     /// One click at a time: a second click's clean-up must not delete the
     /// first click's playlist while that one is still being filled.
     private static let queueFlow = SerialFlow()
 
     func playInContext(persistentID id: String, index: Int?) async throws {
         let store = store
+        let send = { @Sendable [desk] (name: String, body: String) async throws -> [NSAppleEventDescriptor] in
+            try await Self.sendQueueStep(name, body, desk: desk)
+        }
         try await Self.queueFlow.run {
-            let prepared = try await ScriptDesk.shared.run(for: .appleMusic, priority: .command) {
-                PlayerScript(name: "desktop-player.queue-prepare", source: PlayerScriptSource.query(Self.bundleID,
-                    Self.prepareQueue(persistentID: id, index: index, leftovers: store.pendingIDs)), cacheable: false)
-            }
-            let items = prepared.scriptItems
-            guard items.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
-            guard items.count >= 3, items[1].scriptText == "made", let newID = items[2].scriptText, !newID.isEmpty else { return }
+            let prepared = try await send("queue-prepare",
+                                          Self.prepareQueue(persistentID: id, index: index, leftovers: store.pendingIDs))
+            guard prepared.count >= 3, prepared[1].scriptText == "made", let newID = prepared[2].scriptText,
+                  QueuePlaylistStore.valid(newID) != nil else { return }
             // The script deleted every earlier leftover it was given.
             store.pendingIDs = [newID]
-            let built = try await ScriptDesk.shared.run(for: .appleMusic, priority: .command) {
-                PlayerScript(name: "desktop-player.queue-build", source: PlayerScriptSource.query(Self.bundleID,
-                    Self.buildQueue(persistentID: id, index: index, into: newID, replacing: store.queueID)), cacheable: false)
+            let collected = try await send("queue-collect", Self.collectQueue(persistentID: id, index: index, into: newID))
+            if collected.count >= 3, collected[1].scriptText == "ids" {
+                let ids = collected[2].scriptItems.compactMap { $0.scriptText.flatMap(QueuePlaylistStore.valid) }
+                for chunk in Self.chunks(ids) {
+                    _ = try await send("queue-fill", Self.fillQueue(chunk, into: newID))
+                }
             }
-            let reply = built.scriptItems
-            guard reply.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
+            let finished = try await send("queue-finish", Self.finishQueue(into: newID, replacing: store.queueID))
             store.queueID = newID
             store.pendingIDs = []
-            if reply.count >= 2, let playError = reply[1].scriptNumber, playError != 0 { throw PlayerSearchError.failed }
+            if finished.count >= 2, let playError = finished[1].scriptNumber, playError != 0 { throw PlayerSearchError.failed }
         }
     }
 
@@ -668,10 +734,10 @@ struct AppleMusicSearch: PlayerSearching {
         return items[1].scriptItems.compactMap { row -> PlayerQueueItem? in
             let fields = row.scriptItems
             guard fields.count >= 4, let id = fields[0].scriptText, let title = fields[1].scriptText,
-                  let index = fields[3].scriptNumber else { return nil }
-            let here = fields.count >= 5 ? fields[4].scriptNumber : nil
-            return PlayerQueueItem(id: "q-\(id)-\(Int(index))", title: title, artist: fields[2].scriptText ?? "",
-                                   index: Int(index), isCurrent: here == index, persistentID: id)
+                  let index = Int(scriptValue: fields[3].scriptNumber) else { return nil }
+            let here = fields.count >= 5 ? Int(scriptValue: fields[4].scriptNumber) : nil
+            return PlayerQueueItem(id: "q-\(id)-\(index)", title: title, artist: fields[2].scriptText ?? "",
+                                   index: index, isCurrent: here == index, persistentID: id)
         }
     }
 

@@ -144,9 +144,15 @@ struct VLCBackend: PlayerBackend {
         return (name as NSString).deletingPathExtension
     }
 
-    /// "01 Song", "01. Song", "1-03 Song", "01 - Song" -> "Song".
+    /// "01 Song", "01. Song", "1-03 Song", "01 - Song", "7. Song",
+    /// "12 - Song" -> "Song". A number is taken for a track number only when
+    /// it looks like one: zero-padded, after a disc number, or followed by a
+    /// dot or a spaced dash. "99 Luftballons", "21 Guns", "7-Eleven" and
+    /// "10.000 Maniacs" keep theirs.
     static func stripTrackNumber(_ name: String) -> String {
-        let pattern = #"^\s*(\d{1,2}-)?\d{1,3}\s*([.\-–]\s*|\s+)"#
+        let separator = #"(?:\s*[.\-–]\s*|\s+)"#
+        let pattern = #"^\s*(?:\d{1,2}-\d{1,3}"# + separator + #"|0\d{1,2}"# + separator
+            + #"|\d{1,3}(?:\s*[\-–]\s+|\s*\.(?!\d)\s*))"#
         guard let range = name.range(of: pattern, options: .regularExpression), range.upperBound < name.endIndex else { return name }
         return String(name[range.upperBound...])
     }

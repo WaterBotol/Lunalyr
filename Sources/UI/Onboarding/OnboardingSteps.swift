@@ -36,7 +36,7 @@ struct MusicStep: View {
     var body: some View {
         OnboardingStepLayout {
             OnboardingHeader(step: .music, symbol: "music.note.list", title: OnboardingCopy.musicTitle,
-                             message: OnboardingCopy.permissionNote, focus: focus)
+                             message: OnboardingCopy.permissionNote(installed: flow.models.installedPlayers), focus: focus)
                 .padding(.bottom, LunalyrDesign.Spacing.xLarge)
             OnboardingCard {
                 PlayerAccessList()

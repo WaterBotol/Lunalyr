@@ -137,9 +137,24 @@ enum OnboardingCopy {
 
     static let musicTitle = "Let Lunalyr see what’s playing"
     /// What macOS is about to ask, what to answer, and what Lunalyr does
-    /// with the access (inventory B7).
-    static var permissionNote: String {
-        "Lunalyr follows what’s playing in \(PlayerKind.apps.map(\.displayName).joined(separator: ", ")), and in YouTube Music, SoundCloud and Amazon Music in your browser once you turn web players on in Settings. The first time it reads a player, macOS asks whether Lunalyr may control it: allow it. Lunalyr only reads the song and its position, and controls playback only when you use its buttons."
+    /// with the access (inventory B7). Names only the players installed on
+    /// this Mac; VLC, Swinsian and VOX, like web players, only as something
+    /// to turn on in Settings.
+    static func permissionNote(installed: [PlayerKind]) -> String {
+        let apps = PlayerKind.musicApps.filter(installed.contains)
+        let local = PlayerKind.localPlayers.filter(installed.contains)
+        let followed = list((apps.isEmpty ? [.appleMusic] : apps).map(\.displayName))
+        let web = WebService.allCases.map(\.displayName)
+        let optional = local.isEmpty
+            ? "Once you turn web players on in Settings, it also follows \(list(web)) in your browser."
+            : "Once you turn them on in Settings, it also follows \(list(local.map(\.displayName))), and \(list(web)) in your browser."
+        return "Lunalyr follows what’s playing in \(followed). \(optional) The first time it reads a player, macOS asks whether Lunalyr may control it: allow it. Lunalyr only reads the song and its position, and controls playback only when you use its buttons."
+    }
+
+    /// "A", "A and B", "A, B and C".
+    static func list(_ names: [String]) -> String {
+        guard names.count > 1 else { return names.first ?? "" }
+        return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
     }
     static let followCaption = "Automatic follows whichever player is playing. Choosing one means Lunalyr never sends the other anything."
 
