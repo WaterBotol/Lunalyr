@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>Lunalyr Listen Along</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23231f3d'/%3E%3Cpath d='M19 6a11 11 0 1 0 7 19.5A9 9 0 0 1 19 6z' fill='%23c9c2ff'/%3E%3Crect x='9' y='19' width='12' height='2.4' rx='1.2' fill='%23ffd58a'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f4fb;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-solid: #ffffff;
+  --border: rgba(35, 31, 61, 0.10);
+  --text: #1c1930;
+  --muted: #6a6585;
+  --faint: #a7a2bf;
+  --accent: #6c5ce7;
+  --accent-text: #ffffff;
+  --glow: #b4730b;
+  --line-on: #1c1930;
+  --warn-bg: #fff4dc;
+  --warn-text: #7a4b00;
+  --shadow: 0 10px 30px rgba(35, 31, 61, 0.10);
+  --backdrop-opacity: 0.30;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f0d1a;
+    --surface: rgba(28, 25, 46, 0.72);
+    --surface-solid: #1c192e;
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #f2f0fa;
+    --muted: #a39fbd;
+    --faint: #5d5878;
+    --accent: #a99dff;
+    --accent-text: #120f22;
+    --glow: #ffd58a;
+    --line-on: #ffffff;
+    --warn-bg: #3a2d12;
+    --warn-text: #ffd58a;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    --backdrop-opacity: 0.45;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f0d1a;
+  --surface: rgba(28, 25, 46, 0.72);
+  --surface-solid: #1c192e;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #f2f0fa;
+  --muted: #a39fbd;
+  --faint: #5d5878;
+  --accent: #a99dff;
+  --accent-text: #120f22;
+  --glow: #ffd58a;
+  --line-on: #ffffff;
+  --warn-bg: #3a2d12;
+  --warn-text: #ffd58a;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --backdrop-opacity: 0.45;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+}
+a { color: var(--accent); }
+[hidden] { display: none !important; }
+.backdrop {
+  position: fixed; inset: -60px;
+  background-size: cover; background-position: center;
+  filter: blur(60px) saturate(1.4);
+  opacity: 0; transition: opacity 0.8s ease;
+  pointer-events: none; z-index: 0;
+}
+.backdrop.on { opacity: var(--backdrop-opacity); }
+.wrap {
+  position: relative; z-index: 1;
+  max-width: 1040px; margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: 0.01em; margin-right: auto; min-width: 0; }
+.brand svg { flex: none; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.pill[data-s="live"] i { background: #2fbf71; box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.25); }
+.pill[data-s="paused"] i { background: var(--glow); }
+.pill[data-s="reconnecting"] i, .pill[data-s="connecting"] i { background: var(--glow); animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+.icon-btn {
+  flex: none; width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  display: grid; place-items: center; cursor: pointer; font: inherit;
+}
+.grid { display: grid; gap: 16px; }
+@media (min-width: 880px) {
+  .grid { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); align-items: start; }
+  .lyrics-card { position: sticky; top: 16px; }
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: var(--shadow); padding: 16px;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  min-width: 0;
+}
+.eyebrow { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.now { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; align-items: center; }
+@media (min-width: 880px) { .now { grid-template-columns: 1fr; } }
+.cover {
+  width: 100%; aspect-ratio: 1; border-radius: 14px; overflow: hidden;
+  background: linear-gradient(135deg, #6c5ce7, #231f3d 70%);
+  display: grid; place-items: center;
+}
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.meta { min-width: 0; }
+.meta h1 { margin: 0; font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+.meta p { margin: 2px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.meta .album { font-size: 14px; color: var(--faint); }
+.progress { margin-top: 14px; }
+.bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: var(--accent); }
+.times { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.listen { margin-top: 16px; }
+.primary {
+  width: 100%; min-height: 48px; border: 0; border-radius: 14px; cursor: pointer;
+  background: var(--accent); color: var(--accent-text);
+  font-family: inherit; font-size: 16px; font-weight: 650; line-height: 1;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.primary:disabled { opacity: 0.6; cursor: default; }
+.primary.on { opacity: 1; background: transparent; color: var(--accent); border: 1px solid var(--border); }
+.primary.on svg { display: none; }
+.embed { margin-top: 12px; border-radius: 12px; overflow: hidden; min-height: 152px; }
+.embed iframe { display: block; width: 100%; border: 0; }
+.note { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.warn { background: var(--warn-bg); color: var(--warn-text); padding: 8px 10px; border-radius: 10px; }
+.alt { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.alt a {
+  text-decoration: none; font-weight: 600; font-size: 13px;
+  padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-solid);
+}
+.lyrics-card { padding: 0; overflow: hidden; }
+.lyrics-head { display: flex; justify-content: space-between; align-items: baseline; padding: 16px 16px 0; }
+.lyrics-head .eyebrow { margin: 0; }
+.lyrics-box {
+  position: relative; height: 56vh; min-height: 280px; overflow-y: auto; padding: 24px 16px 40vh;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 60px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 60px), transparent 100%);
+  scrollbar-width: none;
+}
+@media (min-width: 880px) { .lyrics-box { height: calc(100vh - 140px); } }
+.lyrics-box::-webkit-scrollbar { display: none; }
+.lyrics { list-style: none; margin: 0; padding: 0; }
+.lyrics li {
+  font-size: 22px; line-height: 1.3; font-weight: 700; color: var(--faint);
+  padding: 7px 0; overflow-wrap: anywhere;
+  transition: color 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+  transform-origin: left center;
+}
+.lyrics li.past { opacity: 0.55; }
+.lyrics li.on { color: var(--line-on); transform: scale(1.04); }
+.lyrics li.on::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--glow); margin: 0 10px 0.2em 0; vertical-align: middle; }
+@media (min-width: 880px) { .lyrics li { font-size: 28px; } }
+.empty { padding: 32px 16px; color: var(--muted); text-align: center; }
+.notice { text-align: center; padding: 28px 16px; margin-bottom: 16px; }
+.notice h2 { margin: 0 0 6px; font-size: 20px; }
+.notice p { margin: 0; color: var(--muted); }
+footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="backdrop" id="backdrop"></div>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#231f3d"/><path d="M19 6a11 11 0 1 0 7 19.5A9 9 0 0 1 19 6z" fill="#c9c2ff"/><rect x="9" y="19" width="12" height="2.4" rx="1.2" fill="#ffd58a"/></svg>
+      <span>Lunalyr</span>
+    </div>
+    <span class="pill" id="pill" data-s="connecting" role="status"><i></i><span id="pillText">Connecting</span></span>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Theme: automatic" title="Theme: automatic">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+    </button>
+  </header>
+
+  <section class="card notice" id="notice" hidden>
+    <h2 id="noticeTitle"></h2>
+    <p id="noticeText"></p>
+  </section>
+
+  <div class="grid" id="main">
+    <section class="card">
+      <p class="eyebrow" id="hostLine">Listen along</p>
+      <div class="now">
+        <div class="cover" id="cover">
+          <svg width="40%" viewBox="0 0 32 32" aria-hidden="true"><path d="M19 6a11 11 0 1 0 7 19.5A9 9 0 0 1 19 6z" fill="rgba(255,255,255,0.55)"/></svg>
+        </div>
+        <div class="meta">
+          <h1 id="title">Connecting…</h1>
+          <p id="artist"></p>
+          <p class="album" id="album"></p>
+        </div>
+      </div>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><span id="barFill"></span></div>
+        <div class="times"><span id="tNow">0:00</span><span id="tDur">0:00</span></div>
+      </div>
+
+      <div class="listen" id="listen">
+        <button class="primary" id="startBtn" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+          <span id="startText">Start listening</span>
+        </button>
+        <div class="embed" id="embedWrap" hidden><div id="embed"></div></div>
+        <p class="note warn" id="embedMsg" hidden></p>
+        <p class="note">Music plays through Spotify’s player. Full songs need you to be logged in to Spotify in this browser; otherwise you’ll hear 30-second previews.</p>
+        <div class="alt" id="alt" hidden>
+          <span>Or open it in</span>
+          <a id="amLink" target="_blank" rel="noopener noreferrer" hidden>Apple Music</a>
+          <a id="ytLink" target="_blank" rel="noopener noreferrer" hidden>YouTube Music</a>
+          <a id="slLink" target="_blank" rel="noopener noreferrer" hidden>Other apps (song.link)</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="card lyrics-card">
+      <div class="lyrics-head"><p class="eyebrow">Lyrics</p></div>
+      <div class="lyrics-box" id="lyricsBox">
+        <ol class="lyrics" id="lyrics"></ol>
+        <p class="empty" id="noLyrics">Lyrics appear here when the host’s song has synced lyrics.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>Shared from Lunalyr. Nothing is stored about you; the room disappears when the host stops sharing.</footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const match = location.pathname.match(/^\/listen\/([a-z0-9]{10})\/?$/);
+  const room = match ? match[1] : null;
+
+  // ---- theme ---------------------------------------------------------------
+  const themes = ["auto", "light", "dark"];
+  let theme = "auto";
+  try { theme = localStorage.getItem("lunalyr-theme") || "auto"; } catch (e) {}
+  function applyTheme() {
+    if (theme === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    const label = "Theme: " + (theme === "auto" ? "automatic" : theme);
+    $("themeBtn").setAttribute("aria-label", label);
+    $("themeBtn").title = label;
+  }
+  $("themeBtn").addEventListener("click", () => {
+    theme = themes[(themes.indexOf(theme) + 1) % themes.length];
+    try { localStorage.setItem("lunalyr-theme", theme); } catch (e) {}
+    applyTheme();
+  });
+  applyTheme();
+
+  // ---- state ---------------------------------------------------------------
+  let state = null;          // last state message
+  let base = null;           // { pos, at, playing }: host position at local time `at`
+  let trackKey = null;       // title + artist of the current track
+  let lyrics = [];
+  let info = {};             // per track: spotifyId, appleId, links
+  let ws = null;
+  let retry = 0;
+  let retryTimer = null;
+  let finished = false;
+  let gotState = false;
+
+  const clock = () => performance.now() / 1000;
+  function hostPos() {
+    if (!base) return 0;
+    let p = base.pos + (base.playing ? clock() - base.at : 0);
+    const d = state && state.track && Number(state.track.duration);
+    if (d > 0) p = Math.min(p, d);
+    return Math.max(0, p);
+  }
+  function fmt(s) {
+    s = Math.max(0, Math.floor(s || 0));
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
+  function setStatus(s) {
+    const labels = { connecting: "Connecting", reconnecting: "Reconnecting", waiting: "Waiting for host", live: "Live", paused: "Paused", idle: "Nothing playing", full: "Room full", ended: "Ended" };
+    $("pill").dataset.s = s;
+    $("pillText").textContent = labels[s] || s;
+  }
+  function liveStatus() {
+    if (!state) return "waiting";
+    if (!state.track) return "idle";
+    return state.playing ? "live" : "paused";
+  }
+  function showNotice(title, text) {
+    $("noticeTitle").textContent = title;
+    $("noticeText").textContent = text;
+    $("notice").hidden = false;
+  }
+
+  // ---- connection ----------------------------------------------------------
+  function connect() {
+    if (finished || !room) return;
+    clearTimeout(retryTimer);
+    setStatus(retry === 0 && !gotState ? "connecting" : "reconnecting");
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(proto + "//" + location.host + "/rooms/" + room + "/listen");
+    ws = socket;
+    socket.onopen = () => {
+      retry = 0;
+      $("notice").hidden = true;
+      setStatus(liveStatus());
+      if (!state) $("title").textContent = "Waiting for the host…";
+    };
+    socket.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (!msg || typeof msg !== "object") return;
+      if (msg.type === "state") applyState(msg);
+      else if (msg.type === "ended") finish("ended");
+    };
+    socket.onclose = (ev) => {
+      if (ws !== socket || finished) return;
+      ws = null;
+      if (ev.code === 4404) return finish(gotState ? "ended" : "unknown");
+      if (ev.code === 1000 && ev.reason === "ended") return finish("ended");
+      if (ev.code === 4429) {
+        setStatus("full");
+        showNotice("This room is full", "Up to 50 people can listen along at once. Trying again shortly…");
+        retryTimer = setTimeout(connect, 30000);
+        return;
+      }
+      setStatus("reconnecting");
+      const delay = Math.min(15000, 1000 * Math.pow(2, retry++));
+      retryTimer = setTimeout(connect, delay);
+    };
+  }
+  function reconnectNow() {
+    if (!finished && !ws && document.visibilityState === "visible") { retry = 0; connect(); }
+  }
+  window.addEventListener("online", reconnectNow);
+  document.addEventListener("visibilitychange", reconnectNow);
+
+  function finish(kind) {
+    finished = true;
+    clearTimeout(retryTimer);
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    setStatus("ended");
+    if (kind === "unknown") {
+      showNotice("This listen-along isn’t active", "The link may be incomplete, or the host stopped sharing a while ago.");
+      $("main").hidden = true;
+    } else {
+      showNotice("The listen-along has ended", "The host stopped sharing. Thanks for listening!");
+    }
+    if (base) base.playing = false;
+    pauseEmbed();
+  }
+
+  // ---- state handling ------------------------------------------------------
+  function keyOf(t) { return t ? JSON.stringify([t.title || "", t.artist || ""]) : null; }
+
+  function applyState(msg) {
+    gotState = true;
+    const t = msg.track && typeof msg.track === "object" ? msg.track : null;
+    const key = keyOf(t);
+    const changed = key !== trackKey;
+    state = msg;
+    base = { pos: (Number(msg.position) || 0) + (Number(msg.age) || 0) / 1000, at: clock(), playing: !!msg.playing && !!t };
+
+    if (Array.isArray(msg.lyrics)) setLyrics(msg.lyrics);
+    else if (changed) setLyrics([]);
+
+    if (changed) { trackKey = key; showTrack(t); }
+    else if (t && t.spotifyId && !info.spotifyId) { info.spotifyId = String(t.spotifyId); resolveLinks(t, key); }
+
+    const name = msg.host && typeof msg.host.name === "string" ? msg.host.name.trim() : "";
+    $("hostLine").textContent = name ? "Listening along with " + name : "Listen along";
+    setStatus(liveStatus());
+    render();
+    syncEmbed();
+  }
+
+  function showTrack(t) {
+    $("progress").hidden = !t;
+    setCover(null);
+    $("alt").hidden = true;
+    for (const id of ["amLink", "ytLink", "slLink"]) $(id).hidden = true;
+    $("embedMsg").hidden = true;
+    if (!t) {
+      info = {};
+      $("title").textContent = "Nothing playing right now";
+      $("artist").textContent = "The music will appear here when the host plays something.";
+      $("album").textContent = "";
+      document.title = "Lunalyr Listen Along";
+      return;
+    }
+    info = {
+      spotifyId: typeof t.spotifyId === "string" && /^[A-Za-z0-9]{22}$/.test(t.spotifyId) ? t.spotifyId : null,
+      appleId: Number(t.appleId) > 0 ? Number(t.appleId) : null,
+    };
+    $("title").textContent = t.title || "Unknown title";
+    $("artist").textContent = t.artist || "";
+    $("album").textContent = t.album || "";
+    document.title = (t.title || "Listen along") + (t.artist ? " · " + t.artist : "") + " · Lunalyr";
+    resolveTrack(t, trackKey);
+  }
+
+  function setCover(url) {
+    const box = $("cover");
+    const bd = $("backdrop");
+    if (!url) {
+      box.querySelectorAll("img").forEach((n) => n.remove());
+      box.firstElementChild && (box.firstElementChild.style.display = "");
+      bd.classList.remove("on");
+      return;
+    }
+    const img = new Image();
+    img.alt = "";
+    img.referrerPolicy = "no-referrer";
+    img.onload = () => {
+      box.querySelectorAll("img").forEach((n) => n.remove());
+      const ph = box.querySelector("svg");
+      if (ph) ph.style.display = "none";
+      box.appendChild(img);
+      bd.style.backgroundImage = "url(\"" + url.replace(/["\\]/g, "") + "\")";
+      bd.classList.add("on");
+    };
+    img.src = url;
+  }
+
+  async function getJSON(url) {
+    const res = await fetch(url, { referrerPolicy: "no-referrer" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  const httpsURL = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
+  const norm = (s) => String(s || "").toLowerCase().replace(/\s*[\(\[].*?[\)\]]\s*/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+  // Cover and Apple ID from iTunes (lookup by ID, else search), then links.
+  async function resolveTrack(t, key) {
+    let art = null;
+    try {
+      const url = info.appleId
+        ? "https://itunes.apple.com/lookup?id=" + encodeURIComponent(info.appleId)
+        : "https://itunes.apple.com/search?entity=song&limit=10&term=" + encodeURIComponent((t.artist || "") + " " + (t.title || ""));
+      const data = await getJSON(url);
+      const results = (data.results || []).filter((r) => r.kind === "song" || r.wrapperType === "track");
+      const want = norm(t.title), wantArtist = norm(t.artist);
+      const hit = info.appleId ? results[0]
+        : results.find((r) => norm(r.trackName) === want && norm(r.artistName).includes(wantArtist.split(" ")[0] || ""))
+          || results.find((r) => norm(r.trackName) === want) || null;
+      if (hit) {
+        if (!info.appleId && hit.trackId) info.appleId = hit.trackId;
+        info.appleURL = httpsURL(hit.trackViewUrl);
+        if (hit.artworkUrl100) art = String(hit.artworkUrl100).replace(/\/\d+x\d+(bb)?\.(jpg|png|webp)$/, "/600x600bb.jpg");
+      }
+    } catch (e) { /* offline or blocked; keep the placeholder */ }
+    if (key !== trackKey) return;
+    if (art) setCover(art);
+    await resolveLinks(t, key);
+  }
+
+  // song.link: the Spotify ID when the host didn't send one, and links to other services.
+  async function resolveLinks(t, key) {
+    let query = null;
+    // Only needed when the host sent no Spotify ID; the other links have plain fallbacks.
+    if (info.spotifyId) query = null;
+    else if (info.appleId) query = "url=" + encodeURIComponent("https://music.apple.com/us/song/" + info.appleId);
+    if (query && !info.linksTried) {
+      info.linksTried = true;
+      try {
+        const data = await getJSON("https://api.song.link/v1-alpha.1/links?" + query);
+        if (key !== trackKey) return;
+        const links = data.linksByPlatform || {};
+        const sp = links.spotify && httpsURL(links.spotify.url);
+        const m = sp && sp.match(/\/track\/([A-Za-z0-9]{22})/);
+        if (m && !info.spotifyId) info.spotifyId = m[1];
+        info.amURL = links.appleMusic && httpsURL(links.appleMusic.url);
+        info.ytURL = links.youtubeMusic && httpsURL(links.youtubeMusic.url);
+        info.pageURL = httpsURL(data.pageUrl);
+        if (!$("cover").querySelector("img") && data.entitiesByUniqueId) {
+          const ent = Object.values(data.entitiesByUniqueId).find((x) => x && httpsURL(x.thumbnailUrl));
+          if (ent) setCover(ent.thumbnailUrl);
+        }
+      } catch (e) { /* song.link unavailable: fall back to plain links below */ }
+    }
+    if (key !== trackKey) return;
+    showLinks(t);
+    syncEmbed();
+  }
+
+  function showLinks(t) {
+    const q = encodeURIComponent(((t.artist || "") + " " + (t.title || "")).trim());
+    const am = info.amURL || info.appleURL || (info.appleId ? "https://music.apple.com/us/song/" + info.appleId : null);
+    const yt = info.ytURL || "https://music.youtube.com/search?q=" + q;
+    const sl = info.pageURL || (info.spotifyId ? "https://song.link/s/" + info.spotifyId : info.appleId ? "https://song.link/i/" + info.appleId : null);
+    const set = (id, url) => { const a = $(id); if (url) { a.href = url; a.hidden = false; } else a.hidden = true; };
+    set("amLink", am); set("ytLink", yt); set("slLink", sl);
+    $("alt").hidden = false;
+    if (started && !info.spotifyId) {
+      embedMessage("This song couldn’t be found on Spotify from here. Try one of the links below.");
+    }
+  }
+
+  // ---- lyrics --------------------------------------------------------------
+  let currentLine = -2;
+  let userScrollUntil = 0;
+  function setLyrics(list) {
+    lyrics = list
+      .filter((l) => l && Number.isFinite(Number(l.start)))
+      .map((l) => ({ start: Number(l.start), end: Number.isFinite(Number(l.end)) ? Number(l.end) : null, text: String(l.text || "") }))
+      .sort((a, b) => a.start - b.start);
+    const ol = $("lyrics");
+    ol.textContent = "";
+    lyrics.forEach((l, i) => {
+      const li = document.createElement("li");
+      li.textContent = l.text.trim() || "♪";
+      if (!l.end) l.end = i + 1 < lyrics.length ? lyrics[i + 1].start : l.start + 6;
+      ol.appendChild(li);
+    });
+    $("noLyrics").hidden = lyrics.length > 0;
+    $("noLyrics").textContent = state && state.track ? "No synced lyrics for this song." : "Lyrics appear here when the host plays a song with synced lyrics.";
+    currentLine = -2;
+    $("lyricsBox").scrollTop = 0;
+  }
+  ["wheel", "touchmove"].forEach((ev) => $("lyricsBox").addEventListener(ev, () => { userScrollUntil = clock() + 4; }, { passive: true }));
+
+  function render() {
+    const t = state && state.track;
+    const pos = hostPos();
+    if (t) {
+      const d = Number(t.duration) || 0;
+      $("tNow").textContent = fmt(pos);
+      $("tDur").textContent = d ? fmt(d) : "–:––";
+      $("barFill").style.width = d ? Math.min(100, (pos / d) * 100) + "%" : "0%";
+    }
+    // The current line: the last one that has started; between lines, none.
+    let idx = -1, upcoming = 0;
+    for (let i = 0; i < lyrics.length; i++) {
+      if (lyrics[i].start <= pos) { upcoming = i + 1; if (pos < lyrics[i].end) idx = i; } else break;
+    }
+    if (idx === currentLine) return;
+    currentLine = idx;
+    const items = $("lyrics").children;
+    for (let i = 0; i < items.length; i++) {
+      items[i].classList.toggle("on", i === idx);
+      items[i].classList.toggle("past", i < upcoming && i !== idx);
+    }
+    const focus = items[idx >= 0 ? idx : Math.min(upcoming, items.length - 1)];
+    if (focus && clock() > userScrollUntil) {
+      const box = $("lyricsBox");
+      box.scrollTo({ top: focus.offsetTop - box.clientHeight * 0.35, behavior: "smooth" });
+    }
+  }
+  setInterval(render, 200);
+
+  // ---- Spotify embed -------------------------------------------------------
+  let started = false;
+  let api = null;
+  let controller = null;
+  let embedReady = false;
+  let loadedUri = null;
+  let pb = null;             // last playback_update: { pos, dur, paused, buffering, at }
+  let lastToggle = -99, lastSeek = -99, lastKick = -99;
+  let previewNoted = false;
+  let previewEnded = false;  // a 30 s preview played out; don't restart it over and over
+
+  function embedMessage(text) {
+    $("embedMsg").textContent = text;
+    $("embedMsg").hidden = !text;
+  }
+
+  $("startBtn").addEventListener("click", () => {
+    started = true;
+    $("startBtn").disabled = true;
+    $("startText").textContent = "Loading Spotify…";
+    $("embedWrap").hidden = false;
+    if (state && state.track && !info.spotifyId && info.linksTried) {
+      embedMessage("This song couldn’t be found on Spotify from here. Try one of the links below.");
+    }
+    if (document.getElementById("spotify-iframe-api")) return;
+    window.onSpotifyIframeApiReady = (IFrameAPI) => { api = IFrameAPI; syncEmbed(); };
+    const s = document.createElement("script");
+    s.id = "spotify-iframe-api";
+    s.src = "https://open.spotify.com/embed/iframe-api/v1";
+    s.async = true;
+    s.onerror = () => {
+      $("startText").textContent = "Spotify unavailable";
+      embedMessage("Spotify’s player couldn’t load. A content blocker or network filter may be stopping it.");
+    };
+    document.body.appendChild(s);
+    setTimeout(() => {
+      if (!embedReady && !(state && state.track && !info.spotifyId)) {
+        embedMessage("Spotify’s player is taking a while. A content blocker may be stopping it; the links below still work.");
+        $("alt").hidden = false;
+      }
+    }, 15000);
+  });
+
+  function createController(id) {
+    const uri = "spotify:track:" + id;
+    loadedUri = uri;
+    api.createController($("embed"), { uri: uri, width: "100%", height: 152 }, (c) => {
+      controller = c;
+      c.addListener("ready", () => {
+        embedReady = true;
+        $("startText").textContent = "Listening along";
+        $("startBtn").classList.add("on");
+        syncEmbed();
+      });
+      c.addListener("playback_update", (e) => {
+        const d = (e && e.data) || {};
+        pb = {
+          pos: (Number(d.position) || 0) / 1000,
+          dur: (Number(d.duration) || 0) / 1000,
+          paused: !!d.isPaused,
+          buffering: !!d.isBuffering,
+          at: clock(),
+        };
+        syncEmbed();
+      });
+    });
+  }
+
+  function pauseEmbed() {
+    if (controller && embedReady && pb && !pb.paused) { try { controller.togglePlay(); } catch (e) {} lastToggle = clock(); }
+  }
+
+  // Keep the embed on the host's track, playing state and position.
+  function syncEmbed() {
+    if (!started || !api) return;
+    const t = state && state.track;
+    const id = info.spotifyId;
+    if (!controller) { if (t && id && !finished) createController(id); return; }
+    if (!embedReady) return;
+    const now = clock();
+    const want = !!(base && base.playing) && !finished;
+    if (!t || !id) { if (pb && !pb.paused && now - lastToggle > 2) pauseEmbed(); return; }
+
+    const uri = "spotify:track:" + id;
+    if (uri !== loadedUri) {
+      loadedUri = uri;
+      pb = null;
+      previewNoted = false;
+      previewEnded = false;
+      lastKick = now;
+      controller.loadUri(uri, false, Math.floor(hostPos()));
+      if (want) controller.play();
+      return;
+    }
+    if (!pb) {
+      // Nothing heard from the player since loading: give it a nudge.
+      if (want && now - lastKick > 4) { lastKick = now; controller.play(); }
+      return;
+    }
+
+    const hostDur = Number(t.duration) || 0;
+    const preview = pb.dur > 0 && pb.dur < 31 && hostDur > 45;
+    if (preview && !previewNoted) {
+      previewNoted = true;
+      embedMessage("You’re hearing a 30-second preview. Log in at open.spotify.com in this browser, then reload this page, for the full song in time with the host.");
+    } else if (!preview && previewNoted) {
+      previewNoted = false;
+      embedMessage("");
+    }
+
+    if (preview && pb.pos >= pb.dur - 1) previewEnded = true;
+    if (want === pb.paused) {
+      if (want && preview && previewEnded) return;
+      if (now - lastToggle > 2.5) { lastToggle = now; controller.togglePlay(); }
+      return;
+    }
+    if (preview || pb.buffering) return;
+    const embedPos = pb.pos + (pb.paused ? 0 : now - pb.at);
+    const target = hostPos();
+    if (Math.abs(embedPos - target) > 2 && now - lastSeek > 3) {
+      lastSeek = now;
+      controller.seek(Math.max(0, target));
+    }
+  }
+  setInterval(syncEmbed, 1000);
+
+  // ---- start ---------------------------------------------------------------
+  if (!room) {
+    finish("unknown");
+  } else {
+    connect();
+  }
+})();
+</script>
+</body>
+</html>
