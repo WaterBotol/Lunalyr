@@ -107,7 +107,7 @@ final class DesktopPlayerModel: ObservableObject {
         historyCount += 1
         history.append(PlayerQueueItem(id: "h-\(historyCount)", title: previous.title, artist: previous.artist,
                                        index: 0, persistentID: previous.persistentID))
-        if history.count > 12 { history.removeFirst(history.count - 12) }
+        if history.count > 24 { history.removeFirst(history.count - 24) }
         recompose()
     }
 
@@ -115,11 +115,18 @@ final class DesktopPlayerModel: ObservableObject {
     /// then what the playlist says comes next.
     private func recompose() {
         guard let nowIndex = fetched.firstIndex(where: \.isCurrent) else { queue = fetched; return }
-        var before = Array(history.suffix(8)).filter { $0.persistentID == nil || $0.persistentID != fetched[nowIndex].persistentID }
-        // Nothing has played since launch: the playlist's own earlier songs
-        // are the best guess, unless shuffle makes them meaningless.
-        if before.isEmpty { before = Array(fetched[..<nowIndex]) }
-        queue = before + [fetched[nowIndex]] + fetched[(nowIndex + 1)...]
+        let now = fetched[nowIndex]
+        let after = Array(fetched[(nowIndex + 1)...])
+        var before = Array(history.suffix(24)).filter { $0.persistentID == nil || $0.persistentID != now.persistentID }
+        // As many before as after: where less has played than is queued, the
+        // playlist's own earlier songs fill in the older end.
+        let missing = after.count - before.count
+        if missing > 0 {
+            let known = Set(before.compactMap(\.persistentID))
+            let earlier = fetched[..<nowIndex].filter { $0.persistentID.map { !known.contains($0) } ?? true }
+            before = Array(earlier.suffix(missing)) + before
+        }
+        queue = before + [now] + after
     }
 
     /// Reloads the strip: the songs before this one, this one, the songs after.

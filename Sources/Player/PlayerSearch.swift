@@ -279,7 +279,7 @@ struct AppleMusicSearch: PlayerSearching {
         set total to count of tracks of listing
         set upTo to here + 24
         if upTo > total then set upTo to total
-        set fromHere to here - 8
+        set fromHere to here - 24
         if fromHere < 1 then set fromHere to 1
         repeat with i from fromHere to upTo
         set t to track i of listing

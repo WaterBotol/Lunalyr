@@ -275,6 +275,7 @@ private struct CoverStrip: View {
     @State private var lastTime: TimeInterval = 0
     @State private var decay: Task<Void, Never>?
     @State private var wheel = WheelBridge()
+    @State private var noteShown = false
 
     private var currentID: String? { items.first(where: \.isCurrent)?.id ?? items.first?.id }
 
@@ -347,10 +348,27 @@ private struct CoverStrip: View {
             }
         }
         .overlay(alignment: .top) {
-            if let note {
+            if let note, noteShown {
                 Text(note).font(.system(size: 10)).foregroundStyle(.white.opacity(0.8))
                     .padding(.horizontal, 10).padding(.vertical, 3)
                     .background(.ultraThinMaterial, in: Capsule())
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.3), value: noteShown)
+        // The shuffle note shows for a moment each time the player opens.
+        .onChange(of: recenter) { _, _ in
+            noteShown = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                noteShown = false
+            }
+        }
+        .onAppear {
+            noteShown = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                noteShown = false
             }
         }
         }
