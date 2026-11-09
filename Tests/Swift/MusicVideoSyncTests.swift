@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import VersoCustom
 
@@ -735,5 +736,73 @@ final class MusicVideoSyncTests: XCTestCase {
         controller.update(track: nil, enabled: true, online: false)
         XCTAssertEqual(controller.tapState, .idle, "a song change ends it")
         XCTAssertFalse(controller.canTapSync)
+    }
+
+    func testOnlyPlainKeysOutsideTextInputCountAsTheTap() {
+        func action(_ code: UInt16, _ modifiers: NSEvent.ModifierFlags = [], repeat isRepeat: Bool = false,
+                    typing: Bool = false) -> MusicVideoTapSync.KeyAction {
+            MusicVideoTapSync.keyAction(keyCode: code, modifiers: modifiers, isRepeat: isRepeat, textInputFocused: typing)
+        }
+        XCTAssertEqual(action(49), .tap, "space")
+        XCTAssertEqual(action(0, .shift), .tap, "a shifted letter is still a plain key")
+        XCTAssertEqual(action(126, .function), .tap, "an arrow key")
+        XCTAssertEqual(action(53), .cancel, "Esc")
+        XCTAssertEqual(action(49, typing: true), .pass, "typing in a text field")
+        XCTAssertEqual(action(53, typing: true), .pass)
+        XCTAssertEqual(action(9, .command), .pass, "Command-V")
+        XCTAssertEqual(action(8, .control), .pass)
+        XCTAssertEqual(action(0, .option), .pass)
+        XCTAssertEqual(action(55, .command), .pass, "Command alone")
+        XCTAssertEqual(action(56, .shift), .pass, "Shift alone")
+        XCTAssertEqual(action(49, repeat: true), .pass, "a held key")
+    }
+
+    func testAMissedBriefListenIsTriedOnceWhenPlaybackResumes() async {
+        let autoSync = FakeAutoSync()
+        let listener = FakeListener()
+        listener.mayListen = false
+        let controller = controller(resolver(library: NoLibrary(video: libraryURL)), autoSync, listener: listener)
+        controller.update(track: track, enabled: true, online: false)
+        await controller.settle()
+        XCTAssertTrue(listener.starts.isEmpty, "paused when the video started")
+        controller.playbackChanged(playing: false)
+        listener.mayListen = true
+        controller.playbackChanged(playing: true)
+        await controller.settle()
+        XCTAssertEqual(listener.starts.count, 1, "tried on resume")
+        XCTAssertFalse(listener.running)
+        controller.playbackChanged(playing: false)
+        controller.playbackChanged(playing: true)
+        await controller.settle()
+        XCTAssertEqual(listener.starts.count, 1, "once")
+
+        // Still not allowed on resume: not tried on every later resume.
+        let blocked = FakeListener()
+        blocked.mayListen = false
+        let other = self.controller(resolver(library: NoLibrary(video: libraryURL)), FakeAutoSync(), listener: blocked)
+        other.update(track: track, enabled: true, online: false)
+        await other.settle()
+        other.playbackChanged(playing: true)
+        await other.settle()
+        blocked.mayListen = true
+        other.playbackChanged(playing: true)
+        await other.settle()
+        XCTAssertTrue(blocked.starts.isEmpty, "the resume try is spent")
+
+        // An offset found meanwhile needs no listening.
+        let found = FakeListener()
+        found.mayListen = false
+        let suite = "LunalyrTests.MusicVideoSync.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let offsets = MusicVideoOffsets(defaults: UserDefaults(suiteName: suite)!)
+        let third = self.controller(resolver(library: NoLibrary(video: libraryURL)), FakeAutoSync(), offsets: offsets,
+                                    listener: found)
+        third.update(track: track, enabled: true, online: false)
+        await third.settle()
+        third.nudgeOffset(by: 2)
+        found.mayListen = true
+        third.playbackChanged(playing: true)
+        await third.settle()
+        XCTAssertTrue(found.starts.isEmpty)
     }
 }

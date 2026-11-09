@@ -70,6 +70,10 @@ final class MusicVideoController: ObservableObject {
     /// Song and video pairs listened to already: once each.
     private var listened: Set<String> = []
     private var listenToken: UUID?
+    /// A library video's brief listen that could not start (paused, say):
+    /// tried once more when playback resumes.
+    private var missedListen: String?
+    private var resumeRetried: Set<String> = []
     /// The longest a brief listen runs.
     static let listenLimit: TimeInterval = 25
 
@@ -111,6 +115,12 @@ final class MusicVideoController: ObservableObject {
 
     func start(monitor: NowPlayingMonitor, settings: Settings) {
         guard cancellables.isEmpty else { return }
+        monitor.$isPlaying.removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] playing in
+                MainActor.assumeIsolated { self?.playbackChanged(playing: playing) }
+            }
+            .store(in: &cancellables)
         Publishers.CombineLatest3(monitor.$current.removeDuplicates(by: Self.sameSong),
                                   settings.$backgroundMode.removeDuplicates(),
                                   settings.$musicVideoOnline.removeDuplicates())
@@ -392,6 +402,18 @@ final class MusicVideoController: ObservableObject {
         if currentOffset != before { objectWillChange.send() }
     }
 
+    /// Playback resumed: a library video whose brief listen could not start
+    /// gets it now, once.
+    func playbackChanged(playing: Bool) {
+        guard playing, let pair = missedListen, let song, case .showing(let source, _) = status,
+              let video = MusicVideoOffsets.videoKey(source), pair == song.key + "\u{0}" + video,
+              !offsets.hasManual(song.key), offsets.automaticEntry(for: song.key, video: video, now: now()) == nil
+        else { return }
+        missedListen = nil
+        resumeRetried.insert(pair)
+        startAutoSync(song, source, force: false)
+    }
+
     private func stopAutoSync() {
         syncTask?.cancel()
         syncTask = nil
@@ -446,7 +468,12 @@ final class MusicVideoController: ObservableObject {
         syncing = true
         let pair = song.key + "\u{0}" + video
         var briefly = false
-        if case .local = source { briefly = shouldListen(pair, force: force) }
+        if case .local = source {
+            briefly = shouldListen(pair, force: force)
+            missedListen = !briefly && listener != nil && !listened.contains(pair) && !resumeRetried.contains(pair) ? pair : nil
+        } else {
+            missedListen = nil
+        }
         syncTask = Task { [weak self] in
             let result: MusicVideoAutoResult
             switch source {
@@ -587,9 +614,14 @@ final class MusicVideoController: ObservableObject {
         guard !AppRuntime.isUnitTesting else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             MainActor.assumeIsolated {
-                guard let self, case .armed = self.tapState, !event.isARepeat else { return event }
-                if event.keyCode == 53 { self.cancelTapSync() } else { self.tap() }
-                return nil
+                guard let self, case .armed = self.tapState else { return event }
+                let typing = (event.window ?? NSApp.keyWindow)?.firstResponder is NSText
+                switch MusicVideoTapSync.keyAction(keyCode: event.keyCode, modifiers: event.modifierFlags,
+                                                   isRepeat: event.isARepeat, textInputFocused: typing) {
+                case .pass: return event
+                case .cancel: self.cancelTapSync(); return nil
+                case .tap: self.tap(); return nil
+                }
             }
         }
         tapExpiry = Task { [weak self] in

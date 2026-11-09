@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 // Two sync aids for the music video:
@@ -109,6 +110,28 @@ enum MusicVideoTapSync {
         if abs(offset) < 0.05 { return "Video starts with the song" }
         return String(format: "Video starts %.1f s %@", abs(offset), offset > 0 ? "ahead" : "behind")
     }
+
+    enum KeyAction: Equatable {
+        /// Not for Tap to sync: the key goes where it was going.
+        case pass
+        case tap
+        case cancel
+    }
+
+    /// What a key press does while armed. Only plain keys count, and never
+    /// while a text field has focus (it is typing): Command, Control and
+    /// Option shortcuts, modifier keys alone and repeats pass through. Esc
+    /// cancels.
+    static func keyAction(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, isRepeat: Bool,
+                          textInputFocused: Bool) -> KeyAction {
+        if textInputFocused || isRepeat { return .pass }
+        if !modifiers.intersection([.command, .control, .option]).isEmpty && keyCode != 53 { return .pass }
+        if modifierKeyCodes.contains(keyCode) { return .pass }
+        return keyCode == 53 ? .cancel : .tap
+    }
+
+    /// Shift, Control, Option, Command (both sides), Caps Lock and Fn.
+    static let modifierKeyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
 
     /// The button's title for each state.
     static func buttonTitle(_ state: MusicVideoTapState) -> String {
