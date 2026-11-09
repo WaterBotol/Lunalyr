@@ -66,10 +66,18 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var textScale: Double {
         didSet { UserDefaults.standard.set(textScale, forKey: Keys.textScale); schedulePreview() }
     }
-    /// How loud the song is in the MP4 (0 to 1.5).
+    /// How loud the song is in the MP4: a slider position from 0 to 1.5, shown in dB.
     @Published var soundVolume = 1.0
     /// How loud the background video's own sound is.
     @Published var backgroundVolume = 1.0
+    /// Lowers the song while the background video's own sound plays.
+    @Published var duckSong = false
+    /// What decides the MP4's length, when the background is a video over two seconds.
+    @Published var clipLength: ClipLength = .matchBackground { didSet { schedulePreview() } }
+    /// Keeps the MP4 to 60 seconds.
+    @Published var capsLength = false { didSet { schedulePreview() } }
+    /// The MP4's length for the current choices.
+    @Published var clipPlan: LyricCard.ClipPlan?
     /// The song's own sound for the selected lines, once fetched or recorded.
     @Published var songClip: SongAudioClip?
     /// The stretch of the song the selected lines need.
@@ -258,7 +266,11 @@ final class LyricCardPopoutModel: ObservableObject {
         content?.textScale = textScale
         content?.backgroundVolume = backgroundVolume
         content?.extraSounds = soundFiles.map { LyricCard.SoundTrack(url: $0.url, volume: $0.volume) }
-        content?.songAudio = useSong && !songNeedsFetching ? songClip : nil
+        // A recording that covers only some of the lines leaves the rest silent (the export says so).
+        content?.songAudio = useSong ? songClip : nil
+        content?.duckSong = duckSong
+        content?.clipLength = clipLength
+        content?.capsLength = capsLength
         return content
     }
 
@@ -268,6 +280,7 @@ final class LyricCardPopoutModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 120_000_000)
             guard let self, !Task.isCancelled, var content = self.content() else { self?.preview = nil; return }
             self.songRange = LyricCard.songRange(content)
+            self.clipPlan = LyricCard.clipPlan(content)
             content.pages = [content.stillPage]
             self.preview = LyricCard.image(content, scale: 0.4)
         }
@@ -339,6 +352,19 @@ struct LyricCardPopoutView: View {
             Slider(value: value, in: range)
             Text("\(Int((value.wrappedValue * 100).rounded()))%")
                 .monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+        }
+        .controlSize(.small)
+    }
+
+    /// A sound's level: the slider runs 0 to 150% and shows the gain in dB
+    /// (0 dB is level with the other sounds; 150% is +12 dB).
+    private func soundLevelRow<Title: View>(value: Binding<Double>, @ViewBuilder title: () -> Title) -> some View {
+        HStack(spacing: 8) {
+            title().frame(width: 110, alignment: .leading)
+            Slider(value: value, in: 0...LyricCardMix.maximumLevel)
+            Text(LyricCardMix.label(forLevel: value.wrappedValue))
+                .monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
+                .help("\(Int((value.wrappedValue * 100).rounded()))%")
         }
         .controlSize(.small)
     }
@@ -424,6 +450,17 @@ struct LyricCardPopoutView: View {
                 if model.background != nil { Button("Remove") { model.clearBackground() }.controlSize(.small) }
                 Button("Choose…") { model.chooseBackground() }.controlSize(.small)
             }
+            Text("Clip length (MP4)").lunalyrText(.groupTitle)
+            if model.clipPlan?.offersChoice == true {
+                Picker("Clip length", selection: $model.clipLength) {
+                    ForEach(ClipLength.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden().controlSize(.small)
+            }
+            Toggle("Max 60 s", isOn: $model.capsLength).toggleStyle(.checkbox)
+            if let plan = model.clipPlan {
+                Text(plan.summary).lunalyrText(.caption)
+            }
             Text("Sound (MP4 only)").lunalyrText(.groupTitle)
             Text("Mix as many as you like: the song, a background video’s sound, and audio files.").lunalyrText(.caption)
             Toggle("The song", isOn: $model.useSong).toggleStyle(.checkbox)
@@ -441,19 +478,21 @@ struct LyricCardPopoutView: View {
                             .controlSize(.small).disabled(model.songRange == nil)
                     }
                 }
-                levelRow("Song level", value: $model.soundVolume)
+                soundLevelRow(value: $model.soundVolume) { Text("Song level") }
+                if model.background?.hasAudio == true {
+                    Toggle("Duck the song under the video’s sound", isOn: $model.duckSong).toggleStyle(.checkbox)
+                }
                 Text("Uses the song’s own file when it has one. Otherwise it plays the selected lines once and records them, which takes as long as they last. You’ll hear it, and macOS may ask to allow audio recording.")
                     .lunalyrText(.caption)
             }
             if model.background?.hasAudio == true {
-                levelRow("Background video", value: $model.backgroundVolume)
+                soundLevelRow(value: $model.backgroundVolume) { Text("Background video") }
             }
             ForEach($model.soundFiles) { $file in
                 HStack(spacing: 8) {
-                    Text(file.url.lastPathComponent).lineLimit(1).truncationMode(.middle).frame(width: 110, alignment: .leading)
-                    Slider(value: $file.volume, in: 0...1.5)
-                    Text("\(Int((file.volume * 100).rounded()))%")
-                        .monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+                    soundLevelRow(value: $file.volume) {
+                        Text(file.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
+                    }
                     Button { model.removeSound(file.id) } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless).accessibilityLabel("Remove \(file.url.lastPathComponent)")
                 }
