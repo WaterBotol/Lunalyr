@@ -282,8 +282,9 @@ enum MusicVideoDrift {
     ///   - sinceLastSeek: seconds since the last seek this loop issued.
     ///   - seekLead: added to a seek target, for players that take a moment
     ///     to resume after seeking.
+    ///   - threshold: drift sought away while playing (`seekThreshold`).
     static func decide(target: Double?, sample: Sample, shouldPlay: Bool, sinceLastSeek: Double,
-                       seekLead: Double = 0) -> Action {
+                       seekLead: Double = 0, threshold: Double = seekThreshold) -> Action {
         guard let target else {
             return sample.videoPlaying ? .pause : .none
         }
@@ -294,7 +295,7 @@ enum MusicVideoDrift {
             if settled && abs(drift) > pausedThreshold { return .seek(to: target, thenPlay: false) }
             return .none
         }
-        if settled && !sample.buffering && abs(drift) > seekThreshold {
+        if settled && !sample.buffering && abs(drift) > threshold {
             return .seek(to: target + seekLead, thenPlay: true)
         }
         return sample.videoPlaying || sample.buffering ? .none : .play

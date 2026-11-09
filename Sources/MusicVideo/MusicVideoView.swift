@@ -100,11 +100,21 @@ protocol MusicVideoPlaybackSurface: AnyObject {
     func playVideo()
     func pauseVideo()
     func seekVideo(to seconds: Double)
+    /// How drift is corrected on this player.
+    var correctionStyle: MusicVideoCorrectionStyle { get }
+    /// Plays a little faster or slower; only asked of `.rate` players.
+    func setVideoRate(_ rate: Double)
+}
+
+extension MusicVideoPlaybackSurface {
+    var correctionStyle: MusicVideoCorrectionStyle { .seek }
+    func setVideoRate(_ rate: Double) {}
 }
 
 /// Checks the video against the song four times a second and corrects it
-/// (`MusicVideoDrift`): follows play, pause and seeks in the player, and
-/// keeps drift under about half a second. Stops checking once a hidden
+/// (`MusicVideoCorrector`): follows play, pause and seeks in the player,
+/// eases small drift on AVPlayer with the rate, and seeks YouTube rarely,
+/// led by its measured seek latency. Stops checking once a hidden
 /// surface's video is paused.
 @MainActor
 final class MusicVideoSyncLoop {
@@ -116,8 +126,10 @@ final class MusicVideoSyncLoop {
     private let uptime: () -> TimeInterval
     private var timer: Timer?
     private var inFlight = false
-    private var lastSeek: TimeInterval = -.infinity
+    private(set) var corrector: MusicVideoCorrector?
     private(set) var surfacePaused = false
+    /// Told the video's length once it is known (for the intro estimate).
+    var onDuration: ((Double) -> Void)?
 
     /// Follows the shared now-playing monitor and the playing song's offset.
     convenience init() {
@@ -168,17 +180,22 @@ final class MusicVideoSyncLoop {
             guard let sample, let surface = self.surface else { return }
             let target = MusicVideoTiming.videoTime(songTime: self.songTime(), offset: self.offset(),
                                                     videoDuration: duration)
+            if let duration { self.onDuration?(duration) }
             let shouldPlay = !self.surfacePaused && self.songPlaying()
-            let now = self.uptime()
-            switch MusicVideoDrift.decide(target: target, sample: sample, shouldPlay: shouldPlay,
-                                          sinceLastSeek: now - self.lastSeek, seekLead: surface.seekLead) {
+            let style = surface.correctionStyle
+            if self.corrector?.style != style { self.corrector = MusicVideoCorrector(style: style) }
+            let action = self.corrector!.decide(target: target, sample: sample, shouldPlay: shouldPlay,
+                                                now: self.uptime(), fixedLead: surface.seekLead)
+            switch action {
             case .none: break
             case .play: surface.playVideo()
             case .pause: surface.pauseVideo()
+            case .rate(let rate): surface.setVideoRate(rate)
             case .seek(let time, let thenPlay):
-                self.lastSeek = now
                 surface.seekVideo(to: max(0, time))
                 if thenPlay && !sample.videoPlaying { surface.playVideo() }
+                // A seek leaves AVPlayer's rate where it was: back to 1.
+                else if thenPlay && style == .rate { surface.setVideoRate(1) }
             }
             if self.surfacePaused && !sample.videoPlaying { self.stop() }
         }
@@ -220,6 +237,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
     private var readyObservation: NSKeyValueObservation?
 
     var seekLead: Double { 0.05 }
+    var correctionStyle: MusicVideoCorrectionStyle { .rate }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -268,6 +286,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         }
         playerLayer.opacity = 0
         player.replaceCurrentItem(with: item)
+        loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
     }
 
     private func reveal() {
@@ -297,6 +316,13 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         player.play()
     }
     func pauseVideo() { player.pause() }
+
+    /// Only while playing: setting a rate on a paused AVPlayer starts it.
+    func setVideoRate(_ rate: Double) {
+        guard player.rate != 0, rate.isFinite, (0.9...1.1).contains(rate) else { return }
+        player.isMuted = true
+        player.rate = Float(rate)
+    }
 
     func seekVideo(to seconds: Double) {
         let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
@@ -691,8 +717,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var navigation: WKNavigation?
     private var blur: Double = -1
 
-    /// YouTube takes a moment to resume after a seek.
-    var seekLead: Double { 0.25 }
+    /// The first seek's lead; later ones use the measured latency.
+    var seekLead: Double { MusicVideoSeekLatency.initial }
+    /// YouTube's rates are too coarse to ease drift with: seek, rarely.
+    var correctionStyle: MusicVideoCorrectionStyle { .ledSeek }
 
     override init() {
         super.init()
@@ -702,6 +730,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     func attach(_ view: WKWebView, videoID: String) {
         self.view = view
+        loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
         perform(session.attach(videoID))
     }
 

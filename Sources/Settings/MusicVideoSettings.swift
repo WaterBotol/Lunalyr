@@ -27,10 +27,17 @@ struct MusicVideoSection: View {
         }
         PastedVideoLink(controller: controller)
         LabeledContent("Video timing") {
-            VideoTimingNudge(offset: controller.currentOffset, enabled: controller.hasSong,
-                             nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
+            VStack(alignment: .trailing, spacing: 4) {
+                VideoTimingNudge(offset: controller.currentOffset, enabled: controller.hasSong,
+                                 manual: controller.offsetOrigin == .manual,
+                                 nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
+                VideoTimingOrigin(label: MusicVideoController.timingLabel(origin: controller.offsetOrigin,
+                                                                          syncing: controller.syncing),
+                                  canResync: controller.canResync, resync: { controller.resync() })
+            }
         }
-        InspectorCaption("For this song: how far into the video the song begins. Raise it when the video opens with a scene before the music.")
+        InspectorCaption("For this song: how far into the video the song begins. Lunalyr sets it by itself when it can; a nudge of yours always wins.",
+                         more: Self.timingDetail)
         displayChoice
         ValueSlider("Video dimming", value: $s.musicVideoDim, in: Settings.musicVideoDimRange, step: 0.01,
                     format: SettingsFormat.percent)
@@ -54,6 +61,7 @@ struct MusicVideoSection: View {
         }
     }
 
+    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. For YouTube videos Lunalyr reads the video’s captions (with Search YouTube on) and matches them to the song’s timed lyrics; for videos in your Music library it compares the video’s soundtrack with the song as it plays, while the visualisers’ system audio is already on. Otherwise a video longer than the song is guessed to have that much intro (Estimated). Re-sync forgets your nudge and looks again."
     static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
     static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube."
 }
@@ -104,6 +112,8 @@ private struct PastedVideoLink: View {
 struct VideoTimingNudge: View {
     let offset: Double
     var enabled = true
+    /// The offset is the user's own, so Reset has something to undo.
+    var manual = true
     let nudge: (Double) -> Void
     let reset: () -> Void
 
@@ -123,14 +133,34 @@ struct VideoTimingNudge: View {
             Button("+5") { nudge(5) }.help("Skip five seconds more of the video’s intro")
                 .accessibilityLabel("Video 5 seconds later")
             Button(action: reset) { Image(systemName: "arrow.counterclockwise") }
-                .help("Back to the video’s own start")
+                .help("Drop your nudge: back to the automatic timing")
                 .accessibilityLabel("Reset video timing")
-                .disabled(offset == 0)
+                .disabled(!manual)
         }
         .controlSize(.small)
         .disabled(!enabled)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Video timing for this song")
         .accessibilityValue(MusicVideoTiming.format(offset))
+    }
+}
+
+/// Where the video timing came from, and Re-sync.
+@MainActor
+struct VideoTimingOrigin: View {
+    let label: String?
+    let canResync: Bool
+    let resync: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let label {
+                Text(label).font(.caption).foregroundStyle(.secondary)
+            }
+            Button("Re-sync", action: resync)
+                .controlSize(.small)
+                .disabled(!canResync)
+                .help("Forget your nudge and find this video’s timing again")
+        }
     }
 }
