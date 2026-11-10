@@ -43,7 +43,7 @@ final class LiveMusicVideoAutoSync: MusicVideoAutoSyncing {
          captureReady: @escaping @MainActor () -> Bool = LiveMusicVideoAutoSync.captureIsRunning,
          captureActive: @escaping @MainActor () -> Bool = LiveMusicVideoAutoSync.captureIsActive,
          songClock: @escaping @MainActor () -> (time: Double, playing: Bool) = {
-             (NowPlayingMonitor.shared.playbackTime(), NowPlayingMonitor.shared.isPlaying)
+             (NowPlayingMonitor.shared.playbackPosition(), NowPlayingMonitor.shared.isPlaying)
          },
          uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          sleep: @escaping (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }) {
