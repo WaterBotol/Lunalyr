@@ -424,7 +424,10 @@ struct TranslationSection: View {
     var body: some View {
         ThemedSection("Translations") {
             Toggle("Show translations under lyrics", isOn: $extras.showsTranslations)
-            InspectorCaption("Shown when the lyric source has a translation.", more: "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Nothing is translated on this Mac or sent anywhere.")
+            InspectorCaption("Shown when the lyric source has a translation.", more: "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Lyrics are never sent anywhere to be translated.")
+            #if canImport(Translation)
+            if #available(macOS 15.0, *) { MachineTranslationControls() }
+            #endif
         }
     }
 }

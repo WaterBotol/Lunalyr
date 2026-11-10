@@ -171,7 +171,7 @@ enum OnboardingCopy {
         "Nudge them a tenth of a second at a time from the menu bar, or press \(earlier) and \(later) once global shortcuts are on. Lunalyr remembers the timing for each song."
     }
     static let readings = "Romanisation shows how lyrics in other scripts sound, below them or in their place."
-    static let translations = "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Nothing is translated on this Mac or sent anywhere."
+    static let translations = "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Translating on this Mac is a separate option in Settings, off unless you turn it on. Lyrics are never sent anywhere to be translated."
 
     static let menuBarTitle = "Find Lunalyr in the menu bar"
     /// Where the app lives and the way back (inventory B10).

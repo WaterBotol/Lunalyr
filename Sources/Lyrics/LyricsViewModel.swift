@@ -12,8 +12,14 @@ final class LyricsViewModel: ObservableObject {
                 wordsPerSecond = Double(lines.reduce(0) { $0 + $1.words.count }) / (last.end - first.start)
             } else { wordsPerSecond = 0 }
             updateReadings()
+            updateMachineTranslations()
         }
     }
+    /// Lines translated on this Mac, by index, for songs whose lyric source
+    /// has no translation (`LyricMachineTranslator`). A source's own
+    /// translation always wins: these are only for lines without one.
+    @Published private(set) var machineTranslations: [Int: String] = [:]
+    let machineTranslator = LyricMachineTranslator.system()
     @Published private(set) var romanized: [Int: [LyricsFetcher.Word]] = [:]
     private var readingTask: Task<Void, Never>?
     private var readingGeneration = UUID()
@@ -91,6 +97,12 @@ final class LyricsViewModel: ObservableObject {
             .dropFirst().sink { [weak self] display, language, tones, saved in
                 self?.updateReadings(options: .init(display: display, language: language, toneMarks: tones, preferSaved: saved))
             }.store(in: &cancellables)
+        let translation = MachineTranslationOptions.shared
+        Publishers.CombineLatest(translation.$enabled, translation.$target)
+            .dropFirst().sink { [weak self] enabled, target in
+                self?.updateMachineTranslations(enabled: enabled, target: target)
+            }.store(in: &cancellables)
+        machineTranslator.$translations.assign(to: &$machineTranslations)
         LyricConnectivity.shared.restored
             .sink { [weak self] in self?.connectionRestored() }.store(in: &cancellables)
         NowPlayingMonitor.shared.$current.removeDuplicates()
@@ -109,6 +121,14 @@ final class LyricsViewModel: ObservableObject {
             self.romanized = readings
         }
     }
+    private func updateMachineTranslations(enabled: Bool? = nil, target: String? = nil, force: Bool = false) {
+        let options = MachineTranslationOptions.shared
+        let chosen = target ?? options.target
+        machineTranslator.update(lines: lines, enabled: enabled ?? options.enabled,
+                                 target: chosen.isEmpty ? MachineTranslationPolicy.systemLanguage() : chosen, force: force)
+    }
+    /// Tries the song on screen again, after language packs were downloaded.
+    func retryMachineTranslation() { updateMachineTranslations(force: true) }
     func activeLineIndex(at time:TimeInterval)->Int? {
         lineIndex.line(at: time)
     }
