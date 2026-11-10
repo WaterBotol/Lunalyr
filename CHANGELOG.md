@@ -88,6 +88,13 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Music video: on a song change the old YouTube video now holds its last frame while it fades out, instead of dropping to the album-colour gradient. Pausing the wallpaper (or covering it) also keeps the frame.
+- Music video: a YouTube video correcting its sync no longer blinks to the gradient; a short wait covers most seeks, and a longer one shows the frame from just before it. Videos now fade in and out with eased curves.
+- Music video: a library video no longer goes through black before its first frame, and fades in smoothly.
+- Music video with Reduce Motion: a YouTube video now shows its own still (faded in) instead of only the gradient.
+- Desktop player: the time and lyric shown over the seek bar no longer sit on top of the song titles under the covers; the titles step aside while they show.
+- Desktop player: with Reduce Motion, the wallpaper lyrics behind the player only fade, without blurring.
+- Shortcut confirmations on the wallpaper stay sharp while the desktop player is up, and are no longer shown twice when the small confirmation under the menu bar already showed them.
 - Imported wallpaper pictures are decoded off the main thread, so a large photo no longer stalls the wallpaper.
 - Torque: long lines no longer sink and run off the bottom of the stage.
 - Hinge: the last words of a line are no longer cut off half-way through folding away.
