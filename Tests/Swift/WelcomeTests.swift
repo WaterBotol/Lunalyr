@@ -25,7 +25,7 @@ final class WelcomeTests: XCTestCase {
         XCTAssertEqual(Set(statuses.map(\.symbol)).count, statuses.count, "Each status reads differently")
         // What lyric services receive, as About › Privacy says.
         XCTAssertTrue(OnboardingCopy.sources.contains("title, artist, album and length"))
-        XCTAssertTrue(OnboardingCopy.translations.contains("Nothing is translated on this Mac or sent anywhere"))
+        XCTAssertTrue(OnboardingCopy.translations.contains("Lyrics are never sent anywhere to be translated"))
         XCTAssertEqual(OnboardingCopy.asksOnContinue([.appleMusic]), "macOS asks about Music when you continue.")
         XCTAssertEqual(OnboardingCopy.asksOnContinue([.appleMusic, .spotify]),
                        "macOS asks about Music and Spotify when you continue.")
