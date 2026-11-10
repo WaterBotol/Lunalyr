@@ -169,14 +169,11 @@ struct ThemedToggleStyle: ToggleStyle {
 
 private struct ThemedToggleBody: View {
     let configuration: ToggleStyleConfiguration
-    @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
-    @Environment(\.themeForcedState) private var forced
     @State private var hovering = false
 
     var body: some View {
-        let state = resolvedState(forced: forced, enabled: enabled, pressed: false, focused: focused, hovering: hovering)
-        ThemeReader { style, t in
+        ThemeReader { _, t in
             Button {
                 configuration.isOn.toggle()
             } label: {
@@ -184,30 +181,69 @@ private struct ThemedToggleBody: View {
                     configuration.label
                         .foregroundStyle(Color(nsColor: t.ink))
                     Spacer(minLength: LunalyrDesign.Spacing.medium)
-                    track(style: style, t: t, state: state)
+                    ThemedSwitchTrack(on: configuration.isOn, focused: focused, hovering: hovering)
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressReportingButtonStyle())
             .accessibilityValue(configuration.isOn ? "On" : "Off")
             .accessibilityAddTraits(.isToggle)
         }
         .onHover { hovering = $0 }
     }
+}
 
-    private func track(style: SettingsVisualStyle, t: SettingsVisualStyle.Tokens, state: ThemeState) -> some View {
-        let on = configuration.isOn
-        let knob = RoundedRectangle(cornerRadius: style == .bold ? 3 : 9, style: .continuous)
-        return Color.clear
-            .frame(width: 42, height: 24)
-            .overlay(alignment: on ? .trailing : .leading) {
-                knob
-                    .fill(on ? Color.white : Color(nsColor: t.ink))
-                    .overlay(knob.strokeBorder(Color(nsColor: t.controlEdge), lineWidth: on && style == .bold ? 1 : 0))
-                    .frame(width: 16, height: 16)
-                    .padding(4)
-            }
-            .themedControl(radius: 12, selected: on, state: state)
+private struct ThemePressedKey: EnvironmentKey { static let defaultValue = false }
+
+extension EnvironmentValues {
+    /// Whether the button around this view is held down (`PressReportingButtonStyle`).
+    fileprivate var themeButtonPressed: Bool {
+        get { self[ThemePressedKey.self] }
+        set { self[ThemePressedKey.self] = newValue }
+    }
+}
+
+/// Draws the label as it is, and tells it whether the button is held down,
+/// so a control drawn inside (the switch's track) can show its pressed face.
+struct PressReportingButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .environment(\.themeButtonPressed, configuration.isPressed)
+    }
+}
+
+/// The switch itself: the track, and a knob that slides to the on side.
+struct ThemedSwitchTrack: View {
+    let on: Bool
+    var focused = false
+    var hovering = false
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.themeForcedState) private var forced
+    @Environment(\.themeButtonPressed) private var pressed
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Track 42 wide, knob 16 inset by 4: the knob travels 42 - 24 points.
+    static let travel: CGFloat = 18
+
+    var body: some View {
+        let state = resolvedState(forced: forced, enabled: enabled, pressed: pressed, focused: focused, hovering: hovering)
+        ThemeReader { style, t in
+            let knob = RoundedRectangle(cornerRadius: style == .bold ? 3 : 9, style: .continuous)
+            Color.clear
+                .frame(width: 42, height: 24)
+                // One alignment and an offset, so the knob slides rather than jumps.
+                .overlay(alignment: .leading) {
+                    knob
+                        .fill(on ? Color.white : Color(nsColor: t.ink))
+                        .overlay(knob.strokeBorder(Color(nsColor: t.controlEdge), lineWidth: on && style == .bold ? 1 : 0))
+                        .frame(width: 16, height: 16)
+                        .padding(4)
+                        .offset(x: on ? Self.travel : 0)
+                }
+                .themedControl(radius: 12, selected: on, state: state)
+                // Scoped to the switch: the change that flips it never animates the preview.
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: on)
+        }
     }
 }
 
@@ -219,6 +255,7 @@ struct ThemedSegments<Value: Hashable>: View {
     let options: [(value: Value, title: String)]
     @Environment(\.isEnabled) private var enabled
     @Environment(\.themeForcedState) private var forced
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, selection: Binding<Value>, options: [(Value, String)]) {
         self.title = title
@@ -247,6 +284,9 @@ struct ThemedSegments<Value: Hashable>: View {
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
+            // The accent moves to the new choice with the click, not a cut.
+            .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                       value: selection)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(title)
         }
@@ -256,7 +296,9 @@ struct ThemedSegments<Value: Hashable>: View {
 // MARK: Slider
 
 /// The track and thumb alone: drag or click to set, arrow keys and VoiceOver
-/// to step. `step` snaps the value.
+/// to step. `step` snaps the value. A drag follows the pointer 1:1, keeping
+/// where the thumb was grabbed; keyboard steps and outside changes (Reset)
+/// glide. Dims as a whole when disabled.
 struct ThemedSliderTrack: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
@@ -264,47 +306,79 @@ struct ThemedSliderTrack: View {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.themeForcedState) private var forced
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @GestureState private var dragging = false
+    /// Pointer minus thumb centre when the drag began on the thumb; 0 when it
+    /// began on the track (the thumb comes to the pointer).
+    @State private var grabOffset: CGFloat?
+    @FocusState private var focused: Bool
+
+    static let thumb: CGFloat = 22
+    /// What a disabled slider is drawn at: track, fill and thumb together.
+    static let disabledOpacity = 0.45
 
     private var fraction: Double {
-        let span = range.upperBound - range.lowerBound
-        return span > 0 ? min(1, max(0, (value - range.lowerBound) / span)) : 0
+        ThemedSliderMath.fraction(of: value, in: range)
     }
 
     private var increment: Double { step ?? (range.upperBound - range.lowerBound) / 20 }
 
     private func set(_ proposed: Double) {
-        var next = proposed
-        if let step, step > 0 { next = (next / step).rounded() * step }
-        next = min(range.upperBound, max(range.lowerBound, next))
+        let next = ThemedSliderMath.snapped(proposed, in: range, step: step)
         if next != value { value = next }
+    }
+
+    private var thumbState: ThemeState {
+        // Disabled dims the whole slider instead (below).
+        if let forced { return forced == .disabled ? .normal : forced }
+        if dragging { return .pressed }
+        return focused && enabled ? .focused : .normal
     }
 
     var body: some View {
         ThemeReader { _, t in
             GeometryReader { proxy in
-                let thumb: CGFloat = 22
+                let thumb = Self.thumb
                 let travel = max(1, proxy.size.width - thumb)
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color(nsColor: t.face))
                         .overlay(Capsule().strokeBorder(Color(nsColor: t.controlEdge), lineWidth: t.outline))
                         .frame(height: 8)
-                    Capsule().fill(Color.lunalyrAccent)
-                        .frame(width: thumb / 2 + travel * fraction, height: 8)
-                    Color.clear
-                        .frame(width: thumb, height: thumb)
-                        .themedControl(radius: 11, state: forced ?? (enabled ? .normal : .disabled))
-                        .offset(x: travel * fraction)
+                    Group {
+                        Capsule().fill(Color.lunalyrAccent)
+                            .frame(width: thumb / 2 + travel * fraction, height: 8)
+                        Color.clear
+                            .frame(width: thumb, height: thumb)
+                            .themedControl(radius: 11, state: thumbState)
+                            .offset(x: travel * fraction)
+                    }
+                    // A drag stays 1:1 with the pointer; steps and Reset glide.
+                    .animation(dragging || reduceMotion ? nil : LunalyrDesign.Motion.quick, value: fraction)
                 }
                 .frame(height: proxy.size.height)
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                    guard enabled else { return }
-                    let f = min(1, max(0, (drag.location.x - thumb / 2) / travel))
-                    set(range.lowerBound + f * (range.upperBound - range.lowerBound))
-                })
+                .gesture(DragGesture(minimumDistance: 0)
+                    .updating($dragging) { _, state, _ in state = enabled }
+                    .onChanged { drag in
+                        guard enabled else { return }
+                        let offset = grabOffset ?? ThemedSliderMath.grabOffset(
+                            start: drag.startLocation.x, fraction: fraction, travel: travel, thumb: thumb)
+                        grabOffset = offset
+                        let f = ThemedSliderMath.fraction(pointer: drag.location.x, grabOffset: offset,
+                                                          travel: travel, thumb: thumb)
+                        set(range.lowerBound + f * (range.upperBound - range.lowerBound))
+                    }
+                    .onEnded { _ in grabOffset = nil })
             }
             .frame(height: 26)
+            // Flattened first, so the track never shows through a dimmed thumb.
+            .compositingGroup()
+            .opacity(enabled && forced != .disabled ? 1 : Self.disabledOpacity)
             .focusable(enabled)
+            .focused($focused)
+            // The thumb draws the look's own focus ring instead of a box round the track.
+            .focusEffectDisabled()
+            .onChange(of: dragging) { _, now in if !now { grabOffset = nil } }
             .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
                 guard enabled, press.modifiers.isEmpty else { return .ignored }
                 let forward = layoutDirection == .leftToRight ? KeyEquivalent.rightArrow : .leftArrow
@@ -323,6 +397,34 @@ struct ThemedSliderTrack: View {
     }
 }
 
+/// The slider's arithmetic, apart from the view so it can be tested.
+enum ThemedSliderMath {
+    static func fraction(of value: Double, in range: ClosedRange<Double>) -> Double {
+        let span = range.upperBound - range.lowerBound
+        return span > 0 ? min(1, max(0, (value - range.lowerBound) / span)) : 0
+    }
+
+    static func snapped(_ proposed: Double, in range: ClosedRange<Double>, step: Double?) -> Double {
+        var next = proposed
+        if let step, step > 0 { next = (next / step).rounded() * step }
+        return min(range.upperBound, max(range.lowerBound, next))
+    }
+
+    /// Where on the thumb a drag starting at `start` took hold: the pointer
+    /// minus the thumb's centre if it began on the thumb, else 0, so a click
+    /// on the track brings the thumb's centre to the pointer.
+    static func grabOffset(start: CGFloat, fraction: Double, travel: CGFloat, thumb: CGFloat) -> CGFloat {
+        let centre = thumb / 2 + travel * CGFloat(fraction)
+        let offset = start - centre
+        return abs(offset) <= thumb / 2 ? offset : 0
+    }
+
+    /// The fraction a pointer at `pointer` asks for, holding the thumb where it was grabbed.
+    static func fraction(pointer: CGFloat, grabOffset: CGFloat, travel: CGFloat, thumb: CGFloat) -> Double {
+        Double(min(1, max(0, (pointer - grabOffset - thumb / 2) / travel)))
+    }
+}
+
 struct ThemedSlider: View {
     let title: String
     @Binding var value: Double
@@ -337,6 +439,9 @@ struct ThemedSlider: View {
         self.format = format
     }
 
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ThemeReader { _, t in
             VStack(alignment: .leading, spacing: 6) {
@@ -344,7 +449,10 @@ struct ThemedSlider: View {
                     Text(title).foregroundStyle(Color(nsColor: t.ink))
                     Spacer()
                     Text(format(value)).monospacedDigit().foregroundStyle(Color(nsColor: t.secondary))
+                        .contentTransition(.numericText(value: value))
+                        .animation(reduceMotion ? nil : LunalyrDesign.Motion.quick, value: value)
                 }
+                .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
                 ThemedSliderTrack(value: $value, range: range)
                     .accessibilityLabel(title)
                     .accessibilityValue(format(value))
@@ -509,8 +617,23 @@ struct StyleGallery: View {
                     Toggle("Focused", isOn: $off).toggleStyle(ThemedToggleStyle()).fixedSize()
                         .environment(\.themeForcedState, .focused)
                 }
+                HStack(spacing: 18) {
+                    Toggle("Pressed on", isOn: $on).toggleStyle(ThemedToggleStyle()).fixedSize()
+                        .environment(\.themeForcedState, .pressed)
+                    Toggle("Pressed off", isOn: $off).toggleStyle(ThemedToggleStyle()).fixedSize()
+                        .environment(\.themeForcedState, .pressed)
+                }
                 ThemedSegments("Pick", selection: $pick, options: [(0, "Automatic"), (1, "Music"), (2, "Spotify")])
                 ThemedSlider("Lyric size", value: $level, in: 0...1, format: { "\(Int($0 * 100))%" })
+                HStack(spacing: 14) {
+                    ForEach([ThemeState.pressed, .focused, .disabled], id: \.self) { state in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(state.rawValue.capitalized).lunalyrText(.caption)
+                            ThemedSliderTrack(value: $level, range: 0...1)
+                                .environment(\.themeForcedState, state)
+                        }
+                    }
+                }
                 ThemedCard("Card", info: "A titled group of controls.") {
                     Text("Body text on the card face.").foregroundStyle(Color(nsColor: t.ink))
                     Text("Secondary text uses the secondary ink.").lunalyrText(.caption)

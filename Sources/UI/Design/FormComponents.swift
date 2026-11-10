@@ -123,7 +123,7 @@ struct ValueSlider: View {
     let minimumLabel: String?
     let maximumLabel: String?
     @Environment(\.isEnabled) private var enabled
-    @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, step: Double? = nil,
          minimumLabel: String? = nil, maximumLabel: String? = nil,
@@ -148,7 +148,11 @@ struct ValueSlider: View {
                     .lunalyrText(.value)
                     .foregroundStyle(.secondary)
                     .fixedSize()
+                    // Digits roll to a stepped or reset value.
+                    .contentTransition(.numericText(value: value))
+                    .animation(reduceMotion ? nil : LunalyrDesign.Motion.quick, value: value)
             }
+            .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
             .accessibilityHidden(true)
             slider
                 .labelsHidden()
@@ -162,6 +166,7 @@ struct ValueSlider: View {
                     if let maximumLabel { Text(maximumLabel) }
                 }
                 .lunalyrText(.footnote)
+                .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
                 .accessibilityHidden(true)
             }
         }
@@ -170,12 +175,6 @@ struct ValueSlider: View {
 
     private var slider: some View {
         ThemedSliderTrack(value: $value, range: range, step: step)
-    }
-
-    private func set(_ proposed: Double, step: Double) {
-        let snapped = (proposed / step).rounded() * step
-        let bounded = min(range.upperBound, max(range.lowerBound, snapped))
-        if bounded != value { value = bounded }
     }
 }
 
