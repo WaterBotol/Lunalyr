@@ -9,6 +9,12 @@ import Foundation
 
 enum LyricTapSync {
     /// How late a tap lands after the line it marks is heard.
+    ///
+    /// Shorter than the music video's (`MusicVideoTapSync.reactionTime`, 0.2)
+    /// on purpose: here the listener taps along to the song again and again,
+    /// and a rhythm is anticipated, so taps land closer to the beat. The
+    /// video's is a single tap reacting to a line seen on screen, a plain
+    /// visual reaction, which is slower.
     static let reactionTime = 0.15
     /// Taps before the offset is first worked out and applied.
     static let requiredTaps = 4
@@ -151,6 +157,10 @@ struct LyricTapSession: Equatable {
         case timedOut
         /// Esc, or Lunalyr lost the keyboard.
         case cancelled
+        /// Another song started mid-session.
+        case songChanged
+        /// Other lyrics (another source) replaced the ones being tapped.
+        case lyricsChanged
     }
 
     private(set) var phase: Phase = .idle
@@ -166,6 +176,7 @@ struct LyricTapSession: Equatable {
     mutating func start(lineStarts: [Double], prior: Double, playing: Bool, now: Double) {
         taps = []
         lastTapAt = nil
+        self.lineStarts = []
         guard playing else { phase = .failed(.notPlaying); return }
         guard !lineStarts.isEmpty else { phase = .failed(.noLyrics); return }
         self.lineStarts = lineStarts
@@ -207,8 +218,14 @@ struct LyricTapSession: Equatable {
     }
 
     mutating func cancel() {
+        stop(.cancelled)
+    }
+
+    /// Ends a listening session for `reason` (the song paused or changed,
+    /// other lyrics arrived).
+    mutating func stop(_ reason: Failure) {
         guard isListening else { return }
-        phase = .failed(.cancelled)
+        phase = .failed(reason)
     }
 
     /// Back to idle (the confirmation has been seen).
@@ -228,12 +245,19 @@ struct LyricTapSession: Equatable {
             let left = max(0, LyricTapSync.requiredTaps - taps.count)
             if taps.isEmpty { return "Press any key each time a lyric line starts. Esc stops." }
             if left > 0 { return "\(taps.count) tapped, \(left) more. Esc stops." }
-            return "\(taps.count) tapped. Keep going: the taps don’t agree yet."
+            let more = max(0, LyricTapSync.maximumTaps - taps.count)
+            return "\(taps.count) tapped. Keep going: the taps don’t agree yet (up to \(more) more)."
         case .applied(let offset, _, let used, let total):
             let agreed = used == total ? "" : " (\(used) of \(total) taps agreed)"
             return "Lyrics synced: \(TimingNudge.format(offset)) for this song\(agreed)."
         case .failed(.notPlaying):
-            return "Play a song first: the taps are timed against it."
+            // Refused at the start, or the song paused mid-session.
+            if lineStarts.isEmpty { return "Play a song first: the taps are timed against it." }
+            return "The song paused, so Tap to sync stopped. The timing is unchanged."
+        case .failed(.songChanged):
+            return "The song changed, so Tap to sync stopped. The timing is unchanged."
+        case .failed(.lyricsChanged):
+            return "Other lyrics loaded, so Tap to sync stopped. Start again to time these."
         case .failed(.noLyrics):
             return "Tap to sync needs this song’s timed lyrics, and they haven’t loaded."
         case .failed(.noAgreement):

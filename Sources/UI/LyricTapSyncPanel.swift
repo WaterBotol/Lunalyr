@@ -107,9 +107,11 @@ final class LyricTapSyncController: ObservableObject {
         // Another song, a pause, or other lyrics on screen (a better source
         // arrived): the taps would be timed against lines no longer shown,
         // and the offset saved for a source no longer in use.
-        guard context.query()?.recordingKey == target.key, context.isPlaying(),
-              offsets.activeSource == target.source, context.lineStarts() == session.lineStarts else {
-            cancel()
+        if let reason = stopReason(target) {
+            // Ends like a result, not like Esc: the keyboard stays with the
+            // panel while it shows, so the next tap can't reach the app behind.
+            session.stop(reason)
+            finish()
             return
         }
         let time = LyricTapSync.tapTime(playbackTime: context.playbackTime(), globalOffset: context.globalOffset())
@@ -120,6 +122,14 @@ final class LyricTapSyncController: ObservableObject {
                                   previous: previous, offset: offsets.offset(for: target.query, source: target.source))
         }
         if !session.isListening { finish() } else { objectWillChange.send() }
+    }
+
+    /// Why taps against `target` can't go on, if they can't.
+    private func stopReason(_ target: (query: LyricQuery, key: String, source: String?)) -> LyricTapSession.Failure? {
+        if context.query()?.recordingKey != target.key { return .songChanged }
+        if !context.isPlaying() { return .notPlaying }
+        if offsets.activeSource != target.source || context.lineStarts() != session.lineStarts { return .lyricsChanged }
+        return nil
     }
 
     /// Esc, the menu item again, or Lunalyr lost the keyboard.
@@ -175,12 +185,36 @@ final class LyricTapSyncController: ObservableObject {
         default: break
         }
         guard presents, panel != nil else { return }
+        scheduleDismissal()
+    }
+
+    /// How long a result stays up: long enough to reach Undo when it's offered.
+    nonisolated static func dismissDelay(for phase: LyricTapSession.Phase) -> TimeInterval {
+        if case .applied = phase { return 8 }
+        return 3
+    }
+
+    /// The pointer is over the panel: the result stays while it is.
+    private var hovering = false
+
+    func pointerHovering(_ inside: Bool) {
+        hovering = inside
+        guard !session.isListening, session.phase != .idle, panel != nil else { return }
+        if inside {
+            dismissal?.cancel()
+            dismissal = nil
+        } else {
+            scheduleDismissal()
+        }
+    }
+
+    private func scheduleDismissal() {
         dismissal?.cancel()
-        let applied: Bool
-        if case .applied = session.phase { applied = true } else { applied = false }
+        dismissal = nil
+        guard !hovering else { return }
+        let delay = Self.dismissDelay(for: session.phase)
         dismissal = Task { [weak self] in
-            // Long enough to reach Undo on the panel.
-            try? await Task.sleep(for: .seconds(applied ? 6 : 3))
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             self?.dismiss()
         }
@@ -313,8 +347,9 @@ final class LyricTapSyncController: ObservableObject {
 
     private func closePanel() {
         stopWatchingKeys()
-        panel?.orderOut(nil)
+        panel?.hide()
         panel = nil
+        hovering = false
         restorePreviousApp()
     }
 }
@@ -349,25 +384,59 @@ final class LyricTapPanel: NSPanel {
         contentView = hosting
     }
 
+    /// A fade out is under way; a show before it ends turns it back.
+    private var hiding = false
+
+    /// Fades in at the top of the screen with the pointer, or back from a
+    /// fade out where it is. A fade, so Reduce Motion keeps it.
     @MainActor
     func show() {
-        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        if let visible = screen?.visibleFrame {
-            setFrameOrigin(NSPoint(x: visible.midX - Self.size.width / 2, y: visible.maxY - Self.size.height - 24))
+        if !isVisible {
+            let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+            if let visible = screen?.visibleFrame {
+                setFrameOrigin(NSPoint(x: visible.midX - Self.size.width / 2, y: visible.maxY - Self.size.height - 24))
+            }
+            alphaValue = 0
         }
+        hiding = false
         makeKeyAndOrderFront(nil)
+        LunalyrDesign.Motion.CA.fade(self, to: 1, duration: LunalyrDesign.Motion.CA.reduced)
+    }
+
+    /// Fades out from wherever the fade in got to, then leaves the screen.
+    @MainActor
+    func hide() {
+        guard isVisible else { return }
+        hiding = true
+        LunalyrDesign.Motion.CA.fade(self, to: 0, duration: LunalyrDesign.Motion.CA.quick) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.hiding else { return }
+                self.hiding = false
+                self.orderOut(nil)
+                self.alphaValue = 1
+            }
+        }
     }
 }
 
 struct LyricTapSyncView: View {
+    private typealias Motion = LunalyrDesign.Motion
     @ObservedObject var controller: LyricTapSyncController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private func animation(_ animation: Animation) -> Animation {
+        Motion.animation(animation, reduceMotion: reduceMotion)
+    }
 
     var body: some View {
         let session = controller.session
         HStack(spacing: LunalyrDesign.Spacing.medium) {
-            Image(systemName: "hand.tap")
+            Image(systemName: Self.symbol(for: session.phase))
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Self.tint(for: session.phase))
+                .contentTransition(Motion.symbolSwap(reduceMotion: reduceMotion))
+                .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? 0 : session.taps.count)
+                .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xSmall) {
                 Text("Tap to sync lyrics")
@@ -376,40 +445,83 @@ struct LyricTapSyncView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if session.isListening {
-                    TapDots(count: session.taps.count)
-                }
+                    .contentTransition(.opacity)
+                // Always laid out, so the text doesn't jump when the result shows.
+                TapDots(count: session.taps.count, reduceMotion: reduceMotion)
+                    .opacity(session.isListening ? 1 : 0)
             }
             Spacer(minLength: 0)
             VStack(spacing: LunalyrDesign.Spacing.xSmall) {
                 if session.isListening {
                     Button("Stop") { controller.cancel() }
+                        .transition(.opacity)
                 } else {
                     if controller.canUndo, case .applied = session.phase {
                         Button("Undo") { controller.undo() }
+                            .transition(.opacity)
                     }
                     Button("Done") { controller.dismiss() }
+                        .transition(.opacity)
                 }
             }
             .controlSize(.small)
         }
+        .animation(animation(Motion.quick), value: session.phase)
         .padding(LunalyrDesign.Spacing.large)
         .frame(width: LyricTapPanel.size.width, height: LyricTapPanel.size.height)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onHover { controller.pointerHovering($0) }
+        .onChange(of: session.taps.count) { _, count in
+            guard count > 0, controller.session.isListening else { return }
+            AccessibilityNotification.Announcement(Self.tapAnnouncement(count)).post()
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Tap to sync lyrics")
     }
 
+    /// The symbol beside the message: the hand while tapping, then how it ended.
+    static func symbol(for phase: LyricTapSession.Phase) -> String {
+        switch phase {
+        case .idle, .listening: return "hand.tap"
+        case .applied: return LunalyrStatus.success.symbol
+        case .failed(.cancelled): return "xmark.circle"
+        case .failed: return LunalyrStatus.warning.symbol
+        }
+    }
+
+    static func tint(for phase: LyricTapSession.Phase) -> Color {
+        switch phase {
+        case .applied: return LunalyrStatus.success.text
+        case .failed(.cancelled), .idle, .listening: return .secondary
+        case .failed: return LunalyrStatus.warning.text
+        }
+    }
+
+    /// What VoiceOver says after each tap.
+    static func tapAnnouncement(_ count: Int) -> String {
+        count <= LyricTapSync.requiredTaps ? "Tap \(count) of \(LyricTapSync.requiredTaps)" : "Tap \(count)"
+    }
+
     private struct TapDots: View {
         let count: Int
+        let reduceMotion: Bool
         var body: some View {
             HStack(spacing: 5) {
                 ForEach(0..<max(LyricTapSync.requiredTaps, count), id: \.self) { index in
-                    Circle()
-                        .fill(index < count ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .frame(width: 7, height: 7)
+                    ZStack {
+                        Circle().fill(Color.secondary.opacity(0.3))
+                        if index < count {
+                            // The newest dot pops in; a plain fade under Reduce Motion.
+                            Circle().fill(Color.accentColor)
+                                .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
+                        }
+                    }
+                    .frame(width: 7, height: 7)
+                    .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
                 }
             }
+            .frame(height: 7)
+            .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: count)
             .accessibilityHidden(true)
         }
     }

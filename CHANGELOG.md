@@ -65,6 +65,8 @@ When merging, keep every entry and combine duplicate headings.
 
 - Tap to sync for lyrics: a tap pressed just after the timing is set no longer reaches the app you were in (Space there could pause the song); the keyboard comes back when the result closes, or at once with Esc or Return.
 - Tap to sync for lyrics stops if a different lyric source replaces the lyrics mid-session, instead of saving timing for lyrics no longer shown.
+- Tap to sync for lyrics: stopping on its own now says why (the song changed, it paused, or other lyrics loaded) instead of "Tap to sync stopped", and keeps your next tap from reaching the app behind. Past four taps it says how many more it will take.
+- Tap to sync for lyrics: the panel fades in and out, each tap pops a dot and nudges the hand, the result shows a check mark or warning sign without the text jumping, and VoiceOver counts the taps. The result stays while the pointer is over it, and for 8 seconds when Undo is offered.
 - A Shortcuts action that opens Lunalyr waits until Lunalyr has started before it runs.
 - Lyrics from Kugou's word-timed files and from Kuwo no longer lose a line, or show a stray timestamp like "<01:60.00>", when a line or word starts within a few milliseconds of a whole minute.
 - LRCLIB, QQ Music, Kugou and Kuwo no longer offer an edition of the song with the wrong length (which was then rejected) when one with the right length was also found.

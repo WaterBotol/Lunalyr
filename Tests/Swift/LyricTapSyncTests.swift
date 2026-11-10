@@ -240,7 +240,16 @@ final class LyricTapSyncTests: XCTestCase {
         controller.start()
         fake.query = LyricQuery(title: "Next", artist: "Artist", album: nil, duration: 180)
         controller.tap()
-        XCTAssertEqual(controller.session.phase, .failed(.cancelled), "a new song ends it")
+        XCTAssertEqual(controller.session.phase, .failed(.songChanged), "a new song ends it")
+        XCTAssertEqual(notes.last, "The song changed, so Tap to sync stopped. The timing is unchanged.")
+
+        fake.query = LyricQuery(title: "Song", artist: "Artist", album: "Album", duration: 200)
+        controller.start()
+        fake.playing = false
+        controller.tap()
+        XCTAssertEqual(controller.session.phase, .failed(.notPlaying), "a pause ends it")
+        XCTAssertEqual(notes.last, "The song paused, so Tap to sync stopped. The timing is unchanged.")
+        fake.playing = true
 
         fake.query = LyricQuery(title: "Song", artist: "Artist", album: "Album", duration: 200)
         controller.start()
@@ -272,7 +281,8 @@ final class LyricTapSyncTests: XCTestCase {
             fake.time = start + LyricTapSync.reactionTime - 0.25
             controller.tap()
         }
-        XCTAssertEqual(controller.session.phase, .failed(.cancelled))
+        XCTAssertEqual(controller.session.phase, .failed(.lyricsChanged))
+        XCTAssertTrue(controller.session.message.hasPrefix("Other lyrics loaded"))
         XCTAssertEqual(offsets.offset(for: query, source: "LRCLIB"), 0, "nothing saved for the source no longer shown")
         XCTAssertEqual(offsets.offset(for: query, source: "Apple Music"), 0)
 
@@ -357,5 +367,42 @@ final class LyricTapSyncTests: XCTestCase {
         extras.nextVisualizer(settings: settings)
         XCTAssertEqual(settings.audioVisualizerStyle, AudioVisualizerStyle.allCases[1])
         XCTAssertEqual(LunalyrExtras.visualizer(after: AudioVisualizerStyle.allCases.last!), AudioVisualizerStyle.allCases[0])
+    }
+
+    // MARK: Polish (T1 to T6)
+
+    func testTheMessageSaysHowManyMoreTapsAreAllowed() {
+        var session = LyricTapSession()
+        session.start(lineStarts: starts, prior: 0, playing: true, now: 0)
+        for index in 0..<LyricTapSync.requiredTaps { session.tap(at: 500 + Double(index) * 0.5, now: Double(index)) }
+        XCTAssertTrue(session.isListening)
+        XCTAssertTrue(session.message.hasSuffix("(up to \(LyricTapSync.maximumTaps - LyricTapSync.requiredTaps) more)."),
+                      session.message)
+    }
+
+    func testOnlyARefusedStartAsksToPlayASong() {
+        var session = LyricTapSession()
+        session.start(lineStarts: starts, prior: 0, playing: false, now: 0)
+        XCTAssertEqual(session.message, "Play a song first: the taps are timed against it.")
+        session.start(lineStarts: starts, prior: 0, playing: true, now: 0)
+        session.stop(.notPlaying)
+        XCTAssertTrue(session.message.hasPrefix("The song paused"))
+        session.start(lineStarts: starts, prior: 0, playing: false, now: 0)
+        XCTAssertTrue(session.message.hasPrefix("Play a song first"), "a refused start forgets the last session's lines")
+        session.stop(.songChanged)
+        XCTAssertEqual(session.phase, .failed(.notPlaying), "only a listening session can be stopped")
+    }
+
+    @MainActor
+    func testTheResultLooksAndStaysAsItShould() {
+        XCTAssertEqual(LyricTapSyncController.dismissDelay(for: .applied(offset: 0.2, previous: 0, used: 4, total: 4)), 8,
+                       "long enough to reach Undo")
+        XCTAssertEqual(LyricTapSyncController.dismissDelay(for: .failed(.noAgreement)), 3)
+        XCTAssertEqual(LyricTapSyncView.symbol(for: .listening), "hand.tap")
+        XCTAssertEqual(LyricTapSyncView.symbol(for: .applied(offset: 0, previous: 0, used: 4, total: 4)), "checkmark.circle.fill")
+        XCTAssertEqual(LyricTapSyncView.symbol(for: .failed(.songChanged)), "exclamationmark.triangle.fill")
+        XCTAssertEqual(LyricTapSyncView.symbol(for: .failed(.cancelled)), "xmark.circle")
+        XCTAssertEqual(LyricTapSyncView.tapAnnouncement(2), "Tap 2 of 4")
+        XCTAssertEqual(LyricTapSyncView.tapAnnouncement(6), "Tap 6")
     }
 }
