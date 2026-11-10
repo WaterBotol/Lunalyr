@@ -161,4 +161,18 @@ final class CreditsLayerTests: XCTestCase {
             XCTAssertNotNil(renderer.cgImage, "seed \(seed)")
         }
     }
+
+    /// A title such as "Song (Remix)" used to lose "(Remix)" to the backing
+    /// vocal layer, drawn small and apart from the rest of the title.
+    @MainActor
+    func testBracketsInATitleOrCreditStayInTheLine() {
+        let cue = LyricCreditCues.cues(in: [], title: "Song (Remix)", artist: "Band")[0]
+        XCTAssertFalse(BackingVocals.split(cue.words, glue: []).backing.isEmpty, "Lyrics would lift this group")
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil,
+                                                  allowed: CreditsLayer.liftsBackingVocals, settingOn: true))
+        XCTAssertTrue(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil, allowed: true, settingOn: true))
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: false, firstRunOnly: nil, allowed: true, settingOn: true))
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: 0.5, allowed: true, settingOn: true))
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil, allowed: true, settingOn: false))
+    }
 }

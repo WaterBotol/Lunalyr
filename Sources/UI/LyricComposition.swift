@@ -195,6 +195,10 @@ struct LyricLineView: View {
     var rollingLineEnds: [TimedWordKey: Double] = [:]
     /// Rolling stages: the tokens each glued run is made of.
     var parts: [TimedWordKey: [LyricsFetcher.Word]] = [:]
+    /// Bracketed words are lifted out as backing vocals. Credits and the
+    /// song's title are not sung, so their brackets ("Song (Remix)",
+    /// "(feat. …)") stay in the line.
+    var liftsBackingVocals = true
     @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
 
     /// The words Echo repeats, and how they run together.
@@ -206,7 +210,7 @@ struct LyricLineView: View {
     var body: some View {
         // Bracketed backing vocals are lifted out and drawn apart, behind the
         // lead (see BackingVocals). Only word-timed lines are split.
-        let split = wordTimed && firstRunOnly == nil && BackingVocals.isOn
+        let split = Self.liftsBacking(wordTimed: wordTimed, firstRunOnly: firstRunOnly, allowed: liftsBackingVocals)
             ? BackingVocals.split(words, glue: glue) : nil
         if let split, !split.backing.isEmpty {
             ZStack {
@@ -217,6 +221,13 @@ struct LyricLineView: View {
         } else {
             lineBody(words: words, glue: glue)
         }
+    }
+
+    /// Whether a line's bracketed words are drawn apart as backing vocals:
+    /// only word-timed lines, not a first-run preview, with the setting on.
+    static func liftsBacking(wordTimed: Bool, firstRunOnly: Double?, allowed: Bool,
+                             settingOn: Bool = BackingVocals.isOn) -> Bool {
+        allowed && wordTimed && firstRunOnly == nil && settingOn
     }
 
     @ViewBuilder
