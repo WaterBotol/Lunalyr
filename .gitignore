@@ -25,3 +25,4 @@ DerivedData/
 *private*key*
 .env*
 __pycache__/
+.dd/
