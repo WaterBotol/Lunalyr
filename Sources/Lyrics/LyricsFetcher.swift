@@ -952,10 +952,22 @@ final class LyricsFetcher {
         )
     }
 
+    /// How long a line with no timing of its own most likely takes to sing:
+    /// about 0.45 s a syllable plus 1.5 s for a held note, 2.5 to 20 s.
+    /// The last line of a song, or one before a long break, runs to the end
+    /// of the track or the next line; estimated word timing spread over that
+    /// whole window lit its words one by one across minutes of outro.
+    static func estimatedSingingSpan(of text: String) -> TimeInterval {
+        let syllables = Double(LyricGapTiming.estimatedSyllables(text))
+        return min(20, max(2.5, syllables * 0.45 + 1.5))
+    }
+
     /// Splits a line's window across its words proportionally to their length,
     /// so longer words hold emphasis longer -- far more natural than an even
     /// split. The window is trimmed slightly because a sung line normally
-    /// finishes before the next one begins.
+    /// finishes before the next one begins, and never runs longer than the
+    /// line takes to sing (`estimatedSingingSpan`). Only the words' timing is
+    /// estimated: the line's own start and end are unchanged.
     static func distributeWords(in text: String, from start: TimeInterval, to end: TimeInterval) -> [Word] {
         var tokens: [String] = []
         text.enumerateSubstrings(in: text.startIndex..., options: .byWords) { _, _, enclosing, _ in
@@ -965,7 +977,7 @@ final class LyricsFetcher {
         guard !tokens.isEmpty else { return [] }
 
         let window = max(end - start, 0.3)
-        let usable = min(window, max(Double(tokens.count) * 0.42, window * 0.88))
+        let usable = min(window, max(Double(tokens.count) * 0.42, min(window * 0.88, estimatedSingingSpan(of: text))))
         let weights = tokens.map { Double($0.count) + 1.5 }
         let totalWeight = weights.reduce(0, +)
 

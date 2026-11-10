@@ -48,14 +48,18 @@ struct LyricLayer: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
-    private static let noticeHoldDuration: TimeInterval = 4.0
-    private static let noticeFadeDuration: TimeInterval = 1.0
-    private static let idleHoldDuration: TimeInterval = 5.0
+    private static let noticeHoldDuration: TimeInterval = WallpaperMotion.noticeHold
+    private static let noticeFadeDuration: TimeInterval = WallpaperMotion.noticeFade
+    private static let idleHoldDuration: TimeInterval = WallpaperMotion.idleNoticeHold
     static let noticeTiming = LyricStagePresence.Timing(idleHold: idleHoldDuration, noticeHold: noticeHoldDuration,
                                                         noticeFade: noticeFadeDuration)
 
-    private var sceneKey: LyricSceneKey {
-        let kind: LyricSceneKey.Kind
+    /// What the stage shows on this frame. Looking the lyrics up again for
+    /// a song already showing "no lyrics" (a reconnect, a change of source
+    /// options) stays on that state instead of bringing the loading notice
+    /// back mid-song.
+    private func sceneKey(wall: Double) -> (key: LyricSceneKey, loadingSince: Double?) {
+        var kind: LyricSceneKey.Kind
         if nowPlaying.current == nil { kind = .idle }
         else if lyricsVM.isLoading && lyricsVM.lines.isEmpty && lyricsVM.plainLines.isEmpty { kind = .loading }
         else if !lyricsVM.plainLines.isEmpty { kind = .plain }
@@ -64,29 +68,54 @@ struct LyricLayer: View {
         var track = Hasher()
         track.combine(nowPlaying.current?.title)
         track.combine(nowPlaying.current?.artist)
-        return LyricSceneKey(kind: kind, track: track.finalize(),
-            fingerprint: LyricSceneKey.fingerprint(lyricsVM.lines, plain: lyricsVM.plainLines))
+        let hash = track.finalize()
+        let shown = cache.shown(kind, track: hash, wall: wall)
+        return (LyricSceneKey(kind: shown.kind, track: hash,
+                              fingerprint: LyricSceneKey.fingerprint(lyricsVM.lines, plain: lyricsVM.plainLines)),
+                shown.loadingSince)
     }
 
-    private var sceneContent: LyricSceneContent {
+    private func sceneContent(loadingSince: Double?) -> LyricSceneContent {
         LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized,
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
-            duration: nowPlaying.current?.duration ?? 0)
+            duration: nowPlaying.current?.duration ?? 0, seed: trackSeed, vocalWindows: lyricsVM.vocalWindows,
+            loadingSince: loadingSince, offline: lyricsVM.notFound && !LyricConnectivity.shared.isOnline)
     }
 
     /// The player macOS will not let Lunalyr read, while that is why the
-    /// wallpaper shows nothing playing.
-    private var refusedPlayer: PlayerKind? { nowPlaying.deniedPlayers.first }
+    /// wallpaper shows nothing playing: the one the hover controls, the
+    /// menu-bar banner and VoiceOver name (`idleRefusal`), so they agree.
+    private var refusedPlayer: PlayerKind? { nowPlaying.idleRefusal }
 
     /// When the idle notice went up: when playback stopped, or when a
     /// running player turned out to be refused -- which, at launch, leaves
     /// no stop to count from.
     private func idleNoticeSince(_ idleSince: Date?) -> Date? {
-        let refused = cache.refusedSince(refusedPlayer, now: Date())
-        return [idleSince, refused].compactMap { $0 }.max()
+        idleNotice(idleSince).hold
     }
+
+    /// The idle notice's timing: `hold` counts its hold and fade from the
+    /// latest reason it went up; `arrival` from when it first appeared, so
+    /// learning that the player is refused while "Nothing playing" is up
+    /// swaps the words without the notice dropping and rising again.
+    /// `swap` is when the refusal replaced the words, if it did.
+    private func idleNotice(_ idleSince: Date?) -> (hold: Date?, arrival: Date?, swap: Date?) {
+        let refused = cache.refusedSince(refusedPlayer, now: Date())
+        return Self.idleNotice(idleSince: idleSince, refused: refused)
+    }
+
+    static func idleNotice(idleSince: Date?, refused: Date?) -> (hold: Date?, arrival: Date?, swap: Date?) {
+        guard let idleSince, let refused else { return (idleSince ?? refused, idleSince ?? refused, nil) }
+        guard refused > idleSince else { return (idleSince, refused, nil) }
+        // The earlier notice was still up when the refusal was learned.
+        let stillUp = refused.timeIntervalSince(idleSince) < noticeHoldTotal
+        return (refused, stillUp ? idleSince : refused, stillUp ? refused : nil)
+    }
+
+    /// How long the idle notice is up: its hold and its fade.
+    static let noticeHoldTotal = WallpaperMotion.idleNoticeHold + WallpaperMotion.noticeFade
 
     /// The text colours for this frame, eased and made readable.
     private func ink(energy: Double, wall: Double) -> LyricInk {
@@ -118,8 +147,9 @@ struct LyricLayer: View {
         // A resting clock's timeline hands a rebuild the date of its last
         // tick; anything this frame starts must start from now.
         let wall = pace?.wall(self.wall) ?? self.wall
-        let key = sceneKey
-        let transition = scenes.observe(key: key, content: sceneContent, time: time, wall: wall,
+        let (key, loadingSince) = sceneKey(wall: wall)
+        let content = sceneContent(loadingSince: loadingSince)
+        let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
         let ink = ink(energy: energy, wall: wall)
@@ -129,15 +159,21 @@ struct LyricLayer: View {
         ZStack {
             if shown > 0.001 {
                 ZStack {
-                    if let outgoing = transition.outgoing, transition.outgoingPresence > 0.001 {
-                        let dissolve = 1 - transition.outgoingPresence
-                        scene(outgoing.content, key: outgoing.key, time: outgoing.renderTime(at: wall),
-                              live: false, energy: energy, ink: ink)
-                            .opacity(transition.outgoingPresence)
-                            .blur(radius: reduceMotion ? 0 : dissolve * 5)
-                            .scaleEffect(reduceMotion ? 1 : 1 - 0.012 * dissolve)
+                    ForEach(transition.leaving, id: \.scene.id) { leaving in
+                        if leaving.presence > 0.001 {
+                            // A song change dissolves softly; a seek or a
+                            // source upgrade redraws the same place and
+                            // only fades.
+                            let dissolve = reduceMotion || !leaving.scene.blurs ? 0 : 1 - leaving.presence
+                            scene(leaving.scene.content, key: leaving.scene.key,
+                                  time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
+                                  ink: ink)
+                                .opacity(leaving.presence)
+                                .blur(radius: dissolve * 5)
+                                .scaleEffect(1 - 0.012 * dissolve)
+                        }
                     }
-                    scene(sceneContent, key: key, time: time, live: true, energy: energy, ink: ink)
+                    scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
                         .opacity(transition.incomingPresence)
                 }
                 // Hiding the lyrics dissolves them softly rather than cutting.
@@ -156,8 +192,12 @@ struct LyricLayer: View {
     /// nothing left to change needs none (`LyricPace.quietLevel`).
     private func level(key: LyricSceneKey, transition: LyricSceneMemory.Transition, shown: Double,
                        target: Double, ink: LyricInk, wall: Double) -> LyricPace.Level {
-        if let note = extras.note, wall - note.at < 2.7 { return .active }
-        if shown > 0.001, transition.outgoing != nil || transition.incomingPresence < 1 { return .active }
+        if let note = extras.note, wall - note.at < WallpaperMotion.toastLife + 0.1 { return .active }
+        if shown > 0.001, !transition.leaving.isEmpty || transition.incomingPresence < 1 { return .active }
+        // The loading notice fading in, after its delay.
+        if key.kind == .loading, let since = cache.loadingSince,
+           (WallpaperMotion.loadingDelay - 0.1)...(WallpaperMotion.loadingDelay + WallpaperMotion.loadingIn + 0.05)
+            ~= wall - since { return .active }
         let drifting = ink.mode.drifts || ink.mode == .musicReactive || !ink.settled
         let noticeAge: TimeInterval?
         switch key.kind {
@@ -178,46 +218,42 @@ struct LyricLayer: View {
             let lines = lyricsVM.lines
             let index = lyricsVM.activeLineIndex(at: time) ?? 0
             let lead = max(0.9, settings.nextWordPreviewLead + 0.15)
-            for row in max(0, index - 2)...min(lines.count - 1, index + 1) where lines.indices.contains(row) {
+            for row in max(0, index - 3)...max(0, min(lines.count - 1, index + 1)) where lines.indices.contains(row) {
                 let line = lines[row]
                 if time >= line.start - lead, time <= line.start + 0.8 { return .active }
-                let exit = LyricPhraseTiming.exitStart(of: line, nextStart: handOver(after: row, in: lines))
-                if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan + 0.1 { return .active }
+                // Where the renderer starts the exit, which for most layouts
+                // is earlier than the phrase's: measured from the phrase's,
+                // those exits played at 12 or 24 fps.
+                let exit = renderedExitStart(row, in: lines)
+                if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan(for: composition(at: row)) + 0.1 {
+                    return .active
+                }
                 for word in line.words where time >= word.start - lead && time <= word.end + 1.2 {
                     return .active
                 }
             }
-            if settings.showInterludes && instrumentalGap(at: time) != nil { return .ambient }
+            if settings.showInterludes && instrumentalGap(at: time, windows: lyricsVM.vocalWindows,
+                                                        duration: nowPlaying.current?.duration ?? 0) != nil {
+                return .ambient
+            }
             return drifting ? .ambient : .still
         }
     }
 
     /// A brief confirmation of what a shortcut just did: rises in, holds,
     /// fades. Drawn whether or not the lyrics are showing.
+    /// While the wallpaper is paused `LyricStage` draws it instead.
     @ViewBuilder
     private func noteView(wall: Double) -> some View {
         if animating, let note = extras.note {
-            let age = wall - note.at
-            let shown = vc_settle(age, 0.32) * (1 - vc_settle(age - 1.9, 0.55))
-            if age >= 0, age < 2.6, shown > 0.001 {
-                Label(note.text, systemImage: note.symbol)
-                    .font(settings.uiFont(size: max(13, baseSize * 0.26), bold: true, mood: mood))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, baseSize * 0.34)
-                    .padding(.vertical, baseSize * 0.16)
-                    .background(Capsule().fill(.black.opacity(0.42)))
-                    .shadow(color: .black.opacity(0.3), radius: 10, y: 3)
-                    .opacity(shown)
-                    .offset(y: reduceMotion ? 0 : (1 - shown) * baseSize * 0.25)
-                    .padding(.bottom, max(24, maxHeight * 0.09))
-                    .accessibilityLabel(note.text)
-            }
+            LyricNoteView(note: note, chain: cache.notes.observe(note), wall: wall, baseSize: baseSize,
+                          maxHeight: maxHeight, mood: mood)
         }
     }
 
     /// One scene: whatever the lyric layer shows for a given state.
     @ViewBuilder
-    private func scene(_ content: LyricSceneContent, key: LyricSceneKey, time: TimeInterval,
+    private func scene(_ content: LyricSceneContent, key: LyricSceneKey, time: TimeInterval, wall: Double,
                        live: Bool, energy: Double, ink: LyricInk) -> some View {
         let fallback = ink.base
         switch key.kind {
@@ -227,27 +263,49 @@ struct LyricLayer: View {
             // Lunalyr the player, say that instead: the music may well be
             // playing. The menu bar and Settings keep saying it after this
             // has gone.
-            if let since = idleNoticeSince(content.idleSince) {
-                let age = Date().timeIntervalSince(since)
+            let notice = idleNotice(content.idleSince)
+            if let since = notice.hold, let arrived = notice.arrival {
+                let now = Date()
+                let age = now.timeIntervalSince(since)
                 let presence = (1 - Easing.smoothstep((age - Self.idleHoldDuration) / Self.noticeFadeDuration))
-                    * vc_settle(age, 0.6)
+                    * vc_settle(now.timeIntervalSince(arrived), 0.6)
+                // Words that change while the notice is up cross-fade.
+                let swapped = notice.swap.map { Easing.smoothstep(now.timeIntervalSince($0) / 0.3) } ?? 1
                 if presence > 0.01 {
-                    if let refused = refusedPlayer {
-                        VStack(spacing: baseSize * 0.14) {
-                            placeholder(LyricLayer.refusedTitle(refused), size: baseSize * 0.42, colour: fallback.rest)
-                            placeholder(LyricLayer.refusedDetail, size: baseSize * 0.24, colour: fallback.rest)
+                    ZStack {
+                        if swapped < 1 {
+                            placeholder("Nothing playing", size: baseSize * 0.42, colour: fallback.rest)
+                                .opacity(1 - swapped)
                         }
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: maxWidth)
-                        .opacity(presence)
-                    } else {
-                        placeholder("Nothing playing", size: baseSize * 0.42, colour: fallback.rest)
-                            .opacity(presence)
+                        if let refused = refusedPlayer {
+                            VStack(spacing: baseSize * 0.14) {
+                                placeholder(LyricLayer.refusedTitle(refused), size: baseSize * 0.42, colour: fallback.rest)
+                                placeholder(LyricLayer.refusedDetail, size: baseSize * 0.24, colour: fallback.rest)
+                            }
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: maxWidth)
+                            .opacity(swapped)
+                        } else {
+                            placeholder("Nothing playing", size: baseSize * 0.42, colour: fallback.rest)
+                                .opacity(swapped)
+                        }
                     }
+                    .opacity(presence)
                 }
             }
         case .loading:
-            ProgressView().controlSize(.large).tint(.white)
+            // Nothing for a quick lookup; for a slower one, the song's name,
+            // quietly, at the lyrics' own scale -- not a system spinner.
+            if let since = content.loadingSince {
+                let presence = Self.loadingPresence(age: wall - since)
+                if presence > 0.001 {
+                    placeholder([content.title, content.artist].filter { !$0.isEmpty }.joined(separator: " · "),
+                                size: baseSize * 0.34, colour: fallback.rest)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: maxWidth)
+                        .opacity(presence)
+                }
+            }
         case .plain:
             // No timed source has this track, so the words are shown as a
             // static block instead of nothing at all.
@@ -282,18 +340,30 @@ struct LyricLayer: View {
                         (age - Self.noticeHoldDuration) / Self.noticeFadeDuration
                     )
                     if presence > 0.01 {
-                        placeholder("Lyrics unavailable", size: baseSize * 0.34, colour: fallback.rest).opacity(presence)
+                        placeholder(content.offline ? Self.offlineNotice : "Lyrics unavailable",
+                                    size: baseSize * 0.34, colour: fallback.rest)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: maxWidth)
+                            .opacity(presence)
                     }
                 }
             }
         case .synced:
             let lines = SceneLines(lines: content.lines, romanized: content.romanized, fingerprint: key.fingerprint,
                                    machineTranslations: content.machineTranslations)
-            let gap = live && settings.showInterludes ? instrumentalGap(at: time) : nil
+            // The scene's own breaks, so an outgoing scene's dots fade out
+            // with it instead of vanishing.
+            let gap = settings.showInterludes
+                ? instrumentalGap(at: time, windows: content.vocalWindows, duration: content.duration) : nil
+            // The scene's own song: an outgoing scene's credits keep its
+            // title and placement instead of taking the new song's.
+            let cues = LyricCreditCues.isOn
+                ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist) : []
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
+                .environment(\.lyricCreditBands, LyricCreditCues.bands(cues))
                 .overlay {
-                    creditsOverlay(lines, time: time)
+                    creditsOverlay(lines, cues: cues, content: content, time: time)
                 }
                 .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
@@ -304,26 +374,33 @@ struct LyricLayer: View {
     }
 
     @ViewBuilder
-    private func creditsOverlay(_ scene: SceneLines, time: Double) -> some View {
-        if LyricCreditCues.isOn {
-            let cues = LyricCreditCues.cues(in: scene.lines, title: nowPlaying.current?.title ?? "",
-                                            artist: nowPlaying.current?.artist ?? "")
-            if !cues.isEmpty {
-                let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
-                CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
-                             baseSize: baseSize, seed: trackSeed,
-                             composition: composition(at: first), mood: mood)
-            }
+    private func creditsOverlay(_ scene: SceneLines, cues: [LyricCreditCues.Cue], content: LyricSceneContent,
+                                time: Double) -> some View {
+        if !cues.isEmpty {
+            let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
+            CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
+                         baseSize: baseSize, seed: content.seed,
+                         composition: composition(at: first), mood: mood)
         }
     }
 
-    private func instrumentalGap(at time: Double) -> VCVocalGap? {
+    private func instrumentalGap(at time: Double, windows: [VCVocalWindow], duration: Double) -> VCVocalGap? {
         var gap = VCVocalGap()
-        let found = lyricsVM.vocalWindows.withUnsafeBufferPointer {
-            vc_vocal_gap($0.baseAddress, Int32($0.count), time, nowPlaying.current?.duration ?? 0, 2.4, &gap)
+        let found = windows.withUnsafeBufferPointer {
+            vc_vocal_gap($0.baseAddress, Int32($0.count), time, duration, 2.4, &gap)
         }
         return found != 0 ? gap : nil
     }
+
+    /// 0...1: the loading notice, `age` seconds into a lookup. Nothing for
+    /// a lookup that answers within `loadingDelay`, then a gentle fade in.
+    static func loadingPresence(age: Double) -> Double {
+        Easing.smoothstep((age - WallpaperMotion.loadingDelay) / WallpaperMotion.loadingIn)
+    }
+
+    /// No lyrics were found while the Mac was offline: say so, rather than
+    /// that the song has none.
+    static let offlineNotice = "You’re offline. Lyrics will load when you reconnect."
 
     /// Unsynced lyrics, all of them: the block scrolls slowly through the
     /// song in step with its progress, with soft edges, instead of stopping
@@ -400,6 +477,10 @@ struct LyricLayer: View {
         let index = activeIndex ?? 0
         let stageSize = CGSize(width: maxWidth, height: maxHeight)
         LyricLineStack(stageSize: stageSize, gap: baseSize * 0.3) {
+            // Three back: after two very short lines the one before them
+            // can still be leaving, and was cut off.
+            earlierLine(index - 3, current: index, scene: scene, time: time, stageSize: stageSize, energy: energy,
+                        live: live, lyricOpacity: lyricOpacity)
             earlierLine(index - 2, current: index, scene: scene, time: time, stageSize: stageSize, energy: energy,
                         live: live, lyricOpacity: lyricOpacity)
             earlierLine(index - 1, current: index, scene: scene, time: time, stageSize: stageSize, energy: energy,
@@ -427,17 +508,31 @@ struct LyricLayer: View {
             let shift = heldShift(row, in: scene.lines, time: time)
             let crossFades = reduceMotion && (shift ?? 0) > 0 && (shift ?? 0) < 1
             let travel = shift.map { reduceMotion ? ($0 >= 1 ? 1 : 0) : $0 }
+            let yield = carriedYield(row, scene: scene, time: time, live: live)
             renderLyricLine(index: row, scene: scene, time: time, stageSize: stageSize,
-                energy: energy, live: live, outgoing: true)
+                energy: energy, live: live, outgoing: true, yield: yield)
                 .modifier(HeldLineShift(travel: travel))
                 .opacity(lyricOpacity * (crossFades ? 1 - (shift ?? 0) : 1))
             if crossFades, let shift {
                 renderLyricLine(index: row, scene: scene, time: time, stageSize: stageSize,
-                    energy: energy, live: live, outgoing: true)
+                    energy: energy, live: live, outgoing: true, yield: yield)
                     .modifier(HeldLineShift(travel: 1))
                     .opacity(lyricOpacity * shift)
             }
         }
+    }
+
+    /// The dimming a line-timed line had reached when the next line's
+    /// preview handed over to that line, kept while it leaves: dropped at
+    /// the onset, the leaving line brightened from about a quarter to half
+    /// strength just as the new line appeared.
+    private func carriedYield(_ row: Int, scene: SceneLines, time: Double, live: Bool) -> Double {
+        let lines = scene.lines
+        guard live, lines.indices.contains(row + 1), !lines[row].wordTimed else { return 0 }
+        let handover = lines[row + 1].start.nextDown
+        guard time > handover,
+              nextLinePreview(after: row, in: scene, time: handover) == row + 1 else { return 0 }
+        return previewLevel(of: lines[row + 1], time: handover, since: previewAllowed(after: row, in: lines))
     }
 
     /// 0...1: how far the next line's preview has ramped in.
@@ -449,20 +544,25 @@ struct LyricLayer: View {
 
     /// Whether an earlier line is still being sung or finishing its exit.
     private func leaving(_ line: Int, current: Int, in lines: [LyricsFetcher.Line], time: Double) -> Bool {
-        Self.isLeaving(line, current: current, lines: lines, time: time) {
+        Self.isLeaving(line, current: current, lines: lines, time: time,
+                       span: { LyricPhraseTiming.exitSpan(for: composition(at: $0)) }) {
             lines[$0].wordTimed && composition(at: $0).arrivalOnly
         }
     }
 
-    /// `leaving`, given which lines roll (`rolls`).
+    /// `leaving`, given which lines roll (`rolls`) and how long each takes
+    /// to leave (`span`).
     static func isLeaving(_ line: Int, current: Int, lines: [LyricsFetcher.Line], time: Double,
+                          span: (Int) -> Double = { _ in LyricPhraseTiming.exitSpan },
                           rolls: (Int) -> Bool) -> Bool {
         guard line >= 0, line < current, lines.indices.contains(current) else { return false }
         // An earlier renderer cannot reappear after a short intervening line.
         guard !changesTiming(lines[line], lines[current]),
               !(line..<current).contains(where: { changesTiming(lines[$0], lines[$0 + 1]) }) else { return false }
         let handOver = Self.handOver(after: line, in: lines, rolls: rolls)
-        guard LyricPhraseTiming.stillLeaving(lines[line], nextStart: handOver, time: time) else { return false }
+        guard LyricPhraseTiming.stillLeaving(lines[line], nextStart: handOver, time: time, span: span(line)) else {
+            return false
+        }
         // A rolling line followed by another rolling line has no exit of its
         // own: its words carry on in that line's stage and fade with it.
         if rolls(line) && rolls(line + 1) { return false }
@@ -514,6 +614,25 @@ struct LyricLayer: View {
         return vc_settle(time - lines[row + 1].start, 0.45)
     }
 
+    /// When line `row` starts to leave as drawn (`renderedExitStart(_:in:handOver:rolls:fillsStage:)`).
+    private func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line]) -> Double {
+        let style = composition(at: row)
+        return Self.renderedExitStart(row, in: lines, handOver: handOver(after: row, in: lines),
+                                      rolls: lines[row].wordTimed && style.arrivalOnly, fillsStage: style.fillsStage)
+    }
+
+    /// The exit the renderer actually draws: word-timed lines that do not
+    /// roll, and line-timed lines in stage layouts, leave a moment after
+    /// their last word (`stageExitStart`); everything else at the phrase's
+    /// own exit.
+    static func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line], handOver: Double, rolls: Bool,
+                                  fillsStage: Bool) -> Double {
+        let line = lines[row]
+        let phrase = LyricPhraseTiming.exitStart(of: line, nextStart: handOver)
+        guard !rolls, line.wordTimed || fillsStage else { return phrase }
+        return min(phrase, stageHeldUntil(line))
+    }
+
     /// A layout remembered for this song or artist wins; "automatic" there
     /// means Match the music even if a fixed layout is set globally.
     private func composition(at index: Int) -> LyricComposition {
@@ -537,6 +656,9 @@ struct LyricLayer: View {
         guard lines.indices.contains(index), lines.indices.contains(next), !lines[next].isInstrumental,
               !Self.changesTiming(lines[index], lines[next]), time < lines[next].start else { return nil }
         let style = composition(at: next)
+        // A stage layout draws nothing for a line-timed preview, so the
+        // line being sung would only dim for nothing.
+        guard lines[next].wordTimed || !style.fillsStage else { return nil }
         guard settings.previewsNextWord(in: style),
               !lines[next].wordTimed || settings.revealsWords(in: style),
               !(lines[index].wordTimed && lines[next].wordTimed && style.arrivalOnly
@@ -650,7 +772,12 @@ struct LyricLayer: View {
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:])
                         let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
-                        let slide: CGFloat = still ? 0 : CGFloat((1 - pose.arrival) * 0.20 - pose.exit * 0.10) * baseSize
+                        // A line leaving lifts away as the next one rises
+                        // into the same place, rather than sitting under it.
+                        let makesWay: Double = outgoing && !composition.fillsStage
+                            ? Self.incomingArrival(after: index, in: lines, time: time) { handOver(after: $0, in: lines) } : 0
+                        let travel: Double = (1 - pose.arrival) * 0.20 - pose.exit * 0.10 - 0.30 * makesWay
+                        let slide: CGFloat = still ? 0 : CGFloat(travel) * baseSize
                         lineView
                             .opacity(stagePresence)
                             .scaleEffect(swell)
@@ -664,7 +791,9 @@ struct LyricLayer: View {
                             annotations: readingOptions.display == .below
                                 ? readingPairs(index, readings: readings, words: line.words, glue: glue,
                                                scene: scene, live: live) : [:],
-                            yield: yield)
+                            yield: yield,
+                            heldPreview: !previewing && live && index > 0 && time - line.start < 1
+                                && nextLinePreview(after: index - 1, in: scene, time: line.start.nextDown) == index)
                     }
                 }
                 if let lineReading {
@@ -705,6 +834,15 @@ struct LyricLayer: View {
         }
     }
 
+    /// 0...1: how far the line after `row` has arrived (its spring), or 0
+    /// before it starts. A held line moves aside instead (`heldShift`).
+    static func incomingArrival(after row: Int, in lines: [LyricsFetcher.Line], time: Double,
+                                handOver: (Int) -> Double) -> Double {
+        guard lines.indices.contains(row + 1), time >= lines[row + 1].start,
+              !LyricPhraseTiming.isHeld(row, in: lines) else { return 0 }
+        return min(1, max(0, LyricPhraseTiming(line: lines[row + 1], nextStart: handOver(row + 1), time: time).arrival))
+    }
+
     /// A line with only a line timestamp, set as one level phrase of words.
     /// Its preview is the same layout with only the first word showing, so
     /// that word appears exactly where it will be rather than mid-screen
@@ -713,17 +851,28 @@ struct LyricLayer: View {
     /// word sung so far at once, so a line that lingers (a long gap before the
     /// next one, or a source whose line end is the next line's start) would
     /// sit there fully built; leave a moment after the last word instead.
+    ///
+    /// The cap on a long held note counts from the last word's onset, not
+    /// the line's start: counted from the start, a word sung more than about
+    /// nine seconds into a line was already gone at its onset and never
+    /// appeared, and a held last word faded while still being sung.
     static func stageExitStart(_ line: LyricsFetcher.Line, pose: LyricPhraseTiming) -> Double {
+        min(pose.exitStart, stageHeldUntil(line))
+    }
+
+    /// When a stage layout's line has been sung and held long enough.
+    static func stageHeldUntil(_ line: LyricsFetcher.Line) -> Double {
         let sung = line.words.map(\.end).max() ?? line.end
-        let held = max(line.start + 1.5, min(sung, line.start + 8)) + 1.2
-        return min(pose.exitStart, held)
+        let lastOnset = line.words.map(\.start).max() ?? line.start
+        let sungEnd = min(sung, lastOnset + 8)
+        return max(line.start + 1.5, sungEnd) + WallpaperMotion.holdAfterSung
     }
 
     private func lineTimedLyric(_ line: LyricsFetcher.Line, words: [LyricsFetcher.Word], time: Double,
                                 pose: LyricPhraseTiming, stageSize: CGSize, composition: LyricComposition,
                                 seed: Int, previewing: Bool,
                                 previewSince: Double, glue: [Bool], annotations: [TimedWordKey: String],
-                                yield: Double) -> some View {
+                                yield: Double, heldPreview: Bool = false) -> some View {
         let phrase = LyricsFetcher.Word(text: line.text, start: line.start, end: line.end)
         // A line sung as one has no words to highlight one by one; it
         // enters as its layout has it enter.
@@ -735,15 +884,56 @@ struct LyricLayer: View {
         let previewOpacity = vc_word_visibility(time, line.start, line.end, 1, 1, settings.nextWordPreviewLead)
             * Easing.smoothstep((time - previewSince) / 0.16)
         let stage = composition.fillsStage
-        return LyricLineView(words: words, time: time, stageSize: stageSize,
-            baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, settings.lyricScale))) : base, mood: mood,
-            composition: stage ? composition : .scattered, seed: seed, presence: pose.presence, readings: annotations,
-            wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
-            exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
-            glue: glue, firstRunOnly: previewing ? previewOpacity : nil)
-            .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
-                direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : pose.presence * (1 - 0.5 * yield),
-                arrival: previewing ? 1 : pose.arrival))
+        let visibility = pose.presence * (1 - 0.5 * yield)
+        // The previewed first word stays where the preview showed it, at
+        // least as strong, while the rest of the line makes its entrance:
+        // restarting it with the line blinked it out for a frame or two
+        // and dropped it back to the entrance's starting pose.
+        let holdsFirstRun = !previewing && !stage && heldPreview
+            && (pose.progress < 1 || pose.arrival != 1) && pose.exit <= 0
+        // A stage layout builds its line word by word, but these word times
+        // are invented: the words come in together from the line's start.
+        let staged = stage ? Self.stageReveal(words, readings: annotations, lineStart: line.start)
+            : (words: words, readings: annotations)
+        let lineView = { (firstRun: Double?, held: Bool, hides: Bool) in
+            LyricLineView(words: staged.words, time: time, stageSize: stageSize,
+                baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, self.settings.lyricScale))) : base,
+                mood: self.mood, composition: stage ? composition : .scattered, seed: seed, presence: pose.presence,
+                readings: staged.readings, wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
+                exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
+                glue: glue, firstRunOnly: firstRun, heldFirstRun: held, hidesFirstRun: hides)
+        }
+        return ZStack {
+            lineView(previewing ? previewOpacity : nil, false, holdsFirstRun)
+                .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
+                    direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : visibility,
+                    arrival: previewing ? 1 : pose.arrival))
+            if holdsFirstRun {
+                lineView(Self.heldFirstRunOpacity(presence: pose.presence) * (1 - 0.5 * yield), true, false)
+            }
+        }
+    }
+
+    /// A line-timed line in a stage layout: its estimated word times are
+    /// replaced by a quick stagger from the line's start (60 ms a word, all
+    /// in within half a second), with the readings re-keyed to match.
+    static func stageReveal(_ words: [LyricsFetcher.Word], readings: [TimedWordKey: String],
+                            lineStart: Double) -> (words: [LyricsFetcher.Word], readings: [TimedWordKey: String]) {
+        var moved: [LyricsFetcher.Word] = [], keys: [TimedWordKey: String] = [:]
+        moved.reserveCapacity(words.count)
+        for (index, word) in words.enumerated() {
+            let start = lineStart + min(0.5, Double(index) * 0.06)
+            let next = LyricsFetcher.Word(text: word.text, start: start, end: max(start, word.end))
+            if let reading = readings[word.presentationID] { keys[next.presentationID] = reading }
+            moved.append(next)
+        }
+        return (moved, keys)
+    }
+
+    /// The previewed first word of a line-timed line as the line arrives:
+    /// never fainter than the preview it takes over from.
+    static func heldFirstRunOpacity(presence: Double) -> Double {
+        max(0.25, presence)
     }
 
     /// Which words of a line run together, worked out once per line and
@@ -1069,6 +1259,28 @@ final class LyricLayerCache: ObservableObject {
         return accentLab
     }
 
+    let notes = LyricNoteMemory()
+
+    private var shownTrack: Int?
+    private var shownKind: LyricSceneKey.Kind?
+    /// Wall time the current song's lyrics started loading, while they are.
+    private(set) var loadingSince: Double?
+
+    /// The scene kind to show for `kind` on this frame (see
+    /// `LyricLayer.sceneKey`), and when loading began.
+    func shown(_ kind: LyricSceneKey.Kind, track: Int, wall: Double) -> (kind: LyricSceneKey.Kind, loadingSince: Double?) {
+        if track != shownTrack { shownTrack = track; shownKind = nil; loadingSince = nil }
+        var kind = kind
+        if kind == .loading, shownKind == .missing { kind = .missing }
+        if kind == .loading {
+            if loadingSince == nil || wall < (loadingSince ?? wall) - 1 { loadingSince = wall }
+        } else {
+            loadingSince = nil
+        }
+        shownKind = kind
+        return (kind, loadingSince)
+    }
+
     private var refused: PlayerKind?
     private var refusedAt: Date?
 
@@ -1290,7 +1502,9 @@ struct LyricStage: View, Equatable {
     @ObservedObject private var settings = Settings.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
     @ObservedObject private var scrubPreview = ScrubPreview.shared
+    @ObservedObject private var extras = LunalyrExtras.shared
     @StateObject private var pace = LyricPace()
+    @StateObject private var pausedNotes = LyricNoteHolder()
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
@@ -1315,7 +1529,116 @@ struct LyricStage: View, Equatable {
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
                        wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace)
         }
+        .overlay(alignment: .bottom) { pausedNote(layout) }
     }
+
+    /// A note posted while the wallpaper is paused ("Wallpaper paused"
+    /// itself): the stage's clock is stopped, so the note gets a clock of
+    /// its own that runs only for the note's life and then ends.
+    @ViewBuilder
+    private func pausedNote(_ layout: LyricViewportMetrics) -> some View {
+        let now = Date().timeIntervalSinceReferenceDate
+        if paused, let note = extras.note, now - note.at < WallpaperMotion.toastLife {
+            TimelineView(.explicit(LyricNoteView.frames(for: note, from: now, interval: interval))) { timeline in
+                LyricNoteView(note: note, chain: pausedNotes.memory.observe(note),
+                              wall: timeline.date.timeIntervalSinceReferenceDate, baseSize: layout.baseSize,
+                              maxHeight: layout.stageSize.height, mood: mood)
+            }
+        }
+    }
+}
+
+/// A shortcut's confirmation on the wallpaper: rises in, holds, fades.
+/// A note replacing one that is still well shown keeps the capsule up and
+/// cross-fades only its words (`LyricNoteMemory`), so repeating a shortcut
+/// does not blink it.
+struct LyricNoteView: View {
+    let note: LunalyrExtras.Note
+    let chain: LyricNoteMemory.Chain
+    let wall: Double
+    let baseSize: CGFloat
+    let maxHeight: CGFloat
+    let mood: TrackMood
+    @ObservedObject private var settings = Settings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 0...1 capsule presence for `note`, `chain` as observed, at `wall`.
+    static func presence(_ note: LunalyrExtras.Note, chain: LyricNoteMemory.Chain, wall: Double) -> Double {
+        let age = wall - note.at
+        guard age >= 0, age < WallpaperMotion.toastLife else { return 0 }
+        return vc_settle(wall - chain.capsuleSince, WallpaperMotion.toastIn)
+            * (1 - vc_settle(age - WallpaperMotion.toastOutAt, WallpaperMotion.toastOut))
+    }
+
+    /// 0...1: how far the words have changed to `note`'s.
+    static func swap(_ note: LunalyrExtras.Note, chain: LyricNoteMemory.Chain, wall: Double) -> Double {
+        chain.previous == nil ? 1 : Easing.smoothstep((wall - note.at) / 0.2)
+    }
+
+    /// Frame dates for a note's own clock: from now to the end of its life.
+    static func frames(for note: LunalyrExtras.Note, from now: Double, interval: Double) -> [Date] {
+        let end = note.at + WallpaperMotion.toastLife + 0.02
+        let step = max(1.0 / 120, interval)
+        return stride(from: now, through: end, by: step).map { Date(timeIntervalSinceReferenceDate: $0) }
+    }
+
+    var body: some View {
+        let shown = Self.presence(note, chain: chain, wall: wall)
+        if shown > 0.001 {
+            let swap = Self.swap(note, chain: chain, wall: wall)
+            ZStack {
+                if let previous = chain.previous, swap < 1 {
+                    label(previous).opacity(1 - swap)
+                }
+                label(note).opacity(swap)
+            }
+            .padding(.horizontal, baseSize * 0.34)
+            .padding(.vertical, baseSize * 0.16)
+            .background(Capsule().fill(.black.opacity(0.42)))
+            .shadow(color: .black.opacity(0.3), radius: 10, y: 3)
+            .opacity(shown)
+            .offset(y: reduceMotion ? 0 : (1 - shown) * baseSize * 0.25)
+            .padding(.bottom, max(24, maxHeight * 0.09))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(note.text)
+        }
+    }
+
+    private func label(_ note: LunalyrExtras.Note) -> some View {
+        Label(note.text, systemImage: note.symbol)
+            .font(settings.uiFont(size: max(13, baseSize * 0.26), bold: true, mood: mood))
+            .foregroundStyle(.white)
+            .fixedSize()
+    }
+}
+
+/// Which notes follow on from one another (see `LyricNoteView`). Never
+/// publishes; consulted while the frame is built.
+final class LyricNoteMemory {
+    struct Chain: Equatable {
+        /// When the capsule began to rise.
+        var capsuleSince: Double
+        /// The note whose words are giving way to the current one's.
+        var previous: LunalyrExtras.Note?
+    }
+    private var current: LunalyrExtras.Note?
+    private var chain = Chain(capsuleSince: -.infinity)
+
+    func observe(_ note: LunalyrExtras.Note) -> Chain {
+        guard note != current else { return chain }
+        if let current, LyricNoteView.presence(current, chain: chain, wall: note.at) > 0.5 {
+            chain = Chain(capsuleSince: chain.capsuleSince, previous: current)
+        } else {
+            chain = Chain(capsuleSince: note.at, previous: nil)
+        }
+        current = note
+        return chain
+    }
+}
+
+/// Holds a `LyricNoteMemory` across a view's rebuilds.
+final class LyricNoteHolder: ObservableObject {
+    let memory = LyricNoteMemory()
 }
 
 /// A held line moving aside for the lines that started under it (see

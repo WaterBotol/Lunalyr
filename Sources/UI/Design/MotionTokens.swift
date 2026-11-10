@@ -157,6 +157,24 @@ enum WallpaperMotion {
     static let reducedDissolve: Double = 0.18
 }
 
+// MARK: - Curves (time-driven)
+
+/// The wallpaper's curves, for motion driven from a time value instead of
+/// a SwiftUI animation.
+enum Easing {
+    /// Classic 3x²-2x³ ease, clamped: symmetric cross-fades.
+    static func smoothstep(_ x: Double) -> Double {
+        let clamped = min(max(x, 0), 1)
+        return clamped * clamped * (3 - 2 * clamped)
+    }
+
+    /// Critically damped arrival (`vc_settle`): 0 until `age` 0, exactly 1
+    /// from `duration` on. Anything that arrives or leaves.
+    static func settle(_ age: Double, _ duration: Double) -> Double {
+        vc_settle(age, duration)
+    }
+}
+
 // MARK: - Reveal modifier
 
 private struct LunalyrRevealModifier<Value: Equatable>: ViewModifier {

@@ -106,8 +106,13 @@ struct LyricPhraseTiming {
     let exitStart: Double
     var presence: Double { progress * (1 - exit) }
 
+    /// How far through a line-only lyric the sweep is: across the time it
+    /// most likely takes to sing (`LyricsFetcher.estimatedSingingSpan`), not
+    /// a window that runs on through a break or the end of the song.
     static func sweep(of line: LyricsFetcher.Line, at time: Double) -> Double {
-        min(1, max(0, (time - line.start) / max(0.001, line.end - line.start)))
+        let end = line.wordTimed ? line.end
+            : min(line.end, line.start + LyricsFetcher.estimatedSingingSpan(of: line.text))
+        return min(1, max(0, (time - line.start) / max(0.001, end - line.start)))
     }
 
     static let exitDuration = 0.46
@@ -131,8 +136,12 @@ struct LyricPhraseTiming {
         UInt64(bitPattern: Int64(exactly: (seconds * 1000).rounded()) ?? 0)
     }
 
+    /// A line starts to leave a quarter second before the next one, so the
+    /// two are not both mostly visible in the middle of the stage -- but
+    /// never before its own last word has been sung.
     static func exitStart(of line: LyricsFetcher.Line, nextStart: Double) -> Double {
-        min(line.end + 0.12, nextStart - 0.08)
+        let lastWordEnd = line.words.map(\.end).max() ?? -.infinity
+        return max(lastWordEnd + 0.10, min(line.end + 0.12, nextStart - 0.25))
     }
 
     /// The longest a line still being sung keeps the stage once the next
@@ -160,9 +169,18 @@ struct LyricPhraseTiming {
         lines.indices.contains(row + 1) && handOver(after: row, in: lines) > lines[row + 1].start
     }
 
+    /// How long a line in `composition` takes to leave once its exit has
+    /// begun. Hinge folds its words shut one after another over most of a
+    /// second, longer than the other layouts' exits: drawn only for
+    /// `exitSpan`, its last words were cut off part-way through the fold.
+    static func exitSpan(for composition: LyricComposition) -> Double {
+        composition == .hinge ? 1.0 : exitSpan
+    }
+
     /// Whether an earlier line still has words on their way out.
-    static func stillLeaving(_ line: LyricsFetcher.Line, nextStart: Double, time: Double) -> Bool {
-        time < exitStart(of: line, nextStart: nextStart) + exitSpan
+    static func stillLeaving(_ line: LyricsFetcher.Line, nextStart: Double, time: Double,
+                             span: Double = exitSpan) -> Bool {
+        time < exitStart(of: line, nextStart: nextStart) + span
     }
 
     static func firstWordOnset(of line: LyricsFetcher.Line) -> Double? {

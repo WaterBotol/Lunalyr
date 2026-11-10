@@ -156,6 +156,24 @@ When merging, keep every entry and combine duplicate headings.
 - Visualisers: a silent source with a tiny constant offset in its audio no longer shows a stuck bass glow and keeps the idle scene away.
 - Visualisers with Reduce Motion or Dim Flashing Lights on: the first frames of a scene no longer show at full brightness before the brightness limiter is ready, and a display switching graphics chips no longer jumps to full brightness.
 - Visualisers: switching from a heavy scene such as Spectrum Tunnel to a lighter one no longer leaves the new scene at reduced resolution.
+- Lyrics: a word sung more than about nine seconds into a long line now appears, and a long held last word is no longer faded out while it is still being sung.
+- Lyrics: lines that leave a moment after their last word now leave at the full frame rate instead of stepping.
+- Lyrics: scrubbing or seeking within a song cross-fades smoothly instead of popping, and the line on screen no longer dims and blurs for a moment after a seek.
+- Lyrics: a better lyric source arriving at the start of a song no longer makes the previous song's fading lyrics vanish; one that shows a different line cross-fades instead of cutting.
+- Lyrics: the loading spinner and the "Nothing playing" notice fade out instead of disappearing in one frame.
+- Hinge: a line's last words now finish folding away instead of being cut off part-way.
+- Spoken, Cascade and Cutout with Reduce Motion: the column of words now dissolves to its next place at each word instead of jumping.
+- Lyrics without word timing: the line being replaced no longer brightens for a moment as the next line appears, and the previewed first word of a line stays in place instead of blinking out and jumping when its line starts.
+- Lyrics: a line now starts leaving a little earlier and lifts away as the next one arrives, so two lines no longer sit on top of each other in the middle of the screen at every change.
+- Lyrics: words in very fast lines stay on screen for a moment instead of flashing, and after two very short lines the line before them finishes leaving instead of being cut off.
+- Hinge, Broadside, Portal, Mosaic, Torque and Fable: lyrics without word timing now bring the line's words in together from its start, instead of building the line on guessed word times.
+- Wallpaper while lyrics load: no more system spinner flashing on every song. A lookup that takes longer than a moment fades in the song's name instead, and looking the lyrics up again for a song already showing "no lyrics" no longer brings a spinner back mid-song.
+- Wallpaper: when lyrics can't be found because the Mac is offline, it says so instead of "Lyrics unavailable".
+- Wallpaper: the "can't read this player" notice names the same player as the menu bar and hover controls, and replaces "Nothing playing" with a cross-fade instead of the notice dropping and rising again.
+- Lyrics: skipping a song during an instrumental intro or outro fades the interlude dots out instead of cutting them, they leave more gently, and credits on the old song no longer switch to the new song's title while they fade.
+- Wallpaper: "Wallpaper paused" now shows when you pause the wallpaper with a shortcut, and pressing a shortcut again while its note is showing (cycling layouts, say) changes the words in place instead of blinking the note away and back.
+- Lyrics: backing vocals keep to the other edge of the screen while a credit is showing, instead of landing on it.
+- Lyrics without word timing: the last line of a song, or a line before a long break, now lights its words over the time it takes to sing them instead of spreading the highlight across the whole outro or break. Line start times are unchanged.
 
 ## [1.0.0] - 2026-11-08
 

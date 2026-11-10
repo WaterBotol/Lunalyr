@@ -114,7 +114,8 @@ VCWordMotion vc_word_motion(double time, double start, double end, double cadenc
     if (!isfinite(end) || end < start) end = start;
     double duration = clamp(end - start, .04, 30), age = time - start;
     energy = clamp(energy, 0, 1);
-    m.reveal = vc_settle(age, clamp(.65*duration, .16, .46) * (1 + .08*vc_jitter(seed, 1)));
+    double reveal = clamp(.65*duration, .16, .46) * (1 + .08*vc_jitter(seed, 1));
+    m.reveal = vc_settle(age, reveal);
     m.enter = reduced ? m.reveal : vc_spring_step(age, vc_word_spring(seed, duration, cadence, energy));
     /* Emphasis gathers with the onset (a breath ahead of it) and releases
        when the voice leaves the word. The release is a second step on the same spring, so
@@ -130,7 +131,11 @@ VCWordMotion vc_word_motion(double time, double start, double end, double cadenc
     m.heat = clamp(weight*(vc_spring_step(time - (start - .02), swell) - vc_spring_step(time - release, fall)), 0, 1.15);
     if (isfinite(exit_start)) {
         double stagger = clamp(order, 0, 1)*.14 + (.5 + .5*vc_jitter(seed, 4))*.05;
-        m.leave = vc_settle(time - exit_start - stagger, .40*(1 + .1*vc_jitter(seed, 5)));
+        /* A word stays a moment once it has fully arrived: in a very fast
+           line it otherwise left about a tenth of a second after its onset,
+           a flash rather than a word. */
+        double leaves = fmax(exit_start + stagger, start + reveal + .20);
+        m.leave = vc_settle(time - leaves, .40*(1 + .1*vc_jitter(seed, 5)));
     }
     if (reduced || m.heat <= 0) return m;
     double hot = fmin(m.heat, 1), held = smooth((duration - .25) / 1.1);

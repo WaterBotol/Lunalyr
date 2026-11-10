@@ -106,6 +106,14 @@ static void noise(void) {
 }
 
 static void word_motion(void) {
+    /* A word in a very fast line holds a moment after it has arrived
+       instead of leaving a tenth of a second after its onset. */
+    for(int seed=1;seed<40;seed++) {
+        VCWordMotion quick=vc_word_motion(10.3,10,10.08,.1,10.1,1,(uint64_t)seed,0,0);
+        assert(quick.reveal==1&&quick.leave==0);
+        VCWordMotion gone=vc_word_motion(11.2,10,10.08,.1,10.1,1,(uint64_t)seed,0,0);
+        assert(gone.leave==1);
+    }
     /* At rest before and long after a word: exact values, not approximately. */
     VCWordMotion a=vc_word_motion(0,10,10.4,.4,INFINITY,.5,99,.3,0);
     VCWordMotion b=vc_word_motion(8,10,10.4,.4,INFINITY,.5,99,.3,0);

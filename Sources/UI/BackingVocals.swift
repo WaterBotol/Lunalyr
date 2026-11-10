@@ -119,6 +119,7 @@ struct BackingVocalLayer: View {
     let composition: LyricComposition
     let mood: TrackMood
     @Environment(\.lyricReduceMotion) private var reduceMotion
+    @Environment(\.lyricCreditBands) private var creditBands
 
     /// How long a group is held at least, however brief the singing was.
     private static let minimumHold = 1.1
@@ -165,6 +166,15 @@ struct BackingVocalLayer: View {
         return time <= hold ? 0 : Easing.smoothstep((time - hold) / fadeOut)
     }
 
+    /// The band a group takes: its own, unless a credit holds that band at
+    /// any time the group is up and the other band is free then. Decided
+    /// for the group's whole life, so it never jumps between bands.
+    static func onTop(_ group: BackingVocals.Group, preferred: Bool, credits: [LyricCreditBand]) -> Bool {
+        let from = group.start - 0.12, to = max(group.end, group.start + minimumHold) + fadeOut
+        func busy(_ top: Bool) -> Bool { credits.contains { $0.top == top && $0.start < to && $0.end > from } }
+        return busy(preferred) && !busy(!preferred) ? !preferred : preferred
+    }
+
     /// A steady 0...1 per group and salt, so a group keeps its place.
     private func unit(_ index: Int, _ salt: Int) -> Double {
         var value = UInt64(truncatingIfNeeded: abs(seed) &* 2654435761 &+ index &* 40503 &+ salt &* 9973)
@@ -175,7 +185,7 @@ struct BackingVocalLayer: View {
     /// Up near the top or down near the foot, alternating, away from the centre
     /// where the lead sits, drifting slowly.
     private func position(of group: BackingVocals.Group) -> CGPoint {
-        let top = (group.id + abs(seed)).isMultiple(of: 2)
+        let top = Self.onTop(group, preferred: (group.id + abs(seed)).isMultiple(of: 2), credits: creditBands)
         let x = 0.30 + 0.40 * unit(group.id, 1)
         let y = top ? 0.14 + 0.08 * unit(group.id, 2) : 0.80 + 0.07 * unit(group.id, 3)
         let drift = reduceMotion ? 0 : sin(time * 0.45 + Double(group.id)) * Double(baseSize) * 0.07

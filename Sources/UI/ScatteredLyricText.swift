@@ -468,15 +468,6 @@ private struct HeldGlyphRenderer: TextRenderer {
     }
 }
 
-enum Easing {
-    /// Classic 3x²-2x³ ease, clamped. Used wherever motion is driven from a
-    /// time value instead of a SwiftUI animation.
-    static func smoothstep(_ x: Double) -> Double {
-        let clamped = min(max(x, 0), 1)
-        return clamped * clamped * (3 - 2 * clamped)
-    }
-}
-
 /// How a single lyric line is set. Cycling these between lines gives the
 /// restless, re-composing quality of the Lyric Speaker display rather than a
 /// fixed centred block.
@@ -540,6 +531,14 @@ struct ScatteredLyricText: View {
     /// Line-timed preview: only the first word, at this opacity, in the place
     /// it will take when the line arrives. Nil draws the whole line.
     var firstRunOnly: Double?
+    /// A line-timed line whose first word was previewed: `firstRunOnly`
+    /// then holds that word where the preview left it while the rest of the
+    /// line makes its entrance (`LyricLayer.lineTimedLyric`), so it keeps
+    /// its colour sweep and leaves its reading to the line.
+    var heldFirstRun = false
+    /// The other half of that: the line making its entrance without its
+    /// first word's label, which `heldFirstRun` draws.
+    var hidesFirstRun = false
     /// Words starting at or after this time always get the "Cutout ·
     /// Highlight" tile, whatever entrance is chosen (the artist in a credit).
     var highlightFrom: Double?
@@ -557,7 +556,7 @@ struct ScatteredLyricText: View {
         let layout = typography.value(for: key) { ScatteredTypography.layout(key, settings: settings) }
         let prepared = layout.words
         let fullness = min(Double(layout.runs.count) / 7, 1)
-        let sweepBounds = !wordTimed && ink.mode == .sungSweep && firstRunOnly == nil
+        let sweepBounds = !wordTimed && ink.mode == .sungSweep && (firstRunOnly == nil || heldFirstRun)
             ? LyricRuns.boundaries(layout.runs.map(\.source)) : []
         let nextIndex = prepared.firstIndex { $0.source.start > time }
         // Motion follows the voice: timing alone tells dense delivery and
@@ -610,6 +609,7 @@ struct ScatteredLyricText: View {
                             tint: Self.runSweep(phraseSweep, index: run.index, boundaries: sweepBounds),
                             rightToLeft: run.rightToLeft, ink: colours)
                             .fixedSize()
+                            .opacity(hidesFirstRun && run.index == 0 ? 0 : 1)
                         run.reading?.tinted(colours.reading).opacity(firstRunOnly == nil ? 1 : 0)
                     }
                     .padding(.horizontal, run.inset.width)

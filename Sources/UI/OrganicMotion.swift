@@ -67,12 +67,62 @@ struct LyricSceneContent {
     var notFoundAt: Date?
     var idleSince: Date?
     var duration: Double = 0
+    /// The song's seed, for its credits: an outgoing scene keeps its own.
+    var seed = 0
+    /// Where the voice rests, for the interlude dots: an outgoing scene
+    /// keeps its own, so a skip during an intro fades them out.
+    var vocalWindows: [VCVocalWindow] = []
+    /// Wall time the lyrics started loading, for the loading notice.
+    var loadingSince: Double?
+    /// No lyrics were found while the Mac was offline.
+    var offline = false
 }
 
-/// Holds the scene being replaced while it fades. Never publishes: it is
+/// Holds the scenes being replaced while they fade. Never publishes: it is
 /// consulted while the frame is being built, like `RenderMemo`.
+///
+/// Every fade is interruptible: a scene that is replaced part-way through
+/// its own entrance leaves from the presence it had reached, never from
+/// full strength, and the incoming scene is never pushed back to nothing.
+/// Up to two scenes can be leaving at once, so scrubbing through a song
+/// cross-fades frame to frame instead of dropping what was on screen.
 @MainActor
 final class LyricSceneMemory: ObservableObject {
+    /// How a scene leaves and the next arrives.
+    enum Fade: Equatable {
+        /// A new song or a new kind of scene: a soft dissolve with a little
+        /// blur (`sceneOut` / `sceneIn`).
+        case song
+        /// A jump within the same lyrics. Both scenes draw mostly the same
+        /// pixels, so the incoming one comes up first and the outgoing one
+        /// goes after it: the line never dims or blurs (`seekIn` / `seekOut`).
+        case seek
+        /// A better lyric source for the same song showing a different line.
+        case upgrade
+
+        /// A source upgrade's cross-fade, both ways.
+        static let upgradeDuration = 0.25
+
+        /// The outgoing scene's share, 0...1, at `age` seconds.
+        func outgoing(_ age: Double) -> Double {
+            switch self {
+            case .song: return 1 - vc_settle(age, WallpaperMotion.sceneOut)
+            case .seek:
+                return 1 - Easing.smoothstep((age - WallpaperMotion.seekOutDelay) / WallpaperMotion.seekOut)
+            case .upgrade: return 1 - Easing.smoothstep(age / Self.upgradeDuration)
+            }
+        }
+
+        /// The incoming scene's presence, 0...1, at `age` seconds.
+        func incoming(_ age: Double) -> Double {
+            switch self {
+            case .song: return vc_settle(age, WallpaperMotion.sceneIn)
+            case .seek: return Easing.smoothstep(age / WallpaperMotion.seekIn)
+            case .upgrade: return Easing.smoothstep(age / Self.upgradeDuration)
+            }
+        }
+    }
+
     struct Outgoing {
         let key: LyricSceneKey
         let content: LyricSceneContent
@@ -80,13 +130,22 @@ final class LyricSceneMemory: ObservableObject {
         let time: Double
         /// Wall time the cross-fade began.
         let wall: Double
+        let fade: Fade
+        /// How present the scene was when it was replaced: it leaves from there.
+        let startPresence: Double
+        /// Tells two leaving scenes apart.
+        let id: Int
         private let nextLineStart: Double
 
-        init(key: LyricSceneKey, content: LyricSceneContent, time: Double, wall: Double) {
+        init(key: LyricSceneKey, content: LyricSceneContent, time: Double, wall: Double,
+             fade: Fade = .song, startPresence: Double = 1, id: Int = 0) {
             self.key = key
             self.content = content
             self.time = time
             self.wall = wall
+            self.fade = fade
+            self.startPresence = min(1, max(0, startPresence))
+            self.id = id
             let row = LyricLineIndex(lines: content.lines).line(at: time) ?? -1
             nextLineStart = content.lines.indices.contains(row + 1) ? content.lines[row + 1].start : .infinity
         }
@@ -96,51 +155,129 @@ final class LyricSceneMemory: ObservableObject {
         func renderTime(at wall: Double) -> Double {
             min(time + max(0, wall - self.wall), nextLineStart.nextDown)
         }
+
+        /// 0...1 presence at `wall`.
+        func presence(at wall: Double) -> Double {
+            startPresence * min(1, max(0, fade.outgoing(wall - self.wall)))
+        }
+
+        /// A song change dissolves softly; a seek or a source upgrade, which
+        /// redraw much the same lines in place, must not blur them.
+        var blurs: Bool { fade == .song }
     }
-    static let fadeOut = 0.45
-    static let fadeIn = 0.55
-    private(set) var outgoing: Outgoing?
+
+    /// A scene below this presence is dropped rather than kept leaving.
+    static let dropBelow = 0.05
+    /// At most this many scenes leave at once.
+    static let maxLeaving = 2
+    /// A source upgrade that changes the line on screen.
+    static let upgradeFade = Fade.upgradeDuration
+
+    private(set) var leaving: [Outgoing] = []
     private var last: (key: LyricSceneKey, content: LyricSceneContent, time: Double)?
     private var lastJumpWall = -Double.infinity
-    private var changedAt = -Double.infinity
+    /// When the incoming scene began to arrive, and how; nil once it is
+    /// fully present (or never faded).
+    private var arriving: (wall: Double, fade: Fade)?
+    private var nextID = 0
 
     struct Transition {
-        var outgoing: Outgoing?
-        /// 0...1 presence of the outgoing scene.
-        var outgoingPresence: Double
+        struct Leaving {
+            let scene: Outgoing
+            /// 0...1 presence of this leaving scene.
+            let presence: Double
+        }
+        /// The scenes on their way out, oldest first.
+        var leaving: [Leaving] = []
         /// 0...1 presence of the incoming scene.
         var incomingPresence: Double
+
+        /// The most visible leaving scene.
+        var outgoing: Outgoing? { leaving.max { $0.presence < $1.presence }?.scene }
+        /// 0...1 presence of `outgoing`.
+        var outgoingPresence: Double { leaving.map(\.presence).max() ?? 0 }
+    }
+
+    private func incomingPresence(at wall: Double) -> Double {
+        guard let arriving else { return 1 }
+        return min(1, max(0, arriving.fade.incoming(wall - arriving.wall)))
+    }
+
+    private func push(_ key: LyricSceneKey, _ content: LyricSceneContent, time: Double, wall: Double,
+                      fade: Fade, presence: Double, now: Double) {
+        leaving.removeAll { $0.presence(at: now) <= Self.dropBelow }
+        leaving.append(Outgoing(key: key, content: content, time: time, wall: wall, fade: fade,
+                                startPresence: presence, id: nextID))
+        nextID &+= 1
+        while leaving.count > Self.maxLeaving,
+              let faintest = leaving.indices.min(by: { leaving[$0].presence(at: now) < leaving[$1].presence(at: now) }) {
+            leaving.remove(at: faintest)
+        }
+    }
+
+    /// Whether two sheets of the same song show different lines at `time`:
+    /// a different text, or the line starting somewhere else.
+    static func activeLineDiffers(_ old: LyricSceneContent, _ new: LyricSceneContent, at time: Double) -> Bool {
+        let before = LyricLineIndex(lines: old.lines).line(at: time).flatMap { old.lines.indices.contains($0) ? old.lines[$0] : nil }
+        let after = LyricLineIndex(lines: new.lines).line(at: time).flatMap { new.lines.indices.contains($0) ? new.lines[$0] : nil }
+        guard let before, let after else { return (before == nil) != (after == nil) }
+        let text = { (line: LyricsFetcher.Line) in
+            line.text.trimmingCharacters(in: .whitespacesAndNewlines).folding(options: [.caseInsensitive], locale: nil)
+        }
+        return text(before) != text(after) || abs(before.start - after.start) > 0.3
+    }
+
+    /// What can be on screen and so must fade rather than vanish. A
+    /// loading or idle stage draws its own notice, which fades too.
+    static func isVisible(_ kind: LyricSceneKey.Kind) -> Bool {
+        switch kind {
+        case .synced, .plain, .missing, .loading, .idle: return true
+        }
     }
 
     func observe(key: LyricSceneKey, content: @autoclosure () -> LyricSceneContent, time: Double,
                  wall: Double, jump: LyricClock.Jump?) -> Transition {
         // The system clock stepped back during a cross-fade: it is finished
         // rather than held for as long as the clock went back.
-        if changedAt > wall + 1 { changedAt = -.infinity }
-        if let outgoing, outgoing.wall > wall + 1 { self.outgoing = nil }
-        // The scene being replaced only becomes the outgoing one if it was
-        // actually on screen. A song change often arrives in two steps (new
-        // title, then cleared lines); the half-faded-in middle step must not
-        // displace the old lyrics that are still visibly leaving.
-        let shown = changedAt.isFinite ? vc_settle(wall - changedAt, Self.fadeIn) : 1
+        if let arriving, arriving.wall > wall + 1 { self.arriving = nil }
+        leaving.removeAll { $0.wall > wall + 1 }
+        // How present the scene being replaced is: it leaves from there. A
+        // song change often arrives in two steps (new title, then cleared
+        // lines); the barely-arrived middle step is dropped rather than
+        // displacing the old lyrics that are still visibly leaving.
+        let shown = incomingPresence(at: wall)
         if let last, last.key != key {
-            let visible = last.key.kind == .synced || last.key.kind == .plain || last.key.kind == .missing
             if last.key.track == key.track && last.key.kind == .synced && key.kind == .synced {
                 // A better timing source for the current recording takes
-                // over the stage atomically. Both sheets can contain this line.
-                outgoing = nil
-                changedAt = -.infinity
-            } else {
-                if shown >= 0.5 || outgoing == nil {
-                    outgoing = visible ? Outgoing(key: last.key, content: last.content, time: last.time, wall: wall) : nil
+                // over the stage in place: both sheets usually show this
+                // line, and two copies would double it. Anything still
+                // leaving from the song before, and the new song's own
+                // entrance, carry on. Only when the new sheet shows another
+                // line does it cross-fade, briefly and without blur.
+                let next = content()
+                if shown >= 0.999, Self.activeLineDiffers(last.content, next, at: time) {
+                    push(last.key, last.content, time: last.time, wall: wall, fade: .upgrade, presence: 1, now: wall)
+                    arriving = (wall, .upgrade)
                 }
-                changedAt = wall
+            } else {
+                if Self.isVisible(last.key.kind), shown > Self.dropBelow {
+                    push(last.key, last.content, time: last.time, wall: wall, fade: .song, presence: shown, now: wall)
+                }
+                arriving = (wall, .song)
             }
         } else if let jump, jump.wall > lastJumpWall, key.kind == .synced, let last {
-            if shown >= 0.5 || outgoing == nil {
-                outgoing = Outgoing(key: key, content: last.content, time: jump.from, wall: jump.wall)
+            // A seek, or the clock adopting a correction: the scene on
+            // screen leaves from the presence it reached. Jumps that come
+            // while that cross-fade is still in flight (scrubbing) join it:
+            // the arriving scene shows the new place and keeps arriving,
+            // rather than piling up scenes or restarting from nothing.
+            let inFlight = arriving != nil && !leaving.isEmpty
+            if !inFlight {
+                if shown > Self.dropBelow {
+                    push(key, last.content, time: jump.from, wall: jump.wall, fade: .seek, presence: shown, now: wall)
+                }
+                arriving = (jump.wall, .seek)
             }
-            changedAt = jump.wall
         }
         if let jump { lastJumpWall = max(lastJumpWall, jump.wall) }
         if last?.key != key || last == nil {
@@ -150,10 +287,11 @@ final class LyricSceneMemory: ObservableObject {
             // Readings arrive after the lines; keep the newest copy.
             if key.kind == .synced { last?.content = content() }
         }
-        if let outgoing, wall - outgoing.wall > Self.fadeOut + 0.05 { self.outgoing = nil }
-        return Transition(outgoing: outgoing,
-                          outgoingPresence: outgoing.map { 1 - vc_settle(wall - $0.wall, Self.fadeOut) } ?? 0,
-                          incomingPresence: changedAt.isFinite ? vc_settle(wall - changedAt, Self.fadeIn) : 1)
+        leaving.removeAll { $0.presence(at: wall) <= 0.001 }
+        let incoming = incomingPresence(at: wall)
+        if incoming >= 1 { arriving = nil }
+        return Transition(leaving: leaving.map { .init(scene: $0, presence: $0.presence(at: wall)) },
+                          incomingPresence: incoming)
     }
 }
 
