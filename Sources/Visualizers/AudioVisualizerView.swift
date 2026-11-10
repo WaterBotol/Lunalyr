@@ -126,7 +126,8 @@ struct AudioVisualizerView: NSViewRepresentable {
         private let preview: Bool
         private let inFlight = DispatchSemaphore(value: 2)
         private let gpuTimer = GPUFrameTimer()
-        private var ladder = RenderScaleLadder()
+        /// Internal for tests; drawFrame adjusts it from `gpuTimer`.
+        var ladder = RenderScaleLadder()
         private var smoothing = VisualizerSmoother()
         /// What this surface's scene is shown of the sound types (idle hides them).
         private var soundGate = SoundTypeIdleGate()
@@ -190,6 +191,10 @@ struct AudioVisualizerView: NSViewRepresentable {
             let settled = hasStyle
             let rebuilt = settled && self.style != style
             if self.style.isWavefield, !style.isWavefield { wavefieldModes = WavefieldModes() }
+            // Each scene costs the GPU differently: the new one starts at
+            // full resolution and is measured afresh, rather than keeping
+            // the Tunnel's half-resolution rung (or a light scene's budget).
+            if rebuilt { restartScaleLadder() }
             let newPalette = settled && palette != self.palette
             self.style = style; hasStyle = true
             self.response = response
@@ -259,10 +264,24 @@ struct AudioVisualizerView: NSViewRepresentable {
             deviceCheckedAt = now
             guard let context = VisualizerGPU.shared.context(for: id),
                   context.device.registryID != gpu?.device.registryID else { return }
-            gpu = context
+            move(to: context, at: now)
             view.device = context.device
+        }
+        /// Draws with `context` (another GPU) from the next frame on. The
+        /// limiter carries on from the brightness on screen: dropping it
+        /// used to make the next frame adopt the scene's full brightness at
+        /// once, a jump of up to the whole limited rise.
+        func move(to context: VisualizerGPU.Context, at now: Double) {
+            if limiting, let probe, let limitedStyle {
+                Self.remember(probe, as: memoryKey(for: limitedStyle), in: .shared, at: now)
+            }
+            gpu = context
             probe = nil
-            limiting = false
+            restartScaleLadder()
+        }
+        private func restartScaleLadder() {
+            ladder.reset()
+            gpuTimer.reset()
         }
         nonisolated static func shouldCheckDevice(display: CGDirectDisplayID, current: CGDirectDisplayID?,
                                                   now: Double, checkedAt: Double) -> Bool {
@@ -333,12 +352,15 @@ struct AudioVisualizerView: NSViewRepresentable {
             // Reduce Motion and Dim Flashing Lights cap how fast the mean
             // brightness may rise; the GPU measures this frame first.
             var exposure: MTLBuffer?
-            if response.calm, let limiter = gpu.exposureLimiter, let probe = probe(on: gpu.device, at: now) {
+            if response.calm {
+                // A calm frame is never shown without its limiter: while the
+                // kernel builds (once per GPU) the surface keeps what it
+                // shows rather than drawing the scene at full brightness.
+                guard let limiter = gpu.exposureLimiter, let probe = probe(on: gpu.device, at: now) else { return nil }
                 if !limiting, hasDrawn { probe.adoptCurrentBrightness() }
-                if probe.encode(into: command, pipeline: pipeline, limiter: limiter, at: now,
-                                bind: { Self.bind(inputs, to: $0) }) {
-                    exposure = probe.state
-                }
+                guard probe.encode(into: command, pipeline: pipeline, limiter: limiter, at: now,
+                                   bind: { Self.bind(inputs, to: $0) }) else { return nil }
+                exposure = probe.state
             }
             limiting = exposure != nil
             limitedStyle = limiting ? style : nil

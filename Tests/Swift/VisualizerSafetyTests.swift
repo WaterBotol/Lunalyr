@@ -307,4 +307,128 @@ final class VisualizerSafetyTests: XCTestCase {
         _ = try rig.draw(stale, level: 0.8, at: later)
         XCTAssertEqual(stale.lastGain, 0, accuracy: 0.001)
     }
+
+    /// Draws one frame of `coordinator`'s prepared scene through
+    /// `encodeFrame` into a small offscreen target; nil when it declined.
+    @MainActor
+    private func drawCoordinator(_ coordinator: AudioVisualizerView.Coordinator, on gpu: VisualizerGPU.Context,
+                                 pipeline: MTLRenderPipelineState, at time: Double) throws -> Float? {
+        let width = 160, height = 90
+        let target = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
+            width: width, height: height, mipmapped: false)
+        target.usage = [.renderTarget]
+        target.storageMode = .shared
+        let texture = try XCTUnwrap(gpu.device.makeTexture(descriptor: target))
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        let command = try XCTUnwrap(gpu.queue.makeCommandBuffer())
+        guard coordinator.encodeFrame(pipeline, on: gpu, into: command, pass: pass,
+                                      size: CGSize(width: width, height: height), sensitivity: 3, at: time) != nil else {
+            return nil
+        }
+        command.commit()
+        command.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes {
+            texture.getBytes($0.baseAddress!, bytesPerRow: width * 4,
+                from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        }
+        return GPUTestSupport.meanLuminance(bgra: pixels)
+    }
+
+    private static func loud() -> AudioSnapshot {
+        var sound = AudioSnapshot()
+        sound.level = 1; sound.bass = 1; sound.mid = 1; sound.treble = 1
+        sound.bands = [Float](repeating: 1, count: AudioSnapshot.bandCount)
+        sound.components = [Float](repeating: 1, count: AudioSnapshot.componentCount)
+        sound.wavefield.rms = 1
+        return sound
+    }
+
+    /// While the limiter's kernel is still building, a calm surface used to
+    /// draw its first frames unlimited, at the scene's full brightness.
+    @MainActor
+    func testACalmSurfaceWaitsForItsLimiter() async throws {
+        let device = try GPUTestSupport.device()
+        let gpu = try XCTUnwrap(VisualizerGPU.Context(device: device))
+        let built = try await GPUTestSupport.eventually(timeout: 60, { gpu.pipeline("tunnelFragment") },
+                                                        until: { $0 != nil })
+        let pipeline = try XCTUnwrap(built)
+        let coordinator = AudioVisualizerView.Coordinator()
+        let timelines = VisualizerTimelines()
+        let response = VisualizerResponse(dimFlashingLights: true)
+        coordinator.prepare(style: .tunnel, time: 0, response: response, palette: nil, vividness: nil,
+                            sound: Self.loud(), at: 70_000, timelines: timelines)
+        XCTAssertNil(try drawCoordinator(coordinator, on: gpu, pipeline: pipeline, at: 70_000),
+                     "No calm frame before the limiter is ready")
+        _ = try await GPUTestSupport.eventually(timeout: 60, { gpu.exposureLimiter }, until: { $0 != nil })
+        let first = try XCTUnwrap(drawCoordinator(coordinator, on: gpu, pipeline: pipeline, at: 70_000.02))
+        XCTAssertLessThan(first, 0.002, "The scene then fades in from black")
+    }
+
+    /// A display moving to another GPU (automatic graphics switching, or a
+    /// window moved to a display on another GPU) used to drop the limiter's
+    /// state, and the next frame adopted the scene's full brightness at once.
+    @MainActor
+    func testMovingToAnotherGPUKeepsTheLimitedBrightness() async throws {
+        let device = try GPUTestSupport.device()
+        let first = try XCTUnwrap(VisualizerGPU.Context(device: device))
+        // A second context stands in for the other GPU: the move always
+        // starts a new probe, which is what crossing GPUs needs.
+        let second = try XCTUnwrap(VisualizerGPU.Context(device: device))
+        var pipelines: [MTLRenderPipelineState] = []
+        for gpu in [first, second] {
+            let built = try await GPUTestSupport.eventually(timeout: 60, { gpu.pipeline("tunnelFragment") },
+                                                            until: { $0 != nil })
+            pipelines.append(try XCTUnwrap(built))
+            _ = try await GPUTestSupport.eventually(timeout: 60, { gpu.exposureLimiter }, until: { $0 != nil })
+        }
+        let coordinator = AudioVisualizerView.Coordinator()
+        let timelines = VisualizerTimelines()
+        let response = VisualizerResponse(dimFlashingLights: true)
+        let start = 80_000.0
+        var shown: Float = 0
+        for frame in 0..<12 {
+            let time = start + Double(frame) / 60
+            coordinator.prepare(style: .tunnel, time: Double(frame) / 60, response: response, palette: nil,
+                                vividness: nil, sound: Self.loud(), at: time, timelines: timelines)
+            shown = try XCTUnwrap(drawCoordinator(coordinator, on: first, pipeline: pipelines[0], at: time))
+        }
+        let time = start + 12.0 / 60
+        coordinator.move(to: second, at: time)
+        coordinator.prepare(style: .tunnel, time: 12.0 / 60, response: response, palette: nil,
+                            vividness: nil, sound: Self.loud(), at: time, timelines: timelines)
+        let moved = try XCTUnwrap(drawCoordinator(coordinator, on: second, pipeline: pipelines[1], at: time))
+        // Without the hand-over the moved frame shows the unlimited mean.
+        coordinator.prepare(style: .tunnel, time: 12.0 / 60, response: VisualizerResponse(), palette: nil,
+                            vividness: nil, sound: Self.loud(), at: time + 0.001, timelines: timelines)
+        let unlimited = try XCTUnwrap(drawCoordinator(coordinator, on: second, pipeline: pipelines[1], at: time + 0.001))
+        XCTAssertGreaterThan(unlimited, shown + 0.02, "The scene is well above what the limiter allowed")
+        XCTAssertLessThan(moved - shown, 0.005, "The move does not release the limited brightness")
+    }
+
+    /// The scale ladder trims resolution while a scene is too heavy. A
+    /// switch to another scene on the same surface kept the old scene's
+    /// rung, so a light scene after the Tunnel stayed at half resolution.
+    @MainActor
+    func testANewSceneStartsAtFullResolution() throws {
+        let coordinator = AudioVisualizerView.Coordinator()
+        let timelines = VisualizerTimelines()
+        coordinator.prepare(style: .tunnel, time: 0, response: VisualizerResponse(), palette: nil, vividness: nil,
+                            sound: AudioSnapshot(), at: 90_000, timelines: timelines)
+        for _ in 0..<4 { coordinator.ladder.adjust(averageGPUTime: 0.05, budget: 1.0 / 30) }
+        XCTAssertEqual(coordinator.ladder.scale, RenderScaleLadder.scales[0])
+        coordinator.prepare(style: .tunnel, time: 0.1, response: VisualizerResponse(), palette: nil, vividness: nil,
+                            sound: AudioSnapshot(), at: 90_000.1, timelines: timelines)
+        XCTAssertEqual(coordinator.ladder.scale, RenderScaleLadder.scales[0], "The same scene keeps its rung")
+        coordinator.prepare(style: .silk, time: 0.2, response: VisualizerResponse(), palette: nil, vividness: nil,
+                            sound: AudioSnapshot(), at: 90_000.2, timelines: timelines)
+        XCTAssertEqual(coordinator.ladder.scale, 1)
+        for _ in 0..<4 { coordinator.ladder.adjust(averageGPUTime: 0.05, budget: 1.0 / 30) }
+        let device = try GPUTestSupport.device()
+        coordinator.move(to: try XCTUnwrap(VisualizerGPU.Context(device: device)), at: 90_000.3)
+        XCTAssertEqual(coordinator.ladder.scale, 1, "Another GPU is measured afresh")
+    }
 }
