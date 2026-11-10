@@ -63,6 +63,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Echo: Lunalyr could crash as a song started when the layout (or the backing-vocal style) was Echo, while drawing the song's title in the background. Credits now also look the same on every launch.
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.
 - Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
 - Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.

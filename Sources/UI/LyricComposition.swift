@@ -407,6 +407,13 @@ struct EchoBackdrop: View {
         return total > 0 ? shown / total : 1
     }
 
+    /// Each repeat's drift seed. Never traps: any seed works, however large
+    /// or negative (a seed's multiple used to overflow into a negative
+    /// number, which `UInt64` refuses).
+    static func wanderSeed(_ seed: Int, slot: Int) -> UInt64 {
+        UInt64(seed.magnitude) &* 31 &+ UInt64(slot.magnitude)
+    }
+
     /// Fixed rather than random: a line must set the same way every frame,
     /// and `TimelineView` rebuilds this view continuously.
     private static let variants: [Ghost] = [
@@ -426,13 +433,13 @@ struct EchoBackdrop: View {
     var body: some View {
         // The seed rotates which variant leads, so two lines in a row do not
         // arrange themselves identically.
-        let offset = abs(seed) % Self.variants.count
+        let offset = Int(seed.magnitude % UInt(Self.variants.count))
         let drift = reduceMotion ? 0.0 : 1.0
-        let tint = ink.sample(slot: 0.5, seed: UInt64(abs(seed))).rest
+        let tint = ink.sample(slot: 0.5, seed: UInt64(seed.magnitude)).rest
         ZStack {
             ForEach(0..<Self.variants.count, id: \.self) { slot in
                 let ghost = Self.variants[(slot + offset) % Self.variants.count]
-                let wander = UInt64(abs(seed) &* 31 &+ slot)
+                let wander = Self.wanderSeed(seed, slot: slot)
                 let x = baseSize * ghost.dx * 3.2 + CGFloat(drift * vc_noise2(wander, time * 0.09)) * baseSize * 0.10
                 let y = baseSize * ghost.dy * 1.5 + CGFloat(drift * vc_noise2(wander ^ 0x5EED, time * 0.07)) * baseSize * 0.06
                 let stage = CGSize(width: stageSize.width * 2 / 3, height: stageSize.height * 2 / 3)
