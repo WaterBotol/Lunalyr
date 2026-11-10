@@ -60,9 +60,15 @@ When merging, keep every entry and combine duplicate headings.
 - Uses less battery while idle: a song paused for over a minute is checked every 10 seconds instead of every 2 (play, pause and track changes still show at once), and the hover check slows down while the pointer rests.
 - Uses less memory over a long day: cover art kept for replays is capped, and large library covers are decoded once, at the size shown, away from the wallpaper's drawing.
 - Uses less battery while the displays sleep or the screen is locked: the music player is re-checked every 10 seconds instead of every 2, and at once when the screens wake.
+- Smoother stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable). Words spring in from rest, the strip and stacks glide on from word to word without a jolt, the word being sung hands its look to the next one over a moment instead of in one frame, and stacks no longer jump as a word is added. Lines leave at the same speed as in every other layout.
+- With Reduce Motion, the stage layouts dissolve between steps instead of moving words around, and Hinge now fades out at the end of a line.
+- Word entrances (Float up, Pop, Orbit, Glide, Unfold and the Cutouts) move the same in Torque and Fable as in every other layout.
 
 ### Fixed
 
+- Torque: long lines no longer sink and run off the bottom of the stage.
+- Hinge: the last words of a line are no longer cut off half-way through folding away.
+- Stage layouts: in Chinese, Japanese and Korean lines, each syllable fades in as it is sung instead of popping in. Mosaic no longer shows a word at two sizes at once as it shrinks into its stack.
 - Tap to sync for lyrics: a tap pressed just after the timing is set no longer reaches the app you were in (Space there could pause the song); the keyboard comes back when the result closes, or at once with Esc or Return.
 - Tap to sync for lyrics stops if a different lyric source replaces the lyrics mid-session, instead of saving timing for lyrics no longer shown.
 - A Shortcuts action that opens Lunalyr waits until Lunalyr has started before it runs.
