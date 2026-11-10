@@ -14,6 +14,11 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- Lyrics for another version of the song (Live, Remix, Acoustic, Sped Up, Edit, Instrumental and so on, in English, Chinese, Japanese or Korean) now rank below timed lyrics for the version playing. They are never rejected, so they still show when nothing else is found, and the source list says "other version (Live)". Remasters, credits and deluxe editions count as the same recording, and a tag the album carries is not held against a match.
+- When several services give the same words, Accuracy first prefers that match among the other sources, and the source list says how many agree. LRCLIB's word timing loses its lead only when two other services agree on timing it disagrees with.
+- NetEase, QQ, Kugou and Kuwo search again under an artist's Chinese, Japanese or Korean name (from MusicBrainz) when the library's name finds nothing. One request per artist, remembered for 30 days. Timing & sources > "Search under artists' other names" turns it off.
+- Music's own lyrics are found for more songs: when no album is reported, or the album is a single, EP, deluxe or remastered release. The exact album still wins, and live albums and other lengths still do not match.
+
 - The desktop player has a seek bar again, under the covers. Click or drag anywhere on it; it thickens while you use it, and the seek happens once, when you let go (Esc cancels). Hovering shows the time and the lyric line at the pointer, with small ticks at line starts and gaps between sections. Dragging snaps gently to the start of a line (hold ⌘ to turn that off), and moving the pointer away from the bar while dragging slows it down for fine scrubbing (or hold ⌥). The wallpaper's lyrics follow the drag on that display. Clicking the time on the right switches between time left and the song's length. Radio shows LIVE, adverts and songs that can't be scrubbed show a plain bar.
 - Keys for the desktop player after clicking it: Space plays or pauses, ← and → move 5 s, ⌥← and ⌥→ move by lyric line, ⌘← and ⌘→ change song, 0–9 jump through the song, ⌘F or / search, ↑ ↓ and Return pick a search result, Esc goes back.
 - On a Force Touch trackpad, a light tap is felt when the seek bar snaps to a line or reaches either end.

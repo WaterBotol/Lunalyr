@@ -625,10 +625,11 @@ final class LyricsFetcher {
             let artist = LyricQuery.checkable(hit.artist, against: query.artist)
             return LyricCandidate(source:id,result:.synced(hit.lines,provenance),title:title ?? query.title,artist:artist ?? query.artist,
                                   duration:nil,score:113,metadataReported:title != nil && artist != nil)
-        case .netEase: return try await netEase(query)
-        case .qqMusic: return try await AdditionalLyricsProviders.qqMusic(query)
-        case .kugou: return try await AdditionalLyricsProviders.kugou(query)
-        case .kuwo: return try await AdditionalLyricsProviders.kuwo(query)
+        // The Chinese catalogues often index only an artist's native name (`ArtistAliases`).
+        case .netEase: return try await withAliases(id, query: query) { try await netEase($0) }
+        case .qqMusic: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.qqMusic($0) }
+        case .kugou: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.kugou($0) }
+        case .kuwo: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.kuwo($0) }
         case .lyricsOVH: return try await AdditionalLyricsProviders.lyricsOVH(query)
         case .lrclib: return try await lrclib(query)
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
