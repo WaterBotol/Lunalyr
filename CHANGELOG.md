@@ -113,6 +113,8 @@ When merging, keep every entry and combine duplicate headings.
 - Visualisers: a silent source with a tiny constant offset in its audio no longer shows a stuck bass glow and keeps the idle scene away.
 - Visualisers with Reduce Motion or Dim Flashing Lights on: the first frames of a scene no longer show at full brightness before the brightness limiter is ready, and a display switching graphics chips no longer jumps to full brightness.
 - Visualisers: switching from a heavy scene such as Spectrum Tunnel to a lighter one no longer leaves the new scene at reduced resolution.
+- Lyrics: a word sung more than about nine seconds into a long line now appears, and a long held last word is no longer faded out while it is still being sung.
+- Lyrics: lines that leave a moment after their last word now leave at the full frame rate instead of stepping.
 
 ## [1.0.0] - 2026-11-08
 

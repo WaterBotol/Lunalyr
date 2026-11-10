@@ -181,7 +181,10 @@ struct LyricLayer: View {
             for row in max(0, index - 2)...min(lines.count - 1, index + 1) where lines.indices.contains(row) {
                 let line = lines[row]
                 if time >= line.start - lead, time <= line.start + 0.8 { return .active }
-                let exit = LyricPhraseTiming.exitStart(of: line, nextStart: handOver(after: row, in: lines))
+                // Where the renderer starts the exit, which for most layouts
+                // is earlier than the phrase's: measured from the phrase's,
+                // those exits played at 12 or 24 fps.
+                let exit = renderedExitStart(row, in: lines)
                 if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan + 0.1 { return .active }
                 for word in line.words where time >= word.start - lead && time <= word.end + 1.2 {
                     return .active
@@ -514,6 +517,25 @@ struct LyricLayer: View {
         return vc_settle(time - lines[row + 1].start, 0.45)
     }
 
+    /// When line `row` starts to leave as drawn (`renderedExitStart(_:in:handOver:rolls:fillsStage:)`).
+    private func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line]) -> Double {
+        let style = composition(at: row)
+        return Self.renderedExitStart(row, in: lines, handOver: handOver(after: row, in: lines),
+                                      rolls: lines[row].wordTimed && style.arrivalOnly, fillsStage: style.fillsStage)
+    }
+
+    /// The exit the renderer actually draws: word-timed lines that do not
+    /// roll, and line-timed lines in stage layouts, leave a moment after
+    /// their last word (`stageExitStart`); everything else at the phrase's
+    /// own exit.
+    static func renderedExitStart(_ row: Int, in lines: [LyricsFetcher.Line], handOver: Double, rolls: Bool,
+                                  fillsStage: Bool) -> Double {
+        let line = lines[row]
+        let phrase = LyricPhraseTiming.exitStart(of: line, nextStart: handOver)
+        guard !rolls, line.wordTimed || fillsStage else { return phrase }
+        return min(phrase, stageHeldUntil(line))
+    }
+
     /// A layout remembered for this song or artist wins; "automatic" there
     /// means Match the music even if a fixed layout is set globally.
     private func composition(at index: Int) -> LyricComposition {
@@ -713,10 +735,21 @@ struct LyricLayer: View {
     /// word sung so far at once, so a line that lingers (a long gap before the
     /// next one, or a source whose line end is the next line's start) would
     /// sit there fully built; leave a moment after the last word instead.
+    ///
+    /// The cap on a long held note counts from the last word's onset, not
+    /// the line's start: counted from the start, a word sung more than about
+    /// nine seconds into a line was already gone at its onset and never
+    /// appeared, and a held last word faded while still being sung.
     static func stageExitStart(_ line: LyricsFetcher.Line, pose: LyricPhraseTiming) -> Double {
+        min(pose.exitStart, stageHeldUntil(line))
+    }
+
+    /// When a stage layout's line has been sung and held long enough.
+    static func stageHeldUntil(_ line: LyricsFetcher.Line) -> Double {
         let sung = line.words.map(\.end).max() ?? line.end
-        let held = max(line.start + 1.5, min(sung, line.start + 8)) + 1.2
-        return min(pose.exitStart, held)
+        let lastOnset = line.words.map(\.start).max() ?? line.start
+        let sungEnd = min(sung, lastOnset + 8)
+        return max(line.start + 1.5, sungEnd) + WallpaperMotion.holdAfterSung
     }
 
     private func lineTimedLyric(_ line: LyricsFetcher.Line, words: [LyricsFetcher.Word], time: Double,
