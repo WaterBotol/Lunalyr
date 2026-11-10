@@ -189,4 +189,41 @@ final class SettingsPolishTests: XCTestCase {
         XCTAssertEqual(value, 3)
         XCTAssertTrue(undo.canUndo)
     }
+
+    // MARK: S25, S10, S15
+
+    /// An offset beyond ±10 s (tap to sync allows ±30) widens the slider, so
+    /// the thumb isn't pinned and a drag can't lose the value.
+    func testTheSongOffsetSliderWidensForLargeOffsets() {
+        XCTAssertEqual(TimingPage.offsetRange(for: 2), -10...10)
+        XCTAssertEqual(TimingPage.offsetRange(for: -10), -10...10)
+        XCTAssertEqual(TimingPage.offsetRange(for: 18.5), -30...30)
+        XCTAssertEqual(TimingPage.offsetRange(for: -24), -30...30)
+        XCTAssertTrue(TimingPage.offsetRange(for: 30).contains(30))
+    }
+
+    /// ↑ and ↓ walk the pages the search leaves, holding at either end.
+    func testSidebarArrowsWalkTheShownPages() {
+        let all = SettingsSidebar.visiblePages(matching: "")
+        XCTAssertEqual(all, SettingsPage.Group.allCases.flatMap(\.pages))
+        let first = all.first, last = all.last
+        XCTAssertEqual(SettingsSidebar.page(from: all[1], by: -1, in: all), first)
+        XCTAssertEqual(SettingsSidebar.page(from: all[0], by: -1, in: all), first)
+        XCTAssertEqual(SettingsSidebar.page(from: all[0], by: 1, in: all), all[1])
+        XCTAssertEqual(SettingsSidebar.page(from: all[all.count - 1], by: 1, in: all), last)
+        // A selection the search hides: ↓ starts at the top, ↑ at the bottom.
+        let some = Array(all.prefix(3))
+        XCTAssertEqual(SettingsSidebar.page(from: all[5], by: 1, in: some), some.first)
+        XCTAssertEqual(SettingsSidebar.page(from: all[5], by: -1, in: some), some.last)
+        XCTAssertNil(SettingsSidebar.page(from: all[0], by: 1, in: []))
+    }
+
+    /// The colour swatch only ticks when its colours move, Reduce Motion is
+    /// off and Settings is the active window.
+    func testTheColourSwatchRestsWhenItCan() {
+        XCTAssertFalse(LyricColourSwatch.swatchPaused(moving: true, reduceMotion: false, active: true))
+        XCTAssertTrue(LyricColourSwatch.swatchPaused(moving: false, reduceMotion: false, active: true))
+        XCTAssertTrue(LyricColourSwatch.swatchPaused(moving: true, reduceMotion: true, active: true))
+        XCTAssertTrue(LyricColourSwatch.swatchPaused(moving: true, reduceMotion: false, active: false))
+    }
 }

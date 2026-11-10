@@ -165,6 +165,7 @@ private struct StyledCanvas: ViewModifier {
 /// from in the welcome and in Settings › General.
 struct SettingsStylePicker: View {
     @ObservedObject private var store = SettingsStyleStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: LunalyrDesign.Spacing.large) {
@@ -192,5 +193,9 @@ struct SettingsStylePicker: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
+        // The ring moves to the new look with the click. Only the picker's
+        // own drawing: the rest of the window switches look as before.
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: store.hasChosen ? store.style : nil)
     }
 }

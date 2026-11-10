@@ -350,7 +350,7 @@ struct ShareInspector: View {
                 }
                 InspectorCaption("Pick lines, a shape and a format for a shareable card.", more: "Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
                 if playing.current == nil {
-                    DisabledReason("A card can be copied while a song is playing.")
+                    DisabledReason("A card can be made while a song is playing.")
                         .revealRow()
                 }
             }
