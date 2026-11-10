@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import XCTest
 @testable import VersoCustom
 
@@ -160,5 +161,43 @@ final class IdleEnergyTests: XCTestCase {
             h.scheduler.drain()
         }
         XCTAssertEqual(h.music.count("music.position"), 4, "The minute counts from this pause, not the last one")
+    }
+
+    /// Asleep or locked displays show no lyrics: the re-sync slows down, and
+    /// waking reads the player at once instead of at the next slow tick.
+    @MainActor
+    func testTheReSyncBacksOffWhileTheScreensAreHiddenAndCatchesUpOnWake() {
+        let music = FakeMusicApp()
+        music.queue = [Self.song]
+        music.state = .playing
+        let hidden = CurrentValueSubject<Bool, Never>(false)
+        let followed = CurrentValueSubject<[PlayerKind], Never>([.appleMusic])
+        var services = NowPlayingServices.offline
+        services.screensHidden = hidden.eraseToAnyPublisher()
+        services.followedPlayers = followed.eraseToAnyPublisher()
+        let scheduler = ManualScheduler(), clock = TestClock()
+        let monitor = NowPlayingMonitor(
+            runner: FakePlayers(music: music, spotify: FakeSpotifyApp(), consent: FakeAutomationPrompt(clock: clock)),
+            environment: FakePlayerEnvironment(running: ["com.apple.Music"]), scheduler: scheduler,
+            permission: { _, _ in 0 }, services: services, uptime: { clock.now }, pollInterval: 2)
+        // Stop the real timer however the test ends.
+        defer { followed.send([]); XCTAssertNil(monitor.resyncInterval) }
+        monitor.start()
+        scheduler.drain()
+        XCTAssertTrue(monitor.isPolling)
+        XCTAssertEqual(monitor.resyncInterval, 2)
+
+        music.clearLog()
+        hidden.send(true)
+        scheduler.drain()
+        XCTAssertEqual(monitor.resyncInterval, 2 * NowPlayingMonitor.hiddenPollFactor)
+        XCTAssertEqual(music.log, [], "Going to sleep sends nothing")
+        hidden.send(true)
+        XCTAssertEqual(monitor.resyncInterval, 2 * NowPlayingMonitor.hiddenPollFactor)
+
+        hidden.send(false)
+        scheduler.drain()
+        XCTAssertEqual(monitor.resyncInterval, 2)
+        XCTAssertEqual(music.count("music.read"), 1, "Read again the moment the screens wake")
     }
 }

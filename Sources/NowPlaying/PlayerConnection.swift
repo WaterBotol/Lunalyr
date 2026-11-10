@@ -592,6 +592,9 @@ struct NowPlayingServices {
     var motionSettingsChanged: AnyPublisher<Void, Never>
     /// The players to follow: the current choice first, then each change.
     var followedPlayers: AnyPublisher<[PlayerKind], Never>
+    /// Whether every display is asleep, locked or showing the screen saver:
+    /// the current value first, then each change.
+    var screensHidden: AnyPublisher<Bool, Never> = Just(false).eraseToAnyPublisher()
 
     @MainActor static var live: NowPlayingServices {
         NowPlayingServices(
@@ -613,7 +616,8 @@ struct NowPlayingServices {
                 .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
                 .map { _ in () }
                 .eraseToAnyPublisher(),
-            followedPlayers: PlayerOptions.shared.playersPublisher
+            followedPlayers: PlayerOptions.shared.playersPublisher,
+            screensHidden: DesktopCoverageMonitor.shared.$systemHidden.eraseToAnyPublisher()
         )
     }
 

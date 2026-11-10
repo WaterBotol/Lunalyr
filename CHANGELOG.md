@@ -59,6 +59,7 @@ When merging, keep every entry and combine duplicate headings.
 - The song in a lyric card MP4 is no longer dropped when its recording doesn't cover every selected line: the missing parts are silent and the export still says to record it again.
 - Uses less battery while idle: a song paused for over a minute is checked every 10 seconds instead of every 2 (play, pause and track changes still show at once), and the hover check slows down while the pointer rests.
 - Uses less memory over a long day: cover art kept for replays is capped, and large library covers are decoded once, at the size shown, away from the wallpaper's drawing.
+- Uses less battery while the displays sleep or the screen is locked: the music player is re-checked every 10 seconds instead of every 2, and at once when the screens wake.
 
 ### Fixed
 
