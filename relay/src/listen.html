@@ -148,6 +148,7 @@ a { color: var(--accent); }
 .primary.on svg { display: none; }
 .embed { margin-top: 12px; border-radius: 12px; overflow: hidden; min-height: 152px; }
 .embed iframe { display: block; width: 100%; border: 0; }
+.embed.apple { min-height: 175px; }
 .note { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
 .warn { background: var(--warn-bg); color: var(--warn-text); padding: 8px 10px; border-radius: 10px; }
 .alt { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
@@ -227,10 +228,12 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
           <span id="startText">Start listening</span>
         </button>
         <div class="embed" id="embedWrap" hidden><div id="embed"></div></div>
+        <div class="embed apple" id="appleWrap" hidden></div>
         <p class="note warn" id="embedMsg" hidden></p>
         <p class="note">Music plays through Spotify’s player. Full songs need you to be logged in to Spotify in this browser; otherwise you’ll hear 30-second previews.</p>
         <div class="alt" id="alt" hidden>
           <span>Or open it in</span>
+          <a id="spLink" target="_blank" rel="noopener noreferrer" hidden>Spotify</a>
           <a id="amLink" target="_blank" rel="noopener noreferrer" hidden>Apple Music</a>
           <a id="ytLink" target="_blank" rel="noopener noreferrer" hidden>YouTube Music</a>
           <a id="slLink" target="_blank" rel="noopener noreferrer" hidden>Other apps (song.link)</a>
@@ -382,13 +385,16 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
     const key = keyOf(t);
     const changed = key !== trackKey;
     state = msg;
-    base = { pos: (Number(msg.position) || 0) + (Number(msg.age) || 0) / 1000, at: clock(), playing: !!msg.playing && !!t };
+    const playing = !!msg.playing && !!t;
+    // The relay's age counts only while the host plays: a paused state
+    // held for minutes is still at its position.
+    base = { pos: (Number(msg.position) || 0) + (playing ? (Number(msg.age) || 0) / 1000 : 0), at: clock(), playing: playing };
 
     if (Array.isArray(msg.lyrics)) setLyrics(msg.lyrics);
     else if (changed) setLyrics([]);
 
     if (changed) { trackKey = key; showTrack(t); }
-    else if (t && t.spotifyId && !info.spotifyId) { info.spotifyId = String(t.spotifyId); resolveLinks(t, key); }
+    else if (t && validSpotifyId(t.spotifyId) && !info.spotifyId) { info.spotifyId = t.spotifyId; resolveLinks(t, key); }
 
     const name = msg.host && typeof msg.host.name === "string" ? msg.host.name.trim() : "";
     $("hostLine").textContent = name ? "Listening along with " + name : "Listen along";
@@ -401,7 +407,7 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
     $("progress").hidden = !t;
     setCover(null);
     $("alt").hidden = true;
-    for (const id of ["amLink", "ytLink", "slLink"]) $(id).hidden = true;
+    for (const id of ["spLink", "amLink", "ytLink", "slLink"]) $(id).hidden = true;
     $("embedMsg").hidden = true;
     if (!t) {
       info = {};
@@ -412,8 +418,8 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
       return;
     }
     info = {
-      spotifyId: typeof t.spotifyId === "string" && /^[A-Za-z0-9]{22}$/.test(t.spotifyId) ? t.spotifyId : null,
-      appleId: Number(t.appleId) > 0 ? Number(t.appleId) : null,
+      spotifyId: validSpotifyId(t.spotifyId) ? t.spotifyId : null,
+      appleId: validAppleId(t.appleId),
     };
     $("title").textContent = t.title || "Unknown title";
     $("artist").textContent = t.artist || "";
@@ -451,6 +457,16 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
     return res.json();
   }
   const httpsURL = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
+  const validSpotifyId = (id) => typeof id === "string" && /^[A-Za-z0-9]{22}$/.test(id);
+  const validAppleId = (id) => {
+    const n = Number(id);
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
+  };
+  // The visitor's Apple storefront, from their browser's region ("en-AU" -> "au").
+  const storefront = (() => {
+    const m = String(navigator.language || "").match(/-([A-Za-z]{2})\b/);
+    return m ? m[1].toLowerCase() : "us";
+  })();
   const norm = (s) => String(s || "").toLowerCase().replace(/\s*[\(\[].*?[\)\]]\s*/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
   // Cover and Apple ID from iTunes (lookup by ID, else search), then links.
@@ -458,8 +474,8 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
     let art = null;
     try {
       const url = info.appleId
-        ? "https://itunes.apple.com/lookup?id=" + encodeURIComponent(info.appleId)
-        : "https://itunes.apple.com/search?entity=song&limit=10&term=" + encodeURIComponent((t.artist || "") + " " + (t.title || ""));
+        ? "https://itunes.apple.com/lookup?country=" + storefront + "&id=" + encodeURIComponent(info.appleId)
+        : "https://itunes.apple.com/search?country=" + storefront + "&entity=song&limit=10&term=" + encodeURIComponent((t.artist || "") + " " + (t.title || ""));
       const data = await getJSON(url);
       const results = (data.results || []).filter((r) => r.kind === "song" || r.wrapperType === "track");
       const want = norm(t.title), wantArtist = norm(t.artist);
@@ -467,9 +483,9 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
         : results.find((r) => norm(r.trackName) === want && norm(r.artistName).includes(wantArtist.split(" ")[0] || ""))
           || results.find((r) => norm(r.trackName) === want) || null;
       if (hit) {
-        if (!info.appleId && hit.trackId) info.appleId = hit.trackId;
+        if (!info.appleId) info.appleId = validAppleId(hit.trackId);
         info.appleURL = httpsURL(hit.trackViewUrl);
-        if (hit.artworkUrl100) art = String(hit.artworkUrl100).replace(/\/\d+x\d+(bb)?\.(jpg|png|webp)$/, "/600x600bb.jpg");
+        if (httpsURL(hit.artworkUrl100)) art = hit.artworkUrl100.replace(/\/\d+x\d+(bb)?\.(jpg|png|webp)$/, "/600x600bb.jpg");
       }
     } catch (e) { /* offline or blocked; keep the placeholder */ }
     if (key !== trackKey) return;
@@ -477,46 +493,61 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
     await resolveLinks(t, key);
   }
 
-  // song.link: the Spotify ID when the host didn't send one, and links to other services.
+  // Links to other services. song.link's API no longer answers keyless
+  // requests, so it is not asked; its web pages (built from an ID) still work.
   async function resolveLinks(t, key) {
-    let query = null;
-    // Only needed when the host sent no Spotify ID; the other links have plain fallbacks.
-    if (info.spotifyId) query = null;
-    else if (info.appleId) query = "url=" + encodeURIComponent("https://music.apple.com/us/song/" + info.appleId);
-    if (query && !info.linksTried) {
-      info.linksTried = true;
-      try {
-        const data = await getJSON("https://api.song.link/v1-alpha.1/links?" + query);
-        if (key !== trackKey) return;
-        const links = data.linksByPlatform || {};
-        const sp = links.spotify && httpsURL(links.spotify.url);
-        const m = sp && sp.match(/\/track\/([A-Za-z0-9]{22})/);
-        if (m && !info.spotifyId) info.spotifyId = m[1];
-        info.amURL = links.appleMusic && httpsURL(links.appleMusic.url);
-        info.ytURL = links.youtubeMusic && httpsURL(links.youtubeMusic.url);
-        info.pageURL = httpsURL(data.pageUrl);
-        if (!$("cover").querySelector("img") && data.entitiesByUniqueId) {
-          const ent = Object.values(data.entitiesByUniqueId).find((x) => x && httpsURL(x.thumbnailUrl));
-          if (ent) setCover(ent.thumbnailUrl);
-        }
-      } catch (e) { /* song.link unavailable: fall back to plain links below */ }
-    }
     if (key !== trackKey) return;
+    info.linksTried = true;
     showLinks(t);
     syncEmbed();
   }
 
   function showLinks(t) {
     const q = encodeURIComponent(((t.artist || "") + " " + (t.title || "")).trim());
-    const am = info.amURL || info.appleURL || (info.appleId ? "https://music.apple.com/us/song/" + info.appleId : null);
-    const yt = info.ytURL || "https://music.youtube.com/search?q=" + q;
-    const sl = info.pageURL || (info.spotifyId ? "https://song.link/s/" + info.spotifyId : info.appleId ? "https://song.link/i/" + info.appleId : null);
+    const sp = info.spotifyId ? "https://open.spotify.com/track/" + info.spotifyId : "https://open.spotify.com/search/" + q;
+    const am = info.appleURL || (info.appleId ? "https://music.apple.com/" + storefront + "/song/" + info.appleId
+                                              : "https://music.apple.com/" + storefront + "/search?term=" + q);
+    const yt = "https://music.youtube.com/search?q=" + q;
+    const sl = info.spotifyId ? "https://song.link/s/" + info.spotifyId : info.appleId ? "https://song.link/i/" + info.appleId : null;
     const set = (id, url) => { const a = $(id); if (url) { a.href = url; a.hidden = false; } else a.hidden = true; };
-    set("amLink", am); set("ytLink", yt); set("slLink", sl);
+    set("spLink", sp); set("amLink", am); set("ytLink", yt); set("slLink", sl);
     $("alt").hidden = false;
-    if (started && !info.spotifyId) {
+    if (started) noteMissingSpotify();
+  }
+
+  // Without a Spotify ID the Spotify player can't follow: Apple Music's
+  // own embed (a preview without sign-in) when the song has an Apple ID.
+  function noteMissingSpotify() {
+    if (!(state && state.track) || info.spotifyId) return;
+    if (info.appleId) {
+      embedMessage("This song is playing from Apple Music. Apple’s player below can’t follow the host’s position; open the song in Apple Music to hear all of it.");
+    } else if (info.linksTried) {
       embedMessage("This song couldn’t be found on Spotify from here. Try one of the links below.");
     }
+  }
+
+  let appleShown = null;
+  function syncAppleEmbed() {
+    const t = state && state.track;
+    const id = started && !finished && t && !info.spotifyId ? info.appleId : null;
+    if (id === appleShown) return;
+    appleShown = id;
+    const wrap = $("appleWrap");
+    wrap.textContent = "";
+    wrap.hidden = !id;
+    // One player at a time: Spotify's box (empty or paused) steps aside.
+    if (started) $("embedWrap").hidden = !!id;
+    if (!id) return;
+    $("startText").textContent = "Listening along";
+    $("startBtn").classList.add("on");
+    const frame = document.createElement("iframe");
+    frame.title = "Apple Music";
+    frame.height = "175";
+    frame.allow = "encrypted-media; clipboard-write";
+    frame.setAttribute("sandbox", "allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation");
+    frame.referrerPolicy = "no-referrer";
+    frame.src = "https://embed.music.apple.com/" + storefront + "/song/" + encodeURIComponent(String(id));
+    wrap.appendChild(frame);
   }
 
   // ---- lyrics --------------------------------------------------------------
@@ -595,9 +626,8 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
     $("startBtn").disabled = true;
     $("startText").textContent = "Loading Spotify…";
     $("embedWrap").hidden = false;
-    if (state && state.track && !info.spotifyId && info.linksTried) {
-      embedMessage("This song couldn’t be found on Spotify from here. Try one of the links below.");
-    }
+    noteMissingSpotify();
+    syncAppleEmbed();
     if (document.getElementById("spotify-iframe-api")) return;
     window.onSpotifyIframeApiReady = (IFrameAPI) => { api = IFrameAPI; syncEmbed(); };
     const s = document.createElement("script");
@@ -648,6 +678,7 @@ footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--fai
 
   // Keep the embed on the host's track, playing state and position.
   function syncEmbed() {
+    syncAppleEmbed();
     if (!started || !api) return;
     const t = state && state.track;
     const id = info.spotifyId;

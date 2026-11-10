@@ -514,7 +514,7 @@ final class ListenSessionTests: XCTestCase {
         musicOnly.spotifyId = nil
         try XCTUnwrap(sockets.opened.first).push(stateText(position: 10, track: musicOnly))
         await waitUntil { follower.note != nil }
-        XCTAssertEqual(follower.note, "\u{201C}Blinding Lights\u{201D} isn\u{2019}t on your Spotify \u{2014} still following")
+        XCTAssertEqual(follower.note, "\u{201C}Blinding Lights\u{201D} can\u{2019}t be found on Spotify from here \u{2014} still following")
         XCTAssertEqual(follower.songPageURL?.absoluteString, "https://song.link/i/1499378607")
         XCTAssertFalse(player.log.contains { $0.hasPrefix("play") })
     }

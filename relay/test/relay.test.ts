@@ -492,6 +492,8 @@ describe("listen page", () => {
     const html = await res.text();
     expect(html).toContain("Start listening");
     expect(html).toContain("https://open.spotify.com/embed/iframe-api/v1");
+    expect(html).toContain("https://embed.music.apple.com/");
+    expect(html).not.toContain("api.song.link");
     expect(res.headers.get("Content-Security-Policy")).toContain("object-src 'none'");
   });
 

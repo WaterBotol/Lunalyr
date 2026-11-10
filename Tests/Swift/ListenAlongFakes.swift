@@ -160,8 +160,19 @@ final class FakeListenPlayer: ListenPlayerControl {
         shuffleOn = on
     }
 
+    /// While set, library searches wait until the test releases them, in order.
+    var holdsSearches = false
+    private var heldSearches: [CheckedContinuation<Void, Never>] = []
+    var pendingSearches: Int { heldSearches.count }
+
+    func releaseSearch() {
+        guard !heldSearches.isEmpty else { return }
+        heldSearches.removeFirst().resume()
+    }
+
     func searchLibrary(title: String) async -> [LibraryCandidate] {
         log.append("search \(title)")
+        if holdsSearches { await withCheckedContinuation { heldSearches.append($0) } }
         return library
     }
 }
