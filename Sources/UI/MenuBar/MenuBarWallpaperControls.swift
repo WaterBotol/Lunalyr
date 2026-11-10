@@ -42,6 +42,11 @@ struct MenuBarWallpaperControls: View {
                     Button(MusicVideoTapSync.buttonTitle(musicVideo.tapState)) { musicVideo.tapSyncButton() }
                         .help("Click, then press any key the moment the singing starts in the video")
                     Spacer(minLength: 0)
+                    // Drag the video in the desktop player (same offset as the nudges).
+                    Button(musicVideo.isAligning ? "Aligning…" : "Align…") { startAlign() }
+                        .disabled(!musicVideo.isAligning && alignReason != nil)
+                        .help(alignReason
+                              ?? "Drag the video\u{2019}s own bar in the desktop player until the picture matches the music (kept for this video)")
                     // A quarter second at a time, kept for this song's video.
                     Button("Video earlier") { musicVideo.videoEarlier() }
                         .help("The video lags the music: show it a quarter second sooner (kept for this video)")
@@ -98,6 +103,20 @@ struct MenuBarWallpaperControls: View {
     }
 
     static let pausedNote = "Paused: your desktop is frozen until you resume it."
+
+    /// Why Align… can't start, nil when it can: it needs the desktop player.
+    private var alignReason: String? {
+        guard DesktopOptions.shared.showsControlsOnHover else {
+            return "Turn on Settings > Performance > Show player on hover to drag the video on the desktop"
+        }
+        return musicVideo.alignAvailability.reason
+    }
+
+    /// Align mode, with the desktop player brought up to drag the video in.
+    private func startAlign() {
+        guard musicVideo.beginAlign() else { return }
+        HoverState.shared.pinForAlign()
+    }
 
     private func shortcut(_ action: GlobalHotkeys.Action) -> String? {
         extras.shortcutsEnabled ? hotkeys.activeLabel(for: action) : nil

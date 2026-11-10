@@ -263,6 +263,7 @@ final class MusicVideoController: ObservableObject {
     /// - The library's own file would not play: said as such.
     func reportPlaybackFailure(of source: MusicVideoSource, _ failure: MusicVideoPlaybackFailure = .refused) {
         guard let song, case .showing(let showing, _) = status, showing == source else { return }
+        endAlign()
         switch (source, failure) {
         case (.local, _):
             status = .missing(.localFileFailed, title: song.title)

@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 extension PlayerKind {
     /// The colour each player is known by, so the switch reads at a glance.
@@ -81,6 +82,9 @@ struct DesktopPlayerView: View {
     /// The strip item a Next press slid to before the player answered.
     @State private var optimisticCurrent: String?
     @State private var pendingCoverToggle: Task<Void, Never>?
+    /// The music video is being lined up: its bar's capsule is up for good,
+    /// so the strip's titles and side covers make way meanwhile.
+    @State private var aligning = false
 
     init(model: DesktopPlayerModel, displayID: CGDirectDisplayID) {
         self.model = model
@@ -100,10 +104,11 @@ struct DesktopPlayerView: View {
         PlayerColumn(scrubKind: rowKind) {
             top(shown: shown)
         } scrub: {
-            ScrubRow(controller: scrub, kind: rowKind, tint: model.playingKind.tint, isPlaying: displayedPlaying,
-                     shown: shown, showsRemaining: $model.showsRemaining)
+            SeekOrAlignRow(musicVideo: MusicVideoController.shared, scrub: scrub, kind: rowKind,
+                           tint: model.playingKind.tint, isPlaying: displayedPlaying, shown: shown,
+                           showsRemaining: $model.showsRemaining)
         } controls: {
-            controls
+            ControlsOrAlign(musicVideo: MusicVideoController.shared, tint: model.playingKind.tint) { controls }
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -128,6 +133,7 @@ struct DesktopPlayerView: View {
         .onChange(of: model.queue) { _, queue in
             if let optimisticCurrent, queue.first(where: \.isCurrent)?.id == optimisticCurrent { self.optimisticCurrent = nil }
         }
+        .onReceive(MusicVideoController.shared.$align.map { $0 != nil }.removeDuplicates()) { aligning = $0 }
         .onAppear { if !maskRender { registerKeys() } }
         .onDisappear { if !maskRender { PlayerKeyboard.shared.unregister(displayID) } }
     }
@@ -214,7 +220,8 @@ struct DesktopPlayerView: View {
             ScrubActivityReader(activity: scrub.activity) { activity in
                 // The bar's capsules rise over the titles under the covers:
                 // the titles make way while they are up.
-                strip(shown: shown, labelsDimmed: activity.capsulesUp, sidesDimmed: activity.dragging)
+                strip(shown: shown, labelsDimmed: activity.capsulesUp || aligning,
+                      sidesDimmed: activity.dragging || aligning)
             }
             .frame(width: Self.width, height: Self.stripHeight)
         }

@@ -14,6 +14,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- Music video: line the video up by dragging it. The film button beside the desktop player's seek bar (or Align… next to Video earlier/later in the menu bar) turns the seek bar into the video's own bar, with the song shown inside it. Drag while the song plays until the picture matches the music; let go to keep it for that video. Drag down (or hold ⌥) for tenths of a second, ← → move it 0.1 s (⇧ 1 s), Esc puts it back, Automatic forgets it. Video earlier/later and Tap to sync change the same timing.
 - Lyrics for another version of the song (Live, Remix, Acoustic, Sped Up, Edit, Instrumental and so on, in English, Chinese, Japanese or Korean) now rank below timed lyrics for the version playing. They are never rejected, so they still show when nothing else is found, and the source list says "other version (Live)". Remasters, credits and deluxe editions count as the same recording, and a tag the album carries is not held against a match.
 - When several services give the same words, Accuracy first prefers that match among the other sources, and the source list says how many agree. LRCLIB's word timing loses its lead only when two other services agree on timing it disagrees with.
 - NetEase, QQ, Kugou and Kuwo search again under an artist's Chinese, Japanese or Korean name (from MusicBrainz) when the library's name finds nothing. One request per artist, remembered for 30 days. Timing & sources > "Search under artists' other names" turns it off.
