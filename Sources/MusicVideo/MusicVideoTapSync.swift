@@ -65,6 +65,11 @@ enum MusicVideoTapFailure: Equatable {
 
 enum MusicVideoTapSync {
     /// How late a tap lands after what it marks: reaction time.
+    ///
+    /// Longer than the lyric Tap to sync's (`LyricTapSync.reactionTime`,
+    /// 0.15) on purpose: this is one tap reacting to a line seen on screen,
+    /// a plain visual reaction, while the lyric one is tapped along to the
+    /// song again and again, and a rhythm anticipated lands closer to the beat.
     static let reactionTime = 0.2
     /// The tap is waited for this long before it is given up.
     static let armedLimit: TimeInterval = 120

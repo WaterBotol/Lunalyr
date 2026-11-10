@@ -180,14 +180,14 @@ struct PlayerPreviewScene: View {
                         .font(.system(size: 54, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.4), radius: 10)
-                        .modifier(PreviewFocus(look: PlayerHoverFocus.look(hovered: true, previewing: true)))
+                        .modifier(PreviewFocus(look: PlayerHoverFocus.look(hovered: true, previewing: true, reduceMotion: look.reduceMotion)))
                         .offset(y: -40)
                 }
             } else if state != .noSong {
                 Text("Oh, the evening knows my name")
                     .font(.system(size: 54, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                    .modifier(PreviewFocus(look: PlayerHoverFocus.look(hovered: true, previewing: false)))
+                    .modifier(PreviewFocus(look: PlayerHoverFocus.look(hovered: true, previewing: false, reduceMotion: look.reduceMotion)))
                     .offset(y: -40)
             }
             PlayerColumn(scrubKind: rowKind) {

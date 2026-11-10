@@ -38,15 +38,38 @@ final class MusicVideoPauseTests: XCTestCase {
 
     /// A frozen frame whose long-pause timer the test fires by hand.
     private func makeFreeze() -> (MusicVideoFrozenFrame, FakeFreezeHost, () -> Void) {
-        var pending: [@MainActor () -> Void] = []
+        let (freeze, host, timers) = makeTimedFreeze()
+        return (freeze, host, { timers.fire(600) })
+    }
+
+    /// Timers by delay, fired by hand.
+    @MainActor
+    final class Timers {
+        var pending: [(id: Int, delay: TimeInterval, work: @MainActor () -> Void)] = []
+        private var next = 0
+        func add(_ delay: TimeInterval, _ work: @escaping @MainActor () -> Void) -> () -> Void {
+            next += 1
+            let id = next
+            pending.append((id, delay, work))
+            return { [weak self] in self?.pending.removeAll { $0.id == id } }
+        }
+        func fire(_ delay: TimeInterval) {
+            let due = pending.filter { $0.delay == delay }
+            pending.removeAll { $0.delay == delay }
+            due.forEach { $0.work() }
+        }
+        func count(_ delay: TimeInterval) -> Int { pending.filter { $0.delay == delay }.count }
+    }
+
+    private func makeTimedFreeze() -> (MusicVideoFrozenFrame, FakeFreezeHost, Timers) {
+        let timers = Timers()
         let freeze = MusicVideoFrozenFrame(longPause: 600) { delay, work in
-            XCTAssertEqual(delay, 600)
-            pending.append(work)
-            return { pending.removeAll() }
+            XCTAssertTrue(delay == 600 || delay == MusicVideoFrozenFrame.seekHold, "\(delay)")
+            return timers.add(delay, work)
         }
         let host = FakeFreezeHost()
         freeze.host = host
-        return (freeze, host, { let due = pending; pending.removeAll(); due.forEach { $0() } })
+        return (freeze, host, timers)
     }
 
     /// Playing, then the user pauses the song: the loop asks for a pause.
@@ -65,21 +88,26 @@ final class MusicVideoPauseTests: XCTestCase {
         XCTAssertEqual(MusicVideoHold.of(surfacePaused: false, songPlaying: true, target: 12), .live)
         XCTAssertEqual(MusicVideoHold.of(surfacePaused: false, songPlaying: false, target: 12), .userPaused,
                        "the user paused the song")
-        XCTAssertEqual(MusicVideoHold.of(surfacePaused: true, songPlaying: false, target: 12), .other,
-                       "covered, wallpaper paused or Reduce Motion")
-        XCTAssertEqual(MusicVideoHold.of(surfacePaused: true, songPlaying: true, target: 12), .other)
+        XCTAssertEqual(MusicVideoHold.of(surfacePaused: true, songPlaying: false, target: 12), .wallpaperPaused,
+                       "covered or wallpaper paused: the frame is held too")
+        XCTAssertEqual(MusicVideoHold.of(surfacePaused: true, songPlaying: true, target: 12), .wallpaperPaused)
         XCTAssertEqual(MusicVideoHold.of(surfacePaused: false, songPlaying: false, target: nil), .other,
                        "before the video starts or past its end")
+        XCTAssertEqual(MusicVideoHold.of(surfacePaused: true, songPlaying: true, target: nil), .other)
+        XCTAssertEqual([MusicVideoHold.live, .userPaused, .wallpaperPaused, .outgoing, .other].filter(\.keepsFrame),
+                       [.userPaused, .wallpaperPaused, .outgoing])
     }
 
-    func testFrozenFrameShowsOnlyForAUserPause() {
+    func testFrozenFrameShowsForHoldsThatKeepIt() {
         let rule = MusicVideoFrozenFrame.showsFrame
         XCTAssertTrue(rule(.userPaused, false, true), "user pause: the frozen frame")
         XCTAssertTrue(rule(.userPaused, true, true), "while the pause lands")
-        XCTAssertFalse(rule(.other, false, true), "covered, paused wallpaper, Reduce Motion, outside the video")
+        XCTAssertTrue(rule(.wallpaperPaused, false, true), "Pause Wallpaper keeps the picture, not the stand-in")
+        XCTAssertTrue(rule(.outgoing, false, true), "a song change fades the old video's picture out")
+        XCTAssertFalse(rule(.other, false, true), "outside the video")
         XCTAssertTrue(rule(.live, false, true), "resumed, not playing yet: kept until it plays")
         XCTAssertFalse(rule(.live, true, true), "playing again")
-        for hold in [MusicVideoHold.live, .userPaused, .other] {
+        for hold in [MusicVideoHold.live, .userPaused, .wallpaperPaused, .outgoing, .other] {
             XCTAssertFalse(rule(hold, false, false), "no picture, the gradient as before")
         }
         // The player itself still shows only while it plays.
@@ -115,7 +143,7 @@ final class MusicVideoPauseTests: XCTestCase {
         XCTAssertEqual(surface.calls.last, "pause")
 
         loop.setSurfacePaused(true)
-        XCTAssertEqual(surface.holds.last, .other, "covered or paused wallpaper, Reduce Motion")
+        XCTAssertEqual(surface.holds.last, .wallpaperPaused, "covered or paused wallpaper")
         loop.stop()
         loop.setSurfacePaused(false)
         XCTAssertEqual(surface.holds.last, .userPaused)
@@ -165,12 +193,12 @@ final class MusicVideoPauseTests: XCTestCase {
     }
 
     func testOtherPausesKeepTheFallback() {
-        // Covered, wallpaper paused, Reduce Motion, outside the video.
-        let (covered, coveredHost, _) = makeFreeze()
-        covered.notePlayer(showing: true)
-        covered.noteHold(.other)
-        covered.pause()
-        XCTAssertEqual(coveredHost.events, ["pause"], "no picture: the gradient shows as before")
+        // Outside the video's span.
+        let (outside, outsideHost, _) = makeFreeze()
+        outside.notePlayer(showing: true)
+        outside.noteHold(.other)
+        outside.pause()
+        XCTAssertEqual(outsideHost.events, ["pause"], "no picture: the gradient shows as before")
         // Buffering (or not started): the player is hidden already.
         let (freeze, host, _) = makeFreeze()
         freeze.notePlayer(showing: false)
@@ -180,13 +208,47 @@ final class MusicVideoPauseTests: XCTestCase {
         XCTAssertFalse(freeze.frameShown)
     }
 
-    func testCoveringHidesTheFrameAndUncoveringBringsItBack() {
+    func testCoveringKeepsTheFrameAndLeavingTheVideoHidesIt() {
         let (freeze, host, _) = makeFreeze()
         userPause(freeze)
+        freeze.noteHold(.wallpaperPaused)
+        XCTAssertEqual(host.events.last, "pause", "covered or paused wallpaper: the frame stays")
+        XCTAssertTrue(freeze.frameShown)
         freeze.noteHold(.other)
-        XCTAssertEqual(host.events.last, "hide")
+        XCTAssertEqual(host.events.last, "hide", "outside the video: the stand-in")
         freeze.noteHold(.userPaused)
         XCTAssertEqual(host.events.last, "show")
+    }
+
+    func testPausingTheWallpaperTakesTheFrame() {
+        // Pause Wallpaper (or covering it) while the song plays: the video
+        // holds its frame instead of dropping to the gradient.
+        let (freeze, host, _) = makeFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        freeze.noteHold(.wallpaperPaused)
+        freeze.pause()
+        freeze.notePlayer(showing: false)
+        XCTAssertEqual(host.events, ["capture", "show", "pause"])
+        XCTAssertTrue(freeze.frameShown)
+        // Resumed: kept until the player plays, then handed over.
+        freeze.noteHold(.live)
+        XCTAssertTrue(freeze.frameShown)
+        freeze.notePlayer(showing: true)
+        XCTAssertEqual(host.events.last, "handOver")
+    }
+
+    func testOutgoingVideoHoldsItsFrameThroughTheSongChange() {
+        // W4: the old video used to be paused and hidden, so the crossfade
+        // showed the gradient. Now its picture is taken, then it pauses.
+        let (freeze, host, _) = makeFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        freeze.noteHold(.outgoing)
+        freeze.pause()
+        freeze.notePlayer(showing: false)
+        XCTAssertEqual(host.events, ["capture", "show", "pause"])
+        XCTAssertTrue(freeze.frameShown, "the fade shows the video's last frame")
     }
 
     func testResumeHandsOverOnlyOncePlaying() {
@@ -280,25 +342,26 @@ final class MusicVideoPauseTests: XCTestCase {
         let (freeze, host, fire) = makeFreeze()
         freeze.noteHold(.live)
         freeze.notePlayer(showing: true)
-        freeze.noteHold(.other)
+        freeze.noteHold(.wallpaperPaused)
         freeze.pause()
         freeze.notePlayer(showing: false)
-        XCTAssertEqual(host.events, ["pause"])
-        freeze.noteHold(.other)
+        XCTAssertEqual(host.events, ["capture", "show", "pause"])
+        freeze.noteHold(.wallpaperPaused)
         fire()
-        XCTAssertEqual(host.events, ["pause", "release"])
-        freeze.noteHold(.other)
-        XCTAssertEqual(host.events, ["pause", "release"], "still covered: stays closed, no second timer")
+        XCTAssertEqual(host.events, ["capture", "show", "pause", "release"])
+        XCTAssertTrue(freeze.frameShown, "the picture stays while the player is closed")
+        freeze.noteHold(.wallpaperPaused)
+        XCTAssertEqual(host.events.last, "release", "still covered: stays closed, no second timer")
         fire()
-        XCTAssertEqual(host.events, ["pause", "release"])
+        XCTAssertEqual(host.events.filter { $0 == "release" }.count, 1)
         freeze.noteHold(.live)
-        XCTAssertEqual(host.events, ["pause", "release", "recreate"], "shown again: a fresh player")
+        XCTAssertEqual(host.events.last, "recreate", "shown again: a fresh player")
     }
 
     func testCoveredAfterAUserPauseClosesAtTheLongPauseToo() {
         let (freeze, host, fire) = makeFreeze()
         userPause(freeze)
-        freeze.noteHold(.other)
+        freeze.noteHold(.wallpaperPaused)
         fire()
         XCTAssertEqual(host.events.last, "release")
         freeze.noteHold(.userPaused)
@@ -309,10 +372,84 @@ final class MusicVideoPauseTests: XCTestCase {
     func testCoveredBrieflyKeepsThePlayer() {
         let (freeze, host, fire) = makeFreeze()
         freeze.noteHold(.live)
-        freeze.noteHold(.other)
+        freeze.noteHold(.wallpaperPaused)
         freeze.noteHold(.live)
         fire()
         XCTAssertFalse(host.events.contains("release"))
+    }
+
+    // MARK: Seeks (W8)
+
+    func testASeekThatBuffersShowsThePictureTakenBeforeIt() {
+        let (freeze, host, timers) = makeTimedFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        freeze.noteSeek()
+        XCTAssertEqual(host.events, ["capture"], "taken as the seek is sent")
+        XCTAssertFalse(freeze.frameShown, "the player still shows")
+        // The seek buffers past the grace: the player hides, the picture covers it.
+        freeze.notePlayer(showing: false)
+        XCTAssertEqual(host.events, ["capture", "show"])
+        XCTAssertEqual(timers.count(MusicVideoFrozenFrame.seekHold), 0, "in use: no longer timed")
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        XCTAssertEqual(host.events.last, "handOver", "faded once the video plays again")
+        XCTAssertNil(freeze.image)
+    }
+
+    func testASeekThatLandsAtOnceShowsNothingAndDropsThePicture() {
+        let (freeze, host, timers) = makeTimedFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        freeze.noteSeek()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        XCTAssertNotNil(freeze.image, "kept for a moment in case it buffers")
+        timers.fire(MusicVideoFrozenFrame.seekHold)
+        XCTAssertNil(freeze.image)
+        XCTAssertEqual(host.events, ["capture"], "never shown")
+        // A later pause takes its own picture.
+        freeze.noteHold(.userPaused)
+        freeze.pause()
+        XCTAssertEqual(host.events, ["capture", "capture", "show", "pause"])
+    }
+
+    func testAPauseRightAfterASeekTakesAFreshPicture() {
+        let (freeze, host, _) = makeTimedFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        freeze.noteSeek()
+        freeze.noteHold(.userPaused)
+        XCTAssertNil(freeze.image, "the seek's picture is dropped")
+        freeze.pause()
+        XCTAssertEqual(host.events, ["capture", "capture", "show", "pause"])
+    }
+
+    func testNoSeekPictureUnlessPlaying() {
+        let (freeze, host, _) = makeTimedFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: false)
+        freeze.noteSeek()
+        freeze.noteHold(.userPaused)
+        freeze.notePlayer(showing: true)
+        freeze.noteSeek()
+        XCTAssertEqual(host.events, [], "hidden, or not live: nothing to take")
+    }
+
+    func testBufferingHidesThePlayerOnlyAfterAGrace() {
+        let grace = YouTubeEmbed.bufferingGrace
+        XCTAssertEqual(YouTubeEmbed.hideDelay(buffering: true, hold: .live, hasFrame: false), grace)
+        XCTAssertGreaterThan(grace, 0.1)
+        XCTAssertLessThanOrEqual(grace, 0.5)
+        XCTAssertEqual(YouTubeEmbed.hideDelay(buffering: true, hold: .live, hasFrame: true), 0,
+                       "a seek's picture covers it at once instead")
+        XCTAssertEqual(YouTubeEmbed.hideDelay(buffering: false, hold: .live, hasFrame: false), 0, "a pause or the end")
+        for hold in [MusicVideoHold.userPaused, .wallpaperPaused, .outgoing, .other] {
+            XCTAssertEqual(YouTubeEmbed.hideDelay(buffering: true, hold: hold, hasFrame: false), 0)
+        }
+        let html = YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0)
+        XCTAssertTrue(html.contains("if (state === 3) return;"), "the page itself does not fade out for buffering")
+        XCTAssertFalse(html.contains("transition:opacity .5s}"), "eased like the other media reveals")
     }
 
     // MARK: Song change and hidden surfaces
@@ -341,7 +478,7 @@ final class MusicVideoPauseTests: XCTestCase {
         loop.surface = surface
         loop.tick()
         XCTAssertEqual(surface.calls, ["pause"], "held where it is, never sought to the new song's time")
-        XCTAssertEqual(surface.holds.last, .other)
+        XCTAssertEqual(surface.holds.last, .outgoing, "its frame is held for the fade")
         loop.tick()
         XCTAssertEqual(surface.calls, ["pause"], "and left alone while it fades")
         // The same video found again for the next song: it follows once more.

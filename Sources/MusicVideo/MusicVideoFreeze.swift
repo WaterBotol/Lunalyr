@@ -9,14 +9,29 @@ enum MusicVideoHold: Equatable {
     /// The user paused the song, the wallpaper is live, and the song is
     /// inside the video's span: the video holds its frame.
     case userPaused
-    /// Anything else: the wallpaper covered or paused, Reduce Motion,
-    /// before the video starts or past its end.
+    /// The wallpaper is paused, covered or hidden while the song is inside
+    /// the video's span: the video holds its frame too, so Pause Wallpaper
+    /// keeps the picture rather than falling back.
+    case wallpaperPaused
+    /// Another song's video, fading out after a song change: it holds its
+    /// last frame for the fade, never the stand-in.
+    case outgoing
+    /// Before the video starts or past its end.
     case other
+
+    /// The holds that keep the video's last frame on screen.
+    var keepsFrame: Bool {
+        switch self {
+        case .userPaused, .wallpaperPaused, .outgoing: return true
+        case .live, .other: return false
+        }
+    }
 
     /// `target` is where the video should be (`MusicVideoTiming.videoTime`),
     /// nil before its start or past its end.
     static func of(surfacePaused: Bool, songPlaying: Bool, target: Double?) -> MusicVideoHold {
-        guard !surfacePaused, target != nil else { return .other }
+        guard target != nil else { return .other }
+        if surfacePaused { return .wallpaperPaused }
         return songPlaying ? .live : .userPaused
     }
 }
@@ -42,18 +57,23 @@ protocol MusicVideoFreezeHost: AnyObject {
 
 /// A paused YouTube video's last frame. YouTube draws a pause button and
 /// its title bar over a paused player, so the player is hidden whenever it
-/// is not playing. When the user pauses the song, a picture of the player
-/// is taken just before it is paused and shown in its place, so the
-/// wallpaper keeps the paused video rather than falling back. Other pauses
-/// (covered, wallpaper paused, Reduce Motion, outside the video, buffering)
-/// fall back as before. After a long pause of any kind (the song paused,
-/// or the wallpaper covered, hidden or paused) the player is closed, so a
-/// hidden YouTube page uses nothing; the picture stays until a new one
-/// plays, and the player opens again once the video should play.
+/// is not playing. When the video is paused for a hold that keeps its frame
+/// (the user paused the song, the wallpaper was paused or covered, or the
+/// song changed and this video is fading out), a picture of the player is
+/// taken just before it is paused and shown in its place, so the wallpaper
+/// keeps the video rather than falling back to the stand-in. A drift seek
+/// takes a picture too, shown only if the seek has to buffer. Outside the
+/// video's span it falls back as before. After a long pause of any kind
+/// the player is closed, so a hidden YouTube page uses nothing; the picture
+/// stays until a new one plays, and the player opens again once the video
+/// should play.
 @MainActor
 final class MusicVideoFrozenFrame {
     /// After this long not playing, the player is closed (about 10 minutes).
     nonisolated static let longPause: TimeInterval = 600
+    /// A seek's picture waits this long for the player to hide (the seek
+    /// buffering); a seek that lands at once drops it.
+    nonisolated static let seekHold: TimeInterval = 2
 
     weak var host: MusicVideoFreezeHost?
     private(set) var hold: MusicVideoHold = .live
@@ -62,10 +82,14 @@ final class MusicVideoFrozenFrame {
     private(set) var image: CGImage?
     private(set) var frameShown = false
     private(set) var capturing = false
+    /// The picture was taken for a seek and has not been needed yet.
+    private(set) var seekFrame = false
+    private var seekCapturing = false
     /// The player was closed for a long pause.
     private(set) var released = false
     private var generation = 0
     private var cancelLongPause: (() -> Void)?
+    private var cancelSeekHold: (() -> Void)?
     private let longPause: TimeInterval
     private let schedule: (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void
 
@@ -86,13 +110,14 @@ final class MusicVideoFrozenFrame {
         return { task.cancel() }
     }
 
-    /// The visibility rule. The frozen frame shows while the user has the
-    /// song paused, and on resume until the player plays again; never for
-    /// other pauses.
+    /// The visibility rule. The frozen frame shows while a hold keeps it
+    /// (user pause, paused wallpaper, outgoing video), and while live until
+    /// the player plays again (a resume, a seek that buffers); never
+    /// outside the video's span.
     nonisolated static func showsFrame(hold: MusicVideoHold, playerShowing: Bool, hasImage: Bool) -> Bool {
         guard hasImage else { return false }
         switch hold {
-        case .userPaused: return true
+        case .userPaused, .wallpaperPaused, .outgoing: return true
         case .live: return !playerShowing
         case .other: return false
         }
@@ -101,6 +126,8 @@ final class MusicVideoFrozenFrame {
     /// From each check of the sync loop.
     func noteHold(_ hold: MusicVideoHold) {
         self.hold = hold
+        // Paused for another reason: a pause takes its own, newer picture.
+        if hold != .live, seekFrame { dropSeekFrame() }
         if hold == .live {
             stopLongPause()
             if released {
@@ -119,13 +146,14 @@ final class MusicVideoFrozenFrame {
         refresh()
     }
 
-    /// The sync loop pauses the video. A user pause of a playing video takes
-    /// its picture first and shows it, then pauses; anything else pauses.
+    /// The sync loop pauses the video. Paused for a hold that keeps its
+    /// frame, a playing video's picture is taken first and shown, then it is
+    /// paused; anything else just pauses.
     func pause() {
         guard !capturing else { return }
         // Once taken, the picture is kept: a later one could catch YouTube's
         // pause button as the pause lands.
-        guard hold == .userPaused, playerShowing, !released, image == nil, let host else {
+        guard hold.keepsFrame, playerShowing, !released, image == nil, let host else {
             host?.sendPause()
             return
         }
@@ -138,8 +166,8 @@ final class MusicVideoFrozenFrame {
             case .live:
                 // Resumed meanwhile: nothing to pause.
                 return
-            case .userPaused:
-                if let picture { self.image = picture }
+            case .userPaused, .wallpaperPaused, .outgoing:
+                if let picture, self.image == nil { self.image = picture }
                 // Shown before the pause, so YouTube's pause button is never seen.
                 self.refresh()
             case .other:
@@ -149,11 +177,40 @@ final class MusicVideoFrozenFrame {
         }
     }
 
+    /// The sync loop is about to seek the playing video (drift). Its picture
+    /// is taken now, before the seek is sent, and shown only if the player
+    /// hides to buffer the seek: a seek that lands at once shows nothing.
+    /// The seek itself is never held up for it.
+    func noteSeek() {
+        guard hold == .live, playerShowing, !released, !capturing, !seekCapturing, image == nil, let host else { return }
+        seekCapturing = true
+        let mine = generation
+        host.captureFrame { [weak self] picture in
+            guard let self, self.generation == mine else { return }
+            self.seekCapturing = false
+            guard self.hold == .live, self.image == nil, let picture else { return }
+            self.image = picture
+            self.seekFrame = true
+            self.cancelSeekHold?()
+            self.cancelSeekHold = self.schedule(Self.seekHold) { [weak self] in
+                guard let self else { return }
+                self.cancelSeekHold = nil
+                guard self.seekFrame else { return }
+                self.seekFrame = false
+                self.refresh()
+            }
+            self.refresh()
+        }
+    }
+
     /// A new video, a failure, or the player gone: no frame.
     func reset() {
         generation += 1
         capturing = false
+        seekCapturing = false
         stopLongPause()
+        stopSeekHold()
+        seekFrame = false
         released = false
         image = nil
         playerShowing = false
@@ -167,16 +224,34 @@ final class MusicVideoFrozenFrame {
         let show = Self.showsFrame(hold: hold, playerShowing: playerShowing, hasImage: image != nil)
         if show, !frameShown, let image {
             frameShown = true
+            // In use now: from here it is an ordinary frame, kept until the
+            // player plays again.
+            if seekFrame {
+                seekFrame = false
+                stopSeekHold()
+            }
             host?.showFrozenFrame(image)
         } else if !show, frameShown {
             frameShown = false
             host?.hideFrozenFrame(handOver: hold == .live && playerShowing)
         }
-        // Playing again: the picture is out of date.
-        if hold == .live && playerShowing && image != nil {
+        // Playing again: the picture is out of date (a seek's picture still
+        // waiting to be needed is kept for its while).
+        if hold == .live && playerShowing && image != nil && !seekFrame {
             image = nil
             stopLongPause()
         }
+    }
+
+    private func dropSeekFrame() {
+        seekFrame = false
+        stopSeekHold()
+        image = nil
+    }
+
+    private func stopSeekHold() {
+        cancelSeekHold?()
+        cancelSeekHold = nil
     }
 
     private func startLongPause() {
@@ -222,8 +297,8 @@ final class MusicVideoFrozenFrame {
 /// are its own.
 @MainActor
 final class MusicVideoFrozenFrameView: NSView {
-    /// The player fades in over 0.5 s; the picture leaves after that.
-    static let handOverDelay: CFTimeInterval = 0.55
+    /// The player fades in over `mediaReveal`; the picture leaves after that.
+    static let handOverDelay: CFTimeInterval = WallpaperMotion.mediaReveal + 0.05
     private let imageLayer = CALayer()
     private var token = 0
 
@@ -266,7 +341,8 @@ final class MusicVideoFrozenFrameView: NSView {
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = imageLayer.presentation()?.opacity ?? imageLayer.opacity
         fade.toValue = 0
-        fade.duration = handOver ? 0.35 : 0.15
+        fade.duration = handOver ? 0.35 : WallpaperMotion.mediaHide
+        fade.timingFunction = LunalyrDesign.Motion.CA.easeIn
         if handOver {
             fade.beginTime = CACurrentMediaTime() + Self.handOverDelay
             fade.fillMode = .backwards

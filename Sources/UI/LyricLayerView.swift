@@ -182,7 +182,6 @@ struct LyricLayer: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) { noteView(wall: wall) }
         .environment(\.lyricInk, ink)
     }
 
@@ -192,7 +191,6 @@ struct LyricLayer: View {
     /// nothing left to change needs none (`LyricPace.quietLevel`).
     private func level(key: LyricSceneKey, transition: LyricSceneMemory.Transition, shown: Double,
                        target: Double, ink: LyricInk, wall: Double) -> LyricPace.Level {
-        if let note = extras.note, wall - note.at < WallpaperMotion.toastLife + 0.1 { return .active }
         if shown > 0.001, !transition.leaving.isEmpty || transition.incomingPresence < 1 { return .active }
         // The loading notice fading in, after its delay.
         if key.kind == .loading, let since = cache.loadingSince,
@@ -237,17 +235,6 @@ struct LyricLayer: View {
                 return .ambient
             }
             return drifting ? .ambient : .still
-        }
-    }
-
-    /// A brief confirmation of what a shortcut just did: rises in, holds,
-    /// fades. Drawn whether or not the lyrics are showing.
-    /// While the wallpaper is paused `LyricStage` draws it instead.
-    @ViewBuilder
-    private func noteView(wall: Double) -> some View {
-        if animating, let note = extras.note {
-            LyricNoteView(note: note, chain: cache.notes.observe(note), wall: wall, baseSize: baseSize,
-                          maxHeight: maxHeight, mood: mood)
         }
     }
 
@@ -1259,8 +1246,6 @@ final class LyricLayerCache: ObservableObject {
         return accentLab
     }
 
-    let notes = LyricNoteMemory()
-
     private var shownTrack: Int?
     private var shownKind: LyricSceneKey.Kind?
     /// Wall time the current song's lyrics started loading, while they are.
@@ -1502,9 +1487,7 @@ struct LyricStage: View, Equatable {
     @ObservedObject private var settings = Settings.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
     @ObservedObject private var scrubPreview = ScrubPreview.shared
-    @ObservedObject private var extras = LunalyrExtras.shared
     @StateObject private var pace = LyricPace()
-    @StateObject private var pausedNotes = LyricNoteHolder()
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
@@ -1529,21 +1512,45 @@ struct LyricStage: View, Equatable {
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
                        wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace)
         }
-        .overlay(alignment: .bottom) { pausedNote(layout) }
+    }
+}
+
+/// A shortcut's confirmation on the wallpaper (`LunalyrExtras.post`): rises
+/// in, holds, fades, whether or not the lyrics are showing. Drawn over the
+/// lyric stage but outside the player's hover blur, so it stays sharp while
+/// the player is up, and on a clock of its own that runs only for the
+/// note's life, so the lyric stage need not speed up for it and a paused
+/// wallpaper ("Wallpaper paused" itself) still shows it. A note the action
+/// HUD already showed is left out: it would be the same words twice.
+struct WallpaperNoteLayer: View, Equatable {
+    let size: CGSize
+    let mood: TrackMood
+    /// The wallpaper's frame interval.
+    let interval: Double
+    @ObservedObject private var extras = LunalyrExtras.shared
+    @StateObject private var notes = LyricNoteHolder()
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.interval == rhs.interval
     }
 
-    /// A note posted while the wallpaper is paused ("Wallpaper paused"
-    /// itself): the stage's clock is stopped, so the note gets a clock of
-    /// its own that runs only for the note's life and then ends.
-    @ViewBuilder
-    private func pausedNote(_ layout: LyricViewportMetrics) -> some View {
+    /// The note the wallpaper draws, if any: not one the HUD showed.
+    static func drawn(_ note: LunalyrExtras.Note?) -> LunalyrExtras.Note? {
+        guard let note, !note.inHUD else { return nil }
+        return note
+    }
+
+    var body: some View {
         let now = Date().timeIntervalSinceReferenceDate
-        if paused, let note = extras.note, now - note.at < WallpaperMotion.toastLife {
+        if let note = Self.drawn(extras.note), now - note.at < WallpaperMotion.toastLife {
+            let layout = LyricViewportMetrics(size: size)
             TimelineView(.explicit(LyricNoteView.frames(for: note, from: now, interval: interval))) { timeline in
-                LyricNoteView(note: note, chain: pausedNotes.memory.observe(note),
+                LyricNoteView(note: note, chain: notes.memory.observe(note),
                               wall: timeline.date.timeIntervalSinceReferenceDate, baseSize: layout.baseSize,
                               maxHeight: layout.stageSize.height, mood: mood)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .allowsHitTesting(false)
         }
     }
 }
