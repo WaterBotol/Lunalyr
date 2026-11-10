@@ -45,23 +45,46 @@ struct SampleLyric: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.lunalyrRendersLiveContent) private var live
+    @Environment(\.controlActiveState) private var activeState
     @State private var started = Date()
+    /// Set once the sample has played twice: it then rests on the full lines.
+    @State private var finished = false
+
+    /// A word every 0.45 s: eight words, then a breath with the lines full.
+    static let beat: TimeInterval = 0.45
+    static let cycle = words + 4
+    /// How many times it plays before resting.
+    static let plays = 2
+
+    /// How many words are sung `elapsed` seconds in; all of them once it has
+    /// played `plays` times.
+    static func sung(after elapsed: TimeInterval) -> Int {
+        let beats = Int(max(0, elapsed) / beat)
+        guard beats < plays * cycle else { return words }
+        return min(beats % cycle, words)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size.width * 0.064
             Group {
-                if live && !reduceMotion {
-                    TimelineView(.periodic(from: started, by: 0.45)) { context in
-                        // Eight words, then a breath with the lines full, then again.
-                        let beat = Int(context.date.timeIntervalSince(started) / 0.45) % (Self.words + 4)
-                        lines(sung: min(beat, Self.words), size: size)
+                if live && !reduceMotion && !finished && activeState != .inactive {
+                    TimelineView(.periodic(from: started, by: Self.beat)) { context in
+                        lines(sung: Self.sung(after: context.date.timeIntervalSince(started)), size: size)
                     }
+                } else if live && !reduceMotion {
+                    // Played out, or the window is in the background: the full lines, still.
+                    lines(sung: Self.words, size: size)
                 } else {
                     lines(sung: Self.held, size: size)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .task(id: live && !reduceMotion) {
+            guard live && !reduceMotion else { return }
+            try? await Task.sleep(for: .seconds(Double(Self.plays * Self.cycle) * Self.beat))
+            if !Task.isCancelled { finished = true }
         }
         .accessibilityHidden(true)
     }
@@ -76,15 +99,16 @@ struct SampleLyric: View {
         .font(AppFont.display(size))
         .multilineTextAlignment(.center)
         .shadow(color: .black.opacity(0.25), radius: size * 0.3, y: size * 0.06)
-        .animation(.easeOut(duration: 0.3), value: sung)
+        .animation(LunalyrDesign.Motion.quick, value: sung)
     }
 
     private func line(_ words: [String], firstWord: Int, sung: Int) -> some View {
         words.indices.reduce(Text("")) { text, index in
             let number = firstWord + index
             let word = Text((index == 0 ? "" : " ") + words[index])
-            if number < sung { return text + word.foregroundStyle(Color.white) }
-            if number == sung { return text + word.foregroundStyle(Color.white.opacity(0.82)) }
+            // The word being sung is the brightest; sung words settle just below it.
+            if number < sung { return text + word.foregroundStyle(Color.white.opacity(0.92)) }
+            if number == sung { return text + word.foregroundStyle(Color.white) }
             return text + word.foregroundStyle(Color.white.opacity(0.36))
         }
     }

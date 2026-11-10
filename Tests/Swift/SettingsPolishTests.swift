@@ -226,4 +226,22 @@ final class SettingsPolishTests: XCTestCase {
         XCTAssertTrue(LyricColourSwatch.swatchPaused(moving: true, reduceMotion: true, active: true))
         XCTAssertTrue(LyricColourSwatch.swatchPaused(moving: true, reduceMotion: false, active: false))
     }
+
+    // MARK: O2
+
+    /// The welcome's sample lyric plays twice, then rests on the full lines:
+    /// no endless redraw.
+    func testTheWelcomeSamplePlaysTwiceThenRests() {
+        let words = SampleLyric.lines.flatMap { $0 }.count
+        XCTAssertEqual(SampleLyric.sung(after: 0), 0)
+        XCTAssertEqual(SampleLyric.sung(after: SampleLyric.beat * 3.5), 3)
+        // The breath at the end of a play holds the lines full.
+        XCTAssertEqual(SampleLyric.sung(after: SampleLyric.beat * Double(words + 2)), words)
+        // The second play starts over.
+        XCTAssertEqual(SampleLyric.sung(after: SampleLyric.beat * Double(SampleLyric.cycle + 1)), 1)
+        // After two plays it stays full.
+        let done = SampleLyric.beat * Double(SampleLyric.plays * SampleLyric.cycle)
+        XCTAssertEqual(SampleLyric.sung(after: done), words)
+        XCTAssertEqual(SampleLyric.sung(after: done * 10), words)
+    }
 }

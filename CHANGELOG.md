@@ -60,6 +60,16 @@ When merging, keep every entry and combine duplicate headings.
 - Uses less battery while idle: a song paused for over a minute is checked every 10 seconds instead of every 2 (play, pause and track changes still show at once), and the hover check slows down while the pointer rests.
 - Uses less memory over a long day: cover art kept for replays is capped, and large library covers are decoded once, at the size shown, away from the wallpaper's drawing.
 - Uses less battery while the displays sleep or the screen is locked: the music player is re-checked every 10 seconds instead of every 2, and at once when the screens wake.
+- Settings controls move: switches slide, sliders glide on arrow keys and Reset (and keep your grip when dragged), segmented choices and the Calm/Bold ring animate, and pressed and keyboard-focus states show.
+- Settings options that appear under a switch or choice now fade and slide in, and the sections below move smoothly instead of jumping.
+- Settings pages reopen where you left them, and a page opened from elsewhere at a section no longer jumps back there on later visits.
+- Hiding the Settings preview slides it away instead of rearranging the window mid-animation.
+- Settings sidebar: arrow keys move between pages, ⌘F goes to search, and the selected page stays in view.
+- Reset Adjustments, Forget and Forget All (remembered styles), Restore Recommended Order and Allow (excluded albums) can be undone with Edit › Undo. Forget All asks first.
+- Clearer feedback in Settings: importing a wallpaper from the tiles shows progress, Google Fonts downloads show a spinner and a warning when they fail, failed lyric and reading imports look like warnings, and a failed translation offers Try Again.
+- Timing & sources has Tap to Sync Lyrics… and its Undo, and the song offset slider stretches to ±30 s when an offset needs it.
+- The welcome's sample lyric plays twice and then rests, and the word being sung is the brightest. Onboarding's buttons and the Pick a look status fade instead of popping, and VoiceOver moves to each step's title once it has settled.
+- The colour preview in Lyric style redraws less often, and not at all under Reduce Motion or while Settings is in the background.
 
 ### Fixed
 

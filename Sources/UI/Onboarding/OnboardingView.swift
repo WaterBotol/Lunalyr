@@ -52,10 +52,13 @@ struct OnboardingView: View {
             // it leaves: a transition is read from the view as last drawn.
             forward = new > old
             DispatchQueue.main.async {
-                withAnimation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.step, reduceMotion: reduceMotion)) {
+                // VoiceOver moves to the new title once the step has settled.
+                withAnimation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.step, reduceMotion: reduceMotion),
+                              completionCriteria: .logicallyComplete) {
                     shown = flow.step
+                } completion: {
+                    focusedTitle = shown
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focusedTitle = shown }
             }
         }
     }
@@ -76,6 +79,7 @@ struct OnboardingView: View {
 /// The step dots, Back and Continue (Open Settings and Done at the end).
 private struct OnboardingFooter: View {
     @ObservedObject var flow: OnboardingFlow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: LunalyrDesign.Spacing.small) {
@@ -85,14 +89,17 @@ private struct OnboardingFooter: View {
                 Button("Back") { flow.back() }
                     .keyboardShortcut("[", modifiers: .command)
                     .help("Back to \(OnboardingFlow.Step(rawValue: flow.step.rawValue - 1)?.title ?? "the last step") (⌘[)")
+                    .transition(.opacity)
             }
             if flow.isLastStep {
                 if flow.firstRun {
                     Button("Done") { flow.finish(.done) }
                         .help("Close and leave Lunalyr in the menu bar")
+                        .transition(.opacity)
                     Button("Open Settings") { flow.finish(.openSettings) }
                         .keyboardShortcut(.defaultAction)
                         .buttonStyle(.lunalyrProminent)
+                        .transition(.opacity)
                 } else {
                     Button("Done") { flow.finish(.done) }
                         .keyboardShortcut(.defaultAction)
@@ -109,6 +116,8 @@ private struct OnboardingFooter: View {
         .controlSize(.large)
         .padding(.horizontal, LunalyrDesign.Spacing.xLarge)
         .padding(.vertical, LunalyrDesign.Spacing.medium + 2)
+        // Back, Done and Open Settings fade in and out with the step.
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: flow.step)
     }
 }
 
