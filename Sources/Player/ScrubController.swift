@@ -391,7 +391,7 @@ struct PlayerHoverFocus: ViewModifier {
     static func look(hovered: Bool, previewing: Bool, reduceMotion: Bool = false) -> (blur: CGFloat, opacity: Double) {
         if previewing { return (reduceMotion ? 0 : 4, 0.8) }
         guard hovered else { return (0, 1) }
-        return reduceMotion ? (0, 0.22) : (22, 0.3)
+        return reduceMotion ? (0, 0.15) : (22, 0.3)
     }
 
     /// The fades: a soft spring that reverses smoothly from where it was
