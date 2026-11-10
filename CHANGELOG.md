@@ -62,6 +62,9 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Tap to sync for lyrics: a tap pressed just after the timing is set no longer reaches the app you were in (Space there could pause the song); the keyboard comes back when the result closes, or at once with Esc or Return.
+- Tap to sync for lyrics stops if a different lyric source replaces the lyrics mid-session, instead of saving timing for lyrics no longer shown.
+- A Shortcuts action that opens Lunalyr waits until Lunalyr has started before it runs.
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.
 - Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
 - Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.
