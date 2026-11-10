@@ -187,7 +187,9 @@ enum LyricCardMix {
                         sampleRate: Double = sampleRate) {
         let frames = samples.count / channels
         let end = min(max(0, end), frames)
-        let length = max(1, Int(seconds * sampleRate))
+        // Sound that stops sooner than the fade lasts fades over what there is,
+        // starting from full level rather than jumping part-way down.
+        let length = max(1, min(Int(seconds * sampleRate), end))
         let start = max(0, end - length)
         samples.withUnsafeMutableBufferPointer { output in
             for frame in start..<end {

@@ -235,6 +235,19 @@ final class LyricCardMixTests: XCTestCase {
         XCTAssertEqual(samples[47999 * 2], 0)
     }
 
+    func testAFadeShorterThanAskedStartsFromFullLevel() {
+        // Sound that stops 100 frames in: no jump from full level to a third of it.
+        var samples = [Float](repeating: 1, count: 1000 * 2)
+        LyricCardMix.fadeOut(&samples, endingAt: 100, seconds: 0.3)
+        XCTAssertEqual(samples[0], 1, accuracy: 0.02)
+        XCTAssertEqual(samples[50 * 2], 0.5, accuracy: 0.02)
+        XCTAssertEqual(samples[99 * 2], 0)
+        XCTAssertEqual(samples[500 * 2], 0)
+        var none = [Float](repeating: 1, count: 20)
+        LyricCardMix.fadeOut(&none, endingAt: 0, seconds: 0.3)
+        XCTAssertEqual(none, [Float](repeating: 0, count: 20))
+    }
+
     func testLoopsRepeatAndCrossfadeWithoutADip() {
         let source = [Float](repeating: 1, count: 100 * 2)
         let looped = LyricCardMix.loop(source, to: 250, crossfade: 10)
@@ -324,6 +337,81 @@ final class LyricCardMixTests: XCTestCase {
             XCTAssertLessThan(abs(weighting), 1)
             XCTAssertLessThanOrEqual(pcm.map(abs).max() ?? 0, 0.95)
         }
+    }
+
+    /// A background video whose sound stops a second before its picture: the
+    /// sound repeats with the picture, with silence where the picture runs on.
+    func testABackgroundsShortSoundTrackRepeatsWithItsPicture() async throws {
+        let picture = try await MixProbe.video(folder.appendingPathComponent("picture.mp4"), seconds: 2.5)
+        let tone = try MixProbe.tone(folder.appendingPathComponent("tone.wav"), frequency: 500, amplitude: 0.4, seconds: 1.5)
+        let composition = AVMutableComposition()
+        let pictureAsset = AVURLAsset(url: picture), toneAsset = AVURLAsset(url: tone)
+        let videoTracks = try await pictureAsset.loadTracks(withMediaType: .video)
+        let audioTracks = try await toneAsset.loadTracks(withMediaType: .audio)
+        let videoTrack = try XCTUnwrap(videoTracks.first), audioTrack = try XCTUnwrap(audioTracks.first)
+        let pictureLength = try await pictureAsset.load(.duration), toneLength = try await toneAsset.load(.duration)
+        try composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)?
+            .insertTimeRange(CMTimeRange(start: .zero, duration: pictureLength), of: videoTrack, at: .zero)
+        try composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)?
+            .insertTimeRange(CMTimeRange(start: .zero, duration: toneLength), of: audioTrack, at: .zero)
+        let background = folder.appendingPathComponent("background.mov")
+        let session = try XCTUnwrap(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
+        session.outputURL = background
+        session.outputFileType = .mov
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in session.exportAsynchronously { done.resume() } }
+        XCTAssertEqual(session.status, .completed, String(describing: session.error))
+        let length = try await AVURLAsset(url: background).load(.duration).seconds
+        XCTAssertEqual(length, 2.5, accuracy: 0.1)
+
+        let maybeLayer = await LyricCard.soundLayer(from: background, role: .background)
+        let layer = try XCTUnwrap(maybeLayer)
+        let maybeRendered = await layer.render(5)
+        let rendered = try XCTUnwrap(maybeRendered)
+        let left = stride(from: 0, to: rendered.samples.count, by: 2).map { rendered.samples[$0] }
+        func rms(_ from: Double, _ to: Double) -> Double { MixProbe.rmsDB(left, Int(from * 48000)..<Int(to * 48000)) }
+        XCTAssertGreaterThan(rms(0.2, 1.3), -20, "the first pass sounds")
+        XCTAssertLessThan(rms(1.7, 2.3), -60, "silent while the picture runs on past its sound")
+        let second = length + 0.2
+        XCTAssertGreaterThan(rms(second, second + 1), -20, "the second pass starts with the picture's")
+    }
+
+    // MARK: Temporary files
+
+    func testOnlyLunalyrsOwnRecordingsAreDeleted() throws {
+        let manager = FileManager.default
+        let recording = SongAudioSource.recordingURL(in: folder)
+        let library = folder.appendingPathComponent("My Song.m4a")
+        let lookalike = folder.appendingPathComponent("Music").appendingPathComponent("Lunalyr song x.caf")
+        try manager.createDirectory(at: lookalike.deletingLastPathComponent(), withIntermediateDirectories: true)
+        for url in [recording, library, lookalike] { try Data([1, 2, 3]).write(to: url) }
+        XCTAssertTrue(SongAudioSource.isRecording(recording, in: folder))
+        XCTAssertFalse(SongAudioSource.isRecording(library, in: folder))
+        XCTAssertFalse(SongAudioSource.isRecording(lookalike, in: folder), "same name, but not in the temporary folder")
+        SongAudioSource.discard(SongAudioClip(url: library, songStart: 0, songEnd: .infinity), in: folder)
+        SongAudioSource.discard(SongAudioClip(url: recording, songStart: 3, songEnd: 9), in: folder)
+        XCTAssertTrue(manager.fileExists(atPath: library.path), "the song's own file is never deleted")
+        XCTAssertFalse(manager.fileExists(atPath: recording.path))
+        let left = SongAudioSource.recordingURL(in: folder)
+        try Data([1]).write(to: left)
+        SongAudioSource.discardLeftoverRecordings(in: folder)
+        XCTAssertFalse(manager.fileExists(atPath: left.path))
+        XCTAssertTrue(manager.fileExists(atPath: library.path))
+        XCTAssertTrue(manager.fileExists(atPath: lookalike.path))
+    }
+
+    func testACancelledExportLeavesNothingBehind() throws {
+        let manager = FileManager.default
+        let own = folder.appendingPathComponent("own")
+        let chosen = folder.appendingPathComponent("chosen")
+        for directory in [own, chosen] { try manager.createDirectory(at: directory, withIntermediateDirectories: true) }
+        let earlier = chosen.appendingPathComponent("Lunalyr Lyric Card.png")
+        let made = chosen.appendingPathComponent("Lunalyr Lyric Card 2.mp4")
+        for url in [earlier, made, own.appendingPathComponent("Lunalyr Lyric Card.mp4")] { try Data([1]).write(to: url) }
+        LyricCard.discardExport([(.mp4, made)], in: chosen, ownsDirectory: false)
+        XCTAssertFalse(manager.fileExists(atPath: made.path))
+        XCTAssertTrue(manager.fileExists(atPath: earlier.path), "an earlier card in the user's folder stays")
+        LyricCard.discardExport([], in: own, ownsDirectory: true)
+        XCTAssertFalse(manager.fileExists(atPath: own.path))
     }
 
     func testLoudLayersAreLimitedNotClipped() async throws {
