@@ -14,6 +14,11 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- The desktop player has a seek bar again, under the covers. Click or drag anywhere on it; it thickens while you use it, and the seek happens once, when you let go (Esc cancels). Hovering shows the time and the lyric line at the pointer, with small ticks at line starts and gaps between sections. Dragging snaps gently to the start of a line (hold ⌘ to turn that off), and moving the pointer away from the bar while dragging slows it down for fine scrubbing (or hold ⌥). The wallpaper's lyrics follow the drag on that display. Clicking the time on the right switches between time left and the song's length. Radio shows LIVE, adverts and songs that can't be scrubbed show a plain bar.
+- Keys for the desktop player after clicking it: Space plays or pauses, ← and → move 5 s, ⌥← and ⌥→ move by lyric line, ⌘← and ⌘→ change song, 0–9 jump through the song, ⌘F or / search, ↑ ↓ and Return pick a search result, Esc goes back.
+- On a Force Touch trackpad, a light tap is felt when the seek bar snaps to a line or reaches either end.
+- Double-click the playing cover in the desktop player to bring its app forward.
+
 - `lunalyr://` links: `lunalyr://join/<room>` listens along with a room (only with a relay set, and only after you say yes), `lunalyr://toggle` shows or hides the lyrics, `lunalyr://card` makes a lyric card, `lunalyr://settings` opens Settings. Anything else is ignored. The web listen-along page has an "Open in Lunalyr" link on wider screens.
 - Shortcuts actions: show or hide lyrics, lyrics earlier or later, next layout, make a lyric card, pause or resume the wallpaper, and open Settings.
 - Tap to sync for lyrics: choose Tap to Sync Lyrics in the menu-bar menu (or the Lyric timing section of the menu-bar panel), then press any key each time a lyric line starts. After four taps that agree, Lunalyr sets this song's lyric timing for its lyric source, says so on screen, and offers Undo. Stray taps are ignored, Esc stops, and it gives up on its own when the taps stop.
@@ -50,6 +55,9 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- The desktop player only comes up when the pointer slows down or rests in the middle of the desktop, not when it passes through; it stays up while you use it, and goes at once when the pointer moves onto a window. It arrives with a soft spring and leaves with a quicker fade.
+- Desktop player buttons are bigger, light up as you press them, and play/pause, next (with shuffle off in Music) and seeks show their result at once. The "shuffle is on" note shows once after shuffle or the playlist changes, not every time. Flicked covers settle on a cover; a paused song's cover sits back a little.
+- The desktop player follows Reduce Motion (no bending, depth or sliding: plain fades), Reduce Transparency (solid backgrounds) and Increase Contrast.
 - Music video: pausing the song now leaves the video paused on its current frame instead of switching to the album-colour gradient. A YouTube video is shown as a picture of its last frame (YouTube's own pause button never shows), per display, and plays again from there on resume. After about ten minutes paused, the YouTube player is closed to save power and reopened on resume, with the frame kept on screen meanwhile. Covering or pausing the wallpaper, Reduce Motion, buffering, and times before or after the video still show the gradient.
 - Smoother music video sync. A library video eases small drift away by playing up to 3% faster or slower instead of jumping, and seeks only past 1.5 s. A YouTube video seeks only for drift over a second that lasts, or a jump, and each seek is led by how long that player takes to land one, measured as it plays.
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
