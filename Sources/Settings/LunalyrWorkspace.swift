@@ -21,15 +21,18 @@ struct SettingsWindowView: View {
     @Model(\.navigation) private var navigation
     @State private var scrollRequest: SettingsScrollRequest?
     @State private var scrollSerial = 0
+    /// Where each page was scrolled to, so a page revisited opens there.
+    @State private var scrollMemory = FormScrollMemory()
 
     var body: some View {
         NavigationStack {
             HStack(spacing: 0) {
-                SettingsSidebar(selection: $page)
+                SettingsSidebar(selection: pageSelection)
                 Divider()
                 SettingsDetail(page: page, previewDisplay: previewDisplay, showsPreview: showsPreview,
                                largePreview: largePreview, scrollRequest: scrollRequest,
-                               select: { page = $0 })
+                               select: select)
+                    .environment(\.formScrollMemory, scrollMemory)
             }
             .styledCanvas()
             .navigationTitle(page.title)
@@ -77,6 +80,17 @@ struct SettingsWindowView: View {
         }
     }
 
+    /// The page the person picks. A section another surface asked for was
+    /// for that one visit: later visits open where the page was left.
+    private var pageSelection: Binding<SettingsPage> {
+        Binding(get: { page }, set: { select($0) })
+    }
+
+    private func select(_ next: SettingsPage) {
+        scrollRequest = nil
+        page = next
+    }
+
     /// Shows the page another surface asked for, scrolled to its section
     /// when the destination names one.
     private func followNavigation() {
@@ -120,31 +134,47 @@ private struct SettingsDetail: View {
 
     @ViewBuilder private func arranged(in size: CGSize) -> some View {
         // The stage beside the inspector in a wide detail; above it in a
-        // narrow one. With the preview hidden, any status sits above the page.
-        let beside = showsPreview && size.width >= LunalyrDesign.Layout.stageBesideInspectorMinimum
+        // narrow one. The axis follows the width alone, so Show/Hide Preview
+        // slides the stage out along it rather than flipping the layout
+        // mid-animation; crossing the width threshold still switches at once.
+        let wide = Self.stageBeside(width: size.width)
+        let beside = wide && showsPreview
         // One layout that switches axis, so the live preview and the page
         // keep their identity as the window narrows past the threshold.
-        let layout = beside ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+        let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
         layout {
             if showsPreview {
                 SettingsStage(previewDisplay: previewDisplay,
                               stacked: beside ? nil : SettingsStageLimits(detailHeight: size.height, largePreview: largePreview))
-                    .transition(.opacity)
+                    .transition(stageTransition(wide: wide))
                 Rectangle()
                     .fill(Color(nsColor: .separatorColor))
                     .frame(width: beside ? 1 : nil, height: beside ? nil : 1)
                     .accessibilityHidden(true)
-            } else {
-                SettingsStatusHeader()
+                    .transition(.opacity)
             }
             let fixedWidth = beside ? inspectorWidth : nil
-            inspector
-                // A wide inspector keeps its forms to a readable column.
-                .modifier(ReadableColumn(margin: fixedWidth == nil ? Self.margin(for: size.width) : nil))
-                .frame(width: fixedWidth)
-                .frame(maxWidth: fixedWidth == nil ? .infinity : nil, maxHeight: .infinity)
-                .focusSection()
+            // With the preview hidden, any status sits above the page.
+            VStack(spacing: 0) {
+                if !showsPreview { SettingsStatusHeader() }
+                inspector
+                    // A wide inspector keeps its forms to a readable column.
+                    .modifier(ReadableColumn(margin: fixedWidth == nil ? Self.margin(for: size.width) : nil))
+            }
+            .frame(width: fixedWidth)
+            .frame(maxWidth: fixedWidth == nil ? .infinity : nil, maxHeight: .infinity)
+            .focusSection()
         }
+    }
+
+    /// Whether a detail this wide puts the stage beside the inspector.
+    static func stageBeside(width: CGFloat) -> Bool {
+        width >= LunalyrDesign.Layout.stageBesideInspectorMinimum
+    }
+
+    /// The stage leaves toward the edge it sits on; a plain fade under Reduce Motion.
+    private func stageTransition(wide: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .move(edge: wide ? .leading : .top).combined(with: .opacity)
     }
 
     private var inspectorWidth: CGFloat {
@@ -178,6 +208,8 @@ private struct SettingsDetail: View {
             }
         }
         .id(page)
+        .environment(\.formScrollKey, page.rawValue)
+        .environment(\.formScrollRestores, scrollRequest == nil)
         .transition(.opacity)
     }
 }
@@ -203,20 +235,28 @@ private struct SettingsStatusHeader: View {
     @Model(\.extras) private var extras
     @Model(\.nowPlaying) private var playing
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let chip = WallpaperStateNote.state(paused: extras.wallpaperPaused, hiddenByMirroring: extras.hiddenByMirroring)
         let banner = AutomationStatusBanner.content(for: playing) != nil
-        if chip != nil || banner {
-            VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.medium) {
-                if chip != nil { WallpaperStateNote() }
-                if banner { AutomationStatusBanner() }
+        // Always here, so the chip and banner fade in and out as on the stage.
+        VStack(spacing: 0) {
+            if chip != nil || banner {
+                VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.medium) {
+                    if chip != nil { WallpaperStateNote().transition(.opacity) }
+                    if banner { AutomationStatusBanner().transition(.opacity) }
+                }
+                .frame(maxWidth: SettingsDetail.readableWidth - 2 * LunalyrDesign.Spacing.xLarge, alignment: .leading)
+                .padding(.horizontal, LunalyrDesign.Spacing.xLarge)
+                .padding(.top, LunalyrDesign.Spacing.large)
+                .frame(maxWidth: .infinity)
+                .focusSection()
+                .transition(.opacity)
             }
-            .frame(maxWidth: SettingsDetail.readableWidth - 2 * LunalyrDesign.Spacing.xLarge, alignment: .leading)
-            .padding(.horizontal, LunalyrDesign.Spacing.xLarge)
-            .padding(.top, LunalyrDesign.Spacing.large)
-            .frame(maxWidth: .infinity)
-            .focusSection()
         }
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion), value: chip)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion), value: banner)
     }
 }
 

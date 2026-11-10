@@ -91,6 +91,66 @@ extension EnvironmentValues {
     }
 }
 
+extension UndoManager {
+    /// Registers a settings change under `name` (Edit › Undo “name”): undoing
+    /// runs `undo` and registers `redo`, so Redo puts the change back.
+    @MainActor
+    func registerSettingsChange(_ name: String, undo: @escaping @MainActor () -> Void,
+                                redo: @escaping @MainActor () -> Void) {
+        registerUndo(withTarget: SettingsUndoTarget.shared) { [weak self] _ in
+            MainActor.assumeIsolated {
+                undo()
+                self?.registerSettingsChange(name, undo: redo, redo: undo)
+            }
+        }
+        setActionName(name)
+    }
+}
+
+/// What settings changes are registered against: the changes capture their
+/// own stores, so any long-lived object will do.
+private final class SettingsUndoTarget {
+    static let shared = SettingsUndoTarget()
+}
+
+/// A small spinner that appears only once a wait has passed
+/// `Motion.Hold.spinnerDelay`, so quick work never flashes one.
+struct DelayedSpinner: View {
+    @State private var shown = false
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .opacity(shown ? 1 : 0)
+            .task {
+                try? await Task.sleep(for: .seconds(LunalyrDesign.Motion.Hold.spinnerDelay))
+                guard !Task.isCancelled else { return }
+                withAnimation(LunalyrDesign.Motion.quick) { shown = true }
+            }
+            .accessibilityHidden(!shown)
+    }
+}
+
+/// Something that went wrong, in the warning colour with its triangle, so it
+/// never reads like an informational caption (failed imports and downloads).
+struct WarningCaption: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Label {
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .labelStyle(CaptionLabelStyle())
+        .foregroundStyle(LunalyrStatus.warning.text)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// Why the control above is unavailable, and when it will be. Every disabled
 /// control that isn't self-explanatory gets one, directly beneath it.
 struct DisabledReason: View {
@@ -123,7 +183,7 @@ struct ValueSlider: View {
     let minimumLabel: String?
     let maximumLabel: String?
     @Environment(\.isEnabled) private var enabled
-    @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, step: Double? = nil,
          minimumLabel: String? = nil, maximumLabel: String? = nil,
@@ -148,7 +208,11 @@ struct ValueSlider: View {
                     .lunalyrText(.value)
                     .foregroundStyle(.secondary)
                     .fixedSize()
+                    // Digits roll to a stepped or reset value.
+                    .contentTransition(.numericText(value: value))
+                    .animation(reduceMotion ? nil : LunalyrDesign.Motion.quick, value: value)
             }
+            .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
             .accessibilityHidden(true)
             slider
                 .labelsHidden()
@@ -162,6 +226,7 @@ struct ValueSlider: View {
                     if let maximumLabel { Text(maximumLabel) }
                 }
                 .lunalyrText(.footnote)
+                .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
                 .accessibilityHidden(true)
             }
         }
@@ -170,12 +235,6 @@ struct ValueSlider: View {
 
     private var slider: some View {
         ThemedSliderTrack(value: $value, range: range, step: step)
-    }
-
-    private func set(_ proposed: Double, step: Double) {
-        let snapped = (proposed / step).rounded() * step
-        let bounded = min(range.upperBound, max(range.lowerBound, snapped))
-        if bounded != value { value = bounded }
     }
 }
 

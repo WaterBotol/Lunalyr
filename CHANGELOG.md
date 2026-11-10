@@ -85,6 +85,16 @@ When merging, keep every entry and combine duplicate headings.
 - Smoother stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable). Words spring in from rest, the strip and stacks glide on from word to word without a jolt, the word being sung hands its look to the next one over a moment instead of in one frame, and stacks no longer jump as a word is added. Lines leave at the same speed as in every other layout.
 - With Reduce Motion, the stage layouts dissolve between steps instead of moving words around, and Hinge now fades out at the end of a line.
 - Word entrances (Float up, Pop, Orbit, Glide, Unfold and the Cutouts) move the same in Torque and Fable as in every other layout.
+- Settings controls move: switches slide, sliders glide on arrow keys and Reset (and keep your grip when dragged), segmented choices and the Calm/Bold ring animate, and pressed and keyboard-focus states show.
+- Settings options that appear under a switch or choice now fade and slide in, and the sections below move smoothly instead of jumping.
+- Settings pages reopen where you left them, and a page opened from elsewhere at a section no longer jumps back there on later visits.
+- Hiding the Settings preview slides it away instead of rearranging the window mid-animation.
+- Settings sidebar: arrow keys move between pages, ⌘F goes to search, and the selected page stays in view.
+- Reset Adjustments, Forget and Forget All (remembered styles), Restore Recommended Order and Allow (excluded albums) can be undone with Edit › Undo. Forget All asks first.
+- Clearer feedback in Settings: importing a wallpaper from the tiles shows progress, Google Fonts downloads show a spinner and a warning when they fail, failed lyric and reading imports look like warnings, and a failed translation offers Try Again.
+- Timing & sources has Tap to Sync Lyrics… and its Undo, and the song offset slider stretches to ±30 s when an offset needs it.
+- The welcome's sample lyric plays twice and then rests, and the word being sung is the brightest. Onboarding's buttons and the Pick a look status fade instead of popping, and VoiceOver moves to each step's title once it has settled.
+- The colour preview in Lyric style redraws less often, and not at all under Reduce Motion or while Settings is in the background.
 
 ### Fixed
 

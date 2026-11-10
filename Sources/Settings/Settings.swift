@@ -307,6 +307,9 @@ final class Settings: ObservableObject {
     @Published private(set) var googleRegular: String?
     @Published private(set) var googleBold: String?
     @Published private(set) var googleStatus: String?
+    /// Where the chosen family's load stands, for the Typeface section's
+    /// spinner, warning or tick beside `googleStatus`.
+    @Published private(set) var googleFontState: GoogleFontState = .idle
     /// Whether that family reads as sans, serif, slab or soft, so Editorial
     /// can set its second voice against it.
     @Published private(set) var googleVoice: LyricFace = .sans
@@ -725,6 +728,24 @@ final class Settings: ObservableObject {
 
     var scrimRange: ClosedRange<Double> { Self.scrimRange(increaseContrast: increaseContrast) }
 
+    /// The values Reset Adjustments changes, to put back with `restoreAdvanced(_:)` (Undo).
+    struct AdvancedValues: Equatable {
+        let effectSpeed, patternOpacity, scrimStrength, vividness, motionBlur: Double
+    }
+
+    var advancedValues: AdvancedValues {
+        AdvancedValues(effectSpeed: effectSpeed, patternOpacity: patternOpacity, scrimStrength: preferredScrimStrength,
+                       vividness: vividness, motionBlur: motionBlur)
+    }
+
+    func restoreAdvanced(_ values: AdvancedValues) {
+        effectSpeed = values.effectSpeed
+        patternOpacity = values.patternOpacity
+        scrimStrength = values.scrimStrength
+        vividness = values.vividness
+        motionBlur = values.motionBlur
+    }
+
     /// Restores every advanced control to its shipped value.
     func resetAdvanced() {
         effectSpeed = 1.0
@@ -891,6 +912,7 @@ final class Settings: ObservableObject {
             return
         }
         googleStatus = "Downloading \(name) from Google Fonts…"
+        googleFontState = .loading
         let result = await provider.load(family: name)
         guard current() else { return }
         switch result {
@@ -918,6 +940,7 @@ final class Settings: ObservableObject {
             googleVoice = GoogleFontsCatalog.voice(of: family) ?? Self.voice(ofFontNamed: font.regular) ?? .sans
         }
         googleStatus = status
+        googleFontState = font != nil ? .ready : status == nil ? .idle : .failed
     }
 
     private func retryGoogleFontAfterReconnect() {
@@ -926,6 +949,12 @@ final class Settings: ObservableObject {
         let family = googleFontFamily
         Task { await loadGoogleFont(family: family) }
     }
+}
+
+/// A Google or installed family's load: nothing asked for, downloading,
+/// in use, or refused (the status says why).
+enum GoogleFontState: Equatable {
+    case idle, loading, ready, failed
 }
 
 /// Launch at login, as macOS keeps it. The app uses `SMAppService.mainApp`;

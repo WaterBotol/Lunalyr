@@ -18,44 +18,50 @@ struct LyricColourSection: View {
             if options.mode.drifts {
                 ValueSlider("Colour speed", value: $options.speed, in: LyricColourOptions.speedRange,
                             minimumLabel: "Slow", maximumLabel: "Lively", format: SettingsFormat.percent)
+                    .revealRow()
             }
             if options.mode == .customGradient {
-                ForEach(Array(options.customHex.enumerated()), id: \.offset) { index, _ in
-                    LabeledContent {
-                        HStack(spacing: LunalyrDesign.Spacing.small) {
-                            ColorPicker("Colour \(index + 1)", selection: Binding(
-                                get: { options.colour(at: index) },
-                                set: { options.setCustom(index, to: $0) }), supportsOpacity: false)
-                                .labelsHidden()
-                            if options.customHex.count > 2 {
-                                Button { options.removeCustom(at: index) } label: {
-                                    Image(systemName: "minus.circle")
-                                        .frame(width: LunalyrDesign.Size.minimumHitTarget - 8,
-                                               height: LunalyrDesign.Size.minimumHitTarget - 8)
+                Group {
+                    ForEach(Array(options.customHex.enumerated()), id: \.offset) { index, _ in
+                        LabeledContent {
+                            HStack(spacing: LunalyrDesign.Spacing.small) {
+                                ColorPicker("Colour \(index + 1)", selection: Binding(
+                                    get: { options.colour(at: index) },
+                                    set: { options.setCustom(index, to: $0) }), supportsOpacity: false)
+                                    .labelsHidden()
+                                if options.customHex.count > 2 {
+                                    Button { options.removeCustom(at: index) } label: {
+                                        Image(systemName: "minus.circle")
+                                            .frame(width: LunalyrDesign.Size.minimumHitTarget - 8,
+                                                   height: LunalyrDesign.Size.minimumHitTarget - 8)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove this colour")
+                                    .accessibilityLabel("Remove colour \(index + 1)")
                                 }
-                                .buttonStyle(.borderless)
-                                .help("Remove this colour")
-                                .accessibilityLabel("Remove colour \(index + 1)")
                             }
+                        } label: {
+                            Text("Colour \(index + 1)")
+                        }
+                    }
+                    LabeledContent {
+                        if options.customHex.count < 4 {
+                            Button("Add Colour") { options.addCustom() }
+                                .help("Add a fourth colour to the gradient")
                         }
                     } label: {
-                        Text("Colour \(index + 1)")
+                        CustomGradientSwatch(colours: options.customColours, strength: options.strength)
+                            .frame(maxWidth: 180)
                     }
                 }
-                LabeledContent {
-                    if options.customHex.count < 4 {
-                        Button("Add Colour") { options.addCustom() }
-                            .help("Add a fourth colour to the gradient")
-                    }
-                } label: {
-                    CustomGradientSwatch(colours: options.customColours, strength: options.strength)
-                        .frame(maxWidth: 180)
-                }
+                .revealRow()
             }
             InspectorCaption("Text backing keeps pastels readable on bright wallpapers.", more: "Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still with Reduce Motion on.")
             Divider()
             LyricHighlightColourControls()
         }
+        .lunalyrReveal(options.mode)
+        .lunalyrReveal(options.customHex.count)
     }
 }
 
@@ -95,6 +101,8 @@ struct LyricStyleMemorySection: View {
     @Model(\.settings) private var settings
     @Model(\.colours) private var colours
     @Model(\.nowPlaying) private var playing
+    @Environment(\.undoManager) private var undoManager
+    @State private var confirmsForgetAll = false
 
     private var chosen: StyleMemory.Style {
         .init(composition: settings.lyricComposition?.rawValue ?? "automatic", colour: colours.mode.rawValue)
@@ -111,7 +119,12 @@ struct LyricStyleMemorySection: View {
                     InspectorCaption("Changes apply to other music until you update this.", more: "Changes above apply to other music until you update or forget this.")
                     HStack(spacing: LunalyrDesign.Spacing.small) {
                         Button("Update with the Choices Above") { memory.remember(chosen, for: track, scope: active.scope) }
-                        Button("Forget") { memory.forget(for: track, scope: active.scope) }
+                        Button("Forget") {
+                            let memory = memory
+                            memory.changeUndoably("Forget Remembered Style", undoManager: undoManager) {
+                                memory.forget(for: track, scope: active.scope)
+                            }
+                        }
                             .help("Use the choices above for this \(active.scope.rawValue) too")
                     }
                 } else {
@@ -129,9 +142,19 @@ struct LyricStyleMemorySection: View {
             }
             if !memory.songs.isEmpty || !memory.artists.isEmpty {
                 LabeledContent {
-                    Button("Forget All") { memory.forgetAll() }
+                    Button("Forget All") { confirmsForgetAll = true }
                         .controlSize(.small)
                         .help("Forget every remembered style")
+                        .confirmationDialog("Forget every remembered style?", isPresented: $confirmsForgetAll) {
+                            Button("Forget All", role: .destructive) {
+                                let memory = memory
+                                memory.changeUndoably("Forget All Remembered Styles", undoManager: undoManager) {
+                                    memory.forgetAll()
+                                }
+                            }
+                        } message: {
+                            Text("\(Self.rememberedCount(songs: memory.songs.count, artists: memory.artists.count)). Those songs and artists then use the choices above. Edit › Undo brings them back.")
+                        }
                 } label: {
                     Text(Self.rememberedCount(songs: memory.songs.count, artists: memory.artists.count))
                         .lunalyrText(.caption)
@@ -167,6 +190,7 @@ struct LyricStyleMemorySection: View {
 struct RememberedStyleNote: View {
     enum Aspect { case layout, colour }
     let aspect: Aspect
+    @Environment(\.undoManager) private var undoManager
     @Model(\.styleMemory) private var memory
     @Model(\.settings) private var settings
     @Model(\.colours) private var colours
@@ -214,6 +238,13 @@ struct RememberedStyleNote: View {
     }
 
     private func forget(_ track: NowPlayingMonitor.Track, _ active: (style: StyleMemory.Style, scope: StyleMemory.Scope)) {
+        let memory = memory
+        memory.changeUndoably("Forget Remembered Style", undoManager: undoManager) {
+            forgetPart(track, active)
+        }
+    }
+
+    private func forgetPart(_ track: NowPlayingMonitor.Track, _ active: (style: StyleMemory.Style, scope: StyleMemory.Scope)) {
         var style = active.style
         switch aspect {
         case .layout: style.composition = nil
@@ -259,38 +290,47 @@ struct ShareInspector: View {
             InspectorCaption("Needs the Discord desktop app. Shows the line being sung.",
                              more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with Play this song and Get Lunalyr buttons for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
             if extras.showsDiscordPresence {
-                ChoiceSegments("Status shows", selection: $extras.discordStatusText,
-                               cases: DiscordStatusText.allCases, label: \.title)
-                Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
-                Toggle("Show the album cover", isOn: $extras.discordShowsCover)
-                InspectorCaption("Looks the cover up by song and artist.",
-                                 more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown. The Play this song button uses the same search for Apple Music songs; with both off, nothing is sent to Apple.")
-                Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
-                Toggle("Show a Play this song button", isOn: $extras.discordShowsSongButton)
-                InspectorCaption("Opens the song on Spotify, Apple Music, YouTube Music and more.",
-                                 more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or, for Apple Music, from the same Apple search as the cover (sent only the song title and artist), and only when the result is exactly that song. Until you change it, this follows Show the album cover. Others see it; Discord never shows you your own buttons.")
-                Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
-                Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
-                ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,
-                            minimumLabel: "With the music", maximumLabel: "Earlier",
-                            format: { String(format: "%.1f s earlier", $0) })
-                InspectorCaption("How far ahead of the music Discord shows the line.")
+                Group {
+                    ChoiceSegments("Status shows", selection: $extras.discordStatusText,
+                                   cases: DiscordStatusText.allCases, label: \.title)
+                    Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
+                    Toggle("Show the album cover", isOn: $extras.discordShowsCover)
+                    InspectorCaption("Looks the cover up by song and artist.",
+                                     more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown. The Play this song button uses the same search for Apple Music songs; with both off, nothing is sent to Apple.")
+                    Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
+                    Toggle("Show a Play this song button", isOn: $extras.discordShowsSongButton)
+                    InspectorCaption("Opens the song on Spotify, Apple Music, YouTube Music and more.",
+                                     more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or, for Apple Music, from the same Apple search as the cover (sent only the song title and artist), and only when the result is exactly that song. Until you change it, this follows Show the album cover. Others see it; Discord never shows you your own buttons.")
+                    Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
+                    Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
+                    ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,
+                                minimumLabel: "With the music", maximumLabel: "Earlier",
+                                format: { String(format: "%.1f s earlier", $0) })
+                    InspectorCaption("How far ahead of the music Discord shows the line.")
+                }
+                .revealRow()
             }
             if extras.listenAlongAvailable {
-                Toggle("Let friends listen along", isOn: $extras.listenSharing)
-                InspectorCaption("Friends with Lunalyr play what you play, in time, on their own Music or Spotify.",
-                                 more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify ID, play and pause, the position, your Discord display name (while Discord is on) and, with Share lyrics with listeners, the lyric lines with their timing. Apple\u{2019}s ID is included only when the Discord cover or song button already looked the song up; sharing never sends titles to Apple. The relay keeps only the latest state, and anyone with the link or code can read it. Off when you turn this off or quit.")
-                if extras.listenSharing {
-                    ListenSharingStatus(listen: .shared)
-                    Toggle("Share lyrics with listeners", isOn: $extras.listenSharesLyrics)
-                    InspectorCaption("Sends the lyric text with its timing, so friends and the web page can show it.",
-                                     more: "The lines you see, with their timing, go to your relay once per song. Anyone with the link or code can read them. Turn this off to share only the song.")
-                    if extras.showsDiscordPresence {
-                        Toggle("Show a Join button on Discord", isOn: $extras.discordOffersJoin)
-                        InspectorCaption("Replaces your Discord buttons while you share.",
-                                         more: "Discord can\u{2019}t show a Join button and link buttons on the same profile. With this on, friends get Join (it opens their Lunalyr), but not Play this song or Get Lunalyr. With it off, they get Listen along (the web page) and Get Lunalyr; friends with Lunalyr can paste the link into its menu.")
+                Group {
+                    Toggle("Let friends listen along", isOn: $extras.listenSharing)
+                    InspectorCaption("Friends with Lunalyr play what you play, in time, on their own Music or Spotify.",
+                                     more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify ID, play and pause, the position, your Discord display name (while Discord is on) and, with Share lyrics with listeners, the lyric lines with their timing. Apple\u{2019}s ID is included only when the Discord cover or song button already looked the song up; sharing never sends titles to Apple. The relay keeps only the latest state, and anyone with the link or code can read it. Off when you turn this off or quit.")
+                    if extras.listenSharing {
+                        Group {
+                            ListenSharingStatus(listen: .shared)
+                            Toggle("Share lyrics with listeners", isOn: $extras.listenSharesLyrics)
+                            InspectorCaption("Sends the lyric text with its timing, so friends and the web page can show it.",
+                                             more: "The lines you see, with their timing, go to your relay once per song. Anyone with the link or code can read them. Turn this off to share only the song.")
+                            if extras.showsDiscordPresence {
+                                Toggle("Show a Join button on Discord", isOn: $extras.discordOffersJoin)
+                                InspectorCaption("Replaces your Discord buttons while you share.",
+                                                 more: "Discord can\u{2019}t show a Join button and link buttons on the same profile. With this on, friends get Join (it opens their Lunalyr), but not Play this song or Get Lunalyr. With it off, they get Listen along (the web page) and Get Lunalyr; friends with Lunalyr can paste the link into its menu.")
+                            }
+                        }
+                        .revealRow()
                     }
                 }
+                .revealRow()
             }
             ListenRelayField(relay: $extras.listenRelayURL)
             InspectorCaption("Listen along needs a relay you run. Leave it empty to turn listen-along off.",
@@ -310,10 +350,16 @@ struct ShareInspector: View {
                 }
                 InspectorCaption("Pick lines, a shape and a format for a shareable card.", more: "Pick any lines from the song, the card’s shape and whether to make an MP4, GIF or PNG. Synced lyrics play in order.")
                 if playing.current == nil {
-                    DisabledReason("A card can be copied while a song is playing.")
+                    DisabledReason("A card can be made while a song is playing.")
+                        .revealRow()
                 }
             }
         }
+        // Discord's and listen-along's options glide in under their switches.
+        .lunalyrReveal(extras.showsDiscordPresence)
+        .lunalyrReveal(extras.listenSharing)
+        .lunalyrReveal(extras.listenAlongAvailable)
+        .lunalyrReveal(playing.current == nil)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
     }
@@ -337,6 +383,7 @@ struct ExtrasInspector: View {
                 if extras.hiddenByMirroring {
                     Button(LunalyrExtras.Titles.showLyricsAnyway) { extras.showLyrics() }
                         .help("Shows the lyrics on every display until mirroring ends")
+                        .revealRow()
                 }
                 Toggle("Pause wallpaper", isOn: $extras.wallpaperPaused)
                 InspectorCaption("Freezes every wallpaper until you resume.", more: "Freezes every desktop wallpaper, lyrics included, until you resume it or Lunalyr next starts. The preview here keeps moving, so changes can still be judged.")
@@ -344,10 +391,13 @@ struct ExtrasInspector: View {
             ThemedSection("Menu bar") {
                 Toggle("Show the current line in the menu bar", isOn: $extras.showsMenuBarLine)
                 if extras.showsMenuBarLine {
-                    ValueSlider("Longest line", value: $extras.menuBarLength, in: LunalyrExtras.menuBarLengthRange, step: 1,
-                                minimumLabel: "Short", maximumLabel: "Long",
-                                format: { "\(Int($0.rounded())) characters" })
-                    InspectorCaption("Follows Hide lyrics and Pause.", more: "Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
+                    Group {
+                        ValueSlider("Longest line", value: $extras.menuBarLength, in: LunalyrExtras.menuBarLengthRange, step: 1,
+                                    minimumLabel: "Short", maximumLabel: "Long",
+                                    format: { "\(Int($0.rounded())) characters" })
+                        InspectorCaption("Follows Hide lyrics and Pause.", more: "Hidden lyrics stay hidden there too, and a paused wallpaper says so.")
+                    }
+                    .revealRow()
                 }
             }
             ThemedSection("Keyboard shortcuts") {
@@ -368,6 +418,8 @@ struct ExtrasInspector: View {
                 }
             }
         }
+        .lunalyrReveal(extras.showsMenuBarLine)
+        .lunalyrReveal(extras.hiddenByMirroring)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
     }

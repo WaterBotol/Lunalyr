@@ -142,16 +142,23 @@ struct SettingsLivePreview: View {
 }
 
 /// What sits behind the lyrics in the Your wallpaper preview: the desktop
-/// picture, or a dark neutral that white lyrics can be judged against.
+/// picture, or a dark neutral that white lyrics can be judged against. The
+/// picture fades in over the neutral once decoded, rather than popping in.
 private struct DesktopPictureBackdrop: View {
     let picture: NSImage?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if let picture {
-            // macOS fills the screen with the picture by default.
-            Image(nsImage: picture).resizable().scaledToFill()
-        } else {
+        ZStack {
             Color(white: 0.16)
+            if let picture {
+                // macOS fills the screen with the picture by default.
+                Image(nsImage: picture).resizable().scaledToFill()
+                    .id(ObjectIdentifier(picture))
+                    .transition(.opacity)
+            }
         }
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                   value: picture.map(ObjectIdentifier.init))
     }
 }

@@ -18,25 +18,47 @@ import UniformTypeIdentifiers
 @MainActor
 final class WallpaperImporter: ObservableObject {
     @Published private(set) var importing = false
+    /// True once an import has run past `Motion.Hold.spinnerDelay`: show a
+    /// spinner then, and nothing for a copy that finishes sooner.
+    @Published private(set) var showsProgress = false
     /// Why the last import failed, if it did.
     @Published private(set) var message: String?
+    private var progressDelay: Task<Void, Never>?
 
-    /// Asks for a file, then imports it. Only ever in answer to a click.
+    /// Asks for a file, then imports it. Only ever in answer to a click. The
+    /// panel is a sheet on the window that asked, so it stays with it.
     func choose(into settings: Settings) {
         let panel = NSOpenPanel()
         panel.title = "Choose your wallpaper"
         panel.allowedContentTypes = [.image, .movie]
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        importFile(url, into: settings)
+        let chosen: (NSApplication.ModalResponse) -> Void = { [weak self, weak panel] response in
+            guard response == .OK, let url = panel?.url else { return }
+            self?.importFile(url, into: settings)
+        }
+        if let window = NSApp.keyWindow, window.isVisible, window.attachedSheet == nil {
+            panel.beginSheetModal(for: window, completionHandler: chosen)
+        } else {
+            chosen(panel.runModal())
+        }
     }
 
     /// Copies `url` into Lunalyr's wallpaper folder and shows it.
     func importFile(_ url: URL, into settings: Settings) {
         importing = true
         message = nil
+        progressDelay?.cancel()
+        progressDelay = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(LunalyrDesign.Motion.Hold.spinnerDelay))
+            guard !Task.isCancelled, let self, self.importing else { return }
+            self.showsProgress = true
+        }
         Task {
-            defer { importing = false }
+            defer {
+                importing = false
+                showsProgress = false
+                progressDelay?.cancel()
+            }
             do {
                 let imported = try await CustomWallpaperStore.importFile(url)
                 let replaced = settings.customWallpaperPath

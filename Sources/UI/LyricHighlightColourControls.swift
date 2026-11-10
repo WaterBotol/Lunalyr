@@ -35,6 +35,11 @@ struct LyricColourSwatch: View {
     @Environment(\.lunalyrRendersLiveContent) private var rendersLiveContent
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.controlActiveState) private var activeState
+
+    static func swatchPaused(moving: Bool, reduceMotion: Bool, active: Bool) -> Bool {
+        !moving || reduceMotion || !active
+    }
 
     /// The swatch's own backdrop, and the luminance the colours are judged against.
     private static let backdrop = Color(.sRGB, red: 0.09, green: 0.09, blue: 0.1)
@@ -42,7 +47,11 @@ struct LyricColourSwatch: View {
 
     var body: some View {
         let moving = colours.mode.drifts || colours.mode == .musicReactive
-        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: !moving)) { timeline in
+        // Ten frames a second is plenty for a slow drift; none under Reduce
+        // Motion (the colours hold almost still there) or while Settings is
+        // in the background.
+        let paused = Self.swatchPaused(moving: moving, reduceMotion: reduceMotion, active: activeState != .inactive)
+        TimelineView(.animation(minimumInterval: 1.0 / 10, paused: paused)) { timeline in
             let ink = model.ink(inputs, now: timeline.date.timeIntervalSinceReferenceDate)
             VStack(spacing: 10) {
                 HStack(spacing: 6) {

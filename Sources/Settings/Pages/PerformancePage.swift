@@ -26,10 +26,12 @@ struct PerformancePage: View {
                 if s.pauseWhenCovered {
                     // What "Pause fully covered wallpapers" can and cannot see.
                     InspectorCaption("Goes by where windows are.", more: "Pause fully covered wallpapers goes by where windows are. Wallpapers pause behind app windows and full-screen apps, and keep moving behind terminals, which are often see-through, and under Stage Manager. If a wallpaper you can see through a window holds still, switch the pause off.")
+                        .revealRow()
                 }
             }
             DesktopInteractionSection()
         }
+        .lunalyrReveal(s.pauseWhenCovered)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
     }

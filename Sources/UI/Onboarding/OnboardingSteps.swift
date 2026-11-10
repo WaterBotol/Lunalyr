@@ -66,6 +66,7 @@ struct LookStep: View {
     var focus: OnboardingTitleFocus
     @Model(\.settings) private var settings
     @StateObject private var importer = WallpaperImporter()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         OnboardingStepLayout {
@@ -78,24 +79,37 @@ struct LookStep: View {
                 WallpaperModeGrid(chooseImport: { importer.choose(into: settings) })
             }
             .frame(width: Self.columnWidth)
+            // Room for two caption lines, the usual summary. (Three would
+            // stop the jump for the longest states, but at the window's
+            // 540 points the step would then scroll.) Changes cross-fade.
             status
-                .frame(maxWidth: 480, minHeight: 30, alignment: .top)
+                .frame(maxWidth: 480, minHeight: Self.statusHeight, alignment: .top)
                 .padding(.top, LunalyrDesign.Spacing.small + 2)
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                           value: settings.backgroundMode)
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                           value: importer.showsProgress)
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                           value: importer.message)
         }
     }
 
     /// The preview and the tiles beneath it: about 370 x 240 on a 13-inch Air.
     static let columnWidth: CGFloat = 368
+    /// The status line's reserved height: two caption lines.
+    static let statusHeight: CGFloat = 30
 
     /// What the chosen look draws, or the import going on, or why it failed.
     @ViewBuilder private var status: some View {
-        if importer.importing {
+        if importer.showsProgress {
             HStack(spacing: LunalyrDesign.Spacing.small) {
                 ProgressView().controlSize(.small)
                 Text("Importing…").lunalyrText(.caption)
             }
+            .transition(.opacity)
         } else if let message = importer.message {
             StatusBanner(.warning, title: "Couldn’t import that file", message: message, density: .compact)
+                .transition(.opacity)
         } else {
             VStack(spacing: LunalyrDesign.Spacing.xSmall) {
                 if let notice = powerSaving {
@@ -113,9 +127,13 @@ struct LookStep: View {
                     Button("Choose Another Image or Video…") { importer.choose(into: settings) }
                         .buttonStyle(.link)
                         .controlSize(.small)
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity)
+            // A new summary cross-fades in place of the last.
+            .id(settings.backgroundMode)
+            .transition(.opacity)
         }
     }
 

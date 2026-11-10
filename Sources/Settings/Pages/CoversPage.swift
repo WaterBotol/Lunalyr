@@ -7,6 +7,7 @@ struct CoversPage: View {
     @Model(\.settings) private var s
     @Model(\.nowPlaying) private var playing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.undoManager) private var undoManager
 
     /// What covers are doing for the playing song, or why they aren't.
     private var coverStatus: String {
@@ -28,6 +29,21 @@ struct CoversPage: View {
         guard let track = playing.current,
               WorkspaceCopy.coverLookupSkipped(track: track, player: playing.activePlayer) == nil else { return nil }
         return track
+    }
+
+    /// Lets an excluded album play again; Edit › Undo leaves it out again.
+    private func allow(_ name: String, album: String) {
+        let settings = s
+        guard let index = settings.motionExclusions.firstIndex(of: name) else { return }
+        withAnimation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion)) {
+            settings.motionExclusions.removeAll { $0 == name }
+        }
+        undoManager?.registerSettingsChange("Allow \(album)", undo: {
+            guard !settings.motionExclusions.contains(name) else { return }
+            settings.motionExclusions.insert(name, at: min(index, settings.motionExclusions.count))
+        }, redo: {
+            settings.motionExclusions.removeAll { $0 == name }
+        })
     }
 
     var body: some View {
@@ -74,7 +90,7 @@ struct CoversPage: View {
                     ForEach(s.motionExclusions, id: \.self) { name in
                         let album = name.replacingOccurrences(of: "|", with: " · ")
                         LabeledContent {
-                            Button("Allow") { s.motionExclusions.removeAll { $0 == name } }
+                            Button("Allow") { allow(name, album: album) }
                                 .controlSize(.small)
                                 .help("Allow animated covers for \(album) again")
                                 .accessibilityLabel("Allow \(album)")
@@ -84,8 +100,13 @@ struct CoversPage: View {
                         }
                     }
                 }
+                .revealRow()
             }
         }
+        // The note about Match the music and the excluded albums come and go smoothly.
+        .lunalyrReveal(s.backgroundMode)
+        .lunalyrReveal(s.useMotionArtwork)
+        .lunalyrReveal(s.motionExclusions.isEmpty)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
     }

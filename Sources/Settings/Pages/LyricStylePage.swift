@@ -22,34 +22,54 @@ struct LyricStylePage: View {
             wordEntrances
             // Match the music can pick either, so both stay reachable there.
             if style.hasConnections || automatic {
-                ThemedSection("Constellation") {
-                    ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
-                                format: SettingsFormat.percent)
-                    ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
-                                format: SettingsFormat.percent)
-                    if automatic {
-                        InspectorCaption("Used when Match the music picks Constellation.")
-                    }
-                }
+                constellation
             }
             if style == .echo || automatic {
-                ThemedSection("Echo") {
-                    ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
-                                format: SettingsFormat.percent)
-                    if automatic {
-                        InspectorCaption("Used when Match the music picks Echo.")
-                    }
-                }
+                echo
             }
             ThemedSection("Instrumental breaks") {
                 Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
             }
             LyricStyleMemorySection()
         }
+        // Sub-options glide in and out with the choice that shows them.
+        .lunalyrReveal(s.lyricComposition)
+        .lunalyrReveal(rotateLayouts)
+        .lunalyrReveal(backingLayer)
+        .lunalyrReveal(s.editorialTypography)
+        .lunalyrReveal(s.randomizeLyricFonts)
+        .lunalyrReveal(s.fontChoice)
+        .lunalyrReveal(s.googleFontState)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .onAppear { familyDraft = s.googleFontFamily }
         .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
+    }
+
+    private var constellation: some View {
+        ThemedSection("Constellation") {
+            ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
+                        format: SettingsFormat.percent)
+            ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
+                        format: SettingsFormat.percent)
+            if automatic {
+                InspectorCaption("Used when Match the music picks Constellation.")
+                    .revealRow()
+            }
+        }
+        .revealRow()
+    }
+
+    private var echo: some View {
+        ThemedSection("Echo") {
+            ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
+                        format: SettingsFormat.percent)
+            if automatic {
+                InspectorCaption("Used when Match the music picks Echo.")
+                    .revealRow()
+            }
+        }
+        .revealRow()
     }
 
     @AppStorage(LyricLayoutRotation.enabledKey) private var rotateLayouts = true
@@ -66,26 +86,30 @@ struct LyricStylePage: View {
             }
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
             if automatic {
-                Toggle("Change layout every song", isOn: $rotateLayouts)
-                InspectorCaption("Each new song takes the next layout.", more: "Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
-                if rotateLayouts {
-                    DisclosureGroup("Layouts in the rotation") {
-                        ForEach(LyricLayoutRotation.order) { layout in
-                            Stepper(value: Binding(get: { rotation.count(for: layout) },
-                                                   set: { rotation.setCount($0, for: layout) }),
-                                    in: 0...LyricLayoutRotation.maximumCount) {
-                                HStack {
-                                    Text(layout.title)
-                                    Spacer()
-                                    Text(rotation.count(for: layout) == 0 ? "Never"
-                                         : rotation.count(for: layout) == 1 ? "1 song" : "\(rotation.count(for: layout)) songs in a row")
-                                        .lunalyrText(.caption)
+                Group {
+                    Toggle("Change layout every song", isOn: $rotateLayouts)
+                    InspectorCaption("Each new song takes the next layout.", more: "Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
+                    if rotateLayouts {
+                        DisclosureGroup("Layouts in the rotation") {
+                            ForEach(LyricLayoutRotation.order) { layout in
+                                Stepper(value: Binding(get: { rotation.count(for: layout) },
+                                                       set: { rotation.setCount($0, for: layout) }),
+                                        in: 0...LyricLayoutRotation.maximumCount) {
+                                    HStack {
+                                        Text(layout.title)
+                                        Spacer()
+                                        Text(rotation.count(for: layout) == 0 ? "Never"
+                                             : rotation.count(for: layout) == 1 ? "1 song" : "\(rotation.count(for: layout)) songs in a row")
+                                            .lunalyrText(.caption)
+                                    }
                                 }
                             }
+                            InspectorCaption("Songs in a row per layout. 0 leaves one out.", more: "How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
                         }
-                        InspectorCaption("Songs in a row per layout. 0 leaves one out.", more: "How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
+                        .revealRow()
                     }
                 }
+                .revealRow()
             }
             RememberedStyleNote(aspect: .layout)
             Toggle("Show credits in the background", isOn: $showCredits)
@@ -97,15 +121,18 @@ struct LyricStylePage: View {
                     Text("The lead’s layout").tag("")
                     ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
                 }
+                .revealRow()
             }
             InspectorCaption("Bracketed backing words sit small and soft behind the lead.", more: "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.")
             Toggle("Add Editorial typography", isOn: $s.editorialTypography)
             if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
                 InspectorCaption(note)
+                    .revealRow()
             }
             if s.editorialTypography {
                 ValueSlider("Editorial amount", value: $s.editorialAmount, in: 0...1, step: 0.01,
                             format: SettingsFormat.percent)
+                    .revealRow()
             }
             ValueSlider("Lyric size", value: $s.lyricScale, in: 0.7...1.5, step: 0.01, format: SettingsFormat.percent)
         }
@@ -116,6 +143,7 @@ struct LyricStylePage: View {
             Toggle("Randomise lyric fonts", isOn: $s.randomizeLyricFonts)
             if s.randomizeLyricFonts {
                 InspectorCaption("Words use a mix of built-in typefaces while this is on.")
+                    .revealRow()
             }
             ChoiceMenu("Typeface", selection: Binding(get: { s.fontChoice }, set: { s.selectFontChoice($0) }),
                        selectedTitle: \.title) {
@@ -123,38 +151,45 @@ struct LyricStylePage: View {
             }
             if s.randomizeLyricFonts {
                 InspectorCaption(WorkspaceCopy.randomisedTypeface)
+                    .revealRow()
             }
             if s.fontChoice == .google {
-                ChoiceMenu("Google Fonts family",
-                           selection: Binding(get: { s.googleFontFamily }, set: { s.applyGoogleFont(family: $0) }),
-                           selectedTitle: { $0.isEmpty ? "Select a family" : $0 }) {
-                    if !GoogleFontsCatalog.allFamilies.contains(s.googleFontFamily) {
-                        Text(s.googleFontFamily.isEmpty ? "Select a family" : s.googleFontFamily).tag(s.googleFontFamily)
-                    }
-                    ForEach(GoogleFontsCatalog.groups) { group in
-                        Section(group.name) {
-                            ForEach(group.families, id: \.self) { family in Text(family).tag(family) }
+                Group {
+                    ChoiceMenu("Google Fonts family",
+                               selection: Binding(get: { s.googleFontFamily }, set: { s.applyGoogleFont(family: $0) }),
+                               selectedTitle: { $0.isEmpty ? "Select a family" : $0 }) {
+                        if !GoogleFontsCatalog.allFamilies.contains(s.googleFontFamily) {
+                            Text(s.googleFontFamily.isEmpty ? "Select a family" : s.googleFontFamily).tag(s.googleFontFamily)
+                        }
+                        ForEach(GoogleFontsCatalog.groups) { group in
+                            Section(group.name) {
+                                ForEach(group.families, id: \.self) { family in Text(family).tag(family) }
+                            }
                         }
                     }
-                }
-                LabeledContent("Any family") {
-                    HStack(spacing: LunalyrDesign.Spacing.small) {
-                        TextField("Any family", text: $familyDraft, prompt: Text("Family name"))
-                            .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit(applyFamilyDraft)
-                        // The current family can be asked for again after
-                        // it failed, but not re-fetched once it works.
-                        Button("Use", action: applyFamilyDraft)
-                            .disabled(Settings.normalizedFontFamily(familyDraft) == nil
-                                      || (Settings.normalizedFontFamily(familyDraft) == s.googleFontFamily && s.googleRegular != nil))
-                            .help("Use this family for the lyrics")
+                    LabeledContent("Any family") {
+                        HStack(spacing: LunalyrDesign.Spacing.small) {
+                            TextField("Any family", text: $familyDraft, prompt: Text("Family name"))
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit(applyFamilyDraft)
+                            // The current family can be asked for again after
+                            // it failed, but not re-fetched once it works.
+                            Button("Use", action: applyFamilyDraft)
+                                .disabled(s.googleFontState == .loading
+                                          || Settings.normalizedFontFamily(familyDraft) == nil
+                                          || (Settings.normalizedFontFamily(familyDraft) == s.googleFontFamily && s.googleRegular != nil))
+                                .help("Use this family for the lyrics")
+                        }
+                    }
+                    InspectorCaption("Type a Google Fonts or installed family.", more: "Type a family from fonts.google.com or one installed on this Mac.")
+                    if let message = s.googleStatus {
+                        GoogleFontStatus(state: s.googleFontState, message: message)
+                            .id(s.googleFontState)
+                            .transition(.opacity)
                     }
                 }
-                InspectorCaption("Type a Google Fonts or installed family.", more: "Type a family from fonts.google.com or one installed on this Mac.")
-                if let message = s.googleStatus {
-                    InspectorCaption(message)
-                }
+                .revealRow()
             }
         }
     }
@@ -204,5 +239,36 @@ struct LyricStylePage: View {
         let family = GoogleFontsCatalog.canonicalName(typed) ?? typed
         familyDraft = family
         s.applyGoogleFont(family: family)
+    }
+}
+
+/// The chosen family's load: a spinner while it downloads, a tick once in
+/// use, and a warning when it can't be used, so a failure no longer reads
+/// like a note.
+private struct GoogleFontStatus: View {
+    let state: GoogleFontState
+    let message: String
+
+    var body: some View {
+        switch state {
+        case .failed:
+            WarningCaption(message)
+        case .loading:
+            HStack(spacing: LunalyrDesign.Spacing.small) {
+                DelayedSpinner()
+                Text(message).lunalyrText(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+        case .ready:
+            Label {
+                Text(message).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(LunalyrStatus.success.text)
+            }
+            .labelStyle(CaptionLabelStyle())
+            .accessibilityElement(children: .combine)
+        case .idle:
+            InspectorCaption(message)
+        }
     }
 }

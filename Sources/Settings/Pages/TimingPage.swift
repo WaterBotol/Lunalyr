@@ -11,12 +11,15 @@ import UniformTypeIdentifiers
 @MainActor
 struct TimingPage: View {
     @Environment(\.lunalyrModels) private var models
+    @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Model(\.nowPlaying) private var playing
     @Model(\.offsets) private var offsets
     @Model(\.settings) private var settings
     @Model(\.sources) private var options
     @Model(\.lyrics) private var model
     @Model(\.localLyrics) private var local
+    @ObservedObject private var tapSync = LyricTapSyncController.shared
     @State private var title = ""
     @State private var artist = ""
     /// The recording the search fields were last filled for.
@@ -47,6 +50,9 @@ struct TimingPage: View {
                 InspectorCaption(pauseCaption)
             }
         }
+        .lunalyrReveal(message)
+        .lunalyrReveal(model.cacheMessage)
+        .lunalyrReveal(tapSync.canUndo)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .onAppear { fillTrack() }
@@ -62,9 +68,24 @@ struct TimingPage: View {
                 LabeledContent("Lyric timing") {
                     SongTimingNudge()
                 }
+                // Tap to sync, as in the menu-bar panel, with its Undo.
+                HStack(spacing: LunalyrDesign.Spacing.small) {
+                    Spacer(minLength: 0)
+                    Button(tapSync.isListening ? LyricTapSyncController.stopTitle : LyricTapSyncController.menuTitle) {
+                        tapSync.toggle()
+                    }
+                    .help("Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps")
+                    if tapSync.canUndo {
+                        Button("Undo Tap to Sync") { tapSync.undo() }
+                            .help("Back to the timing from before the last tap to sync")
+                            .revealRow()
+                    }
+                }
+                .controlSize(.small)
+                let offset = offsets.offset(for: query)
                 ValueSlider("Song offset", value: Binding(get: { offsets.offset(for: query) },
                                                           set: { offsets.set($0, for: query) }),
-                            in: -10...10, step: 0.05, minimumLabel: "Later", maximumLabel: "Earlier",
+                            in: Self.offsetRange(for: offset), step: 0.05, minimumLabel: "Later", maximumLabel: "Earlier",
                             format: TimingNudge.format, spoken: TimingNudge.spoken)
                 InspectorCaption("Positive offsets bring lyrics in earlier.", more: "Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.")
             } else {
@@ -133,8 +154,15 @@ struct TimingPage: View {
             if model.sourceStates.values.contains(where: { $0.hasPrefix(LyricsFetcher.notNeeded) }) {
                 InspectorCaption("Search asks every source.", more: "Sources that couldn’t beat the match showing weren’t asked further. Search asks every source.")
             }
-            if let status = message ?? model.cacheMessage {
+            // A file that couldn't be imported warns; the cache's notes stay captions.
+            if let message {
+                WarningCaption(message)
+                    .id(message)
+                    .transition(.opacity)
+            } else if let status = model.cacheMessage {
                 InspectorCaption(status)
+                    .id(status)
+                    .transition(.opacity)
             }
         }
     }
@@ -148,7 +176,7 @@ struct TimingPage: View {
             }
             InspectorCaption(options.mode.detail)
             InspectorCaption(LyricSourceOptions.ranking)
-            Button("Restore Recommended Order") { options.resetOrder() }
+            Button("Restore Recommended Order", action: restoreRecommendedOrder)
                 .accessibilityLabel("Restore recommended source order")
                 .help("Put the sources back in the order Lunalyr recommends")
         }
@@ -164,13 +192,41 @@ struct TimingPage: View {
                     }),
                           state: model.sourceStates[source],
                           isFirst: options.order.first == source, isLast: options.order.last == source,
-                          move: { options.move(source, by: $0) })
+                          // Rows are keyed by source, so they slide to their new places.
+                          move: { step in withAnimation(motion) { options.move(source, by: step) } })
             }
             InspectorCaption("Online sources receive song metadata.", more: "Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
         }
     }
 
     // MARK: Actions
+
+    /// The song offset slider: ±10 s, widened to the ±30 s that tap to sync
+    /// and the store allow once an offset is beyond 10 s, so the thumb shows
+    /// it and a drag can't snap it back.
+    static func offsetRange(for offset: Double) -> ClosedRange<Double> {
+        abs(offset) > 10 ? -30...30 : -10...10
+    }
+
+    private var motion: Animation {
+        LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion)
+    }
+
+    /// The sources slide back into the recommended order; Edit › Undo puts
+    /// the order and Choose by back as they were.
+    private func restoreRecommendedOrder() {
+        let options = options
+        let before = (order: options.order, mode: options.mode)
+        withAnimation(motion) { options.resetOrder() }
+        let after = (order: options.order, mode: options.mode)
+        guard before.order != after.order || before.mode != after.mode else { return }
+        let animation = motion
+        undoManager?.registerSettingsChange("Restore Recommended Order", undo: {
+            withAnimation(animation) { options.order = before.order; options.mode = before.mode }
+        }, redo: {
+            withAnimation(animation) { options.order = after.order; options.mode = after.mode }
+        })
+    }
 
     private var localExports: some View {
         ThemedSection("Local exports") {
