@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftUI
 
 /// General: how Lunalyr's own windows look, starting at login, updates, and
@@ -19,7 +20,14 @@ struct GeneralPage: View {
                     Toggle("Launch at login", isOn: $s.launchAtLogin)
                         .toggleStyle(ThemedToggleStyle())
                     if let error = s.launchAtLoginError {
-                        StatusBanner(.warning, title: "Launch at login didn’t change", message: error)
+                        if s.launchAtLoginNeedsApproval {
+                            StatusBanner(.warning, title: "Waiting for your approval", message: error) {
+                                Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }
+                                    .help("Opens System Settings › General › Login Items")
+                            }
+                        } else {
+                            StatusBanner(.warning, title: "Launch at login didn’t change", message: error)
+                        }
                     }
                 }
                 ThemedCard("Updates") {

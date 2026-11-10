@@ -312,6 +312,7 @@ final class Settings: ObservableObject {
     @Published private(set) var googleVoice: LyricFace = .sans
 
     private let defaults: UserDefaults
+    private let loginItem: LoginItemService
 
     private convenience init() {
         self.init(defaults: .standard, notifications: .default)
@@ -320,8 +321,10 @@ final class Settings: ObservableObject {
     /// Reads and writes `defaults`, and listens for power and accessibility
     /// changes on `notifications`. The app uses the shared instance; tests
     /// pass an isolated suite so they never touch real preferences.
-    init(defaults d: UserDefaults, notifications: NotificationCenter) {
+    init(defaults d: UserDefaults, notifications: NotificationCenter,
+         loginItem: LoginItemService = SMAppService.mainApp) {
         defaults = d
+        self.loginItem = loginItem
         fontChoice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
         googleFontFamily = d.string(forKey: "googleFontFamily") ?? ""
         backgroundMode = BackgroundMode(rawValue: d.string(forKey: "backgroundMode") ?? "") ?? .auto
@@ -353,7 +356,7 @@ final class Settings: ObservableObject {
         respectLowPower = d.object(forKey: "respectLowPower") as? Bool ?? true
         onBattery = PowerBehaviour(rawValue: d.string(forKey: "onBattery") ?? "") ?? .lightEffects
         noLyrics = NoLyricsBehaviour(rawValue: d.string(forKey: "noLyrics") ?? "") ?? .notice
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        launchAtLogin = Self.launchesAtLogin(loginItem.status)
         effectSpeed = d.object(forKey: "effectSpeed") as? Double ?? 1.0
         audioReactiveEnabled = d.bool(forKey: "custom.audioReactiveEnabled")
         audioSensitivity = d.object(forKey: "custom.audioSensitivity") as? Double ?? 1.0
@@ -380,6 +383,7 @@ final class Settings: ObservableObject {
         customWallpaperPlacement = MotionPlacement(rawValue: d.string(forKey: "custom.wallpaperPlacement") ?? "") ?? .fill
         light3DColours = Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? .album
         increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        if launchAtLogin && loginItem.status == .requiresApproval { launchAtLoginError = Self.loginItemNeedsApproval }
 
         // Every power input feeds `effectiveBackgroundMode`, so each change is
         // republished: the wallpaper redraws and audio capture reconciles at
@@ -736,24 +740,54 @@ final class Settings: ObservableObject {
     }
 
     /// Login items are managed by the system; if registration fails the
-    /// toggle is put back so it never claims something untrue.
+    /// toggle is put back so it never claims something untrue. A change that
+    /// works clears the last failure's message, and one macOS holds for the
+    /// user's approval (switched off in System Settings › Login Items) says
+    /// where to allow it instead of looking done.
     private func applyLaunchAtLogin() {
+        guard !followingLoginItem else { return }
+        var failure: String?
         do {
             if launchAtLogin {
-                if SMAppService.mainApp.status != .enabled {
-                    try SMAppService.mainApp.register()
-                }
-            } else {
-                if SMAppService.mainApp.status == .enabled {
-                    try SMAppService.mainApp.unregister()
-                }
+                if loginItem.status != .enabled { try loginItem.register() }
+            } else if loginItem.status != .notRegistered && loginItem.status != .notFound {
+                try loginItem.unregister()
             }
         } catch {
-            launchAtLoginError = error.localizedDescription
-            let actual = SMAppService.mainApp.status == .enabled
-            if actual != launchAtLogin { launchAtLogin = actual }
+            failure = error.localizedDescription
         }
+        followLoginItem(failure: failure)
     }
+
+    /// Shows what macOS has now, without asking it to change: Settings
+    /// calls this as its window comes forward, as Login Items can be
+    /// changed in System Settings while Lunalyr runs.
+    func refreshLaunchAtLogin() {
+        followLoginItem(failure: nil)
+    }
+
+    private var followingLoginItem = false
+
+    private func followLoginItem(failure: String?) {
+        let status = loginItem.status
+        let actual = Self.launchesAtLogin(status)
+        followingLoginItem = true
+        if actual != launchAtLogin { launchAtLogin = actual }
+        followingLoginItem = false
+        let message = actual && status == .requiresApproval ? Self.loginItemNeedsApproval : failure
+        if launchAtLoginError != message { launchAtLoginError = message }
+    }
+
+    /// Registered counts as on, even while macOS waits for approval: the
+    /// toggle then stays on beside the message saying where to allow it.
+    static func launchesAtLogin(_ status: SMAppService.Status) -> Bool {
+        status == .enabled || status == .requiresApproval
+    }
+
+    static let loginItemNeedsApproval = "Lunalyr is switched off in System Settings › General › Login Items. Switch it on there to open Lunalyr at login."
+
+    /// Launch at login is waiting for the user's approval in System Settings.
+    var launchAtLoginNeedsApproval: Bool { launchAtLoginError == Self.loginItemNeedsApproval }
 
     @Published var launchAtLoginError: String?
 
@@ -893,3 +927,13 @@ final class Settings: ObservableObject {
         Task { await loadGoogleFont(family: family) }
     }
 }
+
+/// Launch at login, as macOS keeps it. The app uses `SMAppService.mainApp`;
+/// tests pass a stand-in, so they never add a login item.
+protocol LoginItemService: AnyObject {
+    var status: SMAppService.Status { get }
+    func register() throws
+    func unregister() throws
+}
+
+extension SMAppService: LoginItemService {}

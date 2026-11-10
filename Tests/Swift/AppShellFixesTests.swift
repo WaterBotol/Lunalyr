@@ -140,3 +140,99 @@ final class ImportedWallpaperFileTests: XCTestCase {
                        "The imported file is missing. Choose it again.")
     }
 }
+
+/// Launch at login against a stand-in for macOS's login items.
+@MainActor
+final class LaunchAtLoginTests: XCTestCase {
+    private final class FakeLoginItem: LoginItemService {
+        var status: SMAppService.Status = .notRegistered
+        /// What a register call leaves, or the error it throws.
+        var registerResult: Result<SMAppService.Status, Error> = .success(.enabled)
+        var registers = 0, unregisters = 0
+
+        func register() throws {
+            registers += 1
+            status = try registerResult.get()
+        }
+
+        func unregister() throws {
+            unregisters += 1
+            status = .notRegistered
+        }
+    }
+
+    private struct Refused: LocalizedError {
+        var errorDescription: String? { "Operation not permitted" }
+    }
+
+    private func settings(_ item: FakeLoginItem) -> VersoCustom.Settings {
+        Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("LunalyrTests"),
+                 notifications: NotificationCenter(), loginItem: item)
+    }
+
+    /// The warning from a failed attempt used to stay up after one that worked.
+    func testASuccessfulChangeClearsAnEarlierFailure() {
+        let item = FakeLoginItem()
+        item.registerResult = .failure(Refused())
+        let settings = settings(item)
+        settings.launchAtLogin = true
+        XCTAssertFalse(settings.launchAtLogin, "the toggle never claims what macOS refused")
+        XCTAssertEqual(settings.launchAtLoginError, "Operation not permitted")
+
+        item.registerResult = .success(.enabled)
+        settings.launchAtLogin = true
+        XCTAssertTrue(settings.launchAtLogin)
+        XCTAssertNil(settings.launchAtLoginError)
+        XCTAssertEqual(item.registers, 2)
+    }
+
+    /// Switched off in System Settings › Login Items, registering leaves the
+    /// item waiting for approval: it used to look done.
+    func testAnItemWaitingForApprovalSaysWhereToAllowIt() {
+        let item = FakeLoginItem()
+        item.registerResult = .success(.requiresApproval)
+        let settings = settings(item)
+        settings.launchAtLogin = true
+        XCTAssertTrue(settings.launchAtLogin)
+        XCTAssertTrue(settings.launchAtLoginNeedsApproval)
+        XCTAssertEqual(settings.launchAtLoginError, Settings.loginItemNeedsApproval)
+
+        // Switching it off unregisters the waiting item and drops the note.
+        settings.launchAtLogin = false
+        XCTAssertEqual(item.unregisters, 1)
+        XCTAssertEqual(item.status, .notRegistered)
+        XCTAssertNil(settings.launchAtLoginError)
+    }
+
+    func testAWaitingItemShowsAsSuchFromLaunch() {
+        let item = FakeLoginItem()
+        item.status = .requiresApproval
+        let settings = settings(item)
+        XCTAssertTrue(settings.launchAtLogin)
+        XCTAssertTrue(settings.launchAtLoginNeedsApproval)
+        XCTAssertEqual(item.registers + item.unregisters, 0, "reading the state changes nothing")
+    }
+
+    /// Login Items changed in System Settings while Lunalyr runs: Settings
+    /// follows when it comes forward, without registering anything itself.
+    func testRefreshFollowsSystemSettingsWithoutChangingIt() {
+        let item = FakeLoginItem()
+        item.status = .enabled
+        let settings = settings(item)
+        XCTAssertTrue(settings.launchAtLogin)
+
+        item.status = .notRegistered
+        settings.refreshLaunchAtLogin()
+        XCTAssertFalse(settings.launchAtLogin)
+
+        item.status = .requiresApproval
+        settings.refreshLaunchAtLogin()
+        XCTAssertTrue(settings.launchAtLogin)
+        XCTAssertTrue(settings.launchAtLoginNeedsApproval)
+
+        item.status = .enabled
+        settings.refreshLaunchAtLogin()
+        XCTAssertNil(settings.launchAtLoginError)
+        XCTAssertEqual(item.registers + item.unregisters, 0)
+    }
+}

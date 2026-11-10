@@ -122,6 +122,8 @@ extension SettingsWindowController: NSWindowDelegate {
     /// Picks up a desktop picture changed in System Settings meanwhile.
     func windowDidBecomeKey(_ notification: Notification) {
         previewDisplay.refresh()
+        // Login Items can be changed in System Settings meanwhile too.
+        Settings.shared.refreshLaunchAtLogin()
     }
 
     /// Back to an accessory app once Settings goes away, so the Dock icon and
