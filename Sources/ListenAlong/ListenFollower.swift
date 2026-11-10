@@ -147,6 +147,9 @@ final class ListenFollower: ObservableObject {
     /// A song that stops matching this close to the host's end ran out on
     /// its own (a library copy can be up to 10 s shorter), not a skip.
     static let naturalEndMargin: Double = 12
+    /// Seconds after the host's song ran out (or restarted) during which
+    /// the follower's own song running out is not taken for a skip.
+    static let naturalEndGrace: TimeInterval = 20
 
     /// What Lunalyr last told the player: the song, and playing or paused.
     struct Expectation: Equatable {
@@ -172,6 +175,9 @@ final class ListenFollower: ObservableObject {
     /// start another.
     private var matching: ListenProtocol.Track?
     private var lastCommandAt: TimeInterval = -.infinity
+    /// When the host's song last ran out on its own or restarted (repeat),
+    /// so the follower's copy ending around then is not a skip.
+    private var hostSongEndedAt: TimeInterval?
     /// No player was open for the song: once one is, following waits for
     /// a Play click (`Hold.ready`) rather than starting by itself.
     private var waitingForPlayer = false
@@ -258,6 +264,7 @@ final class ListenFollower: ObservableObject {
         let wasConnecting = phase == .connecting
         phase = .following
         if let name = ListenProtocol.cleanHostName(state.host?.name) { hostName = name }
+        let restarted = noteHostSongEnd(previous: latest, previousAt: receivedAt, next: state)
         latest = state
         receivedAt = clock()
         if wasConnecting, hold == nil { Task { await self.saveShuffle() } }
@@ -273,6 +280,12 @@ final class ListenFollower: ObservableObject {
         if let lines = state.lyrics { lyrics = lines }
         if let current = track, current.isSameSong(as: incoming) {
             track = incoming
+            // The host's song came round again (repeat) after the follower's
+            // copy ran out and was let go: look it up again.
+            if restarted, target == nil, expected == nil, hold == nil, !waitingForPlayer {
+                startTrack(incoming)
+                return
+            }
             sync()
             return
         }
@@ -286,6 +299,22 @@ final class ListenFollower: ObservableObject {
         if hold == nil { startTrack(incoming) }
     }
 
+    /// Notes when the host's previous state was its song running out (it
+    /// was near the end, playing) and `next` is another song or the same
+    /// one from the top. Returns whether it was the same one restarting.
+    private func noteHostSongEnd(previous: ListenProtocol.State?, previousAt: TimeInterval,
+                                 next: ListenProtocol.State) -> Bool {
+        guard let previous, previous.playing, let old = previous.track, old.duration > 0 else { return false }
+        let now = clock()
+        let wasAt = ListenClock.position(of: previous, receivedAt: previousAt, now: now)
+        guard wasAt >= old.duration - Self.naturalEndMargin else { return false }
+        let restarted = next.track.map { $0.isSameSong(as: old) && next.position < Self.naturalEndMargin } ?? false
+        let changed = next.track.map { !$0.isSameSong(as: old) } ?? false
+        guard restarted || changed else { return false }
+        hostSongEndedAt = now
+        return restarted
+    }
+
     /// Finds the host's song on the follower's service; `sync` plays it
     /// once the host is playing.
     private func startTrack(_ song: ListenProtocol.Track) {
@@ -294,8 +323,10 @@ final class ListenFollower: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             let found = await self.findTarget(for: song)
-            guard !self.stopped, let current = self.track, current.isSameSong(as: song) else { self.matching = nil; return }
-            self.matching = nil
+            // Only this lookup's own mark is cleared: a newer song's lookup
+            // may be running.
+            if self.matching.map({ $0.isSameSong(as: song) }) ?? false { self.matching = nil }
+            guard !self.stopped, let current = self.track, current.isSameSong(as: song) else { return }
             guard self.hold == nil else { return }
             guard let found else {
                 self.waitingForPlayer = self.player.kind == nil
@@ -328,7 +359,7 @@ final class ListenFollower: ObservableObject {
     static func unavailableNote(for song: ListenProtocol.Track, on kind: PlayerKind?) -> String {
         switch kind {
         case nil: return "Open Music or Spotify to listen along"
-        case .spotify: return "\u{201C}\(song.title)\u{201D} isn\u{2019}t on your Spotify \u{2014} still following"
+        case .spotify: return "\u{201C}\(song.title)\u{201D} can\u{2019}t be found on Spotify from here \u{2014} still following"
         case .appleMusic: return "\u{201C}\(song.title)\u{201D} isn\u{2019}t in your Music library \u{2014} still following"
 
         default: return "Listening along needs Music or Spotify \u{2014} still following"
@@ -369,6 +400,12 @@ final class ListenFollower: ObservableObject {
             let reading = player.reading()
             if let reading, expected.target.matches(reading), reading.playing == expected.playing {
                 // Still where Lunalyr left it.
+            } else if expected.playing, let endedAt = hostSongEndedAt, now - endedAt < Self.naturalEndGrace {
+                // The host's song ran out and then the follower's did too
+                // (the host's next state came first): not a skip. Their
+                // next song (or the same one again) is started below.
+                hostSongEndedAt = nil
+                self.expected = nil
             } else if expected.playing, state.playing, ranOut(hostPosition: hostPosition) {
                 // The song ended a little before the host's: the host's next
                 // one is started when it comes, not this one again.
@@ -384,6 +421,7 @@ final class ListenFollower: ObservableObject {
             // Never started while the host is paused (that would be heard
             // before the pause): it starts when they play.
             if state.playing {
+                hostSongEndedAt = nil
                 expected = Expectation(target: target, playing: true)
                 command { await $0.player.play(target, at: hostPosition) } failed: { follower in
                     // Not tried again until the host's next song.

@@ -21,6 +21,11 @@ final class ListenHost: ObservableObject {
 
     /// The most messages are kept under the relay's 64 KB.
     static let maximumMessageBytes = 60_000
+    /// States sent in any one second, under the relay's 5 (it drops the
+    /// rest, which could be the last state of a burst of skips or seeks,
+    /// leaving listeners on the wrong song until the next heartbeat). A held
+    /// state goes with the next update, at most a second later.
+    static let maximumStatesPerSecond = 4
 
     private let base: URL
     private let http: any ListenHTTP
@@ -35,6 +40,8 @@ final class ListenHost: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     private var ended = false
+    /// When the states of the last second went.
+    private var recentSends: [TimeInterval] = []
     /// States sent so far; tests read it.
     private(set) var sentCount = 0
 
@@ -143,6 +150,9 @@ final class ListenHost: ObservableObject {
         let sample = ListenHostSchedule.Sample(track: snapshot.track, playing: snapshot.playing, position: snapshot.position)
         let lyricsDue = schedule.needsLyrics(for: snapshot.track) && !snapshot.lyrics.isEmpty
         guard schedule.reason(for: sample, now: now) != nil || lyricsDue else { return }
+        recentSends.removeAll { now - $0 >= 1 }
+        guard recentSends.count < Self.maximumStatesPerSecond else { return }
+        recentSends.append(now)
         var state = ListenProtocol.State(seq: schedule.seq + 1, track: snapshot.track, playing: snapshot.playing,
                                          position: snapshot.position, lyrics: nil,
                                          host: snapshot.hostName.map { ListenProtocol.Host(name: $0) })

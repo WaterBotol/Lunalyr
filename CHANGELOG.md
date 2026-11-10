@@ -62,6 +62,11 @@ When merging, keep every entry and combine duplicate headings.
 - Fable: words no longer drift on a loop the whole time a line is held, the colour and glow no longer snap off the previous word when the next one starts, and a chosen word entrance is now used.
 - Lyric card MP4s: the Song level, Background video and sound file sliders now make an audible difference. Each sound is first brought to the same loudness (about -16 LUFS, measured on the part actually used), so a mastered song no longer drowns out a quieter video or phone recording at the same setting. The sliders work in decibels and show them: 100% is level with the others, 50% is -12 dB, 25% is -24 dB, 150% is +12 dB and 0 is off. The mix is rendered by Lunalyr itself, so levels above 100% are real gain, and a look-ahead limiter keeps peaks at -1 dBFS so nothing distorts. Measured on test tones, a song 20 dB louder than the video used to stay 14 dB above it at 50%; now it sits 12 dB below it. A new "Duck the song under the video's sound" option lowers the song by 12 dB while the background video's own sound plays.
 
+- Listen along: when your copy of the song ends a moment before the host's, following no longer pauses as if you had skipped, and a song the host plays again on repeat is played again for you too.
+- Listen along: quickly skipping through songs as host no longer leaves friends on the wrong song for up to ten seconds.
+- Listen along: when the host plays from Apple Music, Spotify listeners are told the song can't be found on Spotify from here, instead of that it isn't on their Spotify.
+- Web listen-along page: a paused song no longer shows the wrong time for late joiners. For songs the host plays from Apple Music, the page now offers Apple Music's own player (a preview) and plain Spotify, Apple Music, YouTube Music and song.link links; it no longer asks song.link's API, which has stopped working.
+
 ## [1.0.0] - 2026-11-08
 
 Build 21 for macOS 14 and later.
