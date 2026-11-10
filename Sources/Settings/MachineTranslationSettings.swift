@@ -65,9 +65,22 @@ struct MachineTranslationControls: View {
                 Button("Download Languages…") { download = .init(source: source, target: target) }
                     .help("Apple’s Translation asks before downloading")
             }
-            InspectorCaption(MachineTranslationCopy.status(translator.state, enabled: options.enabled,
-                                                           showing: extras.showsTranslations),
-                             more: MachineTranslationCopy.about)
+            let status = MachineTranslationCopy.status(translator.state, enabled: options.enabled,
+                                                       showing: extras.showsTranslations)
+            if options.enabled, case .translating = translator.state {
+                HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.small) {
+                    DelayedSpinner()
+                    InspectorCaption(status, more: MachineTranslationCopy.about)
+                }
+            } else {
+                InspectorCaption(status, more: MachineTranslationCopy.about)
+            }
+            // A failure isn't a dead end: the song on screen can be tried again.
+            if options.enabled, case .failed = translator.state {
+                Button("Try Again") { LyricsViewModel.shared.retryMachineTranslation() }
+                    .help("Translate this song again")
+                    .revealRow()
+            }
         }
         .task {
             let supported = await LanguageAvailability().supportedLanguages

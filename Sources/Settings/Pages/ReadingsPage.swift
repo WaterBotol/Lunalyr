@@ -7,6 +7,8 @@ struct ReadingsPage: View {
     @Model(\.readings) private var o
     @Model(\.lyrics) private var model
     @State private var message: String?
+    /// The file itself couldn't be used: shown as a warning, not a note.
+    @State private var failed = false
 
     var body: some View {
         ThemedForm {
@@ -26,8 +28,8 @@ struct ReadingsPage: View {
                     // A file that can't be used says why, as on Timing & sources.
                     switch InspectorImport.lyrics(title: "Choose a reading LRC file") {
                     case nil: break
-                    case .failure(let failure)?: message = failure.localizedDescription
-                    case .success(let text)?: message = model.importRomanization(text)
+                    case .failure(let failure)?: message = failure.localizedDescription; failed = true
+                    case .success(let text)?: message = model.importRomanization(text); failed = false
                     }
                 }
                 .disabled(model.lines.isEmpty)
@@ -36,13 +38,18 @@ struct ReadingsPage: View {
                     DisabledReason("Readings can be imported once a song’s lyrics are showing.")
                 }
                 if let message {
-                    InspectorCaption(message)
+                    Group {
+                        if failed { WarningCaption(message) } else { InspectorCaption(message) }
+                    }
+                    .id(message)
+                    .transition(.opacity)
                 }
                 InspectorCaption("Saved readings are pronunciation guides.", more: "Saved readings are pronunciation guides. Translations are a separate feature and are not generated here.")
                 InspectorCaption("Japanese readings are matched to the lyric’s kana.", more: "Japanese readings are matched to the lyric’s kana, however they’re spaced. A reading written for other words isn’t shown; Lunalyr’s own reading is used for that line.")
             }
             TranslationSection()
         }
+        .lunalyrReveal(message)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
     }

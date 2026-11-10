@@ -91,6 +91,44 @@ extension EnvironmentValues {
     }
 }
 
+/// A small spinner that appears only once a wait has passed
+/// `Motion.Hold.spinnerDelay`, so quick work never flashes one.
+struct DelayedSpinner: View {
+    @State private var shown = false
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .opacity(shown ? 1 : 0)
+            .task {
+                try? await Task.sleep(for: .seconds(LunalyrDesign.Motion.Hold.spinnerDelay))
+                guard !Task.isCancelled else { return }
+                withAnimation(LunalyrDesign.Motion.quick) { shown = true }
+            }
+            .accessibilityHidden(!shown)
+    }
+}
+
+/// Something that went wrong, in the warning colour with its triangle, so it
+/// never reads like an informational caption (failed imports and downloads).
+struct WarningCaption: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Label {
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .labelStyle(CaptionLabelStyle())
+        .foregroundStyle(LunalyrStatus.warning.text)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// Why the control above is unavailable, and when it will be. Every disabled
 /// control that isn't self-explanatory gets one, directly beneath it.
 struct DisabledReason: View {

@@ -39,6 +39,7 @@ struct LyricStylePage: View {
         .lunalyrReveal(s.editorialTypography)
         .lunalyrReveal(s.randomizeLyricFonts)
         .lunalyrReveal(s.fontChoice)
+        .lunalyrReveal(s.googleFontState)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .onAppear { familyDraft = s.googleFontFamily }
@@ -175,14 +176,17 @@ struct LyricStylePage: View {
                             // The current family can be asked for again after
                             // it failed, but not re-fetched once it works.
                             Button("Use", action: applyFamilyDraft)
-                                .disabled(Settings.normalizedFontFamily(familyDraft) == nil
+                                .disabled(s.googleFontState == .loading
+                                          || Settings.normalizedFontFamily(familyDraft) == nil
                                           || (Settings.normalizedFontFamily(familyDraft) == s.googleFontFamily && s.googleRegular != nil))
                                 .help("Use this family for the lyrics")
                         }
                     }
                     InspectorCaption("Type a Google Fonts or installed family.", more: "Type a family from fonts.google.com or one installed on this Mac.")
                     if let message = s.googleStatus {
-                        InspectorCaption(message)
+                        GoogleFontStatus(state: s.googleFontState, message: message)
+                            .id(s.googleFontState)
+                            .transition(.opacity)
                     }
                 }
                 .revealRow()
@@ -235,5 +239,36 @@ struct LyricStylePage: View {
         let family = GoogleFontsCatalog.canonicalName(typed) ?? typed
         familyDraft = family
         s.applyGoogleFont(family: family)
+    }
+}
+
+/// The chosen family's load: a spinner while it downloads, a tick once in
+/// use, and a warning when it can't be used, so a failure no longer reads
+/// like a note.
+private struct GoogleFontStatus: View {
+    let state: GoogleFontState
+    let message: String
+
+    var body: some View {
+        switch state {
+        case .failed:
+            WarningCaption(message)
+        case .loading:
+            HStack(spacing: LunalyrDesign.Spacing.small) {
+                DelayedSpinner()
+                Text(message).lunalyrText(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+        case .ready:
+            Label {
+                Text(message).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(LunalyrStatus.success.text)
+            }
+            .labelStyle(CaptionLabelStyle())
+            .accessibilityElement(children: .combine)
+        case .idle:
+            InspectorCaption(message)
+        }
     }
 }

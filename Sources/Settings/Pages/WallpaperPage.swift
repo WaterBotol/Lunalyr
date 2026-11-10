@@ -25,7 +25,12 @@ struct WallpaperPage: View {
                 InspectorCaption(s.backgroundMode.summary)
                 // A failed import leaves the type as it was, so its error
                 // shows here rather than in a section that isn't showing.
-                if let message = importer.message, s.backgroundMode != .custom {
+                // An import from the tiles shows its progress here too, as
+                // the Image or video section isn't showing yet.
+                if importer.showsProgress, s.backgroundMode != .custom {
+                    ImportProgress()
+                        .revealRow()
+                } else if let message = importer.message, s.backgroundMode != .custom {
                     ImportFailure(message: message)
                         .revealRow()
                 }
@@ -47,6 +52,7 @@ struct WallpaperPage: View {
         // sections below slide rather than jump.
         .lunalyrReveal(s.backgroundMode)
         .lunalyrReveal(importer.message)
+        .lunalyrReveal(importer.showsProgress)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
@@ -102,7 +108,7 @@ struct WallpaperPage: View {
     @ViewBuilder private var importedOptions: some View {
         LabeledContent {
             HStack(spacing: LunalyrDesign.Spacing.small) {
-                if importer.importing {
+                if importer.showsProgress {
                     ProgressView().controlSize(.small).accessibilityLabel("Importing")
                 }
                 Button(importer.importing ? "Importing…" : "Choose…") { importer.choose(into: s) }
@@ -190,6 +196,16 @@ private struct PowerSavingBanner: View {
 }
 
 /// Why the chosen picture or video couldn't be used.
+private struct ImportProgress: View {
+    var body: some View {
+        HStack(spacing: LunalyrDesign.Spacing.small) {
+            ProgressView().controlSize(.small)
+            Text("Importing…").lunalyrText(.caption)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct ImportFailure: View {
     let message: String
 

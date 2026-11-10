@@ -102,4 +102,24 @@ final class SettingsPolishTests: XCTestCase {
         defer { window.contentView = nil; window.close() }
         XCTAssertEqual(try XCTUnwrap(found).documentVisibleRect.minY, 0, accuracy: 1)
     }
+
+    // MARK: S8 Google Fonts status
+
+    /// A family that can't be used says so as a failure (the page draws it as
+    /// a warning), not as the same plain note as success.
+    func testAnUnusableFamilyNameIsAFailure() async throws {
+        let name = "LunalyrTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter())
+        XCTAssertEqual(settings.googleFontState, .idle)
+        // Turned away before any cache, installed font or download is tried.
+        settings.applyGoogleFont(family: "Not/A Family")
+        for _ in 0..<20 where settings.googleFontState == .idle {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(settings.googleFontState, .failed)
+        XCTAssertNotNil(settings.googleStatus)
+        XCTAssertNil(settings.googleRegular)
+    }
 }

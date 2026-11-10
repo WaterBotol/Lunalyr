@@ -47,6 +47,8 @@ struct TimingPage: View {
                 InspectorCaption(pauseCaption)
             }
         }
+        .lunalyrReveal(message)
+        .lunalyrReveal(model.cacheMessage)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .onAppear { fillTrack() }
@@ -133,8 +135,15 @@ struct TimingPage: View {
             if model.sourceStates.values.contains(where: { $0.hasPrefix(LyricsFetcher.notNeeded) }) {
                 InspectorCaption("Search asks every source.", more: "Sources that couldn’t beat the match showing weren’t asked further. Search asks every source.")
             }
-            if let status = message ?? model.cacheMessage {
+            // A file that couldn't be imported warns; the cache's notes stay captions.
+            if let message {
+                WarningCaption(message)
+                    .id(message)
+                    .transition(.opacity)
+            } else if let status = model.cacheMessage {
                 InspectorCaption(status)
+                    .id(status)
+                    .transition(.opacity)
             }
         }
     }
