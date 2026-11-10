@@ -40,6 +40,7 @@ struct LyricStylePage: View {
         .lunalyrReveal(s.randomizeLyricFonts)
         .lunalyrReveal(s.fontChoice)
         .lunalyrReveal(s.googleFontState)
+        .lunalyrReveal(EntranceSupport.note(selected: s.arrival(in: style), layout: s.lyricComposition, mix: chosenMix))
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .onAppear { familyDraft = s.googleFontFamily }
@@ -205,7 +206,14 @@ struct LyricStylePage: View {
             ChoiceMenu("Entrance", selection: Binding(get: { s.arrival(in: style) },
                                                       set: { s.wordArrivalByStyle[s.wordControlsKey] = $0.rawValue }),
                        selectedTitle: \.title) {
-                ForEach(WordArrival.allCases) { Text($0.title).tag($0) }
+                // An entrance this layout leaves out for word-timed lyrics is
+                // marked: lines without word timing still enter with it.
+                ForEach(WordArrival.allCases) { Text(EntranceSupport.menuTitle($0, in: s.lyricComposition)).tag($0) }
+            }
+            if let note = EntranceSupport.note(selected: s.arrival(in: style), layout: s.lyricComposition,
+                                               mix: chosenMix) {
+                InspectorCaption(note)
+                    .revealRow()
             }
             if reduceMotion {
                 InspectorCaption(WorkspaceCopy.reduceMotionEntrances)
@@ -232,6 +240,11 @@ struct LyricStylePage: View {
             InspectorCaption(automatic ? "These controls apply to layouts picked by Match the music."
                                        : "These controls apply to the selected layout.")
         }
+    }
+
+    /// The custom mix's entrances, in the order the page lists them.
+    private var chosenMix: [WordArrival] {
+        WordArrival.mixChoices.filter { s.wordEntranceMix.contains($0.rawValue) }
     }
 
     private func applyFamilyDraft() {
