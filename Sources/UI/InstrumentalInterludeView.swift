@@ -39,10 +39,11 @@ extension VCVocalGap {
 
     func instrumentalCue(at time: Double, previewLead: Double, energy: Double = 0) -> InstrumentalCue? {
         let elapsed = time - start
-        let fadeIn = Easing.smoothstep((elapsed - 0.42) / 0.5)
+        let fadeIn = Easing.smoothstep((elapsed - WallpaperMotion.interludeInDelay) / WallpaperMotion.interludeIn)
         let knownEnd = end > start
         let cueEnd = end - (nextVocal >= 0 ? min(previewLead, max(0, end - start - 0.85)) : 0)
-        let fadeOut = knownEnd ? Easing.smoothstep((cueEnd - time) / 0.24) : 1
+        // Leaves almost as gently as it came, not in a quarter second.
+        let fadeOut = knownEnd ? Easing.smoothstep((cueEnd - time) / WallpaperMotion.interludeOut) : 1
         let opacity = min(fadeIn, fadeOut)
         let progress = knownEnd ? min(1, max(0, elapsed / max(0.01, cueEnd - start))) : nil
         let seed = LyricPhraseTiming.timeSeed(start) ^ 0x1D07_5EED

@@ -320,4 +320,56 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertEqual(staged.words.last?.start ?? 0, 20.5, accuracy: 1e-9, "all in within half a second")
         XCTAssertEqual(staged.readings[staged.words[1].presentationID], "ni")
     }
+
+    // MARK: Notices and empty states (W7, W13, W18)
+
+    func testTheLoadingNoticeWaitsThenFadesIn() {
+        XCTAssertEqual(LyricLayer.loadingPresence(age: 0.1), 0, "a cached lookup shows nothing")
+        XCTAssertEqual(LyricLayer.loadingPresence(age: WallpaperMotion.loadingDelay), 0)
+        XCTAssertEqual(LyricLayer.loadingPresence(age: WallpaperMotion.loadingDelay + WallpaperMotion.loadingIn), 1)
+        var last = 0.0
+        for step in 0...120 {
+            let value = LyricLayer.loadingPresence(age: Double(step) / 60)
+            XCTAssertLessThan(abs(value - last), 0.1)
+            last = value
+        }
+    }
+
+    func testALookupAgainKeepsTheNoLyricsStateInsteadOfLoading() {
+        let cache = LyricLayerCache()
+        XCTAssertEqual(cache.shown(.loading, track: 7, wall: 10).kind, .loading)
+        XCTAssertEqual(cache.shown(.loading, track: 7, wall: 10.5).loadingSince, 10)
+        XCTAssertEqual(cache.shown(.missing, track: 7, wall: 12).kind, .missing)
+        // Looked up again mid-song: still "no lyrics", no loading notice.
+        let again = cache.shown(.loading, track: 7, wall: 90)
+        XCTAssertEqual(again.kind, .missing)
+        XCTAssertNil(again.loadingSince)
+        XCTAssertEqual(cache.shown(.synced, track: 7, wall: 91).kind, .synced)
+        // A new song loads as usual.
+        XCTAssertEqual(cache.shown(.loading, track: 8, wall: 100).kind, .loading)
+    }
+
+    func testLearningThePlayerIsRefusedSwapsTheIdleWordsWithoutRestarting() {
+        let stopped = Date(timeIntervalSinceReferenceDate: 1000)
+        let refused = stopped.addingTimeInterval(2)
+        let notice = LyricLayer.idleNotice(idleSince: stopped, refused: refused)
+        XCTAssertEqual(notice.hold, refused, "the refusal gets its own full hold")
+        XCTAssertEqual(notice.arrival, stopped, "but the notice does not drop and rise again")
+        XCTAssertEqual(notice.swap, refused)
+        // A refusal learned long after the notice had gone arrives afresh.
+        let late = LyricLayer.idleNotice(idleSince: stopped, refused: stopped.addingTimeInterval(60))
+        XCTAssertEqual(late.arrival, late.hold)
+        XCTAssertNil(late.swap)
+        XCTAssertEqual(LyricLayer.idleNotice(idleSince: stopped, refused: nil).hold, stopped)
+    }
+
+    func testInterludeDotsLeaveAsGentlyAsTheyArrive() {
+        var gap = VCVocalGap()
+        gap.start = 10; gap.end = 30; gap.nextVocal = 1
+        let lead = 1.0
+        let cueEnd = 30 - lead
+        let mid = gap.instrumentalCue(at: cueEnd - WallpaperMotion.interludeOut / 2, previewLead: lead)
+        XCTAssertEqual(mid?.opacity ?? 0, 0.5, accuracy: 0.01)
+        XCTAssertNotNil(gap.instrumentalCue(at: cueEnd - 0.3, previewLead: lead))
+    }
 }

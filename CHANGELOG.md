@@ -124,6 +124,10 @@ When merging, keep every entry and combine duplicate headings.
 - Lyrics: a line now starts leaving a little earlier and lifts away as the next one arrives, so two lines no longer sit on top of each other in the middle of the screen at every change.
 - Lyrics: words in very fast lines stay on screen for a moment instead of flashing, and after two very short lines the line before them finishes leaving instead of being cut off.
 - Hinge, Broadside, Portal, Mosaic, Torque and Fable: lyrics without word timing now bring the line's words in together from its start, instead of building the line on guessed word times.
+- Wallpaper while lyrics load: no more system spinner flashing on every song. A lookup that takes longer than a moment fades in the song's name instead, and looking the lyrics up again for a song already showing "no lyrics" no longer brings a spinner back mid-song.
+- Wallpaper: when lyrics can't be found because the Mac is offline, it says so instead of "Lyrics unavailable".
+- Wallpaper: the "can't read this player" notice names the same player as the menu bar and hover controls, and replaces "Nothing playing" with a cross-fade instead of the notice dropping and rising again.
+- Lyrics: skipping a song during an instrumental intro or outro fades the interlude dots out instead of cutting them, they leave more gently, and credits on the old song no longer switch to the new song's title while they fade.
 
 ## [1.0.0] - 2026-11-08
 

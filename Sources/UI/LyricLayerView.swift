@@ -48,14 +48,18 @@ struct LyricLayer: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
-    private static let noticeHoldDuration: TimeInterval = 4.0
-    private static let noticeFadeDuration: TimeInterval = 1.0
-    private static let idleHoldDuration: TimeInterval = 5.0
+    private static let noticeHoldDuration: TimeInterval = WallpaperMotion.noticeHold
+    private static let noticeFadeDuration: TimeInterval = WallpaperMotion.noticeFade
+    private static let idleHoldDuration: TimeInterval = WallpaperMotion.idleNoticeHold
     static let noticeTiming = LyricStagePresence.Timing(idleHold: idleHoldDuration, noticeHold: noticeHoldDuration,
                                                         noticeFade: noticeFadeDuration)
 
-    private var sceneKey: LyricSceneKey {
-        let kind: LyricSceneKey.Kind
+    /// What the stage shows on this frame. Looking the lyrics up again for
+    /// a song already showing "no lyrics" (a reconnect, a change of source
+    /// options) stays on that state instead of bringing the loading notice
+    /// back mid-song.
+    private func sceneKey(wall: Double) -> (key: LyricSceneKey, loadingSince: Double?) {
+        var kind: LyricSceneKey.Kind
         if nowPlaying.current == nil { kind = .idle }
         else if lyricsVM.isLoading && lyricsVM.lines.isEmpty && lyricsVM.plainLines.isEmpty { kind = .loading }
         else if !lyricsVM.plainLines.isEmpty { kind = .plain }
@@ -64,29 +68,54 @@ struct LyricLayer: View {
         var track = Hasher()
         track.combine(nowPlaying.current?.title)
         track.combine(nowPlaying.current?.artist)
-        return LyricSceneKey(kind: kind, track: track.finalize(),
-            fingerprint: LyricSceneKey.fingerprint(lyricsVM.lines, plain: lyricsVM.plainLines))
+        let hash = track.finalize()
+        let shown = cache.shown(kind, track: hash, wall: wall)
+        return (LyricSceneKey(kind: shown.kind, track: hash,
+                              fingerprint: LyricSceneKey.fingerprint(lyricsVM.lines, plain: lyricsVM.plainLines)),
+                shown.loadingSince)
     }
 
-    private var sceneContent: LyricSceneContent {
+    private func sceneContent(loadingSince: Double?) -> LyricSceneContent {
         LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized,
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
-            duration: nowPlaying.current?.duration ?? 0)
+            duration: nowPlaying.current?.duration ?? 0, seed: trackSeed, vocalWindows: lyricsVM.vocalWindows,
+            loadingSince: loadingSince, offline: lyricsVM.notFound && !LyricConnectivity.shared.isOnline)
     }
 
     /// The player macOS will not let Lunalyr read, while that is why the
-    /// wallpaper shows nothing playing.
-    private var refusedPlayer: PlayerKind? { nowPlaying.deniedPlayers.first }
+    /// wallpaper shows nothing playing: the one the hover controls, the
+    /// menu-bar banner and VoiceOver name (`idleRefusal`), so they agree.
+    private var refusedPlayer: PlayerKind? { nowPlaying.idleRefusal }
 
     /// When the idle notice went up: when playback stopped, or when a
     /// running player turned out to be refused -- which, at launch, leaves
     /// no stop to count from.
     private func idleNoticeSince(_ idleSince: Date?) -> Date? {
-        let refused = cache.refusedSince(refusedPlayer, now: Date())
-        return [idleSince, refused].compactMap { $0 }.max()
+        idleNotice(idleSince).hold
     }
+
+    /// The idle notice's timing: `hold` counts its hold and fade from the
+    /// latest reason it went up; `arrival` from when it first appeared, so
+    /// learning that the player is refused while "Nothing playing" is up
+    /// swaps the words without the notice dropping and rising again.
+    /// `swap` is when the refusal replaced the words, if it did.
+    private func idleNotice(_ idleSince: Date?) -> (hold: Date?, arrival: Date?, swap: Date?) {
+        let refused = cache.refusedSince(refusedPlayer, now: Date())
+        return Self.idleNotice(idleSince: idleSince, refused: refused)
+    }
+
+    static func idleNotice(idleSince: Date?, refused: Date?) -> (hold: Date?, arrival: Date?, swap: Date?) {
+        guard let idleSince, let refused else { return (idleSince ?? refused, idleSince ?? refused, nil) }
+        guard refused > idleSince else { return (idleSince, refused, nil) }
+        // The earlier notice was still up when the refusal was learned.
+        let stillUp = refused.timeIntervalSince(idleSince) < noticeHoldTotal
+        return (refused, stillUp ? idleSince : refused, stillUp ? refused : nil)
+    }
+
+    /// How long the idle notice is up: its hold and its fade.
+    static let noticeHoldTotal = WallpaperMotion.idleNoticeHold + WallpaperMotion.noticeFade
 
     /// The text colours for this frame, eased and made readable.
     private func ink(energy: Double, wall: Double) -> LyricInk {
@@ -118,8 +147,9 @@ struct LyricLayer: View {
         // A resting clock's timeline hands a rebuild the date of its last
         // tick; anything this frame starts must start from now.
         let wall = pace?.wall(self.wall) ?? self.wall
-        let key = sceneKey
-        let transition = scenes.observe(key: key, content: sceneContent, time: time, wall: wall,
+        let (key, loadingSince) = sceneKey(wall: wall)
+        let content = sceneContent(loadingSince: loadingSince)
+        let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
         let ink = ink(energy: energy, wall: wall)
@@ -136,13 +166,14 @@ struct LyricLayer: View {
                             // only fades.
                             let dissolve = reduceMotion || !leaving.scene.blurs ? 0 : 1 - leaving.presence
                             scene(leaving.scene.content, key: leaving.scene.key,
-                                  time: leaving.scene.renderTime(at: wall), live: false, energy: energy, ink: ink)
+                                  time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
+                                  ink: ink)
                                 .opacity(leaving.presence)
                                 .blur(radius: dissolve * 5)
                                 .scaleEffect(1 - 0.012 * dissolve)
                         }
                     }
-                    scene(sceneContent, key: key, time: time, live: true, energy: energy, ink: ink)
+                    scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
                         .opacity(transition.incomingPresence)
                 }
                 // Hiding the lyrics dissolves them softly rather than cutting.
@@ -163,6 +194,10 @@ struct LyricLayer: View {
                        target: Double, ink: LyricInk, wall: Double) -> LyricPace.Level {
         if let note = extras.note, wall - note.at < 2.7 { return .active }
         if shown > 0.001, !transition.leaving.isEmpty || transition.incomingPresence < 1 { return .active }
+        // The loading notice fading in, after its delay.
+        if key.kind == .loading, let since = cache.loadingSince,
+           (WallpaperMotion.loadingDelay - 0.1)...(WallpaperMotion.loadingDelay + WallpaperMotion.loadingIn + 0.05)
+            ~= wall - since { return .active }
         let drifting = ink.mode.drifts || ink.mode == .musicReactive || !ink.settled
         let noticeAge: TimeInterval?
         switch key.kind {
@@ -197,7 +232,10 @@ struct LyricLayer: View {
                     return .active
                 }
             }
-            if settings.showInterludes && instrumentalGap(at: time) != nil { return .ambient }
+            if settings.showInterludes && instrumentalGap(at: time, windows: lyricsVM.vocalWindows,
+                                                        duration: nowPlaying.current?.duration ?? 0) != nil {
+                return .ambient
+            }
             return drifting ? .ambient : .still
         }
     }
@@ -227,7 +265,7 @@ struct LyricLayer: View {
 
     /// One scene: whatever the lyric layer shows for a given state.
     @ViewBuilder
-    private func scene(_ content: LyricSceneContent, key: LyricSceneKey, time: TimeInterval,
+    private func scene(_ content: LyricSceneContent, key: LyricSceneKey, time: TimeInterval, wall: Double,
                        live: Bool, energy: Double, ink: LyricInk) -> some View {
         let fallback = ink.base
         switch key.kind {
@@ -237,27 +275,49 @@ struct LyricLayer: View {
             // Lunalyr the player, say that instead: the music may well be
             // playing. The menu bar and Settings keep saying it after this
             // has gone.
-            if let since = idleNoticeSince(content.idleSince) {
-                let age = Date().timeIntervalSince(since)
+            let notice = idleNotice(content.idleSince)
+            if let since = notice.hold, let arrived = notice.arrival {
+                let now = Date()
+                let age = now.timeIntervalSince(since)
                 let presence = (1 - Easing.smoothstep((age - Self.idleHoldDuration) / Self.noticeFadeDuration))
-                    * vc_settle(age, 0.6)
+                    * vc_settle(now.timeIntervalSince(arrived), 0.6)
+                // Words that change while the notice is up cross-fade.
+                let swapped = notice.swap.map { Easing.smoothstep(now.timeIntervalSince($0) / 0.3) } ?? 1
                 if presence > 0.01 {
-                    if let refused = refusedPlayer {
-                        VStack(spacing: baseSize * 0.14) {
-                            placeholder(LyricLayer.refusedTitle(refused), size: baseSize * 0.42, colour: fallback.rest)
-                            placeholder(LyricLayer.refusedDetail, size: baseSize * 0.24, colour: fallback.rest)
+                    ZStack {
+                        if swapped < 1 {
+                            placeholder("Nothing playing", size: baseSize * 0.42, colour: fallback.rest)
+                                .opacity(1 - swapped)
                         }
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: maxWidth)
-                        .opacity(presence)
-                    } else {
-                        placeholder("Nothing playing", size: baseSize * 0.42, colour: fallback.rest)
-                            .opacity(presence)
+                        if let refused = refusedPlayer {
+                            VStack(spacing: baseSize * 0.14) {
+                                placeholder(LyricLayer.refusedTitle(refused), size: baseSize * 0.42, colour: fallback.rest)
+                                placeholder(LyricLayer.refusedDetail, size: baseSize * 0.24, colour: fallback.rest)
+                            }
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: maxWidth)
+                            .opacity(swapped)
+                        } else {
+                            placeholder("Nothing playing", size: baseSize * 0.42, colour: fallback.rest)
+                                .opacity(swapped)
+                        }
                     }
+                    .opacity(presence)
                 }
             }
         case .loading:
-            ProgressView().controlSize(.large).tint(.white)
+            // Nothing for a quick lookup; for a slower one, the song's name,
+            // quietly, at the lyrics' own scale -- not a system spinner.
+            if let since = content.loadingSince {
+                let presence = Self.loadingPresence(age: wall - since)
+                if presence > 0.001 {
+                    placeholder([content.title, content.artist].filter { !$0.isEmpty }.joined(separator: " · "),
+                                size: baseSize * 0.34, colour: fallback.rest)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: maxWidth)
+                        .opacity(presence)
+                }
+            }
         case .plain:
             // No timed source has this track, so the words are shown as a
             // static block instead of nothing at all.
@@ -292,18 +352,25 @@ struct LyricLayer: View {
                         (age - Self.noticeHoldDuration) / Self.noticeFadeDuration
                     )
                     if presence > 0.01 {
-                        placeholder("Lyrics unavailable", size: baseSize * 0.34, colour: fallback.rest).opacity(presence)
+                        placeholder(content.offline ? Self.offlineNotice : "Lyrics unavailable",
+                                    size: baseSize * 0.34, colour: fallback.rest)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: maxWidth)
+                            .opacity(presence)
                     }
                 }
             }
         case .synced:
             let lines = SceneLines(lines: content.lines, romanized: content.romanized, fingerprint: key.fingerprint,
                                    machineTranslations: content.machineTranslations)
-            let gap = live && settings.showInterludes ? instrumentalGap(at: time) : nil
+            // The scene's own breaks, so an outgoing scene's dots fade out
+            // with it instead of vanishing.
+            let gap = settings.showInterludes
+                ? instrumentalGap(at: time, windows: content.vocalWindows, duration: content.duration) : nil
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
                 .overlay {
-                    creditsOverlay(lines, time: time)
+                    creditsOverlay(lines, content: content, time: time)
                 }
                 .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
@@ -314,26 +381,37 @@ struct LyricLayer: View {
     }
 
     @ViewBuilder
-    private func creditsOverlay(_ scene: SceneLines, time: Double) -> some View {
+    private func creditsOverlay(_ scene: SceneLines, content: LyricSceneContent, time: Double) -> some View {
         if LyricCreditCues.isOn {
-            let cues = LyricCreditCues.cues(in: scene.lines, title: nowPlaying.current?.title ?? "",
-                                            artist: nowPlaying.current?.artist ?? "")
+            // The scene's own song: an outgoing scene's credits keep its
+            // title and placement instead of taking the new song's.
+            let cues = LyricCreditCues.cues(in: scene.lines, title: content.title, artist: content.artist)
             if !cues.isEmpty {
                 let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
                 CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
-                             baseSize: baseSize, seed: trackSeed,
+                             baseSize: baseSize, seed: content.seed,
                              composition: composition(at: first), mood: mood)
             }
         }
     }
 
-    private func instrumentalGap(at time: Double) -> VCVocalGap? {
+    private func instrumentalGap(at time: Double, windows: [VCVocalWindow], duration: Double) -> VCVocalGap? {
         var gap = VCVocalGap()
-        let found = lyricsVM.vocalWindows.withUnsafeBufferPointer {
-            vc_vocal_gap($0.baseAddress, Int32($0.count), time, nowPlaying.current?.duration ?? 0, 2.4, &gap)
+        let found = windows.withUnsafeBufferPointer {
+            vc_vocal_gap($0.baseAddress, Int32($0.count), time, duration, 2.4, &gap)
         }
         return found != 0 ? gap : nil
     }
+
+    /// 0...1: the loading notice, `age` seconds into a lookup. Nothing for
+    /// a lookup that answers within `loadingDelay`, then a gentle fade in.
+    static func loadingPresence(age: Double) -> Double {
+        Easing.smoothstep((age - WallpaperMotion.loadingDelay) / WallpaperMotion.loadingIn)
+    }
+
+    /// No lyrics were found while the Mac was offline: say so, rather than
+    /// that the song has none.
+    static let offlineNotice = "You’re offline. Lyrics will load when you reconnect."
 
     /// Unsynced lyrics, all of them: the block scrolls slowly through the
     /// song in step with its progress, with soft edges, instead of stopping
@@ -1190,6 +1268,26 @@ final class LyricLayerCache: ObservableObject {
             }
         }
         return accentLab
+    }
+
+    private var shownTrack: Int?
+    private var shownKind: LyricSceneKey.Kind?
+    /// Wall time the current song's lyrics started loading, while they are.
+    private(set) var loadingSince: Double?
+
+    /// The scene kind to show for `kind` on this frame (see
+    /// `LyricLayer.sceneKey`), and when loading began.
+    func shown(_ kind: LyricSceneKey.Kind, track: Int, wall: Double) -> (kind: LyricSceneKey.Kind, loadingSince: Double?) {
+        if track != shownTrack { shownTrack = track; shownKind = nil; loadingSince = nil }
+        var kind = kind
+        if kind == .loading, shownKind == .missing { kind = .missing }
+        if kind == .loading {
+            if loadingSince == nil || wall < (loadingSince ?? wall) - 1 { loadingSince = wall }
+        } else {
+            loadingSince = nil
+        }
+        shownKind = kind
+        return (kind, loadingSince)
     }
 
     private var refused: PlayerKind?

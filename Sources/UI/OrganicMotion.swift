@@ -67,6 +67,15 @@ struct LyricSceneContent {
     var notFoundAt: Date?
     var idleSince: Date?
     var duration: Double = 0
+    /// The song's seed, for its credits: an outgoing scene keeps its own.
+    var seed = 0
+    /// Where the voice rests, for the interlude dots: an outgoing scene
+    /// keeps its own, so a skip during an intro fades them out.
+    var vocalWindows: [VCVocalWindow] = []
+    /// Wall time the lyrics started loading, for the loading notice.
+    var loadingSince: Double?
+    /// No lyrics were found while the Mac was offline.
+    var offline = false
 }
 
 /// Holds the scenes being replaced while they fade. Never publishes: it is
