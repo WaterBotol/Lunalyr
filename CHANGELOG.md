@@ -195,7 +195,6 @@ When merging, keep every entry and combine duplicate headings.
 - Lyrics without word timing: the line being replaced no longer brightens for a moment as the next line appears, and the previewed first word of a line stays in place instead of blinking out and jumping when its line starts.
 - Lyrics: a line now starts leaving a little earlier and lifts away as the next one arrives, so two lines no longer sit on top of each other in the middle of the screen at every change.
 - Lyrics: words in very fast lines stay on screen for a moment instead of flashing, and after two very short lines the line before them finishes leaving instead of being cut off.
-- Hinge, Broadside, Portal, Mosaic, Torque and Fable: lyrics without word timing now bring the line's words in together from its start, instead of building the line on guessed word times.
 - Wallpaper while lyrics load: no more system spinner flashing on every song. A lookup that takes longer than a moment fades in the song's name instead, and looking the lyrics up again for a song already showing "no lyrics" no longer brings a spinner back mid-song.
 - Wallpaper: when lyrics can't be found because the Mac is offline, it says so instead of "Lyrics unavailable".
 - Wallpaper: the "can't read this player" notice names the same player as the menu bar and hover controls, and replaces "Nothing playing" with a cross-fade instead of the notice dropping and rising again.
@@ -203,7 +202,7 @@ When merging, keep every entry and combine duplicate headings.
 - Wallpaper: "Wallpaper paused" now shows when you pause the wallpaper with a shortcut, and pressing a shortcut again while its note is showing (cycling layouts, say) changes the words in place instead of blinking the note away and back.
 - Lyrics: backing vocals keep to the other edge of the screen while a credit is showing, instead of landing on it.
 - Lyrics without word timing: the last line of a song, or a line before a long break, now lights its words over the time it takes to sing them instead of spreading the highlight across the whole outro or break. Line start times are unchanged.
-- Lyrics without word timing: ordinary lines no longer race through their words to the end long before the singing (test builds 61 and 62). Only the last line or a line before a long break is shortened, judged against the song's own pace, and not at all with "Treat long pauses as instrumental" off. Lyrics saved by those builds are corrected when shown.
+- Lyrics without word timing: ordinary lines no longer race through their words to the end long before the singing (test builds 61 to 65). In Portal, Hinge, Broadside, Mosaic, Torque and Fable those lines build word by word over the line again, instead of every word arriving within half a second of its start. Only the last line or a line before a long break is shortened, judged against the song's own pace, and not at all with "Treat long pauses as instrumental" off. Lyrics saved by those builds are corrected when shown.
 
 ## [1.0.0] - 2026-11-08
 
