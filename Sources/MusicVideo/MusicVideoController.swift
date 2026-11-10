@@ -357,6 +357,28 @@ final class MusicVideoController: ObservableObject {
         relook(song)
     }
 
+    // MARK: Search YouTube…
+
+    /// The playing song, for the Search YouTube… picker.
+    var searchSong: MusicVideoSong? { song }
+
+    /// The video the user picked or pasted for the playing song, if any.
+    var pickedVideoID: String? { resolver.links.videoID(for: song?.key) }
+
+    /// What the picker's search found for `query`.
+    func searchYouTube(_ query: String) async -> MusicVideoSearchOutcome {
+        await resolver.searchResults(for: query)
+    }
+
+    /// Uses a video picked in Search YouTube… for the song it was searched
+    /// for, exactly as a pasted link. False when that song is no longer
+    /// the one playing (or the ID is not a video's).
+    @discardableResult
+    func usePickedVideo(_ videoID: String, forSong songKey: String) -> Bool {
+        guard song?.key == songKey, YouTubeVideoID.isValid(videoID) else { return false }
+        return usePastedLink(videoID)
+    }
+
     private func relook(_ song: MusicVideoSong) {
         stillCheck?.cancel()
         pastedLooksStill = false
