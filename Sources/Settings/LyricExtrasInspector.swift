@@ -258,21 +258,94 @@ struct RememberedStyleNote: View {
     }
 }
 
-/// How many follow the shared room, with its link.
+/// What a status row in Share says: sharing's relay state, or whether
+/// Discord is there.
+@MainActor
+struct ShareStatusRow: Hashable {
+    let text: String
+    let symbol: String
+    let status: LunalyrStatus
+
+    /// Listen-along sharing, worded as the menu-bar panel words it. Nil is
+    /// sharing switched on with nothing started yet.
+    static func sharing(_ state: ListenAlong.SharingState?) -> ShareStatusRow {
+        let state = state ?? .waitingForMusic
+        let text = MenuBarListenAlong.sharingTitle(state), symbol = MenuBarListenAlong.sharingSymbol(state)
+        switch state {
+        case .waitingForMusic: return .init(text: text, symbol: symbol, status: .neutral)
+        case .retrying: return .init(text: text, symbol: symbol, status: .warning)
+        case .live: return .init(text: text, symbol: symbol, status: .success)
+        }
+    }
+
+    /// Rich Presence's connection. Shown only while it is switched on, so
+    /// `.off` is the moment before it starts.
+    static func discord(_ status: DiscordPresence.ConnectionStatus) -> ShareStatusRow {
+        switch status {
+        case .off, .waitingForDiscord:
+            return .init(text: "Waiting for Discord", symbol: "hourglass", status: .neutral)
+        case .connected(let name?) where !name.trimmingCharacters(in: .whitespaces).isEmpty:
+            return .init(text: "Connected as \(name)", symbol: "checkmark.circle.fill", status: .success)
+        case .connected:
+            return .init(text: "Connected", symbol: "checkmark.circle.fill", status: .success)
+        }
+    }
+
+    /// Under the Discord row while Discord hasn't answered.
+    static let waitingNote = "Open the Discord desktop app; Lunalyr connects once it\u{2019}s running."
+}
+
+/// A status row's chip, which cross-fades as the state changes.
+private struct ShareStatusChip: View {
+    let row: ShareStatusRow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        StatusChip(row.status, row.text, symbol: row.symbol)
+            .id(row)
+            .transition(.opacity)
+            .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: row)
+    }
+}
+
+/// Whether Discord is there for the presence.
+@MainActor
+struct DiscordConnectionStatus: View {
+    let status: DiscordPresence.ConnectionStatus
+
+    var body: some View {
+        let row = ShareStatusRow.discord(status)
+        LabeledContent {
+            ShareStatusChip(row: row)
+        } label: {
+            Text("Connection")
+        }
+        if row.status != .success {
+            InspectorCaption(ShareStatusRow.waitingNote)
+                .revealRow()
+        }
+    }
+}
+
+/// Sharing's state on the relay -- waiting for music, retrying, or how many
+/// follow the room -- with its link.
 @MainActor
 struct ListenSharingStatus: View {
     @ObservedObject var listen: ListenAlong
 
     var body: some View {
         LabeledContent {
-            if let link = listen.webPageURL {
-                Button("Copy Link") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(link.absoluteString, forType: .string)
+            HStack(spacing: LunalyrDesign.Spacing.small) {
+                ShareStatusChip(row: ShareStatusRow.sharing(listen.sharingState))
+                if let link = listen.webPageURL {
+                    Button("Copy Link") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(link.absoluteString, forType: .string)
+                    }
                 }
             }
         } label: {
-            Text(listen.room == nil ? "Starts when something plays" : MenuBarListenAlong.sharingTitle(listeners: listen.listeners))
+            Text("Sharing")
         }
     }
 }
@@ -291,6 +364,7 @@ struct ShareInspector: View {
                              more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with Play this song and Get Lunalyr buttons for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
             if extras.showsDiscordPresence {
                 Group {
+                    DiscordConnectionStatus(status: extras.discordStatus)
                     ChoiceSegments("Status shows", selection: $extras.discordStatusText,
                                    cases: DiscordStatusText.allCases, label: \.title)
                     Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
@@ -357,6 +431,7 @@ struct ShareInspector: View {
         }
         // Discord's and listen-along's options glide in under their switches.
         .lunalyrReveal(extras.showsDiscordPresence)
+        .lunalyrReveal(extras.discordStatus)
         .lunalyrReveal(extras.listenSharing)
         .lunalyrReveal(extras.listenAlongAvailable)
         .lunalyrReveal(playing.current == nil)
@@ -455,8 +530,10 @@ struct ExtrasInspector: View {
 
     /// Under the shortcuts. The rows above show each combination as the
     /// keyboard in use types it (⌃⌥⌘Ü for ⌃⌥⌘[ on a German one), so this
-    /// names no key of Lunalyr's: only the arrows it leaves alone.
-    static let shortcutsCaption = "They work from any app; switch off any you need for something else. Sync changes are saved for this song’s lyric source, like the song offset in Timing & sources. None of them use the arrow keys, which window managers such as Rectangle use with ⌃⌥⌘ to move windows between displays."
+    /// names no key of Lunalyr's: only the arrows it leaves alone. The card
+    /// shortcut is named as its row names it (`GlobalHotkeys`), and does what
+    /// the Share page's button does.
+    static let shortcutsCaption = "They work from any app; switch off any you need for something else. \(GlobalHotkeys.Action.copyCard.title) opens the lyric card window for the line playing, like Open Lyric Card\u{2026} in \(SettingsPage.share.title). Sync changes are saved for this song’s lyric source, like the song offset in \(SettingsPage.lyrics.title). None of them use the arrow keys, which window managers such as Rectangle use with ⌃⌥⌘ to move windows between displays."
 
     /// The caption under "Hide lyrics while a display is mirrored".
     static func mirroringNote(mirroring: Bool, hides: Bool, showsAnyway: Bool) -> String {

@@ -97,7 +97,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .readings: return ["romanisation", "romanization", "pinyin", "translation", "japanese", "korean", "readings"]
         case .players: return ["player", "spotify", "music app", "automation", "permission", "access", "apple music", "tidal"]
         case .general: return ["appearance", "look", "theme", "calm", "bold", "launch at login", "startup", "updates", "welcome", "version"]
-        case .extras: return ["menu bar", "shortcut", "hotkey", "keyboard", "hide lyrics", "pause wallpaper", "mirroring", "line"]
+        case .extras: return ["menu bar", "shortcut", "hotkey", "keyboard", "hide lyrics", "pause wallpaper", "mirroring", "line", "lyric card"]
         case .share: return ["discord", "rich presence", "lyric card", "gif", "mp4", "png", "share", "copy", "save", "status"]
         case .performance: return ["performance", "battery", "power", "frame rate", "gpu", "low power", "energy", "fps"]
         case .about: return ["about", "credits", "licence", "license", "version", "website"]

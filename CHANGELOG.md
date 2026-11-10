@@ -95,6 +95,9 @@ When merging, keep every entry and combine duplicate headings.
 - Timing & sources has Tap to Sync Lyrics… and its Undo, and the song offset slider stretches to ±30 s when an offset needs it.
 - The welcome's sample lyric plays twice and then rests, and the word being sung is the brightest. Onboarding's buttons and the Pick a look status fade instead of popping, and VoiceOver moves to each step's title once it has settled.
 - The colour preview in Lyric style redraws less often, and not at all under Reduce Motion or while Settings is in the background.
+- Discord & lyric card shows whether Discord is connected ("Waiting for Discord" or "Connected as …") and whether listen-along sharing is waiting for music, can't reach the relay, or live with its listeners.
+- Lyric style marks the word entrances a layout doesn't use on word-timed lyrics ("whole lines only"), with a note saying why; such an entrance no longer locks Reveal sung words.
+- The shortcuts note in Menu bar & shortcuts now says what Open lyric card does, and searching Settings for "lyric card" finds that page too.
 
 ### Fixed
 
