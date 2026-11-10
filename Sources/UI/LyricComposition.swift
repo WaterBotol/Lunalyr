@@ -195,6 +195,10 @@ struct LyricLineView: View {
     var rollingLineEnds: [TimedWordKey: Double] = [:]
     /// Rolling stages: the tokens each glued run is made of.
     var parts: [TimedWordKey: [LyricsFetcher.Word]] = [:]
+    /// Bracketed words are lifted out as backing vocals. Credits and the
+    /// song's title are not sung, so their brackets ("Song (Remix)",
+    /// "(feat. …)") stay in the line.
+    var liftsBackingVocals = true
     @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
 
     /// The words Echo repeats, and how they run together.
@@ -206,7 +210,7 @@ struct LyricLineView: View {
     var body: some View {
         // Bracketed backing vocals are lifted out and drawn apart, behind the
         // lead (see BackingVocals). Only word-timed lines are split.
-        let split = wordTimed && firstRunOnly == nil && BackingVocals.isOn
+        let split = Self.liftsBacking(wordTimed: wordTimed, firstRunOnly: firstRunOnly, allowed: liftsBackingVocals)
             ? BackingVocals.split(words, glue: glue) : nil
         if let split, !split.backing.isEmpty {
             ZStack {
@@ -217,6 +221,13 @@ struct LyricLineView: View {
         } else {
             lineBody(words: words, glue: glue)
         }
+    }
+
+    /// Whether a line's bracketed words are drawn apart as backing vocals:
+    /// only word-timed lines, not a first-run preview, with the setting on.
+    static func liftsBacking(wordTimed: Bool, firstRunOnly: Double?, allowed: Bool,
+                             settingOn: Bool = BackingVocals.isOn) -> Bool {
+        allowed && wordTimed && firstRunOnly == nil && settingOn
     }
 
     @ViewBuilder
@@ -407,6 +418,13 @@ struct EchoBackdrop: View {
         return total > 0 ? shown / total : 1
     }
 
+    /// Each repeat's drift seed. Never traps: any seed works, however large
+    /// or negative (a seed's multiple used to overflow into a negative
+    /// number, which `UInt64` refuses).
+    static func wanderSeed(_ seed: Int, slot: Int) -> UInt64 {
+        UInt64(seed.magnitude) &* 31 &+ UInt64(slot.magnitude)
+    }
+
     /// Fixed rather than random: a line must set the same way every frame,
     /// and `TimelineView` rebuilds this view continuously.
     private static let variants: [Ghost] = [
@@ -426,13 +444,13 @@ struct EchoBackdrop: View {
     var body: some View {
         // The seed rotates which variant leads, so two lines in a row do not
         // arrange themselves identically.
-        let offset = abs(seed) % Self.variants.count
+        let offset = Int(seed.magnitude % UInt(Self.variants.count))
         let drift = reduceMotion ? 0.0 : 1.0
-        let tint = ink.sample(slot: 0.5, seed: UInt64(abs(seed))).rest
+        let tint = ink.sample(slot: 0.5, seed: UInt64(seed.magnitude)).rest
         ZStack {
             ForEach(0..<Self.variants.count, id: \.self) { slot in
                 let ghost = Self.variants[(slot + offset) % Self.variants.count]
-                let wander = UInt64(abs(seed) &* 31 &+ slot)
+                let wander = Self.wanderSeed(seed, slot: slot)
                 let x = baseSize * ghost.dx * 3.2 + CGFloat(drift * vc_noise2(wander, time * 0.09)) * baseSize * 0.10
                 let y = baseSize * ghost.dy * 1.5 + CGFloat(drift * vc_noise2(wander ^ 0x5EED, time * 0.07)) * baseSize * 0.06
                 let stage = CGSize(width: stageSize.width * 2 / 3, height: stageSize.height * 2 / 3)

@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import VersoCustom
 
@@ -143,5 +144,35 @@ final class CreditsLayerTests: XCTestCase {
         // Syllables of one word still join.
         let syllables = ["beau", "ti", "ful"].enumerated().map { LyricsFetcher.Word(text: $1, start: Double($0), end: Double($0) + 0.9) }
         XCTAssertEqual(StageRun.make(syllables, glue: [false, true, true]).map(\.text), ["beautiful"])
+    }
+
+    /// Credits in the Echo layout used to take a string's `hashValue` as
+    /// their seed. Most such seeds overflowed Echo's `abs(seed) * 31` into a
+    /// negative number, and converting that to `UInt64` crashed the app as
+    /// the song's opening title cue was drawn.
+    @MainActor
+    func testEchoTakesAnySeedWithoutTrapping() {
+        XCTAssertEqual(EchoBackdrop.wanderSeed(41_234, slot: 3), UInt64(41_234 * 31 + 3), "Ordinary seeds drift as before")
+        for seed in [Int.max, Int.min, -7, 0, 7_381_234_567_890_123_456, -5_102_938_475_610_293_847] {
+            _ = (0..<5).map { EchoBackdrop.wanderSeed(seed, slot: $0) }
+            let echo = EchoBackdrop(text: "Title - Artist", font: { .system(size: $0) }, baseSize: 40,
+                                    stageSize: CGSize(width: 800, height: 400), seed: seed, presence: 1, time: 3)
+            let renderer = ImageRenderer(content: echo.frame(width: 800, height: 400))
+            XCTAssertNotNil(renderer.cgImage, "seed \(seed)")
+        }
+    }
+
+    /// A title such as "Song (Remix)" used to lose "(Remix)" to the backing
+    /// vocal layer, drawn small and apart from the rest of the title.
+    @MainActor
+    func testBracketsInATitleOrCreditStayInTheLine() {
+        let cue = LyricCreditCues.cues(in: [], title: "Song (Remix)", artist: "Band")[0]
+        XCTAssertFalse(BackingVocals.split(cue.words, glue: []).backing.isEmpty, "Lyrics would lift this group")
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil,
+                                                  allowed: CreditsLayer.liftsBackingVocals, settingOn: true))
+        XCTAssertTrue(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil, allowed: true, settingOn: true))
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: false, firstRunOnly: nil, allowed: true, settingOn: true))
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: 0.5, allowed: true, settingOn: true))
+        XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil, allowed: true, settingOn: false))
     }
 }

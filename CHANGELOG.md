@@ -59,6 +59,7 @@ When merging, keep every entry and combine duplicate headings.
 - The song in a lyric card MP4 is no longer dropped when its recording doesn't cover every selected line: the missing parts are silent and the export still says to record it again.
 - Uses less battery while idle: a song paused for over a minute is checked every 10 seconds instead of every 2 (play, pause and track changes still show at once), and the hover check slows down while the pointer rests.
 - Uses less memory over a long day: cover art kept for replays is capped, and large library covers are decoded once, at the size shown, away from the wallpaper's drawing.
+- Uses less battery while the displays sleep or the screen is locked: the music player is re-checked every 10 seconds instead of every 2, and at once when the screens wake.
 
 ### Fixed
 
@@ -74,6 +75,10 @@ When merging, keep every entry and combine duplicate headings.
 - First launch: resting the pointer on the desktop while the welcome was open could make macOS ask whether Lunalyr may control Music before the welcome had explained why. The desktop player now appears on hover only once the welcome is finished.
 - Launch at login: a warning from a failed attempt no longer stays on screen after one that worked. When Lunalyr is switched off in System Settings › Login Items, Settings now says so with an Open Login Items button instead of showing the switch as done, and the switch follows changes made in System Settings while Lunalyr is open.
 - Imported wallpaper: importing another picture or video now deletes the copy Lunalyr kept of the previous one, instead of keeping every import in Application Support. If the kept copy goes missing, the wallpaper falls back to a generated one instead of black, and Settings says the file is missing and asks for it again.
+- Lyrics from a broken source with an impossibly late line time no longer crash Lunalyr when that line or the break before it is shown.
+- Song titles and credits: brackets such as "(Remix)" or "(feat. …)" now stay in the title shown as a song starts, instead of being drawn small and apart like a backing vocal.
+- Hinge, Broadside, Portal, Mosaic and Torque: lyrics whose word times run out of order no longer crash Lunalyr; their words now appear in reading order.
+- Echo: Lunalyr could crash as a song started when the layout (or the backing-vocal style) was Echo, while drawing the song's title in the background. Credits now also look the same on every launch.
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.
 - Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
 - Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.

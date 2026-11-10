@@ -104,6 +104,36 @@ final class StageLyricSnapshotTests: XCTestCase {
             try rep?.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: directory + "/stage.png"))
         }
     }
+
+    /// A line whose word times run backwards (left as it came when its word
+    /// timing fails validation) used to crash Hinge, Broadside, Portal,
+    /// Mosaic and Torque once a later word had arrived before an earlier one.
+    func testWordsOutOfOrderNeverCrashTheStageLayouts() throws {
+        let words = [LyricsFetcher.Word(text: "hello", start: 12, end: 13), LyricsFetcher.Word(text: "world", start: 10, end: 11),
+                     LyricsFetcher.Word(text: "again", start: 11, end: 12)]
+        let runs = StageRun.make(words, glue: [false, false, false])
+        XCTAssertEqual(StageLyricView.shownRuns(runs, at: 10.5).map(\.id), [], "Held back until the first word arrives")
+        XCTAssertEqual(StageLyricView.shownRuns(runs, at: 12.5).map(\.id), [0, 1, 2])
+        for composition in [LyricComposition.hinge, .broadside, .portal, .mosaic, .torque] {
+            for time in [10.5, 11.5, 12.5] {
+                let view = StageLyricView(words: words, glue: [false, false, false], time: time,
+                                          stageSize: CGSize(width: 640, height: 300), baseSize: 40, mood: .neutral,
+                                          composition: composition, seed: 3)
+                    .environment(\.lyricInk, LyricInk())
+                // Laid out and drawn in a window, as on the desktop.
+                let hosting = NSHostingView(rootView: view)
+                let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 300),
+                                      styleMask: .borderless, backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = hosting
+                hosting.layoutSubtreeIfNeeded()
+                hosting.display()
+                window.close()
+            }
+        }
+        let ordered = StageRun.make(words.sorted { $0.start < $1.start }, glue: [false, false, false])
+        XCTAssertEqual(StageLyricView.shownRuns(ordered, at: 11.5).map(\.text), ["world", "again"], "In-order lines are unchanged")
+    }
 }
 
 @MainActor
@@ -203,4 +233,5 @@ final class CardLogoSnapshotTests: XCTestCase {
         let wide = try XCTUnwrap(LyricCard.stillPNG(content, scale: 0.5))
         try wide.write(to: URL(fileURLWithPath: dir + "/card-wide.png"))
     }
+
 }

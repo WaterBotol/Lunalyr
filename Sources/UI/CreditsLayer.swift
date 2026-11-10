@@ -109,6 +109,10 @@ struct CreditsLayer: View {
     let composition: LyricComposition
     let mood: TrackMood
 
+    /// Credits are not sung: "Song (Remix)" keeps its brackets in the line
+    /// instead of "(Remix)" being drawn small and apart as a backing vocal.
+    static let liftsBackingVocals = false
+
     var body: some View {
         let style = BackingVocals.style(forLead: composition)
         // Thin bands along the top and bottom edges, clear of the middle
@@ -120,7 +124,8 @@ struct CreditsLayer: View {
                 if level > 0.004 {
                     LyricLineView(words: cue.words, time: time, stageSize: box, baseSize: baseSize * 0.72, mood: mood,
                                   composition: style, seed: seed &+ cue.id, presence: 1,
-                                  lineEnd: cue.end, exitStart: cue.end, highlightFrom: cue.highlightFrom)
+                                  lineEnd: cue.end, exitStart: cue.end, highlightFrom: cue.highlightFrom,
+                                  liftsBackingVocals: CreditsLayer.liftsBackingVocals)
                         .frame(width: box.width, height: box.height)
                         .layerExit(cue.title != nil ? .title : .credit(towardTop: cue.id.isMultiple(of: 2)),
                                    progress: LyricCreditCues.exitProgress(of: cue, at: time), size: box.height)

@@ -219,6 +219,8 @@ final class NowPlayingMonitor: ObservableObject {
     private var anchorIsEstimate = false
     private var timer: Timer?
     private var ticks = 0
+    /// Every display asleep, locked or showing the screen saver.
+    private var screensHidden = false
     /// When the player on screen last stopped playing (uptime), while it
     /// stays paused: after `restingAfter` a player that announces its own
     /// changes is re-read like the background ones, not every tick.
@@ -286,6 +288,10 @@ final class NowPlayingMonitor: ObservableObject {
         // Delivers the current choice at once, then each change.
         services.followedPlayers
             .sink { [weak self] players in self?.follow(players) }
+            .store(in: &cancellables)
+        services.screensHidden
+            .removeDuplicates()
+            .sink { [weak self] hidden in self?.setScreensHidden(hidden) }
             .store(in: &cancellables)
         runningPlayers = Set(followedPlayers.filter { environment.isRunning($0.bundleID) })
         if runningPlayers.isEmpty { clearPlayback() }
@@ -928,6 +934,26 @@ final class NowPlayingMonitor: ObservableObject {
 
     // MARK: - Re-sync timer
 
+    /// How much slower the re-sync runs while every display is asleep or
+    /// locked: nothing shows the lyrics then, and the players still announce
+    /// play, pause and track changes themselves.
+    static let hiddenPollFactor: TimeInterval = 5
+
+    /// The re-sync timer's interval, nil while it is not running.
+    var resyncInterval: TimeInterval? { timer?.timeInterval }
+
+    private func setScreensHidden(_ hidden: Bool) {
+        guard hidden != screensHidden else { return }
+        screensHidden = hidden
+        // Restart the timer at the new pace.
+        if isPolling {
+            isPolling = false
+            updatePolling()
+        }
+        // Back on screen: catch up now rather than at the next tick.
+        if !hidden { refresh() }
+    }
+
     private func updatePolling() {
         let shouldPoll = started && !pollablePlayers.isEmpty
         guard shouldPoll != isPolling else { return }
@@ -935,10 +961,11 @@ final class NowPlayingMonitor: ObservableObject {
         timer?.invalidate()
         timer = nil
         guard shouldPoll, let pollInterval else { return }
-        let timer = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
+        let interval = screensHidden ? pollInterval * Self.hiddenPollFactor : pollInterval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
-        timer.tolerance = pollInterval * 0.1
+        timer.tolerance = interval * 0.1
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }

@@ -311,7 +311,7 @@ struct LyricLayer: View {
             if !cues.isEmpty {
                 let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
                 CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
-                             baseSize: baseSize, seed: nowPlaying.current.map { "\($0.artist)|\($0.title)".hashValue } ?? 0,
+                             baseSize: baseSize, seed: trackSeed,
                              composition: composition(at: first), mood: mood)
             }
         }
