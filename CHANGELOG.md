@@ -130,6 +130,7 @@ When merging, keep every entry and combine duplicate headings.
 - Lyrics: skipping a song during an instrumental intro or outro fades the interlude dots out instead of cutting them, they leave more gently, and credits on the old song no longer switch to the new song's title while they fade.
 - Wallpaper: "Wallpaper paused" now shows when you pause the wallpaper with a shortcut, and pressing a shortcut again while its note is showing (cycling layouts, say) changes the words in place instead of blinking the note away and back.
 - Lyrics: backing vocals keep to the other edge of the screen while a credit is showing, instead of landing on it.
+- Lyrics without word timing: the last line of a song, or a line before a long break, now lights its words over the time it takes to sing them instead of spreading the highlight across the whole outro or break. Line start times are unchanged.
 
 ## [1.0.0] - 2026-11-08
 

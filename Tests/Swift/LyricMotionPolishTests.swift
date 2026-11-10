@@ -419,4 +419,26 @@ final class LyricMotionPolishTests: XCTestCase {
         // A credit long gone does not move it.
         XCTAssertTrue(BackingVocalLayer.onTop(group, preferred: true, credits: [LyricCreditBand(start: 0, end: 5, top: true)]))
     }
+
+    // MARK: Estimated word timing
+
+    /// The last LRC line of a song runs to the end of the track: its
+    /// estimated words and sweep must finish in a natural time, not across
+    /// minutes of outro. The line's own times are unchanged.
+    func testTheLastLineIsNotSpreadOverTheOutro() {
+        let text = "And I will always love you"
+        let last = LyricsFetcher.makeLine(text: text, start: 180, end: 300)
+        XCTAssertEqual(last.start, 180)
+        XCTAssertEqual(last.end, 300)
+        let span = LyricsFetcher.estimatedSingingSpan(of: text)
+        XCTAssertLessThan(span, 8)
+        XCTAssertGreaterThan(span, 3)
+        XCTAssertEqual(last.words.last?.end ?? 0, 180 + span, accuracy: 1e-6)
+        XCTAssertEqual(LyricPhraseTiming.sweep(of: last, at: 180 + span), 1)
+        XCTAssertEqual(LyricPhraseTiming.sweep(of: last, at: 180 + span / 2), 0.5, accuracy: 1e-9)
+        // An ordinary line keeps its window as before.
+        let ordinary = LyricsFetcher.makeLine(text: text, start: 10, end: 13)
+        XCTAssertEqual(ordinary.words.last?.end ?? 0, 10 + 3 * 0.88, accuracy: 1e-6)
+        XCTAssertEqual(LyricPhraseTiming.sweep(of: ordinary, at: 11.5), 0.5, accuracy: 1e-9)
+    }
 }

@@ -106,8 +106,13 @@ struct LyricPhraseTiming {
     let exitStart: Double
     var presence: Double { progress * (1 - exit) }
 
+    /// How far through a line-only lyric the sweep is: across the time it
+    /// most likely takes to sing (`LyricsFetcher.estimatedSingingSpan`), not
+    /// a window that runs on through a break or the end of the song.
     static func sweep(of line: LyricsFetcher.Line, at time: Double) -> Double {
-        min(1, max(0, (time - line.start) / max(0.001, line.end - line.start)))
+        let end = line.wordTimed ? line.end
+            : min(line.end, line.start + LyricsFetcher.estimatedSingingSpan(of: line.text))
+        return min(1, max(0, (time - line.start) / max(0.001, end - line.start)))
     }
 
     static let exitDuration = 0.46
