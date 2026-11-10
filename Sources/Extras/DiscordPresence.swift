@@ -444,9 +444,11 @@ final class DiscordPresence {
         case .join(let secret):
             let listen = ListenAlong.shared
             if !listen.isAvailable {
-                extras?.post("To listen along, add a listen-along relay in Settings › Share", symbol: "person.2")
+                extras?.post("To listen along, add a listen-along relay in Settings › Share", symbol: "person.2",
+                             origin: .elsewhere)
             } else if !listen.requestJoin(discordSecret: secret) {
-                extras?.post("That Discord invite isn\u{2019}t a listen-along room", symbol: "person.2.slash")
+                extras?.post("That Discord invite isn\u{2019}t a listen-along room", symbol: "person.2.slash",
+                             origin: .elsewhere)
             }
         case .joinRequest(let userID, _):
             guard ListenAlong.shared.room != nil else { return }

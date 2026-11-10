@@ -27,7 +27,7 @@ final class GlobalHotkeys: ObservableObject {
             case .syncEarlier: return "Lyrics 0.1 s earlier for this song"
             case .syncLater: return "Lyrics 0.1 s later for this song"
             case .cycleLayout: return "Next layout"
-            case .copyCard: return "Copy a lyric card"
+            case .copyCard: return "Open lyric card"
             case .pauseWallpaper: return "Pause or resume the wallpaper"
             case .tapSyncLyrics: return "Tap to sync lyrics"
             case .toggleMusicVideo: return "Music video on or off"
@@ -279,16 +279,19 @@ final class GlobalHotkeys: ObservableObject {
     func perform(_ raw: UInt32) {
         guard registered, let action = Action(rawValue: raw), active.contains(action) else { return }
         let extras = LunalyrExtras.shared
-        switch action {
-        case .toggleLyrics: extras.toggleLyrics()
-        case .syncEarlier: extras.nudgeSync(by: 0.1)
-        case .syncLater: extras.nudgeSync(by: -0.1)
-        case .cycleLayout: extras.cycleLayout()
-        case .copyCard: extras.copyLyricCard()
-        case .pauseWallpaper: extras.toggleWallpaperPause()
-        case .tapSyncLyrics: LyricTapSyncController.shared.toggle()
-        case .toggleMusicVideo: extras.toggleMusicVideo()
-        case .nextVisualizer: extras.nextVisualizer()
+        // A shortcut is pressed in another app: its note goes to the HUD.
+        extras.performing(from: .elsewhere) {
+            switch action {
+            case .toggleLyrics: extras.toggleLyrics()
+            case .syncEarlier: extras.nudgeSync(by: 0.1)
+            case .syncLater: extras.nudgeSync(by: -0.1)
+            case .cycleLayout: extras.cycleLayout()
+            case .copyCard: extras.copyLyricCard()
+            case .pauseWallpaper: extras.toggleWallpaperPause()
+            case .tapSyncLyrics: LyricTapSyncController.shared.toggle()
+            case .toggleMusicVideo: extras.toggleMusicVideo()
+            case .nextVisualizer: extras.nextVisualizer()
+            }
         }
     }
 }

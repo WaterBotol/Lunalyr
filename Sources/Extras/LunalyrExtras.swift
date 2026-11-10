@@ -55,6 +55,18 @@ final class LunalyrExtras: ObservableObject {
         let text: String
         let symbol: String
         let at: Double
+        /// The action HUD showed it too, so the wallpaper can leave it out.
+        var inHUD = false
+    }
+
+    /// Where an action came from, which decides whether its note also goes
+    /// to the action HUD.
+    enum NoteOrigin: Equatable {
+        /// A control in a Lunalyr window or menu the user is looking at.
+        case window
+        /// A global shortcut, a Shortcuts action, a `lunalyr://` link, or
+        /// something that happened on its own (listen-along ending).
+        case elsewhere
     }
 
     static let menuBarLengthRange: ClosedRange<Double> = 16...64
@@ -233,6 +245,14 @@ final class LunalyrExtras: ObservableObject {
     /// Speaks each note to VoiceOver: the wallpaper that draws it is
     /// decoration, hidden from assistive technology. Tests listen in.
     var announce: (String) -> Void = LunalyrExtras.announceToVoiceOver
+    /// Shows a note in the action HUD. Nothing until `start` (so unit tests
+    /// never open a window); tests set their own.
+    var presentHUD: ((_ text: String, _ symbol: String) -> Void)?
+    /// Whether the wallpaper under the pointer is covered by windows. False
+    /// until `start`; tests set their own.
+    var wallpaperCovered: () -> Bool = { false }
+    /// The origin of the action running now; see `performing(from:_:)`.
+    private(set) var actionOrigin: NoteOrigin = .window
 
     private let defaults: UserDefaults
     private var started = false
@@ -280,6 +300,13 @@ final class LunalyrExtras: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        if presentHUD == nil { presentHUD = { ActionHUD.shared.show($0, symbol: $1) } }
+        wallpaperCovered = {
+            let coverage = DesktopCoverageMonitor.shared
+            if coverage.systemHidden { return true }
+            guard let display = ActionHUD.displayWithPointer() else { return false }
+            return coverage.hiddenDisplays.contains(display)
+        }
         Self.forgetSavedPause(in: defaults)
         refreshMirroring()
         screenObserver = NotificationCenter.default.addObserver(
@@ -380,9 +407,9 @@ final class LunalyrExtras: ObservableObject {
         if lyricsVisible { post("Lyrics shown while mirroring", symbol: "eye") }
     }
 
-    /// A paused desktop draws no further frames, so its note shows only in
-    /// the Settings preview; VoiceOver hears it either way. The note shows
-    /// the state just reached, not the action that would undo it.
+    /// A paused desktop draws no further frames, so its note shows in the
+    /// action HUD (and the Settings preview); VoiceOver hears it either way.
+    /// The note shows the state just reached, not the action that would undo it.
     func toggleWallpaperPause() {
         wallpaperPaused.toggle()
         post(wallpaperPaused ? "Wallpaper paused" : "Wallpaper resumed", symbol: pauseStateSymbol)
@@ -440,8 +467,33 @@ final class LunalyrExtras: ObservableObject {
         LyricCardPopoutController.shared.show()
     }
 
-    func post(_ text: String, symbol: String) {
-        note = Note(text: text, symbol: symbol, at: Date().timeIntervalSinceReferenceDate)
+    /// Runs `body` as an action from `origin`: a global shortcut, Shortcuts
+    /// action or link runs its action through here, so the note it posts
+    /// shows in the action HUD rather than only on a wallpaper that windows
+    /// may hide.
+    @discardableResult
+    func performing<T>(from origin: NoteOrigin, _ body: () -> T) -> T {
+        let outer = actionOrigin
+        actionOrigin = origin
+        defer { actionOrigin = outer }
+        return body()
+    }
+
+    /// Whether a note belongs in the action HUD as well as on the wallpaper:
+    /// when the action came from outside Lunalyr's windows, or the wallpaper
+    /// is paused (it draws nothing new) or covered where the user is looking.
+    nonisolated static func showsInHUD(origin: NoteOrigin, wallpaperPaused: Bool, wallpaperCovered: Bool) -> Bool {
+        origin == .elsewhere || wallpaperPaused || wallpaperCovered
+    }
+
+    /// Confirms what just happened: on the wallpaper, to VoiceOver, and in
+    /// the action HUD when the wallpaper is unlikely to be seen. `origin`
+    /// defaults to that of the action running (see `performing(from:_:)`).
+    func post(_ text: String, symbol: String, origin: NoteOrigin? = nil) {
+        let inHUD = Self.showsInHUD(origin: origin ?? actionOrigin, wallpaperPaused: wallpaperPaused,
+                                    wallpaperCovered: wallpaperCovered())
+        if inHUD { presentHUD?(text, symbol) }
+        note = Note(text: text, symbol: symbol, at: Date().timeIntervalSinceReferenceDate, inHUD: inHUD && presentHUD != nil)
         announce(text)
     }
 

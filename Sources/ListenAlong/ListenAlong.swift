@@ -229,7 +229,8 @@ final class ListenAlong: ObservableObject {
             self.follower = nil
             self.followerChanges = nil
             self.startIfNeeded()
-            LunalyrExtras.shared.post(Self.endNote(phase, name: name, connected: connected), symbol: "person.2.slash")
+            LunalyrExtras.shared.post(Self.endNote(phase, name: name, connected: connected), symbol: "person.2.slash",
+                                      origin: .elsewhere)
         }
         self.follower = follower
         followerChanges = follower.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
