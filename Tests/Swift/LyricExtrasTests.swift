@@ -542,7 +542,7 @@ final class LyricExtrasTests: XCTestCase {
         let fake = FakeRegistrar()
         let hotkeys = GlobalHotkeys(defaults: defaults, registrar: fake.registrar)
         var entries = MenuBarLyricTicker.menuEntries(extras: extras, hotkeys: hotkeys)
-        XCTAssertEqual(entries.map { $0?.title }, ["Hide Lyrics", "Pause Wallpaper", "Copy Lyric Card", nil,
+        XCTAssertEqual(entries.map { $0?.title }, ["Hide Lyrics", "Pause Wallpaper", "Open Lyric Card…", nil,
                                                    "Settings…", "Hide This Line from the Menu Bar"])
         XCTAssertTrue(entries.allSatisfy { $0?.key == nil }, "no keys shown while the shortcuts are off")
 

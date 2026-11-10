@@ -80,7 +80,7 @@ struct MenuBarWallpaperControls: View {
                 .accessibilityHint(extras.lyricsVisible ? "Hides the lyrics on every wallpaper"
                                    : extras.hiddenByMirroring ? "Shows the lyrics on every display until mirroring ends"
                                    : "Shows the lyrics again")
-                QuickToggle("Copy card", symbol: "photo.on.rectangle", detail: shortcut(.copyCard),
+                QuickToggle("Lyric card", symbol: "photo.on.rectangle", detail: shortcut(.copyCard),
                             accessibilityTitle: LunalyrExtras.Titles.copyCard) { extras.copyLyricCard() }
                     .disabled(playing.current == nil)
                     .accessibilityHint(playing.current == nil ? "Available while a song plays"

@@ -46,7 +46,7 @@ final class LunalyrExtras: ObservableObject {
         static let showLyricsAnyway = "Show Lyrics Anyway"
         static let pauseWallpaper = "Pause Wallpaper"
         static let resumeWallpaper = "Resume Wallpaper"
-        static let copyCard = "Copy Lyric Card"
+        static let copyCard = "Open Lyric Card…"
         static let settings = "Settings…"
     }
 
