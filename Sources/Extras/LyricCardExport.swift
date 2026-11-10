@@ -262,9 +262,27 @@ extension LyricCard {
         return buffer
     }
 
+    /// What an export is doing, for the status under the bar.
+    enum ExportPhase: Equatable {
+        case drawing(CardFormat)
+        case mixingSound
+        case encodingGIF
+
+        var title: String {
+            switch self {
+            case .drawing(.mp4): return "Making the MP4…"
+            case .drawing(.gif): return "Making the GIF…"
+            case .drawing(.png): return "Making the PNG…"
+            case .mixingSound: return "Mixing the sound…"
+            case .encodingGIF: return "Encoding the GIF…"
+            }
+        }
+    }
+
     /// Makes each chosen format, writing them to `directory`. Returns the files made.
     static func export(_ content: Content, formats: Set<CardFormat>, to directory: URL,
                        notes: @escaping (String) -> Void = { _ in },
+                       phase: @escaping (ExportPhase) -> Void = { _ in },
                        progress: @escaping (Double) -> Void = { _ in }) async -> [(CardFormat, URL)] {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])

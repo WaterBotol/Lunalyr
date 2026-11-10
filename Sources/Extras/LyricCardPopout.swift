@@ -11,6 +11,73 @@ import UniformTypeIdentifiers
 // which of MP4, GIF and PNG to make. Copy puts the chosen formats on the
 // clipboard as attachments; Save… writes them to a folder.
 
+/// What the card window reads about the song, and where it makes and copies
+/// cards. The app's is `.live`; tests pass their own, so they never touch the
+/// player, the clipboard or real preferences.
+struct LyricCardSource {
+    typealias Export = @MainActor (_ content: LyricCard.Content, _ formats: Set<CardFormat>, _ directory: URL,
+                                   _ notes: @escaping (String) -> Void,
+                                   _ phase: @escaping (LyricCard.ExportPhase) -> Void,
+                                   _ progress: @escaping (Double) -> Void) async -> [(CardFormat, URL)]
+
+    /// Tells songs apart: another key is another song.
+    var trackKey: @MainActor () -> String
+    var title: @MainActor () -> String
+    var artist: @MainActor () -> String
+    var hasSong: @MainActor () -> Bool
+    /// The lines to pick from.
+    var rows: @MainActor () -> [LyricCardPopoutModel.Row]
+    /// The row being sung now, if any.
+    var activeRow: @MainActor () -> Int?
+    var content: @MainActor (_ rows: [Int], _ layout: LyricComposition?, _ aspect: CardAspect) -> LyricCard.Content?
+    /// The card layout shared with Settings → Share → Card layout.
+    var composition: @MainActor () -> LyricComposition?
+    var setComposition: @MainActor (LyricComposition?) -> Void
+    var export: Export
+    var pasteboard: NSPasteboard
+    var defaults: UserDefaults
+    /// Refreshes the lines when the song or its lyrics change (the app only).
+    var followsTheSong: Bool
+
+    @MainActor static var live: Self {
+        Self(trackKey: {
+                 let current = NowPlayingMonitor.shared.current
+                 return "\(current?.title ?? "")|\(current?.artist ?? "")"
+             },
+             title: { NowPlayingMonitor.shared.current?.title ?? "" },
+             artist: { NowPlayingMonitor.shared.current?.artist ?? "" },
+             hasSong: { NowPlayingMonitor.shared.current != nil },
+             rows: {
+                 let model = LyricsViewModel.shared
+                 if model.lines.isEmpty {
+                     // The same filtered list `LyricCard.currentContent` indexes.
+                     return model.plainLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                         .enumerated().map { LyricCardPopoutModel.Row(id: $0.offset, text: $0.element) }
+                 }
+                 return model.lines.indices
+                     .filter { !model.lines[$0].isInstrumental && !model.lines[$0].text.isEmpty }
+                     .map { LyricCardPopoutModel.Row(id: $0, text: model.lines[$0].text) }
+             },
+             activeRow: {
+                 let model = LyricsViewModel.shared
+                 let time = NowPlayingMonitor.shared.playbackTime() + Settings.shared.lyricOffset
+                     + SongOffsets.shared.offset(for: model.currentQuery)
+                 return model.activeLineIndex(at: time)
+             },
+             content: { rows, layout, aspect in
+                 LyricCard.currentContent(before: 0, after: 0, composition: layout, rows: rows, aspect: aspect)
+             },
+             composition: { LunalyrExtras.shared.lyricCardComposition },
+             setComposition: { LunalyrExtras.shared.lyricCardComposition = $0 },
+             export: { content, formats, directory, notes, phase, progress in
+                 await LyricCard.export(content, formats: formats, to: directory, notes: notes, phase: phase, progress: progress)
+             },
+             pasteboard: .general,
+             defaults: .standard,
+             followsTheSong: true)
+    }
+}
+
 @MainActor
 final class LyricCardPopoutModel: ObservableObject {
     struct Row: Identifiable, Equatable {
@@ -30,13 +97,13 @@ final class LyricCardPopoutModel: ObservableObject {
     @Published var selection: Set<Int> = [] { didSet { schedulePreview() } }
     /// The card's layout; nil follows the wallpaper. Shared with Settings → Share → Card layout.
     @Published var layout: LyricComposition? {
-        didSet { LunalyrExtras.shared.lyricCardComposition = layout; schedulePreview() }
+        didSet { source.setComposition(layout); schedulePreview() }
     }
     @Published var aspect: CardAspect {
-        didSet { UserDefaults.standard.set(aspect.rawValue, forKey: Keys.aspect); schedulePreview() }
+        didSet { source.defaults.set(aspect.rawValue, forKey: Keys.aspect); schedulePreview() }
     }
     @Published var formats: Set<CardFormat> {
-        didSet { UserDefaults.standard.set(formats.map(\.rawValue).sorted(), forKey: Keys.formats) }
+        didSet { source.defaults.set(formats.map(\.rawValue).sorted(), forKey: Keys.formats) }
     }
     @Published var preview: NSImage?
     @Published var progress: Double?
@@ -61,10 +128,10 @@ final class LyricCardPopoutModel: ObservableObject {
     /// Any number of audio files to go under the MP4, mixed together.
     @Published var soundFiles: [SoundFile] = []
     /// Whether the song's own sound goes under the MP4.
-    @Published var useSong = false { didSet { UserDefaults.standard.set(useSong, forKey: Keys.useSong); schedulePreview() } }
+    @Published var useSong = false { didSet { source.defaults.set(useSong, forKey: Keys.useSong); schedulePreview() } }
     /// How big the lyrics are on the card, 50 to 110% of the room they have.
     @Published var textScale: Double {
-        didSet { UserDefaults.standard.set(textScale, forKey: Keys.textScale); schedulePreview() }
+        didSet { source.defaults.set(textScale, forKey: Keys.textScale); schedulePreview() }
     }
     /// How loud the song is in the MP4: a slider position from 0 to 1.5, shown in dB.
     @Published var soundVolume = 1.0
@@ -98,11 +165,19 @@ final class LyricCardPopoutModel: ObservableObject {
 
     private var previewTask: Task<Void, Never>?
     private var exportTask: Task<Void, Never>?
+    /// The export running now. Progress from any other (one cancelled, or
+    /// finished) is stale and ignored.
+    private var exportID: UUID?
+    /// The song whose lines were last loaded.
+    private(set) var loadedTrackKey: String?
+    let source: LyricCardSource
 
-    init() {
-        let defaults = UserDefaults.standard
+    init(source: LyricCardSource? = nil) {
+        let source = source ?? .live
+        self.source = source
+        let defaults = source.defaults
         aspect = CardAspect(rawValue: defaults.string(forKey: Keys.aspect) ?? "") ?? .portrait
-        layout = LunalyrExtras.shared.lyricCardComposition
+        layout = source.composition()
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
         useSong = defaults.bool(forKey: Keys.useSong)
@@ -114,7 +189,7 @@ final class LyricCardPopoutModel: ObservableObject {
                 self?.background = loaded
             }
         }
-        followTheSong()
+        if source.followsTheSong { followTheSong() }
     }
 
     func chooseBackground() {
@@ -192,7 +267,7 @@ final class LyricCardPopoutModel: ObservableObject {
             guard let self else { return }
             if let loaded {
                 self.background = loaded
-                UserDefaults.standard.set(url.path, forKey: Keys.background)
+                source.defaults.set(url.path, forKey: Keys.background)
                 self.status = ""
             } else {
                 self.status = "Couldn’t open that file as a background"
@@ -202,40 +277,79 @@ final class LyricCardPopoutModel: ObservableObject {
 
     func clearBackground() {
         background = nil
-        UserDefaults.standard.removeObject(forKey: Keys.background)
+        source.defaults.removeObject(forKey: Keys.background)
     }
 
-    var hasSong: Bool { NowPlayingMonitor.shared.current != nil }
+    var hasSong: Bool { source.hasSong() }
 
-    /// Reads the playing song's lyrics and selects the line being sung.
+    /// Making a card, or getting the song's sound: what the card is made
+    /// from can't change underneath either.
+    var isBusy: Bool { progress != nil || songBusy }
+
+    /// The window is opening again. A new song starts afresh; the same song
+    /// keeps the selection and the recording, only refreshing lines that
+    /// changed meanwhile. Nothing changes while a card or recording is
+    /// being made.
+    func prepareToShow() {
+        guard !isBusy else { return }
+        reload(trackChanged: loadedTrackKey != source.trackKey())
+    }
+
+    /// Reads the playing song's lyrics. A new track selects the line being
+    /// sung and drops the old song's recording; new lyrics for the same
+    /// track keep the lines picked where they are still there.
     func reload(trackChanged: Bool = true) {
-        exportTask?.cancel()
-        if trackChanged { songTask?.cancel(); songClip = nil; songStatus = ""; songRange = nil }
-        progress = nil
-        status = ""
-        if layout != LunalyrExtras.shared.lyricCardComposition { layout = LunalyrExtras.shared.lyricCardComposition }
-        let playing = NowPlayingMonitor.shared
-        title = playing.current?.title ?? ""
-        artist = playing.current?.artist ?? ""
-        let model = LyricsViewModel.shared
-        if model.lines.isEmpty {
-            // The same filtered list `LyricCard.currentContent` indexes.
-            rows = model.plainLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                .enumerated().map { Row(id: $0.offset, text: $0.element) }
-        } else {
-            rows = model.lines.indices
-                .filter { !model.lines[$0].isInstrumental && !model.lines[$0].text.isEmpty }
-                .map { Row(id: $0, text: model.lines[$0].text) }
+        if trackChanged {
+            exportTask?.cancel()
+            exportID = nil
+            progress = nil
+            status = ""
+            songTask?.cancel(); songClip = nil; songStatus = ""; songRange = nil
         }
-        let time = playing.playbackTime() + Settings.shared.lyricOffset + SongOffsets.shared.offset(for: model.currentQuery)
-        let active = model.activeLineIndex(at: time)
-        if let active, rows.contains(where: { $0.id == active }) {
+        if layout != source.composition() { layout = source.composition() }
+        loadedTrackKey = source.trackKey()
+        title = source.title()
+        artist = source.artist()
+        let fresh = source.rows()
+        if !trackChanged {
+            guard fresh != rows else { return }
+            let kept = Self.carrySelection(selection, from: rows, to: fresh)
+            let hadSelection = !selection.isEmpty
+            rows = fresh
+            if !kept.isEmpty {
+                selection = kept
+                if hadSelection { status = "Lyrics updated, selection kept" }
+                return
+            }
+        }
+        rows = fresh
+        if let active = source.activeRow(), rows.contains(where: { $0.id == active }) {
             selection = [active]
         } else if let first = rows.first {
             selection = [first.id]
         } else {
             selection = []
         }
+    }
+
+    /// The picked lines in `new`, matched by their words: the second of two
+    /// identical lines stays the second. Lines no longer there are dropped.
+    nonisolated static func carrySelection(_ selection: Set<Int>, from old: [Row], to new: [Row]) -> Set<Int> {
+        var occurrence: [String: Int] = [:]
+        var wanted: Set<String> = []
+        for row in old {
+            let seen = occurrence[row.text, default: 0]
+            occurrence[row.text] = seen + 1
+            if selection.contains(row.id) { wanted.insert("\(seen)|\(row.text)") }
+        }
+        occurrence = [:]
+        var kept: Set<Int> = []
+        for row in new {
+            let seen = occurrence[row.text, default: 0]
+            occurrence[row.text] = seen + 1
+            if wanted.contains("\(seen)|\(row.text)") { kept.insert(row.id) }
+        }
+        return kept
     }
 
     /// Keeps the lines to pick from in step with the song: a new track, or its
@@ -261,8 +375,7 @@ final class LyricCardPopoutModel: ObservableObject {
 
     private func content() -> LyricCard.Content? {
         guard !selection.isEmpty else { return nil }
-        var content = LyricCard.currentContent(before: 0, after: 0, composition: layout,
-                                               rows: selection.sorted(), aspect: aspect)
+        var content = source.content(selection.sorted(), layout, aspect)
         content?.background = background
         if let backgroundPalette { content?.palette = backgroundPalette }
         content?.backgroundStill = background?.first
@@ -283,7 +396,10 @@ final class LyricCardPopoutModel: ObservableObject {
         previewTask?.cancel()
         previewTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 120_000_000)
-            guard let self, !Task.isCancelled, var content = self.content() else { self?.preview = nil; return }
+            // Superseded by a newer change: that one draws the preview. Clearing
+            // it here would flash the empty placeholder on every slider tick.
+            guard !Task.isCancelled, let self else { return }
+            guard var content = self.content() else { self.preview = nil; return }
             self.songRange = LyricCard.songRange(content)
             self.clipPlan = LyricCard.clipPlan(content)
             content.pages = [content.stillPage]
@@ -291,7 +407,7 @@ final class LyricCardPopoutModel: ObservableObject {
         }
     }
 
-    var canMake: Bool { !selection.isEmpty && !formats.isEmpty && progress == nil }
+    var canMake: Bool { !selection.isEmpty && !formats.isEmpty && !isBusy }
 
     func toggle(_ format: CardFormat) {
         if formats.contains(format) { formats.remove(format) } else { formats.insert(format) }
@@ -313,20 +429,23 @@ final class LyricCardPopoutModel: ObservableObject {
     private func make(into folder: URL?) {
         guard let content = content(), canMake else { return }
         let chosen = formats
+        let id = UUID()
+        exportID = id
         progress = 0
         status = "Making your card…"
         let directory = folder ?? LyricCard.exportDirectory
+        let export = source.export
         exportTask = Task { [weak self] in
             var warnings: [String] = []
-            let files = await LyricCard.export(content, formats: chosen, to: directory, notes: { warnings.append($0) }) { value in
-                Task { @MainActor in self?.progress = value }
+            let files = await export(content, chosen, directory, { warnings.append($0) }, { _ in }) { value in
+                self?.reportProgress(value, for: id)
             }
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, let self, self.exportID == id else {
                 // Cancelled: nothing half-made is left behind (an MP4 may have lost its sound).
                 LyricCard.discardExport(files, in: directory, ownsDirectory: folder == nil)
                 return
             }
-            guard let self else { return }
+            self.exportID = nil
             self.progress = nil
             if files.isEmpty, folder == nil { try? FileManager.default.removeItem(at: directory) }
             defer {
@@ -336,7 +455,7 @@ final class LyricCardPopoutModel: ObservableObject {
             guard !files.isEmpty else { self.status = "Couldn’t make the card"; return }
             let names = files.map { $0.0.title }.joined(separator: ", ")
             if folder == nil {
-                if LyricCard.publish(files, to: .general) {
+                if LyricCard.publish(files, to: self.source.pasteboard) {
                     LyricCard.pruneExpiredExports(in: directory.deletingLastPathComponent(), keeping: directory)
                     self.status = "Copied \(names)"
                 } else {
@@ -349,11 +468,23 @@ final class LyricCardPopoutModel: ObservableObject {
         }
     }
 
+    /// How far the export `id` has got. Only the running export moves the
+    /// bar, and only forward: a report arriving after Cancel or the finish
+    /// would otherwise bring back a bar with nothing behind it.
+    func reportProgress(_ value: Double, for id: UUID) {
+        guard id == exportID, let current = progress, value.isFinite else { return }
+        progress = max(current, min(1, value))
+    }
+
     func cancel() {
         exportTask?.cancel()
+        exportID = nil
         progress = nil
         status = "Cancelled"
     }
+
+    /// Waits for the export in progress, if any (tests).
+    func waitForExport() async { await exportTask?.value }
 }
 
 struct LyricCardPopoutView: View {
@@ -597,7 +728,14 @@ final class LyricCardPopoutController {
     init() { model.isOpen = { [weak self] in self?.window?.isVisible == true } }
 
     func show() {
-        model.reload()
+        // Already open: just bring it forward, keeping the lines picked, the
+        // song's recording and any card being made.
+        if let window, window.isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        model.prepareToShow()
         if window == nil {
             let host = NSHostingController(rootView: LyricCardPopoutView(model: model))
             let window = NSWindow(contentViewController: host)
