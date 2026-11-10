@@ -70,7 +70,7 @@ struct MusicVideoSection: View {
 
     static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. For YouTube videos Lunalyr reads the video’s captions (with Search YouTube on) and matches them to the song’s timed lyrics; for videos in your Music library it compares the video’s soundtrack with the song as it plays. If the visualisers’ System audio is switched on and has worked on this Mac before, Lunalyr turns its capture on for up to 25 seconds to do this, once per song and video, then off again; the audio is analysed on this Mac and nothing is recorded or sent. For YouTube videos, while that capture runs, Lunalyr also lines the video’s cuts up with the beat: it looks at a few tiny frames a second from the muted video for up to 50 seconds, once per video, and keeps the result only when one timing clearly fits. Otherwise a video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap or nudge is kept for the video it was made on. Re-sync forgets your nudge and looks again."
     static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
-    static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube."
+    static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… works with this off too: it sends only what is in its search box, when you search, and loads the results’ thumbnails."
 }
 
 /// A YouTube link for the playing song, for when search finds nothing or
@@ -90,6 +90,9 @@ private struct PastedVideoLink: View {
                     .accessibilityLabel("YouTube link for this song")
                 Button("Use", action: use)
                     .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || !controller.hasSong)
+                Button("Search…") { MusicVideoSearchWindowController.shared.show() }
+                    .help("Search YouTube for this song and pick the video to use")
+                    .accessibilityLabel("Search YouTube…")
                 if controller.pastedLink != nil {
                     Button("Clear") { controller.clearPastedLink(); text = "" }
                         .help("Stop using the pasted link for this song")
