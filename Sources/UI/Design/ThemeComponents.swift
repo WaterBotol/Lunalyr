@@ -817,6 +817,24 @@ struct ThemedLabeledContentStyle: LabeledContentStyle {
     }
 }
 
+/// A row (or, on a `Group`, each row) that appears and disappears with the
+/// form's `reveal` transition: a fade with a 4 pt settle, a plain fade under
+/// Reduce Motion. Pair it with `lunalyrReveal(_:)` on the page, keyed on the
+/// flag that shows it, so the rows below slide rather than jump.
+private struct RevealRowModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transition(LunalyrDesign.Motion.reveal(reduceMotion: reduceMotion))
+    }
+}
+
+extension View {
+    func revealRow() -> some View {
+        modifier(RevealRowModifier())
+    }
+}
+
 /// A titled card inside a `ThemedForm`; the stand-in for a form `Section`.
 struct ThemedSection<Content: View>: View {
     let title: String

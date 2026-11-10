@@ -27,18 +27,26 @@ struct WallpaperPage: View {
                 // shows here rather than in a section that isn't showing.
                 if let message = importer.message, s.backgroundMode != .custom {
                     ImportFailure(message: message)
+                        .revealRow()
                 }
             }
             typeSection
+                .revealRow()
             if s.backgroundMode == .visualizer {
                 MusicResponseSection()
                     .id(SettingsAnchor.musicResponse)
+                    .revealRow()
             }
             LyricBackingSection()
             if s.backgroundMode != .desktop {
                 adjustments
+                    .revealRow()
             }
         }
+        // Rows and sections that come and go with the type glide in; the
+        // sections below slide rather than jump.
+        .lunalyrReveal(s.backgroundMode)
+        .lunalyrReveal(importer.message)
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
@@ -117,6 +125,7 @@ struct WallpaperPage: View {
         InspectorCaption(WorkspaceCopy.importedWallpaperDetail(reduceMotion: reduceMotion))
         if let message = importer.message {
             ImportFailure(message: message)
+                .revealRow()
         }
     }
 
@@ -125,9 +134,11 @@ struct WallpaperPage: View {
             if s.backgroundMode != .custom && s.backgroundMode != .musicVideo {
                 ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
                             format: SettingsFormat.multiplier)
+                    .revealRow()
                 if s.backgroundMode != .visualizer || s.audioVisualizerStyle != .light3D || s.light3DColours == .album {
                     ValueSlider("Colour richness", value: $s.vividness, in: 0.4...1.8, step: 0.01,
                                 format: SettingsFormat.percent)
+                        .revealRow()
                 }
             }
             ValueSlider("Darkening", value: $s.scrimStrength, in: s.scrimRange, step: 0.01, format: SettingsFormat.percent)
@@ -138,6 +149,7 @@ struct WallpaperPage: View {
             if s.backgroundMode == .pattern {
                 ValueSlider("Pattern visibility", value: $s.patternOpacity, in: 0...1, step: 0.01,
                             format: SettingsFormat.percent)
+                    .revealRow()
             }
             Button("Reset Adjustments") { s.resetAdvanced() }
                 .disabled(s.advancedIsDefault)
