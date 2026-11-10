@@ -437,7 +437,8 @@ final class LyricCardPopoutModel: ObservableObject {
         let export = source.export
         exportTask = Task { [weak self] in
             var warnings: [String] = []
-            let files = await export(content, chosen, directory, { warnings.append($0) }, { _ in }) { value in
+            let files = await export(content, chosen, directory, { warnings.append($0) },
+                                     { self?.reportPhase($0, for: id) }) { value in
                 self?.reportProgress(value, for: id)
             }
             guard !Task.isCancelled, let self, self.exportID == id else {
@@ -474,6 +475,12 @@ final class LyricCardPopoutModel: ObservableObject {
     func reportProgress(_ value: Double, for id: UUID) {
         guard id == exportID, let current = progress, value.isFinite else { return }
         progress = max(current, min(1, value))
+    }
+
+    /// What the export `id` is doing now, shown under the bar.
+    func reportPhase(_ phase: LyricCard.ExportPhase, for id: UUID) {
+        guard id == exportID, progress != nil else { return }
+        status = phase.title
     }
 
     func cancel() {

@@ -97,6 +97,7 @@ When merging, keep every entry and combine duplicate headings.
 - Lyric cards: the progress bar no longer comes back after Cancel or after a card is made (which left Copy and Save greyed out).
 - Lyric cards: the preview no longer flashes "Pick lines to preview" while you drag a slider or change an option.
 - Lyric cards: opening the card window again (shortcut, menu, `lunalyr://card`) no longer throws away the lines you picked, the song recording or a card being made. A new song still starts afresh, and better lyrics arriving keep the lines you picked.
+- Lyric cards: mixing an MP4's sound no longer freezes the card window, and Cancel now stops it. The status says what is happening ("Mixing the sound…", "Encoding the GIF…"), and the progress bar moves steadily through every format instead of jumping or stalling.
 - Discord: the song now shows when Discord is opened after Lunalyr, or restarted, without waiting for the next song.
 - Discord: updates stay within Discord's limit of five every 20 seconds, with room kept for a new song or a pause, so they are no longer dropped by Discord.
 - Discord: long lines in scripts such as Thai, or with emoji, and a bad button link no longer make Discord reject the whole status.

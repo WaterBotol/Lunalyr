@@ -320,13 +320,24 @@ enum LyricCard {
         let delay: Double
     }
 
-    static func gif(_ content: Content, scale: CGFloat = gifScale) async -> Data? {
+    /// The most frames a GIF of `pages` lines is drawn with.
+    static func gifFrameBudget(pages: Int) -> Int { pages == 1 ? 90 : 120 }
+    /// The share of a GIF's progress its frames take; encoding them takes the rest.
+    static let gifDrawingShare = 0.8
+
+    /// The card as a looping GIF. `progress` runs 0 to `gifDrawingShare`
+    /// while the frames are drawn, then `encoding` is called and the bar
+    /// holds there until the file is written.
+    static func gif(_ content: Content, scale: CGFloat = gifScale, progress: ((Double) -> Void)? = nil,
+                    encoding: (() -> Void)? = nil) async -> Data? {
         var collected: [GIFFrame] = []
-        let ok = await renderFrames(content, scale: scale, minimumCadence: 0.08, budget: content.pages.count == 1 ? 90 : 120) { image, delay in
+        let ok = await renderFrames(content, scale: scale, minimumCadence: 0.08, budget: gifFrameBudget(pages: content.pages.count),
+                                    progress: { progress?($0 * gifDrawingShare) }) { image, delay in
             collected.append(GIFFrame(image: image, delay: delay))
             return true
         }
         guard ok, !Task.isCancelled else { return nil }
+        encoding?()
         let frames = collected
         let encoder = Task.detached(priority: .userInitiated) {
             encodeGIF(frames)
@@ -392,7 +403,8 @@ enum LyricCard {
             guard await sink(image, max(0.02, delay)) else { return nil }
             produced += 1
             progress?(min(1, Double(produced) / Double(expected)))
-            if produced.isMultiple(of: 4) { await Task.yield() }
+            // Every frame, so Cancel, the pointer and the bar stay responsive.
+            await Task.yield()
             return time + delay < end - 0.0005
         }
         var elapsed = 0.0

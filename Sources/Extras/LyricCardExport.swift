@@ -108,19 +108,20 @@ extension LyricCard {
 
     /// One strand of sound under the video: its slider level, what it is, and
     /// how to render it for a given length.
-    struct SoundLayer {
-        enum Role { case song, background, file }
+    /// Rendered off the main thread, with the rest of the mix.
+    struct SoundLayer: Sendable {
+        enum Role: Sendable { case song, background, file }
         /// The slider position, 0 to 1.5 (see `LyricCardMix.decibels(forLevel:)`).
         var volume: Float
         var role: Role = .file
         /// The strand's sound for that many seconds; nil when it can't be read.
-        var render: (Double) async -> Rendered?
+        var render: @Sendable (Double) async -> Rendered?
     }
 
     /// A strand's samples, interleaved stereo at `LyricCardMix.sampleRate`,
     /// and where it fades out, if it stops before the end. The fade is applied
     /// after the strand's loudness is measured, so it doesn't skew the matching.
-    struct Rendered {
+    struct Rendered: Sendable {
         var samples: [Float]
         var fadeOut: (end: Int, seconds: Double)?
         init(_ samples: [Float], fadeOut: (end: Int, seconds: Double)? = nil) { self.samples = samples; self.fadeOut = fadeOut }
@@ -129,8 +130,8 @@ extension LyricCard {
     /// `soundURL` looped (or cut) to the video's length. A `crossfade` (in
     /// seconds) overlaps each repeat with the end of the one before, as a
     /// background video's picture does.
-    static func soundLayer(from soundURL: URL, volume: Float = 1, role: SoundLayer.Role = .file,
-                           crossfade: Double = 0) async -> SoundLayer? {
+    nonisolated static func soundLayer(from soundURL: URL, volume: Float = 1, role: SoundLayer.Role = .file,
+                                       crossfade: Double = 0) async -> SoundLayer? {
         let sound = AVURLAsset(url: soundURL)
         guard (try? await sound.loadTracks(withMediaType: .audio).first) != nil,
               let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return nil }
@@ -161,13 +162,17 @@ extension LyricCard {
     /// last `LyricCardMix.endFade` seconds and limits peaks to -1 dBFS. The result is
     /// written as AAC and laid under the video, which is copied as it is, and
     /// `videoURL` is replaced. False, with the file untouched, if it can't.
-    static func mux(soundOnto videoURL: URL, layers: [SoundLayer], duck: Bool = false) async -> Bool {
+    ///
+    /// The mixing and the AAC encoding run off the main thread (a minute of
+    /// sound is millions of samples per strand), reporting 0 to 1 through
+    /// `progress`. Cancelling the task stops the mix and the final copy, and
+    /// leaves `videoURL` untouched.
+    static func mux(soundOnto videoURL: URL, layers: [SoundLayer], duck: Bool = false,
+                    progress: ((Double) -> Void)? = nil) async -> Bool {
         guard !layers.isEmpty else { return false }
         let video = AVURLAsset(url: videoURL)
         guard let videoTrack = try? await video.loadTracks(withMediaType: .video).first,
               let length = try? await video.load(.duration), length.seconds > 0 else { return false }
-        guard let mix = await mixdown(layers, seconds: length.seconds, duck: duck) else { return false }
-        guard let mix else { return true } // every layer turned off: leave the video silent
         let folder = videoURL.deletingLastPathComponent()
         let sound = folder.appendingPathComponent("mix-\(UUID().uuidString).m4a")
         let output = folder.appendingPathComponent("sound-\(UUID().uuidString).mp4")
@@ -175,7 +180,12 @@ extension LyricCard {
             try? FileManager.default.removeItem(at: sound)
             try? FileManager.default.removeItem(at: output)
         }
-        do { try LyricCardMix.writeAAC(mix, to: sound) } catch { return false }
+        switch await mixAndWrite(layers, seconds: length.seconds, duck: duck, to: sound, progress: progress) {
+        case .failed: return false
+        case .silent: return true // every layer turned off: leave the video silent
+        case .written: break
+        }
+        guard !Task.isCancelled else { return false }
         let audio = AVURLAsset(url: sound)
         let composition = AVMutableComposition()
         guard let audioTrack = try? await audio.loadTracks(withMediaType: .audio).first,
@@ -190,22 +200,57 @@ extension LyricCard {
         guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else { return false }
         session.outputURL = output
         session.outputFileType = .mp4
-        await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
-            session.exportAsynchronously { finished.resume() }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
+                session.exportAsynchronously { finished.resume() }
+            }
+        } onCancel: {
+            session.cancelExport()
         }
-        guard session.status == .completed else { return false }
+        guard session.status == .completed, !Task.isCancelled else { return false }
+        progress?(1)
         return (try? FileManager.default.replaceItemAt(videoURL, withItemAt: output)) != nil
     }
 
-    /// The finished mix for `seconds`; .some(nil) when every layer is off, nil when one can't be read.
-    static func mixdown(_ layers: [SoundLayer], seconds: Double, duck: Bool) async -> [Float]?? {
+    enum MixOutcome: Sendable { case written, silent, failed }
+
+    /// Mixes `layers` and writes the result as AAC to `url`, on a background
+    /// task. Progress (0 to 0.9) arrives on the caller's actor, in order.
+    static func mixAndWrite(_ layers: [SoundLayer], seconds: Double, duck: Bool, to url: URL,
+                            progress: ((Double) -> Void)?) async -> MixOutcome {
+        let (updates, continuation) = AsyncStream.makeStream(of: Double.self)
+        let work = Task.detached(priority: .userInitiated) { () -> MixOutcome in
+            defer { continuation.finish() }
+            let mixed = await mixdown(layers, seconds: seconds, duck: duck) { continuation.yield($0 * 0.8) }
+            guard let mixed, !Task.isCancelled else { return .failed }
+            guard let mix = mixed else { return .silent }
+            do { try LyricCardMix.writeAAC(mix, to: url) } catch { return .failed }
+            guard !Task.isCancelled else { return .failed }
+            continuation.yield(0.9)
+            return .written
+        }
+        return await withTaskCancellationHandler {
+            for await value in updates { progress?(value) }
+            return await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
+
+    /// The finished mix for `seconds`; .some(nil) when every layer is off, nil
+    /// when one can't be read or the task is cancelled. Runs on whatever
+    /// thread calls it (`mux` calls it off the main thread), reporting 0 to 1.
+    nonisolated static func mixdown(_ layers: [SoundLayer], seconds: Double, duck: Bool,
+                                    progress: (Double) -> Void = { _ in }) async -> [Float]?? {
         let channels = LyricCardMix.channels
         let frames = Int((seconds * LyricCardMix.sampleRate).rounded())
         var strands: [(role: SoundLayer.Role, samples: [Float])] = []
-        for layer in layers {
+        for (index, layer) in layers.enumerated() {
+            guard !Task.isCancelled else { return nil }
             let level = LyricCardMix.decibels(forLevel: Double(layer.volume))
             guard level.isFinite else { continue }
             guard let rendered = await layer.render(seconds) else { return nil }
+            defer { progress(0.8 * Double(index + 1) / Double(layers.count)) }
             var samples = rendered.samples
             if samples.count != frames * channels {
                 samples = Array(samples.prefix(frames * channels))
@@ -219,6 +264,7 @@ extension LyricCard {
             strands.append((layer.role, samples))
         }
         guard !strands.isEmpty else { return .some(nil) }
+        guard !Task.isCancelled else { return nil }
         if duck, let trigger = strands.first(where: { $0.role == .background })?.samples,
            strands.contains(where: { $0.role == .song }) {
             let gains = LyricCardMix.duckGains(under: trigger, frames: frames)
@@ -240,6 +286,7 @@ extension LyricCard {
         }
         LyricCardMix.fadeOut(&mix, endingAt: frames, seconds: LyricCardMix.endFade)
         LyricCardMix.limit(&mix)
+        progress(1)
         return .some(mix)
     }
 
@@ -287,22 +334,29 @@ extension LyricCard {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
         let order = CardFormat.allCases.filter(formats.contains)
+        let plan = clipPlan(content)
+        let sound = hasSound(content)
+        let shares = progressShares(order, duration: plan.duration, pages: content.pages.count, hasSound: sound)
         var made: [(CardFormat, URL)] = []
-        for (index, format) in order.enumerated() {
+        for format in order {
             guard !Task.isCancelled else { break }
             // A folder that already holds a card gets "Lunalyr Lyric Card 2.mp4" and
             // so on: nothing is overwritten, and the MP4 writer refuses an existing file.
             let file = availableFile(named: "Lunalyr Lyric Card", extension: format.rawValue, in: directory)
-            let share: (Double) -> Void = { progress((Double(index) + $0) / Double(order.count)) }
+            let range = shares[format] ?? 0...1
+            let share: (Double) -> Void = { progress(range.lowerBound + (range.upperBound - range.lowerBound) * min(1, max(0, $0))) }
+            phase(.drawing(format))
             switch format {
             case .png:
                 if let data = stillPNG(content), (try? data.write(to: file, options: .atomic)) != nil { made.append((format, file)) }
             case .gif:
-                if let data = await gif(content), (try? data.write(to: file, options: .atomic)) != nil { made.append((format, file)) }
+                if let data = await gif(content, progress: share, encoding: { phase(.encodingGIF) }),
+                   (try? data.write(to: file, options: .atomic)) != nil { made.append((format, file)) }
             case .mp4:
-                let plan = clipPlan(content)
                 if let note = plan.note { notes(note) }
-                if await video(content, to: file, plan: plan, progress: share) {
+                // The frames take the bar up to the sound's share, the mix the rest.
+                let framesShare = sound ? 1 - mixShare : 1
+                if await video(content, to: file, plan: plan, progress: { share($0 * framesShare) }) {
                     made.append((format, file))
                     var layers: [SoundLayer] = []
                     let level = Float(content.soundVolume)
@@ -330,14 +384,61 @@ extension LyricCard {
                             layers.append(layer)
                         }
                     }
-                    if !layers.isEmpty, !(await mux(soundOnto: file, layers: layers, duck: content.duckSong)) {
-                        notes("The MP4 has no sound: couldn’t add it.")
+                    if !layers.isEmpty {
+                        phase(.mixingSound)
+                        let mixed = await mux(soundOnto: file, layers: layers, duck: content.duckSong) {
+                            share(framesShare + (1 - framesShare) * $0)
+                        }
+                        if !mixed, !Task.isCancelled { notes("The MP4 has no sound: couldn’t add it.") }
                     }
                 }
             }
             share(1)
         }
         return made
+    }
+
+    /// The share of the MP4's part of the bar its sound mix takes, when it has sound.
+    static let mixShare = 0.15
+
+    /// Whether the MP4 will carry any sound.
+    static func hasSound(_ content: Content) -> Bool {
+        content.songAudio != nil || content.soundFile != nil || !content.extraSounds.isEmpty
+            || (content.backgroundSoundSource != nil && content.backgroundVolume > 0)
+    }
+
+    /// Each format's stretch of the progress bar, in `order`, sized by roughly
+    /// how long it takes: the frames it draws times their size, plus the
+    /// MP4's sound mix and the GIF's encoding. A long MP4 gets most of the bar,
+    /// a PNG a sliver, so the bar moves at an even pace.
+    static func progressShares(_ order: [CardFormat], duration: Double, pages: Int,
+                               hasSound: Bool) -> [CardFormat: ClosedRange<Double>] {
+        let seconds = duration.isFinite ? max(0.5, duration) : 5
+        func cost(_ format: CardFormat) -> Double {
+            switch format {
+            case .mp4:
+                let frames = seconds * videoFramesPerSecond + Double(pages)
+                let drawing = frames * Double(videoScale * videoScale)
+                return hasSound ? drawing / (1 - mixShare) : drawing
+            case .gif:
+                let frames = min(Double(gifFrameBudget(pages: pages)), seconds / 0.08 + Double(pages))
+                return frames * Double(gifScale * gifScale) / gifDrawingShare
+            case .png:
+                // One frame at twice the card's size.
+                return 4
+            }
+        }
+        let costs = order.map(cost)
+        let total = costs.reduce(0, +)
+        guard total > 0 else { return [:] }
+        var shares: [CardFormat: ClosedRange<Double>] = [:]
+        var start = 0.0
+        for (format, value) in zip(order, costs) {
+            let end = format == order.last ? 1 : start + value / total
+            shares[format] = start...end
+            start = end
+        }
+        return shares
     }
 
     /// Removes what a cancelled export made: the whole folder when it is

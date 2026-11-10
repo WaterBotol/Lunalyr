@@ -51,7 +51,8 @@ extension LyricCard {
     /// The song's sound window by window, laid end to end. Where the clip
     /// doesn't cover a window the sound is silent; it fades out over
     /// `LyricCardMix.songCutFade` where it stops, whether the video ends first or carries on.
-    static func songLayer(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)], volume: Float = 1) async -> SoundLayer? {
+    nonisolated static func songLayer(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)],
+                                      volume: Float = 1) async -> SoundLayer? {
         let source = AVURLAsset(url: clip.url)
         guard !windows.isEmpty, (try? await source.loadTracks(withMediaType: .audio).first) != nil,
               let sourceLength = try? await source.load(.duration) else { return nil }
