@@ -90,12 +90,15 @@ enum YouTubeSearchPage {
         /// The channel carries YouTube's verified-artist badge (the music
         /// note), from the result's `ownerBadges`.
         var verifiedArtist = false
+        /// The length YouTube shows on the result ("3:45"), in seconds.
+        var duration: Double?
 
-        init(videoID: String, title: String, channel: String, verifiedArtist: Bool = false) {
+        init(videoID: String, title: String, channel: String, verifiedArtist: Bool = false, duration: Double? = nil) {
             self.videoID = videoID
             self.title = title
             self.channel = channel
             self.verifiedArtist = verifiedArtist
+            self.duration = duration
         }
     }
 
@@ -123,9 +126,13 @@ enum YouTubeSearchPage {
     }
 
     /// The official video among `results`: the first of `officialVideos`.
-    static func officialVideo(in results: [Result], title: String, artist: String) -> Result? {
-        officialVideos(in: results, title: title, artist: artist).first
+    static func officialVideo(in results: [Result], title: String, artist: String, songDuration: Double? = nil) -> Result? {
+        officialVideos(in: results, title: title, artist: artist, songDuration: songDuration).first
     }
+
+    /// An upload this close to the song's length plays it from its first
+    /// second: no intro to guess, so it is in step from the start.
+    static let lengthMatch = 2.0
 
     /// Words in a title that mark an upload as something other than the
     /// video (whole words, any case): audio and art tracks, lyric and
@@ -143,12 +150,16 @@ enum YouTubeSearchPage {
     ///   verified-artist badge; never an auto-generated "- Topic" channel;
     /// - not be a live, concert or fan upload, nor any of `excludedWords`.
     /// "Official music video" ranks above "official video", which ranks
-    /// above "official" or "music video"; ties keep YouTube's order.
-    static func officialVideos(in results: [Result], title: String, artist: String) -> [Result] {
+    /// above "official" or "music video"; ties keep YouTube's order. Given
+    /// the song's length, a video named as one (official, music video, MV)
+    /// that lasts as long as the song (`lengthMatch`) comes first: a longer
+    /// cinematic cut opens or closes with scenes, which throws the timing.
+    static func officialVideos(in results: [Result], title: String, artist: String,
+                               songDuration: Double? = nil) -> [Result] {
         let song = LyricQuery.normalize(title)
         let singers = MusicVideoTitleMatch.artistParts(artist)
         guard !song.isEmpty, !singers.isEmpty else { return [] }
-        var ranked: [(result: Result, score: Int, index: Int)] = []
+        var ranked: [(result: Result, score: Int, sameLength: Bool, index: Int)] = []
         for (index, result) in results.prefix(12).enumerated() {
             let name = LyricQuery.normalize(result.title)
             let channel = LyricQuery.normalize(result.channel)
@@ -164,10 +175,17 @@ enum YouTubeSearchPage {
             if containsWords(name, "official music video") { score += 4 }
             else if containsWords(name, "official video") { score += 3 }
             else if containsWords(name, "official") || containsWords(name, "music video") || containsWords(name, "mv") { score += 1 }
+            let namedAsVideo = score > 1
             if vevo || ownChannel { score += 1 }
-            ranked.append((result, score, index))
+            let sameLength = namedAsVideo && songDuration.map { song in
+                song > 0 && result.duration.map { abs($0 - song) <= lengthMatch } == true
+            } == true
+            ranked.append((result, score, sameLength, index))
         }
-        return ranked.sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }.map(\.result)
+        return ranked.sorted {
+            if $0.sameLength != $1.sameLength { return $0.sameLength }
+            return $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index
+        }.map(\.result)
     }
 
     /// A channel named after the artist: the name itself, or starting or
@@ -202,12 +220,25 @@ enum YouTubeSearchPage {
                 let title = text(renderer["title"]) ?? ""
                 let channel = text(renderer["ownerText"]) ?? text(renderer["longBylineText"]) ?? ""
                 found.append(Result(videoID: id, title: title, channel: channel,
-                                    verifiedArtist: hasVerifiedArtistBadge(renderer["ownerBadges"])))
+                                    verifiedArtist: hasVerifiedArtistBadge(renderer["ownerBadges"]),
+                                    duration: text(renderer["lengthText"]).flatMap(lengthSeconds)))
             }
             for (key, value) in dictionary where key != "videoRenderer" { collect(value, into: &found) }
         } else if let array = node as? [Any] {
             for value in array { collect(value, into: &found) }
         }
+    }
+
+    /// "3:45" or "1:02:03" as seconds; nil for anything else ("LIVE").
+    static func lengthSeconds(_ text: String) -> Double? {
+        let parts = text.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard (2...3).contains(parts.count) else { return nil }
+        var total = 0.0
+        for part in parts {
+            guard !part.isEmpty, part.count <= 2 || part == parts.first, let value = Int(part), value >= 0 else { return nil }
+            total = total * 60 + Double(value)
+        }
+        return total
     }
 
     /// `ownerBadges: [{metadataBadgeRenderer: {style: "BADGE_STYLE_TYPE_VERIFIED_ARTIST"}}]`.

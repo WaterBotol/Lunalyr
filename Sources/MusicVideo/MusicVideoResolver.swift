@@ -123,20 +123,43 @@ enum MusicVideoOffsetOrigin: Equatable, Sendable {
     case audio
     /// Guessed from how much longer the video is than the song.
     case estimated
+    /// Found from the video's cuts against the beat of the song as it
+    /// plays (`MusicVideoCutAlign`).
+    case cuts
 
-    var isAutomatic: Bool { self == .captions || self == .audio }
+    var isAutomatic: Bool { self == .captions || self == .audio || self == .cuts }
+
+    /// How it is written in the automatic offsets' store.
+    var storedKind: String {
+        switch self {
+        case .audio: return "audio"
+        case .cuts: return "cuts"
+        default: return "captions"
+        }
+    }
+
+    static func stored(_ kind: String?) -> MusicVideoOffsetOrigin {
+        switch kind {
+        case "audio": return .audio
+        case "cuts": return .cuts
+        default: return .captions
+        }
+    }
 }
 
 /// How far into each song's video the song starts, per recording.
 ///
-/// Three layers, the first present wins: the user's nudge (`values`, kept
-/// even at 0 once set), the automatic offset found for this song and THIS
-/// video (captions or audio, cached on this Mac), then a guess from the
-/// video's length (kept in memory only).
+/// Three layers, the first present wins: the user's nudge or tap (`values`,
+/// kept even at 0 once set, for the video it was set on), the automatic
+/// offset found for this song and THIS video (captions, audio or cuts,
+/// cached on this Mac), then a guess from the video's length (kept in
+/// memory only).
 @MainActor
 final class MusicVideoOffsets: ObservableObject {
     static let key = "custom.musicVideoOffsets"
     static let automaticKey = "custom.musicVideoAutoOffsets"
+    /// The video each of the user's offsets was set on.
+    static let manualVideoKey = "custom.musicVideoOffsetVideos"
     /// Found offsets are kept this long…
     static let automaticLifetime: TimeInterval = 180 * 86_400
     /// …and "checked, nothing usable" this long, so a video without
@@ -146,6 +169,9 @@ final class MusicVideoOffsets: ObservableObject {
 
     /// The user's offsets.
     @Published private(set) var values: [String: Double]
+    /// The video (`videoKey`) each of `values` was set on. A song without
+    /// one was set before videos were told apart: it applies to any video.
+    @Published private(set) var manualVideos: [String: String]
     @Published private(set) var automatic: [String: Automatic]
     @Published private(set) var estimates: [String: Double] = [:]
     private let defaults: UserDefaults
@@ -161,12 +187,19 @@ final class MusicVideoOffsets: ObservableObject {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
-        values = defaults.dictionary(forKey: Self.key) as? [String: Double] ?? [:]
+        let manual = defaults.dictionary(forKey: Self.key) as? [String: Double] ?? [:]
+        values = manual
+        manualVideos = (defaults.dictionary(forKey: Self.manualVideoKey) as? [String: String] ?? [:])
+            .filter { manual[$0.key] != nil }
         let stored = defaults.dictionary(forKey: Self.automaticKey) as? [String: [String: Any]] ?? [:]
         automatic = stored.compactMapValues { entry in
             guard let video = entry["video"] as? String, let at = entry["at"] as? Double else { return nil }
-            let origin: MusicVideoOffsetOrigin = entry["kind"] as? String == "audio" ? .audio : .captions
-            return Automatic(video: video, offset: entry["offset"] as? Double, origin: origin, at: at)
+            let origin = MusicVideoOffsetOrigin.stored(entry["kind"] as? String)
+            var offset = entry["offset"] as? Double
+            // Audio offsets found before the video's clock dropped the
+            // lyrics' lead were measured against that lead: add it back.
+            if origin == .audio, entry["clock"] == nil, let found = offset { offset = found + NowPlayingMonitor.syncLead }
+            return Automatic(video: video, offset: offset, origin: origin, at: at)
         }
     }
 
@@ -192,7 +225,9 @@ final class MusicVideoOffsets: ObservableObject {
 
     private func resolved(_ songKey: String?, video: String?, now: Date) -> (offset: Double, origin: MusicVideoOffsetOrigin) {
         guard let songKey else { return (0, .none) }
-        if let manual = values[songKey] { return (MusicVideoTiming.clampedOffset(manual), .manual) }
+        if let manual = values[songKey], manualApplies(songKey, video: video) {
+            return (MusicVideoTiming.clampedOffset(manual), .manual)
+        }
         guard let video else { return (0, .none) }
         if let found = automaticEntry(for: songKey, video: video, now: now), let offset = found.offset {
             return (MusicVideoTiming.clampedOffset(offset), found.origin)
@@ -201,7 +236,18 @@ final class MusicVideoOffsets: ObservableObject {
         return (0, .none)
     }
 
-    func hasManual(_ songKey: String?) -> Bool { songKey.map { values[$0] != nil } ?? false }
+    /// The user set the offset for the song (and this video, when given).
+    func hasManual(_ songKey: String?, video: String? = nil) -> Bool {
+        songKey.map { values[$0] != nil && manualApplies($0, video: video) } ?? false
+    }
+
+    /// A tap or nudge is kept for the video it was made on: another upload
+    /// of the song (the next candidate after a refusal, a pasted link, a
+    /// later search) has its own intro and does not inherit it.
+    private func manualApplies(_ songKey: String, video: String?) -> Bool {
+        guard let video, let owner = manualVideos[songKey] else { return true }
+        return owner == video
+    }
 
     /// What was found for the song and this video, unless it has expired.
     func automaticEntry(for songKey: String, video: String, now: Date) -> Automatic? {
@@ -212,30 +258,36 @@ final class MusicVideoOffsets: ObservableObject {
 
     // MARK: The user's offset
 
-    /// The user's offset for the song, kept even at 0.
-    func set(_ value: Double, for songKey: String) {
+    /// The user's offset for the song, kept even at 0, for `video` (the
+    /// one on screen) when given. To a hundredth of a second, so quarter-
+    /// second nudges add up exactly.
+    func set(_ value: Double, for songKey: String, video: String? = nil) {
         guard value.isFinite else { return }
-        values[songKey] = (MusicVideoTiming.clampedOffset(value) * 10).rounded() / 10
+        values[songKey] = (MusicVideoTiming.clampedOffset(value) * 100).rounded() / 100
+        if let video { manualVideos[songKey] = video } else { manualVideos.removeValue(forKey: songKey) }
         defaults.set(values, forKey: Self.key)
+        defaults.set(manualVideos, forKey: Self.manualVideoKey)
     }
 
     /// Moves the offset in force (automatic or not) by `delta`; from then
-    /// on it is the user's.
+    /// on it is the user's, for this video.
     func nudge(by delta: Double, for songKey: String, video: String? = nil, now: Date = Date()) {
-        set(offset(for: songKey, video: video, now: now) + delta, for: songKey)
+        set(offset(for: songKey, video: video, now: now) + delta, for: songKey, video: video)
     }
 
     /// Back to the automatic offset (or none).
     func clearManual(_ songKey: String) {
         guard values.removeValue(forKey: songKey) != nil else { return }
+        manualVideos.removeValue(forKey: songKey)
         defaults.set(values, forKey: Self.key)
+        defaults.set(manualVideos, forKey: Self.manualVideoKey)
     }
 
     // MARK: Automatic offsets
 
     /// Stores what an alignment found (`offset` nil: nothing usable).
     func storeAutomatic(_ offset: Double?, origin: MusicVideoOffsetOrigin, for songKey: String, video: String, now: Date) {
-        let bounded = offset.flatMap { $0.isFinite ? (MusicVideoTiming.clampedOffset($0) * 10).rounded() / 10 : nil }
+        let bounded = offset.flatMap { $0.isFinite ? (MusicVideoTiming.clampedOffset($0) * 100).rounded() / 100 : nil }
         automatic[songKey] = Automatic(video: video, offset: bounded, origin: origin, at: now.timeIntervalSince1970)
         if automatic.count > Self.capacity {
             let oldest = automatic.sorted { $0.value.at < $1.value.at }
@@ -251,8 +303,9 @@ final class MusicVideoOffsets: ObservableObject {
 
     private func saveAutomatic() {
         let plist = automatic.mapValues { entry -> [String: Any] in
-            var row: [String: Any] = ["video": entry.video, "at": entry.at,
-                                      "kind": entry.origin == .audio ? "audio" : "captions"]
+            // "clock": measured against the song's position without the
+            // lyrics' lead (see `init`).
+            var row: [String: Any] = ["video": entry.video, "at": entry.at, "kind": entry.origin.storedKind, "clock": 2]
             if let offset = entry.offset { row["offset"] = offset }
             return row
         }
@@ -423,7 +476,8 @@ final class MusicVideoResolver {
             // About a megabyte of HTML and JSON: read off the main actor.
             let results = await parse(data)
             guard !results.isEmpty else { return .missing(.lookupFailed) }
-            let found = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist)
+            let found = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist,
+                                                         songDuration: song.duration)
             let skipped = refused[song.key] ?? []
             let candidates = found.filter { !skipped.contains($0.videoID) }
             // Every official video was refused by the player already.

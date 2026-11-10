@@ -365,13 +365,15 @@ final class MusicVideoSyncTests: XCTestCase {
         XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 15)
         XCTAssertEqual(offsets.origin(for: song.key, video: video, now: start), .estimated)
         offsets.storeAutomatic(12.34, origin: .captions, for: song.key, video: video, now: start)
-        XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 12.3, "found beats the estimate")
+        XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 12.34, "found beats the estimate")
         XCTAssertEqual(offsets.origin(for: song.key, video: video, now: start), .captions)
         offsets.nudge(by: 0.5, for: song.key, video: video, now: start)
-        XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 12.8, "nudged from the automatic one")
+        XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 12.84, accuracy: 1e-9,
+                       "nudged from the automatic one")
         XCTAssertEqual(offsets.origin(for: song.key, video: video, now: start), .manual)
         offsets.storeAutomatic(30, origin: .captions, for: song.key, video: video, now: start)
-        XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 12.8, "a later automatic one never wins")
+        XCTAssertEqual(offsets.offset(for: song.key, video: video, now: start), 12.84, accuracy: 1e-9,
+                       "a later automatic one never wins")
         offsets.set(0, for: song.key)
         XCTAssertEqual(offsets.origin(for: song.key, video: video, now: start), .manual, "a nudge to 0 is kept")
         offsets.clearManual(song.key)

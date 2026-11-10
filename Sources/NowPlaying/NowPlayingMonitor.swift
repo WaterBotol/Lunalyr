@@ -246,7 +246,7 @@ final class NowPlayingMonitor: ObservableObject {
     /// tells us where the player *was*, and the audio itself is buffered a
     /// little behind that, so a small lead lands the highlight on the beat
     /// instead of just after it.
-    private static let syncLead: TimeInterval = 0.16
+    static let syncLead: TimeInterval = 0.16
 
     init(runner: AppleScriptRunning = LiveAppleScriptRunner(),
          environment: PlayerEnvironment? = nil,
@@ -303,6 +303,12 @@ final class NowPlayingMonitor: ObservableObject {
     func playbackTime() -> TimeInterval {
         guard let position = clock.position(at: uptime()) else { return 0 }
         return clock.isRunning ? position + Self.syncLead : position
+    }
+
+    /// The position itself, without the lyrics' lead: for the music video,
+    /// whose offsets are measured against the song, not the highlight.
+    func playbackPosition() -> TimeInterval {
+        clock.position(at: uptime()) ?? 0
     }
 
     /// Re-reads every player Lunalyr may currently ask.

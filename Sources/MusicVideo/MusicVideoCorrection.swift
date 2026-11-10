@@ -66,6 +66,11 @@ struct MusicVideoSeekLatency: Equatable {
 
 /// When a YouTube video is sought: only for drift that is large or lasts,
 /// and once correcting, until it is well within step (hysteresis).
+///
+/// Drift between `release` and `engage` that simply stays (a seek that
+/// landed off, with the retries used up) is sought too once it has lasted
+/// `lingerChecks`; each such seek doubles the wait for the next, so a
+/// player that never lands closer is not sought over and over.
 struct MusicVideoSeekHysteresis: Equatable {
     /// Drift past this, on `persistence` checks in a row, is sought.
     static let engage = 1.0
@@ -73,22 +78,31 @@ struct MusicVideoSeekHysteresis: Equatable {
     static let jump = 2.5
     /// After a seek, another one is tried until drift is within this…
     static let release = 0.3
+    /// …or this, after the offset itself was changed (a quarter-second
+    /// nudge must show).
+    static let retargetRelease = 0.12
     /// …at most this many times.
     static let retries = 2
     static let persistence = 2
+    /// Checks (a quarter second each) a lingering drift lasts before a seek.
+    static let lingerChecks = 12
 
     private var over = 0
     private var correcting = false
     private var tries = 0
+    private var lingering = 0
+    private var lingerWait = lingerChecks
+    private var releaseNow = release
 
     /// Whether to seek now, for a playing, settled video `drift` off.
     mutating func shouldSeek(drift: Double) -> Bool {
         let size = abs(drift)
         if correcting {
-            if size <= Self.release || tries >= Self.retries {
+            if size <= releaseNow || tries >= Self.retries {
                 correcting = false
                 tries = 0
                 over = 0
+                releaseNow = Self.release
                 return false
             }
             tries += 1
@@ -100,13 +114,33 @@ struct MusicVideoSeekHysteresis: Equatable {
             return over >= Self.persistence ? startCorrecting() : false
         }
         over = 0
-        return false
+        guard size > Self.release else {
+            lingering = 0
+            lingerWait = Self.lingerChecks
+            return false
+        }
+        lingering += 1
+        guard lingering >= lingerWait else { return false }
+        lingerWait *= 2
+        return startCorrecting()
+    }
+
+    /// The target itself moved (the user's nudge or tap, a found offset):
+    /// what is off now is meant to be corrected at once, not waited out.
+    mutating func retarget() {
+        correcting = true
+        releaseNow = Self.retargetRelease
+        tries = 0
+        over = 0
+        lingering = 0
+        lingerWait = Self.lingerChecks
     }
 
     private mutating func startCorrecting() -> Bool {
         correcting = true
         tries = 0
         over = 0
+        lingering = 0
         return true
     }
 
@@ -138,9 +172,13 @@ struct MusicVideoCorrector {
     private(set) var latency = MusicVideoSeekLatency()
     private var nudge = MusicVideoRateNudge()
     private var hysteresis = MusicVideoSeekHysteresis()
-    private var lastSeek: TimeInterval = -.infinity
+    private(set) var lastSeek: TimeInterval = -.infinity
     /// The lead of the seek whose landing is still to be measured.
     private var pendingLead: Double?
+    /// The offset was changed on purpose; not yet acted on (AVPlayer).
+    private var retargeted = false
+    /// A changed offset seeks AVPlayer past this; less is eased.
+    static let retargetSeek = 0.3
 
     init(style: MusicVideoCorrectionStyle) {
         self.style = style
@@ -174,7 +212,11 @@ struct MusicVideoCorrector {
                 break
             case .rate:
                 guard settled else { return .none }
-                if abs(drift) > MusicVideoRateNudge.seekThreshold { return seek(target + lead, thenPlay: true, now: now) }
+                let deliberate = retargeted
+                retargeted = false
+                if abs(drift) > MusicVideoRateNudge.seekThreshold || (deliberate && abs(drift) > Self.retargetSeek) {
+                    return seek(target + lead, thenPlay: true, now: now)
+                }
                 let next = nudge.rate(forDrift: drift)
                 if next != rate {
                     rate = next
@@ -208,6 +250,18 @@ struct MusicVideoCorrector {
         pendingLead = thenPlay ? (led ?? (style == .ledSeek ? latency.lead : nil)) : nil
         resetRate()
         return .seek(to: to, thenPlay: thenPlay)
+    }
+
+    /// The offset in force changed (a nudge, a tap, a found offset): the
+    /// change is applied at the next steady check instead of waiting for
+    /// the drift to grow past the usual thresholds, which a small change
+    /// never would on YouTube.
+    mutating func targetMoved() {
+        switch style {
+        case .seek: break
+        case .rate: retargeted = true
+        case .ledSeek: hysteresis.retarget()
+        }
     }
 
     /// AVPlayer's `play()` and seeks leave the rate at 1.
