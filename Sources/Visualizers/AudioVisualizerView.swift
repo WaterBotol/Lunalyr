@@ -78,6 +78,10 @@ struct AudioVisualizerView: NSViewRepresentable {
     /// setting. A stand-in inside WebVisualizerView passes 1: NowPlayingView
     /// already applies richness to the whole web layer.
     var vividness: Double?
+    /// Called once, after the first frame is sent to the screen: the scene's
+    /// pipeline compiles on first use, and until then there is nothing to
+    /// show, so the wallpaper's crossfade into it waits for this.
+    var onFirstFrame: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeCoordinator() -> Coordinator { Coordinator(preview: preview) }
@@ -94,6 +98,7 @@ struct AudioVisualizerView: NSViewRepresentable {
     func updateNSView(_ view: MTKView, context: Context) {
         context.coordinator.prepare(style: style, time: time,
             response: .current(reduceMotion: reduceMotion), palette: palette, vividness: vividness)
+        context.coordinator.onFirstFrame = onFirstFrame
         if !paused { view.draw() }
     }
     static func dismantleNSView(_ view: MTKView, coordinator: Coordinator) {
@@ -147,6 +152,9 @@ struct AudioVisualizerView: NSViewRepresentable {
         private var vividness: Double?
         private static let uncolouredStops = [SIMD4<Float>](repeating: .zero, count: 5)
         private var lastAudibleTime = -Double.infinity
+        /// Told once, after the first frame is committed (see `AudioVisualizerView.onFirstFrame`).
+        var onFirstFrame: (() -> Void)?
+        private(set) var hasPresented = false
         /// Whether this surface has shown a frame, and whether the last one
         /// went through the limiter. A limiter starting on a surface that
         /// is already showing keeps its brightness. A new surface for a scene
@@ -316,6 +324,12 @@ struct AudioVisualizerView: NSViewRepresentable {
                 semaphore.signal()
             }
             command.present(drawable); command.commit()
+            if !hasPresented {
+                hasPresented = true
+                // This runs inside a SwiftUI update (updateNSView), where
+                // view state must not change.
+                if let report = onFirstFrame { DispatchQueue.main.async { report() } }
+            }
         }
         /// The drawable for a surface of `native` pixels. Soft wallpaper
         /// fields do not need retina-sized offscreen surfaces (text keeps

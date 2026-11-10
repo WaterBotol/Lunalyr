@@ -59,7 +59,7 @@ enum WebVisualizerEngine: String, CaseIterable {
 }
 
 /// What a web scene's surface shows.
-enum WebVisualizerPlacement: Equatable {
+enum WebVisualizerPlacement: Hashable {
     /// The settings preview: a still from a live desktop surface, or the
     /// closest native scene until one exists.
     case preview
@@ -125,23 +125,35 @@ struct WebVisualizerView: View {
     var palette: AlbumWallpaperPalette?
     /// The display this desktop surface covers; nil in the settings preview.
     var displayID: CGDirectDisplayID?
+    /// What this surface shows, when the wallpaper has already decided it.
+    /// NowPlayingView keys its background layer on it, so moving between
+    /// the live scene and its stand-in (the main display changing) is
+    /// crossfaded like any other change: the outgoing copy keeps what it
+    /// showed. Nil decides here, from the display.
+    var placement: WebVisualizerPlacement? = nil
+    /// Called once the scene has drawn its first frame (see
+    /// `AudioVisualizerView.onFirstFrame`).
+    var onFirstFrame: (() -> Void)? = nil
     @ObservedObject var preferences: VisualizerPreferences = .shared
     @ObservedObject private var mainDisplay = MainDisplayMonitor.shared
 
     var body: some View {
         let colours = Self.scenePalette(palette, colours: preferences.colours(for: engine))
         let standIn = engine.nativeStandIn(projection: projection)
-        switch Self.placement(preview: preview, heavyScenesOnMainDisplayOnly: preferences.heavyScenesOnMainDisplayOnly,
-                              display: displayID, mainDisplay: mainDisplay.id) {
+        switch placement ?? Self.placement(preview: preview,
+                                           heavyScenesOnMainDisplayOnly: preferences.heavyScenesOnMainDisplayOnly,
+                                           display: displayID, mainDisplay: mainDisplay.id) {
         case .preview:
-            WebVisualizerPreview(engine: engine, standIn: standIn, paused: paused, tick: tick, palette: colours)
+            WebVisualizerPreview(engine: engine, standIn: standIn, paused: paused, tick: tick, palette: colours,
+                                 onFirstFrame: onFirstFrame)
         case .standIn:
             // NowPlayingView applies Colour richness to the whole web layer,
             // so the stand-in's shader leaves it at 1.
-            AudioVisualizerView(style: standIn, time: tick, paused: paused, palette: colours, vividness: 1)
+            AudioVisualizerView(style: standIn, time: tick, paused: paused, palette: colours, vividness: 1,
+                                onFirstFrame: onFirstFrame)
         case .live:
             WebVisualizerSurface(engine: engine, preset: preset, projection: projection, sensitivity: sensitivity,
-                motion: motion, tick: tick, paused: paused, palette: colours)
+                motion: motion, tick: tick, paused: paused, palette: colours, onFirstFrame: onFirstFrame)
         }
     }
 
@@ -358,6 +370,7 @@ private struct WebVisualizerSurface: NSViewRepresentable {
     let tick: Double
     let paused: Bool
     let palette: AlbumWallpaperPalette?
+    var onFirstFrame: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduced
 
     func makeCoordinator() -> WebVisualizerCoordinator { WebVisualizerCoordinator(engine: engine) }
@@ -373,6 +386,7 @@ private struct WebVisualizerSurface: NSViewRepresentable {
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {
+        context.coordinator.onFirstFrame = onFirstFrame
         guard tick.isFinite, view.bounds.width >= 2, view.bounds.height >= 2 else { return }
         let response = VisualizerResponse.current(reduceMotion: reduced)
         context.coordinator.schedule(view, request: .init(
@@ -414,6 +428,10 @@ final class WebVisualizerCoordinator: NSObject, WKNavigationDelegate {
 
     /// The page has loaded and accepts frames.
     var isReady: Bool { ready }
+    /// Told once, after the page's first successful draw: until then the
+    /// page is black (or, before it loads, possibly white).
+    var onFirstFrame: (() -> Void)?
+    private(set) var hasDrawn = false
 
     /// Seconds before reloading after the `crashes`-th termination in a row:
     /// at once, then 1, 2, 4 … up to a minute, until a frame draws again.
@@ -460,6 +478,10 @@ final class WebVisualizerCoordinator: NSObject, WKNavigationDelegate {
                 switch result {
                 case .success(let state):
                     self.crashes = 0
+                    if !self.hasDrawn {
+                        self.hasDrawn = true
+                        self.onFirstFrame?()
+                    }
                     WebVisualizerDiagnostics.shared.drew(self.engine, state: state as? [String: Any])
                 case .failure(let error):
                     WebVisualizerDiagnostics.shared.failed(self.engine, message: error.localizedDescription)
@@ -518,15 +540,17 @@ private struct WebVisualizerPreview: View {
     let paused: Bool
     let tick: Double
     let palette: AlbumWallpaperPalette?
+    var onFirstFrame: (() -> Void)?
     @ObservedObject private var snapshots = WebVisualizerSnapshots.shared
 
     var body: some View {
         ZStack {
             if let image = snapshots.still(for: engine) {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                    .onAppear { onFirstFrame?() }
             } else {
                 AudioVisualizerView(style: standIn, time: tick, paused: paused, preview: true, palette: palette,
-                    vividness: 1)
+                    vividness: 1, onFirstFrame: onFirstFrame)
             }
         }
         .clipped()
