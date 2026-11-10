@@ -221,7 +221,7 @@ final class LyricExtrasTests: XCTestCase {
         let hotkeys = GlobalHotkeys(defaults: defaults, registrar: fake.registrar)
         hotkeys.setEnabled(true)
         XCTAssertEqual(hotkeys.unavailable, [.toggleLyrics], "an exclusive registration that fails is said, not hidden")
-        XCTAssertEqual(hotkeys.active, Set(GlobalHotkeys.Action.allCases).subtracting([.toggleLyrics]))
+        XCTAssertEqual(hotkeys.active, Set(GlobalHotkeys.Action.allCases.filter(\.isOnByDefault)).subtracting([.toggleLyrics]))
         XCTAssertTrue(fake.attempts.allSatisfy { $0.modifiers == GlobalHotkeys.Modifiers.controlOptionCommand.carbon })
         XCTAssertNil(hotkeys.activeLabel(for: .toggleLyrics), "the menus don't advertise a key that won't work")
         XCTAssertNil(hotkeys.keyEquivalent(for: .toggleLyrics))
@@ -257,7 +257,7 @@ final class LyricExtrasTests: XCTestCase {
 
         hotkeys.modifiers = .controlShiftCommand
         XCTAssertEqual(fake.attempts.last?.modifiers, GlobalHotkeys.Modifiers.controlShiftCommand.carbon)
-        XCTAssertEqual(hotkeys.active.count, GlobalHotkeys.Action.allCases.count - 1)
+        XCTAssertEqual(hotkeys.active.count, GlobalHotkeys.Action.allCases.filter(\.isOnByDefault).count - 1)
         XCTAssertTrue(hotkeys.label(for: .toggleLyrics)?.hasPrefix("⌃⇧⌘") ?? false)
 
         let reloaded = GlobalHotkeys(defaults: defaults, registrar: FakeRegistrar().registrar)

@@ -18,6 +18,7 @@ final class GlobalHotkeys: ObservableObject {
 
     enum Action: UInt32, CaseIterable, Identifiable {
         case toggleLyrics = 1, syncEarlier, syncLater, cycleLayout, copyCard, pauseWallpaper
+        case tapSyncLyrics, toggleMusicVideo, nextVisualizer
         var id: UInt32 { rawValue }
 
         var title: String {
@@ -28,6 +29,9 @@ final class GlobalHotkeys: ObservableObject {
             case .cycleLayout: return "Next layout"
             case .copyCard: return "Copy a lyric card"
             case .pauseWallpaper: return "Pause or resume the wallpaper"
+            case .tapSyncLyrics: return "Tap to sync lyrics"
+            case .toggleMusicVideo: return "Music video on or off"
+            case .nextVisualizer: return "Next visualiser"
             }
         }
 
@@ -40,6 +44,18 @@ final class GlobalHotkeys: ObservableObject {
             case .cycleLayout: return "cycleLayout"
             case .copyCard: return "copyCard"
             case .pauseWallpaper: return "pauseWallpaper"
+            case .tapSyncLyrics: return "tapSyncLyrics"
+            case .toggleMusicVideo: return "toggleMusicVideo"
+            case .nextVisualizer: return "nextVisualizer"
+            }
+        }
+
+        /// The first six are on unless switched off; later ones wait to be
+        /// switched on, so an update takes no new keys from other apps.
+        var isOnByDefault: Bool {
+            switch self {
+            case .tapSyncLyrics, .toggleMusicVideo, .nextVisualizer: return false
+            default: return true
             }
         }
     }
@@ -79,6 +95,9 @@ final class GlobalHotkeys: ObservableObject {
         .init(action: .cycleLayout, keyCode: UInt32(kVK_ANSI_K), key: "K"),
         .init(action: .copyCard, keyCode: UInt32(kVK_ANSI_C), key: "C"),
         .init(action: .pauseWallpaper, keyCode: UInt32(kVK_ANSI_P), key: "P"),
+        .init(action: .tapSyncLyrics, keyCode: UInt32(kVK_ANSI_T), key: "T"),
+        .init(action: .toggleMusicVideo, keyCode: UInt32(kVK_ANSI_V), key: "V"),
+        .init(action: .nextVisualizer, keyCode: UInt32(kVK_ANSI_N), key: "N"),
     ]
 
     static func shortcut(for action: Action) -> Shortcut? {
@@ -88,6 +107,8 @@ final class GlobalHotkeys: ObservableObject {
     enum Keys {
         static let modifiers = "custom.globalShortcutModifiers"
         static let switchedOff = "custom.globalShortcutsOff"
+        /// Shortcuts that are off by default and were switched on.
+        static let switchedOn = "custom.globalShortcutsOn"
     }
 
     /// Takes and releases combinations. The app uses Carbon; tests use a
@@ -126,7 +147,10 @@ final class GlobalHotkeys: ObservableObject {
         self.registrar = registrar ?? .carbon
         modifiers = Modifiers(rawValue: defaults.string(forKey: Keys.modifiers) ?? "") ?? .controlOptionCommand
         let off = Set(defaults.stringArray(forKey: Keys.switchedOff) ?? [])
-        switchedOff = Set(Action.allCases.filter { off.contains($0.storageName) })
+        let on = Set(defaults.stringArray(forKey: Keys.switchedOn) ?? [])
+        switchedOff = Set(Action.allCases.filter {
+            $0.isOnByDefault ? off.contains($0.storageName) : !on.contains($0.storageName)
+        })
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -143,7 +167,9 @@ final class GlobalHotkeys: ObservableObject {
 
     func setSwitchedOn(_ on: Bool, for action: Action) {
         if on { switchedOff.remove(action) } else { switchedOff.insert(action) }
-        defaults.set(switchedOff.map(\.storageName).sorted(), forKey: Keys.switchedOff)
+        defaults.set(switchedOff.filter(\.isOnByDefault).map(\.storageName).sorted(), forKey: Keys.switchedOff)
+        defaults.set(Action.allCases.filter { !$0.isOnByDefault && !switchedOff.contains($0) }.map(\.storageName),
+                     forKey: Keys.switchedOn)
         guard registered else { return }
         if !on {
             if active.contains(action) {
@@ -260,6 +286,9 @@ final class GlobalHotkeys: ObservableObject {
         case .cycleLayout: extras.cycleLayout()
         case .copyCard: extras.copyLyricCard()
         case .pauseWallpaper: extras.toggleWallpaperPause()
+        case .tapSyncLyrics: LyricTapSyncController.shared.toggle()
+        case .toggleMusicVideo: extras.toggleMusicVideo()
+        case .nextVisualizer: extras.nextVisualizer()
         }
     }
 }
