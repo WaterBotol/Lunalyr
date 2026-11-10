@@ -62,6 +62,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- First launch: resting the pointer on the desktop while the welcome was open could make macOS ask whether Lunalyr may control Music before the welcome had explained why. The desktop player now appears on hover only once the welcome is finished.
 - Launch at login: a warning from a failed attempt no longer stays on screen after one that worked. When Lunalyr is switched off in System Settings › Login Items, Settings now says so with an Open Login Items button instead of showing the switch as done, and the switch follows changes made in System Settings while Lunalyr is open.
 - Imported wallpaper: importing another picture or video now deletes the copy Lunalyr kept of the previous one, instead of keeping every import in Application Support. If the kept copy goes missing, the wallpaper falls back to a generated one instead of black, and Settings says the file is missing and asks for it again.
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.

@@ -236,3 +236,13 @@ final class LaunchAtLoginTests: XCTestCase {
         XCTAssertEqual(item.registers + item.unregisters, 0)
     }
 }
+
+/// First launch, before any permission: the desktop player's hover read was
+/// the first Apple event to an open Music, raising macOS's Automation
+/// prompt before the welcome had explained it.
+final class FirstLaunchHoverTests: XCTestCase {
+    func testHoverControlsWaitForTheFirstRunWelcome() {
+        XCTAssertFalse(AppDelegate.startsHoverAtLaunch(hasOnboarded: false))
+        XCTAssertTrue(AppDelegate.startsHoverAtLaunch(hasOnboarded: true))
+    }
+}
