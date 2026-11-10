@@ -141,6 +141,13 @@ final class MusicVideoController: ObservableObject {
         }
     }
 
+    /// Whether `source` is the video found for the playing song. A surface
+    /// still fading out after a song change is not.
+    func isShowing(_ source: MusicVideoSource) -> Bool {
+        if case .showing(let showing, _) = status { return showing == source }
+        return false
+    }
+
     /// The video to show for `track`, when one was found for it.
     func source(for track: NowPlayingMonitor.Track?) -> MusicVideoSource? {
         guard let track, case .showing(let source, _) = status, let song,

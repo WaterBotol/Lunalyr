@@ -214,7 +214,8 @@ final class MusicVideoPauseTests: XCTestCase {
         XCTAssertEqual(host.events, ["capture", "pause"])
         XCTAssertFalse(freeze.frameShown)
         fire()
-        XCTAssertFalse(host.events.contains("release"), "no long-pause close without a frame to show")
+        XCTAssertEqual(host.events.last, "release", "closed after a long pause even without a frame: nothing on screen changes")
+        XCTAssertFalse(freeze.frameShown)
         // A picture with nothing in it (WebKit left the video out) is a failure too.
         XCTAssertTrue(MusicVideoFrozenFrame.looksBlank(Self.image(gray: 0)))
         XCTAssertFalse(MusicVideoFrozenFrame.looksBlank(Self.image(gray: 0.3)))
@@ -273,11 +274,106 @@ final class MusicVideoPauseTests: XCTestCase {
         XCTAssertFalse(host.events.contains("release"))
     }
 
-    func testCoveredAtTheLongPauseKeepsThePlayer() {
+    func testCoveredForALongTimeClosesThePlayerAndShowingReopensIt() {
+        // The wallpaper covered, hidden or paused for ten minutes: the hidden
+        // YouTube page is closed so it uses nothing.
+        let (freeze, host, fire) = makeFreeze()
+        freeze.noteHold(.live)
+        freeze.notePlayer(showing: true)
+        freeze.noteHold(.other)
+        freeze.pause()
+        freeze.notePlayer(showing: false)
+        XCTAssertEqual(host.events, ["pause"])
+        freeze.noteHold(.other)
+        fire()
+        XCTAssertEqual(host.events, ["pause", "release"])
+        freeze.noteHold(.other)
+        XCTAssertEqual(host.events, ["pause", "release"], "still covered: stays closed, no second timer")
+        fire()
+        XCTAssertEqual(host.events, ["pause", "release"])
+        freeze.noteHold(.live)
+        XCTAssertEqual(host.events, ["pause", "release", "recreate"], "shown again: a fresh player")
+    }
+
+    func testCoveredAfterAUserPauseClosesAtTheLongPauseToo() {
         let (freeze, host, fire) = makeFreeze()
         userPause(freeze)
         freeze.noteHold(.other)
         fire()
-        XCTAssertFalse(host.events.contains("release"), "only a user pause closes it")
+        XCTAssertEqual(host.events.last, "release")
+        freeze.noteHold(.userPaused)
+        XCTAssertTrue(freeze.frameShown, "uncovered with the song still paused: the frozen frame, no player")
+        XCTAssertFalse(host.events.contains("recreate"))
+    }
+
+    func testCoveredBrieflyKeepsThePlayer() {
+        let (freeze, host, fire) = makeFreeze()
+        freeze.noteHold(.live)
+        freeze.noteHold(.other)
+        freeze.noteHold(.live)
+        fire()
+        XCTAssertFalse(host.events.contains("release"))
+    }
+
+    // MARK: Song change and hidden surfaces
+
+    func testAVideoFadingOutAfterASongChangeIsHeldNotSought() {
+        final class Surface: MusicVideoPlaybackSurface {
+            var time = 95.0, playing = true
+            var calls: [String] = []
+            var holds: [MusicVideoHold] = []
+            var seekLead: Double { 0 }
+            var correctionStyle: MusicVideoCorrectionStyle { .rate }
+            func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
+                done(.init(videoTime: time, videoPlaying: playing), 200)
+            }
+            func playVideo() { calls.append("play"); playing = true }
+            func pauseVideo() { calls.append("pause"); playing = false }
+            func seekVideo(to seconds: Double) { calls.append("seek \(seconds)"); time = seconds }
+            func setVideoRate(_ rate: Double) { calls.append("rate") }
+            func noteHold(_ hold: MusicVideoHold) { holds.append(hold) }
+        }
+        // The next song has started at 0:01; the old video was at 1:35.
+        var current = false
+        let surface = Surface()
+        let loop = MusicVideoSyncLoop(songTime: { 1 }, songPlaying: { true }, offset: { 0 }, uptime: { 10 })
+        loop.isCurrent = { current }
+        loop.surface = surface
+        loop.tick()
+        XCTAssertEqual(surface.calls, ["pause"], "held where it is, never sought to the new song's time")
+        XCTAssertEqual(surface.holds.last, .other)
+        loop.tick()
+        XCTAssertEqual(surface.calls, ["pause"], "and left alone while it fades")
+        // The same video found again for the next song: it follows once more.
+        current = true
+        loop.tick()
+        XCTAssertEqual(Array(surface.calls.suffix(2)), ["seek 1.0", "play"])
+        XCTAssertEqual(surface.holds.last, .live)
+        loop.stop()
+    }
+
+    func testAHiddenSurfaceWithNothingToSampleStopsChecking() {
+        final class Empty: MusicVideoPlaybackSurface {
+            var samples = 0
+            var seekLead: Double { 0 }
+            func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
+                samples += 1
+                done(nil, nil)
+            }
+            func playVideo() {}
+            func pauseVideo() {}
+            func seekVideo(to seconds: Double) {}
+        }
+        let surface = Empty()
+        let loop = MusicVideoSyncLoop(songTime: { 30 }, songPlaying: { true }, offset: { 0 }, uptime: { 0 })
+        loop.surface = surface
+        loop.start()
+        XCTAssertTrue(loop.isRunning, "visible: keeps checking until the player loads")
+        loop.setSurfacePaused(true)
+        loop.tick()
+        XCTAssertFalse(loop.isRunning, "hidden, closed or not loaded: the loop rests")
+        loop.setSurfacePaused(false)
+        XCTAssertTrue(loop.isRunning, "shown again: checks again")
+        loop.stop()
     }
 }

@@ -139,6 +139,11 @@ final class MusicVideoSyncLoop {
     var onDuration: ((Double) -> Void)?
     /// Told each sample of the video's own position (for Tap to sync).
     var onSample: ((MusicVideoDrift.Sample) -> Void)?
+    /// Whether this surface's video is still the playing song's. A video
+    /// fading out after a song change is not: it is paused where it is,
+    /// never sought to the next song's position (which would flash its
+    /// opening frame, or another part of it, during the fade).
+    var isCurrent: () -> Bool = { true }
 
     /// Follows the shared now-playing monitor and the playing song's offset.
     convenience init() {
@@ -172,6 +177,9 @@ final class MusicVideoSyncLoop {
         timer = nil
     }
 
+    /// The loop is checking (for tests).
+    var isRunning: Bool { timer != nil }
+
     func setSurfacePaused(_ paused: Bool) {
         guard paused != surfacePaused else { return }
         surfacePaused = paused
@@ -181,6 +189,7 @@ final class MusicVideoSyncLoop {
 
     /// Why the video is moving or not, right now.
     func hold(videoDuration: Double?) -> MusicVideoHold {
+        guard isCurrent() else { return .other }
         let target = MusicVideoTiming.videoTime(songTime: songTime(), offset: offset(), videoDuration: videoDuration)
         return MusicVideoHold.of(surfacePaused: surfacePaused, songPlaying: songPlaying(), target: target)
     }
@@ -196,7 +205,18 @@ final class MusicVideoSyncLoop {
         surface.sample { [weak self] sample, duration in
             guard let self else { return }
             self.inFlight = false
-            guard let sample, let surface = self.surface else { return }
+            guard let sample, let surface = self.surface else {
+                // Nothing to sample (not loaded yet, failed, or closed for a
+                // long pause) behind a hidden surface: nothing can play, so
+                // the loop rests until the surface shows again.
+                if self.surfacePaused { self.stop() }
+                return
+            }
+            guard self.isCurrent() else {
+                // Another song's video, on its way out: hold it still.
+                if sample.videoPlaying || sample.buffering { surface.pauseVideo() }
+                return
+            }
             let target = MusicVideoTiming.videoTime(songTime: self.songTime(), offset: self.offset(),
                                                     videoDuration: duration)
             if let duration {
@@ -309,6 +329,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         }
         playerLayer.opacity = 0
         player.replaceCurrentItem(with: item)
+        loop.isCurrent = { MusicVideoController.shared.isShowing(.local(url)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
         loop.onSample = {
             MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
@@ -543,6 +564,8 @@ enum YouTubeEmbed {
         }
         window.lunalyrSample = function () {
           if (!ready || !player || !player.getCurrentTime) return null;
+          // Checked on every sample too: the video must never be heard.
+          try { if (player.isMuted && !player.isMuted()) player.mute(); } catch (e) {}
           return {time: player.getCurrentTime(), state: player.getPlayerState(), duration: player.getDuration()};
         };
         window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
@@ -783,6 +806,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         if videoID != self.videoID { freeze.reset() }
         self.videoID = videoID
         if view == nil { openWebView() }
+        loop.isCurrent = { MusicVideoController.shared.isShowing(.youTube(videoID)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
         loop.onSample = {
             MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
