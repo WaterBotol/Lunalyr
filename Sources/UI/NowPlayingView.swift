@@ -33,13 +33,33 @@ struct NowPlayingView: View {
     @State private var previousWallpaperPalette: AlbumWallpaperPalette?
     @State private var paletteChangedAt = Date.distantPast
     @State private var hasAlbumPalette = false
-    /// The background layer on screen, the one it replaced, and the fade
-    /// between them.
-    @State private var crossfade = BackgroundCrossfade<BackgroundLayer>(.generated(pattern: nil, seed: 0))
-    /// The last track's look, kept while nothing plays so a pause or a stop
-    /// does not redraw the wallpaper as a different one.
-    @State private var heldMood: TrackMood?
-    @State private var heldSeed: Int?
+    /// Whether the palette fading out was the album's, so the album tint
+    /// fades with the colours instead of popping in or out.
+    @State private var hadAlbumPalette = false
+    /// The cover the palette was last asked for, the track that cover is
+    /// for, and whether its colours are still being taken.
+    @State private var paletteRequest: (image: NSImage?, track: NowPlayingMonitor.Track?, inFlight: Bool)?
+    /// The track whose cover's colours are applied: a song change's
+    /// background waits until they are in.
+    @State private var paletteTrack: NowPlayingMonitor.Track?
+    /// The background layers on screen, bottom first, and their fades. It
+    /// starts empty (an invisible placeholder) until the view appears.
+    @State private var crossfade = BackgroundCrossfade<BackgroundLayer>(.generated(pattern: nil, seed: 0), ready: false,
+                                                                        fadingInAt: .distantFuture)
+    /// The mood and seed the background is chosen from: held across a song
+    /// change until the new song's cover and lyrics are in, then kept for
+    /// that recording, and kept while nothing plays (see
+    /// `BackgroundChoiceHold`).
+    @State private var choiceHold = BackgroundChoiceHold<NowPlayingMonitor.Track, BackgroundInputs?>(choice: nil)
+    /// Layers whose view has drawn its first frame (visualisers, imported
+    /// pictures): the crossfade into one waits for it.
+    @State private var drawnLayers: Set<BackgroundLayer> = []
+    /// A layer whose first frame took longer than `firstFrameWait`: shown
+    /// anyway rather than holding the old one forever.
+    @State private var firstFrameOverdue: BackgroundLayer?
+    /// The song whose music video took longer than `musicVideoWait` to
+    /// find: its surface falls back meanwhile.
+    @State private var musicVideoOverdue: NowPlayingMonitor.Track?
     @State private var viewportSize: CGSize = .zero
     /// Renewed at natural breaks to keep the shader's clock small.
     @State private var shaderEpoch = 0
@@ -47,12 +67,17 @@ struct NowPlayingView: View {
     /// Bumped when a fade or notice ends, so a quiet frame clock can stop.
     @State private var clockCheck = 0
 
-    private static let backgroundFadeDuration: TimeInterval = 0.75
-    private static let paletteFadeDuration: TimeInterval = 0.9
+    private static let backgroundFadeDuration: TimeInterval = WallpaperMotion.surfaceFade
+    private static let paletteFadeDuration: TimeInterval = WallpaperMotion.surfaceFade
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
-    private static let noticeHoldDuration: TimeInterval = 4.0
-    private static let noticeFadeDuration: TimeInterval = 1.0
-    private static let idleHoldDuration: TimeInterval = 5.0
+    private static let noticeHoldDuration: TimeInterval = WallpaperMotion.noticeHold
+    private static let noticeFadeDuration: TimeInterval = WallpaperMotion.noticeFade
+    private static let idleHoldDuration: TimeInterval = WallpaperMotion.idleNoticeHold
+    /// How long a crossfade waits for a layer's first frame.
+    static let firstFrameWait: TimeInterval = 3
+    /// How long a song change in Music video waits on the cover stand-in
+    /// for the song's video before showing the fallback wallpaper.
+    static let musicVideoWait: TimeInterval = 3
     /// Ambient motion under Reduce Motion, matching the visualisers.
     private static let reducedMotionRate = 0.15
     /// How long the text backing takes to come or go when the lyric stage
@@ -75,14 +100,21 @@ struct NowPlayingView: View {
     /// this differ from `currentLayer` and starts a crossfade.
     enum BackgroundLayer: Hashable {
         case desktop
-        /// `still` shows the cover itself instead of its animation.
-        case motion(URL, still: Bool)
+        /// `still` shows the cover itself instead of its animation (Reduce
+        /// Motion); `cover` is that song's cover, so a new one crossfades in.
+        case motion(URL, still: Bool, cover: NSImage? = nil)
         case custom(URL)
         /// The song's music video, kept on the song's position.
         case musicVideo(MusicVideoSource)
+        /// The video's stand-in (the cover's colours, dimmed) while the new
+        /// song's video is being looked for, so a song change goes from one
+        /// video to the next without the fallback wallpaper in between.
+        case musicVideoPending
         /// A new epoch is the same effect restarted on a fresh clock.
         case shader(ShaderStyle, epoch: Int)
-        case visualizer(AudioVisualizerStyle)
+        /// `web` is where a web scene is drawn (live, or the native stand-in
+        /// on another display); nil for the native scenes.
+        case visualizer(AudioVisualizerStyle, web: WebVisualizerPlacement? = nil)
         case albumGradient
         /// `nil` pattern means colour field only. Each layer keeps its own
         /// seed, so the outgoing pattern keeps its geometry while it fades.
@@ -92,10 +124,21 @@ struct NowPlayingView: View {
         /// still pictures draw themselves.
         var animatesWithClock: Bool {
             switch self {
-            case .desktop, .motion, .custom, .musicVideo: return false
+            case .desktop, .motion, .custom, .musicVideo, .musicVideoPending: return false
             case .shader, .visualizer, .generated, .albumGradient: return true
             }
         }
+
+        /// Everything but Your wallpaper covers what is beneath it (each
+        /// layer is drawn over its own black), so a crossfade between two of
+        /// them leaves the outgoing one fully drawn under the incoming one.
+        var isOpaque: Bool { self != .desktop }
+    }
+
+    /// What a song's background is chosen from (see `BackgroundChoiceHold`).
+    struct BackgroundInputs: Equatable {
+        var mood: TrackMood
+        var seed: Int
     }
 
     private var desiredLayer: BackgroundLayer {
@@ -103,11 +146,39 @@ struct NowPlayingView: View {
         let mode = settings.effectiveBackgroundMode
         if mode == .musicVideo {
             if let source = musicVideoHere { return .musicVideo(source) }
+            if awaitsMusicVideo { return .musicVideoPending }
             // No video for this song, or kept off this display: whatever
             // was chosen before Music video, under the same power rules.
             return layer(for: Settings.effectiveMode(settings.musicVideoFallback, under: settings.powerConstraint))
         }
         return layer(for: mode)
+    }
+
+    /// The playing song's video is still being looked for, for a surface
+    /// that would show it (see `musicVideoWait`).
+    private var awaitsMusicVideo: Bool {
+        guard let track = nowPlaying.current, musicVideoOverdue != track else { return false }
+        return musicVideoLookupPending && showsMusicVideoHere
+    }
+
+    /// The video controller is looking for the playing song's video, or
+    /// has not caught up with the song change yet (it still shows the last
+    /// song's video, which `source(for:)` does not return for this one).
+    private var musicVideoLookupPending: Bool {
+        guard nowPlaying.current != nil else { return false }
+        switch musicVideo.status {
+        case .searching, .showing: return true
+        case .off, .idle, .missing: return false
+        }
+    }
+
+    /// Whether this surface shows music videos at all (display choice).
+    private var showsMusicVideoHere: Bool {
+        // Placement does not depend on the video, so any source asks it.
+        MusicVideoController.placement(source: .youTube(""), preview: isSettingsPreview,
+                                       heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
+                                       choice: settings.musicVideoDisplays, displays: mainDisplay.displays,
+                                       display: effectDisplay, mainDisplay: mainDisplay.id) != nil
     }
 
     /// The song's video, when this surface shows it.
@@ -121,7 +192,7 @@ struct NowPlayingView: View {
     /// The type drawn, with Music video resolved to the video or its fallback.
     private var drawnMode: Settings.BackgroundMode {
         let mode = settings.effectiveBackgroundMode
-        guard mode == .musicVideo, musicVideoHere == nil else { return mode }
+        guard mode == .musicVideo, musicVideoHere == nil, !awaitsMusicVideo else { return mode }
         return Settings.effectiveMode(settings.musicVideoFallback, under: settings.powerConstraint)
     }
 
@@ -132,15 +203,23 @@ struct NowPlayingView: View {
                                     album: nowPlaying.current?.album) {
             // Portrait displays get the tall rendition when the album has a
             // dependable one.
-            return .motion(motion.rendition(portrait: prefersTallArtwork), still: reduceMotion)
+            return .motion(motion.rendition(portrait: prefersTallArtwork), still: reduceMotion,
+                           cover: reduceMotion ? nowPlaying.currentTrackArtwork : nil)
         }
-        let mood = backgroundMood
-        let seed = backgroundSeed
+        let inputs = backgroundInputs
+        let mood = inputs.mood
+        let seed = inputs.seed
         if mode == .desktop { return .desktop }
         if mode == .custom, CustomWallpaperStore.isAvailable(settings.customWallpaperPath) {
             return .custom(URL(fileURLWithPath: settings.customWallpaperPath))
         }
-        if mode == .visualizer { return .visualizer(settings.audioVisualizerStyle) }
+        if mode == .visualizer {
+            let style = settings.audioVisualizerStyle
+            guard style.webEngine != nil else { return .visualizer(style) }
+            return .visualizer(style, web: WebVisualizerView.placement(
+                preview: isSettingsPreview, heavyScenesOnMainDisplayOnly: visualizerPreferences.heavyScenesOnMainDisplayOnly,
+                display: effectDisplay, mainDisplay: mainDisplay.id))
+        }
         if mode == .shader || (mode == .auto && mood.energy > 0.72) {
             return .shader(settings.resolvedShader(for: mood, seed: seed), epoch: shaderEpoch)
         }
@@ -168,9 +247,35 @@ struct NowPlayingView: View {
         )
     }
 
-    /// The background follows the last track until another one plays.
-    private var backgroundMood: TrackMood { nowPlaying.current == nil ? heldMood ?? mood : mood }
-    private var backgroundSeed: Int { nowPlaying.current == nil ? heldSeed ?? trackSeed : trackSeed }
+    /// The playing song's inputs as they stand now.
+    private var liveInputs: BackgroundInputs { BackgroundInputs(mood: mood, seed: trackSeed) }
+
+    /// What the background is chosen from: the held choice, once there is
+    /// one (see `choiceHold`).
+    private var backgroundInputs: BackgroundInputs { choiceHold.choice ?? liveInputs }
+
+    /// The playing song's cover colours are applied and its lyrics are no
+    /// longer loading: its background can be chosen.
+    private var backgroundInputsSettled: Bool {
+        guard let track = nowPlaying.current, let paletteTrack, paletteTrack.isSameTrack(as: track) else { return false }
+        return !lyricsVM.isLoading
+    }
+
+    private struct SettleKey: Equatable {
+        let track: NowPlayingMonitor.Track?
+        let settled: Bool
+    }
+
+    /// Takes the playing song's background choice once its inputs settle
+    /// (or `settleLimit` passes). A new song's effect clock is renewed in
+    /// the same step, so a song change is one crossfade.
+    private func settleBackgroundChoice() {
+        var hold = choiceHold
+        if hold.update(track: nowPlaying.current, choice: liveInputs, settled: backgroundInputsSettled, now: Date()) {
+            renewShaderClock(.trackChange)
+        }
+        if hold != choiceHold { choiceHold = hold }
+    }
 
     private var currentLayer: BackgroundLayer { crossfade.current }
 
@@ -179,9 +284,29 @@ struct NowPlayingView: View {
     /// never had anything to draw waits instead of fading towards an empty
     /// view (see `BackgroundCrossfade`).
     private func canDraw(_ layer: BackgroundLayer) -> Bool {
-        guard case .shader(let style, _) = layer else { return true }
-        return effects.isSettled(style, display: effectDisplay)
+        switch layer {
+        case .shader(let style, _):
+            return effects.isSettled(style, display: effectDisplay)
+        case .visualizer, .custom:
+            // A visualiser compiles on first use, a web scene loads, and a
+            // picture decodes: each says when its first frame is up.
+            return drawnLayers.contains(layer) || firstFrameOverdue == layer
+        default:
+            return true
+        }
     }
+
+    /// Records that `layer`'s view has drawn, outside the view update that
+    /// drew it.
+    private func firstFrameDrawn(_ layer: BackgroundLayer) -> () -> Void {
+        { if !drawnLayers.contains(layer) { drawnLayers.insert(layer) } }
+    }
+
+    /// A date for a fade that starts now: while the surface is paused,
+    /// changes apply at once instead, so the still wallpaper shows the new
+    /// layer and the new colours together, and resuming does not jump the
+    /// last of a frozen fade.
+    private var fadeStart: Date { renderingPaused ? .distantPast : Date() }
 
     private func prepareEffect(for layer: BackgroundLayer) {
         if case .shader(let style, _) = layer { effects.prepare(style, display: effectDisplay) }
@@ -221,7 +346,7 @@ struct NowPlayingView: View {
     /// holds still, no lyric is advancing, and fades and notices are done.
     private var quietAfter: Date? {
         var ends: [Date] = []
-        if crossfade.previous != nil { ends.append(crossfade.changedAt.addingTimeInterval(Self.backgroundFadeDuration)) }
+        if let end = crossfade.fadesEnd(duration: Self.backgroundFadeDuration) { ends.append(end) }
         ends.append(paletteChangedAt.addingTimeInterval(Self.paletteFadeDuration))
         if nowPlaying.current == nil, let since = nowPlaying.idleSince {
             ends.append(since.addingTimeInterval(Self.idleHoldDuration + Self.noticeFadeDuration))
@@ -276,25 +401,18 @@ struct NowPlayingView: View {
                 // state, so a `.transition` here would simply cut. An effect
                 // that has not yet had anything to draw holds the fade at its
                 // start.
-                let fade = crossfade.fade(at: Date(), duration: Self.backgroundFadeDuration)
-                let outgoing = crossfade.outgoing(fade: fade)
-                let layers = crossfade.layers(fade: fade)
+                let layers = crossfade.layers(at: Date(), duration: Self.backgroundFadeDuration, isOpaque: \.isOpaque)
                 let phases = LayerPhases(colour: colourPhase, flow: flowPhase, pattern: patternPhase,
                                          visualizer: visualizerPhase, economical: economical)
                 let stage = stagePresence(at: Date())
 
                 WallpaperViewport(size: geometry.size) {
                   ZStack {
-                    // Generated wallpapers sit on opaque black. Desktop
-                    // overlay mode leaves the desktop showing, and the black
-                    // fades with the layer moving to or from it.
-                    let base = baseOpacity(outgoing: outgoing, fade: fade)
-                    if base > 0 { Color.black.opacity(base) }
                     // Keyed by the layer itself, so the outgoing layer stays
                     // the same view -- and the same video or web page -- for
                     // the whole fade instead of being rebuilt in a new slot.
-                    ForEach(layers, id: \.self) { layer in
-                        crossfaded(layer, opacity: crossfade.opacity(of: layer, fade: fade),
+                    ForEach(layers, id: \.layer) { drawn in
+                        crossfaded(drawn.layer, opacity: drawn.opacity,
                                    phases: phases, size: geometry.size, cover: cover, stage: stage)
                     }
                   }
@@ -321,7 +439,8 @@ struct NowPlayingView: View {
                     .opacity(isHovered ? 0.3 : 1)
                     // A soft spring rather than a fixed curve: moving off and
                     // back on mid-fade reverses smoothly from where it was.
-                    .animation(.spring(response: 0.42, dampingFraction: 0.9), value: isHovered)
+                    .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.step, reduceMotion: reduceMotion),
+                               value: isHovered)
                 }
                 // The words, copies and echoes on screen are decoration for
                 // assistive technology; the element below speaks for them.
@@ -345,27 +464,49 @@ struct NowPlayingView: View {
             }
         }
         .ignoresSafeArea(edges: isSettingsPreview ? [] : .all)
-        .onChange(of: nowPlaying.artwork) { _, artwork in updatePalette(artwork) }
+        .onChange(of: ArtworkKey(image: nowPlaying.artwork, track: nowPlaying.artworkTrack)) {
+            updatePalette(nowPlaying.artwork, for: nowPlaying.artworkTrack)
+        }
         .onChange(of: desiredLayer) { _, next in
-            // Hold the old layer alive just long enough to fade it out. A
-            // layer that never had anything to draw was never seen, so the
+            // Hold the old layers alive just long enough to fade them out.
+            // A layer that never had anything to draw was never seen, so the
             // fade carries on from the one that is on screen.
             prepareEffect(for: next)
-            crossfade.change(to: next, ready: canDraw(next), at: Date())
+            crossfade.change(to: next, ready: canDraw(next), at: fadeStart, duration: Self.backgroundFadeDuration)
+            let kept = Set(crossfade.entries.map(\.layer))
+            if !drawnLayers.isSubset(of: kept) { drawnLayers.formIntersection(kept) }
+            if let overdue = firstFrameOverdue, !kept.contains(overdue) { firstFrameOverdue = nil }
         }
         .onChange(of: canDraw(currentLayer)) { _, ready in
             // The effect is ready: start the fade into it now. Once shown, it
             // stays shown -- its surface keeps drawing it on the GPU it has
             // while the display's new GPU compiles it.
-            if ready { crossfade.becameReady(at: Date()) }
+            if ready { crossfade.becameReady(at: fadeStart) }
         }
-        .onChange(of: mood, initial: true) { _, mood in
-            if nowPlaying.current != nil { heldMood = mood }
+        // A layer that never reports a first frame is shown anyway.
+        .task(id: crossfade.isHeld ? currentLayer : nil) {
+            guard crossfade.isHeld else { return }
+            let held = currentLayer
+            try? await Task.sleep(for: .seconds(Self.firstFrameWait))
+            if !Task.isCancelled, crossfade.isHeld, currentLayer == held { firstFrameOverdue = held }
         }
-        .onChange(of: trackSeed, initial: true) { _, seed in
-            if nowPlaying.current != nil { heldSeed = seed }
+        // A song change holds the background until the song's cover and
+        // lyrics are in, then crossfades once.
+        .onChange(of: SettleKey(track: nowPlaying.current, settled: backgroundInputsSettled), initial: true) {
+            settleBackgroundChoice()
         }
-        .onChange(of: nowPlaying.current) { _, _ in renewShaderClock(.trackChange) }
+        .task(id: choiceHold.deadline) {
+            guard let deadline = choiceHold.deadline else { return }
+            try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow) + 0.01))
+            if !Task.isCancelled { settleBackgroundChoice() }
+        }
+        // A video still being looked for after `musicVideoWait` gives way to
+        // the fallback wallpaper.
+        .task(id: musicVideoLookupPending ? nowPlaying.current : nil) {
+            guard musicVideoLookupPending, let track = nowPlaying.current else { return }
+            try? await Task.sleep(for: .seconds(Self.musicVideoWait))
+            if !Task.isCancelled, nowPlaying.current == track { musicVideoOverdue = track }
+        }
         .onChange(of: renderActivity.screensAsleep) { _, asleep in
             if !asleep { renewShaderClock(.wake) }
         }
@@ -385,10 +526,14 @@ struct NowPlayingView: View {
             if !Task.isCancelled { renewShaderClock(.elapsed) }
         }
         .onAppear {
-            updatePalette(nowPlaying.artwork)
+            updatePalette(nowPlaying.artwork, for: nowPlaying.artworkTrack)
             let layer = desiredLayer
             prepareEffect(for: layer)
-            crossfade = BackgroundCrossfade(layer, ready: canDraw(layer))
+            // A desktop surface fades in from its black window once its
+            // first layer can draw, rather than popping in; the Settings
+            // preview shows at once.
+            crossfade = isSettingsPreview ? BackgroundCrossfade(layer, ready: canDraw(layer))
+                : BackgroundCrossfade(layer, ready: canDraw(layer), fadingInAt: fadeStart)
         }
     }
 
@@ -409,11 +554,15 @@ struct NowPlayingView: View {
                        placement: settings.customWallpaperPlacement, screen: viewportSize)
     }
 
-    /// Opaque black under generated wallpapers; none under the desktop
-    /// overlay; fading with a crossfade to or from it.
-    private func baseOpacity(outgoing: BackgroundLayer?, fade: Double) -> Double {
-        if currentLayer == .desktop { return outgoing == nil ? 0 : 1 - fade }
-        return outgoing == .desktop ? fade : 1
+    /// The cover and the track it belongs to. Compared by identity: holding
+    /// the image keeps a new cover from reusing an old one's address.
+    private struct ArtworkKey: Equatable {
+        let image: NSImage?
+        let track: NowPlayingMonitor.Track?
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.image === rhs.image && lhs.track == rhs.track && lhs.track?.persistentID == rhs.track?.persistentID
+        }
     }
 
     private func crossfaded(_ layer: BackgroundLayer, opacity: Double, phases: LayerPhases,
@@ -424,7 +573,11 @@ struct NowPlayingView: View {
         // web views and Metal views are included: their layers sit in one
         // group-opacity layer, so the fade applies to the whole layer rather
         // than to each part separately.
+        //
+        // Every layer but Your wallpaper sits on its own opaque black, so it
+        // covers what is beneath it as it fades in (see `isOpaque`).
         backgroundLayer(layer, phases: phases, size: size, cover: cover, stage: stage)
+            .background { if layer.isOpaque { Color.black.ignoresSafeArea() } }
             .compositingGroup()
             .opacity(opacity)
     }
@@ -448,6 +601,8 @@ struct NowPlayingView: View {
         // shader does to read as moving with the track.
         let colourFlow = phases.flow * 0.34
         let backing = textBackingAmount(for: layer, cover: cover, size: size)
+        // The album tint follows the palette's fade.
+        let tint = albumTint(at: renderingPaused ? .distantFuture : Date())
         switch layer {
         case .desktop:
             ZStack {
@@ -459,8 +614,8 @@ struct NowPlayingView: View {
             ZStack {
                 // Reduce Motion holds an imported video on a still frame.
                 CustomWallpaperView(url: url, placement: settings.customWallpaperPlacement,
-                                    paused: renderingPaused || reduceMotion)
-                if hasAlbumPalette { cover.gradient.opacity(0.18).ignoresSafeArea() }
+                                    paused: renderingPaused || reduceMotion, onFirstFrame: firstFrameDrawn(layer))
+                if tint > 0 { cover.gradient.opacity(0.18 * tint).ignoresSafeArea() }
                 scrim
                 textBacking(backing, presence: stage, size: size)
             }
@@ -475,12 +630,23 @@ struct NowPlayingView: View {
                 textBacking(backing, presence: stage, size: size)
             }
 
-        case .motion(let url, let still):
+        case .musicVideoPending:
+            ZStack {
+                // MusicVideoBackground's stand-in, as it looks before a
+                // video's first frame.
+                cover.gradient.ignoresSafeArea()
+                Color.black.opacity(min(Settings.musicVideoDimRange.upperBound, max(0, settings.musicVideoDim)))
+                    .ignoresSafeArea()
+                scrim
+                textBacking(backing, presence: stage, size: size)
+            }
+
+        case .motion(let url, let still, let artwork):
             ZStack {
                 cover.gradient.ignoresSafeArea()
                 Group {
                     if still {
-                        stillCover
+                        stillCover(artwork)
                     } else {
                         MotionArtworkView(url: url, placement: settings.motionPlacement, isPaused: renderingPaused)
                     }
@@ -493,7 +659,7 @@ struct NowPlayingView: View {
                 // the frame edge. It used to breathe with the beat; that
                 // twitched the whole picture on every hit.
                 .scaleEffect(1.04)
-                if hasAlbumPalette { cover.gradient.opacity(0.18).ignoresSafeArea() }
+                if tint > 0 { cover.gradient.opacity(0.18 * tint).ignoresSafeArea() }
                 Color.black.opacity(0.40 * settings.scrimStrength).ignoresSafeArea()
                 RadialGradient(
                     colors: [.black.opacity(0.5), .black.opacity(0.16), .clear],
@@ -518,19 +684,20 @@ struct NowPlayingView: View {
                 textBacking(backing, presence: stage, size: size)
             }
 
-        case .visualizer(let style):
+        case .visualizer(let style, let web):
             ZStack {
                 if let engine = style.webEngine {
                     let originalLight3D = style == .light3D && settings.light3DColours == .original
                     WebVisualizerView(engine: engine, preset: settings.wavefieldPreset, projection: settings.wavefieldProjection,
                         sensitivity: settings.audioSensitivity, motion: settings.effectSpeed, tick: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview, palette: hasAlbumPalette && !originalLight3D ? cover : nil,
-                        displayID: effectDisplay, preferences: visualizerPreferences)
+                        displayID: effectDisplay, placement: web, onFirstFrame: firstFrameDrawn(layer),
+                        preferences: visualizerPreferences)
                         .id(engine)
                         .ignoresSafeArea()
                         .saturation(originalLight3D ? 1 : settings.vividness)
                 } else {
                     AudioVisualizerView(style: style, time: phases.visualizer, paused: renderingPaused, preview: isSettingsPreview,
-                        palette: hasAlbumPalette ? cover : nil)
+                        palette: hasAlbumPalette ? cover : nil, onFirstFrame: firstFrameDrawn(layer))
                         .ignoresSafeArea()
                 }
                 scrim
@@ -571,10 +738,11 @@ struct NowPlayingView: View {
     }
 
     /// The album's own cover, softened and filled like its animation, for
-    /// Reduce Motion.
+    /// Reduce Motion. Each layer keeps its own song's cover, so a new one
+    /// crossfades in rather than replacing the outgoing one at once.
     @ViewBuilder
-    private var stillCover: some View {
-        if let artwork = nowPlaying.artwork {
+    private func stillCover(_ artwork: NSImage?) -> some View {
+        if let artwork {
             GeometryReader { geometry in
                 Image(nsImage: artwork)
                     .resizable()
@@ -624,7 +792,9 @@ struct NowPlayingView: View {
 
     private func textBackingAmount(for layer: BackgroundLayer, cover: AlbumWallpaperPalette, size: CGSize) -> Double {
         if let manual = desktopOptions.manualTextBacking { return manual }
-        let hasLyrics = !lyricsVM.lines.isEmpty || !lyricsVM.plainLines.isEmpty
+        // The lyric target whenever a song plays, not only once its lyrics
+        // are in: switching then stepped the backing darker mid-fade.
+        let hasLyrics = nowPlaying.current != nil || !lyricsVM.lines.isEmpty || !lyricsVM.plainLines.isEmpty
         let target = hasLyrics ? LyricLegibility.pastelBackingTarget(increaseContrast: settings.increaseContrast)
             : LyricLegibility.targetContrast(baseSize: LyricViewportMetrics(size: size).baseSize)
         let strength = max(0, settings.scrimStrength)
@@ -638,12 +808,13 @@ struct NowPlayingView: View {
         case .custom:
             luminance = backdrop.luminance ?? LyricLegibility.unknownBackdropLuminance
             existing = scrim
-        case .musicVideo:
+        case .musicVideo, .musicVideoPending:
             // Footage is unmeasured; the dimming is laid over it before the scrim.
             luminance = LyricLegibility.unknownBackdropLuminance
             existing = 1 - (1 - min(1, max(0, settings.musicVideoDim))) * (1 - scrim)
         case .motion:
-            luminance = LyricLegibility.coverLuminance(hsbGrid: palette)
+            // From the interpolated colours, so it follows the palette fade.
+            luminance = Self.coverLuminance(cover)
             existing = 1 - (1 - min(1, 0.40 * strength)) * 0.5
         case .shader:
             luminance = LyricLegibility.shaderLuminance(cover)
@@ -682,19 +853,45 @@ struct NowPlayingView: View {
         return lyricsVM.notFound ? "Lyrics unavailable" : track.title
     }
 
+    private func paletteProgress(at date: Date) -> Double {
+        Easing.smoothstep(date.timeIntervalSince(paletteChangedAt) / Self.paletteFadeDuration)
+    }
+
     private func wallpaperPalette(at date: Date) -> AlbumWallpaperPalette {
-        let progress = Easing.smoothstep(date.timeIntervalSince(paletteChangedAt) / 0.9)
+        let progress = paletteProgress(at: date)
         guard progress < 1, let previousWallpaperPalette else { return wallpaperPalette }
         return previousWallpaperPalette.interpolated(to: wallpaperPalette, fraction: progress)
     }
 
+    /// How much of the album tint is drawn, 0 to 1, following the palette
+    /// fade between an album's colours and the fallback ones.
+    private func albumTint(at date: Date) -> Double {
+        let progress = paletteProgress(at: date)
+        return (hadAlbumPalette ? 1 - progress : 0) + (hasAlbumPalette ? progress : 0)
+    }
+
+    /// `LyricLegibility.coverLuminance` of the colours on screen: the
+    /// brightest cell of the cover's middle row.
+    nonisolated static func coverLuminance(_ cover: AlbumWallpaperPalette) -> Double {
+        let middle = [3, 4, 5].filter(cover.artworkStops.indices.contains).map { cover.artworkStops[$0] }
+        return middle.map { LyricLegibility.luminance(SIMD3<Double>(Double($0.x), Double($0.y), Double($0.z))) }.max()
+            ?? LyricLegibility.unknownBackdropLuminance
+    }
+
     private func applyPalette(_ extracted: [SIMD3<Double>], hasArtwork: Bool) {
         let now = Date()
+        // While paused the colours change at once, with the layers.
+        let start = fadeStart
+        hadAlbumPalette = albumTint(at: now) >= 0.5
         previousWallpaperPalette = wallpaperPalette(at: now)
         wallpaperPalette = AlbumWallpaperPalette(grid: extracted)
-        paletteChangedAt = now
+        paletteChangedAt = start
         hasAlbumPalette = hasArtwork
         palette = extracted
+        if let request = paletteRequest {
+            paletteRequest = (request.image, request.track, false)
+            paletteTrack = request.track
+        }
         DesktopWallpaperController.shared.currentPalette = extracted
     }
 
@@ -705,9 +902,18 @@ struct NowPlayingView: View {
         return Color(hue: hsb.x, saturation: min(0.65, max(0.2, hsb.y)), brightness: max(0.78, hsb.z))
     }
 
-    private func updatePalette(_ artwork: NSImage?) {
+    /// Takes the colours from `artwork`, the cover of `track`. The same
+    /// cover for another track (the next song on the album) needs no new
+    /// colours, only the note that they are that track's now.
+    private func updatePalette(_ artwork: NSImage?, for track: NowPlayingMonitor.Track?) {
+        if let request = paletteRequest, request.image === artwork {
+            paletteRequest = (artwork, track, request.inFlight)
+            if !request.inFlight { paletteTrack = track }
+            return
+        }
         let token = UUID()
         paletteGeneration = token
+        paletteRequest = (artwork, track, artwork != nil)
         guard let artwork else {
             applyPalette(ColorExtractor.fallbackHSBPalette, hasArtwork: false)
             return

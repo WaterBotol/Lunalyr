@@ -421,12 +421,11 @@ final class WallpaperEnergyTests: XCTestCase {
         let start = Date(timeIntervalSinceReferenceDate: 1_000)
         var crossfade = BackgroundCrossfade<Layer>(.desktop)
         cache.prepare(.aurora, display: 7)
-        crossfade.change(to: effect, ready: canDraw(), at: start)
+        crossfade.change(to: effect, ready: canDraw(), at: start, duration: duration)
         XCTAssertTrue(crossfade.isHeld)
         XCTAssertEqual(crossfade.fade(at: start.addingTimeInterval(5), duration: duration), 0)
-        XCTAssertEqual(crossfade.layers(fade: 0), [.desktop, effect])
-        XCTAssertEqual(crossfade.opacity(of: effect, fade: 0), 0)
-        XCTAssertEqual(crossfade.opacity(of: .desktop, fade: 0), 1)
+        XCTAssertEqual(drawn(crossfade, at: start.addingTimeInterval(5), duration),
+                       [.init(layer: .desktop, opacity: 1), .init(layer: effect, opacity: 0)])
 
         // Compiled: the fade runs from then, to the end.
         pending.removeFirst()(plasma)
@@ -436,7 +435,7 @@ final class WallpaperEnergyTests: XCTestCase {
         XCTAssertEqual(crossfade.fade(at: ready, duration: duration), 0)
         let shown = ready.addingTimeInterval(1)
         XCTAssertEqual(crossfade.fade(at: shown, duration: duration), 1)
-        XCTAssertEqual(crossfade.layers(fade: 1), [effect])
+        XCTAssertEqual(drawn(crossfade, at: shown, duration).map(\.layer), [effect])
 
         // The display moves to the other GPU, where the effect has not
         // compiled: the effect stays on screen at full opacity.
@@ -447,8 +446,8 @@ final class WallpaperEnergyTests: XCTestCase {
         let moved = shown.addingTimeInterval(1)
         let fade = crossfade.fade(at: moved, duration: duration)
         XCTAssertEqual(fade, 1)
-        XCTAssertEqual(crossfade.layers(fade: fade), [effect], "The outgoing layer never comes back")
-        XCTAssertEqual(crossfade.opacity(of: effect, fade: fade), 1)
+        XCTAssertEqual(drawn(crossfade, at: moved, duration), [.init(layer: effect, opacity: 1)],
+                       "The outgoing layer never comes back")
         // Compiled there as well: nothing fades in again.
         cache.prepare(.aurora, display: 7)
         pending.removeFirst()(plasma)
@@ -458,8 +457,14 @@ final class WallpaperEnergyTests: XCTestCase {
 
         // Leaving it fades the effect out, not the layer before it.
         let colour = Layer.generated(pattern: nil, seed: 0)
-        crossfade.change(to: colour, ready: true, at: moved)
-        XCTAssertEqual(crossfade.layers(fade: crossfade.fade(at: moved, duration: duration)), [effect, colour])
+        crossfade.change(to: colour, ready: true, at: moved, duration: duration)
+        XCTAssertEqual(drawn(crossfade, at: moved, duration).map(\.layer), [effect, colour])
+    }
+
+    /// What NowPlayingView draws of `crossfade` at `date`.
+    private func drawn(_ crossfade: BackgroundCrossfade<NowPlayingView.BackgroundLayer>, at date: Date,
+                       _ duration: TimeInterval) -> [BackgroundCrossfade<NowPlayingView.BackgroundLayer>.Drawn] {
+        crossfade.layers(at: date, duration: duration, isOpaque: \.isOpaque)
     }
 
     /// Unplugging an external display wired to a MacBook Pro's discrete GPU
@@ -610,17 +615,23 @@ final class WallpaperEnergyTests: XCTestCase {
     func testALayerThatNeverDrewIsSkippedByTheNextFade() {
         let start = Date(timeIntervalSinceReferenceDate: 500)
         var crossfade = BackgroundCrossfade<String>("desktop")
-        crossfade.change(to: "aurora", ready: false, at: start)
-        crossfade.change(to: "plasma", ready: false, at: start.addingTimeInterval(1))
+        crossfade.change(to: "aurora", ready: false, at: start, duration: 1)
+        crossfade.change(to: "plasma", ready: false, at: start.addingTimeInterval(1), duration: 1)
         XCTAssertEqual(crossfade.previous, "desktop")
         crossfade.becameReady(at: start.addingTimeInterval(2))
-        XCTAssertEqual(crossfade.layers(fade: 0.5), ["desktop", "plasma"])
-        XCTAssertEqual(crossfade.opacity(of: "plasma", fade: 0.5), 0.5)
-        XCTAssertEqual(crossfade.opacity(of: "desktop", fade: 0.5), 0.5)
+        let halfway = start.addingTimeInterval(2.5)
+        XCTAssertEqual(crossfade.fade(at: halfway, duration: 1), 0.5)
+        // The incoming layer fades in over the outgoing one, which stays
+        // fully drawn beneath it.
+        XCTAssertEqual(crossfade.layers(at: halfway, duration: 1),
+                       [.init(layer: "desktop", opacity: 1), .init(layer: "plasma", opacity: 0.5)])
+        // A transparent one (Your wallpaper) cannot cover what it replaces,
+        // so that fades out as it fades in.
+        XCTAssertEqual(crossfade.layers(at: halfway, duration: 1, isOpaque: { $0 != "plasma" }),
+                       [.init(layer: "desktop", opacity: 0.5), .init(layer: "plasma", opacity: 0.5)])
         // A surface's first layer is shown at once.
         let first = BackgroundCrossfade<String>("aurora", ready: false)
-        XCTAssertEqual(first.layers(fade: 0), ["aurora"])
-        XCTAssertEqual(first.opacity(of: "aurora", fade: 0), 1)
+        XCTAssertEqual(first.layers(at: start, duration: 1), [.init(layer: "aurora", opacity: 1)])
     }
 
     // MARK: Paused surfaces
