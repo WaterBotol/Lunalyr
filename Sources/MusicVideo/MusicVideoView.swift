@@ -139,6 +139,11 @@ final class MusicVideoSyncLoop {
     var onDuration: ((Double) -> Void)?
     /// Told each sample of the video's own position (for Tap to sync).
     var onSample: ((MusicVideoDrift.Sample) -> Void)?
+    /// Whether this surface's video is still the playing song's. A video
+    /// fading out after a song change is not: it is paused where it is,
+    /// never sought to the next song's position (which would flash its
+    /// opening frame, or another part of it, during the fade).
+    var isCurrent: () -> Bool = { true }
 
     /// Follows the shared now-playing monitor and the playing song's offset.
     convenience init() {
@@ -172,6 +177,9 @@ final class MusicVideoSyncLoop {
         timer = nil
     }
 
+    /// The loop is checking (for tests).
+    var isRunning: Bool { timer != nil }
+
     func setSurfacePaused(_ paused: Bool) {
         guard paused != surfacePaused else { return }
         surfacePaused = paused
@@ -181,6 +189,7 @@ final class MusicVideoSyncLoop {
 
     /// Why the video is moving or not, right now.
     func hold(videoDuration: Double?) -> MusicVideoHold {
+        guard isCurrent() else { return .other }
         let target = MusicVideoTiming.videoTime(songTime: songTime(), offset: offset(), videoDuration: videoDuration)
         return MusicVideoHold.of(surfacePaused: surfacePaused, songPlaying: songPlaying(), target: target)
     }
@@ -196,7 +205,18 @@ final class MusicVideoSyncLoop {
         surface.sample { [weak self] sample, duration in
             guard let self else { return }
             self.inFlight = false
-            guard let sample, let surface = self.surface else { return }
+            guard let sample, let surface = self.surface else {
+                // Nothing to sample (not loaded yet, failed, or closed for a
+                // long pause) behind a hidden surface: nothing can play, so
+                // the loop rests until the surface shows again.
+                if self.surfacePaused { self.stop() }
+                return
+            }
+            guard self.isCurrent() else {
+                // Another song's video, on its way out: hold it still.
+                if sample.videoPlaying || sample.buffering { surface.pauseVideo() }
+                return
+            }
             let target = MusicVideoTiming.videoTime(songTime: self.songTime(), offset: self.offset(),
                                                     videoDuration: duration)
             if let duration {
@@ -309,6 +329,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         }
         playerLayer.opacity = 0
         player.replaceCurrentItem(with: item)
+        loop.isCurrent = { MusicVideoController.shared.isShowing(.local(url)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
         loop.onSample = {
             MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
@@ -543,6 +564,8 @@ enum YouTubeEmbed {
         }
         window.lunalyrSample = function () {
           if (!ready || !player || !player.getCurrentTime) return null;
+          // Checked on every sample too: the video must never be heard.
+          try { if (player.isMuted && !player.isMuted()) player.mute(); } catch (e) {}
           return {time: player.getCurrentTime(), state: player.getPlayerState(), duration: player.getDuration()};
         };
         window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
@@ -605,6 +628,10 @@ final class YouTubeEmbedSession {
     static let readyTimeout: TimeInterval = 12
     /// Reloads after the web content process quits, per video.
     static let reloadLimit = 2
+    /// A ready player that should play but has not played for this long
+    /// is stuck (a sign-in or bot check, a block that sends no error): the
+    /// wallpaper falls back, as for a player that never answered.
+    static let playTimeout: TimeInterval = 20
 
     struct Message: Equatable {
         enum Kind: Equatable {
@@ -657,6 +684,8 @@ final class YouTubeEmbedSession {
     /// Set once a failure was reported for the current page; later news
     /// about it is ignored.
     private var failed = false
+    /// Since when the ready player should have been playing and was not.
+    private var notPlayingSince: TimeInterval?
     private var timeout: Task<Void, Never>?
     private let readyTimeout: TimeInterval
     private let reloadLimit: Int
@@ -684,6 +713,7 @@ final class YouTubeEmbedSession {
         page += 1
         ready = false
         failed = false
+        notPlayingSince = nil
         timeout?.cancel()
         let page = self.page, wait = readyTimeout, sleep = self.sleep
         timeout = Task { [weak self] in
@@ -719,6 +749,23 @@ final class YouTubeEmbedSession {
         case .other:
             return .none
         }
+    }
+
+    /// From each sync check of the ready player: whether it should be
+    /// playing (the song plays, inside the video, on a live wallpaper) and
+    /// whether it is. Not playing when it should for `playTimeout` in a row
+    /// is a passing failure.
+    func notePlayback(shouldPlay: Bool, playing: Bool, now: TimeInterval,
+                      timeout: TimeInterval = YouTubeEmbedSession.playTimeout) -> Effect {
+        guard ready, !failed, videoID != nil, shouldPlay, !playing else {
+            notPlayingSince = nil
+            return .none
+        }
+        guard let since = notPlayingSince else {
+            notPlayingSince = now
+            return .none
+        }
+        return now - since >= timeout ? fail(.transient) : .none
     }
 
     /// The page's own navigation failed (offline, say). A load cancelled
@@ -766,6 +813,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private weak var view: WKWebView?
     private var navigation: WKNavigation?
     private var blur: Double = -1
+    /// Why the video is moving or not, as of the sync loop's last check.
+    private var hold: MusicVideoHold = .other
 
     /// The first seek's lead; later ones use the measured latency.
     var seekLead: Double { MusicVideoSeekLatency.initial }
@@ -783,6 +832,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         if videoID != self.videoID { freeze.reset() }
         self.videoID = videoID
         if view == nil { openWebView() }
+        loop.isCurrent = { MusicVideoController.shared.isShowing(.youTube(videoID)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
         loop.onSample = {
             MusicVideoController.shared.noteVideoSample(time: $0.videoTime, playing: $0.videoPlaying && !$0.buffering,
@@ -905,7 +955,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     // MARK: MusicVideoPlaybackSurface
 
-    func noteHold(_ hold: MusicVideoHold) { freeze.noteHold(hold) }
+    func noteHold(_ hold: MusicVideoHold) {
+        self.hold = hold
+        freeze.noteHold(hold)
+    }
 
     func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
         guard session.ready, let view else { done(nil, nil); return }
@@ -916,7 +969,17 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                     return
                 }
                 // Also from each sample, in case a state message was missed.
-                if let self { self.setVisible(self.session.ready && YouTubeEmbed.showsVideo(sample: sample)) }
+                if let self {
+                    let showing = YouTubeEmbed.showsVideo(sample: sample)
+                    self.setVisible(self.session.ready && showing)
+                    let stuck = self.session.notePlayback(shouldPlay: self.hold == .live, playing: showing,
+                                                          now: ProcessInfo.processInfo.systemUptime)
+                    if stuck != .none {
+                        self.perform(stuck)
+                        done(nil, nil)
+                        return
+                    }
+                }
                 done(sample, duration)
             }
         }

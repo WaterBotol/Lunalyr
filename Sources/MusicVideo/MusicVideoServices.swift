@@ -140,11 +140,18 @@ actor AppleMusicVideoLibrary: MusicVideoLibrary {
             guard MusicVideoTitleMatch.matches(videoTitle: hit.title, songTitle: song.title, artist: song.artist),
                   !MusicVideoTitleMatch.isLiveOrFanUpload(hit.title, songTitle: song.title) else { return nil }
             let artist = song.artist.isEmpty ? 1 : LyricQuery.similarity(hit.artist, song.artist)
-            guard artist >= 0.5 else { return nil }
+            guard song.artist.isEmpty || artist >= 0.85 || sharesAnArtist(hit.artist, song.artist) else { return nil }
             return (hit, artist + (CoverLookup.normal(hit.title) == CoverLookup.normal(song.title) ? 1 : 0))
         }
         guard let best = ranked.max(by: { $0.1 < $1.1 }) else { return nil }
         return URL(fileURLWithPath: best.0.path)
+    }
+
+    /// One of the credited names is the same on both sides ("Wallows" in
+    /// "Wallows & Clairo"). A shared word is not enough: "The Who" and
+    /// "The Kinks" are different artists with songs of the same name.
+    static func sharesAnArtist(_ a: String, _ b: String) -> Bool {
+        !Set(MusicVideoTitleMatch.artistParts(a)).isDisjoint(with: MusicVideoTitleMatch.artistParts(b))
     }
 }
 

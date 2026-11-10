@@ -46,11 +46,13 @@ protocol MusicVideoFreezeHost: AnyObject {
 /// is taken just before it is paused and shown in its place, so the
 /// wallpaper keeps the paused video rather than falling back. Other pauses
 /// (covered, wallpaper paused, Reduce Motion, outside the video, buffering)
-/// fall back as before. After a long pause the player is closed; the
-/// picture stays until a new one plays.
+/// fall back as before. After a long pause of any kind (the song paused,
+/// or the wallpaper covered, hidden or paused) the player is closed, so a
+/// hidden YouTube page uses nothing; the picture stays until a new one
+/// plays, and the player opens again once the video should play.
 @MainActor
 final class MusicVideoFrozenFrame {
-    /// After this long paused, the player is closed (about 10 minutes).
+    /// After this long not playing, the player is closed (about 10 minutes).
     nonisolated static let longPause: TimeInterval = 600
 
     weak var host: MusicVideoFreezeHost?
@@ -105,6 +107,8 @@ final class MusicVideoFrozenFrame {
                 released = false
                 host?.recreatePlayer()
             }
+        } else if cancelLongPause == nil, !released {
+            startLongPause()
         }
         refresh()
     }
@@ -135,10 +139,7 @@ final class MusicVideoFrozenFrame {
                 // Resumed meanwhile: nothing to pause.
                 return
             case .userPaused:
-                if let picture {
-                    self.image = picture
-                    self.startLongPause()
-                }
+                if let picture { self.image = picture }
                 // Shown before the pause, so YouTube's pause button is never seen.
                 self.refresh()
             case .other:
@@ -183,7 +184,7 @@ final class MusicVideoFrozenFrame {
         cancelLongPause = schedule(longPause) { [weak self] in
             guard let self else { return }
             self.cancelLongPause = nil
-            guard self.hold == .userPaused, self.image != nil, !self.released else { return }
+            guard self.hold != .live, !self.released else { return }
             self.released = true
             self.playerShowing = false
             self.host?.releasePlayer()

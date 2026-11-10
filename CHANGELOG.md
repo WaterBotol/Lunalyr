@@ -61,6 +61,13 @@ When merging, keep every entry and combine duplicate headings.
 - Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
 - Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.
 - Desktop player: a "Lunalyr Queue" left behind when Music or Lunalyr quit part-way through starting a song is now removed the next time you pick a song, instead of staying as a second "Lunalyr Queue".
+- Music video: after a song change, the old video now holds still while it fades out instead of jumping to the new song's position (which could flash its opening frame).
+- Music video: a YouTube player kept hidden for about ten minutes (wallpaper covered, hidden or paused, Reduce Motion) is now closed so it uses nothing, and reopened when the video plays again. A hidden wallpaper whose video has not loaded no longer keeps checking it four times a second.
+- Music video: Japanese and Korean video titles are now recognised, such as 「Title」 and 『Title』, 'Title' M/V, and the artist's name written in their own script next to the title.
+- Music video: a library video of a song with the same name by another band (such as "The Who" and "The Kinks") is no longer picked just because the names share a word, and a YouTube channel only counts as the artist's when it is named after them, not when a short name like "IU" happens to be inside another channel's name.
+- Music video: a YouTube video that loads but never starts playing (a sign-in or bot check, or a block YouTube reports no error for) now falls back to the normal wallpaper after 20 seconds, and is tried once more later, instead of leaving the colour gradient up for the whole song.
+- Music video: when YouTube refuses to play a found video outside its site (age-restricted, not embeddable, removed), the song's next official video is tried, up to three, before the normal wallpaper is shown for it.
+- Music video: the YouTube player is checked and muted again on every sync check, in case anything unmuted it.
 - Fable: long lines no longer run off the stage or under the menu bar, and earlier words no longer fade away before the line has been read. Lines are wrapped, then shrunk only if they still do not fit.
 - Fable: Arabic and other joined scripts are no longer split into reversed, unjoined letters, and right-to-left lines read from the right.
 - Fable: with romanisation set to Below, each word's reading now shows under it. Fable used to drop readings that were split by word.

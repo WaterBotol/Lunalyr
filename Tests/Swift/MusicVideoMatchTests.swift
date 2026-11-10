@@ -117,6 +117,33 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertNil(AppleMusicVideoLibrary.pick([other], for: song))
     }
 
+    func testAShortArtistNameInsideAnotherChannelIsNotTheArtists() {
+        XCTAssertFalse(YouTubeSearchPage.channel("liquidmusic", isOf: "iu"))
+        XCTAssertTrue(YouTubeSearchPage.channel("iuofficial", isOf: "iu"))
+        XCTAssertTrue(YouTubeSearchPage.channel("officialiu", isOf: "iu"))
+        XCTAssertTrue(YouTubeSearchPage.channel("thisiswallowschannel", isOf: "wallows"))
+        let title = "IU - Love Wins All (Official MV)"
+        XCTAssertNil(YouTubeSearchPage.officialVideo(
+            in: [Result(videoID: "AAAAAAAAAAA", title: title, channel: "Liquid Music")], title: "Love Wins All", artist: "IU"))
+        XCTAssertEqual(YouTubeSearchPage.officialVideo(
+            in: [Result(videoID: "AAAAAAAAAAA", title: title, channel: "IU Official")], title: "Love Wins All", artist: "IU")?
+            .videoID, "AAAAAAAAAAA")
+    }
+
+    func testALibraryVideoOfTheSameTitleByAnotherBandIsNotPicked() {
+        let song = MusicVideoSong(title: "Substitute", artist: "The Who", duration: 220)
+        let kinks = AppleMusicVideoLibrary.Hit(title: "Substitute", artist: "The Kinks", path: "/kinks.m4v")
+        XCTAssertNil(AppleMusicVideoLibrary.pick([kinks], for: song), "sharing \"The\" is not the same artist")
+        let who = AppleMusicVideoLibrary.Hit(title: "Substitute", artist: "The Who", path: "/who.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([kinks, who], for: song), URL(fileURLWithPath: "/who.m4v"))
+        let duet = MusicVideoSong(title: "Are You Bored Yet?", artist: "Wallows & Clairo", duration: 180)
+        let wallows = AppleMusicVideoLibrary.Hit(title: "Are You Bored Yet?", artist: "Wallows", path: "/w.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([wallows], for: duet), URL(fileURLWithPath: "/w.m4v"),
+                       "one of the credited artists")
+        let feat = AppleMusicVideoLibrary.Hit(title: "Are You Bored Yet?", artist: "Wallows feat. Clairo", path: "/f.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([feat], for: duet), URL(fileURLWithPath: "/f.m4v"))
+    }
+
     func testEveryOlderCachedPickIsThrownAway() {
         let name = "LunalyrTests.MusicVideoMatch.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -179,5 +206,65 @@ final class MusicVideoMatchTests: XCTestCase {
                        .init(kind: .state(1), video: "4NRXx6U8ABQ", page: page))
         _ = session.receive(.init(kind: .error(150), video: "4NRXx6U8ABQ", page: page), trusted: true)
         XCTAssertEqual(state(1), .visible(false), "a failed video stays hidden")
+    }
+
+    func testNonLatinAndKpopTitlesMatch() {
+        let cases: [(video: String, song: String, artist: String)] = [
+            ("YOASOBI「アイドル」 Official Music Video", "アイドル", "YOASOBI"),
+            ("米津玄師 MV「Lemon」", "Lemon", "米津玄師"),
+            ("ヨルシカ - 『ただ君に晴れ』 (Music Video)", "ただ君に晴れ", "ヨルシカ"),
+            ("BLACKPINK - 'Shut Down' M/V", "Shut Down", "BLACKPINK"),
+            ("NewJeans (뉴진스) 'Ditto' Official MV", "Ditto", "NewJeans"),
+            ("IVE 아이브 'I AM' MV", "I AM", "IVE"),
+            ("BTS (방탄소년단) ‘Dynamite’ Official MV", "Dynamite", "BTS"),
+        ]
+        for (video, song, artist) in cases {
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: video, songTitle: song, artist: artist), video)
+        }
+        // Still exact: another song in quotes, or the artist's other words.
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "BLACKPINK - 'Shut Down' M/V", songTitle: "Down",
+                                                    artist: "BLACKPINK"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "YOASOBI「アイドル」 Official Music Video",
+                                                    songTitle: "アイ", artist: "YOASOBI"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "IVE 아이브 'I AM' MV", songTitle: "I", artist: "IVE"))
+        // Apostrophes are not quotes.
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "Wallows - Don't Want to Talk (Official Video)",
+                                                   songTitle: "Don't Want to Talk", artist: "Wallows"))
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "Artist - Rock 'n' Roll Star (Official Video)",
+                                                   songTitle: "Rock 'n' Roll Star", artist: "Artist"))
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "IU 좋은 날", songTitle: "좋은 날", artist: "IU"),
+                      "the artist written before the title still works")
+        let pick = YouTubeSearchPage.officialVideo(
+            in: [Result(videoID: "AAAAAAAAAAA", title: "YOASOBI「アイドル」 Official Music Video", channel: "Ayase / YOASOBI")],
+            title: "アイドル", artist: "YOASOBI")
+        XCTAssertEqual(pick?.videoID, "AAAAAAAAAAA")
+    }
+
+    func testTheSampleKeepsThePlayerMuted() {
+        let html = YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0)
+        XCTAssertTrue(html.contains("if (player.isMuted && !player.isMuted()) player.mute();"),
+                      "every sync sample mutes the player again if anything unmuted it")
+    }
+
+    func testAReadyPlayerThatNeverPlaysFallsBack() {
+        let session = YouTubeEmbedSession(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
+        guard case .load(_, let page) = session.attach("4NRXx6U8ABQ") else { return XCTFail() }
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 0), .none, "not ready: the ready timeout's job")
+        XCTAssertEqual(session.receive(.init(kind: .ready, video: "4NRXx6U8ABQ", page: page), trusted: true), .ready)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 100), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 110), .none, "buffering a while is fine")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: true, now: 115), .none, "it played")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 116), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: false, playing: false, now: 130), .none, "paused song: not stuck")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 131), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 150), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 151),
+                       .fail(videoID: "4NRXx6U8ABQ", .transient), "twenty seconds that should have played")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 200), .none, "reported once")
+        // A new page starts afresh.
+        guard case .load(_, let next) = session.attach("4NRXx6U8ABQ") else { return XCTFail() }
+        _ = session.receive(.init(kind: .ready, video: "4NRXx6U8ABQ", page: next), trusted: true)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 300), .none)
+        session.stop()
     }
 }

@@ -155,7 +155,7 @@ enum YouTubeSearchPage {
             let channelKey = CoverLookup.normal(result.channel)
             guard MusicVideoTitleMatch.matches(videoTitle: result.title, songTitle: title, artist: artist) else { continue }
             guard !channel.hasSuffix(" topic") else { continue }
-            let ownChannel = singers.contains { channelKey == $0 || channelKey.contains($0) }
+            let ownChannel = singers.contains { Self.channel(channelKey, isOf: $0) }
             let vevo = channelKey.hasSuffix("vevo")
             guard ownChannel || vevo || result.verifiedArtist else { continue }
             if MusicVideoTitleMatch.isLiveOrFanUpload(result.title, songTitle: title) { continue }
@@ -168,6 +168,15 @@ enum YouTubeSearchPage {
             ranked.append((result, score, index))
         }
         return ranked.sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }.map(\.result)
+    }
+
+    /// A channel named after the artist: the name itself, or starting or
+    /// ending with it ("WallowsOfficial", "Ayase / YOASOBI"). A short name
+    /// inside another ("IU" in "Liquid Music") is not the artist's.
+    static func channel(_ channelKey: String, isOf artist: String) -> Bool {
+        guard !artist.isEmpty else { return false }
+        return channelKey == artist || channelKey.hasPrefix(artist) || channelKey.hasSuffix(artist)
+            || (artist.count >= 5 && channelKey.contains(artist))
     }
 
     /// Whole-word containment on normalised text.
