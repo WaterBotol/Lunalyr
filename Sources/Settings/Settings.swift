@@ -192,11 +192,19 @@ final class Settings: ObservableObject {
         case mix
     }
 
+    /// With a layout chosen, only an entrance it shows on sung words locks
+    /// it: Hinge with Satin Ribbon moves its words its own way, so nothing
+    /// needs unveiling. Match the music's choice is one for every layout it
+    /// picks, so it locks as before.
     func wordRevealLock(in style: LyricComposition) -> WordRevealLock? {
         if style.arrivalOnly { return .layout(style) }
         let selected = arrival(in: style)
-        if selected.requiresReveal { return .entrance(selected) }
-        if selected == .mix, wordEntranceMix.contains(where: { WordArrival(rawValue: $0)?.requiresReveal == true }) {
+        let chosenLayout = lyricComposition != nil
+        let unveils = { (arrival: WordArrival) in
+            arrival.requiresReveal && (!chosenLayout || EntranceSupport.appliesToSungWords(arrival, in: style))
+        }
+        if unveils(selected) { return .entrance(selected) }
+        if selected == .mix, wordEntranceMix.contains(where: { WordArrival(rawValue: $0).map(unveils) == true }) {
             return .mix
         }
         return nil

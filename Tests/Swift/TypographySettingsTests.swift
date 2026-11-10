@@ -115,9 +115,13 @@ final class TypographySettingsTests: XCTestCase {
                     settings.wordArrivalByStyle[style.rawValue] = arrival.rawValue
                     settings.wordEntranceMix = mix
                     let selected = settings.arrival(in: style)
-                    // The rule as it stood before the lock was given reasons.
-                    let required = style.arrivalOnly || selected.requiresReveal || (selected == .mix
-                        && mix.contains { WordArrival(rawValue: $0)?.requiresReveal == true })
+                    // The rule as it stood before the lock was given reasons,
+                    // less the entrances a chosen stage layout leaves out.
+                    let unveils = { (arrival: WordArrival) in
+                        arrival.requiresReveal && EntranceSupport.appliesToSungWords(arrival, in: style)
+                    }
+                    let required = style.arrivalOnly || unveils(selected) || (selected == .mix
+                        && mix.contains { WordArrival(rawValue: $0).map(unveils) == true })
                     XCTAssertEqual(settings.requiresWordEntrances(in: style), required, "\(style) \(arrival) \(mix)")
                     XCTAssertEqual(settings.wordRevealLock(in: style) != nil, required)
                 }
