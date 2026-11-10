@@ -355,10 +355,15 @@ struct LyricLayer: View {
             // with it instead of vanishing.
             let gap = settings.showInterludes
                 ? instrumentalGap(at: time, windows: content.vocalWindows, duration: content.duration) : nil
+            // The scene's own song: an outgoing scene's credits keep its
+            // title and placement instead of taking the new song's.
+            let cues = LyricCreditCues.isOn
+                ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist) : []
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
+                .environment(\.lyricCreditBands, LyricCreditCues.bands(cues))
                 .overlay {
-                    creditsOverlay(lines, content: content, time: time)
+                    creditsOverlay(lines, cues: cues, content: content, time: time)
                 }
                 .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
@@ -369,17 +374,13 @@ struct LyricLayer: View {
     }
 
     @ViewBuilder
-    private func creditsOverlay(_ scene: SceneLines, content: LyricSceneContent, time: Double) -> some View {
-        if LyricCreditCues.isOn {
-            // The scene's own song: an outgoing scene's credits keep its
-            // title and placement instead of taking the new song's.
-            let cues = LyricCreditCues.cues(in: scene.lines, title: content.title, artist: content.artist)
-            if !cues.isEmpty {
-                let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
-                CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
-                             baseSize: baseSize, seed: content.seed,
-                             composition: composition(at: first), mood: mood)
-            }
+    private func creditsOverlay(_ scene: SceneLines, cues: [LyricCreditCues.Cue], content: LyricSceneContent,
+                                time: Double) -> some View {
+        if !cues.isEmpty {
+            let first = scene.lines.firstIndex { !$0.isInstrumental } ?? 0
+            CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
+                         baseSize: baseSize, seed: content.seed,
+                         composition: composition(at: first), mood: mood)
         }
     }
 

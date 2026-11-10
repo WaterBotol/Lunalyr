@@ -404,4 +404,19 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertLessThanOrEqual(frames.last?.timeIntervalSinceReferenceDate ?? 0, 50 + WallpaperMotion.toastLife + 0.03)
         XCTAssertTrue(LyricNoteView.frames(for: note, from: 60, interval: 1.0 / 60).isEmpty)
     }
+
+    // MARK: W22
+
+    func testBackingVocalsKeepToTheBandACreditLeavesFree() {
+        let group = try! XCTUnwrap(BackingVocals.split(words(["(ooh)", "la"], start: 12), glue: []).backing.first)
+        let topCredit = [LyricCreditBand(start: 10, end: 16, top: true)]
+        XCTAssertFalse(BackingVocalLayer.onTop(group, preferred: true, credits: topCredit))
+        XCTAssertFalse(BackingVocalLayer.onTop(group, preferred: false, credits: topCredit))
+        XCTAssertTrue(BackingVocalLayer.onTop(group, preferred: true, credits: []))
+        // Both bands busy: it keeps its own.
+        let both = topCredit + [LyricCreditBand(start: 10, end: 16, top: false)]
+        XCTAssertTrue(BackingVocalLayer.onTop(group, preferred: true, credits: both))
+        // A credit long gone does not move it.
+        XCTAssertTrue(BackingVocalLayer.onTop(group, preferred: true, credits: [LyricCreditBand(start: 0, end: 5, top: true)]))
+    }
 }

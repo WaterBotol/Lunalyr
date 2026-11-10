@@ -98,6 +98,32 @@ enum LyricCreditCues {
     static func exitProgress(of cue: Cue, at time: Double) -> Double {
         time <= cue.end ? 0 : Easing.smoothstep((time - cue.end) / fadeOut)
     }
+
+    /// The edge bands the cues hold, and when (`CreditsLayer` places even
+    /// cues at the top, odd ones at the foot).
+    static func bands(_ cues: [Cue]) -> [LyricCreditBand] {
+        cues.map { LyricCreditBand(start: $0.start, end: $0.end + fadeOut, top: $0.id.isMultiple(of: 2)) }
+    }
+}
+
+/// A screen band a credit cue holds for a while; backing vocals keep to
+/// the other band meanwhile (`BackingVocalLayer`).
+struct LyricCreditBand: Equatable {
+    var start: Double
+    var end: Double
+    var top: Bool
+}
+
+private struct LyricCreditBandsKey: EnvironmentKey {
+    static let defaultValue: [LyricCreditBand] = []
+}
+
+extension EnvironmentValues {
+    /// The credit cues on screen around this line, for backing vocals.
+    var lyricCreditBands: [LyricCreditBand] {
+        get { self[LyricCreditBandsKey.self] }
+        set { self[LyricCreditBandsKey.self] = newValue }
+    }
 }
 
 struct CreditsLayer: View {
