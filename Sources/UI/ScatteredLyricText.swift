@@ -468,15 +468,6 @@ private struct HeldGlyphRenderer: TextRenderer {
     }
 }
 
-enum Easing {
-    /// Classic 3x²-2x³ ease, clamped. Used wherever motion is driven from a
-    /// time value instead of a SwiftUI animation.
-    static func smoothstep(_ x: Double) -> Double {
-        let clamped = min(max(x, 0), 1)
-        return clamped * clamped * (3 - 2 * clamped)
-    }
-}
-
 /// How a single lyric line is set. Cycling these between lines gives the
 /// restless, re-composing quality of the Lyric Speaker display rather than a
 /// fixed centred block.
