@@ -178,4 +178,221 @@ final class DiscordPresenceTests: XCTestCase {
         defer { fresh.removePersistentDomain(forName: freshName) }
         XCTAssertTrue(LunalyrExtras(defaults: fresh).discordShowsSongButton)
     }
+
+    // MARK: Limits Discord enforces
+
+    func testFieldsAreMeasuredTheWayDiscordCounts() {
+        // 100 graphemes but 200 UTF-16 units: Discord would refuse the whole activity.
+        let emoji = DiscordPresence.field(String(repeating: "\u{1F3B5}", count: 100))
+        XCTAssertLessThanOrEqual(emoji.utf16.count, 128)
+        XCTAssertTrue(emoji.hasSuffix("…"))
+        XCTAssertTrue(emoji.dropLast().allSatisfy { $0 == "\u{1F3B5}" }, "cut between whole characters")
+        let thai = DiscordPresence.field(String(repeating: "\u{0E01}\u{0E34}", count: 90))
+        XCTAssertLessThanOrEqual(thai.utf16.count, 128)
+        XCTAssertEqual(DiscordPresence.field(String(repeating: "é", count: 128)).utf16.count, 128)
+    }
+
+    func testABadButtonIsDroppedRatherThanLosingTheWholeActivity() throws {
+        var playing = DiscordPresence.Playing(title: "Song", artist: "Artist", album: nil, line: nil, start: 0, end: nil)
+        for bad in ["javascript:alert(1)", "https://", "not a url", "https://x.example/" + String(repeating: "a", count: 520)] {
+            playing.songURL = bad
+            let buttons = try XCTUnwrap(DiscordPresence.activity(for: playing)["buttons"] as? [[String: String]])
+            XCTAssertEqual(buttons.map { $0["label"] }, ["Get Lunalyr"], bad)
+        }
+        playing.party = DiscordPresence.ListenParty(room: "abc", listeners: 0, webURL: "file:///etc/passwd")
+        playing.songURL = nil
+        let buttons = try XCTUnwrap(DiscordPresence.activity(for: playing)["buttons"] as? [[String: String]])
+        XCTAssertEqual(buttons.map { $0["label"] }, ["Get Lunalyr"])
+        XCTAssertTrue(DiscordPresence.isValidButton(label: "Play this song", url: "https://song.link/i/1"))
+        XCTAssertFalse(DiscordPresence.isValidButton(label: String(repeating: "a", count: 33), url: "https://song.link/i/1"))
+    }
+
+    func testASpotifyIDWithForeignCharactersMakesNoLink() {
+        XCTAssertNil(DiscordPresence.songLink(spotifyURI: "spotify:track:abcé٣", appleTrackID: nil))
+        XCTAssertEqual(DiscordPresence.songLink(spotifyURI: "spotify:track:abcé", appleTrackID: 7), "https://song.link/i/7")
+    }
+
+    func testUpdatesStayWithinDiscordsRateLimitWithRoomForASongChange() {
+        var budget = DiscordUpdateBudget()
+        let start = Date(timeIntervalSince1970: 1000)
+        var sentLines = 0
+        // A line change every second for twenty seconds.
+        for second in 0..<20 {
+            let now = start.addingTimeInterval(Double(second))
+            if budget.allows(urgent: false, at: now) { budget.record(now); sentLines += 1 }
+        }
+        XCTAssertEqual(sentLines, 4)
+        // A new song right then still goes out at once.
+        let change = start.addingTimeInterval(19.5)
+        XCTAssertTrue(budget.allows(urgent: true, at: change))
+        budget.record(change)
+        XCTAssertFalse(budget.allows(urgent: true, at: change.addingTimeInterval(0.1)), "five in twenty seconds at most")
+        // Never more than five in any twenty seconds.
+        var any = DiscordUpdateBudget()
+        var times: [Double] = []
+        for tick in 0..<400 {
+            let t = Double(tick) * 0.5
+            let now = start.addingTimeInterval(t)
+            if any.allows(urgent: tick % 7 == 0, at: now) { any.record(now); times.append(t) }
+        }
+        for t in times { XCTAssertLessThanOrEqual(times.filter { $0 >= t && $0 < t + 20 }.count, 5) }
+    }
+
+    func testOnlyASongChangePauseOrClearIsUrgent() {
+        let a = DiscordPresence.Playing(title: "A", artist: "X", album: nil, line: "one", start: 0, end: nil)
+        var b = a; b.line = "two"
+        var paused = a; paused.paused = true
+        var other = a; other.title = "B"
+        XCTAssertFalse(DiscordPresence.isUrgent(from: .some(a), to: b))
+        XCTAssertTrue(DiscordPresence.isUrgent(from: .some(a), to: paused))
+        XCTAssertTrue(DiscordPresence.isUrgent(from: .some(a), to: other))
+        XCTAssertTrue(DiscordPresence.isUrgent(from: .some(a), to: nil))
+        XCTAssertTrue(DiscordPresence.isUrgent(from: nil, to: a))
+        XCTAssertTrue(DiscordPresence.isUrgent(from: .some(nil), to: a))
+    }
+
+    // MARK: The socket (a socket pair stands in for Discord)
+
+    private final class FakeDiscord: @unchecked Sendable {
+        private let lock = NSLock()
+        private var running = false
+        private var pairs: [[Int32]] = []
+        var up: Bool {
+            get { lock.withLock { running } }
+            set { lock.withLock { running = newValue } }
+        }
+        /// Discord's end of the latest connection.
+        var peer: Int32 { lock.withLock { pairs.last?[1] ?? -1 } }
+        var connections: Int { lock.withLock { pairs.count } }
+
+        func dial() -> Int32? {
+            lock.withLock {
+                guard running else { return nil }
+                var pair: [Int32] = [-1, -1]
+                guard socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0 else { return nil }
+                // READY waits in the socket for the handshake to read.
+                let ready = DiscordPresence.frame(.frame, ["evt": "READY", "data": ["user": ["username": "tester"]]])!
+                _ = ready.withUnsafeBytes { Darwin.write(pair[1], $0.baseAddress!, ready.count) }
+                pairs.append(pair)
+                return pair[0]
+            }
+        }
+
+        /// The next packet Discord's end receives, within `timeout`.
+        func next(timeout: TimeInterval = 3) -> (opcode: UInt32, body: [String: Any])? {
+            let fd = peer
+            func read(_ count: Int) -> Data? {
+                var data = Data()
+                let deadline = Date().addingTimeInterval(timeout)
+                while data.count < count {
+                    var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                    guard poll(&descriptor, 1, Int32(max(1, deadline.timeIntervalSinceNow * 1000))) > 0 else { return nil }
+                    var buffer = [UInt8](repeating: 0, count: count - data.count)
+                    let n = Darwin.read(fd, &buffer, buffer.count)
+                    guard n > 0 else { return nil }
+                    data.append(contentsOf: buffer[..<n])
+                }
+                return data
+            }
+            guard let header = read(8) else { return nil }
+            let opcode = header.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 0, as: UInt32.self) }.littleEndian
+            let length = Int(header.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }.littleEndian)
+            guard let body = read(length) else { return nil }
+            return (opcode, (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:])
+        }
+
+        func hangUp() {
+            lock.withLock {
+                guard let last = pairs.indices.last else { return }
+                close(pairs[last][1]); pairs[last][1] = -1
+            }
+        }
+        /// Closes Discord's ends; the transport closes its own.
+        func closeAll() { lock.withLock { for pair in pairs where pair[1] >= 0 { close(pair[1]) } } }
+
+        func waitFor(connections count: Int) async throws {
+            var waited = 0
+            while connections < count, waited < 60 { try await Task.sleep(nanoseconds: 50_000_000); waited += 1 }
+        }
+    }
+
+    private func activityPayload(_ details: String) -> [String: Any] {
+        let playing = DiscordPresence.Playing(title: details, artist: "Artist", album: nil, line: nil, start: 0, end: nil)
+        return DiscordPresence.setActivityPayload(DiscordPresence.activity(for: playing), pid: 1, nonce: UUID().uuidString)
+    }
+
+    private func details(_ packet: (opcode: UInt32, body: [String: Any])?) -> String? {
+        ((packet?.body["args"] as? [String: Any])?["activity"] as? [String: Any])?["details"] as? String
+    }
+
+    func testDiscordStartedLaterStillGetsTheSong() async throws {
+        let discord = FakeDiscord()
+        defer { discord.closeAll() }
+        let transport = DiscordTransport(connects: false, retryInterval: 0.2, dial: { discord.dial() })
+        transport.send(activityPayload("Song"))
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(discord.connections, 0)
+        // Discord opens; nothing new is playing, so nothing new is sent.
+        discord.up = true
+        try await discord.waitFor(connections: 1)
+        XCTAssertEqual(discord.next()?.opcode, DiscordPresence.Opcode.handshake.rawValue)
+        XCTAssertEqual(details(discord.next()), "Song · Artist", "the song shown before Discord opened is sent")
+    }
+
+    func testARestartedDiscordIsFoundAgainAtOnce() async throws {
+        let discord = FakeDiscord()
+        discord.up = true
+        defer { discord.closeAll() }
+        let transport = DiscordTransport(connects: false, retryInterval: 60, dial: { discord.dial() })
+        transport.send(activityPayload("First"))
+        try await discord.waitFor(connections: 1)
+        XCTAssertEqual(discord.next()?.opcode, DiscordPresence.Opcode.handshake.rawValue)
+        XCTAssertEqual(details(discord.next()), "First · Artist")
+        discord.hangUp()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        transport.send(activityPayload("Second"))
+        try await discord.waitFor(connections: 2)
+        XCTAssertEqual(discord.next()?.opcode, DiscordPresence.Opcode.handshake.rawValue)
+        XCTAssertEqual(details(discord.next()), "Second · Artist")
+        XCTAssertEqual(discord.connections, 2)
+    }
+
+    func testAClearedPresenceIsNotSentAgain() async throws {
+        let discord = FakeDiscord()
+        defer { discord.closeAll() }
+        let transport = DiscordTransport(connects: false, retryInterval: 0.2, dial: { discord.dial() })
+        transport.send(activityPayload("Song"))
+        transport.send(DiscordPresence.setActivityPayload(nil, pid: 1, nonce: "x"), thenDisconnect: true)
+        try await Task.sleep(nanoseconds: 100_000_000) // both handled while Discord is closed
+        discord.up = true
+        try await Task.sleep(nanoseconds: 700_000_000)
+        XCTAssertEqual(discord.connections, 0, "nothing to show, so Discord isn't dialled")
+    }
+
+    // MARK: Ticking and caching
+
+    func testTheTickIsSlowWhileNothingPlays() {
+        XCTAssertEqual(DiscordPresence.tickInterval(playing: true, heldBack: false), DiscordPresence.tickInterval)
+        XCTAssertEqual(DiscordPresence.tickInterval(playing: false, heldBack: true), DiscordPresence.tickInterval,
+                       "a held-back pause or clear still goes out promptly")
+        XCTAssertEqual(DiscordPresence.tickInterval(playing: false, heldBack: false), DiscordPresence.idleTickInterval)
+        XCTAssertGreaterThanOrEqual(DiscordPresence.idleTickInterval, 5)
+    }
+
+    func testTheCatalogueCacheKeepsTheMostRecentSongs() {
+        var cache = RecentCache<Int>(capacity: 3)
+        for (index, key) in ["a", "b", "c"].enumerated() { cache.set(index, for: key) }
+        XCTAssertEqual(cache.value(for: "a"), 0) // a is now the most recent
+        cache.set(3, for: "d")
+        XCTAssertEqual(cache.count, 3)
+        XCTAssertNil(cache.value(for: "b"), "the least recently used goes first")
+        XCTAssertEqual(cache.value(for: "a"), 0)
+        cache.set(9, for: "a")
+        XCTAssertEqual(cache.value(for: "a"), 9)
+        cache.remove("a")
+        XCTAssertNil(cache.value(for: "a"))
+        XCTAssertEqual(cache.count, 2)
+        for index in 0..<1000 { cache.set(index, for: "k\(index)") }
+        XCTAssertEqual(cache.count, 3)
+    }
 }
