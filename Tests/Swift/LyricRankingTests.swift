@@ -50,7 +50,7 @@ final class LyricRankingTests: XCTestCase {
             LyricSourceOptions.Snapshot(enabled: enabled, mode: mode, localFolder: "", localVersion: "x").fingerprint
         }
         // v9 adds AMLL and Kugou's word timing, so choices cached before are looked up again.
-        XCTAssertTrue(print(.smart, [.lrclib]).hasPrefix("v11|"))
+        XCTAssertTrue(print(.smart, [.lrclib]).hasPrefix("v12|"))
         XCTAssertNotEqual(print(.smart, [.lrclib]), print(.priority, [.lrclib]))
         XCTAssertEqual(print(.smart, [.lrclib]), print(.smart, [.lyrimuse, .lrclib, .appleMusicCache]))
         XCTAssertNotEqual(print(.smart, [.lrclib, .netEase]), print(.smart, [.netEase, .lrclib]))
@@ -93,5 +93,59 @@ final class LyricRankingTests: XCTestCase {
         let match = LyricCandidate(source: .lrclib, result: .plain(["la"], .init(precision: "", source: "")),
                                    title: "🦋", artist: "!!!", duration: 200, score: 0)
         XCTAssertNil(LyricsFetcher.rejection(match, query: butterfly))
+    }
+
+    // MARK: Bunched lines
+
+    /// A chorus as a listener-made LRC sometimes stamps it: seventeen lines
+    /// inside five seconds (from a real LRCLIB upload).
+    private func bunchedChorus(from start: Double = 92) -> [LyricsFetcher.Line] {
+        var lines = [LyricsFetcher.makeLine(text: "No place I'd rather be", start: start - 3, end: start)]
+        var time = start
+        for index in 0..<17 {
+            let next = time + 0.3
+            lines.append(LyricsFetcher.makeLine(text: index % 3 == 0 ? "N-n-no, no, no" : "No place I'd rather be", start: time, end: next))
+            time = next
+        }
+        lines.append(LyricsFetcher.makeLine(text: "Sing it once again", start: time, end: time + 4))
+        return lines
+    }
+
+    private func steady(_ count: Int = 20, every gap: Double = 2.5) -> [LyricsFetcher.Line] {
+        (0..<count).map { LyricsFetcher.makeLine(text: "No place I'd rather be", start: 10 + Double($0) * gap, end: 10 + Double($0 + 1) * gap) }
+    }
+
+    func testABunchedChorusIsFoundAndSteadyLinesAreNot() {
+        let run = LyricGapTiming.bunchedRun(in: bunchedChorus())
+        XCTAssertEqual(run?.count, 18)
+        XCTAssertEqual(run?.start ?? 0, 92, accuracy: 0.01)
+        XCTAssertNil(LyricGapTiming.bunchedRun(in: steady()))
+        // Fast but singable: eight syllables a second over 1 s lines.
+        XCTAssertNil(LyricGapTiming.bunchedRun(in: steady(every: 1)))
+        // Four quick ad-libs in a row are a stutter, not a broken file.
+        var stutter = steady()
+        for index in 0..<3 { stutter.insert(LyricsFetcher.makeLine(text: "Hey", start: 30.1 + Double(index) * 0.1, end: 30.2), at: 9 + index) }
+        XCTAssertNil(LyricGapTiming.bunchedRun(in: stutter.sorted { $0.start < $1.start }))
+        // Credits stamped half a second apart before the song are not lyrics.
+        let credits = ["Human Nature - Yot Club", "Lyrics by：Ryan Kaiser", "Composed by：Ryan Kaiser", "Produced by：Ryan Kaiser"]
+            .enumerated().map { LyricsFetcher.makeLine(text: $1, start: Double($0) * 0.5, end: Double($0 + 1) * 0.5) }
+        XCTAssertNil(LyricGapTiming.bunchedRun(in: credits + steady()))
+        // Instrumental markers and blank lines do not count as sung.
+        var marked = steady()
+        marked.insert(LyricsFetcher.Line(start: 20.1, end: 22, text: "", words: [], isInstrumental: true, wordTimed: false), at: 5)
+        XCTAssertNil(LyricGapTiming.bunchedRun(in: marked))
+    }
+
+    func testSoundTimingOutranksBunchedTimingButNotPlainText() {
+        let options = LyricSourceOptions.Snapshot(enabled: [.lrclib, .netEase], mode: .priority, localFolder: "", localVersion: "")
+        var bunched = candidate(.lrclib, words: false)
+        bunched.result = .synced(bunchedChorus(), .init(precision: "Line-synced", source: "LRCLIB"))
+        var sound = candidate(.netEase, words: false)
+        sound.result = .synced(steady(), .init(precision: "Line-synced", source: "NetEase"))
+        XCTAssertEqual(LyricsFetcher.ranked([bunched, sound], query: query, options: options).map(\.source), [.netEase, .lrclib])
+        // Still shown when it is the only timing found.
+        var plain = candidate(.netEase, words: false)
+        plain.result = .plain(["No place I'd rather be"], .init(precision: "Not synced", source: "NetEase"))
+        XCTAssertEqual(LyricsFetcher.ranked([plain, bunched], query: query, options: options).map(\.source), [.lrclib, .netEase])
     }
 }

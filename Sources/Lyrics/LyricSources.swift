@@ -87,7 +87,7 @@ final class LyricSourceOptions: ObservableObject {
         /// v10: production credits are kept (as `Line.credit`) for the credits layer.
         /// v9: AMLL's word-timed database and Kugou's word-timed KRC.
         /// v11: lyrics for another version (Live, Remix…) rank below the playing one's.
-        static let cachePolicy = "v11"
+        static let cachePolicy = "v12"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

@@ -107,6 +107,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Lyrics no longer race through several lines at once. Some listener-made LRCLIB uploads stamp a whole chorus within a few seconds (Clean Bandit's "Rather Be" packed 17 lines into 5 s). Timing like that now ranks below any source with sound timing, LRCLIB's other uploads for the song are searched as well, and the source list says "17 lines bunched at 1:32". It is still used when nothing else is timed. Songs cached before are looked up again.
 - Music video: on a song change the old YouTube video now holds its last frame while it fades out, instead of dropping to the album-colour gradient. Pausing the wallpaper (or covering it) also keeps the frame.
 - Music video: a YouTube video correcting its sync no longer blinks to the gradient; a short wait covers most seeks, and a longer one shows the frame from just before it. Videos now fade in and out with eased curves.
 - Music video: a library video no longer goes through black before its first frame, and fades in smoothly.

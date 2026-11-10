@@ -58,6 +58,38 @@ enum LyricGapTiming {
         }
     }
 
+    /// The longest run of consecutive sung lines that start faster than
+    /// anyone could sing them (each line's window shorter than
+    /// `bunchedSecondsPerSyllable` a syllable, and under 0.6 s), or nil when
+    /// no run reaches `bunchedRunLength` lines. A listener-made LRC sometimes
+    /// stamps a whole chorus within a few seconds; shown as it is, the lyrics
+    /// race through those lines and land at the end of them.
+    static func bunchedRun(in lines: [LyricsFetcher.Line]) -> (count: Int, start: Double, end: Double)? {
+        // Credit lines ("Lyrics by: …") are often stamped a moment apart before the song starts.
+        let sung = lines.filter { !$0.isInstrumental && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && $0.start.isFinite && !LyricCredits.isCredit($0.text) }
+        var best: (count: Int, start: Double, end: Double)?
+        var runStart: Int?
+        for index in sung.indices {
+            let next = index + 1 < sung.count ? sung[index + 1].start : nil
+            let window = next.map { $0 - sung[index].start }
+            let tooQuick = window.map { $0 >= 0 && $0 < min(0.6, Double(max(1, estimatedSyllables(sung[index].text))) * bunchedSecondsPerSyllable) } ?? false
+            if tooQuick {
+                if runStart == nil { runStart = index }
+            } else if let first = runStart {
+                // The run's last line is the one the quick lines lead into.
+                let count = index - first + 1
+                if count >= bunchedRunLength, count > (best?.count ?? 0) {
+                    best = (count, sung[first].start, sung[index].start)
+                }
+                runStart = nil
+            }
+        }
+        return best
+    }
+    static let bunchedSecondsPerSyllable = 0.08
+    static let bunchedRunLength = 5
+
     /// The quickest singing the estimate assumes.
     static let minimumSecondsPerSyllable = 0.4
 

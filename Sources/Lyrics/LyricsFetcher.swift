@@ -415,6 +415,9 @@ final class LyricsFetcher {
                          options: LyricSourceOptions.Snapshot) -> Bool {
         let timing = rankedTiming(a.result), other = rankedTiming(b.result)
         if (timing > 0) != (other > 0) { return timing > 0 }
+        // Timing that races through a run of lines ranks below sound timing.
+        let sound = !hasBunchedLines(a.result), otherSound = !hasBunchedLines(b.result)
+        if sound != otherSound { return sound }
         let fits = fitsVersion(a, query), otherFits = fitsVersion(b, query)
         if fits != otherFits { return fits }
         if timing != other { return timing > other }
@@ -428,6 +431,13 @@ final class LyricsFetcher {
             if closeness != otherCloseness { return closeness > otherCloseness }
         }
         return order(a.source, in: options) < order(b.source, in: options)
+    }
+    /// Whether timed lyrics stamp a run of lines faster than they could be
+    /// sung (`LyricGapTiming.bunchedRun`).
+    static func hasBunchedLines(_ result: Result) -> Bool { bunchedRun(result) != nil }
+    static func bunchedRun(_ result: Result) -> (count: Int, start: Double, end: Double)? {
+        guard case .synced(let lines, _) = result else { return nil }
+        return LyricGapTiming.bunchedRun(in: lines)
     }
     /// Whether the match names the same version as the playing song. A
     /// service that reported no checkable name repeats the search, so it fits.
@@ -524,6 +534,9 @@ final class LyricsFetcher {
             var found = base[candidate.source]?.hasPrefix("Saved match") == true ? "Saved match" : "Match found"
             let other = VersionTags.mismatch(query, title: candidate.title)
             if !other.isEmpty { found += " · other version (\(VersionTags.describe(other)))" }
+            if let run = LyricsFetcher.bunchedRun(candidate.result) {
+                found += " · \(run.count) lines bunched at \(LyricQuery.clock(run.start))"
+            }
             if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
             else if candidate.agreement.peers > 0 {
                 found += candidate.agreement.peers == 1 ? " · 1 other source agrees" : " · \(candidate.agreement.peers) other sources agree"
@@ -729,7 +742,13 @@ final class LyricsFetcher {
         if payloads.first?.instrumental == true, payloads.first.map({ LyricQuery.similarity(query.title, $0.trackName ?? query.title) >= 0.95 }) == true {
             return nil
         }
-        let exactTimed = payloads.contains { $0.syncedLyrics?.isEmpty == false || $0.lyricsfile?.isEmpty == false }
+        // An exact match whose timing races through lines (listener-made)
+        // is not the last word: other uploads for the song are searched too.
+        let exactTimed = payloads.contains { payload in
+            if let file = payload.lyricsfile, !file.isEmpty { return LyricGapTiming.bunchedRun(in: parseLyricsFile(file)) == nil }
+            if let lrc = payload.syncedLyrics, !lrc.isEmpty { return LyricGapTiming.bunchedRun(in: parseLRC(lrc, trackDuration: query.duration)) == nil }
+            return false
+        }
         if !exactTimed {
             let search = query.hasArtist ? ["track_name":query.title,"artist_name":query.artist] : ["track_name":query.title]
             do {
@@ -754,8 +773,10 @@ final class LyricsFetcher {
             else if let plain=payload.plainLyrics,!plain.isEmpty {
                 result = .plain(plain.components(separatedBy:.newlines),Provenance(precision:"Not synced",source:"LRCLIB"))
             } else {return nil}
+            // Below every upload with sound timing, above plain text.
+            let bunched = !lines.isEmpty && LyricGapTiming.bunchedRun(in: lines) != nil
             return LyricCandidate(source:.lrclib,result:result,title:title,artist:artist,duration:payload.duration,
-                score:score-(lines.isEmpty ? 12 : 0))
+                score:score-(lines.isEmpty ? 12 : bunched ? 6 : 0))
         }
         return bestOffer(candidates, query: query)
     }
