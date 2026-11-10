@@ -438,6 +438,11 @@ struct NowPlayingView: View {
                     .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
                     // Under the player; clearer while its seek bar is dragged.
                     .modifier(PlayerHoverFocus(hovered: isHovered, displayID: effectDisplay))
+                    // Shortcut confirmations stay sharp over that blur.
+                    .overlay {
+                        WallpaperNoteLayer(size: geometry.size, mood: mood, interval: frameInterval)
+                            .equatable()
+                    }
                 }
                 // The words, copies and echoes on screen are decoration for
                 // assistive technology; the element below speaks for them.
@@ -619,10 +624,12 @@ struct NowPlayingView: View {
 
         case .musicVideo(let source):
             ZStack {
-                // Reduce Motion holds the video still, as it does an imported one.
-                MusicVideoBackground(source: source, paused: renderingPaused || reduceMotion,
+                // Reduce Motion shows a still: a library video's paused
+                // frame, or a YouTube video's own still (no player at all).
+                // A paused or covered wallpaper holds the video's frame.
+                MusicVideoBackground(source: source, paused: renderingPaused,
                                      dim: settings.musicVideoDim, blur: settings.musicVideoBlur,
-                                     preview: isSettingsPreview, standIn: cover.gradient)
+                                     preview: isSettingsPreview, still: reduceMotion, standIn: cover.gradient)
                 scrim
                 textBacking(backing, presence: stage, size: size)
             }

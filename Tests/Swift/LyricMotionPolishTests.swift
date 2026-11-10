@@ -397,6 +397,21 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertEqual(fresh.capsuleSince, 200)
     }
 
+    func testTheWallpaperLeavesOutANoteTheHUDShowed() {
+        // F1: one confirmation, in one place.
+        let mine = LunalyrExtras.Note(text: "Lyrics hidden", symbol: "eye.slash", at: 10)
+        XCTAssertEqual(WallpaperNoteLayer.drawn(mine), mine)
+        let shownInHUD = LunalyrExtras.Note(text: "Lyrics hidden", symbol: "eye.slash", at: 10, inHUD: true)
+        XCTAssertNil(WallpaperNoteLayer.drawn(shownInHUD))
+        XCTAssertNil(WallpaperNoteLayer.drawn(nil))
+        // The layer is drawn apart from the stage, so it compares on its own inputs.
+        let a = WallpaperNoteLayer(size: CGSize(width: 800, height: 500), mood: .neutral, interval: 1.0 / 60)
+        let b = WallpaperNoteLayer(size: CGSize(width: 800, height: 500), mood: .neutral, interval: 1.0 / 60)
+        let c = WallpaperNoteLayer(size: CGSize(width: 800, height: 600), mood: .neutral, interval: 1.0 / 60)
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+    }
+
     func testANoteWhilePausedGetsAClockThatEnds() {
         let note = LunalyrExtras.Note(text: "Wallpaper paused", symbol: "pause", at: 50)
         let frames = LyricNoteView.frames(for: note, from: 50.01, interval: 1.0 / 60)
