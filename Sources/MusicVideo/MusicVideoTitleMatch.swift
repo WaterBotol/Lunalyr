@@ -32,10 +32,15 @@ enum MusicVideoTitleMatch {
         core(title, artists: artistParts(artist))
     }
 
-    /// The song and the video name the same song.
+    /// The song and the video name the same song. Also tried with segments
+    /// that are the artist beside qualifiers or the artist's name in its
+    /// own script dropped ("米津玄師 MV「Lemon」", "IVE 아이브 'I AM' MV"); what
+    /// is left must still equal the song title.
     static func matches(videoTitle: String, songTitle: String, artist: String) -> Bool {
         let song = songKey(songTitle)
-        return !song.isEmpty && videoKey(videoTitle, artist: artist) == song
+        guard !song.isEmpty else { return false }
+        let artists = artistParts(artist)
+        return core(videoTitle, artists: artists) == song || core(videoTitle, artists: artists, loose: true) == song
     }
 
     /// A live, concert or fan recording, unless the song's own title says so.
@@ -69,12 +74,16 @@ enum MusicVideoTitleMatch {
 
     // MARK: Pieces
 
-    private static func core(_ title: String, artists: [String]) -> String {
+    private static func core(_ title: String, artists: [String], loose: Bool = false) -> String {
         var kept: [String] = []
+        // "M/V", as K-pop titles write it, is the qualifier "MV".
+        let title = title.replacingOccurrences(of: #"(?<![A-Za-z0-9])[Mm]/[Vv](?![A-Za-z0-9])"#, with: "MV",
+                                               options: .regularExpression)
         for segment in segments(stripBrackets(title)) {
             let cleaned = stripCredits(segment)
             let normal = CoverLookup.normal(cleaned)
             if normal.isEmpty || artists.contains(normal) || isQualifier(cleaned) { continue }
+            if loose && isLooseArtistSegment(cleaned, artists: artists) { continue }
             kept.append(normal)
         }
         var key = kept.joined()
@@ -88,9 +97,30 @@ enum MusicVideoTitleMatch {
         return key.isEmpty && artists.isEmpty ? CoverLookup.normal(title) : key
     }
 
+    /// A segment that is the artist plus qualifier words ("米津玄師 MV"), or
+    /// the artist plus their name in another script ("IVE 아이브").
+    private static func isLooseArtistSegment(_ segment: String, artists: [String]) -> Bool {
+        let words = LyricQuery.normalize(segment).split(separator: " ").map(String.init)
+        let rest = words.filter { !qualifierWords.contains($0) }.joined()
+        guard !rest.isEmpty else { return false }
+        for artist in artists {
+            if rest == artist { return true }
+            var other = rest
+            if other.hasPrefix(artist) { other.removeFirst(artist.count) } else if other.hasSuffix(artist) {
+                other.removeLast(artist.count)
+            } else { continue }
+            if !other.isEmpty, !other.unicodeScalars.contains(where: \.isASCII) { return true }
+        }
+        return false
+    }
+
+    /// Cut at separators: dashes, bars and colons with spaces, double
+    /// quotes, Japanese corner brackets 「」『』, and single quotes that open
+    /// or close a quotation ("BLACKPINK - 'Shut Down' MV"), not apostrophes.
     private static func segments(_ text: String) -> [String] {
-        let marked = text.replacingOccurrences(of: #"\s+[-–—|:]\s+|\s*[|“”"«»]\s*|\s+[-–—]|[-–—]\s+|:\s+"#, with: "\u{1}",
-                                               options: .regularExpression)
+        let pattern = #"\s+[-–—|:]\s+|\s*[|“”"«»「」『』]\s*|\s+[-–—]|[-–—]\s+|:\s+"#
+            + #"|(?:^|\s)['‘](?=\S)|(?<=\S)['’](?:\s|$)"#
+        let marked = text.replacingOccurrences(of: pattern, with: "\u{1}", options: .regularExpression)
         return marked.split(separator: "\u{1}").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 

@@ -55,6 +55,10 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Music video: after a song change, the old video now holds still while it fades out instead of jumping to the new song's position (which could flash its opening frame).
+- Music video: a YouTube player kept hidden for about ten minutes (wallpaper covered, hidden or paused, Reduce Motion) is now closed so it uses nothing, and reopened when the video plays again. A hidden wallpaper whose video has not loaded no longer keeps checking it four times a second.
+- Music video: Japanese and Korean video titles are now recognised, such as 「Title」 and 『Title』, 'Title' M/V, and the artist's name written in their own script next to the title.
+- Music video: the YouTube player is checked and muted again on every sync check, in case anything unmuted it.
 - Fable: long lines no longer run off the stage or under the menu bar, and earlier words no longer fade away before the line has been read. Lines are wrapped, then shrunk only if they still do not fit.
 - Fable: Arabic and other joined scripts are no longer split into reversed, unjoined letters, and right-to-left lines read from the right.
 - Fable: with romanisation set to Below, each word's reading now shows under it. Fable used to drop readings that were split by word.

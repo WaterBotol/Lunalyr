@@ -180,4 +180,42 @@ final class MusicVideoMatchTests: XCTestCase {
         _ = session.receive(.init(kind: .error(150), video: "4NRXx6U8ABQ", page: page), trusted: true)
         XCTAssertEqual(state(1), .visible(false), "a failed video stays hidden")
     }
+
+    func testNonLatinAndKpopTitlesMatch() {
+        let cases: [(video: String, song: String, artist: String)] = [
+            ("YOASOBI「アイドル」 Official Music Video", "アイドル", "YOASOBI"),
+            ("米津玄師 MV「Lemon」", "Lemon", "米津玄師"),
+            ("ヨルシカ - 『ただ君に晴れ』 (Music Video)", "ただ君に晴れ", "ヨルシカ"),
+            ("BLACKPINK - 'Shut Down' M/V", "Shut Down", "BLACKPINK"),
+            ("NewJeans (뉴진스) 'Ditto' Official MV", "Ditto", "NewJeans"),
+            ("IVE 아이브 'I AM' MV", "I AM", "IVE"),
+            ("BTS (방탄소년단) ‘Dynamite’ Official MV", "Dynamite", "BTS"),
+        ]
+        for (video, song, artist) in cases {
+            XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: video, songTitle: song, artist: artist), video)
+        }
+        // Still exact: another song in quotes, or the artist's other words.
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "BLACKPINK - 'Shut Down' M/V", songTitle: "Down",
+                                                    artist: "BLACKPINK"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "YOASOBI「アイドル」 Official Music Video",
+                                                    songTitle: "アイ", artist: "YOASOBI"))
+        XCTAssertFalse(MusicVideoTitleMatch.matches(videoTitle: "IVE 아이브 'I AM' MV", songTitle: "I", artist: "IVE"))
+        // Apostrophes are not quotes.
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "Wallows - Don't Want to Talk (Official Video)",
+                                                   songTitle: "Don't Want to Talk", artist: "Wallows"))
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "Artist - Rock 'n' Roll Star (Official Video)",
+                                                   songTitle: "Rock 'n' Roll Star", artist: "Artist"))
+        XCTAssertTrue(MusicVideoTitleMatch.matches(videoTitle: "IU 좋은 날", songTitle: "좋은 날", artist: "IU"),
+                      "the artist written before the title still works")
+        let pick = YouTubeSearchPage.officialVideo(
+            in: [Result(videoID: "AAAAAAAAAAA", title: "YOASOBI「アイドル」 Official Music Video", channel: "Ayase / YOASOBI")],
+            title: "アイドル", artist: "YOASOBI")
+        XCTAssertEqual(pick?.videoID, "AAAAAAAAAAA")
+    }
+
+    func testTheSampleKeepsThePlayerMuted() {
+        let html = YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0)
+        XCTAssertTrue(html.contains("if (player.isMuted && !player.isMuted()) player.mute();"),
+                      "every sync sample mutes the player again if anything unmuted it")
+    }
 }
