@@ -598,12 +598,18 @@ final class ScrubControllerTests: XCTestCase {
 
     func testScrubPreviewIsPerDisplay() {
         let preview = ScrubPreview.shared
+        var held = true
+        preview.buttonsHeld = { held }
+        defer { preview.buttonsHeld = { NSEvent.pressedMouseButtons != 0 } }
         preview.show(42, on: 7)
         XCTAssertEqual(preview.songTime(on: 7), 42)
         XCTAssertNil(preview.songTime(on: 8))
         XCTAssertNil(preview.songTime(on: nil))
         preview.clear(on: 8)
         XCTAssertEqual(preview.songTime(on: 7), 42)
+        held = false
+        XCTAssertNil(preview.songTime(on: 7), "Never outlives the press")
+        held = true
         preview.clear(on: 7)
         XCTAssertNil(preview.songTime(on: 7))
     }

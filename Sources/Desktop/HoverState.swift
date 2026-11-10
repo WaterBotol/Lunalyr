@@ -130,7 +130,7 @@ final class HoverState: ObservableObject {
         // A resting pointer cannot start a reveal; an active one still needs
         // its linger timed and its controls kept in reach, and a pending one
         // its dwell.
-        guard moved || session.activeDisplayID != 0 || intent.isPending || PlayerInteraction.shared.dragging else { return }
+        guard moved || session.activeDisplayID != 0 || intent.isPending else { return }
         let screens = NSScreen.screens
         let displays = screens.compactMap { screen -> VCDisplayFrame? in
             guard let id = screen.versoDisplayID else { return nil }
@@ -155,8 +155,11 @@ final class HoverState: ObservableObject {
         let intentReady = intent.sample(location, at: now,
                                         inHotZone: !held && !blocked && inHotZone && previous != screen.displayID)
         let interaction = PlayerInteraction.shared
+        // A drag is only in flight while a button is down: a press whose
+        // view went away (a display change) can never pin the player up.
+        let dragging = interaction.dragging && held
         let holds = previousDisplay != nil && PlayerDismissGuard.holds(
-            dragging: interaction.dragging, searchFocused: interaction.searchFocused, lastClick: interaction.lastClick,
+            dragging: dragging, searchFocused: interaction.searchFocused, lastClick: interaction.lastClick,
             now: now, overWindow: blocked)
         var active = Self.decide(proposed: proposed, previous: previousDisplay, intentReady: intentReady, holds: holds)
         // Keep the C session in step: a reveal refused for intent is not a
@@ -164,7 +167,7 @@ final class HoverState: ObservableObject {
         if let active {
             if session.activeDisplayID != active { session.activeDisplayID = active }
             // After a drag the usual linger runs from the release.
-            if holds && interaction.dragging { session.deadline = now + lingerDuration }
+            if holds && dragging { session.deadline = now + lingerDuration }
             intent.reset()
         } else if session.activeDisplayID != 0 {
             session = VCHoverSession()

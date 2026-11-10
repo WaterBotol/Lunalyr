@@ -29,6 +29,9 @@ final class ScrubPreview: ObservableObject {
     }
 
     @Published private(set) var state: State?
+    /// A preview only stands while a button is down, so a drag whose view
+    /// went away (a display change) can never leave the lyrics frozen.
+    var buttonsHeld: () -> Bool = { NSEvent.pressedMouseButtons != 0 }
 
     func show(_ songTime: Double, on displayID: CGDirectDisplayID) {
         let next = State(displayID: displayID, songTime: songTime)
@@ -41,7 +44,7 @@ final class ScrubPreview: ObservableObject {
 
     /// The previewed song time on `displayID`, if a drag is in flight there.
     func songTime(on displayID: CGDirectDisplayID?) -> Double? {
-        guard let state, let displayID, state.displayID == displayID else { return nil }
+        guard let state, let displayID, state.displayID == displayID, buttonsHeld() else { return nil }
         return state.songTime
     }
 }
