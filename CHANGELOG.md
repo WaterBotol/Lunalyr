@@ -50,6 +50,13 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- A song change now crossfades the background once, after the new song's cover colours and lyrics are in (at most 2.5 s), instead of two or three times; a lyric upgrade later in the song no longer switches the background.
+- Background crossfades no longer dim the screen halfway, and a second change arriving mid-fade carries on smoothly instead of cutting.
+- The wallpaper fades in at launch or on a new display instead of popping in over black; visualisers, web scenes and imported pictures now fade in once they have a first frame, not into black first.
+- Music video: a song change shows the cover's colours while the next video is found, instead of flashing the fallback wallpaper (it falls back after 3 s).
+- Moving a web visualiser between the live scene and its stand-in (main display changed) now crossfades. Under Reduce Motion, a new album's still cover crossfades in.
+- The text backing no longer steps darker when lyrics arrive, and the album tint fades with the colours.
+- Song changes while the wallpaper is paused show the new background and colours together, without a jump on resume.
 - Music video: pausing the song now leaves the video paused on its current frame instead of switching to the album-colour gradient. A YouTube video is shown as a picture of its last frame (YouTube's own pause button never shows), per display, and plays again from there on resume. After about ten minutes paused, the YouTube player is closed to save power and reopened on resume, with the frame kept on screen meanwhile. Covering or pausing the wallpaper, Reduce Motion, buffering, and times before or after the video still show the gradient.
 - Smoother music video sync. A library video eases small drift away by playing up to 3% faster or slower instead of jumping, and seeks only past 1.5 s. A YouTube video seeks only for drift over a second that lasts, or a jump, and each seek is led by how long that player takes to land one, measured as it plays.
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
@@ -63,6 +70,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Imported wallpaper pictures are decoded off the main thread, so a large photo no longer stalls the wallpaper.
 - Tap to sync for lyrics: a tap pressed just after the timing is set no longer reaches the app you were in (Space there could pause the song); the keyboard comes back when the result closes, or at once with Esc or Return.
 - Tap to sync for lyrics stops if a different lyric source replaces the lyrics mid-session, instead of saving timing for lyrics no longer shown.
 - A Shortcuts action that opens Lunalyr waits until Lunalyr has started before it runs.
