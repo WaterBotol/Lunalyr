@@ -14,6 +14,8 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Added
 
+- A small confirmation under the menu bar, on the screen with the pointer, for actions taken where the wallpaper can't be seen: global shortcuts, Shortcuts actions, `lunalyr://` links, listen-along joining and ending, and anything done while the wallpaper is paused or covered. It never takes focus or clicks and is left out of screenshots. Shortcuts actions now say what they did.
+- Listen along: the menu says "Reconnecting to …" while a dropped connection is retried, keeps a note when following ends (with Dismiss), and says when sharing is waiting for music or can't reach the relay. Copy Link confirms with "Copied".
 - `lunalyr://` links: `lunalyr://join/<room>` listens along with a room (only with a relay set, and only after you say yes), `lunalyr://toggle` shows or hides the lyrics, `lunalyr://card` makes a lyric card, `lunalyr://settings` opens Settings. Anything else is ignored. The web listen-along page has an "Open in Lunalyr" link on wider screens.
 - Shortcuts actions: show or hide lyrics, lyrics earlier or later, next layout, make a lyric card, pause or resume the wallpaper, and open Settings.
 - Tap to sync for lyrics: choose Tap to Sync Lyrics in the menu-bar menu (or the Lyric timing section of the menu-bar panel), then press any key each time a lyric line starts. After four taps that agree, Lunalyr sets this song's lyric timing for its lyric source, says so on screen, and offers Undo. Stray taps are ignored, Esc stops, and it gives up on its own when the taps stop.
@@ -50,6 +52,9 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 
+- The menu-bar line keeps one width per song, so the status items to its left no longer shift with every line; a line too wide is shown in two halves. It wakes the Mac about once a line instead of four times a second, dims while the music is paused, and waits 2 seconds before leaving between songs.
+- The menu-bar panel no longer jumps in height when a song starts or stops. Covers, titles, play/pause, quick toggles, the timing value and status banners now change with short fades instead of cutting; play/pause answers the click at once, and the audio banner stays in place through Reconnect and says when it worked.
+- The "Copy a lyric card" shortcut is now called "Open lyric card", which is what it does.
 - Music video: pausing the song now leaves the video paused on its current frame instead of switching to the album-colour gradient. A YouTube video is shown as a picture of its last frame (YouTube's own pause button never shows), per display, and plays again from there on resume. After about ten minutes paused, the YouTube player is closed to save power and reopened on resume, with the frame kept on screen meanwhile. Covering or pausing the wallpaper, Reduce Motion, buffering, and times before or after the video still show the gradient.
 - Smoother music video sync. A library video eases small drift away by playing up to 3% faster or slower instead of jumping, and seeks only past 1.5 s. A YouTube video seeks only for drift over a second that lasts, or a jump, and each seek is led by how long that player takes to land one, measured as it plays.
 - The Player picker lists only installed players. Automatic follows browsers only with web players turned on, and VLC, Swinsian and VOX only with local players turned on. Onboarding names only the players installed on this Mac.
