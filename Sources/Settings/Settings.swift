@@ -728,6 +728,24 @@ final class Settings: ObservableObject {
 
     var scrimRange: ClosedRange<Double> { Self.scrimRange(increaseContrast: increaseContrast) }
 
+    /// The values Reset Adjustments changes, to put back with `restoreAdvanced(_:)` (Undo).
+    struct AdvancedValues: Equatable {
+        let effectSpeed, patternOpacity, scrimStrength, vividness, motionBlur: Double
+    }
+
+    var advancedValues: AdvancedValues {
+        AdvancedValues(effectSpeed: effectSpeed, patternOpacity: patternOpacity, scrimStrength: preferredScrimStrength,
+                       vividness: vividness, motionBlur: motionBlur)
+    }
+
+    func restoreAdvanced(_ values: AdvancedValues) {
+        effectSpeed = values.effectSpeed
+        patternOpacity = values.patternOpacity
+        scrimStrength = values.scrimStrength
+        vividness = values.vividness
+        motionBlur = values.motionBlur
+    }
+
     /// Restores every advanced control to its shipped value.
     func resetAdvanced() {
         effectSpeed = 1.0

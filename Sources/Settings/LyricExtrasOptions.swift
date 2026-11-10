@@ -185,6 +185,33 @@ final class StyleMemory: ObservableObject {
         cached = nil
     }
 
+    /// Every remembered style, to put back with `restore(_:)` (Undo).
+    struct Snapshot: Equatable {
+        let songs: [String: Style]
+        let artists: [String: Style]
+    }
+
+    var snapshot: Snapshot { Snapshot(songs: songs, artists: artists) }
+
+    func restore(_ snapshot: Snapshot) {
+        songs = snapshot.songs
+        artists = snapshot.artists
+        defaults.set(songs.mapValues(\.plist), forKey: Keys.songs)
+        defaults.set(artists.mapValues(\.plist), forKey: Keys.artists)
+        cached = nil
+    }
+
+    /// Makes `change`, and registers it with `undoManager` under `name` so
+    /// Edit › Undo puts every remembered style back as it was.
+    func changeUndoably(_ name: String, undoManager: UndoManager?, _ change: () -> Void) {
+        let before = snapshot
+        change()
+        let after = snapshot
+        guard before != after else { return }
+        undoManager?.registerSettingsChange(name, undo: { [weak self] in self?.restore(before) },
+                                            redo: { [weak self] in self?.restore(after) })
+    }
+
     func forgetAll() {
         songs = [:]
         artists = [:]

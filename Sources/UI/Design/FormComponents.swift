@@ -91,6 +91,28 @@ extension EnvironmentValues {
     }
 }
 
+extension UndoManager {
+    /// Registers a settings change under `name` (Edit › Undo “name”): undoing
+    /// runs `undo` and registers `redo`, so Redo puts the change back.
+    @MainActor
+    func registerSettingsChange(_ name: String, undo: @escaping @MainActor () -> Void,
+                                redo: @escaping @MainActor () -> Void) {
+        registerUndo(withTarget: SettingsUndoTarget.shared) { [weak self] _ in
+            MainActor.assumeIsolated {
+                undo()
+                self?.registerSettingsChange(name, undo: redo, redo: undo)
+            }
+        }
+        setActionName(name)
+    }
+}
+
+/// What settings changes are registered against: the changes capture their
+/// own stores, so any long-lived object will do.
+private final class SettingsUndoTarget {
+    static let shared = SettingsUndoTarget()
+}
+
 /// A small spinner that appears only once a wait has passed
 /// `Motion.Hold.spinnerDelay`, so quick work never flashes one.
 struct DelayedSpinner: View {

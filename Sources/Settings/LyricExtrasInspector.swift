@@ -101,6 +101,8 @@ struct LyricStyleMemorySection: View {
     @Model(\.settings) private var settings
     @Model(\.colours) private var colours
     @Model(\.nowPlaying) private var playing
+    @Environment(\.undoManager) private var undoManager
+    @State private var confirmsForgetAll = false
 
     private var chosen: StyleMemory.Style {
         .init(composition: settings.lyricComposition?.rawValue ?? "automatic", colour: colours.mode.rawValue)
@@ -117,7 +119,12 @@ struct LyricStyleMemorySection: View {
                     InspectorCaption("Changes apply to other music until you update this.", more: "Changes above apply to other music until you update or forget this.")
                     HStack(spacing: LunalyrDesign.Spacing.small) {
                         Button("Update with the Choices Above") { memory.remember(chosen, for: track, scope: active.scope) }
-                        Button("Forget") { memory.forget(for: track, scope: active.scope) }
+                        Button("Forget") {
+                            let memory = memory
+                            memory.changeUndoably("Forget Remembered Style", undoManager: undoManager) {
+                                memory.forget(for: track, scope: active.scope)
+                            }
+                        }
                             .help("Use the choices above for this \(active.scope.rawValue) too")
                     }
                 } else {
@@ -135,9 +142,19 @@ struct LyricStyleMemorySection: View {
             }
             if !memory.songs.isEmpty || !memory.artists.isEmpty {
                 LabeledContent {
-                    Button("Forget All") { memory.forgetAll() }
+                    Button("Forget All") { confirmsForgetAll = true }
                         .controlSize(.small)
                         .help("Forget every remembered style")
+                        .confirmationDialog("Forget every remembered style?", isPresented: $confirmsForgetAll) {
+                            Button("Forget All", role: .destructive) {
+                                let memory = memory
+                                memory.changeUndoably("Forget All Remembered Styles", undoManager: undoManager) {
+                                    memory.forgetAll()
+                                }
+                            }
+                        } message: {
+                            Text("\(Self.rememberedCount(songs: memory.songs.count, artists: memory.artists.count)). Those songs and artists then use the choices above. Edit › Undo brings them back.")
+                        }
                 } label: {
                     Text(Self.rememberedCount(songs: memory.songs.count, artists: memory.artists.count))
                         .lunalyrText(.caption)
@@ -173,6 +190,7 @@ struct LyricStyleMemorySection: View {
 struct RememberedStyleNote: View {
     enum Aspect { case layout, colour }
     let aspect: Aspect
+    @Environment(\.undoManager) private var undoManager
     @Model(\.styleMemory) private var memory
     @Model(\.settings) private var settings
     @Model(\.colours) private var colours
@@ -220,6 +238,13 @@ struct RememberedStyleNote: View {
     }
 
     private func forget(_ track: NowPlayingMonitor.Track, _ active: (style: StyleMemory.Style, scope: StyleMemory.Scope)) {
+        let memory = memory
+        memory.changeUndoably("Forget Remembered Style", undoManager: undoManager) {
+            forgetPart(track, active)
+        }
+    }
+
+    private func forgetPart(_ track: NowPlayingMonitor.Track, _ active: (style: StyleMemory.Style, scope: StyleMemory.Scope)) {
         var style = active.style
         switch aspect {
         case .layout: style.composition = nil

@@ -11,6 +11,8 @@ import UniformTypeIdentifiers
 @MainActor
 struct TimingPage: View {
     @Environment(\.lunalyrModels) private var models
+    @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Model(\.nowPlaying) private var playing
     @Model(\.offsets) private var offsets
     @Model(\.settings) private var settings
@@ -157,7 +159,7 @@ struct TimingPage: View {
             }
             InspectorCaption(options.mode.detail)
             InspectorCaption(LyricSourceOptions.ranking)
-            Button("Restore Recommended Order") { options.resetOrder() }
+            Button("Restore Recommended Order", action: restoreRecommendedOrder)
                 .accessibilityLabel("Restore recommended source order")
                 .help("Put the sources back in the order Lunalyr recommends")
         }
@@ -173,13 +175,34 @@ struct TimingPage: View {
                     }),
                           state: model.sourceStates[source],
                           isFirst: options.order.first == source, isLast: options.order.last == source,
-                          move: { options.move(source, by: $0) })
+                          // Rows are keyed by source, so they slide to their new places.
+                          move: { step in withAnimation(motion) { options.move(source, by: step) } })
             }
             InspectorCaption("Online sources receive song metadata.", more: "Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
         }
     }
 
     // MARK: Actions
+
+    private var motion: Animation {
+        LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion)
+    }
+
+    /// The sources slide back into the recommended order; Edit › Undo puts
+    /// the order and Choose by back as they were.
+    private func restoreRecommendedOrder() {
+        let options = options
+        let before = (order: options.order, mode: options.mode)
+        withAnimation(motion) { options.resetOrder() }
+        let after = (order: options.order, mode: options.mode)
+        guard before.order != after.order || before.mode != after.mode else { return }
+        let animation = motion
+        undoManager?.registerSettingsChange("Restore Recommended Order", undo: {
+            withAnimation(animation) { options.order = before.order; options.mode = before.mode }
+        }, redo: {
+            withAnimation(animation) { options.order = after.order; options.mode = after.mode }
+        })
+    }
 
     private var localExports: some View {
         ThemedSection("Local exports") {

@@ -10,6 +10,7 @@ struct WallpaperPage: View {
     var scrollRequest: SettingsScrollRequest?
     @Model(\.settings) private var s
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.undoManager) private var undoManager
     @StateObject private var importer = WallpaperImporter()
 
     var body: some View {
@@ -135,6 +136,18 @@ struct WallpaperPage: View {
         }
     }
 
+    /// The sliders glide back (outside a drag they animate their own
+    /// changes), and Edit › Undo puts every value back, Softening included.
+    private func resetAdjustments() {
+        let before = s.advancedValues
+        s.resetAdvanced()
+        let after = s.advancedValues
+        let settings = s
+        undoManager?.registerSettingsChange("Reset Adjustments",
+                                            undo: { settings.restoreAdvanced(before) },
+                                            redo: { settings.restoreAdvanced(after) })
+    }
+
     private var adjustments: some View {
         ThemedSection("Adjustments") {
             if s.backgroundMode != .custom && s.backgroundMode != .musicVideo {
@@ -157,7 +170,7 @@ struct WallpaperPage: View {
                             format: SettingsFormat.percent)
                     .revealRow()
             }
-            Button("Reset Adjustments") { s.resetAdvanced() }
+            Button("Reset Adjustments", action: resetAdjustments)
                 .disabled(s.advancedIsDefault)
                 .help("Motion speed, Colour richness, Darkening, Pattern visibility and the covers’ Softening go back to how Lunalyr comes")
         }

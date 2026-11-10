@@ -122,4 +122,71 @@ final class SettingsPolishTests: XCTestCase {
         XCTAssertNotNil(settings.googleStatus)
         XCTAssertNil(settings.googleRegular)
     }
+
+    // MARK: S7 undo
+
+    private func throwawayDefaults() throws -> (UserDefaults, () -> Void) {
+        let name = "LunalyrTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        return (defaults, { defaults.removePersistentDomain(forName: name) })
+    }
+
+    /// Forget All can be undone and redone, and what comes back is saved.
+    func testForgetAllCanBeUndone() throws {
+        let (defaults, cleanUp) = try throwawayDefaults()
+        defer { cleanUp() }
+        let memory = StyleMemory(defaults: defaults)
+        let track = NowPlayingMonitor.Track(title: "Hello", artist: "Adele", duration: 295, genre: nil, album: "25")
+        memory.remember(.init(composition: "echo", colour: nil), for: track, scope: .song)
+        memory.remember(.init(composition: nil, colour: "pastel"), for: track, scope: .artist)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        memory.changeUndoably("Forget All Remembered Styles", undoManager: undo) { memory.forgetAll() }
+        undo.endUndoGrouping()
+        XCTAssertTrue(memory.songs.isEmpty && memory.artists.isEmpty)
+        XCTAssertEqual(undo.undoActionName, "Forget All Remembered Styles")
+
+        undo.undo()
+        XCTAssertEqual(memory.songs.count, 1)
+        XCTAssertEqual(memory.artists.count, 1)
+        XCTAssertEqual(StyleMemory(defaults: defaults).snapshot, memory.snapshot, "the restored styles are saved")
+        XCTAssertTrue(undo.canRedo)
+        undo.redo()
+        XCTAssertTrue(memory.songs.isEmpty && memory.artists.isEmpty)
+    }
+
+    /// Reset Adjustments puts back every value it changed, Softening included.
+    func testResetAdjustmentsCanBeUndone() throws {
+        let (defaults, cleanUp) = try throwawayDefaults()
+        defer { cleanUp() }
+        let settings = VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter())
+        settings.effectSpeed = 1.6
+        settings.vividness = 0.7
+        settings.scrimStrength = 0.4
+        settings.motionBlur = 9
+        let before = settings.advancedValues
+        settings.resetAdvanced()
+        XCTAssertTrue(settings.advancedIsDefault)
+        settings.restoreAdvanced(before)
+        XCTAssertEqual(settings.advancedValues, before)
+        XCTAssertEqual(settings.motionBlur, 9)
+    }
+
+    /// An undone change registers its redo under the same name.
+    func testSettingsChangesRedo() {
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        var value = 2
+        undo.beginUndoGrouping()
+        value = 3
+        undo.registerSettingsChange("Change", undo: { value = 2 }, redo: { value = 3 })
+        undo.endUndoGrouping()
+        undo.undo()
+        XCTAssertEqual(value, 2)
+        XCTAssertEqual(undo.redoActionName, "Change")
+        undo.redo()
+        XCTAssertEqual(value, 3)
+        XCTAssertTrue(undo.canUndo)
+    }
 }
