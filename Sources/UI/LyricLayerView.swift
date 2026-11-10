@@ -1282,26 +1282,34 @@ struct LyricStage: View, Equatable {
     /// What the wallpaper measured behind the stage, for a picture (see
     /// `LyricBackdrop`); nil for generated wallpapers or until it is known.
     var backdrop: Double? = nil
+    /// The display this stage is on: a drag on that display's seek bar
+    /// previews its lyric here (`ScrubPreview`). Nil for previews elsewhere.
+    var displayID: CGDirectDisplayID? = nil
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
+    @ObservedObject private var scrubPreview = ScrubPreview.shared
     @StateObject private var pace = LyricPace()
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
             && lhs.palette == rhs.palette && lhs.interval == rhs.interval && lhs.paused == rhs.paused
-            && lhs.backdrop == rhs.backdrop
+            && lhs.backdrop == rhs.backdrop && lhs.displayID == rhs.displayID
     }
 
     var body: some View {
         let layout = LyricViewportMetrics(size: size)
-        TimelineView(.animation(minimumInterval: pace.interval(full: interval), paused: paused || pace.rests)) { timeline in
+        let previewed = scrubPreview.songTime(on: displayID)
+        TimelineView(.animation(minimumInterval: previewed == nil ? pace.interval(full: interval) : interval,
+                                paused: paused || (pace.rests && previewed == nil))) { timeline in
             let now = pace.wall(timeline.date.timeIntervalSinceReferenceDate)
+            let offsets = settings.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery)
             // Smoothed so Music's periodic re-anchoring bends the pace
-            // instead of jumping every word mid-animation.
-            let time = LyricClock.shared.time(wall: now,
-                raw: nowPlaying.playbackTime() + settings.lyricOffset + songOffsets.offset(for: lyricsVM.currentQuery),
+            // instead of jumping every word mid-animation. A scrub preview
+            // follows the hand directly.
+            let time = previewed.map { $0 + offsets } ?? LyricClock.shared.time(wall: now,
+                raw: nowPlaying.playbackTime() + offsets,
                 playing: nowPlaying.isPlaying)
             LyricLayer(time: time, baseSize: layout.baseSize, maxWidth: layout.stageSize.width,
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,

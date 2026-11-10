@@ -312,16 +312,14 @@ struct NowPlayingView: View {
                         // The measured brightness behind the lyrics, so text
                         // colours over Your wallpaper or an imported picture
                         // are judged against what is really there.
-                        backdrop: lyricBackdrop(for: cover)
+                        backdrop: lyricBackdrop(for: cover),
+                        displayID: effectDisplay
                     )
                     .equatable()
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
-                    .blur(radius: isHovered ? 22 : 0)
-                    .opacity(isHovered ? 0.3 : 1)
-                    // A soft spring rather than a fixed curve: moving off and
-                    // back on mid-fade reverses smoothly from where it was.
-                    .animation(.spring(response: 0.42, dampingFraction: 0.9), value: isHovered)
+                    // Under the player; clearer while its seek bar is dragged.
+                    .modifier(PlayerHoverFocus(hovered: isHovered, displayID: effectDisplay))
                 }
                 // The words, copies and echoes on screen are decoration for
                 // assistive technology; the element below speaks for them.
