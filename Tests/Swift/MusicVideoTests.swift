@@ -864,6 +864,19 @@ final class MusicVideoTests: XCTestCase {
         XCTAssertEqual(configuration.urlCache?.diskCapacity ?? 0, 0, "nothing cached on disk")
     }
 
+    func testFullScreenThumbnailTriesTheLargestStillFirst() async {
+        // Reduce Motion shows the still full screen: the 1280 px one when the
+        // video has it, else the usual one.
+        XCTAssertEqual(YouTubeThumbnail.urls(for: "4NRXx6U8ABQ", large: true).map(\.lastPathComponent),
+                       ["maxresdefault.jpg", "hqdefault.jpg"])
+        XCTAssertEqual(YouTubeThumbnail.urls(for: "4NRXx6U8ABQ", large: false).map(\.lastPathComponent),
+                       ["hqdefault.jpg"])
+        XCTAssertTrue(YouTubeThumbnail.urls(for: "../../x", large: true).isEmpty)
+        let http = FakeHTTP()
+        _ = await YouTubeThumbnail.load("4NRXx6U8ABQ", large: true, http: http)
+        XCTAssertEqual(http.hosts(), ["i.ytimg.com", "i.ytimg.com"], "falls back to the usual still")
+    }
+
     // MARK: Still-image uploads
 
     /// A 120×90 greyscale frame like YouTube's: 4:3 with letterbox bars,

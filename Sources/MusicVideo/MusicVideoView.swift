@@ -4,7 +4,8 @@ import WebKit
 
 /// The music video behind the lyrics: filled to the screen (cropping the
 /// edges), muted, dimmed and blurred as Settings asks, and kept on the
-/// song's position. A paused or covered wallpaper pauses the video too.
+/// song's position. A paused or covered wallpaper pauses the video too,
+/// holding its frame.
 @MainActor
 struct MusicVideoBackground: View {
     let source: MusicVideoSource
@@ -12,9 +13,13 @@ struct MusicVideoBackground: View {
     let dim: Double
     let blur: Double
     var preview = false
+    /// Reduce Motion: a still instead of the moving video. A library video
+    /// holds a frame; a YouTube one shows the video's own still (no player
+    /// is started at all).
+    var still = false
     /// Under the video: what shows while a YouTube player is not playing
     /// (it is hidden then, so none of YouTube's overlays can show), unless
-    /// the user paused the song and its frozen frame shows instead.
+    /// its frozen frame shows instead (`MusicVideoFrozenFrame`).
     var standIn: LinearGradient = LinearGradient(colors: [.black], startPoint: .top, endPoint: .bottom)
 
     var body: some View {
@@ -36,16 +41,19 @@ struct MusicVideoBackground: View {
             Group {
                 switch source {
                 case .local(let url):
-                    LocalMusicVideoView(url: url, paused: paused)
+                    LocalMusicVideoView(url: url, paused: paused || still)
                         // Softened like the animated covers; the overscan
                         // keeps the blur from showing the frame's edge.
                         .blur(radius: blur)
                         .scaleEffect(blur > 0 ? 1.04 : 1)
                 case .youTube(let id):
-                    if preview {
+                    if preview || still {
                         // The preview does not start a second YouTube
-                        // player; the video's own still stands in.
-                        YouTubeThumbnail(videoID: id).blur(radius: blur).scaleEffect(blur > 0 ? 1.04 : 1)
+                        // player, and Reduce Motion shows no moving video:
+                        // the video's own still stands in, fading in over
+                        // the stand-in once it has loaded.
+                        YouTubeThumbnail(videoID: id, large: !preview)
+                            .blur(radius: blur).scaleEffect(blur > 0 ? 1.04 : 1)
                     } else {
                         YouTubeMusicVideoView(videoID: id, paused: paused, blur: blur)
                     }
@@ -55,35 +63,57 @@ struct MusicVideoBackground: View {
     }
 }
 
-/// The YouTube video's own still, for the Settings preview. Fetched on
-/// the music video's ephemeral session (no cookies, nothing on disk), not
-/// `URLSession.shared` as `AsyncImage` would.
+/// The YouTube video's own still: the Settings preview, and the wallpaper
+/// under Reduce Motion. Fetched on the music video's ephemeral session (no
+/// cookies, nothing on disk), not `URLSession.shared` as `AsyncImage` would.
+/// Clear until it loads, so whatever is under it (the stand-in) shows, then
+/// fades in.
 struct YouTubeThumbnail: View {
     let videoID: String
+    /// Full screen: the largest still first, the usual one if the video has none.
+    var large = false
     @State private var image: NSImage?
+
+    /// How long the still takes to fade in once loaded.
+    static let fadeIn: Double = 0.4
 
     static func url(for videoID: String) -> URL? {
         guard YouTubeVideoID.isValid(videoID) else { return nil }
         return URL(string: "https://i.ytimg.com/vi/\(videoID)/hqdefault.jpg")
     }
 
+    /// The stills to try, best first. Not every video has a full-size one.
+    static func urls(for videoID: String, large: Bool) -> [URL] {
+        guard let usual = url(for: videoID) else { return [] }
+        guard large, let biggest = URL(string: "https://i.ytimg.com/vi/\(videoID)/maxresdefault.jpg") else { return [usual] }
+        return [biggest, usual]
+    }
+
     /// The still's image, or nil. `http` is a seam for tests.
-    static func load(_ videoID: String, http: MusicVideoHTTP = URLSessionMusicVideoHTTP()) async -> NSImage? {
-        guard let url = url(for: videoID), let (data, response) = try? await http.get(url),
-              response.statusCode == 200 else { return nil }
-        return NSImage(data: data)
+    static func load(_ videoID: String, large: Bool = false,
+                     http: MusicVideoHTTP = URLSessionMusicVideoHTTP()) async -> NSImage? {
+        for url in urls(for: videoID, large: large) {
+            guard !Task.isCancelled else { return nil }
+            if let (data, response) = try? await http.get(url), response.statusCode == 200,
+               let image = NSImage(data: data) {
+                return image
+            }
+        }
+        return nil
     }
 
     var body: some View {
         ZStack {
-            Color.black
             if let image {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                    .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: Self.fadeIn), value: image != nil)
         .task(id: videoID) {
             image = nil
-            let loaded = await Self.load(videoID)
+            let loaded = await Self.load(videoID, large: large)
             if !Task.isCancelled { image = loaded }
         }
     }
@@ -195,7 +225,7 @@ final class MusicVideoSyncLoop {
 
     /// Why the video is moving or not, right now.
     func hold(videoDuration: Double?) -> MusicVideoHold {
-        guard isCurrent() else { return .other }
+        guard isCurrent() else { return .outgoing }
         let target = MusicVideoTiming.videoTime(songTime: songTime(), offset: offset(), videoDuration: videoDuration)
         return MusicVideoHold.of(surfacePaused: surfacePaused, songPlaying: songPlaying(), target: target)
     }
@@ -229,7 +259,8 @@ final class MusicVideoSyncLoop {
                 return
             }
             guard self.isCurrent() else {
-                // Another song's video, on its way out: hold it still.
+                // Another song's video, on its way out: hold it still (on
+                // YouTube, its frame is taken first, so the fade shows it).
                 if sample.videoPlaying || sample.buffering { surface.pauseVideo() }
                 return
             }
@@ -324,7 +355,8 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         playerLayer.opacity = 0
         let host = CALayer()
         host.masksToBounds = true
-        host.backgroundColor = NSColor.black.cgColor
+        // Clear, so the stand-in under the view shows until the first frame.
+        host.backgroundColor = NSColor.clear.cgColor
         layer = host
         wantsLayer = true
         host.addSublayer(playerLayer)
@@ -357,7 +389,11 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
                 MusicVideoController.shared.reportPlaybackFailure(of: .local(url))
             }
         }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.removeAnimation(forKey: "reveal")
         playerLayer.opacity = 0
+        CATransaction.commit()
         player.replaceCurrentItem(with: item)
         loop.isCurrent = { MusicVideoController.shared.isShowing(.local(url)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
@@ -368,12 +404,14 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         }
     }
 
+    /// The first frame is up: eased in from wherever the layer is now.
     private func reveal() {
         guard playerLayer.opacity < 1 else { return }
         let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0
+        fade.fromValue = playerLayer.presentation()?.opacity ?? playerLayer.opacity
         fade.toValue = 1
-        fade.duration = 0.6
+        fade.duration = WallpaperMotion.mediaReveal
+        fade.timingFunction = LunalyrDesign.Motion.CA.easeOut
         playerLayer.opacity = 1
         playerLayer.add(fade, forKey: "reveal")
     }
@@ -531,12 +569,26 @@ enum YouTubeEmbed {
     /// The player is visible only while it plays (state 1). Paused, ended,
     /// cued, unstarted or buffering, YouTube draws its title bar and a big
     /// play or pause button over the video; the wallpaper shows its stand-in
-    /// instead, or, when the user paused the song, the frame taken just
-    /// before the pause (`MusicVideoFrozenFrame`).
+    /// instead, or the frame taken just before a pause or a seek
+    /// (`MusicVideoFrozenFrame`). Buffering hides it only after a grace
+    /// (`hideDelay`).
     static func showsVideo(state: Int) -> Bool { state == 1 }
 
     /// The same rule from a sync sample: playing, not buffering.
     static func showsVideo(sample: MusicVideoDrift.Sample) -> Bool { sample.videoPlaying && !sample.buffering }
+
+    /// A playing video that starts buffering (a drift seek, a stall) stays
+    /// up this long before it is hidden: most seeks land sooner, and hiding
+    /// at once flashed the stand-in on every one.
+    static let bufferingGrace: TimeInterval = 0.3
+
+    /// How long to wait before hiding the player. Only buffering while the
+    /// song plays waits, and not when a picture is ready to cover it (the
+    /// seek's frozen frame shows at once instead); anything else (a pause,
+    /// the end, an error) hides at once.
+    static func hideDelay(buffering: Bool, hold: MusicVideoHold, hasFrame: Bool) -> TimeInterval {
+        buffering && hold == .live && !hasFrame ? bufferingGrace : 0
+    }
 
     /// The interface language for the player's own text: the system's.
     static func playerLanguage(_ locale: Locale = .current) -> String {
@@ -553,7 +605,8 @@ enum YouTubeEmbed {
         <style>
         html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
         #frame{position:absolute;left:50%;top:50%;width:max(100vw,177.78vh);height:max(100vh,56.25vw);
-        transform:translate(-50%,-50%) scale(\(overscan));pointer-events:none;opacity:0;transition:opacity .5s}
+        transform:translate(-50%,-50%) scale(\(overscan));pointer-events:none;opacity:0;
+        transition:opacity .6s cubic-bezier(0.22,1,0.36,1)}
         #frame iframe,#player{width:100%;height:100%;border:0;pointer-events:none}
         </style></head><body><div id="frame"><div id="player"></div></div>
         <script>
@@ -564,6 +617,8 @@ enum YouTubeEmbed {
         }
         function visibleFor(state) { return state === 1; }
         function show(state) {
+          // Buffering keeps what shows: Lunalyr hides the whole view if it lasts.
+          if (state === 3) return;
           document.getElementById('frame').style.opacity = visibleFor(state) ? '1' : '0';
         }
         function hideCaptions() {
@@ -853,6 +908,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var cutVideoID: String?
     private var cutActive: Bool { cutVideoID != nil }
     private var snapshotInFlight = false
+    /// The web view is shown (or fading in), as last asked.
+    private var playerVisible = false
+    /// A buffering player's hide, waiting out `YouTubeEmbed.bufferingGrace`.
+    private var pendingHide: DispatchWorkItem?
 
     /// The first seek's lead; later ones use the measured latency.
     var seekLead: Double { MusicVideoSeekLatency.initial }
@@ -891,6 +950,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         configuration.userContentController.add(WeakScriptHandler(self), name: YouTubeEmbed.messageName)
         let view = BackgroundYouTubeView(frame: host.bounds, configuration: configuration)
         view.alphaValue = 0
+        playerVisible = false
+        cancelPendingHide()
         view.underPageBackgroundColor = .black
         view.allowsMagnification = false
         view.navigationDelegate = self
@@ -900,6 +961,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     /// Closes the web view, and with it the page and its player.
     private func closeWebView() {
+        cancelPendingHide()
+        playerVisible = false
         guard let view else { return }
         view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
         view.navigationDelegate = nil
@@ -909,7 +972,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         navigation = nil
     }
 
-    private func perform(_ effect: YouTubeEmbedSession.Effect) {
+    /// `buffering`: the effect answers a buffering state (3) message.
+    private func perform(_ effect: YouTubeEmbedSession.Effect, buffering: Bool = false) {
         switch effect {
         case .none: break
         case .ready:
@@ -925,7 +989,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             navigation = view.loadHTMLString(YouTubeEmbed.html(videoID: videoID, start: start, page: page),
                                              baseURL: YouTubeEmbed.baseURL)
         case .visible(let visible):
-            setVisible(visible)
+            setVisible(visible, buffering: buffering)
         case .fail(let videoID, let failure):
             setVisible(false)
             freeze.reset()
@@ -936,14 +1000,49 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     /// The whole web view fades with the player's state, so nothing of
     /// YouTube's (title bar, play or pause button) shows over the stand-in
-    /// or the frozen frame.
-    private func setVisible(_ visible: Bool) {
-        freeze.notePlayer(showing: visible)
+    /// or the frozen frame. A playing video that starts to buffer is hidden
+    /// only after a short grace (`YouTubeEmbed.hideDelay`), so a drift seek
+    /// does not blink to the stand-in.
+    private func setVisible(_ visible: Bool, buffering: Bool = false) {
+        if visible {
+            cancelPendingHide()
+            freeze.notePlayer(showing: true)
+            fade(visible: true)
+            return
+        }
+        let delay = YouTubeEmbed.hideDelay(buffering: buffering, hold: hold, hasFrame: freeze.image != nil)
+        if delay > 0, playerVisible {
+            guard pendingHide == nil else { return }
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.pendingHide = nil
+                    self.freeze.notePlayer(showing: false)
+                    self.fade(visible: false)
+                }
+            }
+            pendingHide = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return
+        }
+        cancelPendingHide()
+        freeze.notePlayer(showing: false)
+        fade(visible: false)
+    }
+
+    private func cancelPendingHide() {
+        pendingHide?.cancel()
+        pendingHide = nil
+    }
+
+    private func fade(visible: Bool) {
+        playerVisible = visible
         guard let view else { return }
         let alpha: CGFloat = visible ? 1 : 0
         guard view.alphaValue != alpha else { return }
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = visible ? 0.5 : 0.15
+            context.duration = visible ? WallpaperMotion.mediaReveal : WallpaperMotion.mediaHide
+            context.timingFunction = visible ? LunalyrDesign.Motion.CA.easeOut : LunalyrDesign.Motion.CA.easeIn
             view.animator().alphaValue = alpha
         }
     }
@@ -1076,7 +1175,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                 // Also from each sample, in case a state message was missed.
                 if let self {
                     let showing = YouTubeEmbed.showsVideo(sample: sample)
-                    self.setVisible(self.session.ready && showing)
+                    self.setVisible(self.session.ready && showing, buffering: sample.buffering)
                     let stuck = self.session.notePlayback(shouldPlay: self.hold == .live, playing: showing,
                                                           now: ProcessInfo.processInfo.systemUptime)
                     if stuck != .none {
@@ -1091,9 +1190,14 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     func playVideo() { run("window.lunalyrPlay()") }
-    /// A user pause takes the frozen frame first (`MusicVideoFrozenFrame`).
+    /// A pause that keeps the frame takes it first (`MusicVideoFrozenFrame`).
     func pauseVideo() { freeze.pause() }
-    func seekVideo(to seconds: Double) { run("window.lunalyrSeek(\(seconds))") }
+    /// The playing picture is taken as the seek is sent (not before it:
+    /// the seek is never delayed), in case the seek has to buffer.
+    func seekVideo(to seconds: Double) {
+        freeze.noteSeek()
+        run("window.lunalyrSeek(\(seconds))")
+    }
 
     // MARK: Messages
 
@@ -1102,7 +1206,9 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         let origin = message.frameInfo.securityOrigin
         let trusted = message.webView === view
             && YouTubeEmbed.trusts(mainFrame: message.frameInfo.isMainFrame, scheme: origin.protocol, host: origin.host)
-        perform(session.receive(parsed, trusted: trusted))
+        var buffering = false
+        if case .state(3) = parsed.kind { buffering = true }
+        perform(session.receive(parsed, trusted: trusted), buffering: buffering)
     }
 
     // MARK: Navigation
