@@ -117,6 +117,33 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertNil(AppleMusicVideoLibrary.pick([other], for: song))
     }
 
+    func testAShortArtistNameInsideAnotherChannelIsNotTheArtists() {
+        XCTAssertFalse(YouTubeSearchPage.channel("liquidmusic", isOf: "iu"))
+        XCTAssertTrue(YouTubeSearchPage.channel("iuofficial", isOf: "iu"))
+        XCTAssertTrue(YouTubeSearchPage.channel("officialiu", isOf: "iu"))
+        XCTAssertTrue(YouTubeSearchPage.channel("thisiswallowschannel", isOf: "wallows"))
+        let title = "IU - Love Wins All (Official MV)"
+        XCTAssertNil(YouTubeSearchPage.officialVideo(
+            in: [Result(videoID: "AAAAAAAAAAA", title: title, channel: "Liquid Music")], title: "Love Wins All", artist: "IU"))
+        XCTAssertEqual(YouTubeSearchPage.officialVideo(
+            in: [Result(videoID: "AAAAAAAAAAA", title: title, channel: "IU Official")], title: "Love Wins All", artist: "IU")?
+            .videoID, "AAAAAAAAAAA")
+    }
+
+    func testALibraryVideoOfTheSameTitleByAnotherBandIsNotPicked() {
+        let song = MusicVideoSong(title: "Substitute", artist: "The Who", duration: 220)
+        let kinks = AppleMusicVideoLibrary.Hit(title: "Substitute", artist: "The Kinks", path: "/kinks.m4v")
+        XCTAssertNil(AppleMusicVideoLibrary.pick([kinks], for: song), "sharing \"The\" is not the same artist")
+        let who = AppleMusicVideoLibrary.Hit(title: "Substitute", artist: "The Who", path: "/who.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([kinks, who], for: song), URL(fileURLWithPath: "/who.m4v"))
+        let duet = MusicVideoSong(title: "Are You Bored Yet?", artist: "Wallows & Clairo", duration: 180)
+        let wallows = AppleMusicVideoLibrary.Hit(title: "Are You Bored Yet?", artist: "Wallows", path: "/w.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([wallows], for: duet), URL(fileURLWithPath: "/w.m4v"),
+                       "one of the credited artists")
+        let feat = AppleMusicVideoLibrary.Hit(title: "Are You Bored Yet?", artist: "Wallows feat. Clairo", path: "/f.m4v")
+        XCTAssertEqual(AppleMusicVideoLibrary.pick([feat], for: duet), URL(fileURLWithPath: "/f.m4v"))
+    }
+
     func testEveryOlderCachedPickIsThrownAway() {
         let name = "LunalyrTests.MusicVideoMatch.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
