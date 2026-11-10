@@ -51,7 +51,8 @@ extension LyricCard {
     /// The song's sound window by window, laid end to end. Where the clip
     /// doesn't cover a window the sound is silent; it fades out over
     /// `LyricCardMix.songCutFade` where it stops, whether the video ends first or carries on.
-    static func songLayer(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)], volume: Float = 1) async -> SoundLayer? {
+    nonisolated static func songLayer(_ clip: SongAudioClip, windows: [(start: Double, duration: Double)],
+                                      volume: Float = 1) async -> SoundLayer? {
         let source = AVURLAsset(url: clip.url)
         guard !windows.isEmpty, (try? await source.loadTracks(withMediaType: .audio).first) != nil,
               let sourceLength = try? await source.load(.duration) else { return nil }
@@ -155,9 +156,26 @@ enum SongAudioSource {
         return url
     }
 
+    /// How a recording is getting on.
+    enum RecordingUpdate: Equatable {
+        /// Seeking and waiting for the song to play (up to 8 seconds).
+        case starting
+        /// `elapsed` of the `needed` seconds are recorded; `secondsLeft` is
+        /// the countdown, which changes once a second.
+        case recording(elapsed: Double, needed: Double, secondsLeft: Int)
+    }
+
+    /// The update to publish now, or nil when the countdown shows the same
+    /// second as `last`: the window redraws once a second, not every poll.
+    nonisolated static func recordingUpdate(elapsed: Double, needed: Double, last: RecordingUpdate?) -> RecordingUpdate? {
+        let left = max(0, Int((needed - elapsed).rounded(.up)))
+        if case .recording(_, _, let shown) = last, shown == left { return nil }
+        return .recording(elapsed: min(max(0, elapsed), needed), needed: needed, secondsLeft: left)
+    }
+
     /// Plays `range` of the song once and records it. The player is put back
     /// where it was, playing or paused, afterwards.
-    static func record(range: ClosedRange<Double>, update: @escaping (String) -> Void) async throws -> SongAudioClip {
+    static func record(range: ClosedRange<Double>, update: @escaping (RecordingUpdate) -> Void) async throws -> SongAudioClip {
         let monitor = NowPlayingMonitor.shared
         guard let track = monitor.current else { throw Failure.nothingPlaying }
         guard !track.isStream, #available(macOS 14.2, *) else {
@@ -175,7 +193,7 @@ enum SongAudioSource {
             if !recorded { monitor.seek(to: origin) }
             if !wasPlaying && monitor.isPlaying { monitor.playPause() }
         }
-        update("Starting the song…")
+        update(.starting)
         monitor.seek(to: max(0, range.lowerBound - preRoll))
         if !monitor.isPlaying { monitor.playPause() }
         // Wait for the song to be playing near the start.
@@ -193,10 +211,14 @@ enum SongAudioSource {
         guard needed > 0, needed < SongAudioRecorder.maximumSeconds else {
             throw Failure.notRecordable("That stretch is too long to record (the limit is two minutes).")
         }
+        var shown: RecordingUpdate?
         while monitor.playbackTime() < range.upperBound + 0.5 {
             try Task.checkCancellation()
             guard monitor.isPlaying else { throw Failure.notRecordable("The song stopped while recording.") }
-            update(String(format: "Recording the song… %.0f s left", max(0, range.upperBound + 0.5 - monitor.playbackTime())))
+            if let next = recordingUpdate(elapsed: monitor.playbackTime() - songStart, needed: needed, last: shown) {
+                shown = next
+                update(next)
+            }
             try await Task.sleep(nanoseconds: 150_000_000)
         }
         let file = recordingURL()

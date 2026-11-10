@@ -83,6 +83,8 @@ When merging, keep every entry and combine duplicate headings.
 - Imported wallpaper pictures are decoded off the main thread, so a large photo no longer stalls the wallpaper.
 - Tap to sync for lyrics: a tap pressed just after the timing is set no longer reaches the app you were in (Space there could pause the song); the keyboard comes back when the result closes, or at once with Esc or Return.
 - Tap to sync for lyrics stops if a different lyric source replaces the lyrics mid-session, instead of saving timing for lyrics no longer shown.
+- Tap to sync for lyrics: stopping on its own now says why (the song changed, it paused, or other lyrics loaded) instead of "Tap to sync stopped", and keeps your next tap from reaching the app behind. Past four taps it says how many more it will take.
+- Tap to sync for lyrics: the panel fades in and out, each tap pops a dot and nudges the hand, the result shows a check mark or warning sign without the text jumping, and VoiceOver counts the taps. The result stays while the pointer is over it, and for 8 seconds when Undo is offered.
 - A Shortcuts action that opens Lunalyr waits until Lunalyr has started before it runs.
 - Lyrics from Kugou's word-timed files and from Kuwo no longer lose a line, or show a stray timestamp like "<01:60.00>", when a line or word starts within a few milliseconds of a whole minute.
 - LRCLIB, QQ Music, Kugou and Kuwo no longer offer an edition of the song with the wrong length (which was then rejected) when one with the right length was also found.
@@ -117,6 +119,13 @@ When merging, keep every entry and combine duplicate headings.
 - Lyric cards: cancelling no longer leaves a half-made card (such as an MP4 without its sound) in the folder or the temporary folder.
 - Lyric cards: recordings of the song are deleted when they are replaced, when the song changes and on the next launch, instead of piling up in the temporary folder.
 - Lyric cards: a background video whose sound stops before its picture now repeats its sound in step with the picture, and a song that stops almost at once fades out instead of jumping quieter.
+- Lyric cards: the progress bar no longer comes back after Cancel or after a card is made (which left Copy and Save greyed out).
+- Lyric cards: the preview no longer flashes "Pick lines to preview" while you drag a slider or change an option.
+- Lyric cards: opening the card window again (shortcut, menu, `lunalyr://card`) no longer throws away the lines you picked, the song recording or a card being made. A new song still starts afresh, and better lyrics arriving keep the lines you picked.
+- Lyric cards: mixing an MP4's sound no longer freezes the card window, and Cancel now stops it. The status says what is happening ("Mixing the sound…", "Encoding the GIF…"), and the progress bar moves steadily through every format instead of jumping or stalling.
+- Lyric cards: the bottom of the card window no longer jumps: progress (with a percentage and Cancel, which Esc also presses) and the result share one fixed line. A made card shows a check mark and Show in Finder, a failure says so with a warning sign, and any notes sit under Details. The result clears when you change an option.
+- Lyric cards: while a card is made or the song is recorded, the lines and options are dimmed and locked (Cancel stays usable), so nothing changes underneath. Recording the song shows a spinner while it starts, then a bar and a countdown.
+- Lyric cards: the preview cross-fades to each new version and dims with a spinner while it catches up; dropping a file on it shows a highlight; the Shape and Make tiles answer hover and clicks; option rows fade in and out instead of popping.
 - Discord: the song now shows when Discord is opened after Lunalyr, or restarted, without waiting for the next song.
 - Discord: updates stay within Discord's limit of five every 20 seconds, with room kept for a new song or a pause, so they are no longer dropped by Discord.
 - Discord: long lines in scripts such as Thai, or with emoji, and a bad button link no longer make Discord reject the whole status.
