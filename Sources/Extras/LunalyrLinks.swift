@@ -97,6 +97,12 @@ final class LunalyrLinkRouter {
         }
     }
 
+    /// A Shortcuts action: runs now, or, when the action is what launched
+    /// Lunalyr, once the app has started (like a link).
+    func run(_ command: LunalyrCommand) {
+        if ready { actions.run(command) } else { waiting.append(.command(command)) }
+    }
+
     /// The app has started: run what arrived with the launch.
     func becameReady() {
         guard !ready else { return }

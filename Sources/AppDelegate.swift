@@ -35,9 +35,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `lunalyr://` links, from a browser, Shortcuts or `open`. Unknown or
     /// malformed ones are ignored; a join is asked about before following.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard !AppRuntime.isUnitTesting else { return }
+        guard !AppRuntime.isUnitTesting else { Self.openedWhileTesting.append(contentsOf: urls); return }
         LunalyrLinkRouter.shared.open(urls)
     }
+
+    /// Links that reached this delegate in the unit tests, which check that
+    /// SwiftUI's own app delegate passes `application(_:open:)` on to it.
+    @MainActor static var openedWhileTesting: [URL] = []
 
     /// Opening Lunalyr again (from Applications, Spotlight or the Dock)
     /// is the way back when the menu-bar icon is hidden behind the notch.

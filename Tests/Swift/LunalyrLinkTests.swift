@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import VersoCustom
 
@@ -82,6 +83,29 @@ final class LunalyrLinkRouterTests: XCTestCase {
         XCTAssertTrue(joined.isEmpty)
         XCTAssertEqual(notes.count, 1)
         XCTAssertTrue(notes[0].contains("relay"))
+    }
+
+    func testShortcutsActionsThatLaunchTheAppWaitUntilItHasStarted() {
+        let router = router(ready: false)
+        router.run(.toggleLyrics)
+        router.open([URL(string: "lunalyr://card")!])
+        router.run(.openSettings)
+        XCTAssertTrue(ran.isEmpty)
+        router.becameReady()
+        XCTAssertEqual(ran, [.toggleLyrics, .lyricCard, .openSettings], "in the order they came")
+        router.run(.syncLater)
+        XCTAssertEqual(ran.last, .syncLater, "at once once started")
+    }
+
+    /// The app is a SwiftUI `App` with only a menu-bar extra; links reach
+    /// `AppDelegate` only if SwiftUI's own delegate passes them on.
+    func testSwiftUIsAppDelegatePassesOpenedLinksOn() throws {
+        AppDelegate.openedWhileTesting = []
+        defer { AppDelegate.openedWhileTesting = [] }
+        let delegate = try XCTUnwrap(NSApp.delegate)
+        let url = try XCTUnwrap(URL(string: "lunalyr://toggle"))
+        delegate.application?(NSApp, open: [url])
+        XCTAssertEqual(AppDelegate.openedWhileTesting, [url])
     }
 
     func testLinksThatLaunchTheAppWaitUntilItHasStarted() {
