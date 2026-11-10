@@ -211,8 +211,10 @@ struct DesktopPlayerView: View {
                 .frame(width: Self.width, height: Self.resultsHeight)
                 .glass(radius: 26, tint: model.player.tint, look: look)
         } else {
-            ScrubActivityReader(activity: scrub.activity) { hovering, dragging in
-                strip(shown: shown, labelsDimmed: hovering || dragging, sidesDimmed: dragging)
+            ScrubActivityReader(activity: scrub.activity) { activity in
+                // The bar's capsules rise over the titles under the covers:
+                // the titles make way while they are up.
+                strip(shown: shown, labelsDimmed: activity.capsulesUp, sidesDimmed: activity.dragging)
             }
             .frame(width: Self.width, height: Self.stripHeight)
         }
@@ -485,12 +487,13 @@ struct EmptyPlayerTile: View {
     }
 }
 
-/// Redraws its content only when hover over the bar or a drag starts or ends.
+/// Redraws its content only when hover over the bar, a drag or a key's
+/// time capsule starts or ends.
 private struct ScrubActivityReader<Content: View>: View {
     @ObservedObject var activity: ScrubActivity
-    @ViewBuilder let content: (_ hovering: Bool, _ dragging: Bool) -> Content
+    @ViewBuilder let content: (_ activity: ScrubActivity) -> Content
 
-    var body: some View { content(activity.hovering, activity.dragging) }
+    var body: some View { content(activity) }
 }
 
 private struct StripOffsetKey: PreferenceKey {
@@ -585,6 +588,11 @@ struct CoverStrip: View {
     }
 
     private var currentIndex: Int { currentID.flatMap { id in items.firstIndex { $0.id == id } } ?? 0 }
+
+    /// The titles under the covers while the seek bar's capsules are up:
+    /// gone, since the capsules sit right over them (dimmed, they still
+    /// showed through the time and lyric).
+    static func labelOpacity(dimmed: Bool) -> Double { dimmed ? 0 : 1 }
 
     var body: some View {
         Group {
@@ -716,8 +724,8 @@ struct CoverStrip: View {
                 }
                 .frame(width: DesktopPlayerView.cover)
                 .shadow(color: .black.opacity(0.7), radius: 5)
-                .opacity(labelsDimmed ? 0.35 : 1)
-                .animation(.easeOut(duration: 0.12), value: labelsDimmed)
+                .opacity(Self.labelOpacity(dimmed: labelsDimmed))
+                .animation(labelsDimmed ? .easeIn(duration: 0.10) : .easeOut(duration: 0.12), value: labelsDimmed)
             }
         }
         .buttonStyle(CoverButtonStyle())

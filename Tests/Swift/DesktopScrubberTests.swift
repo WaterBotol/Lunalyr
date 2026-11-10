@@ -556,6 +556,22 @@ final class ScrubControllerTests: XCTestCase {
         XCTAssertEqual(seeks.last, 40, "Without lyrics, 10 s")
     }
 
+    func testTitlesMakeWayForTheCapsules() {
+        // The time and lyric capsules rise over the titles under the covers:
+        // the titles go while they are up (hover, drag, or a key's capsule).
+        XCTAssertEqual(CoverStrip.labelOpacity(dimmed: true), 0)
+        XCTAssertEqual(CoverStrip.labelOpacity(dimmed: false), 1)
+        let scrub = controller()
+        XCTAssertFalse(scrub.activity.capsulesUp)
+        scrub.seek(by: 5)
+        XCTAssertTrue(scrub.activity.flashing, "a key press shows the time capsule")
+        XCTAssertTrue(scrub.activity.capsulesUp)
+        let hovered = controller()
+        hovered.mouseDown(x: 100, y: 0)
+        XCTAssertTrue(hovered.activity.capsulesUp)
+        hovered.mouseUp(x: 100, y: 0)
+    }
+
     func testCannotSeekDoesNothing() {
         let scrub = controller()
         scrub.update(.init(duration: 200, trackKey: "song", lines: [], canSeek: false))
@@ -594,6 +610,17 @@ final class ScrubControllerTests: XCTestCase {
         XCTAssertEqual(PlayerHoverFocus.look(hovered: true, previewing: false).blur, 22)
         XCTAssertLessThan(PlayerHoverFocus.look(hovered: true, previewing: true).blur, 22)
         XCTAssertGreaterThan(PlayerHoverFocus.look(hovered: true, previewing: true).opacity, 0.3)
+    }
+
+    func testWallpaperFocusUnderReduceMotionOnlyFades() {
+        for (hovered, previewing) in [(true, false), (true, true), (false, false)] {
+            XCTAssertEqual(PlayerHoverFocus.look(hovered: hovered, previewing: previewing, reduceMotion: true).blur, 0)
+        }
+        XCTAssertLessThan(PlayerHoverFocus.look(hovered: true, previewing: false, reduceMotion: true).opacity, 0.3,
+                          "fainter, making up for the missing blur")
+        XCTAssertEqual(PlayerHoverFocus.animations(reduceMotion: true).hover, LunalyrDesign.Motion.reduced)
+        XCTAssertEqual(PlayerHoverFocus.animations(reduceMotion: true).preview, LunalyrDesign.Motion.reduced)
+        XCTAssertEqual(PlayerHoverFocus.animations(reduceMotion: false).hover, LunalyrDesign.Motion.step)
     }
 
     func testScrubPreviewIsPerDisplay() {

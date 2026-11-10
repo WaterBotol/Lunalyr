@@ -73,13 +73,17 @@ struct OptimisticToggle: Equatable {
     }
 }
 
-/// Whether the pointer is over the bar and whether a drag is in flight:
-/// published only when either changes, so the strip can dim without being
-/// redrawn on every mouse move.
+/// Whether the pointer is over the bar, whether a drag is in flight, and
+/// whether a key's time capsule is up: published only when one changes, so
+/// the strip can make way without being redrawn on every mouse move.
 @MainActor
 final class ScrubActivity: ObservableObject {
     @Published fileprivate(set) var hovering = false
     @Published fileprivate(set) var dragging = false
+    @Published fileprivate(set) var flashing = false
+
+    /// The time (and lyric) capsules are over the strip's labels.
+    var capsulesUp: Bool { hovering || dragging || flashing }
 }
 
 /// One seek bar's live state: hover, the press in flight, what was just
@@ -142,7 +146,9 @@ final class ScrubController: ObservableObject {
     let activity = ScrubActivity()
     @Published private(set) var held: Held?
     /// The time capsule shown for a moment after a key press.
-    @Published private(set) var flash: Double?
+    @Published private(set) var flash: Double? {
+        didSet { if activity.flashing != (flash != nil) { activity.flashing = flash != nil } }
+    }
     @Published private(set) var context = Context()
 
     let displayID: CGDirectDisplayID
@@ -374,25 +380,36 @@ final class ScrubController: ObservableObject {
 
 /// How the wallpaper's lyrics sit under the player: blurred and faint while
 /// it is up, so the player reads; clearer while its seek bar is dragged, so
-/// the lyric under the hand can be seen moving with it.
+/// the lyric under the hand can be seen moving with it. Under Reduce Motion
+/// there is no blur, only a quick fade (and a little fainter, to make up).
 struct PlayerHoverFocus: ViewModifier {
     let hovered: Bool
     let displayID: CGDirectDisplayID?
     @ObservedObject private var preview = ScrubPreview.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static func look(hovered: Bool, previewing: Bool) -> (blur: CGFloat, opacity: Double) {
-        if previewing { return (4, 0.8) }
-        return hovered ? (22, 0.3) : (0, 1)
+    static func look(hovered: Bool, previewing: Bool, reduceMotion: Bool = false) -> (blur: CGFloat, opacity: Double) {
+        if previewing { return (reduceMotion ? 0 : 4, 0.8) }
+        guard hovered else { return (0, 1) }
+        return reduceMotion ? (0, 0.22) : (22, 0.3)
+    }
+
+    /// The fades: a soft spring that reverses smoothly from where it was
+    /// when the pointer moves off and back on mid-fade, or the Reduce
+    /// Motion dissolve.
+    static func animations(reduceMotion: Bool) -> (hover: Animation, preview: Animation) {
+        (LunalyrDesign.Motion.animation(LunalyrDesign.Motion.step, reduceMotion: reduceMotion),
+         LunalyrDesign.Motion.animation(.spring(response: 0.3, dampingFraction: 1), reduceMotion: reduceMotion))
     }
 
     func body(content: Content) -> some View {
-        let look = Self.look(hovered: hovered, previewing: preview.songTime(on: displayID) != nil)
+        let look = Self.look(hovered: hovered, previewing: preview.songTime(on: displayID) != nil,
+                             reduceMotion: reduceMotion)
+        let animations = Self.animations(reduceMotion: reduceMotion)
         content
             .blur(radius: look.blur)
             .opacity(look.opacity)
-            // A soft spring rather than a fixed curve: moving off and
-            // back on mid-fade reverses smoothly from where it was.
-            .animation(.spring(response: 0.42, dampingFraction: 0.9), value: hovered)
-            .animation(.spring(response: 0.3, dampingFraction: 1), value: look.opacity)
+            .animation(animations.hover, value: hovered)
+            .animation(animations.preview, value: look.opacity)
     }
 }
