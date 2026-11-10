@@ -377,11 +377,30 @@ final class MusicVideoResolver {
         return result
     }
 
-    /// The player found the video cannot be embedded: remembered, so the
-    /// song is not looked up again for a while. A pasted link is kept: the
-    /// user may want to fix it.
-    func markNotEmbeddable(_ song: MusicVideoSong) {
+    /// Videos YouTube's player refused for each song this session; the
+    /// song's next search skips them.
+    private var refused: [String: Set<String>] = [:]
+    /// Refused videos per song before "can't be embedded" is remembered.
+    static let refusalsTried = 3
+
+    /// The player found the video cannot be embedded. With `videoID` (a
+    /// found video, online lookups on), the song's next candidate is tried:
+    /// true means look the song up again. Otherwise, or once
+    /// `refusalsTried` videos were refused, "can't be embedded" is
+    /// remembered, so the song is not looked up again for a while. A pasted
+    /// link never comes here: the user may want to fix it.
+    @discardableResult
+    func markNotEmbeddable(_ song: MusicVideoSong, videoID: String? = nil) -> Bool {
+        if let videoID {
+            if refused.count > 200 { refused.removeAll() }
+            refused[song.key, default: []].insert(videoID)
+            if refused[song.key, default: []].count < Self.refusalsTried {
+                cache.remove(song.key)
+                return true
+            }
+        }
         cache.store(.missing(.notEmbeddable), for: song.key, now: now())
+        return false
     }
 
     private enum FetchError: Error { case rateLimited, failed }
@@ -404,7 +423,11 @@ final class MusicVideoResolver {
             // About a megabyte of HTML and JSON: read off the main actor.
             let results = await parse(data)
             guard !results.isEmpty else { return .missing(.lookupFailed) }
-            let candidates = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist)
+            let found = YouTubeSearchPage.officialVideos(in: results, title: song.title, artist: song.artist)
+            let skipped = refused[song.key] ?? []
+            let candidates = found.filter { !skipped.contains($0.videoID) }
+            // Every official video was refused by the player already.
+            if candidates.isEmpty && !found.isEmpty { return .missing(.notEmbeddable) }
             for video in candidates.prefix(Self.candidatesChecked) {
                 if try await stillVerdict(video.videoID) != true { return .found(.youTube(video.videoID)) }
             }

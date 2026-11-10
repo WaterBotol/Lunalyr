@@ -235,8 +235,9 @@ final class MusicVideoController: ObservableObject {
 
     /// The player could not show the video, and the wallpaper falls back
     /// for this song. Only a report about the video on screen counts.
-    /// - YouTube refused it for good: remembered, unless it is the user's
-    ///   own pasted link (kept, so they can fix it).
+    /// - YouTube refused it for good: the song's next official video is
+    ///   tried (a few at most), then "can't be embedded" is remembered;
+    ///   never for the user's own pasted link (kept, so they can fix it).
     /// - Something passing (offline, no answer in time, player error 5):
     ///   nothing is remembered, and the song is tried once more later.
     /// - The library's own file would not play: said as such.
@@ -249,8 +250,11 @@ final class MusicVideoController: ObservableObject {
             status = .missing(.playerUnreachable, title: song.title)
             if retried != song.key { scheduleRetry(song) }
         case (.youTube(let id), .refused):
-            if resolver.links.videoID(for: song.key) != id { resolver.markNotEmbeddable(song) }
             status = .missing(.notEmbeddable, title: song.title)
+            // The user's own link is kept as it is, so they can fix it.
+            guard resolver.links.videoID(for: song.key) != id else { return }
+            // A found video: the song's next official video, if it has one.
+            if resolver.markNotEmbeddable(song, videoID: online ? id : nil) { relook(song) }
         }
     }
 

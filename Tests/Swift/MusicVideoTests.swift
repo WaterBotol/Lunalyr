@@ -772,9 +772,31 @@ final class MusicVideoTests: XCTestCase {
         http.replies["www.youtube.com"] = officialPage()
         let controller = await showingController(http: http, track: track, online: true)
         controller.reportPlaybackFailure(of: .youTube("4NRXx6U8ABQ"))
+        await controller.settle()
+        XCTAssertEqual(controller.status, .missing(.notEmbeddable, title: "Blinding Lights"), "no other official video")
         XCTAssertEqual(MusicVideoCache(defaults: defaults).lookup(MusicVideoSong(track).key,
                                                                   now: Date(timeIntervalSince1970: 1_800_000_000)),
                        .missing(.notEmbeddable))
+    }
+
+    func testARefusedVideoMakesWayForTheSongsNextOfficialVideo() async {
+        let http = FakeHTTP()
+        http.replies["www.youtube.com"] = .init(status: 200, body: Fixtures.searchPage([
+            ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"),
+            ("CCCCCCCCCCC", "The Weeknd - Blinding Lights (Official Music Video)", "The Weeknd"),
+        ]))
+        let controller = await showingController(http: http, track: track, online: true)
+        XCTAssertEqual(controller.source(for: track), .youTube("CCCCCCCCCCC"))
+        controller.reportPlaybackFailure(of: .youTube("CCCCCCCCCCC"))
+        XCTAssertNil(controller.source(for: track), "the refused video goes at once")
+        await controller.settle()
+        XCTAssertEqual(controller.source(for: track), .youTube("4NRXx6U8ABQ"), "the next official video")
+        let key = MusicVideoSong(track).key, now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(MusicVideoCache(defaults: defaults).lookup(key, now: now), .found(.youTube("4NRXx6U8ABQ")))
+        controller.reportPlaybackFailure(of: .youTube("4NRXx6U8ABQ"))
+        await controller.settle()
+        XCTAssertEqual(controller.status, .missing(.notEmbeddable, title: "Blinding Lights"), "none left")
+        XCTAssertEqual(MusicVideoCache(defaults: defaults).lookup(key, now: now), .missing(.notEmbeddable))
     }
 
     func testLocalFileFailureSaysSo() async {
