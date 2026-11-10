@@ -51,6 +51,12 @@ final class DesktopPlayerModel: ObservableObject {
     private var lastTrack: NowPlayingMonitor.Track?
     private var historyCount = 0
     @Published private(set) var status: Status = .idle
+    /// A short note over the strip about the song just picked: that it
+    /// plays alone and why, or that it could not be played. Shown once per
+    /// `playNoteToken`; the status line under a search is not on screen
+    /// once a song is picked.
+    @Published private(set) var playNote: String?
+    @Published private(set) var playNoteToken = 0
     private let defaults: UserDefaults
     private var searchTask: Task<Void, Never>?
     private var queueTask: Task<Void, Never>?
@@ -234,7 +240,7 @@ final class DesktopPlayerModel: ObservableObject {
 
     func play(_ result: PlayerSearchResult) {
         let searcher = self.searcher
-        perform(searcher) { try await searcher.play(result) }
+        perform(searcher) { try await searcher.playNoting(result) }
         if case .spotifySearch = result.target { return }
         collapseAfterPlaying()
     }
@@ -248,7 +254,7 @@ final class DesktopPlayerModel: ObservableObject {
             fetched = fetched.map { var copy = $0; copy.isCurrent = $0.id == item.id; return copy }
             recompose()
         }
-        perform(searcher) { try await searcher.playQueueItem(item) }
+        perform(searcher) { try await searcher.playQueueItemNoting(item) }
         Task { [weak self] in
             for delay in [900, 2500, 5000] as [UInt64] {
                 try? await Task.sleep(nanoseconds: delay * 1_000_000)
@@ -262,11 +268,29 @@ final class DesktopPlayerModel: ObservableObject {
         results = []
     }
 
-    private func perform(_ searcher: any PlayerSearching, _ work: @escaping @Sendable () async throws -> Void) {
+    private func perform(_ searcher: any PlayerSearching, _ work: @escaping @Sendable () async throws -> String?) {
         Task { [weak self] in
-            do { try await work() } catch {
-                self?.status = .message(Self.words(for: error, player: searcher.kind))
+            do {
+                self?.showPlayNote(try await work())
+            } catch {
+                let words = Self.words(for: error, player: searcher.kind)
+                self?.status = .message(words)
+                self?.showPlayNote(words)
             }
+        }
+    }
+
+    /// Seconds a play note stays on record: longer than the strip shows it.
+    static let playNoteLife: UInt64 = 9
+
+    private func showPlayNote(_ text: String?) {
+        guard let text else { return }
+        playNote = text
+        playNoteToken += 1
+        let token = playNoteToken
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.playNoteLife * 1_000_000_000)
+            if self?.playNoteToken == token { self?.playNote = nil }
         }
     }
 

@@ -53,6 +53,20 @@ enum PlayerSearchError: Error, Equatable, Sendable {
     /// The player offers nothing to search (a local-file player).
     case unsupported(PlayerKind)
     case failed
+    /// The script stopped on this AppleScript error number.
+    case scriptFailed(Int)
+
+    /// For the queue log: the error number, or what went wrong.
+    static func logText(_ error: Error) -> String {
+        switch error {
+        case PlayerSearchError.scriptFailed(let code): return "error \(code)"
+        case PlayerSearchError.notRunning: return "Music is not running"
+        case PlayerSearchError.blocked: return "Automation access is off"
+        case PlayerSearchError.failed: return "unexpected reply"
+        case is CancellationError: return "cancelled"
+        default: return "\(type(of: error))"
+        }
+    }
 }
 
 /// Searching and playing, one implementation per player. Everything runs
@@ -63,6 +77,22 @@ protocol PlayerSearching: Sendable {
     func play(_ result: PlayerSearchResult) async throws
     func queue() async throws -> PlayerQueueSnapshot
     func playQueueItem(_ item: PlayerQueueItem) async throws
+    /// `play`, and anything the user should know about how it plays (a
+    /// song that plays alone, and why); nil when there is nothing to say.
+    func playNoting(_ result: PlayerSearchResult) async throws -> String?
+    func playQueueItemNoting(_ item: PlayerQueueItem) async throws -> String?
+}
+
+extension PlayerSearching {
+    func playNoting(_ result: PlayerSearchResult) async throws -> String? {
+        try await play(result)
+        return nil
+    }
+
+    func playQueueItemNoting(_ item: PlayerQueueItem) async throws -> String? {
+        try await playQueueItem(item)
+        return nil
+    }
 }
 
 extension PlayerKind {
@@ -226,7 +256,7 @@ final class ScriptDesk: @unchecked Sendable {
             switch PlayerResponse<Bool>(failureCode: failure.code) {
             case .blocked: return .failure(PlayerSearchError.blocked(kind))
             case .notRunning: return .failure(PlayerSearchError.notRunning(kind))
-            default: return .failure(PlayerSearchError.failed)
+            default: return .failure(PlayerSearchError.scriptFailed(failure.code))
             }
         }
     }
@@ -255,6 +285,148 @@ struct QueuePlaylistStore: @unchecked Sendable {
     static func valid(_ id: String) -> String? {
         !id.isEmpty && id.count <= 32 && id.allSatisfy(\.isHexDigit) ? id : nil
     }
+
+    /// Builds that have not finished, kept on record until one does.
+    static let pendingLimit = 10
+
+    /// A build made `id`: on record, after the earlier unfinished ones, until
+    /// its finish reports back. Only the latest few are kept.
+    func record(_ id: String, after leftovers: [String]) {
+        pendingIDs = Array((leftovers.filter { $0 != id } + [id]).suffix(Self.pendingLimit))
+    }
+}
+
+/// How a click on a song went, for the strip's note and the log.
+enum QueueOutcome: Equatable, Sendable {
+    /// "Lunalyr Queue" plays: `songs` of the `wanted` ones were copied.
+    case queued(songs: Int, wanted: Int, fromAlbum: Bool)
+    /// The song plays on its own.
+    case alone(QueueSolo)
+    /// A newer click came first; this one played nothing.
+    case superseded
+
+    /// In plain words, when there is something to say.
+    var note: String? {
+        switch self {
+        case .queued(let songs, let wanted, let fromAlbum):
+            if songs < wanted { return "Some songs after it couldn\u{2019}t be added, so they\u{2019}re left out." }
+            return fromAlbum ? "Then the rest of its album." : nil
+        case .alone(let why): return why.note
+        case .superseded: return nil
+        }
+    }
+}
+
+/// Why a song plays on its own.
+enum QueueSolo: String, Sendable {
+    /// What is playing can't be copied: radio, a CD, a folder, a stream.
+    case source
+    /// The song isn't in the library, so nothing can be copied after it.
+    case notInLibrary
+    /// A library song with no album name.
+    case single
+    /// Nothing comes after it on its album in the library.
+    case album
+    /// The queue could not be built, so the song plays by itself.
+    case rescued
+
+    var note: String {
+        switch self {
+        case .source: return "Plays this song only: Lunalyr can keep only your library and your own playlists going."
+        case .notInLibrary: return "Plays this song only: it isn\u{2019}t in your library, so the playlist can\u{2019}t carry on from it."
+        case .single: return "Plays this song only."
+        case .album: return "Plays this song only: nothing after it on its album is in your library."
+        case .rescued: return "Couldn\u{2019}t line up what comes next, so this song plays on its own."
+        }
+    }
+}
+
+/// A library song from the clicked song's album.
+struct AlbumTrack: Equatable, Sendable {
+    var id: String
+    var disc = 0
+    var number = 0
+}
+
+/// The first step's reply (`AppleMusicSearch.prepareQueue`).
+enum QueuePrepared: Equatable, Sendable {
+    /// Played alone, why; and the playing playlist's kind and size.
+    case played(QueueSolo, source: String, songs: Int)
+    /// The new queue playlist's persistent ID.
+    case made(String, source: String, songs: Int)
+    /// The clicked library song's album, in library order.
+    case album([AlbumTrack], source: String, songs: Int)
+    case unreadable
+
+    init(_ items: [NSAppleEventDescriptor]) {
+        func text(_ i: Int) -> String { items.indices.contains(i) ? items[i].scriptText ?? "" : "" }
+        func number(_ i: Int) -> Int { items.indices.contains(i) ? Int(scriptValue: items[i].scriptNumber) ?? 0 : 0 }
+        func numbers(_ i: Int) -> [Int] {
+            items.indices.contains(i) ? items[i].scriptItems.map { Int(scriptValue: $0.scriptNumber) ?? 0 } : []
+        }
+        switch text(1) {
+        case "played":
+            self = .played(QueueSolo(rawValue: text(2)) ?? .source, source: text(3), songs: number(4))
+        case "made":
+            guard let id = QueuePlaylistStore.valid(text(4)) else { self = .unreadable; return }
+            self = .made(id, source: text(2), songs: number(3))
+        case "album":
+            let ids = items.indices.contains(4) ? items[4].scriptItems.map { $0.scriptText ?? "" } : []
+            let discs = numbers(5), tracks = numbers(6)
+            let matched = discs.count == ids.count && tracks.count == ids.count
+            self = .album(ids.indices.map { AlbumTrack(id: ids[$0], disc: matched ? discs[$0] : 0,
+                                                        number: matched ? tracks[$0] : 0) },
+                          source: text(2), songs: number(3))
+        default:
+            self = .unreadable
+        }
+    }
+
+    /// For the queue log; no song titles.
+    var logText: String {
+        switch self {
+        case .played(let why, let source, let songs): return "source \(source) (\(songs) songs): plays alone (\(why.rawValue))"
+        case .made(_, let source, let songs): return "source \(source) (\(songs) songs): building"
+        case .album(let tracks, let source, _): return "not in the playing playlist (source \(source)): \(tracks.count) songs on its album in the library"
+        case .unreadable: return "unreadable reply"
+        }
+    }
+}
+
+/// The second step's reply (`AppleMusicSearch.collectQueue`).
+enum QueueCollected: Equatable, Sendable {
+    case ids([String])
+    /// Positions in the library playlist.
+    case ranges([ClosedRange<Int>])
+    case unreadable
+
+    init(_ items: [NSAppleEventDescriptor]) {
+        func number(_ i: Int) -> Int? { items.indices.contains(i) ? Int(scriptValue: items[i].scriptNumber) : nil }
+        switch items.indices.contains(1) ? items[1].scriptText : nil {
+        case "ids":
+            self = .ids(items.indices.contains(2) ? items[2].scriptItems.compactMap { $0.scriptText.flatMap(QueuePlaylistStore.valid) } : [])
+        case "range":
+            guard let n = number(2), let end = number(3), n >= 1, end >= n else { self = .unreadable; return }
+            let upTo = number(4) ?? 0
+            self = .ranges([n...end] + (upTo >= 1 && upTo < n ? [1...upTo] : []))
+        default:
+            self = .unreadable
+        }
+    }
+
+    /// How many songs a fill step copied.
+    static func copied(_ items: [NSAppleEventDescriptor]) -> Int {
+        items.indices.contains(1) ? max(0, Int(scriptValue: items[1].scriptNumber) ?? 0) : 0
+    }
+}
+
+/// Numbers the clicks on songs, so a build can tell a newer click came.
+final class ClickCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var latest = 0
+
+    func begin() -> Int { lock.withLock { latest += 1; return latest } }
+    func isLatest(_ click: Int) -> Bool { lock.withLock { latest == click } }
 }
 
 /// Runs async jobs one after another, in the order they were started.
@@ -262,14 +434,14 @@ final class SerialFlow: @unchecked Sendable {
     private let lock = NSLock()
     private var tail: Task<Void, Never>?
 
-    func run(_ work: @escaping @Sendable () async throws -> Void) async throws {
-        let task: Task<Void, Error> = lock.withLock {
+    func run<Value: Sendable>(_ work: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        let task: Task<Value, Error> = lock.withLock {
             let previous = tail
-            let task = Task { _ = await previous?.value; try await work() }
+            let task = Task { _ = await previous?.value; return try await work() }
             tail = Task { _ = try? await task.value }
             return task
         }
-        try await task.value
+        return try await task.value
     }
 }
 
@@ -429,7 +601,8 @@ struct AppleMusicSearch: PlayerSearching {
     /// has no way to start a playlist part-way. So the song and the ones after
     /// it are copied, in order, into a playlist of Lunalyr's own, which is
     /// played from its start: the playlist carries on, and shuffle still works.
-    /// A song that is not in the playing playlist plays from the library.
+    /// A library song from outside the playing playlist (a search result)
+    /// carries on through the rest of its album instead.
     ///
     /// Only playlists Lunalyr made are ever deleted: their persistent IDs are
     /// kept (`QueuePlaylistStore`), and one is deleted only while it is still
@@ -439,10 +612,20 @@ struct AppleMusicSearch: PlayerSearching {
     static let buildingPlaylistName = queuePlaylistName + " (new)"
     /// Songs copied at most.
     static let queueLength = 150
+    /// Seconds each Apple event of a build step may take. Copying songs into
+    /// a playlist can be slow while Music syncs the library; a step that runs
+    /// out of time fails the build (and the clicked song still plays).
+    static let queueStepTimeout = 12
 
     var store = QueuePlaylistStore()
     /// Where the queue's scripts wait their turn; tests give their own.
     var desk: ScriptDesk = .shared
+
+    /// Errors one song can raise without stopping the copy: it is missing, or
+    /// Music refuses to add it to a playlist (-10000 handler failed, -10006
+    /// write refused, as for a song no longer available). Anything else --
+    /// Music quitting, access off, a timeout -- ends the step.
+    static let skippable = "{-1728, -1700, -1708, -1719, -10000, -10006}"
 
     /// Deletes the playlist with this persistent ID, but only if it is still
     /// one Lunalyr made: a plain user playlist named exactly `name`.
@@ -492,19 +675,27 @@ struct AppleMusicSearch: PlayerSearching {
         return lines.joined(separator: "\n")
     }
 
-    /// Step one. Plays the song directly when a queue cannot (or should not)
-    /// be built; otherwise clears up any half-built queue Lunalyr left behind,
-    /// makes a new one and returns its persistent ID.
+    /// Step one. Clears up any half-built queue Lunalyr left behind, then
+    /// decides, from the scripting dictionary's own classes:
+    /// - the song is in the playing playlist, that playlist is the library,
+    ///   a user playlist or an Apple Music playlist, and the song is in the
+    ///   library: makes the new queue playlist, `{"ok", "made", kind, count, id}`;
+    /// - it is in the playing playlist but that cannot be copied (radio, a
+    ///   CD, a folder, a stream) or the song is not in the library: plays
+    ///   it alone, `{"ok", "played", why, kind, count}`;
+    /// - it is only in the library (a search result, a song from history):
+    ///   replies with its album's songs, `{"ok", "album", kind, count, ids,
+    ///   discs, numbers}`, or plays it alone when it has no album name.
     ///
-    /// Only a source made of library songs is copied. `duplicate` into a user
-    /// playlist adds a song that is not in the library to it (with Music's
-    /// default "Add songs to Library when adding to playlists"), so an Apple
-    /// Music playlist, radio or a catalogue song falls back to a plain `play`.
-    /// Not verified live: the hard rules forbid driving Music, so how Music
-    /// treats every kind of source here is untested.
+    /// Only library songs are ever copied (`fillQueue`, `fillRange`): adding
+    /// any other song to a user playlist would add it to the library.
+    /// `kind` is the playing playlist's class, for the log. Not verified
+    /// live: the hard rules forbid driving Music.
     static func prepareQueue(persistentID id: String, index: Int?, leftovers: [String]) -> String {
         let cleanUp = leftovers.map { deleteOwnPlaylist($0, named: buildingPlaylistName) }.joined(separator: "\n")
+        let quotedID = ScriptText.quoted(id)
         return """
+        \(cleanUp)
         set inSource to false
         try
         \(locate(id, index: index))
@@ -513,45 +704,97 @@ struct AppleMusicSearch: PlayerSearching {
         end try
         set inLibrary to false
         try
-        set libTrack to first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id))
+        set libTrack to first track of library playlist 1 whose persistent ID is \(quotedID)
         set inLibrary to true
         on error number errorNumber
         if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
         end try
-        set queueable to false
-        if inSource and inLibrary then
+        set sourceKind to "none"
+        set total to 0
+        if inSource then
+        set sourceKind to "other"
+        try
+        set total to count of tracks of src
         set sourceClass to class of src
-        if sourceClass is library playlist or sourceClass is user playlist then set queueable to true
+        if sourceClass is library playlist then
+        set sourceKind to "library"
+        else if sourceClass is user playlist then
+        set sourceKind to "playlist"
+        else if sourceClass is subscription playlist then
+        set sourceKind to "apple-music-playlist"
+        else if sourceClass is radio tuner playlist then
+        set sourceKind to "radio"
+        else if sourceClass is audio CD playlist then
+        set sourceKind to "cd"
+        else if sourceClass is folder playlist then
+        set sourceKind to "folder"
         end if
-        if not queueable then
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        end if
+        if inSource and inLibrary and sourceKind is in {"library", "playlist", "apple-music-playlist"} then
+        set newList to make new user playlist with properties {name:\(ScriptText.quoted(buildingPlaylistName))}
+        return {"ok", "made", sourceKind, total, persistent ID of newList}
+        end if
         if inSource then
         play srcTrack
-        else if inLibrary then
+        if inLibrary then return {"ok", "played", "source", sourceKind, total}
+        return {"ok", "played", "notInLibrary", sourceKind, total}
+        end if
+        if not inLibrary then error number -1728
+        set albumName to ""
+        set albumArtist to ""
+        set trackArtist to ""
+        try
+        set albumName to album of libTrack
+        set albumArtist to album artist of libTrack
+        set trackArtist to artist of libTrack
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        if albumName is "" then
         play libTrack
+        return {"ok", "played", "single", sourceKind, total}
+        end if
+        if albumArtist is not "" then
+        set albumIDs to persistent ID of (every track of library playlist 1 whose album is albumName and album artist is albumArtist)
+        set albumDiscs to disc number of (every track of library playlist 1 whose album is albumName and album artist is albumArtist)
+        set albumNumbers to track number of (every track of library playlist 1 whose album is albumName and album artist is albumArtist)
         else
-        error number -1728
+        set albumIDs to persistent ID of (every track of library playlist 1 whose album is albumName and artist is trackArtist)
+        set albumDiscs to disc number of (every track of library playlist 1 whose album is albumName and artist is trackArtist)
+        set albumNumbers to track number of (every track of library playlist 1 whose album is albumName and artist is trackArtist)
         end if
-        return {"ok", "played"}
-        end if
-        \(cleanUp)
+        return {"ok", "album", sourceKind, total, albumIDs, albumDiscs, albumNumbers}
+        """
+    }
+
+    /// Makes the new queue playlist for an album (step one only reads it).
+    static func makeQueue() -> String {
+        """
         set newList to make new user playlist with properties {name:\(ScriptText.quoted(buildingPlaylistName))}
         return {"ok", "made", persistent ID of newList}
         """
     }
 
-    /// Step two. Finds the song and the ones after it (wrapping round, up to
-    /// `queueLength`) and copies them into the new playlist, each as the
-    /// library's own copy, so nothing is added to the library. From the
-    /// library itself that is one ranged `duplicate` each way round, a single
-    /// event however many songs. From a user playlist, which may hold songs
-    /// that aren't in the library, it replies `{"ok", "ids", {…}}` instead,
-    /// and the songs are copied by `fillQueue`, `queueChunk` at a time, each
-    /// its own script, so the monitor's polls run in between. Otherwise
-    /// `{"ok", "copied"}`. A failure deletes the half-built playlist and then
-    /// raises the error.
+    /// Plays a library song on its own: one with nothing to carry on to.
+    static func playAlone(persistentID id: String) -> String {
+        """
+        play (first track of library playlist 1 whose persistent ID is \(ScriptText.quoted(id)))
+        return {"ok", "played"}
+        """
+    }
+
+    /// Step two. Finds the song in the playing playlist and says which songs
+    /// follow it (wrapping round, up to `queueLength`). From the library:
+    /// `{"ok", "range", n, endAt, upTo}`, the positions `fillRange` copies,
+    /// a short run at a time. From any other playlist, which may hold songs
+    /// that aren't in the library: `{"ok", "ids", {…}}`, for `fillQueue`.
+    /// Copies nothing itself. A failure deletes the half-built playlist and
+    /// then raises the error.
     static func collectQueue(persistentID id: String, index: Int?, into newID: String) -> String {
         """
-        set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
         try
         set inSource to false
         \(locate(id, index: index))
@@ -565,11 +808,7 @@ struct AppleMusicSearch: PlayerSearching {
         set upTo to n - 1
         if upTo > room then set upTo to room
         end if
-        if class of src is library playlist then
-        duplicate tracks n thru endAt of src to newList
-        if upTo > 0 then duplicate tracks 1 thru upTo of src to newList
-        return {"ok", "copied"}
-        end if
+        if class of src is library playlist then return {"ok", "range", n, endAt, upTo}
         set wanted to (persistent ID of tracks n thru endAt of src) as list
         if upTo > 0 then set wanted to wanted & ((persistent ID of tracks 1 thru upTo of src) as list)
         return {"ok", "ids", wanted}
@@ -577,27 +816,62 @@ struct AppleMusicSearch: PlayerSearching {
         """
     }
 
-    /// Songs `fillQueue` copies in one script: short enough that a poll
-    /// never waits long behind it.
+    /// Songs `fillQueue` copies in one script, and positions `fillRange`
+    /// copies in one: short enough that a poll never waits long behind it.
     static let queueChunk = 20
+    static let rangeChunk = 25
 
     /// Copies these songs, by their library copies, into the new playlist.
-    /// A song no longer in the library is skipped. Replies `{"ok"}`.
+    /// A song that is gone or that Music won't add is skipped (`skippable`).
+    /// Replies `{"ok", copied}`.
     static func fillQueue(_ ids: [String], into newID: String) -> String {
         let list = "{" + ids.compactMap(QueuePlaylistStore.valid).map(ScriptText.quoted).joined(separator: ", ") + "}"
         return """
         set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
         try
+        set countBefore to count of tracks of newList
         repeat with idItem in \(list)
         set wantedID to contents of idItem
         try
         duplicate (first track of library playlist 1 whose persistent ID is wantedID) to newList
         on error number errorNumber
-        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        if errorNumber is not in \(skippable) then error number errorNumber
         end try
         end repeat
+        set copied to (count of tracks of newList) - countBefore
         \(cleanUpOnFailure(newID))
-        return {"ok"}
+        return {"ok", copied}
+        """
+    }
+
+    /// Copies library songs `from` to `to` (positions in the library
+    /// playlist) into the new playlist in one ranged `duplicate`. If that
+    /// is refused and added nothing, they go one at a time and any Music
+    /// won't add is skipped, so one bad song no longer sinks the whole
+    /// build. Replies `{"ok", copied}`.
+    static func fillRange(from start: Int, to end: Int, into newID: String) -> String {
+        """
+        set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
+        try
+        set src to library playlist 1
+        set countBefore to count of tracks of newList
+        try
+        duplicate tracks \(start) thru \(end) of src to newList
+        on error number errorNumber
+        if errorNumber is not in \(skippable) then error number errorNumber
+        if (count of tracks of newList) is countBefore then
+        repeat with i from \(start) to \(end)
+        try
+        duplicate track i of src to newList
+        on error number errorNumber
+        if errorNumber is not in \(skippable) then error number errorNumber
+        end try
+        end repeat
+        end if
+        end try
+        set copied to (count of tracks of newList) - countBefore
+        \(cleanUpOnFailure(newID))
+        return {"ok", copied}
         """
     }
 
@@ -655,15 +929,57 @@ struct AppleMusicSearch: PlayerSearching {
         """
     }
 
+    /// After a build failed: the half-built playlist goes (by ID and exact
+    /// name), and the clicked song plays on its own -- unless it is already
+    /// playing (a finish that started it but whose reply was lost). Never
+    /// leaves silence where a song was asked for. Replies `{"ok", "played"}`
+    /// or `{"ok", "playing"}`.
+    static func rescueQueue(persistentID id: String, index: Int?, newID: String?) -> String {
+        let quotedID = ScriptText.quoted(id)
+        let cleanUp = newID.flatMap(QueuePlaylistStore.valid).map {
+            "try\n\(deleteOwnPlaylist($0, named: buildingPlaylistName))\nend try"
+        } ?? ""
+        return """
+        \(cleanUp)
+        try
+        if player state is playing then
+        if persistent ID of current track is \(quotedID) then return {"ok", "playing"}
+        end if
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        set inSource to false
+        try
+        \(locate(id, index: index))
+        on error number errorNumber
+        if errorNumber is not in \(PlayerScriptSource.tolerated) then error number errorNumber
+        end try
+        if inSource then
+        play srcTrack
+        else
+        play (first track of library playlist 1 whose persistent ID is \(quotedID))
+        end if
+        return {"ok", "played"}
+        """
+    }
+
     /// One step of building the queue, as a command: its reply's items once
-    /// it says "ok".
-    private static func sendQueueStep(_ name: String, _ body: String, desk: ScriptDesk) async throws -> [NSAppleEventDescriptor] {
-        let reply = try await desk.run(for: .appleMusic, priority: .command) {
-            PlayerScript(name: "desktop-player.\(name)", source: PlayerScriptSource.query(bundleID, body), cacheable: false)
+    /// it says "ok". Every step is logged with its AppleScript error number.
+    private static func sendQueueStep(_ name: String, _ body: String, click: Int,
+                                      desk: ScriptDesk) async throws -> [NSAppleEventDescriptor] {
+        do {
+            let reply = try await desk.run(for: .appleMusic, priority: .command) {
+                PlayerScript(name: "desktop-player.queue-\(name)",
+                             source: PlayerScriptSource.query(bundleID, timeout: queueStepTimeout, body), cacheable: false)
+            }
+            let items = reply.scriptItems
+            guard items.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
+            QueueLog.step(click, name, detail: "ok")
+            return items
+        } catch {
+            QueueLog.step(click, name, failed: PlayerSearchError.logText(error))
+            throw error
         }
-        let items = reply.scriptItems
-        guard items.first?.scriptText == "ok" else { throw PlayerSearchError.failed }
-        return items
     }
 
     /// `ids` in runs of `queueChunk`, in order.
@@ -671,46 +987,156 @@ struct AppleMusicSearch: PlayerSearching {
         stride(from: 0, to: ids.count, by: queueChunk).map { Array(ids[$0..<min($0 + queueChunk, ids.count)]) }
     }
 
-    /// One click at a time: a second click's clean-up must not delete the
-    /// first click's playlist while that one is still being filled.
-    private static let queueFlow = SerialFlow()
-
-    func playInContext(persistentID id: String, index: Int?) async throws {
-        let store = store
-        let send = { @Sendable [desk] (name: String, body: String) async throws -> [NSAppleEventDescriptor] in
-            try await Self.sendQueueStep(name, body, desk: desk)
-        }
-        try await Self.queueFlow.run {
-            let leftovers = store.pendingIDs
-            let prepared = try await send("queue-prepare",
-                                          Self.prepareQueue(persistentID: id, index: index, leftovers: leftovers))
-            guard prepared.count >= 3, prepared[1].scriptText == "made", let newID = prepared[2].scriptText,
-                  QueuePlaylistStore.valid(newID) != nil else { return }
-            // The script deleted every leftover still named as a half-built
-            // queue. One already renamed "Lunalyr Queue" by a finish that
-            // never reported back is kept on record and goes in the finish.
-            store.pendingIDs = leftovers.filter { $0 != newID } + [newID]
-            let collected = try await send("queue-collect", Self.collectQueue(persistentID: id, index: index, into: newID))
-            if collected.count >= 3, collected[1].scriptText == "ids" {
-                let ids = collected[2].scriptItems.compactMap { $0.scriptText.flatMap(QueuePlaylistStore.valid) }
-                for chunk in Self.chunks(ids) {
-                    _ = try await send("queue-fill", Self.fillQueue(chunk, into: newID))
-                }
+    /// Library positions in runs of `rangeChunk`, in order.
+    static func rangeChunks(_ ranges: [ClosedRange<Int>]) -> [ClosedRange<Int>] {
+        ranges.filter { $0.lowerBound >= 1 }.flatMap { range in
+            stride(from: range.lowerBound, through: range.upperBound, by: rangeChunk).map {
+                $0...min($0 + rangeChunk - 1, range.upperBound)
             }
-            let finished = try await send("queue-finish", Self.finishQueue(
-                into: newID, replacing: (store.queueID.map { [$0] } ?? []) + leftovers))
-            store.queueID = newID
-            store.pendingIDs = []
-            if finished.count >= 2, let playError = finished[1].scriptNumber, playError != 0 { throw PlayerSearchError.failed }
         }
     }
 
+    /// One click at a time: a second click's clean-up must not delete the
+    /// first click's playlist while that one is still being filled.
+    private static let queueFlow = SerialFlow()
+    /// Which click is the latest: one overtaken by a newer click stops
+    /// before it plays anything, so a quick run of clicks plays only the last.
+    private static let clicks = ClickCounter()
+
+    /// Plays the song, carrying on with what follows it where Music allows
+    /// (see `prepareQueue`), and says how it went. `origin` is for the log.
+    @discardableResult
+    func playInContext(persistentID id: String, index: Int?, origin: String = "strip") async throws -> QueueOutcome {
+        let store = store
+        let click = Self.clicks.begin()
+        let send = { @Sendable [desk] (name: String, body: String) async throws -> [NSAppleEventDescriptor] in
+            try await Self.sendQueueStep(name, body, click: click, desk: desk)
+        }
+        return try await Self.queueFlow.run {
+            guard Self.clicks.isLatest(click) else {
+                QueueLog.finished(click, "skipped: a newer click came first")
+                return .superseded
+            }
+            QueueLog.started(click, from: origin, index: index)
+            return try await Self.build(persistentID: id, index: index, click: click, store: store, send: send)
+        }
+    }
+
+    private static func build(persistentID id: String, index: Int?, click: Int, store: QueuePlaylistStore,
+                              send: @escaping @Sendable (String, String) async throws -> [NSAppleEventDescriptor])
+        async throws -> QueueOutcome {
+        var newID: String?
+        do {
+            let leftovers = store.pendingIDs
+            let prepared = QueuePrepared(try await send("prepare", prepareQueue(persistentID: id, index: index,
+                                                                                    leftovers: leftovers)))
+            QueueLog.prepared(click, prepared)
+            let wanted: Int
+            var copied = 0
+            var fromAlbum = false
+            switch prepared {
+            case .unreadable:
+                throw PlayerSearchError.failed
+            case .played(let why, _, _):
+                QueueLog.finished(click, "played alone (\(why.rawValue))")
+                return .alone(why)
+            case .made(let made, _, _):
+                newID = made
+                store.record(made, after: leftovers)
+                switch QueueCollected(try await send("collect", collectQueue(persistentID: id, index: index, into: made))) {
+                case .unreadable:
+                    throw PlayerSearchError.failed
+                case .ids(let ids):
+                    wanted = ids.count
+                    QueueLog.step(click, "collect", detail: "\(ids.count) songs by ID")
+                    for chunk in chunks(ids) {
+                        copied += QueueCollected.copied(try await send("fill", fillQueue(chunk, into: made)))
+                    }
+                case .ranges(let ranges):
+                    wanted = ranges.reduce(0) { $0 + $1.count }
+                    QueueLog.step(click, "collect", detail: "\(wanted) library songs")
+                    for range in rangeChunks(ranges) {
+                        copied += QueueCollected.copied(try await send(
+                            "fill", fillRange(from: range.lowerBound, to: range.upperBound, into: made)))
+                    }
+                }
+            case .album(let tracks, _, _):
+                let order = albumQueue(startingAt: id, tracks: tracks)
+                guard order.count > 1 else {
+                    _ = try await send("play-alone", playAlone(persistentID: id))
+                    QueueLog.finished(click, "played alone (nothing after it on its album)")
+                    return .alone(.album)
+                }
+                fromAlbum = true
+                wanted = order.count
+                let madeReply = try await send("make", makeQueue())
+                guard madeReply.count >= 3, let made = madeReply[2].scriptText.flatMap(QueuePlaylistStore.valid) else {
+                    throw PlayerSearchError.failed
+                }
+                newID = made
+                store.record(made, after: leftovers)
+                for chunk in chunks(order) {
+                    copied += QueueCollected.copied(try await send("fill", fillQueue(chunk, into: made)))
+                }
+            }
+            QueueLog.step(click, "fill", detail: "\(copied) of \(wanted) songs copied")
+            guard let made = newID, copied > 0 else { throw PlayerSearchError.failed }
+            guard clicks.isLatest(click) else {
+                // Left on record: the newer click's first step deletes it.
+                QueueLog.finished(click, "stopped: a newer click came first")
+                return .superseded
+            }
+            let finished = try await send("finish", finishQueue(
+                into: made, replacing: (store.queueID.map { [$0] } ?? []) + leftovers))
+            store.queueID = made
+            store.pendingIDs = []
+            newID = nil
+            if finished.count >= 2, let playError = Int(scriptValue: finished[1].scriptNumber), playError != 0 {
+                QueueLog.step(click, "finish", failed: "play error \(playError)")
+                throw PlayerSearchError.scriptFailed(playError)
+            }
+            QueueLog.finished(click, "playing \(queuePlaylistName), \(copied) songs\(fromAlbum ? " from its album" : "")")
+            return .queued(songs: copied, wanted: wanted, fromAlbum: fromAlbum)
+        } catch {
+            guard !(error is CancellationError) else { throw error }
+            do {
+                _ = try await send("rescue", rescueQueue(persistentID: id, index: index, newID: newID))
+                QueueLog.finished(click, "build failed; played the song alone")
+                return .alone(.rescued)
+            } catch {
+                QueueLog.finished(click, "build failed and the song could not be played")
+            }
+            throw error
+        }
+    }
+
+    /// An album's library songs from the clicked one to the end, in album
+    /// order (disc, then track number; unnumbered songs after the numbered
+    /// ones, in library order). Nothing before it, nothing after the album.
+    static func albumQueue(startingAt id: String, tracks: [AlbumTrack]) -> [String] {
+        let ordered = tracks.enumerated().sorted { a, b in
+            (max(a.element.disc, 1), a.element.number > 0 ? a.element.number : Int.max, a.offset)
+                < (max(b.element.disc, 1), b.element.number > 0 ? b.element.number : Int.max, b.offset)
+        }.map(\.element.id)
+        guard let start = ordered.firstIndex(of: id) else { return QueuePlaylistStore.valid(id).map { [$0] } ?? [] }
+        var seen: Set<String> = []
+        return Array(ordered[start...].filter { QueuePlaylistStore.valid($0) != nil && seen.insert($0).inserted }
+            .prefix(queueLength))
+    }
+
     func play(_ result: PlayerSearchResult) async throws {
+        _ = try await playNoting(result)
+    }
+
+    /// A library song carries on through the playlist it is in, else its
+    /// album (`playInContext`); the note says when it plays alone.
+    func playNoting(_ result: PlayerSearchResult) async throws -> String? {
         switch result.target {
         case .libraryTrack(let id):
-            try await playInContext(persistentID: id, index: nil)
+            return try await playInContext(persistentID: id, index: nil, origin: "search").note
         case .address(let url):
             try await open(url)
+            return nil
         case .spotifySearch:
             throw PlayerSearchError.failed
         }
@@ -775,8 +1201,12 @@ struct AppleMusicSearch: PlayerSearching {
     /// A song without a library ID (a stream, a radio track) cannot be found
     /// again; the strip does not offer it (`PlayerQueueItem.isPlayable`).
     func playQueueItem(_ item: PlayerQueueItem) async throws {
+        _ = try await playQueueItemNoting(item)
+    }
+
+    func playQueueItemNoting(_ item: PlayerQueueItem) async throws -> String? {
         guard let id = item.persistentID else { throw PlayerSearchError.failed }
-        try await playInContext(persistentID: id, index: item.index > 0 ? item.index : nil)
+        return try await playInContext(persistentID: id, index: item.index > 0 ? item.index : nil, origin: "strip").note
     }
 
     private func run(_ name: String, _ body: String) async throws {

@@ -86,19 +86,52 @@ final class DesktopPlayerQueueScriptTests: XCTestCase {
 
     func testOnlyLibrarySourcesAreCopiedOthersJustPlay() throws {
         let script = AppleMusicSearch.prepareQueue(persistentID: "AB12", index: nil, leftovers: [])
-        XCTAssertTrue(script.contains("if sourceClass is library playlist or sourceClass is user playlist then set queueable to true"))
-        XCTAssertTrue(script.contains("if inSource and inLibrary then"))
-        XCTAssertTrue(script.contains("play srcTrack"))
-        // The playlist is made only after the plain-play way out has returned.
-        let played = try XCTUnwrap(script.range(of: "return {\"ok\", \"played\"}"))
-        let made = try XCTUnwrap(script.range(of: "make new user playlist"))
-        XCTAssertLessThan(played.lowerBound, made.lowerBound)
+        // The playing playlist's kind, from the dictionary's own classes.
+        for (kind, name) in [("library playlist", "library"), ("user playlist", "playlist"),
+                             ("subscription playlist", "apple-music-playlist"), ("radio tuner playlist", "radio"),
+                             ("audio CD playlist", "cd"), ("folder playlist", "folder")] {
+            XCTAssertTrue(script.contains("if sourceClass is \(kind) then\nset sourceKind to \"\(name)\""), kind)
+        }
+        // A playlist is made only for a library song found in a copyable playlist.
+        let made = try XCTUnwrap(script.range(of: """
+        if inSource and inLibrary and sourceKind is in {"library", "playlist", "apple-music-playlist"} then
+        set newList to make new user playlist with properties {name:"Lunalyr Queue (new)"}
+        return {"ok", "made", sourceKind, total, persistent ID of newList}
+        end if
+        """))
+        XCTAssertEqual(script.components(separatedBy: "make new user playlist").count, 2)
+        // Anything else in the playing playlist plays alone, and says why.
+        let alone = try XCTUnwrap(script.range(of: """
+        if inSource then
+        play srcTrack
+        if inLibrary then return {"ok", "played", "source", sourceKind, total}
+        return {"ok", "played", "notInLibrary", sourceKind, total}
+        end if
+        """))
+        XCTAssertLessThan(made.lowerBound, alone.lowerBound)
+        // A library song from elsewhere reads its album, in three bulk events.
+        let album = try XCTUnwrap(script.range(of: "return {\"ok\", \"album\", sourceKind, total, albumIDs, albumDiscs, albumNumbers}"))
+        XCTAssertLessThan(alone.upperBound, album.lowerBound)
+        XCTAssertTrue(script.contains("set albumIDs to persistent ID of (every track of library playlist 1 whose album is albumName and album artist is albumArtist)"))
+        XCTAssertTrue(script.contains("whose album is albumName and artist is trackArtist"), "no album artist: the track's artist")
+        XCTAssertTrue(script.contains("if albumName is \"\" then\nplay libTrack\nreturn {\"ok\", \"played\", \"single\""))
+        XCTAssertTrue(script.contains("if not inLibrary then error number -1728"))
+        XCTAssertFalse(script.contains("duplicate"), "the first step copies nothing")
+    }
+
+    func testLeftoversAreClearedUpWhateverTheClickTurnsInto() throws {
+        let script = AppleMusicSearch.prepareQueue(persistentID: "AB12", index: nil, leftovers: ["0A1B"])
+        let cleanUp = try XCTUnwrap(script.range(of: "whose persistent ID is \"0A1B\""))
+        let firstPlay = try XCTUnwrap(script.range(of: "play srcTrack"))
+        XCTAssertLessThan(cleanUp.lowerBound, firstPlay.lowerBound,
+                          "a half-built playlist goes even when this click only plays a song")
     }
 
     func testBuildingCopiesLibrarySongsAndCleansUpAfterAFailure() {
         let collect = AppleMusicSearch.collectQueue(persistentID: "AB12", index: 3, into: "FFEE")
         let fill = AppleMusicSearch.fillQueue(["0A", "0B"], into: "FFEE")
-        for script in [collect, fill] {
+        let range = AppleMusicSearch.fillRange(from: 1, to: 25, into: "FFEE")
+        for script in [collect, fill, range] {
             XCTAssertFalse(script.contains(deleteByName))
             XCTAssertFalse(script.contains("duplicate (track"))
             // A failure deletes the half-built playlist, by its ID and exact name, then raises the error again.

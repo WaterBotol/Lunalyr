@@ -54,13 +54,19 @@ final class QueueOrphanTests: XCTestCase {
                 self.lock.withLock { self.sent.append(script) }
                 switch script.name {
                 case "desktop-player.queue-prepare":
-                    done(.success(.scriptList([text("ok"), text("made"), text("FFEE")])))
+                    done(.success(.scriptList([text("ok"), text("made"), text("library"), NSAppleEventDescriptor(int32: 500),
+                                               text("FFEE")])))
                 case "desktop-player.queue-collect":
-                    done(.success(.scriptList([text("ok"), text("copied")])))
+                    done(.success(.scriptList([text("ok"), text("range"), NSAppleEventDescriptor(int32: 1),
+                                               NSAppleEventDescriptor(int32: 2), NSAppleEventDescriptor(int32: 0)])))
+                case "desktop-player.queue-fill":
+                    done(.success(.scriptList([text("ok"), NSAppleEventDescriptor(int32: 2)])))
                 case "desktop-player.queue-finish" where self.finishFails:
-                    done(.failure(ScriptFailure(code: AppleEventCode.connectionInvalid)))
-                default:
+                    done(.failure(ScriptFailure(code: AppleEventCode.timedOut)))
+                case "desktop-player.queue-finish":
                     done(.success(.scriptList([text("ok"), NSAppleEventDescriptor(int32: 0)])))
+                default:
+                    done(.success(.scriptList([text("ok"), text("played")])))
                 }
             }
         }
@@ -85,10 +91,11 @@ final class QueueOrphanTests: XCTestCase {
         // A build whose finish renamed its playlist but whose reply was lost.
         store.queueID = "1111"
         fake.finishFails = true
-        do {
-            try await search.playInContext(persistentID: "AB12", index: nil)
-            XCTFail("the finish failed")
-        } catch {}
+        let outcome = try await search.playInContext(persistentID: "AB12", index: nil)
+        XCTAssertEqual(outcome, .alone(.rescued), "the finish failed, so the song plays on its own")
+        let rescue = try XCTUnwrap(fake.source("desktop-player.queue-rescue"))
+        XCTAssertFalse(rescue.contains("if ownName is \"Lunalyr Queue\" then delete"),
+                       "a playlist the finish may have renamed and started is never deleted by the rescue")
         XCTAssertEqual(store.queueID, "1111")
         XCTAssertEqual(store.pendingIDs, ["FFEE"], "the unfinished playlist stays on record")
 

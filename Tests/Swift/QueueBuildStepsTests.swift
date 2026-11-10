@@ -26,9 +26,11 @@ final class QueueBuildStepsTests: XCTestCase {
                 self.lock.withLock { self.sent.append(script) }
                 let answer: NSAppleEventDescriptor
                 switch script.name {
-                case "desktop-player.queue-prepare": answer = .scriptList([text("ok"), text("made"), text("FFEE")])
+                case "desktop-player.queue-prepare":
+                    answer = .scriptList([text("ok"), text("made"), text("playlist"), number(300), text("FFEE")])
                 case "desktop-player.queue-collect": answer = self.collectReply
                 case "desktop-player.queue-finish": answer = .scriptList([text("ok"), number(0)])
+                case "desktop-player.queue-fill": answer = .scriptList([text("ok"), number(Double(self.copiedPerFill(script)))])
                 default: answer = .scriptList([text("ok")])
                 }
                 done(.success(answer))
@@ -36,6 +38,13 @@ final class QueueBuildStepsTests: XCTestCase {
         }
 
         var names: [String] { lock.withLock { sent.map(\.name) } }
+
+        /// Every song a fill names, or every position in its range, was copied.
+        func copiedPerFill(_ script: PlayerScript) -> Int {
+            if let match = script.source.firstMatch(of: /duplicate tracks (\d+) thru (\d+) of src/),
+               let from = Int(match.1), let to = Int(match.2) { return to - from + 1 }
+            return script.source.components(separatedBy: "\", \"").count
+        }
     }
 
     private func store() -> (QueuePlaylistStore, UserDefaults, String) {
@@ -70,21 +79,54 @@ final class QueueBuildStepsTests: XCTestCase {
         XCTAssertEqual(store.pendingIDs, [])
     }
 
-    func testTheLibraryIsCopiedInOneRangedDuplicate() async throws {
-        let fake = FakeMusicLane(collectReply: .scriptList([text("ok"), text("copied")]))
+    func testTheLibraryIsCopiedInShortRangedDuplicates() async throws {
+        // The song is the library's 140th; 150 songs from there wrap round to the first 39.
+        let fake = FakeMusicLane(collectReply: .scriptList([text("ok"), text("range"), number(140), number(250), number(39)]))
         let (store, defaults, name) = store()
         defer { defaults.removePersistentDomain(forName: name) }
         var search = AppleMusicSearch()
         search.store = store
         search.desk = ScriptDesk { fake.lane }
-        try await search.playInContext(persistentID: "AB12", index: nil)
-        XCTAssertEqual(fake.names, ["desktop-player.queue-prepare", "desktop-player.queue-collect", "desktop-player.queue-finish"])
+        let outcome = try await search.playInContext(persistentID: "AB12", index: nil)
+        XCTAssertEqual(outcome, .queued(songs: 150, wanted: 150, fromAlbum: false))
+        XCTAssertNil(outcome.note)
+        let fills = fake.lock.withLock { fake.sent.filter { $0.name == "desktop-player.queue-fill" }.map(\.source) }
+        let ranges = fills.compactMap { source -> ClosedRange<Int>? in
+            guard let match = source.firstMatch(of: /duplicate tracks (\d+) thru (\d+) of src/),
+                  let from = Int(match.1), let to = Int(match.2) else { return nil }
+            return from...to
+        }
+        XCTAssertEqual(ranges, [140...164, 165...189, 190...214, 215...239, 240...250, 1...25, 26...39],
+                       "the playing song first, in order, then the wrap round, never more than 25 in one event")
+        XCTAssertEqual(fake.names.first, "desktop-player.queue-prepare")
+        XCTAssertEqual(fake.names.last, "desktop-player.queue-finish")
 
         let collect = AppleMusicSearch.collectQueue(persistentID: "AB12", index: nil, into: "FFEE")
-        XCTAssertTrue(collect.contains("if class of src is library playlist then\nduplicate tracks n thru endAt of src to newList"))
-        XCTAssertTrue(collect.contains("if upTo > 0 then duplicate tracks 1 thru upTo of src to newList"))
+        XCTAssertTrue(collect.contains("if class of src is library playlist then return {\"ok\", \"range\", n, endAt, upTo}"))
+        XCTAssertFalse(collect.contains("duplicate"), "collecting copies nothing")
         XCTAssertFalse(collect.contains("whose persistent ID is wantedID"), "no library-wide search per song")
-        XCTAssertFalse(collect.contains("repeat with idItem"))
+    }
+
+    func testOneSongMusicWontAddDoesNotSinkTheBuild() throws {
+        let fill = AppleMusicSearch.fillRange(from: 3, to: 27, into: "FFEE")
+        // The ranged copy first; only if it was refused and added nothing, one at a time.
+        let ranged = try XCTUnwrap(fill.range(of: "duplicate tracks 3 thru 27 of src to newList"))
+        let guardLine = try XCTUnwrap(fill.range(of: "if (count of tracks of newList) is countBefore then\nrepeat with i from 3 to 27"))
+        XCTAssertLessThan(ranged.lowerBound, guardLine.lowerBound)
+        XCTAssertTrue(fill.contains("duplicate track i of src to newList"))
+        XCTAssertTrue(fill.contains("set src to library playlist 1"), "only library songs are copied")
+        XCTAssertEqual(fill.components(separatedBy: "if errorNumber is not in \(AppleMusicSearch.skippable) then error number errorNumber").count, 3)
+        XCTAssertTrue(AppleMusicSearch.skippable.contains("-10006") && AppleMusicSearch.skippable.contains("-10000"))
+        XCTAssertFalse(AppleMusicSearch.skippable.contains("-1712"), "a timeout ends the step")
+        XCTAssertTrue(fill.contains("return {\"ok\", copied}"))
+        XCTAssertFalse(fill.contains("delete track"))
+    }
+
+    func testRangeChunks() {
+        XCTAssertEqual(AppleMusicSearch.rangeChunks([]), [])
+        XCTAssertEqual(AppleMusicSearch.rangeChunks([1...25]), [1...25])
+        XCTAssertEqual(AppleMusicSearch.rangeChunks([1...26]), [1...25, 26...26])
+        XCTAssertEqual(AppleMusicSearch.rangeChunks([0...3, 5...5]), [5...5], "position 0 does not exist")
     }
 
     func testChunksAndIDsAreSafe() {

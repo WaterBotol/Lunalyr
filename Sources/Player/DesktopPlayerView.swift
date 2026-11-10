@@ -130,6 +130,7 @@ struct DesktopPlayerView: View {
         .onChange(of: nowPlaying.isPlaying) { _, playing in
             playToggle.reconcile(actual: playing, now: Self.uptime)
         }
+        .onChange(of: model.playNoteToken) { _, _ in noteTrigger += 1 }
         .onChange(of: model.queue) { _, queue in
             if let optimisticCurrent, queue.first(where: \.isCurrent)?.id == optimisticCurrent { self.optimisticCurrent = nil }
         }
@@ -242,7 +243,8 @@ struct DesktopPlayerView: View {
             EmptyPlayerTile(title: nowPlaying.idleTitle)
         } else {
             CoverStrip(items: model.queue, tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork,
-                       recenter: recenter, note: model.shuffleOn ? "Shuffle is on: this is the playlist\u{2019}s order" : nil,
+                       recenter: recenter,
+                       note: model.playNote ?? (model.shuffleOn ? "Shuffle is on: this is the playlist\u{2019}s order" : nil),
                        noteTrigger: noteTrigger, shown: shown, paused: paused, labelsDimmed: labelsDimmed,
                        sidesDimmed: sidesDimmed, optimisticCurrent: optimisticCurrent, onTap: coverTapped)
         }
@@ -587,6 +589,7 @@ struct CoverStrip: View {
     @State private var decay: Task<Void, Never>?
     @State private var wheel = WheelBridge()
     @State private var noteShown = false
+    @State private var noteShownFor = 0
     @State private var fanned = true
 
     private var currentID: String? {
@@ -601,6 +604,11 @@ struct CoverStrip: View {
     /// showed through the time and lyric).
     static func labelOpacity(dimmed: Bool) -> Double { dimmed ? 0 : 1 }
 
+    /// Long enough to read the note: 2.5 s for a short one, up to 7 s.
+    nonisolated static func noteSeconds(_ note: String?) -> Double {
+        min(7, max(2.5, Double(note?.count ?? 0) / 14))
+    }
+
     var body: some View {
         Group {
             if preview != nil { staticRow } else { scrollingRow }
@@ -614,11 +622,13 @@ struct CoverStrip: View {
             }
         }
         .animation(.easeOut(duration: 0.3), value: noteShown)
-        .onChange(of: noteTrigger) { _, _ in
+        .onChange(of: noteTrigger) { _, trigger in
             noteShown = true
+            noteShownFor = trigger
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
-                noteShown = false
+                try? await Task.sleep(nanoseconds: UInt64(Self.noteSeconds(note) * 1_000_000_000))
+                // A newer note keeps its own time on screen.
+                if noteShownFor == trigger { noteShown = false }
             }
         }
         .onChange(of: shown) { _, now in
