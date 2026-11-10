@@ -34,6 +34,20 @@ final class PlayerKeyboard {
         guard let handlers = handlers[displayID] else { return false }
         let editing = (event.window?.firstResponder as? NSTextView)?.isFieldEditor == true
         let flags = event.modifierFlags
+        // Lining up the music video: the arrows move the video, Return
+        // keeps it, Esc cancels (a seek-bar drag's Esc stays the seek bar's).
+        let musicVideo = MusicVideoController.shared
+        if musicVideo.isAligning, !handlers.scrub.isDragging,
+           let key = MusicVideoAlignKey.action(keyCode: event.keyCode, shift: flags.contains(.shift),
+                                               option: flags.contains(.option), command: flags.contains(.command),
+                                               control: flags.contains(.control), editingText: editing) {
+            switch key {
+            case .nudge(let delta): musicVideo.alignNudge(by: delta)
+            case .done: musicVideo.alignDone()
+            case .cancel: musicVideo.alignCancel()
+            }
+            return true
+        }
         guard let action = PlayerKeyMap.action(
             keyCode: event.keyCode, characters: event.charactersIgnoringModifiers ?? "",
             command: flags.contains(.command), option: flags.contains(.option), control: flags.contains(.control),

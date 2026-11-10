@@ -190,6 +190,7 @@ final class MusicVideoController: ObservableObject {
         stopAutoSync()
         endCutSync()
         resetTaps()
+        endAlign()
         guard enabled else { status = .off; return }
         guard let next else {
             status = isAdvertOrStream ? .missing(.notASong, title: track?.title ?? "") : .idle
@@ -262,6 +263,7 @@ final class MusicVideoController: ObservableObject {
     /// - The library's own file would not play: said as such.
     func reportPlaybackFailure(of source: MusicVideoSource, _ failure: MusicVideoPlaybackFailure = .refused) {
         guard let song, case .showing(let showing, _) = status, showing == source else { return }
+        endAlign()
         switch (source, failure) {
         case (.local, _):
             status = .missing(.localFileFailed, title: song.title)
@@ -363,6 +365,7 @@ final class MusicVideoController: ObservableObject {
         stopAutoSync()
         endCutSync()
         resetTaps()
+        endAlign()
         objectWillChange.send()
         guard enabled else { return }
         status = .searching(title: song.title)
@@ -380,14 +383,19 @@ final class MusicVideoController: ObservableObject {
     /// How far into the video the song starts, for the playing song: the
     /// user's nudge, else the automatic offset for this video, else the
     /// length estimate, else 0.
-    var currentOffset: Double { offsets.offset(for: song?.key, video: showingVideoKey, now: now()) }
+    /// While the video's bar is dragged, the offset under the hand.
+    var currentOffset: Double {
+        if isAlignDragging, let alignDrag { return MusicVideoTiming.clampedOffset(alignDrag.offset) }
+        return offsets.offset(for: song?.key, video: showingVideoKey, now: now())
+    }
 
     /// Where `currentOffset` came from.
     var offsetOrigin: MusicVideoOffsetOrigin { offsets.origin(for: song?.key, video: showingVideoKey, now: now()) }
 
     func offset(for track: NowPlayingMonitor.Track?) -> Double {
         let key = track.map { MusicVideoSong($0).key }
-        return offsets.offset(for: key, video: key == song?.key ? showingVideoKey : nil, now: now())
+        if let key, key == song?.key { return currentOffset }
+        return offsets.offset(for: key, video: nil, now: now())
     }
 
     /// The user's nudge, from the offset in force; it wins from then on,
@@ -439,6 +447,7 @@ final class MusicVideoController: ObservableObject {
     func noteVideoDuration(_ duration: Double, of source: MusicVideoSource) {
         guard let song, case .showing(let showing, _) = status, showing == source,
               let video = MusicVideoOffsets.videoKey(source) else { return }
+        if duration.isFinite, duration > 0 { videoLengths[video] = duration }
         let estimate = MusicVideoDurationEstimate.intro(videoDuration: duration, songDuration: song.duration)
         let before = currentOffset
         offsets.setEstimate(estimate, for: song.key, video: video)
@@ -702,7 +711,7 @@ final class MusicVideoController: ObservableObject {
     /// offset or one already found for it, and only with the music heard
     /// (System audio's capture running, or allowed to run briefly).
     func cutSyncWanted(_ source: MusicVideoSource) -> Bool {
-        guard cutSyncEnabled, !cutSyncing, case .youTube = source, let song, let pair = cutPairKey(source),
+        guard cutSyncEnabled, !cutSyncing, !isAligning, case .youTube = source, let song, let pair = cutPairKey(source),
               let video = MusicVideoOffsets.videoKey(source), !cutTried.contains(pair),
               !offsets.hasManual(song.key, video: video) else { return false }
         if let entry = offsets.automaticEntry(for: song.key, video: video, now: now()),
@@ -777,6 +786,184 @@ final class MusicVideoController: ObservableObject {
         cutListening = false
         cutPair = nil
         if cutSyncing { cutSyncing = false }
+    }
+
+    // MARK: Align by hand
+
+    /// The video's own length, by `videoKey`, as its player reported it.
+    private var videoLengths: [String: Double] = [:]
+    /// The wallpaper shows the video's still instead of playing it.
+    var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// A player that reported its position this recently can be sought.
+    static let respondingWithin: TimeInterval = 2
+
+    /// Align mode, while the player's seek row is the video's bar.
+    @Published private(set) var align: MusicVideoAlignSession?
+    /// The press on the video's bar in flight.
+    @Published private(set) var alignDrag: MusicVideoAlignDrag?
+    /// The offset was changed in this align mode.
+    @Published private(set) var alignTouched = false
+
+    /// Align mode is on, for the song and the video on screen now.
+    var isAligning: Bool {
+        guard let align, let song, align.songKey == song.key, align.video == showingVideoKey else { return false }
+        return true
+    }
+
+    /// A drag on the video's bar is in flight: the sync loop seeks the video
+    /// with it and does not correct it meanwhile.
+    /// Only while a button is down: a press whose release never came (its
+    /// view went away) can't hold the video or stop its correction.
+    var isAlignDragging: Bool { alignDrag != nil && isAligning && buttonsHeld() }
+    var buttonsHeld: () -> Bool = { AppRuntime.isUnitTesting || NSEvent.pressedMouseButtons != 0 }
+
+    /// The player reported the position of the video on screen lately.
+    private var videoResponding: Bool {
+        guard let sample = videoSample, sample.video == showingVideoKey else { return false }
+        let age = uptime() - sample.at
+        return age >= 0 && age < Self.respondingWithin
+    }
+
+    /// Whether align mode can start (or carry on), and if not, why.
+    var alignAvailability: MusicVideoAlignAvailability {
+        MusicVideoAlignAvailability.of(showing: enabled && song != nil && showingVideoKey != nil,
+                                       reduceMotion: reduceMotion(), songPlaying: songClock().playing,
+                                       responding: videoResponding)
+    }
+
+    /// The video's length on screen, or nil before its player said.
+    var showingVideoLength: Double? { showingVideoKey.flatMap { videoLengths[$0] } }
+
+    /// What the video's bar draws now, nil outside align mode.
+    func alignDisplay(songTime: Double? = nil) -> MusicVideoAlignDisplay? {
+        guard isAligning, let song else { return nil }
+        let offset = currentOffset
+        return MusicVideoAlignDisplay(
+            videoLength: MusicVideoAlignBar.videoLength(reported: showingVideoLength, songDuration: song.duration,
+                                                        offset: offset),
+            songDuration: song.duration, offset: offset, songTime: songTime ?? songClock().time,
+            origin: offsetOrigin, dragging: alignDrag != nil, rateLabel: alignDrag?.rateLabel,
+            touched: alignTouched, available: alignAvailability.isAvailable)
+    }
+
+    /// Starts align mode. False (nothing changes) when it can't start.
+    @discardableResult
+    func beginAlign() -> Bool {
+        if isAligning { return true }
+        guard alignAvailability.isAvailable, let song, let video = showingVideoKey else { return false }
+        if case .armed = tapState { cancelTapSync() }
+        endCutSync()
+        align = MusicVideoAlignSession(songKey: song.key, video: video, restore: offsets.manualEntry(song.key))
+        alignDrag = nil
+        alignTouched = false
+        return true
+    }
+
+    /// A press on the video's bar at `x` (points from its leading edge,
+    /// `width` wide), `y` from its centre line.
+    func alignMouseDown(x: Double, y: Double, width: Double, option: Bool = false) {
+        // A press left over from a release that never came is replaced.
+        guard isAligning, let song else { return }
+        let clock = songClock()
+        alignDrag = nil
+        let offset = currentOffset
+        let length = MusicVideoAlignBar.videoLength(reported: showingVideoLength, songDuration: song.duration, offset: offset)
+        let knob = MusicVideoAlignBar.layout(videoLength: length, songDuration: song.duration, offset: offset,
+                                             songTime: clock.time, width: width).knob
+        alignDrag = MusicVideoAlignDrag(
+            x: x, y: y, knobX: knob, offset: offset,
+            secondsPerPoint: MusicVideoAlignBar.secondsPerPoint(videoLength: length, width: width),
+            bounds: MusicVideoAlignBar.bounds(videoLength: length, songTime: clock.time, current: offset), option: option)
+        endCutSync()
+    }
+
+    /// The pointer moved with the button down. True when the knob just
+    /// reached an end of the video (one alignment haptic).
+    @discardableResult
+    func alignMouseDragged(x: Double, y: Double, option: Bool = false) -> Bool {
+        guard isAligning, var drag = alignDrag else { return false }
+        let reached = drag.move(x: x, y: y, option: option)
+        if drag != alignDrag { alignDrag = drag }
+        return reached
+    }
+
+    func alignModifiersChanged(option: Bool) {
+        guard isAligning, var drag = alignDrag else { return }
+        drag.modifiersChanged(option: option)
+        if drag != alignDrag { alignDrag = drag }
+    }
+
+    /// The release keeps the offset under the hand, for this song's video,
+    /// as the user's own (it beats anything automatic from then on).
+    func alignMouseUp(x: Double, y: Double, option: Bool = false) {
+        guard isAligning, alignDrag != nil else { alignDrag = nil; return }
+        alignMouseDragged(x: x, y: y, option: option)
+        guard let drag = alignDrag, let song else { alignDrag = nil; return }
+        alignDrag = nil
+        guard drag.changed else { return }
+        offsets.set(drag.offset, for: song.key, video: showingVideoKey)
+        endCutSync()
+        resetTaps()
+        alignTouched = true
+        objectWillChange.send()
+    }
+
+    /// ← → (± a tenth), ⇧← ⇧→ (± a second): kept at once, like Video
+    /// earlier and later (the same offset).
+    func alignNudge(by delta: Double) {
+        guard isAligning, alignDrag == nil else { return }
+        nudgeOffset(by: delta)
+        alignTouched = true
+    }
+
+    /// Back to the automatic offset; align mode stays on to see it.
+    func alignReset() {
+        guard isAligning else { return }
+        alignDrag = nil
+        resetOffset()
+        alignTouched = true
+    }
+
+    /// Esc: a drag in flight springs back (nothing was kept yet); otherwise
+    /// the offset from before align mode is put back and align mode ends.
+    func alignCancel() {
+        guard isAligning, let align else { endAlign(); return }
+        if alignDrag != nil {
+            alignDrag = nil
+            return
+        }
+        if alignTouched {
+            let restore = align.restore
+            endAlign()
+            if let restore {
+                offsets.restoreManual(restore, for: align.songKey)
+                resetTaps()
+                objectWillChange.send()
+            } else {
+                resetOffset()
+            }
+        } else {
+            endAlign()
+        }
+    }
+
+    /// Done (Return): keeps what was set and ends align mode.
+    func alignDone() {
+        // A press still in flight (its release never came): kept as it is.
+        if alignDrag != nil { alignMouseUp(x: .nan, y: .nan) }
+        endAlign()
+    }
+
+    /// The film button: on, or off keeping what was set.
+    func toggleAlign() {
+        if isAligning { alignDone() } else { beginAlign() }
+    }
+
+    /// Ends align mode where it is (a song change, a new video).
+    func endAlign() {
+        if align != nil { align = nil }
+        if alignDrag != nil { alignDrag = nil }
+        if alignTouched { alignTouched = false }
     }
 
     // MARK: Settings copy

@@ -275,6 +275,22 @@ final class MusicVideoOffsets: ObservableObject {
         set(offset(for: songKey, video: video, now: now) + delta, for: songKey, video: video)
     }
 
+    /// The user's own offset for a song, as stored: its value and the video
+    /// it was set on (nil: set before videos were told apart).
+    struct ManualEntry: Equatable, Sendable {
+        var value: Double
+        var video: String?
+    }
+
+    func manualEntry(_ songKey: String) -> ManualEntry? {
+        values[songKey].map { ManualEntry(value: $0, video: manualVideos[songKey]) }
+    }
+
+    /// Puts back what `manualEntry` read (nil: there was none).
+    func restoreManual(_ entry: ManualEntry?, for songKey: String) {
+        if let entry { set(entry.value, for: songKey, video: entry.video) } else { clearManual(songKey) }
+    }
+
     /// Back to the automatic offset (or none).
     func clearManual(_ songKey: String) {
         guard values.removeValue(forKey: songKey) != nil else { return }

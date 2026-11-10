@@ -175,7 +175,9 @@ final class HoverState: ObservableObject {
         // A search in progress keeps the player up while the pointer is elsewhere.
         // Forget a display that has been unplugged since.
         if let pinned = pinnedDisplay, !displays.contains(where: { $0.displayID == pinned }) { pinnedDisplay = nil }
-        if active == nil, DesktopPlayerModel.shared.isPinned, let pinned = pinnedDisplay ?? activeDisplayID,
+        // So does lining up the music video.
+        let pinnedOpen = DesktopPlayerModel.shared.isPinned || MusicVideoController.shared.isAligning
+        if active == nil, pinnedOpen, let pinned = pinnedDisplay ?? activeDisplayID,
            displays.contains(where: { $0.displayID == pinned }) { active = pinned }
         if let active, pinnedDisplay != active { pinnedDisplay = active }
         if active != activeDisplayID {
@@ -189,6 +191,13 @@ final class HoverState: ObservableObject {
     /// The display the player was last shown on: a search in progress stays
     /// there, and only there.
     @Published private(set) var pinnedDisplay: CGDirectDisplayID?
+
+    /// Align mode started from the menu bar: the player comes up on the
+    /// display it was last shown on, or the main one, at the next poll.
+    func pinForAlign() {
+        if pinnedDisplay == nil { pinnedDisplay = CGMainDisplayID() }
+        lastLocation = nil
+    }
 
     /// Whether the player shows on `displayID`: where the pointer hovers, and,
     /// while a search is typed, on the one display it was typed on -- not on

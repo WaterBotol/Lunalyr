@@ -264,6 +264,15 @@ struct MusicVideoCorrector {
         }
     }
 
+    /// Someone else sought the video at `now` (a drag on the video's bar):
+    /// it is given time to land like one of the corrector's own seeks.
+    mutating func noteSeek(at now: TimeInterval) {
+        guard now.isFinite else { return }
+        lastSeek = max(lastSeek, now)
+        pendingLead = nil
+        resetRate()
+    }
+
     /// AVPlayer's `play()` and seeks leave the rate at 1.
     private mutating func resetRate() {
         rate = 1

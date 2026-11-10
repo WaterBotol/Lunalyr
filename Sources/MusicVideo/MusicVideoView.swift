@@ -154,6 +154,8 @@ extension MusicVideoPlaybackSurface {
 @MainActor
 final class MusicVideoSyncLoop {
     static let interval: TimeInterval = 0.25
+    /// The check while the video's bar is dragged: the video follows the hand.
+    static let dragInterval: TimeInterval = 1.0 / 15
     weak var surface: MusicVideoPlaybackSurface?
     private let songTime: () -> Double
     private let songPlaying: () -> Bool
@@ -178,6 +180,11 @@ final class MusicVideoSyncLoop {
     /// never sought to the next song's position (which would flash its
     /// opening frame, or another part of it, during the fade).
     var isCurrent: () -> Bool = { true }
+    /// The video's bar is being dragged (align mode): the video is sought
+    /// with the hand (`MusicVideoAlignSeeker`) and not corrected meanwhile.
+    var alignDragging: () -> Bool = { false }
+    /// The drag's seeks, while one is in flight.
+    private(set) var seeker: MusicVideoAlignSeeker?
 
     /// Follows the shared now-playing monitor and the playing song's offset.
     /// The song's own position, not the lyrics' lead: offsets are measured
@@ -187,6 +194,7 @@ final class MusicVideoSyncLoop {
                   songPlaying: { NowPlayingMonitor.shared.isPlaying },
                   offset: { MusicVideoController.shared.currentOffset },
                   uptime: { ProcessInfo.processInfo.systemUptime })
+        alignDragging = { MusicVideoController.shared.isAlignDragging }
     }
 
     init(songTime: @escaping () -> Double, songPlaying: @escaping () -> Bool, offset: @escaping () -> Double,
@@ -199,14 +207,22 @@ final class MusicVideoSyncLoop {
 
     func start() {
         guard timer == nil else { return }
-        let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
-        }
-        timer.tolerance = 0.05
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        schedule(alignDragging() ? Self.dragInterval : Self.interval)
         tick()
     }
+
+    private func schedule(_ interval: TimeInterval) {
+        timer?.invalidate()
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        timer.tolerance = min(0.05, interval / 4)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    /// The pace of the checks right now (for tests).
+    var checkInterval: TimeInterval? { timer?.timeInterval }
 
     func stop() {
         timer?.invalidate()
@@ -233,6 +249,11 @@ final class MusicVideoSyncLoop {
     /// One check. Public for tests.
     func tick() {
         guard let surface else { return }
+        // Quicker while the video's bar is dragged, back to the usual after.
+        if let timer {
+            let wanted = alignDragging() ? Self.dragInterval : Self.interval
+            if timer.timeInterval != wanted { schedule(wanted) }
+        }
         // Before the sample: a closed player (a long pause) has none, and
         // still needs to hear that the song plays again.
         surface.noteHold(hold(videoDuration: lastDuration))
@@ -274,12 +295,31 @@ final class MusicVideoSyncLoop {
             let shouldPlay = !self.surfacePaused && self.songPlaying()
             let style = surface.correctionStyle
             if self.corrector?.style != style { self.corrector = MusicVideoCorrector(style: style) }
-            // A change of offset (a nudge, a tap, a found offset) is applied
-            // at once, however small.
-            if let last = self.lastOffset, abs(offset - last) >= 0.05 { self.corrector?.targetMoved() }
-            self.lastOffset = offset
-            let action = self.corrector!.decide(target: target, sample: sample, shouldPlay: shouldPlay,
+            let action: MusicVideoCorrector.Action
+            if self.alignDragging() {
+                // The hand moves the video: seek with it, correct nothing.
+                if self.seeker?.style != style {
+                    self.seeker = MusicVideoAlignSeeker(style: style, offset: self.lastOffset ?? offset)
+                }
+                let lead = style == .ledSeek ? (self.corrector?.latency.lead ?? surface.seekLead) : surface.seekLead
+                action = self.seeker!.decide(offset: offset, target: target, sample: sample, shouldPlay: shouldPlay,
+                                             now: self.uptime(), lead: lead)
+                self.lastOffset = offset
+            } else {
+                if let seeker = self.seeker {
+                    // Released: correction resumes from the drag's last seek,
+                    // with the new offset applied however small the change.
+                    self.seeker = nil
+                    self.corrector?.noteSeek(at: seeker.lastSeek)
+                    self.corrector?.targetMoved()
+                }
+                // A change of offset (a nudge, a tap, a found offset) is applied
+                // at once, however small.
+                if let last = self.lastOffset, abs(offset - last) >= 0.05 { self.corrector?.targetMoved() }
+                self.lastOffset = offset
+                action = self.corrector!.decide(target: target, sample: sample, shouldPlay: shouldPlay,
                                                 now: self.uptime(), fixedLead: surface.seekLead)
+            }
             switch action {
             case .none: break
             case .play: surface.playVideo()

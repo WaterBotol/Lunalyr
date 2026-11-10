@@ -51,6 +51,10 @@ final class ControlPanelController {
             .store(in: &cancellables)
         DesktopPlayerModel.shared.objectWillChange.sink { [weak self] _ in self?.masksStale = true }
             .store(in: &cancellables)
+        // Align mode swaps the seek row and the transport for the video's.
+        MusicVideoController.shared.$align.map { $0 != nil }.removeDuplicates()
+            .sink { [weak self] _ in self?.masksStale = true }
+            .store(in: &cancellables)
         LyricsViewModel.shared.$provenance.sink { [weak self] _ in self?.masksStale = true }
             .store(in: &cancellables)
         DesktopOptions.shared.$showsControlsOnHover.removeDuplicates().dropFirst().sink { [weak self] _ in
