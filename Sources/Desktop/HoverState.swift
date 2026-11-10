@@ -16,7 +16,14 @@ final class HoverState: ObservableObject {
     private var timer: Timer?
     private var session = VCHoverSession()
     private let lingerDuration: TimeInterval = 0.7
-    private static let interval: TimeInterval = 0.09
+    nonisolated private static let interval: TimeInterval = 0.09
+    /// The poll while the pointer has rested a while and nothing is shown:
+    /// the first movement is noticed a little later, then the poll is quick
+    /// again. Lunalyr runs all day; most of it with the pointer still.
+    nonisolated static let restingInterval: TimeInterval = 0.25
+    nonisolated static let restAfter: TimeInterval = 1.5
+    /// When the pointer last moved, or the controls were last up.
+    private var lastMotion: TimeInterval = 0
     private var started = false
     private var cancellables: Set<AnyCancellable> = []
     private var lastLocation: CGPoint?
@@ -59,10 +66,22 @@ final class HoverState: ObservableObject {
         }
         guard timer == nil else { return }
         lastLocation = nil
-        let tick = Timer(timeInterval: Self.interval, repeats: true) { _ in
+        lastMotion = ProcessInfo.processInfo.systemUptime
+        schedule(Self.interval)
+    }
+
+    /// How often to poll: quickly while the pointer moves or the controls
+    /// are up, and for `restAfter` seconds after.
+    nonisolated static func pollInterval(stillFor: TimeInterval, active: Bool) -> TimeInterval {
+        !active && stillFor >= restAfter ? restingInterval : interval
+    }
+
+    private func schedule(_ interval: TimeInterval) {
+        timer?.invalidate()
+        let tick = Timer(timeInterval: interval, repeats: true) { _ in
             Task { @MainActor in HoverState.shared.poll() }
         }
-        tick.tolerance = Self.interval / 3
+        tick.tolerance = interval / 3
         timer = tick
         RunLoop.main.add(tick, forMode: .common)
     }
@@ -79,6 +98,11 @@ final class HoverState: ObservableObject {
         let moved = location != lastLocation || buttons != lastButtons
         lastLocation = location
         lastButtons = buttons
+        let now = ProcessInfo.processInfo.systemUptime
+        let shown = session.activeDisplayID != 0 || activeDisplayID != nil
+        if moved || shown { lastMotion = now }
+        let wanted = Self.pollInterval(stillFor: now - lastMotion, active: shown)
+        if let timer, timer.timeInterval != wanted { schedule(wanted) }
         // A resting pointer cannot start a reveal; an active one still needs
         // its linger timed and its controls kept in reach.
         guard moved || session.activeDisplayID != 0 else { return }

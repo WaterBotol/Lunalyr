@@ -13,10 +13,12 @@ actor MotionArtworkProvider {
     typealias Fetch = @Sendable (URLRequest) async -> (Data, URLResponse)?
 
     private let fetch: Fetch
-    private var cache: [String: Motion] = [:]
+    /// Bounded: the app runs all day, and every album played adds a key.
+    static let cacheCapacity = 256
+    private var cache = BoundedCache<String, Motion>(capacity: MotionArtworkProvider.cacheCapacity)
     /// Albums Apple was reached for and has no animated cover. Session-only:
     /// a cover added later appears after a relaunch.
-    private var misses: Set<String> = []
+    private var misses = BoundedCache<String, Bool>(capacity: MotionArtworkProvider.cacheCapacity)
 
     init(session: URLSession = .shared) {
         fetch = { request in try? await session.data(for: request) }
@@ -37,8 +39,8 @@ actor MotionArtworkProvider {
 
     func motion(album: String?, artist: String, title: String) async -> Motion? {
         let key = Self.cacheKey(album: album, artist: artist, title: title)
-        if let cached = cache[key] { return cached }
-        if misses.contains(key) { return nil }
+        if let cached = cache.value(for: key) { return cached }
+        if misses.value(for: key) != nil { return nil }
 
         // Only an answer from Apple is a miss. A failure to reach it must
         // not become a negative cache, even for the session.
@@ -61,13 +63,13 @@ actor MotionArtworkProvider {
                     }
                     if let artwork = Self.parse(html: html) {
                         let motion = await progressive(artwork)
-                        if !Task.isCancelled { cache[key] = motion }
+                        if !Task.isCancelled { cache.insert(motion, for: key) }
                         return motion
                     }
                 }
             }
         }
-        if reachedApple, !Task.isCancelled { misses.insert(key) }
+        if reachedApple, !Task.isCancelled { misses.insert(true, for: key) }
         return nil
     }
 

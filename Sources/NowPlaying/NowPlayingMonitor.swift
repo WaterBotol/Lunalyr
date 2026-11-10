@@ -219,6 +219,10 @@ final class NowPlayingMonitor: ObservableObject {
     private var anchorIsEstimate = false
     private var timer: Timer?
     private var ticks = 0
+    /// When the player on screen last stopped playing (uptime), while it
+    /// stays paused: after `restingAfter` a player that announces its own
+    /// changes is re-read like the background ones, not every tick.
+    private var pausedSince: TimeInterval?
     private var artworkTask: Task<Void, Never>?
     private var artworkTarget: Track?
     private var motionLookup: Task<Void, Never>?
@@ -231,6 +235,11 @@ final class NowPlayingMonitor: ObservableObject {
     private static let idlePollEvery = 5
     /// Every other tick for idle players that post no notifications.
     private static let quietPollEvery = 2
+    /// How long the player on screen stays paused before its re-sync slows
+    /// to `idlePollEvery`. Music and Spotify announce play, pause and track
+    /// changes themselves; the re-sync of a paused player only catches a
+    /// scrub, so a long pause need not wake the player every two seconds.
+    static let restingAfter: TimeInterval = 60
     /// Nudges lyrics slightly ahead of the raw clock. An Apple event only
     /// tells us where the player *was*, and the audio itself is buffered a
     /// little behind that, so a small lead lands the highlight on the beat
@@ -874,6 +883,7 @@ final class NowPlayingMonitor: ObservableObject {
             requestPosition(kind)
         }
         if isPlaying != running { isPlaying = running }
+        if running || isNewTrack { pausedSince = running ? nil : now } else if pausedSince == nil { pausedSince = now }
         if isNewTrack {
             loadArtwork(for: track, from: kind)
             updateMotionArtwork()
@@ -883,6 +893,7 @@ final class NowPlayingMonitor: ObservableObject {
     private func clearPlayback() {
         if current != nil { current = nil } else if idleSince == nil { idleSince = Date() }
         if isPlaying { isPlaying = false }
+        pausedSince = nil
         clock.reset()
         anchorIsEstimate = false
         artworkGeneration.advance()
@@ -938,10 +949,11 @@ final class NowPlayingMonitor: ObservableObject {
     /// case a notification went missing.
     func tick() {
         ticks &+= 1
+        let resting = pausedSince.map { uptime() - $0 >= Self.restingAfter } ?? false
         // Players that announce nothing are asked more often while idle:
         // asking is the only way to notice them start.
         for kind in pollablePlayers
-        where kind == activePlayer || snapshots[kind] == nil
+        where (kind == activePlayer && !(resting && !kind.pollsForChanges)) || snapshots[kind] == nil
             || ticks % (kind.pollsForChanges ? Self.quietPollEvery : Self.idlePollEvery) == 0 {
             requestPosition(kind)
         }
@@ -975,7 +987,16 @@ final class NowPlayingMonitor: ObservableObject {
             // behind it, so a burst of skips reads one cover.
             guard artworkGeneration.value == generation else { return }
             let reply = connection.artwork(backend)
-            scheduler.main { [weak self] in self?.receiveArtwork(reply, from: kind, generation: generation) }
+            // Decoded here, off the main thread.
+            let decoded: CGImage?
+            if case .value(let read) = reply, case .image(let data) = read.reading {
+                decoded = ArtworkImage.decode(data)
+            } else {
+                decoded = nil
+            }
+            scheduler.main { [weak self] in
+                self?.receiveArtwork(reply, decoded: decoded, from: kind, generation: generation)
+            }
         }
     }
 
@@ -983,7 +1004,8 @@ final class NowPlayingMonitor: ObservableObject {
         generation == artworkGeneration.value
     }
 
-    private func receiveArtwork(_ response: PlayerResponse<ArtworkReply>, from kind: PlayerKind, generation: Int) {
+    private func receiveArtwork(_ response: PlayerResponse<ArtworkReply>, decoded: CGImage?, from kind: PlayerKind,
+                                generation: Int) {
         let reply = accept(response, from: kind)
         guard isCurrentArtwork(generation), activePlayer == kind, let target = artworkTarget, let current,
               target.isSameTrack(as: current) else { return }
@@ -991,9 +1013,9 @@ final class NowPlayingMonitor: ObservableObject {
         // track's own load follows its notification or the next re-sync.
         if let read = reply?.trackID, let known = current.persistentID, read != known { return }
         switch reply?.reading {
-        case .image(let data)?:
-            if let image = NSImage(data: data) {
-                setArtwork(image, for: current)
+        case .image?:
+            if let decoded {
+                setArtwork(ArtworkImage.image(decoded), for: current)
             } else {
                 searchCatalogue(for: current, from: kind, generation: generation)
             }
@@ -1018,9 +1040,10 @@ final class NowPlayingMonitor: ObservableObject {
         let download = services.downloadArtwork
         artworkTask = Task { [weak self] in
             let data = await download(url)
+            let decoded = await ArtworkImage.decodeDetached(data)
             guard let self, !Task.isCancelled, self.isCurrentArtwork(generation),
                   let current = self.current, track.isSameTrack(as: current) else { return }
-            self.setArtwork(data.flatMap { NSImage(data: $0) }, for: current)
+            self.setArtwork(decoded.map(ArtworkImage.image), for: current)
         }
     }
 
@@ -1037,11 +1060,12 @@ final class NowPlayingMonitor: ObservableObject {
         let search = services.catalogueArtwork
         artworkTask = Task { [weak self] in
             let data = await search(track)
+            let decoded = await ArtworkImage.decodeDetached(data)
             guard let self, !Task.isCancelled, self.isCurrentArtwork(generation),
                   let current = self.current, track.isSameTrack(as: current) else { return }
-            // NSImage remains on the main actor; only immutable, Sendable
-            // image bytes cross the provider's boundary.
-            self.setArtwork(data.flatMap { NSImage(data: $0) }, for: current)
+            // NSImage remains on the main actor; only immutable image bytes
+            // and the decoded CGImage cross the provider's boundary.
+            self.setArtwork(decoded.map(ArtworkImage.image), for: current)
         }
     }
 
