@@ -26,9 +26,25 @@ struct MenuBarNowPlaying: View {
 /// This song's lyrics earlier or later, a tenth of a second a click: the
 /// per-song, per-source offset the shortcuts and Timing & sources change too.
 struct MenuBarLyricTiming: View {
+    @ObservedObject private var tapSync = LyricTapSyncController.shared
+    @Model(\.offsets) private var offsets
+
     var body: some View {
-        PanelSectionHeader("Lyric timing") {
-            SongTimingNudge()
+        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xSmall) {
+            PanelSectionHeader("Lyric timing") {
+                SongTimingNudge()
+            }
+            // Tap to sync: a key pressed as each line starts sets the timing.
+            HStack(spacing: 6) {
+                Spacer(minLength: 0)
+                Button(tapSync.isListening ? "Stop tap to sync" : "Tap to sync…") { tapSync.toggle() }
+                    .help("Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps")
+                if tapSync.canUndo {
+                    Button("Undo tap sync") { tapSync.undo() }
+                        .help("Back to the timing from before the last tap to sync")
+                }
+            }
+            .controlSize(.small)
         }
     }
 }
