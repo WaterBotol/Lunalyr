@@ -155,10 +155,18 @@ struct StageLyricView: View {
 
     private var leave: Double { Easing.smoothstep((time - exitStart) / 0.5) }
 
+    /// The runs that have arrived: always the first ones, in reading order,
+    /// as the layouts read their arrays by `run.id`. A source whose word
+    /// times run backwards made a filter skip an earlier run, and the next
+    /// one's id then read past the end of those arrays (a crash).
+    static func shownRuns(_ runs: [StageRun], at time: Double) -> [StageRun] {
+        Array(runs.prefix { time >= $0.start - 0.04 })
+    }
+
     var body: some View {
         if firstRunOnly == nil {
             let runs = StageRun.make(words, glue: glue)
-            let shown = runs.filter { time >= $0.start - 0.04 }
+            let shown = Self.shownRuns(runs, at: time)
             Group {
                 switch composition {
                 case .hinge: hinge(shown, total: runs.count)
