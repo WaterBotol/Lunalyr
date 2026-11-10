@@ -62,6 +62,9 @@ final class LyricsViewModel: ObservableObject {
     /// Latest progress of this track's lookup, and how it was started.
     private var report: LyricLookupReport?
     private var lastLookup: (query: LyricQuery, force: Bool)?
+    /// This lookup repeats one for lyrics already on screen (a settings
+    /// change, a returning connection): see `reception`.
+    private var rerun = false
     private var appliedRevision = 0
     private var retryWhenOnline = false
     /// Retries this track has had because a lookup looked offline while the
@@ -141,7 +144,7 @@ final class LyricsViewModel: ObservableObject {
         lastKey=next;lookupTask?.cancel();upgradeTask?.cancel();localTask?.cancel();generation=UUID()
         originalResult=nil;lines=[];plainLines=[];provenance=nil;notFound=false;notFoundAt=nil
         candidates=[];nearMisses=[];sourceStates=[:];pinnedMatch=false;cacheMessage=nil;isLoading=false;isRefining=false
-        report=nil;lastLookup=nil;appliedRevision=0;retryWhenOnline=false;onlineRetries=0;localChangedDuringLookup=false
+        report=nil;lastLookup=nil;appliedRevision=0;retryWhenOnline=false;onlineRetries=0;localChangedDuringLookup=false;rerun=false
         if let track {
             let query=LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
             startLookup(query,recording:query.recordingKey,force:false)
@@ -162,6 +165,7 @@ final class LyricsViewModel: ObservableObject {
         isLoading=true;isRefining=false;cacheMessage=nil
         // The previous lookup's report must not be refreshed into this one.
         report=nil;appliedRevision=0;retryWhenOnline=false;localChangedDuringLookup=false;lastLookup=(query,force)
+        rerun = !force && originalResult != nil
         let progress: @Sendable (LyricLookupReport) async -> Void = { [weak self] update in
             await self?.receive(update,ticket:ticket,recording:recording)
         }
@@ -182,10 +186,10 @@ final class LyricsViewModel: ObservableObject {
         }
         if sourceStates != update.states {sourceStates=update.states}
         if pinnedMatch != update.pinned {pinnedMatch=update.pinned}
-        if update.revision>appliedRevision || (update.isComplete && appliedRevision==0) {
-            let first=appliedRevision==0
+        let step=Self.reception(of:update,applied:appliedRevision,rerun:rerun)
+        if step != .ignore {
             appliedRevision=max(update.revision,1)
-            if !first {
+            if step == .swapAtBoundary {
                 upgrade(to:update.result,ticket:ticket)
             } else if !LyricsFetcher.sameResult(update.result,originalResult) || (originalResult==nil && !notFound) {
                 // A repeat lookup that finds the same lyrics leaves the screen alone.
@@ -205,6 +209,20 @@ final class LyricsViewModel: ObservableObject {
             localChangedDuringLookup=false
             localLyricsChanged()
         }
+    }
+    /// What `receive` does with a report: `.show` puts its result on screen
+    /// now, `.swapAtBoundary` once the line being sung ends (`upgrade`).
+    /// A lookup's first result shows at once and each later one swaps at a
+    /// boundary. A rerun for lyrics already on screen shows nothing until it
+    /// completes: its early choice could be worse than what is showing
+    /// (which the rerun may not have heard from yet), and showing it would
+    /// swap the song's lyrics twice, mid-line.
+    enum Reception: Equatable { case ignore, show, swapAtBoundary }
+    nonisolated static func reception(of update: LyricLookupReport, applied: Int, rerun: Bool) -> Reception {
+        if rerun && !update.isComplete { return .ignore }
+        guard update.revision > applied || (update.isComplete && applied == 0) else { return .ignore }
+        if applied > 0 || (rerun && update.result != nil) { return .swapAtBoundary }
+        return .show
     }
     /// Nothing was found and the network looked unreachable. The lookup runs
     /// again when a connection returns. If the Mac is online already -- the
@@ -357,7 +375,7 @@ final class LyricsViewModel: ObservableObject {
     /// local file changes or a returning connection leave it alone.
     private func stopLookup() {
         lookupTask?.cancel();upgradeTask?.cancel();localTask?.cancel();generation=UUID();isLoading=false;isRefining=false
-        report=nil;lastLookup=nil;localChangedDuringLookup=false;retryWhenOnline=false
+        report=nil;lastLookup=nil;localChangedDuringLookup=false;retryWhenOnline=false;rerun=false
     }
     func select(_ candidate:LyricCandidate) {
         guard let query=currentQuery else {return}
