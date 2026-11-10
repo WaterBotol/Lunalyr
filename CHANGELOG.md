@@ -98,6 +98,9 @@ When merging, keep every entry and combine duplicate headings.
 - Lyric cards: the preview no longer flashes "Pick lines to preview" while you drag a slider or change an option.
 - Lyric cards: opening the card window again (shortcut, menu, `lunalyr://card`) no longer throws away the lines you picked, the song recording or a card being made. A new song still starts afresh, and better lyrics arriving keep the lines you picked.
 - Lyric cards: mixing an MP4's sound no longer freezes the card window, and Cancel now stops it. The status says what is happening ("Mixing the sound…", "Encoding the GIF…"), and the progress bar moves steadily through every format instead of jumping or stalling.
+- Lyric cards: the bottom of the card window no longer jumps: progress (with a percentage and Cancel, which Esc also presses) and the result share one fixed line. A made card shows a check mark and Show in Finder, a failure says so with a warning sign, and any notes sit under Details. The result clears when you change an option.
+- Lyric cards: while a card is made or the song is recorded, the lines and options are dimmed and locked (Cancel stays usable), so nothing changes underneath. Recording the song shows a spinner while it starts, then a bar and a countdown.
+- Lyric cards: the preview cross-fades to each new version and dims with a spinner while it catches up; dropping a file on it shows a highlight; the Shape and Make tiles answer hover and clicks; option rows fade in and out instead of popping.
 - Discord: the song now shows when Discord is opened after Lunalyr, or restarted, without waiting for the next song.
 - Discord: updates stay within Discord's limit of five every 20 seconds, with room kept for a new song or a pause, so they are no longer dropped by Discord.
 - Discord: long lines in scripts such as Thai, or with emoji, and a bad button link no longer make Discord reject the whole status.

@@ -187,4 +187,74 @@ final class LyricCardPopoutTests: XCTestCase {
         XCTAssertEqual(LyricCardPopoutModel.carrySelection([0, 1], from: old, to: new), [5])
         XCTAssertEqual(LyricCardPopoutModel.carrySelection([], from: old, to: new), [])
     }
+
+    // MARK: C8, C10, C11, C12
+
+    func testNothingCanBeMadeWhileTheSongIsBeingRecorded() {
+        let model = makeModel(Song())
+        model.prepareToShow()
+        XCTAssertTrue(model.canMake)
+        model.songBusy = true
+        XCTAssertFalse(model.canMake)
+        XCTAssertTrue(model.isBusy)
+    }
+
+    func testTheRecordingCountdownChangesOnceASecond() {
+        var last: SongAudioSource.RecordingUpdate?
+        var shown: [Int] = []
+        for tick in stride(from: 0.0, through: 3.0, by: 0.15) {
+            if let next = SongAudioSource.recordingUpdate(elapsed: tick, needed: 3, last: last) {
+                last = next
+                if case .recording(_, _, let left) = next { shown.append(left) }
+            }
+        }
+        XCTAssertEqual(shown, [3, 2, 1, 0])
+        XCTAssertEqual(SongAudioSource.recordingUpdate(elapsed: 5, needed: 3, last: nil),
+                       .recording(elapsed: 3, needed: 3, secondsLeft: 0))
+    }
+
+    func testAFailedCardSaysSoWithItsNotesAndAnOptionChangeClearsIt() async {
+        let song = Song()
+        song.export = { _, _, _, notes, phase, _ in
+            phase(.drawing(.png))
+            notes("Couldn’t read the audio in a.wav")
+            return []
+        }
+        let model = makeModel(song)
+        model.prepareToShow()
+        model.copy()
+        await model.waitForExport()
+        XCTAssertEqual(model.statusTone, .failure)
+        XCTAssertEqual(model.warnings, ["Couldn’t read the audio in a.wav"])
+        model.textScale = 0.7
+        XCTAssertEqual(model.status, "")
+        XCTAssertEqual(model.statusTone, .plain)
+        XCTAssertTrue(model.warnings.isEmpty)
+    }
+
+    func testTheStatusSaysWhatTheExportIsDoing() async {
+        let song = Song()
+        var seen: [String] = []
+        let model = makeModel(song)
+        song.export = { [weak model] _, _, _, _, phase, _ in
+            phase(.mixingSound)
+            seen.append(model?.status ?? "")
+            return []
+        }
+        model.prepareToShow()
+        model.copy()
+        await model.waitForExport()
+        XCTAssertEqual(seen, ["Mixing the sound…"])
+    }
+
+    func testEachNewPreviewIsCounted() async {
+        let model = makeModel(Song())
+        model.prepareToShow()
+        await settle(300)
+        let first = model.previewGeneration
+        model.aspect = .square
+        await settle(300)
+        XCTAssertEqual(model.previewGeneration, first + 1)
+        XCTAssertFalse(model.previewStale)
+    }
 }

@@ -283,7 +283,7 @@ final class LyricCardMixTests: XCTestCase {
         var background = [Float](repeating: 0, count: 48000 * 3 * 2)
         background.replaceSubrange((48000 * 2)..<(48000 * 4), with: MixProbe.stereoSine(frequency: 2000, amplitude: 0.2, seconds: 1))
         let layers = [LyricCard.SoundLayer(volume: 1, role: .song) { _ in .init(song) },
-                      LyricCard.SoundLayer(volume: 1, role: .background) { _ in .init(background) }]
+                      LyricCard.SoundLayer(volume: 1, role: .background) { [background] _ in .init(background) }]
         let ducked = await LyricCard.mixdown(layers, seconds: 3, duck: true)
         let mixed = try XCTUnwrap(try XCTUnwrap(ducked))
         let mono = stride(from: 0, to: mixed.count, by: 2).map { mixed[$0] }
