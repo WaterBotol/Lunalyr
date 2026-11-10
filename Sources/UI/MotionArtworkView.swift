@@ -11,16 +11,20 @@ struct MotionArtworkView: NSViewRepresentable {
     let url: URL
     var placement: Settings.MotionPlacement = .fill
     var isPaused = false
+    /// Called once the clip has a frame to show (see `CustomWallpaperView`).
+    var onFirstFrame: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> PlayerView {
         let view = PlayerView()
         view.placement = placement
+        view.onFirstFrame = onFirstFrame
         view.play(url: url, paused: isPaused)
         return view
     }
 
     func updateNSView(_ view: PlayerView, context: Context) {
         view.placement = placement
+        view.onFirstFrame = onFirstFrame
         view.play(url: url, paused: isPaused)
         view.setPaused(isPaused)
     }
@@ -35,6 +39,8 @@ struct MotionArtworkView: NSViewRepresentable {
         private var readyObservation: NSKeyValueObservation?
         private var currentURL: URL?
         private var paused = false
+        /// Told once per clip, when it first has a frame.
+        var onFirstFrame: (() -> Void)?
         /// The clip's real dimensions, once the asset reports them.
         ///
         /// Only a correction: motion covers are square by construction -- the
@@ -103,10 +109,11 @@ struct MotionArtworkView: NSViewRepresentable {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
             fade.toValue = 1
-            fade.duration = 0.6
-            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            fade.duration = WallpaperMotion.mediaReveal
+            fade.timingFunction = LunalyrDesign.Motion.CA.easeOut
             layer.opacity = 1
             layer.add(fade, forKey: "reveal")
+            onFirstFrame?()
         }
 
         func setPaused(_ value: Bool) {

@@ -200,7 +200,7 @@ enum WallpaperOpacityPolicy {
 
     /// The incoming wallpaper's fade (NowPlayingView's background fade) and
     /// a margin for its last frames.
-    static let settleTime: TimeInterval = 1.2
+    static let settleTime: TimeInterval = WallpaperMotion.surfaceFade + 0.4
     /// How often a compile in flight is looked at.
     static let pollInterval: TimeInterval = 0.25
     /// A compile still running after this long is not waited for.
