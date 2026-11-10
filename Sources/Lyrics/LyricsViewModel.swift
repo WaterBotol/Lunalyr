@@ -320,6 +320,10 @@ final class LyricsViewModel: ObservableObject {
     }
     /// Shows `result`, and keeps it to show again when the gap setting changes.
     private func apply(_ result:LyricsFetcher.Result?, repairQQGaps: Bool? = nil) {
+        if let result, case .synced(let synced, let provenance) = result {
+            SyncLog.lyrics(originalResult == nil ? "shown" : "swapped", source: "\(provenance.source) · \(provenance.precision)",
+                           lines: synced.count, at: NowPlayingMonitor.shared.playbackTime(), track: currentQuery?.title ?? "")
+        }
         originalResult = result
         let shown = Self.presentation(of: result, repairingGaps: repairQQGaps ?? LyricSourceOptions.shared.repairQQGaps,
                                     track: currentQuery.map { ($0.title, $0.artist) })

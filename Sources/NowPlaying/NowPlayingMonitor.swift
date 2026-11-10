@@ -358,6 +358,7 @@ final class NowPlayingMonitor: ObservableObject {
         seeking[kind] = serial
         epochs.advance(kind)
         clock.sync(to: target, sampledAt: now, running: isPlaying, now: now, continuous: false)
+        SyncLog.seek(to: target, track: current.title)
         anchorIsEstimate = false
         let script = kind.backend.seekScript(to: target)
         let connection = connection, epochs = epochs, scheduler = scheduler
@@ -885,8 +886,12 @@ final class NowPlayingMonitor: ObservableObject {
         let running = snapshot.state == .playing
         let now = uptime()
         if let fix, fix.kind == kind {
+            let shown = isNewTrack || !(wasRunning && running) ? nil : clock.position(at: now)
+            let continuous = !isNewTrack && wasRunning && running && !anchorIsEstimate && !fix.fix.estimate
             clock.sync(to: fix.fix.position, sampledAt: fix.fix.time, running: running, now: now,
-                       continuous: !isNewTrack && wasRunning && running && !anchorIsEstimate && !fix.fix.estimate)
+                       continuous: continuous)
+            SyncLog.clockMoved(from: shown, to: fix.fix.position + max(0, now - fix.fix.time), player: kind.rawValue,
+                               track: track.title, continuous: continuous, estimate: fix.fix.estimate)
             anchorIsEstimate = fix.fix.estimate
         } else if isNewTrack {
             // A new track starts at its beginning; the sample confirms where.
