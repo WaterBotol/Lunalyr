@@ -92,13 +92,20 @@ enum YouTubeSearchPage {
         var verifiedArtist = false
         /// The length YouTube shows on the result ("3:45"), in seconds.
         var duration: Double?
+        /// YouTube's own view count, as shown ("12M views"), when given.
+        var views: String?
+        /// How long ago it was uploaded, as shown ("3 years ago"), when given.
+        var uploaded: String?
 
-        init(videoID: String, title: String, channel: String, verifiedArtist: Bool = false, duration: Double? = nil) {
+        init(videoID: String, title: String, channel: String, verifiedArtist: Bool = false, duration: Double? = nil,
+             views: String? = nil, uploaded: String? = nil) {
             self.videoID = videoID
             self.title = title
             self.channel = channel
             self.verifiedArtist = verifiedArtist
             self.duration = duration
+            self.views = views
+            self.uploaded = uploaded
         }
     }
 
@@ -221,7 +228,9 @@ enum YouTubeSearchPage {
                 let channel = text(renderer["ownerText"]) ?? text(renderer["longBylineText"]) ?? ""
                 found.append(Result(videoID: id, title: title, channel: channel,
                                     verifiedArtist: hasVerifiedArtistBadge(renderer["ownerBadges"]),
-                                    duration: text(renderer["lengthText"]).flatMap(lengthSeconds)))
+                                    duration: text(renderer["lengthText"]).flatMap(lengthSeconds),
+                                    views: shown(text(renderer["shortViewCountText"]) ?? text(renderer["viewCountText"])),
+                                    uploaded: shown(text(renderer["publishedTimeText"]))))
             }
             for (key, value) in dictionary where key != "videoRenderer" { collect(value, into: &found) }
         } else if let array = node as? [Any] {
@@ -248,6 +257,12 @@ enum YouTubeSearchPage {
             guard let renderer = (badge as? [String: Any])?["metadataBadgeRenderer"] as? [String: Any] else { return false }
             return renderer["style"] as? String == "BADGE_STYLE_TYPE_VERIFIED_ARTIST"
         }
+    }
+
+    /// Text as shown, trimmed; nil when there is none.
+    private static func shown(_ text: String?) -> String? {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func text(_ node: Any?) -> String? {

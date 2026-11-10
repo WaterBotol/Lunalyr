@@ -31,11 +31,19 @@ struct MenuBarWallpaperControls: View {
             // The panel never opens a file panel: Image or video with nothing
             // imported yet goes to Settings, which has the importer.
             WallpaperModeGrid(chooseImport: { navigation.openSettings(.wallpaper) })
-            if settings.backgroundMode == .musicVideo, musicVideo.showingYouTubeID != nil {
-                Button("Open video on YouTube") { musicVideo.openOnYouTube() }
-                    .buttonStyle(.link)
-                    .controlSize(.small)
-                    .help("Opens the video in your browser at the song’s position")
+            if settings.backgroundMode == .musicVideo, musicVideo.hasSong {
+                HStack(spacing: LunalyrDesign.Spacing.small) {
+                    if musicVideo.showingYouTubeID != nil {
+                        Button("Open video on YouTube") { musicVideo.openOnYouTube() }
+                            .help("Opens the video in your browser at the song’s position")
+                    }
+                    Spacer(minLength: 0)
+                    // Wrong upload? Pick another from YouTube's results.
+                    Button("Search YouTube…") { MusicVideoSearchWindowController.shared.show() }
+                        .help("Search YouTube for this song and pick the video to use")
+                }
+                .buttonStyle(.link)
+                .controlSize(.small)
             }
             if settings.backgroundMode == .musicVideo, musicVideo.canTapSync {
                 HStack(spacing: LunalyrDesign.Spacing.small) {

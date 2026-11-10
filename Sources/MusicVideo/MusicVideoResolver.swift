@@ -538,6 +538,27 @@ final class MusicVideoResolver {
         try? await stillVerdict(videoID)
     }
 
+    // MARK: Search YouTube… (the picker)
+
+    /// YouTube's results for what the user typed in Search YouTube…, in
+    /// YouTube's order: the same rate limit and ephemeral session as the
+    /// automatic lookup, nothing cached. A page with no results data at
+    /// all (YouTube changed it, or asks for consent) is `.failed`, not
+    /// "no videos".
+    func searchResults(for query: String) async -> MusicVideoSearchOutcome {
+        guard let url = YouTubeSearchPage.requestURL(query: query) else { return .failed }
+        do {
+            let data = try await fetch(url)
+            let results = await parse(data)
+            if results.isEmpty && data.range(of: Data("ytInitialData".utf8)) == nil { return .failed }
+            return .results(results)
+        } catch FetchError.rateLimited {
+            return .rateLimited
+        } catch {
+            return Task.isCancelled ? .cancelled : .failed
+        }
+    }
+
     // MARK: Captions
 
     /// The caption tracks worth trying for a video, each as cues, and the
