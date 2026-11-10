@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import XCTest
 @testable import VersoCustom
@@ -239,5 +240,42 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertEqual(SpokenTypographyView.cursor(prepared, time: 10 + WallpaperMotion.reducedDissolve, intensity: 0,
                                                    reduceMotion: true), 1, accuracy: 1e-9)
         XCTAssertEqual(SpokenTypographyView.stacks(cursor: 1.37, reduceMotion: false).map(\.position), [1.37])
+    }
+
+    // MARK: L7
+
+    /// A line-timed line can be drawn as its previewed first word alone,
+    /// held, and the rest of the line without that word: together exactly
+    /// the whole line, so the word can stay put while the rest arrives.
+    func testAPreviewedFirstWordAndTheRestOfTheLineMakeTheWholeLine() throws {
+        let phrase = LyricsFetcher.makeLine(text: "Hold the light", start: 1, end: 5)
+        let ink = LyricInk(mode: .standard,
+                           base: LyricInkSample(rest: .white, sung: .white, glow: .clear, reading: .white, sweeps: false))
+        func lit(firstRun: Double? = nil, held: Bool = false, hides: Bool = false) throws -> Int {
+            let stage = CGSize(width: 600, height: 220)
+            let renderer = ImageRenderer(content: LyricLineView(words: phrase.words, time: 1.02, stageSize: stage,
+                baseSize: 72, wordTimed: false, firstRunOnly: firstRun, heldFirstRun: held, hidesFirstRun: hides)
+                .environment(\.lyricInk, ink)
+                .frame(width: stage.width, height: stage.height)
+                .background(.black))
+            let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+            var count = 0
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                    if let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), pixel.redComponent > 0.6 {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }
+        let whole = try lit()
+        let first = try lit(firstRun: 1, held: true)
+        let rest = try lit(hides: true)
+        XCTAssertGreaterThan(first, 20)
+        XCTAssertGreaterThan(rest, first)
+        XCTAssertEqual(Double(first + rest), Double(whole), accuracy: Double(whole) * 0.08)
+        XCTAssertEqual(LyricLayer.heldFirstRunOpacity(presence: 0.02), 0.25, "never fainter than the preview")
+        XCTAssertEqual(LyricLayer.heldFirstRunOpacity(presence: 0.8), 0.8)
     }
 }

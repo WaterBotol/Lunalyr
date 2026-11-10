@@ -437,17 +437,31 @@ struct LyricLayer: View {
             let shift = heldShift(row, in: scene.lines, time: time)
             let crossFades = reduceMotion && (shift ?? 0) > 0 && (shift ?? 0) < 1
             let travel = shift.map { reduceMotion ? ($0 >= 1 ? 1 : 0) : $0 }
+            let yield = carriedYield(row, scene: scene, time: time, live: live)
             renderLyricLine(index: row, scene: scene, time: time, stageSize: stageSize,
-                energy: energy, live: live, outgoing: true)
+                energy: energy, live: live, outgoing: true, yield: yield)
                 .modifier(HeldLineShift(travel: travel))
                 .opacity(lyricOpacity * (crossFades ? 1 - (shift ?? 0) : 1))
             if crossFades, let shift {
                 renderLyricLine(index: row, scene: scene, time: time, stageSize: stageSize,
-                    energy: energy, live: live, outgoing: true)
+                    energy: energy, live: live, outgoing: true, yield: yield)
                     .modifier(HeldLineShift(travel: 1))
                     .opacity(lyricOpacity * shift)
             }
         }
+    }
+
+    /// The dimming a line-timed line had reached when the next line's
+    /// preview handed over to that line, kept while it leaves: dropped at
+    /// the onset, the leaving line brightened from about a quarter to half
+    /// strength just as the new line appeared.
+    private func carriedYield(_ row: Int, scene: SceneLines, time: Double, live: Bool) -> Double {
+        let lines = scene.lines
+        guard live, lines.indices.contains(row + 1), !lines[row].wordTimed else { return 0 }
+        let handover = lines[row + 1].start.nextDown
+        guard time > handover,
+              nextLinePreview(after: row, in: scene, time: handover) == row + 1 else { return 0 }
+        return previewLevel(of: lines[row + 1], time: handover, since: previewAllowed(after: row, in: lines))
     }
 
     /// 0...1: how far the next line's preview has ramped in.
@@ -571,6 +585,9 @@ struct LyricLayer: View {
         guard lines.indices.contains(index), lines.indices.contains(next), !lines[next].isInstrumental,
               !Self.changesTiming(lines[index], lines[next]), time < lines[next].start else { return nil }
         let style = composition(at: next)
+        // A stage layout draws nothing for a line-timed preview, so the
+        // line being sung would only dim for nothing.
+        guard lines[next].wordTimed || !style.fillsStage else { return nil }
         guard settings.previewsNextWord(in: style),
               !lines[next].wordTimed || settings.revealsWords(in: style),
               !(lines[index].wordTimed && lines[next].wordTimed && style.arrivalOnly
@@ -698,7 +715,9 @@ struct LyricLayer: View {
                             annotations: readingOptions.display == .below
                                 ? readingPairs(index, readings: readings, words: line.words, glue: glue,
                                                scene: scene, live: live) : [:],
-                            yield: yield)
+                            yield: yield,
+                            heldPreview: !previewing && live && index > 0 && time - line.start < 1
+                                && nextLinePreview(after: index - 1, in: scene, time: line.start.nextDown) == index)
                     }
                 }
                 if let lineReading {
@@ -768,7 +787,7 @@ struct LyricLayer: View {
                                 pose: LyricPhraseTiming, stageSize: CGSize, composition: LyricComposition,
                                 seed: Int, previewing: Bool,
                                 previewSince: Double, glue: [Bool], annotations: [TimedWordKey: String],
-                                yield: Double) -> some View {
+                                yield: Double, heldPreview: Bool = false) -> some View {
         let phrase = LyricsFetcher.Word(text: line.text, start: line.start, end: line.end)
         // A line sung as one has no words to highlight one by one; it
         // enters as its layout has it enter.
@@ -780,15 +799,36 @@ struct LyricLayer: View {
         let previewOpacity = vc_word_visibility(time, line.start, line.end, 1, 1, settings.nextWordPreviewLead)
             * Easing.smoothstep((time - previewSince) / 0.16)
         let stage = composition.fillsStage
-        return LyricLineView(words: words, time: time, stageSize: stageSize,
-            baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, settings.lyricScale))) : base, mood: mood,
-            composition: stage ? composition : .scattered, seed: seed, presence: pose.presence, readings: annotations,
-            wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
-            exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
-            glue: glue, firstRunOnly: previewing ? previewOpacity : nil)
-            .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
-                direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : pose.presence * (1 - 0.5 * yield),
-                arrival: previewing ? 1 : pose.arrival))
+        let visibility = pose.presence * (1 - 0.5 * yield)
+        // The previewed first word stays where the preview showed it, at
+        // least as strong, while the rest of the line makes its entrance:
+        // restarting it with the line blinked it out for a frame or two
+        // and dropped it back to the entrance's starting pose.
+        let holdsFirstRun = !previewing && !stage && heldPreview
+            && (pose.progress < 1 || pose.arrival != 1) && pose.exit <= 0
+        let lineView = { (firstRun: Double?, held: Bool, hides: Bool) in
+            LyricLineView(words: words, time: time, stageSize: stageSize,
+                baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, self.settings.lyricScale))) : base,
+                mood: self.mood, composition: stage ? composition : .scattered, seed: seed, presence: pose.presence,
+                readings: annotations, wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
+                exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
+                glue: glue, firstRunOnly: firstRun, heldFirstRun: held, hidesFirstRun: hides)
+        }
+        return ZStack {
+            lineView(previewing ? previewOpacity : nil, false, holdsFirstRun)
+                .modifier(WordEntrance(progress: previewing ? 1 : pose.progress, style: entrance, size: pointSize,
+                    direction: seed.isMultiple(of: 2) ? 1 : -1, visibility: previewing ? 1 : visibility,
+                    arrival: previewing ? 1 : pose.arrival))
+            if holdsFirstRun {
+                lineView(Self.heldFirstRunOpacity(presence: pose.presence) * (1 - 0.5 * yield), true, false)
+            }
+        }
+    }
+
+    /// The previewed first word of a line-timed line as the line arrives:
+    /// never fainter than the preview it takes over from.
+    static func heldFirstRunOpacity(presence: Double) -> Double {
+        max(0.25, presence)
     }
 
     /// Which words of a line run together, worked out once per line and

@@ -120,6 +120,7 @@ When merging, keep every entry and combine duplicate headings.
 - Lyrics: the loading spinner and the "Nothing playing" notice fade out instead of disappearing in one frame.
 - Hinge: a line's last words now finish folding away instead of being cut off part-way.
 - Spoken, Cascade and Cutout with Reduce Motion: the column of words now dissolves to its next place at each word instead of jumping.
+- Lyrics without word timing: the line being replaced no longer brightens for a moment as the next line appears, and the previewed first word of a line stays in place instead of blinking out and jumping when its line starts.
 
 ## [1.0.0] - 2026-11-08
 
