@@ -8,6 +8,8 @@ import SwiftUI
 final class DesktopPlayerModel: ObservableObject {
     static let shared = DesktopPlayerModel()
     static let playerKey = "custom.desktopPlayer.player"
+    /// "remaining" or "total": what the seek bar's right-hand label shows.
+    static let timeModeKey = "custom.desktopPlayer.timeMode"
     /// Players installed on this Mac, looked up once.
     static let installed: Set<PlayerKind> = PlayerOptions.installedPlayers
 
@@ -27,7 +29,19 @@ final class DesktopPlayerModel: ObservableObject {
         }
     }
     @Published var query = ""
-    @Published private(set) var results: [PlayerSearchResult] = []
+    @Published private(set) var results: [PlayerSearchResult] = [] {
+        didSet { if results != oldValue { selection = 0 } }
+    }
+    /// The result Return plays; ↑ and ↓ move it.
+    @Published private(set) var selection = 0
+    /// The seek bar's right-hand label: time left (true) or the song's length.
+    @Published var showsRemaining: Bool {
+        didSet { if showsRemaining != oldValue { defaults.set(showsRemaining ? "remaining" : "total", forKey: Self.timeModeKey) } }
+    }
+    /// Moves on each time shuffle is switched or the playlist changes, so the
+    /// shuffle note shows on the next reveal only, not on every one.
+    @Published private(set) var shuffleNoteToken = 0
+    private var shuffleNoteShown = 0
     /// What the strip shows: songs that played, the one playing, what is next.
     @Published private(set) var queue: [PlayerQueueItem] = []
     /// Shuffle is on, so the order of what comes next is not known.
@@ -45,6 +59,7 @@ final class DesktopPlayerModel: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         player = PlayerKind(rawValue: defaults.string(forKey: Self.playerKey) ?? "") ?? .appleMusic
+        showsRemaining = defaults.string(forKey: Self.timeModeKey) != "total"
         $query.removeDuplicates().debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.runSearch() }.store(in: &cancellables)
         // Songs that finish are remembered, in the order they played.
@@ -157,6 +172,9 @@ final class DesktopPlayerModel: ObservableObject {
                 // A player between two songs answers with nothing; keep what
                 // the strip already shows rather than emptying it.
                 if items.isEmpty, !self.fetched.isEmpty { return }
+                if snapshot.shuffle != self.shuffleOn || Self.playlistChanged(from: self.fetched, to: items) {
+                    self.shuffleNoteToken += 1
+                }
                 self.shuffleOn = snapshot.shuffle
                 self.fetched = items
                 self.recompose()
@@ -168,6 +186,50 @@ final class DesktopPlayerModel: ObservableObject {
                 if self.queue.isEmpty { self.status = .message(Self.words(for: error, player: searcher.kind)) }
             }
         }
+    }
+
+    /// ↑ / ↓ in the results.
+    func moveSelection(by step: Int) {
+        guard !results.isEmpty else { return }
+        selection = min(max(selection + step, 0), results.count - 1)
+    }
+
+    /// Return in the search: the selected result.
+    func playSelection() {
+        guard results.indices.contains(selection) else { return }
+        play(results[selection])
+    }
+
+    /// Whether the shuffle note should show on this reveal: once per change.
+    func takeShuffleNote() -> Bool {
+        guard shuffleOn, shuffleNoteToken != shuffleNoteShown else { return false }
+        shuffleNoteShown = shuffleNoteToken
+        return true
+    }
+
+    /// Whether a fresh read of the playlist window is a different playlist:
+    /// a position both reads cover holds a different song, or the two
+    /// windows share no song at all.
+    nonisolated static func playlistChanged(from old: [PlayerQueueItem], to new: [PlayerQueueItem]) -> Bool {
+        guard !old.isEmpty, !new.isEmpty else { return old.isEmpty != new.isEmpty }
+        let before = Dictionary(old.map { ($0.index, $0.persistentID ?? "\($0.title)|\($0.artist)") },
+                                uniquingKeysWith: { first, _ in first })
+        var overlap = false
+        for item in new {
+            guard let was = before[item.index] else { continue }
+            overlap = true
+            if was != (item.persistentID ?? "\(item.title)|\(item.artist)") { return true }
+        }
+        return !overlap
+    }
+
+    /// The strip item a press on Next can slide to before the player
+    /// answers: only for Music with shuffle off, where what comes next is
+    /// known; never a guess.
+    nonisolated static func optimisticNext(queue: [PlayerQueueItem], shuffleOn: Bool, kind: PlayerKind?) -> String? {
+        guard kind == .appleMusic, !shuffleOn, let now = queue.firstIndex(where: \.isCurrent),
+              now + 1 < queue.count, queue[now + 1].isPlayable else { return nil }
+        return queue[now + 1].id
     }
 
     func play(_ result: PlayerSearchResult) {
