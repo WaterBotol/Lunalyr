@@ -372,4 +372,36 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertEqual(mid?.opacity ?? 0, 0.5, accuracy: 0.01)
         XCTAssertNotNil(gap.instrumentalCue(at: cueEnd - 0.3, previewLead: lead))
     }
+
+    // MARK: Notes (W16, W17)
+
+    func testARepeatedShortcutKeepsItsNoteUpAndSwapsOnlyTheWords() {
+        let memory = LyricNoteMemory()
+        let first = LunalyrExtras.Note(text: "Layout: Echo", symbol: "textformat", at: 100)
+        let chain = memory.observe(first)
+        XCTAssertEqual(LyricNoteView.presence(first, chain: chain, wall: 100), 0)
+        let second = LunalyrExtras.Note(text: "Layout: Hinge", symbol: "textformat", at: 100.8)
+        let before = LyricNoteView.presence(first, chain: chain, wall: 100.8)
+        let next = memory.observe(second)
+        XCTAssertEqual(next.previous, first)
+        XCTAssertGreaterThanOrEqual(LyricNoteView.presence(second, chain: next, wall: 100.8), before - 1e-9,
+                                    "the capsule does not blink")
+        XCTAssertEqual(LyricNoteView.swap(second, chain: next, wall: 100.8), 0)
+        XCTAssertEqual(LyricNoteView.swap(second, chain: next, wall: 101.0), 1)
+        // The hold restarts from the new note.
+        XCTAssertGreaterThan(LyricNoteView.presence(second, chain: next, wall: 102.5), 0.5)
+        // A note long after the last one rises afresh.
+        let later = LunalyrExtras.Note(text: "Wallpaper paused", symbol: "pause", at: 200)
+        let fresh = memory.observe(later)
+        XCTAssertNil(fresh.previous)
+        XCTAssertEqual(fresh.capsuleSince, 200)
+    }
+
+    func testANoteWhilePausedGetsAClockThatEnds() {
+        let note = LunalyrExtras.Note(text: "Wallpaper paused", symbol: "pause", at: 50)
+        let frames = LyricNoteView.frames(for: note, from: 50.01, interval: 1.0 / 60)
+        XCTAssertGreaterThan(frames.count, 100)
+        XCTAssertLessThanOrEqual(frames.last?.timeIntervalSinceReferenceDate ?? 0, 50 + WallpaperMotion.toastLife + 0.03)
+        XCTAssertTrue(LyricNoteView.frames(for: note, from: 60, interval: 1.0 / 60).isEmpty)
+    }
 }

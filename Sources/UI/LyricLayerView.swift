@@ -192,7 +192,7 @@ struct LyricLayer: View {
     /// nothing left to change needs none (`LyricPace.quietLevel`).
     private func level(key: LyricSceneKey, transition: LyricSceneMemory.Transition, shown: Double,
                        target: Double, ink: LyricInk, wall: Double) -> LyricPace.Level {
-        if let note = extras.note, wall - note.at < 2.7 { return .active }
+        if let note = extras.note, wall - note.at < WallpaperMotion.toastLife + 0.1 { return .active }
         if shown > 0.001, !transition.leaving.isEmpty || transition.incomingPresence < 1 { return .active }
         // The loading notice fading in, after its delay.
         if key.kind == .loading, let since = cache.loadingSince,
@@ -242,24 +242,12 @@ struct LyricLayer: View {
 
     /// A brief confirmation of what a shortcut just did: rises in, holds,
     /// fades. Drawn whether or not the lyrics are showing.
+    /// While the wallpaper is paused `LyricStage` draws it instead.
     @ViewBuilder
     private func noteView(wall: Double) -> some View {
         if animating, let note = extras.note {
-            let age = wall - note.at
-            let shown = vc_settle(age, 0.32) * (1 - vc_settle(age - 1.9, 0.55))
-            if age >= 0, age < 2.6, shown > 0.001 {
-                Label(note.text, systemImage: note.symbol)
-                    .font(settings.uiFont(size: max(13, baseSize * 0.26), bold: true, mood: mood))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, baseSize * 0.34)
-                    .padding(.vertical, baseSize * 0.16)
-                    .background(Capsule().fill(.black.opacity(0.42)))
-                    .shadow(color: .black.opacity(0.3), radius: 10, y: 3)
-                    .opacity(shown)
-                    .offset(y: reduceMotion ? 0 : (1 - shown) * baseSize * 0.25)
-                    .padding(.bottom, max(24, maxHeight * 0.09))
-                    .accessibilityLabel(note.text)
-            }
+            LyricNoteView(note: note, chain: cache.notes.observe(note), wall: wall, baseSize: baseSize,
+                          maxHeight: maxHeight, mood: mood)
         }
     }
 
@@ -1270,6 +1258,8 @@ final class LyricLayerCache: ObservableObject {
         return accentLab
     }
 
+    let notes = LyricNoteMemory()
+
     private var shownTrack: Int?
     private var shownKind: LyricSceneKey.Kind?
     /// Wall time the current song's lyrics started loading, while they are.
@@ -1507,7 +1497,9 @@ struct LyricStage: View, Equatable {
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
+    @ObservedObject private var extras = LunalyrExtras.shared
     @StateObject private var pace = LyricPace()
+    @StateObject private var pausedNotes = LyricNoteHolder()
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
@@ -1528,7 +1520,116 @@ struct LyricStage: View, Equatable {
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
                        wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace)
         }
+        .overlay(alignment: .bottom) { pausedNote(layout) }
     }
+
+    /// A note posted while the wallpaper is paused ("Wallpaper paused"
+    /// itself): the stage's clock is stopped, so the note gets a clock of
+    /// its own that runs only for the note's life and then ends.
+    @ViewBuilder
+    private func pausedNote(_ layout: LyricViewportMetrics) -> some View {
+        let now = Date().timeIntervalSinceReferenceDate
+        if paused, let note = extras.note, now - note.at < WallpaperMotion.toastLife {
+            TimelineView(.explicit(LyricNoteView.frames(for: note, from: now, interval: interval))) { timeline in
+                LyricNoteView(note: note, chain: pausedNotes.memory.observe(note),
+                              wall: timeline.date.timeIntervalSinceReferenceDate, baseSize: layout.baseSize,
+                              maxHeight: layout.stageSize.height, mood: mood)
+            }
+        }
+    }
+}
+
+/// A shortcut's confirmation on the wallpaper: rises in, holds, fades.
+/// A note replacing one that is still well shown keeps the capsule up and
+/// cross-fades only its words (`LyricNoteMemory`), so repeating a shortcut
+/// does not blink it.
+struct LyricNoteView: View {
+    let note: LunalyrExtras.Note
+    let chain: LyricNoteMemory.Chain
+    let wall: Double
+    let baseSize: CGFloat
+    let maxHeight: CGFloat
+    let mood: TrackMood
+    @ObservedObject private var settings = Settings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 0...1 capsule presence for `note`, `chain` as observed, at `wall`.
+    static func presence(_ note: LunalyrExtras.Note, chain: LyricNoteMemory.Chain, wall: Double) -> Double {
+        let age = wall - note.at
+        guard age >= 0, age < WallpaperMotion.toastLife else { return 0 }
+        return vc_settle(wall - chain.capsuleSince, WallpaperMotion.toastIn)
+            * (1 - vc_settle(age - WallpaperMotion.toastOutAt, WallpaperMotion.toastOut))
+    }
+
+    /// 0...1: how far the words have changed to `note`'s.
+    static func swap(_ note: LunalyrExtras.Note, chain: LyricNoteMemory.Chain, wall: Double) -> Double {
+        chain.previous == nil ? 1 : Easing.smoothstep((wall - note.at) / 0.2)
+    }
+
+    /// Frame dates for a note's own clock: from now to the end of its life.
+    static func frames(for note: LunalyrExtras.Note, from now: Double, interval: Double) -> [Date] {
+        let end = note.at + WallpaperMotion.toastLife + 0.02
+        let step = max(1.0 / 120, interval)
+        return stride(from: now, through: end, by: step).map { Date(timeIntervalSinceReferenceDate: $0) }
+    }
+
+    var body: some View {
+        let shown = Self.presence(note, chain: chain, wall: wall)
+        if shown > 0.001 {
+            let swap = Self.swap(note, chain: chain, wall: wall)
+            ZStack {
+                if let previous = chain.previous, swap < 1 {
+                    label(previous).opacity(1 - swap)
+                }
+                label(note).opacity(swap)
+            }
+            .padding(.horizontal, baseSize * 0.34)
+            .padding(.vertical, baseSize * 0.16)
+            .background(Capsule().fill(.black.opacity(0.42)))
+            .shadow(color: .black.opacity(0.3), radius: 10, y: 3)
+            .opacity(shown)
+            .offset(y: reduceMotion ? 0 : (1 - shown) * baseSize * 0.25)
+            .padding(.bottom, max(24, maxHeight * 0.09))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(note.text)
+        }
+    }
+
+    private func label(_ note: LunalyrExtras.Note) -> some View {
+        Label(note.text, systemImage: note.symbol)
+            .font(settings.uiFont(size: max(13, baseSize * 0.26), bold: true, mood: mood))
+            .foregroundStyle(.white)
+            .fixedSize()
+    }
+}
+
+/// Which notes follow on from one another (see `LyricNoteView`). Never
+/// publishes; consulted while the frame is built.
+final class LyricNoteMemory {
+    struct Chain: Equatable {
+        /// When the capsule began to rise.
+        var capsuleSince: Double
+        /// The note whose words are giving way to the current one's.
+        var previous: LunalyrExtras.Note?
+    }
+    private var current: LunalyrExtras.Note?
+    private var chain = Chain(capsuleSince: -.infinity)
+
+    func observe(_ note: LunalyrExtras.Note) -> Chain {
+        guard note != current else { return chain }
+        if let current, LyricNoteView.presence(current, chain: chain, wall: note.at) > 0.5 {
+            chain = Chain(capsuleSince: chain.capsuleSince, previous: current)
+        } else {
+            chain = Chain(capsuleSince: note.at, previous: nil)
+        }
+        current = note
+        return chain
+    }
+}
+
+/// Holds a `LyricNoteMemory` across a view's rebuilds.
+final class LyricNoteHolder: ObservableObject {
+    let memory = LyricNoteMemory()
 }
 
 /// A held line moving aside for the lines that started under it (see

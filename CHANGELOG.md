@@ -128,6 +128,7 @@ When merging, keep every entry and combine duplicate headings.
 - Wallpaper: when lyrics can't be found because the Mac is offline, it says so instead of "Lyrics unavailable".
 - Wallpaper: the "can't read this player" notice names the same player as the menu bar and hover controls, and replaces "Nothing playing" with a cross-fade instead of the notice dropping and rising again.
 - Lyrics: skipping a song during an instrumental intro or outro fades the interlude dots out instead of cutting them, they leave more gently, and credits on the old song no longer switch to the new song's title while they fade.
+- Wallpaper: "Wallpaper paused" now shows when you pause the wallpaper with a shortcut, and pressing a shortcut again while its note is showing (cycling layouts, say) changes the words in place instead of blinking the note away and back.
 
 ## [1.0.0] - 2026-11-08
 
