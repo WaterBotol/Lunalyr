@@ -62,6 +62,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Imported wallpaper: importing another picture or video now deletes the copy Lunalyr kept of the previous one, instead of keeping every import in Application Support. If the kept copy goes missing, the wallpaper falls back to a generated one instead of black, and Settings says the file is missing and asks for it again.
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.
 - Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
 - Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.

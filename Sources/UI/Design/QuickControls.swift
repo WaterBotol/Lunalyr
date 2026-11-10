@@ -103,7 +103,8 @@ struct WallpaperModeGrid: View {
     }
 
     private func choose(_ mode: Settings.BackgroundMode) {
-        if mode == .custom && settings.customWallpaperPath.isEmpty {
+        // Nothing imported yet, or the copy has gone: ask for a file.
+        if mode == .custom && !CustomWallpaperStore.isAvailable(settings.customWallpaperPath) {
             chooseImport()
             return
         }

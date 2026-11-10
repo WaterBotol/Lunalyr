@@ -137,7 +137,7 @@ struct NowPlayingView: View {
         let mood = backgroundMood
         let seed = backgroundSeed
         if mode == .desktop { return .desktop }
-        if mode == .custom, !settings.customWallpaperPath.isEmpty {
+        if mode == .custom, CustomWallpaperStore.isAvailable(settings.customWallpaperPath) {
             return .custom(URL(fileURLWithPath: settings.customWallpaperPath))
         }
         if mode == .visualizer { return .visualizer(settings.audioVisualizerStyle) }

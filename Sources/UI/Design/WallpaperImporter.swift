@@ -39,7 +39,9 @@ final class WallpaperImporter: ObservableObject {
             defer { importing = false }
             do {
                 let imported = try await CustomWallpaperStore.importFile(url)
+                let replaced = settings.customWallpaperPath
                 settings.customWallpaperPath = imported.url.path
+                CustomWallpaperStore.discardReplaced(replaced, keeping: imported.url)
                 settings.customWallpaperName = imported.originalName
                 settings.backgroundMode = .custom
             } catch {

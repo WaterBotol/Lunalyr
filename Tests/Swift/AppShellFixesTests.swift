@@ -71,3 +71,72 @@ final class ThrowawaySuiteSweepTests: XCTestCase {
         }
     }
 }
+
+/// An imported wallpaper whose copy is replaced or goes missing.
+@MainActor
+final class ImportedWallpaperFileTests: XCTestCase {
+    private func folder() throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Wallpapers-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
+        return folder
+    }
+
+    func testAvailabilityFollowsTheFile() throws {
+        let folder = try folder()
+        let file = folder.appendingPathComponent("a.png")
+        XCTAssertFalse(CustomWallpaperStore.isAvailable(""))
+        XCTAssertFalse(CustomWallpaperStore.isAvailable(file.path))
+        try Data([1]).write(to: file)
+        XCTAssertTrue(CustomWallpaperStore.isAvailable(file.path))
+        XCTAssertFalse(CustomWallpaperStore.isAvailable(folder.path), "a folder is not a wallpaper")
+        try FileManager.default.removeItem(at: file)
+        XCTAssertFalse(CustomWallpaperStore.isAvailable(file.path))
+    }
+
+    /// Each import used to leave the previous copy behind for good.
+    func testANewImportDeletesOnlyTheCopyItReplaced() throws {
+        let folder = try folder()
+        let old = folder.appendingPathComponent("old.mov"), new = folder.appendingPathComponent("new.mov")
+        try Data([1]).write(to: old)
+        try Data([2]).write(to: new)
+        XCTAssertTrue(CustomWallpaperStore.discardReplaced(old.path, keeping: new, directory: folder))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: new.path))
+        // Importing the same copy again never deletes the one in use.
+        XCTAssertFalse(CustomWallpaperStore.discardReplaced(new.path, keeping: new, directory: folder))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: new.path))
+        XCTAssertFalse(CustomWallpaperStore.discardReplaced("", keeping: new, directory: folder))
+    }
+
+    /// A path from elsewhere (an older build, an edited preference) is the
+    /// user's own file: never deleted.
+    func testFilesOutsideLunalyrsFolderAreNeverDeleted() throws {
+        let folder = try folder()
+        let library = folder.appendingPathComponent("Wallpapers")
+        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+        let theirs = folder.appendingPathComponent("holiday.jpg")
+        let nested = library.appendingPathComponent("sub", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let deeper = nested.appendingPathComponent("x.jpg")
+        try Data([1]).write(to: theirs)
+        try Data([1]).write(to: deeper)
+        let new = library.appendingPathComponent("new.jpg")
+        XCTAssertFalse(CustomWallpaperStore.discardReplaced(theirs.path, keeping: new, directory: library))
+        XCTAssertFalse(CustomWallpaperStore.discardReplaced(deeper.path, keeping: new, directory: library))
+        XCTAssertFalse(CustomWallpaperStore.discardReplaced(library.appendingPathComponent("../holiday.jpg").path,
+                                                            keeping: new, directory: library))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: theirs.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: deeper.path))
+    }
+
+    func testTheFileLabelSaysWhenTheCopyIsMissing() {
+        XCTAssertEqual(WorkspaceCopy.importedFileLabel(name: "", path: "", available: { _ in true }), "None chosen")
+        XCTAssertEqual(WorkspaceCopy.importedFileLabel(name: "beach.mov", path: "/x/1.mov", available: { _ in true }),
+                       "beach.mov")
+        XCTAssertEqual(WorkspaceCopy.importedFileLabel(name: "beach.mov", path: "/x/1.mov", available: { _ in false }),
+                       "“beach.mov” is missing. Choose it again.")
+        XCTAssertEqual(WorkspaceCopy.importedFileLabel(name: "", path: "/x/1.mov", available: { _ in false }),
+                       "The imported file is missing. Choose it again.")
+    }
+}
