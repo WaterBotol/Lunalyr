@@ -245,4 +245,26 @@ final class MusicVideoMatchTests: XCTestCase {
         XCTAssertTrue(html.contains("if (player.isMuted && !player.isMuted()) player.mute();"),
                       "every sync sample mutes the player again if anything unmuted it")
     }
+
+    func testAReadyPlayerThatNeverPlaysFallsBack() {
+        let session = YouTubeEmbedSession(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
+        guard case .load(_, let page) = session.attach("4NRXx6U8ABQ") else { return XCTFail() }
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 0), .none, "not ready: the ready timeout's job")
+        XCTAssertEqual(session.receive(.init(kind: .ready, video: "4NRXx6U8ABQ", page: page), trusted: true), .ready)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 100), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 110), .none, "buffering a while is fine")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: true, now: 115), .none, "it played")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 116), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: false, playing: false, now: 130), .none, "paused song: not stuck")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 131), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 150), .none)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 151),
+                       .fail(videoID: "4NRXx6U8ABQ", .transient), "twenty seconds that should have played")
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 200), .none, "reported once")
+        // A new page starts afresh.
+        guard case .load(_, let next) = session.attach("4NRXx6U8ABQ") else { return XCTFail() }
+        _ = session.receive(.init(kind: .ready, video: "4NRXx6U8ABQ", page: next), trusted: true)
+        XCTAssertEqual(session.notePlayback(shouldPlay: true, playing: false, now: 300), .none)
+        session.stop()
+    }
 }

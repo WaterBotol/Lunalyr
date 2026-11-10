@@ -628,6 +628,10 @@ final class YouTubeEmbedSession {
     static let readyTimeout: TimeInterval = 12
     /// Reloads after the web content process quits, per video.
     static let reloadLimit = 2
+    /// A ready player that should play but has not played for this long
+    /// is stuck (a sign-in or bot check, a block that sends no error): the
+    /// wallpaper falls back, as for a player that never answered.
+    static let playTimeout: TimeInterval = 20
 
     struct Message: Equatable {
         enum Kind: Equatable {
@@ -680,6 +684,8 @@ final class YouTubeEmbedSession {
     /// Set once a failure was reported for the current page; later news
     /// about it is ignored.
     private var failed = false
+    /// Since when the ready player should have been playing and was not.
+    private var notPlayingSince: TimeInterval?
     private var timeout: Task<Void, Never>?
     private let readyTimeout: TimeInterval
     private let reloadLimit: Int
@@ -707,6 +713,7 @@ final class YouTubeEmbedSession {
         page += 1
         ready = false
         failed = false
+        notPlayingSince = nil
         timeout?.cancel()
         let page = self.page, wait = readyTimeout, sleep = self.sleep
         timeout = Task { [weak self] in
@@ -742,6 +749,23 @@ final class YouTubeEmbedSession {
         case .other:
             return .none
         }
+    }
+
+    /// From each sync check of the ready player: whether it should be
+    /// playing (the song plays, inside the video, on a live wallpaper) and
+    /// whether it is. Not playing when it should for `playTimeout` in a row
+    /// is a passing failure.
+    func notePlayback(shouldPlay: Bool, playing: Bool, now: TimeInterval,
+                      timeout: TimeInterval = YouTubeEmbedSession.playTimeout) -> Effect {
+        guard ready, !failed, videoID != nil, shouldPlay, !playing else {
+            notPlayingSince = nil
+            return .none
+        }
+        guard let since = notPlayingSince else {
+            notPlayingSince = now
+            return .none
+        }
+        return now - since >= timeout ? fail(.transient) : .none
     }
 
     /// The page's own navigation failed (offline, say). A load cancelled
@@ -789,6 +813,8 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private weak var view: WKWebView?
     private var navigation: WKNavigation?
     private var blur: Double = -1
+    /// Why the video is moving or not, as of the sync loop's last check.
+    private var hold: MusicVideoHold = .other
 
     /// The first seek's lead; later ones use the measured latency.
     var seekLead: Double { MusicVideoSeekLatency.initial }
@@ -929,7 +955,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     // MARK: MusicVideoPlaybackSurface
 
-    func noteHold(_ hold: MusicVideoHold) { freeze.noteHold(hold) }
+    func noteHold(_ hold: MusicVideoHold) {
+        self.hold = hold
+        freeze.noteHold(hold)
+    }
 
     func sample(_ done: @escaping @MainActor (MusicVideoDrift.Sample?, Double?) -> Void) {
         guard session.ready, let view else { done(nil, nil); return }
@@ -940,7 +969,17 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                     return
                 }
                 // Also from each sample, in case a state message was missed.
-                if let self { self.setVisible(self.session.ready && YouTubeEmbed.showsVideo(sample: sample)) }
+                if let self {
+                    let showing = YouTubeEmbed.showsVideo(sample: sample)
+                    self.setVisible(self.session.ready && showing)
+                    let stuck = self.session.notePlayback(shouldPlay: self.hold == .live, playing: showing,
+                                                          now: ProcessInfo.processInfo.systemUptime)
+                    if stuck != .none {
+                        self.perform(stuck)
+                        done(nil, nil)
+                        return
+                    }
+                }
                 done(sample, duration)
             }
         }
