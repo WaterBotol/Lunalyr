@@ -61,7 +61,14 @@ enum KugouKRC {
     }
 
     private static func stamp(_ open: String, _ seconds: Double, _ close: String) -> String {
-        let clamped = max(0, seconds)
-        return open + String(format: "%02d:%05.2f", Int(clamped / 60), clamped.truncatingRemainder(dividingBy: 60)) + close
+        open + clock(seconds) + close
+    }
+    /// An LRC time, "mm:ss.xxx", from whole milliseconds. Rounding the
+    /// seconds on their own wrote 59.996 s as "00:60.00", which no LRC reader
+    /// accepts: the line was lost, or a word stamp was shown as text.
+    static func clock(_ seconds: Double) -> String {
+        // At most 999 minutes, the longest an LRC stamp can say.
+        let ms = Int((min(max(0, seconds.isFinite ? seconds : 0), 59_999) * 1000).rounded())
+        return String(format: "%02d:%02d.%03d", ms / 60_000, ms / 1000 % 60, ms % 1000)
     }
 }

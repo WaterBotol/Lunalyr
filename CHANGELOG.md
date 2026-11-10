@@ -65,6 +65,12 @@ When merging, keep every entry and combine duplicate headings.
 - Tap to sync for lyrics: a tap pressed just after the timing is set no longer reaches the app you were in (Space there could pause the song); the keyboard comes back when the result closes, or at once with Esc or Return.
 - Tap to sync for lyrics stops if a different lyric source replaces the lyrics mid-session, instead of saving timing for lyrics no longer shown.
 - A Shortcuts action that opens Lunalyr waits until Lunalyr has started before it runs.
+- Lyrics from Kugou's word-timed files and from Kuwo no longer lose a line, or show a stray timestamp like "<01:60.00>", when a line or word starts within a few milliseconds of a whole minute.
+- LRCLIB, QQ Music, Kugou and Kuwo no longer offer an edition of the song with the wrong length (which was then rejected) when one with the right length was also found.
+- A song LRCLIB lists as instrumental no longer shows the lyrics of a sung edition with the same name and length.
+- Accuracy first now picks the same lyrics whichever source answers first, so the choice (and the song's timing offset for it) no longer changes from one play to the next.
+- LRC files that put a space between a line's timestamps ("[00:12.00] [00:45.00]Chorus") now show the line at every timestamp instead of the second one as text.
+- After changing lyric sources, the lyrics on screen change once, between lines, to the best match, instead of possibly switching to a lesser one first.
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.
 - Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
 - Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.
