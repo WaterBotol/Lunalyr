@@ -27,6 +27,37 @@ enum LyricGapTiming {
         }.sorted { $0.start < $1.start }
     }
 
+    /// Estimated word timing for the lyrics without any (`wordTimed` false):
+    /// each line's words fill its window (`LyricsFetcher.distributeWords`),
+    /// except where that window is far longer than singing the line would
+    /// take at the song's own pace (`estimatedVocalEnd`): the last line,
+    /// which runs to the end of the track, or a line before a long break.
+    /// Those words are spread over the estimate instead, so they do not light
+    /// one by one across an outro. An ordinary line is never shortened: a
+    /// cap for every line raced slow lines and held notes to their end long
+    /// before the singing. Without `inferringPauses` (the setting is off,
+    /// for songs with long held notes) no line is shortened. Line starts and
+    /// ends, supplied word timing and supplied line ends are never changed.
+    /// Every such line is spread again here, so words saved by an older
+    /// estimate are corrected.
+    static func estimatingWords(in lines: [LyricsFetcher.Line], inferringPauses: Bool) -> [LyricsFetcher.Line] {
+        let pace = inferringPauses ? secondsPerSyllable(in: lines) : minimumSecondsPerSyllable
+        return lines.indices.map { index in
+            var line = lines[index]
+            guard !line.wordTimed, !line.isInstrumental, !line.words.isEmpty,
+                  line.start.isFinite, line.end.isFinite, line.end > line.start else { return line }
+            var end = line.end
+            let endsAtNextLine = index + 1 == lines.count || abs(lines[index + 1].start - line.end) < 0.05
+            if inferringPauses, line.endFromNextLine == true, endsAtNextLine,
+               let sung = estimatedVocalEnd(of: line, secondsPerSyllable: pace) {
+                end = sung
+            }
+            let words = LyricsFetcher.distributeWords(in: line.text, from: line.start, to: end)
+            if !words.isEmpty { line.words = words }
+            return line
+        }
+    }
+
     /// The quickest singing the estimate assumes.
     static let minimumSecondsPerSyllable = 0.4
 

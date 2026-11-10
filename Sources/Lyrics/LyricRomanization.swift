@@ -458,7 +458,7 @@ enum LyricRomanizer {
                 if display == .replace {
                     let words = line.wordTimed
                         ? LyricsFetcher.distributeWords(in: text, from: first.start, to: last.end)
-                        : LyricsFetcher.distributeWords(in: text, from: line.start, to: line.end)
+                        : LyricsFetcher.distributeWords(in: text, from: line.start, to: LyricsFetcher.estimatedSweepEnd(of: line))
                     return words.isEmpty ? nil : words
                 }
                 return [LyricsFetcher.Word(text: text, start: first.start, end: last.end)]

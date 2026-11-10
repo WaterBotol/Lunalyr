@@ -989,22 +989,27 @@ final class LyricsFetcher {
         )
     }
 
-    /// How long a line with no timing of its own most likely takes to sing:
-    /// about 0.45 s a syllable plus 1.5 s for a held note, 2.5 to 20 s.
-    /// The last line of a song, or one before a long break, runs to the end
-    /// of the track or the next line; estimated word timing spread over that
-    /// whole window lit its words one by one across minutes of outro.
-    static func estimatedSingingSpan(of text: String) -> TimeInterval {
-        let syllables = Double(LyricGapTiming.estimatedSyllables(text))
-        return min(20, max(2.5, syllables * 0.45 + 1.5))
+    /// The share of a line's window that its estimated words take
+    /// (`distributeWords`): a sung line normally finishes a little before
+    /// the next one begins.
+    static let estimatedWordShare = 0.88
+
+    /// Where the line-level sweep of a lyric without word timing ends: the
+    /// line's end, unless its estimated words were spread over less than the
+    /// window (`LyricGapTiming.estimatingWords`: the last line running on
+    /// through the outro, or a line before a long break), in which case the
+    /// sweep ends with them. Never later than the line's end.
+    static func estimatedSweepEnd(of line: Line) -> TimeInterval {
+        guard !line.wordTimed, let sung = line.words.lazy.map(\.end).max(), sung > line.start else { return line.end }
+        return min(line.end, line.start + (sung - line.start) / estimatedWordShare)
     }
 
     /// Splits a line's window across its words proportionally to their length,
     /// so longer words hold emphasis longer -- far more natural than an even
     /// split. The window is trimmed slightly because a sung line normally
-    /// finishes before the next one begins, and never runs longer than the
-    /// line takes to sing (`estimatedSingingSpan`). Only the words' timing is
-    /// estimated: the line's own start and end are unchanged.
+    /// finishes before the next one begins (`estimatedWordShare`). A caller
+    /// may pass a window shorter than the line's own
+    /// (`LyricGapTiming.estimatingWords`); the line's times stay the caller's.
     static func distributeWords(in text: String, from start: TimeInterval, to end: TimeInterval) -> [Word] {
         var tokens: [String] = []
         text.enumerateSubstrings(in: text.startIndex..., options: .byWords) { _, _, enclosing, _ in
@@ -1014,7 +1019,7 @@ final class LyricsFetcher {
         guard !tokens.isEmpty else { return [] }
 
         let window = max(end - start, 0.3)
-        let usable = min(window, max(Double(tokens.count) * 0.42, min(window * 0.88, estimatedSingingSpan(of: text))))
+        let usable = min(window, max(Double(tokens.count) * 0.42, window * estimatedWordShare))
         let weights = tokens.map { Double($0.count) + 1.5 }
         let totalWeight = weights.reduce(0, +)
 

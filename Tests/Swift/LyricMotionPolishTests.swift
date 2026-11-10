@@ -440,15 +440,20 @@ final class LyricMotionPolishTests: XCTestCase {
     /// The last LRC line of a song runs to the end of the track: its
     /// estimated words and sweep must finish in a natural time, not across
     /// minutes of outro. The line's own times are unchanged.
-    func testTheLastLineIsNotSpreadOverTheOutro() {
+    func testTheLastLineIsNotSpreadOverTheOutro() throws {
         let text = "And I will always love you"
-        let last = LyricsFetcher.makeLine(text: text, start: 180, end: 300)
+        let lrc = "[02:52.00]I hope life treats you kind\n[02:56.00]And I hope you have all you dreamed of\n[03:00.00]" + text
+        let source = LyricsFetcher.Result.synced(LyricsFetcher.parseLRC(lrc, trackDuration: 300),
+                                                 .init(precision: "Line-synced", source: "LRCLIB"))
+        let lines = LyricsViewModel.presentation(of: source, repairingGaps: true).lines
+        let last = try XCTUnwrap(lines.last)
+        XCTAssertEqual(last.text, text)
         XCTAssertEqual(last.start, 180)
         XCTAssertEqual(last.end, 300)
-        let span = LyricsFetcher.estimatedSingingSpan(of: text)
-        XCTAssertLessThan(span, 8)
+        let span = LyricsFetcher.estimatedSweepEnd(of: last) - last.start
+        XCTAssertLessThan(span, 20)
         XCTAssertGreaterThan(span, 3)
-        XCTAssertEqual(last.words.last?.end ?? 0, 180 + span, accuracy: 1e-6)
+        XCTAssertEqual(last.words.last?.end ?? 0, 180 + span * LyricsFetcher.estimatedWordShare, accuracy: 1e-6)
         XCTAssertEqual(LyricPhraseTiming.sweep(of: last, at: 180 + span), 1)
         XCTAssertEqual(LyricPhraseTiming.sweep(of: last, at: 180 + span / 2), 0.5, accuracy: 1e-9)
         // An ordinary line keeps its window as before.

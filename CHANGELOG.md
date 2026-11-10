@@ -200,6 +200,7 @@ When merging, keep every entry and combine duplicate headings.
 - Wallpaper: "Wallpaper paused" now shows when you pause the wallpaper with a shortcut, and pressing a shortcut again while its note is showing (cycling layouts, say) changes the words in place instead of blinking the note away and back.
 - Lyrics: backing vocals keep to the other edge of the screen while a credit is showing, instead of landing on it.
 - Lyrics without word timing: the last line of a song, or a line before a long break, now lights its words over the time it takes to sing them instead of spreading the highlight across the whole outro or break. Line start times are unchanged.
+- Lyrics without word timing: ordinary lines no longer race through their words to the end long before the singing (test builds 61 and 62). Only the last line or a line before a long break is shortened, judged against the song's own pace, and not at all with "Treat long pauses as instrumental" off. Lyrics saved by those builds are corrected when shown.
 
 ## [1.0.0] - 2026-11-08
 

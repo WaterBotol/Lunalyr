@@ -137,7 +137,11 @@ final class LyricGapTimingTests: XCTestCase {
         // 34-second break after "Hold on" is no longer one held line.
         for source in ["LRCLIB", "NetEase", "Kugou Music", "Kuwo Music", "Lyrimuse local files", "Imported lyrics"] {
             XCTAssertTrue(shown(source).infersPauses, source)
-            XCTAssertEqual(shown(source).lines, lines, source)
+            // Its estimated words are lit over the singing, not the break.
+            var expected = lines
+            expected[0].words = LyricsFetcher.distributeWords(in: "Hold on", from: 1, to: 6)
+            XCTAssertEqual(shown(source).lines, expected, source)
+            XCTAssertEqual(LyricsFetcher.estimatedSweepEnd(of: shown(source).lines[0]), 6, accuracy: 1e-9, source)
             XCTAssertEqual(shown(source).provenance?.source, source)
             XCTAssertEqual(shown(source).vocalWindows.map(\.end), [6, 40], source)
         }

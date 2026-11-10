@@ -357,8 +357,11 @@ final class LyricsViewModel: ObservableObject {
         switch result {
         case .synced(let value, let source) where !value.isEmpty:
             let qq = source.source.lowercased().contains("qq")
-            let validated = (repair && qq ? QQGapRepair.repair(LyricCredits.flagging(value, title: title, artist: artist))
-                                      : LyricCredits.flagging(value, title: title, artist: artist)).map { original in
+            let flagged = repair && qq ? QQGapRepair.repair(LyricCredits.flagging(value, title: title, artist: artist))
+                                       : LyricCredits.flagging(value, title: title, artist: artist)
+            // Estimated word timing is worked out afresh for the song as a
+            // whole, so only an abnormally long window is shortened.
+            let validated = LyricGapTiming.estimatingWords(in: flagged, inferringPauses: repair).map { original in
                 var line = original; line.wordTimed = LyricsFetcher.validWordTiming(original); return line
             }
             let lines = LyricLineIndex.removingMixedTimingCopies(validated)
