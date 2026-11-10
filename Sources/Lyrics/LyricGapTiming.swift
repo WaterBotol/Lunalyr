@@ -87,6 +87,22 @@ enum LyricGapTiming {
         }
         return best
     }
+    /// Word-timed lines whose words are crammed into far less time than
+    /// singing them takes (under `crushedSecondsPerSyllable` a syllable, four
+    /// syllables or more): a listener-made upload sometimes squeezes a
+    /// line, often one with backing vocals, into a split second, and the
+    /// highlight shoots to its end. The start of each, in order.
+    static func crushedLines(in lines: [LyricsFetcher.Line]) -> [Double] {
+        lines.compactMap { line in
+            guard line.wordTimed, !line.isInstrumental, line.words.count >= 3,
+                  let first = line.words.map(\.start).min(), let last = line.words.map(\.end).max(),
+                  first.isFinite, last.isFinite, !LyricCredits.isCredit(line.text) else { return nil }
+            let syllables = estimatedSyllables(line.text)
+            return syllables >= 4 && last - first < Double(syllables) * crushedSecondsPerSyllable ? line.start : nil
+        }
+    }
+    static let crushedSecondsPerSyllable = 0.06
+
     static let bunchedSecondsPerSyllable = 0.08
     static let bunchedRunLength = 5
 

@@ -148,4 +148,49 @@ final class LyricRankingTests: XCTestCase {
         plain.result = .plain(["No place I'd rather be"], .init(precision: "Not synced", source: "NetEase"))
         XCTAssertEqual(LyricsFetcher.ranked([plain, bunched], query: query, options: options).map(\.source), [.lrclib, .netEase])
     }
+
+    /// "Hurts Me" as one LRCLIB word-timed upload has it: a line's eleven
+    /// words inside 0.04 s.
+    private func crammed(at start: Double = 99.09) -> LyricsFetcher.Line {
+        let text = "I don't need it (I'm obsessed when I don't have it)"
+        let words = text.split(separator: " ").enumerated().map { index, word in
+            LyricsFetcher.Word(text: String(word), start: start + Double(index) * 0.004, end: start + Double(index + 1) * 0.004)
+        }
+        return LyricsFetcher.Line(start: start, end: start + 0.04, text: text, words: words, isInstrumental: false, wordTimed: true)
+    }
+
+    private func wordTimed(_ lines: [LyricsFetcher.Line]) -> [LyricsFetcher.Line] {
+        lines.map { line in
+            var timed = line
+            let parts = line.text.split(separator: " ")
+            let step = min(0.3, (line.end - line.start) / Double(parts.count))
+            timed.words = parts.enumerated().map { .init(text: String($1), start: line.start + Double($0) * step, end: line.start + Double($0 + 1) * step) }
+            timed.wordTimed = true
+            return timed
+        }
+    }
+
+    func testCrammedWordsAreFoundAndSungWordsAreNot() {
+        let song = wordTimed(steady())
+        XCTAssertNil(LyricsFetcher.timingFault(song))
+        XCTAssertEqual(LyricGapTiming.crushedLines(in: song + [crammed()]), [99.09])
+        XCTAssertEqual(LyricsFetcher.timingFault(song + [crammed()]), "a line crammed at 1:39")
+        XCTAssertEqual(LyricsFetcher.timingFault(song + [crammed(), crammed(at: 120)]), "2 lines crammed from 1:39")
+        // A quick "oh-oh-oh" is three syllables: not enough to judge.
+        let quick = LyricsFetcher.Line(start: 5, end: 5.1, text: "oh oh oh", words: [.init(text: "oh", start: 5, end: 5.03),
+            .init(text: "oh", start: 5.03, end: 5.06), .init(text: "oh", start: 5.06, end: 5.1)], isInstrumental: false, wordTimed: true)
+        XCTAssertNil(LyricsFetcher.timingFault([quick] + song))
+    }
+
+    func testCrammedLRCLIBWordTimingLosesItsLeadToSoundWordTiming() {
+        let options = LyricSourceOptions.Snapshot(enabled: [.lrclib, .kugou], mode: .smart, localFolder: "", localVersion: "")
+        var lrclib = candidate(.lrclib, words: true)
+        lrclib.result = .synced(wordTimed(steady()) + [crammed()], .init(precision: "Word-by-word", source: "LRCLIB"))
+        var kugou = candidate(.kugou, words: true)
+        kugou.result = .synced(wordTimed(steady()), .init(precision: "Word-by-word", source: "Kugou Music"))
+        XCTAssertEqual(LyricsFetcher.ranked([lrclib, kugou], query: query, options: options).map(\.source), [.kugou, .lrclib])
+        // Sound, LRCLIB's word timing keeps its lead.
+        lrclib.result = .synced(wordTimed(steady()), .init(precision: "Word-by-word", source: "LRCLIB"))
+        XCTAssertEqual(LyricsFetcher.ranked([kugou, lrclib], query: query, options: options).map(\.source), [.lrclib, .kugou])
+    }
 }
