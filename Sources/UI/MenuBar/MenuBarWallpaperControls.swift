@@ -37,10 +37,19 @@ struct MenuBarWallpaperControls: View {
                     .help("Opens the video in your browser at the song’s position")
             }
             if settings.backgroundMode == .musicVideo, musicVideo.canTapSync {
-                Button(MusicVideoTapSync.buttonTitle(musicVideo.tapState)) { musicVideo.tapSyncButton() }
-                    .buttonStyle(.link)
-                    .controlSize(.small)
-                    .help("Click, then press any key the moment the singing starts in the video")
+                HStack(spacing: LunalyrDesign.Spacing.small) {
+                    Button(MusicVideoTapSync.buttonTitle(musicVideo.tapState)) { musicVideo.tapSyncButton() }
+                        .help("Click, then press any key the moment the singing starts in the video")
+                    Spacer(minLength: 0)
+                    // A quarter second at a time, kept for this song's video.
+                    Button("Video earlier") { musicVideo.videoEarlier() }
+                        .help("The video lags the music: show it a quarter second sooner (kept for this video)")
+                    Button("Video later") { musicVideo.videoLater() }
+                        .help("The video runs ahead of the music: show it a quarter second later (kept for this video)")
+                }
+                .buttonStyle(.link)
+                .controlSize(.small)
+                InspectorCaption("Video timing: \(MusicVideoTiming.format(musicVideo.currentOffset))")
                 if let note = MusicVideoTapSync.note(musicVideo.tapState) {
                     InspectorCaption(note)
                 }
