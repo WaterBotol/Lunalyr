@@ -104,7 +104,11 @@ final class LyricTapSyncController: ObservableObject {
     /// A tap: a lyric line starts now.
     func tap() {
         guard session.isListening, let target else { return }
-        guard context.query()?.recordingKey == target.key, context.isPlaying() else {
+        // Another song, a pause, or other lyrics on screen (a better source
+        // arrived): the taps would be timed against lines no longer shown,
+        // and the offset saved for a source no longer in use.
+        guard context.query()?.recordingKey == target.key, context.isPlaying(),
+              offsets.activeSource == target.source, context.lineStarts() == session.lineStarts else {
             cancel()
             return
         }
@@ -158,7 +162,13 @@ final class LyricTapSyncController: ObservableObject {
     // MARK: - Finishing
 
     private func finish() {
-        stopListening()
+        ticker?.cancel()
+        ticker = nil
+        // Stopping hands the keyboard back at once. A result keeps it while
+        // it shows (`keyResponse`): the listener is mid-rhythm, and the next
+        // tap would otherwise land in the app behind, typing into it or
+        // pausing the song with Space.
+        if session.phase == .failed(.cancelled) || !presents || panel == nil { handBackKeyboard() }
         switch session.phase {
         case .applied: notify(session.message, "hand.tap")
         case .failed(let failure) where failure != .cancelled: notify(session.message, "hand.tap")
@@ -201,35 +211,75 @@ final class LyricTapSyncController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.session.isListening, let panel = self.panel, !panel.isKeyWindow else { return }
-                self.previousApp = NSWorkspace.shared.frontmostApplication
+                // Not Lunalyr itself (a result still showing kept the keyboard).
+                if self.previousApp == nil, let front = NSWorkspace.shared.frontmostApplication,
+                   front.processIdentifier != NSRunningApplication.current.processIdentifier {
+                    self.previousApp = front
+                }
                 NSApp.activate(ignoringOtherApps: true)
                 panel.makeKeyAndOrderFront(nil)
             }
         }
     }
 
+    /// What a key pressed in the panel does.
+    enum KeyResponse: Equatable {
+        /// Not for Tap to sync (a shortcut, a modifier, a held key).
+        case pass
+        case tap
+        /// Esc while listening.
+        case stop
+        /// A tap after the result: kept from the app behind.
+        case swallow
+        /// Esc or Return on the result: closes it and hands the keyboard back.
+        case close
+    }
+
+    nonisolated static func keyResponse(listening: Bool, keyCode: UInt16, modifiers: NSEvent.ModifierFlags,
+                                        isRepeat: Bool, textInputFocused: Bool) -> KeyResponse {
+        switch MusicVideoTapSync.keyAction(keyCode: keyCode, modifiers: modifiers, isRepeat: isRepeat,
+                                           textInputFocused: textInputFocused) {
+        case .pass: return .pass
+        case .cancel: return listening ? .stop : .close
+        case .tap:
+            if listening { return .tap }
+            // Return and keypad Enter.
+            return keyCode == 36 || keyCode == 76 ? .close : .swallow
+        }
+    }
+
     /// While listening, plain keys pressed in the panel are taps and Esc
-    /// stops. Local to Lunalyr's own windows: no new permission, and a key
-    /// pressed in a text field (Settings, the player's search) is typing.
+    /// stops; while a result shows, they are kept from the app behind.
+    /// Local to Lunalyr's own windows: no new permission, and a key pressed
+    /// in a text field (Settings, the player's search) is typing.
     private func watchKeys() {
         stopWatchingKeys()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             MainActor.assumeIsolated {
-                guard let self, self.session.isListening, let panel = self.panel, event.window === panel else { return event }
+                guard let self, let panel = self.panel, event.window === panel else { return event }
                 let typing = panel.firstResponder is NSText
-                switch MusicVideoTapSync.keyAction(keyCode: event.keyCode, modifiers: event.modifierFlags,
-                                                   isRepeat: event.isARepeat, textInputFocused: typing) {
+                switch Self.keyResponse(listening: self.session.isListening, keyCode: event.keyCode,
+                                        modifiers: event.modifierFlags, isRepeat: event.isARepeat,
+                                        textInputFocused: typing) {
                 case .pass: return event
-                case .cancel: self.cancel(); return nil
                 case .tap: self.tap(); return nil
+                case .stop: self.cancel(); return nil
+                case .swallow: return nil
+                case .close: self.dismiss(); return nil
                 }
             }
         }
         // Clicking elsewhere takes the keyboard away: the keys would no
         // longer reach Tap to sync, so it stops rather than waiting blind.
+        // The listener chose where the keyboard went, so no app is brought
+        // back in front afterwards.
         resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
                                                                 object: panel, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.cancel() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.previousApp = nil
+                if self.session.isListening { self.cancel() } else { self.stopWatchingKeys() }
+            }
         }
     }
 
@@ -240,9 +290,8 @@ final class LyricTapSyncController: ObservableObject {
         resignObserver = nil
     }
 
-    private func stopListening() {
-        ticker?.cancel()
-        ticker = nil
+    /// Gives the keyboard back to where it was before Tap to sync took it.
+    private func handBackKeyboard() {
         stopWatchingKeys()
         // The result stays on screen, but the keyboard goes back: ordering
         // the panel out and in again hands key status on without activating
@@ -251,7 +300,11 @@ final class LyricTapSyncController: ObservableObject {
             panel.orderOut(nil)
             panel.orderFrontRegardless()
         }
-        // Only if Lunalyr is still in front: a click on another app chose it.
+        restorePreviousApp()
+    }
+
+    /// Only if Lunalyr is still in front: a click on another app chose it.
+    private func restorePreviousApp() {
         if let previousApp {
             self.previousApp = nil
             if NSApp.isActive { previousApp.activate() }
@@ -262,6 +315,7 @@ final class LyricTapSyncController: ObservableObject {
         stopWatchingKeys()
         panel?.orderOut(nil)
         panel = nil
+        restorePreviousApp()
     }
 }
 

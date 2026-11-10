@@ -251,6 +251,66 @@ final class LyricTapSyncTests: XCTestCase {
         XCTAssertEqual(offsets.offset(for: fake.query), 0, "nothing saved")
     }
 
+    @MainActor
+    func testControllerStopsWhenOtherLyricsReplaceTheOnesBeingTapped() throws {
+        let (defaults, cleanUp) = isolated()
+        defer { cleanUp() }
+        let offsets = SongOffsets(defaults: defaults)
+        offsets.activeSource = "LRCLIB"
+        let fake = Fake()
+        fake.lines = starts
+        let query = try XCTUnwrap(fake.query)
+        let controller = LyricTapSyncController(offsets: offsets, context: fake.context, now: { [unowned fake] in fake.clock },
+                                                presents: false, notify: { _, _ in })
+        // A better source arrives mid-session: its lines start elsewhere.
+        controller.start()
+        fake.time = starts[0] + LyricTapSync.reactionTime - 0.25
+        controller.tap()
+        offsets.activeSource = "Apple Music"
+        fake.lines = starts.map { $0 + 1.2 }
+        for start in fake.lines[1...4] {
+            fake.time = start + LyricTapSync.reactionTime - 0.25
+            controller.tap()
+        }
+        XCTAssertEqual(controller.session.phase, .failed(.cancelled))
+        XCTAssertEqual(offsets.offset(for: query, source: "LRCLIB"), 0, "nothing saved for the source no longer shown")
+        XCTAssertEqual(offsets.offset(for: query, source: "Apple Music"), 0)
+
+        // The same source reloading the same lines carries on.
+        controller.start()
+        fake.lines = Array(fake.lines)
+        for start in fake.lines[0...3] {
+            fake.time = start + LyricTapSync.reactionTime - 0.25
+            controller.tap()
+        }
+        if case .applied = controller.session.phase {} else { XCTFail("\(controller.session.phase)") }
+    }
+
+    func testKeysAfterTheResultAreKeptFromTheAppBehind() {
+        func response(_ listening: Bool, _ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags = [],
+                      repeats: Bool = false) -> LyricTapSyncController.KeyResponse {
+            LyricTapSyncController.keyResponse(listening: listening, keyCode: keyCode, modifiers: modifiers,
+                                               isRepeat: repeats, textInputFocused: false)
+        }
+        // Listening: Space and letters tap, Esc stops.
+        XCTAssertEqual(response(true, 49), .tap)
+        XCTAssertEqual(response(true, 0), .tap)
+        XCTAssertEqual(response(true, 53), .stop)
+        // The result showing: a tap a beat late never reaches the app behind
+        // (Space there would pause the song); Esc or Return closes it.
+        XCTAssertEqual(response(false, 49), .swallow)
+        XCTAssertEqual(response(false, 0), .swallow)
+        XCTAssertEqual(response(false, 53), .close)
+        XCTAssertEqual(response(false, 36), .close)
+        XCTAssertEqual(response(false, 76), .close)
+        // Shortcuts and modifier keys always pass.
+        XCTAssertEqual(response(false, 12, .command), .pass)
+        XCTAssertEqual(response(true, 12, .command), .pass)
+        XCTAssertEqual(response(false, 56), .pass)
+        XCTAssertEqual(LyricTapSyncController.keyResponse(listening: false, keyCode: 0, modifiers: [], isRepeat: false,
+                                                          textInputFocused: true), .pass)
+    }
+
     // MARK: Shortcuts
 
     @MainActor
