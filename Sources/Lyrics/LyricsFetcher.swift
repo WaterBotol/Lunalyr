@@ -180,7 +180,7 @@ final class LyricsFetcher {
         states[.lyrimuse] = outcome.state
         report.candidates = screened.accepted
         report.rejected = screened.rejected
-        report.states = Self.annotate(states, screened, shown: shown?.source)
+        report.states = Self.annotate(states, screened, shown: shown?.source, query: query)
         if !Self.sameResult(shown?.result, previous.result) {
             report.result = shown?.result
             report.revision = previous.revision + 1
@@ -201,7 +201,7 @@ final class LyricsFetcher {
         let fetch = fetchSource, timing = timing, folder = options.localFolder
         func report(_ screened: Screened, complete: Bool) -> LyricLookupReport {
             LyricLookupReport(result: publication.shown?.result ?? pinned, candidates: screened.accepted,
-                              states: Self.annotate(states, screened, shown: publication.shown?.source), pinned: pinned != nil,
+                              states: Self.annotate(states, screened, shown: publication.shown?.source, query: query), pinned: pinned != nil,
                               rejected: screened.rejected, revision: publication.revision, isComplete: complete, offline: offline,
                               localPrint: localPrint)
         }
@@ -393,6 +393,9 @@ final class LyricsFetcher {
             if let reason = rejection(candidate, query: query) { rejected.append(.init(candidate: candidate, reason: reason)) }
             else { accepted.append(candidate) }
         }
+        // Only matches for the playing version are compared: a live take has the same words but its own timing.
+        let fitting = accepted.indices.filter { fitsVersion(accepted[$0], query) }
+        for (index, weighed) in zip(fitting, weighAgreement(fitting.map { accepted[$0] })) { accepted[index] = weighed }
         accepted.sort { outranks($0, $1, query: query, options: options) }
         rejected.sort { order($0.candidate.source, in: options) < order($1.candidate.source, in: options) }
         return (accepted, rejected)
@@ -400,7 +403,10 @@ final class LyricsFetcher {
     static func ranked(_ candidates: [LyricCandidate], query: LyricQuery, options: LyricSourceOptions.Snapshot) -> [LyricCandidate] {
         screen(candidates, query: query, options: options).accepted
     }
-    /// Whether `a` ranks above `b`. Word-by-word and mixed timing rank
+    /// Whether `a` ranks above `b`. Timed lyrics rank above plain text, and
+    /// among timed lyrics a match for the playing version ranks above one
+    /// for another version (Live, Remix, Acoustic…: `VersionTags`), whose
+    /// timing will not fit. Then word-by-word and mixed timing rank
     /// together, first: Music's own lyrics, then LRCLIB's, then the other
     /// sources'. Line timing is next, Music's own first, then plain text.
     /// Beyond those leads, sources follow the configured order, which in
@@ -408,14 +414,25 @@ final class LyricsFetcher {
     static func outranks(_ a: LyricCandidate, _ b: LyricCandidate, query: LyricQuery,
                          options: LyricSourceOptions.Snapshot) -> Bool {
         let timing = rankedTiming(a.result), other = rankedTiming(b.result)
+        if (timing > 0) != (other > 0) { return timing > 0 }
+        let fits = fitsVersion(a, query), otherFits = fitsVersion(b, query)
+        if fits != otherFits { return fits }
         if timing != other { return timing > other }
-        let lead = Self.lead(a.source, timing: timing), otherLead = Self.lead(b.source, timing: timing)
+        let lead = Self.lead(a, timing: timing), otherLead = Self.lead(b, timing: timing)
         if lead != otherLead { return lead < otherLead }
         if options.mode == .smart {
+            // Other services giving the same words: a tie-break, never above the leads.
+            let peers = min(a.agreement.peers, 2), otherPeers = min(b.agreement.peers, 2)
+            if peers != otherPeers { return peers > otherPeers }
             let closeness = confidence(a, query), otherCloseness = confidence(b, query)
             if closeness != otherCloseness { return closeness > otherCloseness }
         }
         return order(a.source, in: options) < order(b.source, in: options)
+    }
+    /// Whether the match names the same version as the playing song. A
+    /// service that reported no checkable name repeats the search, so it fits.
+    static func fitsVersion(_ candidate: LyricCandidate, _ query: LyricQuery) -> Bool {
+        VersionTags.mismatch(query, title: candidate.title).isEmpty
     }
     /// The timing matches are ranked by: 2 for word-by-word or mixed timing,
     /// which rank together, 1 for line timing and 0 for plain text.
@@ -429,6 +446,13 @@ final class LyricsFetcher {
         case .lrclib where timing == 2: return 1
         default: return 2
         }
+    }
+    /// `lead` for a match: LRCLIB's word timing loses its lead when two other
+    /// services agree on the timing and LRCLIB's disagrees with both
+    /// (`LyricAgreement.timingOutlier`): its timing is made by listeners.
+    private static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
+        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 2 }
+        return lead(candidate.source, timing: timing)
     }
     private static func order(_ source: LyricSourceID, in options: LyricSourceOptions.Snapshot) -> Int {
         options.enabled.firstIndex(of: source) ?? 999
@@ -493,10 +517,17 @@ final class LyricsFetcher {
         candidates.map { (candidate: $0, passes: rejection($0, query: query) == nil) }
             .max { ($0.passes ? 1 : 0, $0.candidate.score) < ($1.passes ? 1 : 0, $1.candidate.score) }?.candidate
     }
-    private static func annotate(_ base: [LyricSourceID: String], _ screened: Screened, shown: LyricSourceID?) -> [LyricSourceID: String] {
+    private static func annotate(_ base: [LyricSourceID: String], _ screened: Screened, shown: LyricSourceID?,
+                                 query: LyricQuery) -> [LyricSourceID: String] {
         var states = base
         for candidate in screened.accepted {
-            let found = base[candidate.source]?.hasPrefix("Saved match") == true ? "Saved match" : "Match found"
+            var found = base[candidate.source]?.hasPrefix("Saved match") == true ? "Saved match" : "Match found"
+            let other = VersionTags.mismatch(query, title: candidate.title)
+            if !other.isEmpty { found += " · other version (\(VersionTags.describe(other)))" }
+            if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
+            else if candidate.agreement.peers > 0 {
+                found += candidate.agreement.peers == 1 ? " · 1 other source agrees" : " · \(candidate.agreement.peers) other sources agree"
+            }
             states[candidate.source] = candidate.source == shown ? found + " · showing" : found
         }
         for rejection in screened.rejected { states[rejection.candidate.source] = rejection.reason }
@@ -516,8 +547,13 @@ final class LyricsFetcher {
                           options: LyricSourceOptions.Snapshot) -> Bool {
         guard source != best.source else { return false }
         let timing = rankedTiming(best.result), ceiling = min(source.timingCeiling, 2)
+        if (ceiling > 0) != (timing > 0) { return ceiling > 0 }
+        // Another version's timed lyrics: any timed source could still find the playing one.
+        if timing > 0, !fitsVersion(best, query) { return true }
         if ceiling != timing { return ceiling > timing }
-        let lead = Self.lead(source, timing: timing), bestLead = Self.lead(best.source, timing: timing)
+        let lead = Self.lead(source, timing: timing), bestLead = Self.lead(best, timing: timing)
+        // Agreement is weighed only among the answers in hand: waiting for more would undo
+        // stopping the other services once LRCLIB's word timing or Music's lyrics lead.
         if lead != bestLead { return lead < bestLead }
         // Accuracy first: a closer match could still arrive, the same names
         // with a length that fits (as `outranks` weighs it) included. A match
@@ -589,10 +625,11 @@ final class LyricsFetcher {
             let artist = LyricQuery.checkable(hit.artist, against: query.artist)
             return LyricCandidate(source:id,result:.synced(hit.lines,provenance),title:title ?? query.title,artist:artist ?? query.artist,
                                   duration:nil,score:113,metadataReported:title != nil && artist != nil)
-        case .netEase: return try await netEase(query)
-        case .qqMusic: return try await AdditionalLyricsProviders.qqMusic(query)
-        case .kugou: return try await AdditionalLyricsProviders.kugou(query)
-        case .kuwo: return try await AdditionalLyricsProviders.kuwo(query)
+        // The Chinese catalogues often index only an artist's native name (`ArtistAliases`).
+        case .netEase: return try await withAliases(id, query: query) { try await netEase($0) }
+        case .qqMusic: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.qqMusic($0) }
+        case .kugou: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.kugou($0) }
+        case .kuwo: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.kuwo($0) }
         case .lyricsOVH: return try await AdditionalLyricsProviders.lyricsOVH(query)
         case .lrclib: return try await lrclib(query)
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)

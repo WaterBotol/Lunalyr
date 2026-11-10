@@ -20,6 +20,8 @@ struct TimingPage: View {
     @Model(\.lyrics) private var model
     @Model(\.localLyrics) private var local
     @ObservedObject private var tapSync = LyricTapSyncController.shared
+    /// `ArtistAliases.enabled`.
+    @AppStorage("custom.artistAliases") private var artistAliases = true
     @State private var title = ""
     @State private var artist = ""
     /// The recording the search fields were last filled for.
@@ -195,6 +197,8 @@ struct TimingPage: View {
                           // Rows are keyed by source, so they slide to their new places.
                           move: { step in withAnimation(motion) { options.move(source, by: step) } })
             }
+            Toggle("Search under artists’ other names", isOn: $artistAliases)
+            InspectorCaption("When NetEase, QQ, Kugou or Kuwo find nothing under a name like “Kenshi Yonezu”, they search again as “米津玄師”. The other names come from MusicBrainz, which receives the artist’s name.")
             InspectorCaption("Online sources receive song metadata.", more: "Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
         }
     }

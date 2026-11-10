@@ -32,6 +32,28 @@ final class AppleMusicCachedLyricsTests: XCTestCase {
         XCTAssertEqual(match.provenance.precision, "Word-by-word")
     }
 
+    func testReleaseNamesThatKeepTheRecordingStillMatch() throws {
+        func songs(_ bytes: Data) throws -> [AppleMusicCachedLyrics.Song] {
+            try JSONDecoder().decode(AppleMusicCachedLyrics.Envelope.self, from: bytes).data
+        }
+        // No album reported, a single, a deluxe or remastered release.
+        let noAlbum = LyricQuery(title: "A Song", artist: "A Singer", album: nil, duration: 180)
+        XCTAssertNotNil(try AppleMusicCachedLyrics.candidate(noAlbum, songs: songs(payload())))
+        for album in ["An Album - Single", "An Album (Deluxe Edition)", "An Album [2011 Remaster]"] {
+            XCTAssertNotNil(try AppleMusicCachedLyrics.candidate(query, songs: songs(payload(album: album))), album)
+        }
+        // Another release that is another recording, or another length, still does not.
+        for album in ["An Album (Live)", "An Album Live", "Another Album"] {
+            XCTAssertNil(try AppleMusicCachedLyrics.candidate(query, songs: songs(payload(album: album))), album)
+        }
+        XCTAssertNil(try AppleMusicCachedLyrics.candidate(noAlbum, songs: songs(payload(duration: 184_000))))
+        // The exact album decides between two cached songs; two loose ones are ambiguous.
+        let exact = try XCTUnwrap(AppleMusicCachedLyrics.candidate(query, songs: songs(payload(id: "2", album: "An Album - Single")) + songs(payload())))
+        XCTAssertEqual(exact.duration, 180.1)
+        XCTAssertNil(try AppleMusicCachedLyrics.candidate(noAlbum, songs: songs(payload(id: "1")) + songs(payload(id: "2"))))
+        XCTAssertEqual(AppleMusicCachedLyrics.albumCore("An Album (Deluxe Edition) - EP"), "an album")
+    }
+
     func testReadsOnlyExpectedCacheEntriesAndHandlesMissingSchema() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }

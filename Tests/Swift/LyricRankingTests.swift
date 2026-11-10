@@ -50,7 +50,7 @@ final class LyricRankingTests: XCTestCase {
             LyricSourceOptions.Snapshot(enabled: enabled, mode: mode, localFolder: "", localVersion: "x").fingerprint
         }
         // v9 adds AMLL and Kugou's word timing, so choices cached before are looked up again.
-        XCTAssertTrue(print(.smart, [.lrclib]).hasPrefix("v10|"))
+        XCTAssertTrue(print(.smart, [.lrclib]).hasPrefix("v11|"))
         XCTAssertNotEqual(print(.smart, [.lrclib]), print(.priority, [.lrclib]))
         XCTAssertEqual(print(.smart, [.lrclib]), print(.smart, [.lyrimuse, .lrclib, .appleMusicCache]))
         XCTAssertNotEqual(print(.smart, [.lrclib, .netEase]), print(.smart, [.netEase, .lrclib]))
