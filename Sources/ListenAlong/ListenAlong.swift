@@ -29,6 +29,32 @@ final class ListenAlong: ObservableObject {
     private(set) var sharesLyrics = true
     /// The invitation being asked about, so a second one waits its turn.
     @Published private(set) var asking: ListenInvite?
+    /// Why following last ended on its own ("Sam stopped sharing"), shown
+    /// above the join field until dismissed or the next join.
+    @Published private(set) var lastEnded: String?
+
+    /// Sharing, as the menu shows it.
+    enum SharingState: Equatable {
+        /// On, with no room yet: one is made when something plays.
+        case waitingForMusic
+        /// The relay could not be reached; trying again.
+        case retrying
+        /// A room is open.
+        case live(room: String, listeners: Int)
+    }
+
+    var sharingState: SharingState? {
+        guard sharing, let host else { return nil }
+        return Self.sharingState(room: host.room, listeners: host.listeners, retrying: host.retrying)
+    }
+
+    nonisolated static func sharingState(room: String?, listeners: Int, retrying: Bool) -> SharingState {
+        if retrying { return .retrying }
+        if let room { return .live(room: room, listeners: listeners) }
+        return .waitingForMusic
+    }
+
+    func dismissLastEnded() { lastEnded = nil }
 
     private let sockets: any ListenSocketOpening
     private let makePlayer: @MainActor () -> any ListenPlayerControl
@@ -229,8 +255,16 @@ final class ListenAlong: ObservableObject {
             self.follower = nil
             self.followerChanges = nil
             self.startIfNeeded()
-            LunalyrExtras.shared.post(Self.endNote(phase, name: name, connected: connected), symbol: "person.2.slash")
+            let note = Self.endNote(phase, name: name, connected: connected)
+            self.lastEnded = note
+            LunalyrExtras.shared.post(note, symbol: "person.2.slash", origin: .elsewhere)
         }
+        follower.onFollowing = { [weak follower] in
+            guard let follower else { return }
+            LunalyrExtras.shared.post("Listening along with \(follower.displayName)", symbol: "headphones",
+                                      origin: .elsewhere)
+        }
+        lastEnded = nil
         self.follower = follower
         followerChanges = follower.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         follower.start()

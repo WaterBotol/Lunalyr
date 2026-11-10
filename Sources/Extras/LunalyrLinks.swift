@@ -9,14 +9,31 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
     @MainActor
     func run() {
         let extras = LunalyrExtras.shared
+        // From a link or Shortcuts, so its note goes to the HUD.
+        extras.performing(from: .elsewhere) {
+            switch self {
+            case .toggleLyrics: extras.toggleLyrics()
+            case .syncEarlier: extras.nudgeSync(by: 0.1)
+            case .syncLater: extras.nudgeSync(by: -0.1)
+            case .cycleLayout: extras.cycleLayout()
+            case .lyricCard: extras.copyLyricCard()
+            case .pauseWallpaper: extras.toggleWallpaperPause()
+            case .openSettings: LunalyrNavigation.shared.openSettings()
+            }
+        }
+    }
+
+    /// What a Shortcuts action says when the command posted no note of its
+    /// own (one that opens a window), or ran later because it launched Lunalyr.
+    var doneText: String {
         switch self {
-        case .toggleLyrics: extras.toggleLyrics()
-        case .syncEarlier: extras.nudgeSync(by: 0.1)
-        case .syncLater: extras.nudgeSync(by: -0.1)
-        case .cycleLayout: extras.cycleLayout()
-        case .lyricCard: extras.copyLyricCard()
-        case .pauseWallpaper: extras.toggleWallpaperPause()
-        case .openSettings: LunalyrNavigation.shared.openSettings()
+        case .toggleLyrics: return "Lyrics shown or hidden"
+        case .syncEarlier: return "Lyrics moved earlier"
+        case .syncLater: return "Lyrics moved later"
+        case .cycleLayout: return "Next layout"
+        case .lyricCard: return "Opening the lyric card"
+        case .pauseWallpaper: return "Wallpaper paused or resumed"
+        case .openSettings: return "Opening Lunalyr Settings"
         }
     }
 }
@@ -134,6 +151,6 @@ extension LunalyrLinkRouter.Actions {
                  return true
              },
              run: { $0.run() },
-             note: { LunalyrExtras.shared.post($0, symbol: $1) })
+             note: { LunalyrExtras.shared.post($0, symbol: $1, origin: .elsewhere) })
     }
 }

@@ -226,6 +226,18 @@ final class DiscordPresence {
         /// Someone asked to join the user's party.
         case joinRequest(userID: String, name: String?)
         case error(code: Int, message: String)
+        /// The connection to Discord closed (Discord quit or restarted).
+        case disconnected
+    }
+
+    /// Whether Discord is there to show the presence, for status lines.
+    enum ConnectionStatus: Equatable {
+        /// Discord presence is off.
+        case off
+        /// On, but Discord isn't running or hasn't answered yet.
+        case waitingForDiscord
+        /// Discord answered, as this user (when it said who).
+        case connected(name: String?)
     }
 
     nonisolated static let joinEvents = ["ACTIVITY_JOIN", "ACTIVITY_JOIN_REQUEST"]
@@ -344,6 +356,7 @@ final class DiscordPresence {
     func start() {
         guard !running else { return }
         running = true
+        extras?.discordStatus = .waitingForDiscord
         let monitor = NowPlayingMonitor.shared
         var sources: [AnyPublisher<Void, Never>] = [
             monitor.$current.map { _ in () }.eraseToAnyPublisher(),
@@ -441,12 +454,17 @@ final class DiscordPresence {
         switch event {
         case .ready(let name):
             ListenAlong.shared.discordUserName = name
+            extras?.discordStatus = .connected(name: name)
+        case .disconnected:
+            extras?.discordStatus = .waitingForDiscord
         case .join(let secret):
             let listen = ListenAlong.shared
             if !listen.isAvailable {
-                extras?.post("To listen along, add a listen-along relay in Settings › Share", symbol: "person.2")
+                extras?.post("To listen along, add a listen-along relay in Settings › Share", symbol: "person.2",
+                             origin: .elsewhere)
             } else if !listen.requestJoin(discordSecret: secret) {
-                extras?.post("That Discord invite isn\u{2019}t a listen-along room", symbol: "person.2.slash")
+                extras?.post("That Discord invite isn\u{2019}t a listen-along room", symbol: "person.2.slash",
+                             origin: .elsewhere)
             }
         case .joinRequest(let userID, _):
             guard ListenAlong.shared.room != nil else { return }
@@ -845,7 +863,9 @@ final class DiscordTransport: @unchecked Sendable {
     }
 
     private func disconnect() {
+        let wasOpen = fd >= 0
         if fd >= 0 { close(fd) }
         fd = -1
+        if wasOpen { onEvent?(.disconnected) }
     }
 }

@@ -13,27 +13,36 @@ struct MenuBarView: View {
     @Model(\.settings) private var settings
     @Model(\.extras) private var extras
     @Environment(\.lunalyrModels) private var models
-    /// Whether system-audio capture needs attention. Followed on its own:
-    /// the capture controller also publishes meter levels many times a
-    /// second, which must not redraw the panel.
-    @State private var audioNeedsAttention = false
+    /// Where system-audio capture is in a failure and its recovery. Followed
+    /// on its own: the capture controller also publishes meter levels many
+    /// times a second, which must not redraw the panel.
+    @State private var audioPhase = MenuBarAudioStatus.Phase.hidden
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let statuses = MenuBarStatusBanners.raised(playing: playing, settings: settings, extras: extras,
-                                                   audioNeedsAttention: audioNeedsAttention)
-        ViewThatFits(in: .vertical) {
+                                                   audioNeedsAttention: audioPhase != .hidden)
+        // One scroll view at every height, scrolling only once the panel
+        // outgrows its limit: switching between a plain stack and a scroll
+        // view rebuilt the panel, and lost what was typed in it.
+        ScrollView {
             panel(statuses)
-                .fixedSize(horizontal: false, vertical: true)
-            ScrollView {
-                panel(statuses)
-            }
-            .frame(height: Self.maximumPanelHeight)
         }
+        .scrollBounceBehavior(.basedOnSize)
         .frame(width: LunalyrDesign.Layout.menuPanelWidth)
         .frame(maxHeight: Self.maximumPanelHeight)
+        .fixedSize(horizontal: false, vertical: true)
         .styledCanvas()
         .lunalyrTint()
-        .onReceive(models.resolved.audio.$state.map(\.needsAttention).removeDuplicates()) { audioNeedsAttention = $0 }
+        .onReceive(models.resolved.audio.$state.removeDuplicates()) {
+            audioPhase = MenuBarAudioStatus.phase(after: audioPhase, state: $0)
+        }
+        .task(id: audioPhase) {
+            guard audioPhase == .recovered else { return }
+            try? await Task.sleep(for: .seconds(MenuBarAudioStatus.recoveredHold))
+            guard !Task.isCancelled else { return }
+            audioPhase = .hidden
+        }
     }
 
     private func panel(_ statuses: [MenuBarStatus]) -> some View {
@@ -42,8 +51,9 @@ struct MenuBarView: View {
                 .menuCard()
                 .focusSection()
             if !statuses.isEmpty {
-                MenuBarStatusBanners(statuses: statuses)
+                MenuBarStatusBanners(statuses: statuses, audioPhase: audioPhase)
                     .focusSection()
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
             }
             MenuBarWallpaperControls()
                 .menuCard()
@@ -58,6 +68,8 @@ struct MenuBarView: View {
         }
         .padding(LunalyrDesign.Spacing.panel)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: statuses.isEmpty)
     }
 
     /// Leaves room for the menu bar and popover chrome on a 13-inch display.

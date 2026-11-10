@@ -113,30 +113,63 @@ struct PlayerAccessRow: View {
     let status: PlayerAccessStatus
     var allow: () -> Void = {}
     var openSettings: () -> Void = {}
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Allow Access… was clicked and macOS hasn't answered yet: the button
+    /// says so and can't be clicked twice.
+    @State private var asking = false
+
+    /// Gives up waiting for the answer after this long, so a prompt that was
+    /// dismissed some other way can be asked again.
+    static let askingTimeout: TimeInterval = 60
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.small) {
             Image(systemName: status.symbol)
                 .foregroundStyle(status.lunalyrStatus.text)
+                .contentTransition(LunalyrDesign.Motion.symbolSwap(reduceMotion: reduceMotion))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.displayName).lunalyrText(.emphasis)
                 Text(status.summary).lunalyrText(.caption)
+                    .contentTransition(.opacity)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(kind.displayName): \(status.summary)")
             Spacer(minLength: LunalyrDesign.Spacing.small)
             switch status {
+            case .notDetermined where asking:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text(Self.askingTitle).lunalyrText(.caption)
+                }
+                .accessibilityElement(children: .combine)
+                .transition(.opacity)
             case .notDetermined:
-                Button("Allow Access…", action: allow)
-                    .help("macOS asks whether Lunalyr may read \(kind.displayName)")
+                Button("Allow Access…") {
+                    asking = true
+                    allow()
+                }
+                .help("macOS asks whether Lunalyr may read \(kind.displayName)")
+                .transition(.opacity)
             case .denied:
                 Button("Open Privacy Settings", action: openSettings)
                     .help("Opens Privacy & Security › Automation in System Settings")
+                    .transition(.opacity)
             default:
                 EmptyView()
             }
         }
         .controlSize(.small)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: [String(describing: status), asking ? "asking" : ""])
+        .onChange(of: status) { _, _ in asking = false }
+        .task(id: asking) {
+            guard asking else { return }
+            try? await Task.sleep(for: .seconds(Self.askingTimeout))
+            guard !Task.isCancelled else { return }
+            asking = false
+        }
     }
+
+    static let askingTitle = "Asking…"
 }

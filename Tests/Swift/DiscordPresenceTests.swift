@@ -357,6 +357,32 @@ final class DiscordPresenceTests: XCTestCase {
         XCTAssertEqual(discord.connections, 2)
     }
 
+    func testTheTransportSaysWhenDiscordAnswersAndWhenItGoes() async throws {
+        let discord = FakeDiscord()
+        discord.up = true
+        defer { discord.closeAll() }
+        let events = EventLog()
+        let transport = DiscordTransport(connects: false, retryInterval: 60, dial: { discord.dial() })
+        transport.onEvent = { events.append($0) }
+        transport.send(activityPayload("First"))
+        try await discord.waitFor(connections: 1)
+        _ = discord.next()
+        XCTAssertEqual(events.all.first, .ready(userName: "tester"), "connected, with the user's name")
+        discord.hangUp()
+        // The next write finds Discord gone.
+        transport.send(activityPayload("Second"))
+        try await discord.waitFor(connections: 2)
+        _ = discord.next()
+        XCTAssertTrue(events.all.contains(.disconnected), "a lost connection is reported for the status line")
+    }
+
+    private final class EventLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var events: [DiscordPresence.Event] = []
+        func append(_ event: DiscordPresence.Event) { lock.withLock { events.append(event) } }
+        var all: [DiscordPresence.Event] { lock.withLock { events } }
+    }
+
     func testAClearedPresenceIsNotSentAgain() async throws {
         let discord = FakeDiscord()
         defer { discord.closeAll() }

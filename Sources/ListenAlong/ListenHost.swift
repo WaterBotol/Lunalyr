@@ -18,6 +18,9 @@ final class ListenHost: ObservableObject {
     @Published private(set) var room: String?
     @Published private(set) var listeners = 0
     @Published private(set) var connected = false
+    /// The relay could not be reached (or dropped the room) and a retry is
+    /// waiting.
+    @Published private(set) var retrying = false
 
     /// The most messages are kept under the relay's 64 KB.
     static let maximumMessageBytes = 60_000
@@ -82,6 +85,7 @@ final class ListenHost: ObservableObject {
             }
             room = created.room
             hostKey = created.hostKey
+            retrying = false
             connect()
         }
     }
@@ -100,6 +104,7 @@ final class ListenHost: ObservableObject {
                     let text = try await socket.receive()
                     guard let self else { return }
                     self.failures = 0
+                    if self.retrying { self.retrying = false }
                     if case .listeners(let count) = ListenProtocol.decode(text) { self.listeners = count }
                 } catch {
                     self?.socketFailed(socket)
@@ -135,6 +140,7 @@ final class ListenHost: ObservableObject {
         failures += 1
         let delay = max(wait ?? 0, ListenBackoff.delay(afterFailures: failures))
         retryDelay = delay
+        retrying = true
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1e9))

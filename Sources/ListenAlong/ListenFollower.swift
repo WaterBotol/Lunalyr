@@ -138,6 +138,9 @@ final class ListenFollower: ObservableObject {
     /// The song's song.link page, offered with a note when the song can't
     /// be played here.
     @Published private(set) var songPageURL: URL?
+    /// The connection dropped and is being tried again; the menu says so
+    /// rather than still claiming to listen along.
+    @Published private(set) var isReconnecting = false
 
     let room: String
     /// Seconds between drift checks.
@@ -184,6 +187,8 @@ final class ListenFollower: ObservableObject {
     private var savedShuffle: (kind: PlayerKind, on: Bool)?
     private var stopped = false
     var onEnd: ((Phase) -> Void)?
+    /// The first state arrived: following has begun.
+    var onFollowing: (() -> Void)?
 
     init(room: String, base: URL?, sockets: any ListenSocketOpening = LiveListenSockets(),
          player: any ListenPlayerControl,
@@ -217,6 +222,7 @@ final class ListenFollower: ObservableObject {
                     guard let self else { return }
                     guard let incoming = ListenProtocol.decode(text) else { continue }
                     self.failures = 0
+                    if self.isReconnecting { self.isReconnecting = false }
                     self.receive(incoming)
                 } catch {
                     self?.socketFailed(socket)
@@ -239,6 +245,7 @@ final class ListenFollower: ObservableObject {
         }
         failures += 1
         guard failures <= 8 else { finish(.notFound); return }
+        isReconnecting = true
         let delay = ListenBackoff.delay(afterFailures: failures)
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1e9))
@@ -264,6 +271,7 @@ final class ListenFollower: ObservableObject {
         let wasConnecting = phase == .connecting
         phase = .following
         if let name = ListenProtocol.cleanHostName(state.host?.name) { hostName = name }
+        if wasConnecting { onFollowing?() }
         let restarted = noteHostSongEnd(previous: latest, previousAt: receivedAt, next: state)
         latest = state
         receivedAt = clock()

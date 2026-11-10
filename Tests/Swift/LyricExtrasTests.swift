@@ -165,12 +165,14 @@ final class LyricExtrasTests: XCTestCase {
 
     @MainActor
     func testMenuBarLineIsShortenedAtAWordBoundary() {
-        XCTAssertEqual(MenuBarLyricTicker.text("Hold on", limit: 36), "Hold on")
-        XCTAssertEqual(MenuBarLyricTicker.text("I could stay awake just to hear you breathing tonight", limit: 24),
+        // Ten points a character, so 240 pt holds 24.
+        let measure: (String) -> CGFloat = { CGFloat($0.count * 10) }
+        XCTAssertEqual(MenuBarLyricTicker.fitted("Hold on", maxWidth: 360, measure: measure), "Hold on")
+        XCTAssertEqual(MenuBarLyricTicker.fitted("I could stay awake just to hear you breathing tonight", maxWidth: 240,
+                                                 measure: measure),
                        "I could stay awake just…")
-        XCTAssertEqual(MenuBarLyricTicker.text(nil, limit: 24), "♪")
-        XCTAssertEqual(MenuBarLyricTicker.text("   ", limit: 24), "♪")
-        let emoji = MenuBarLyricTicker.text(String(repeating: "👋🏽", count: 30), limit: 10)
+        XCTAssertEqual(MenuBarLyricTicker.pages("   ", maxWidth: 240, measure: measure), ["♪"])
+        let emoji = MenuBarLyricTicker.fitted(String(repeating: "👋🏽", count: 30), maxWidth: 100, measure: measure)
         XCTAssertEqual(emoji.count, 10, "never splits a character")
         XCTAssertTrue(emoji.hasSuffix("…"))
     }
@@ -516,19 +518,19 @@ final class LyricExtrasTests: XCTestCase {
             Ticker.tickInterval(hasTrack: hasTrack, playing: playing, hasTimedLines: lines, lyricsVisible: visible,
                                 paused: paused, screensAsleep: asleep)
         }
-        XCTAssertEqual(interval(), Ticker.tickInterval)
+        XCTAssertEqual(interval(), Ticker.maxWait, "playing, it wakes for each change and at least this often")
         // A paused song can still be scrubbed in the player; it is read as
         // often as the player is re-read.
         XCTAssertEqual(interval(playing: false), Ticker.pausedTickInterval)
-        XCTAssertGreaterThan(Ticker.pausedTickInterval, Ticker.tickInterval)
         XCTAssertNil(interval(hasTrack: false))
         XCTAssertNil(interval(lines: false), "a stream or a song without timed lyrics only ever shows ♪")
         XCTAssertNil(interval(visible: false))
         XCTAssertNil(interval(paused: true))
         XCTAssertNil(interval(asleep: true))
         XCTAssertNil(interval(playing: false, asleep: true))
-        XCTAssertGreaterThan(Ticker.tolerance(for: Ticker.tickInterval), 0, "ticks can be coalesced")
-        XCTAssertLessThan(Ticker.tolerance(for: Ticker.tickInterval), Ticker.tickInterval)
+        XCTAssertGreaterThan(Ticker.tolerance(for: Ticker.maxWait), 0, "ticks can be coalesced")
+        XCTAssertLessThan(Ticker.tolerance(for: Ticker.maxWait), Ticker.maxWait)
+        XCTAssertLessThanOrEqual(Ticker.tolerance(for: 0.7), 0.03, "a line start shows on time")
     }
 
     @MainActor

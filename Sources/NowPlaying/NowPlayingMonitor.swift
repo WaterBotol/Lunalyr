@@ -141,6 +141,10 @@ final class NowPlayingMonitor: ObservableObject {
 
     var canControlPlayback: Bool { transportTarget != nil }
 
+    /// macOS may be showing its Automation prompt for a player; the transport
+    /// waits (and its buttons say so) until the person answers it.
+    var awaitsConsent: Bool { connection.queueAwaitsConsent }
+
     /// "Play a song in Music", naming the players Lunalyr follows that are
     /// installed (all of them followed if none is).
     var idlePrompt: String {
