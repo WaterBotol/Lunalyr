@@ -273,13 +273,29 @@ final class SerialFlow: @unchecked Sendable {
     }
 }
 
-/// Escapes text for an AppleScript string literal.
+/// Escapes text for an AppleScript string literal. Inside the quotes every
+/// word is plain text, so a song or search named "back", "last", "stop" or
+/// "end tell" is never read as AppleScript. Line breaks of every kind and
+/// other control characters (a NUL ends the source early) become spaces; tab
+/// stays. Everything else, accents and emoji included, is kept as it is.
 enum ScriptText {
     static func quoted(_ text: String) -> String {
-        let cleaned = text.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
+        var cleaned = ""
+        cleaned.unicodeScalars.reserveCapacity(text.unicodeScalars.count + 2)
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "\\": cleaned += "\\\\"
+            case "\"": cleaned += "\\\""
+            case "\t": cleaned.unicodeScalars.append(scalar)
+            case "\u{2028}", "\u{2029}", "\u{85}": cleaned += " "
+            default:
+                if scalar.properties.generalCategory == .control {
+                    cleaned += " "
+                } else {
+                    cleaned.unicodeScalars.append(scalar)
+                }
+            }
+        }
         return "\"\(cleaned)\""
     }
 }
@@ -604,7 +620,18 @@ struct AppleMusicSearch: PlayerSearching {
     /// shuffle is put back. Replies `{"ok", n}`, where n is a playback error
     /// number, or 0.
     static func finishQueue(into newID: String, replacing oldID: String?) -> String {
-        let replace = oldID.map { deleteOwnPlaylist($0, named: queuePlaylistName) } ?? ""
+        finishQueue(into: newID, replacing: oldID.map { [$0] } ?? [])
+    }
+
+    /// `oldIDs`: the previous queue, and any earlier build whose finish
+    /// renamed it but never reported back (Music quit, Lunalyr quit). Each
+    /// goes only by its own ID and only while it is still named exactly
+    /// "Lunalyr Queue"; without this such a playlist was left behind for
+    /// good, a second "Lunalyr Queue" beside the real one.
+    static func finishQueue(into newID: String, replacing oldIDs: [String]) -> String {
+        var seen: Set<String> = [newID]
+        let replace = oldIDs.compactMap(QueuePlaylistStore.valid).filter { seen.insert($0).inserted }
+            .map { deleteOwnPlaylist($0, named: queuePlaylistName) }.joined(separator: "\n")
         return """
         set newList to first user playlist whose persistent ID is \(ScriptText.quoted(newID))
         set wasShuffle to shuffle enabled
@@ -654,12 +681,15 @@ struct AppleMusicSearch: PlayerSearching {
             try await Self.sendQueueStep(name, body, desk: desk)
         }
         try await Self.queueFlow.run {
+            let leftovers = store.pendingIDs
             let prepared = try await send("queue-prepare",
-                                          Self.prepareQueue(persistentID: id, index: index, leftovers: store.pendingIDs))
+                                          Self.prepareQueue(persistentID: id, index: index, leftovers: leftovers))
             guard prepared.count >= 3, prepared[1].scriptText == "made", let newID = prepared[2].scriptText,
                   QueuePlaylistStore.valid(newID) != nil else { return }
-            // The script deleted every earlier leftover it was given.
-            store.pendingIDs = [newID]
+            // The script deleted every leftover still named as a half-built
+            // queue. One already renamed "Lunalyr Queue" by a finish that
+            // never reported back is kept on record and goes in the finish.
+            store.pendingIDs = leftovers.filter { $0 != newID } + [newID]
             let collected = try await send("queue-collect", Self.collectQueue(persistentID: id, index: index, into: newID))
             if collected.count >= 3, collected[1].scriptText == "ids" {
                 let ids = collected[2].scriptItems.compactMap { $0.scriptText.flatMap(QueuePlaylistStore.valid) }
@@ -667,7 +697,8 @@ struct AppleMusicSearch: PlayerSearching {
                     _ = try await send("queue-fill", Self.fillQueue(chunk, into: newID))
                 }
             }
-            let finished = try await send("queue-finish", Self.finishQueue(into: newID, replacing: store.queueID))
+            let finished = try await send("queue-finish", Self.finishQueue(
+                into: newID, replacing: (store.queueID.map { [$0] } ?? []) + leftovers))
             store.queueID = newID
             store.pendingIDs = []
             if finished.count >= 2, let playError = finished[1].scriptNumber, playError != 0 { throw PlayerSearchError.failed }
