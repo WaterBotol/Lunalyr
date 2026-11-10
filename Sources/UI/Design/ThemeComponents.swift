@@ -672,6 +672,10 @@ struct ThemedForm<Content: View>: View {
         self.content = content()
     }
 
+    @Environment(\.formScrollMemory) private var memory
+    @Environment(\.formScrollKey) private var key
+    @Environment(\.formScrollRestores) private var restores
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -679,12 +683,126 @@ struct ThemedForm<Content: View>: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if let memory, let key {
+                    FormScrollAnchor(memory: memory, key: key, restores: restores)
+                        .accessibilityHidden(true)
+                }
+            }
         }
         .scrollContentBackground(.hidden)
         .toggleStyle(ThemedToggleStyle())
         .buttonStyle(ThemedButtonStyle())
         .labeledContentStyle(ThemedLabeledContentStyle())
         .environment(\.compactCaptions, true)
+    }
+}
+
+/// Inside a `ThemedForm`'s scrolling content: puts the scroll view back where
+/// `memory` says this page was left, then records where it is scrolled to.
+/// It watches the clip view's bounds, so scrolling redraws nothing.
+private struct FormScrollAnchor: NSViewRepresentable {
+    let memory: FormScrollMemory
+    let key: String
+    let restores: Bool
+
+    func makeNSView(context: Context) -> FormScrollAnchorView {
+        FormScrollAnchorView(memory: memory, key: key, restores: restores)
+    }
+
+    func updateNSView(_ view: FormScrollAnchorView, context: Context) {}
+}
+
+final class FormScrollAnchorView: NSView {
+    private let memory: FormScrollMemory
+    private let key: String
+    private let restores: Bool
+    private var observer: NSObjectProtocol?
+    /// Nothing is recorded until any restore is done, so the first layout's
+    /// top can't overwrite the remembered offset.
+    private var ready = false
+
+    init(memory: FormScrollMemory, key: String, restores: Bool) {
+        self.memory = memory
+        self.key = key
+        self.restores = restores
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else {
+            stopWatching()
+            return
+        }
+        guard observer == nil, let clip = enclosingScrollView?.contentView else { return }
+        clip.postsBoundsChangedNotifications = true
+        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip,
+                                                          queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.record() }
+        }
+        // After SwiftUI has sized the content.
+        DispatchQueue.main.async { [weak self] in self?.restore() }
+    }
+
+    private func restore() {
+        defer { ready = true }
+        guard restores, let y = memory.offsets[key], let scroll = enclosingScrollView else { return }
+        let clip = scroll.contentView
+        let bottom = (scroll.documentView?.frame.height ?? 0) - clip.bounds.height + clip.contentInsets.bottom
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(-clip.contentInsets.top, min(y, bottom))))
+        scroll.reflectScrolledClipView(clip)
+    }
+
+    private func record() {
+        guard ready, let clip = enclosingScrollView?.contentView else { return }
+        memory.offsets[key] = clip.bounds.minY
+    }
+
+    private func stopWatching() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
+}
+
+/// Where each settings page was scrolled to (the clip view's bounds origin),
+/// by page, for the life of the window. A plain reference: writing it while
+/// scrolling redraws nothing.
+final class FormScrollMemory {
+    var offsets: [String: CGFloat] = [:]
+}
+
+private struct FormScrollMemoryKey: EnvironmentKey { static let defaultValue: FormScrollMemory? = nil }
+private struct FormScrollKeyKey: EnvironmentKey { static let defaultValue: String? = nil }
+private struct FormScrollRestoresKey: EnvironmentKey { static let defaultValue = true }
+
+extension EnvironmentValues {
+    /// Set by the Settings window: `ThemedForm`s below remember their scroll offset here.
+    var formScrollMemory: FormScrollMemory? {
+        get { self[FormScrollMemoryKey.self] }
+        set { self[FormScrollMemoryKey.self] = newValue }
+    }
+
+    /// Which page a `ThemedForm` is, for `formScrollMemory`.
+    var formScrollKey: String? {
+        get { self[FormScrollKeyKey.self] }
+        set { self[FormScrollKeyKey.self] = newValue }
+    }
+
+    /// False while another surface's request scrolls the page to a section:
+    /// that visit opens there instead of where the page was left.
+    var formScrollRestores: Bool {
+        get { self[FormScrollRestoresKey.self] }
+        set { self[FormScrollRestoresKey.self] = newValue }
     }
 }
 

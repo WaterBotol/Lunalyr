@@ -40,4 +40,66 @@ final class SettingsPolishTests: XCTestCase {
         XCTAssertEqual(ThemedSliderMath.fraction(of: 5, in: 5...5), 0)
         XCTAssertEqual(ThemedSliderMath.fraction(of: -3, in: -10...10), 0.35, accuracy: 1e-9)
     }
+
+    // MARK: S24 scroll memory
+
+    private func hostForm(memory: FormScrollMemory, key: String) -> (NSWindow, NSScrollView?) {
+        let form = ThemedForm {
+            ForEach(0..<60, id: \.self) { index in
+                Text("Row \(index)").frame(height: 30)
+            }
+        }
+        .environment(\.formScrollMemory, memory)
+        .environment(\.formScrollKey, key)
+        let window = NSWindow(contentRect: NSRect(x: -30_000, y: -30_000, width: 400, height: 300),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: form.frame(width: 400, height: 300))
+        settle(window)
+        return (window, scrollView(in: window.contentView))
+    }
+
+    private func settle(_ window: NSWindow) {
+        for _ in 0..<6 {
+            window.layoutIfNeeded()
+            window.displayIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+    }
+
+    private func scrollView(in view: NSView?) -> NSScrollView? {
+        guard let view else { return nil }
+        if let scroll = view as? NSScrollView { return scroll }
+        for child in view.subviews { if let found = scrollView(in: child) { return found } }
+        return nil
+    }
+
+    /// A page records how far it was scrolled, and opens there when visited again.
+    func testAPageReopensWhereItWasLeft() throws {
+        let memory = FormScrollMemory()
+        let (window, found) = hostForm(memory: memory, key: "lyrics")
+        let scroll = try XCTUnwrap(found)
+        XCTAssertEqual(memory.offsets["lyrics"] ?? 0, 0, accuracy: 1)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 420))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        settle(window)
+        XCTAssertEqual(memory.offsets["lyrics"] ?? 0, 420, accuracy: 2, "the offset is remembered")
+        window.contentView = nil
+        window.close()
+
+        let (again, reopened) = hostForm(memory: memory, key: "lyrics")
+        defer { again.contentView = nil; again.close() }
+        let restored = try XCTUnwrap(reopened)
+        XCTAssertEqual(restored.documentVisibleRect.minY, 420, accuracy: 2, "the page opens where it was left")
+        XCTAssertEqual(memory.offsets["lyrics"] ?? 0, 420, accuracy: 2, "the first layout doesn't overwrite it")
+    }
+
+    /// Another page has its own offset: a fresh page opens at the top.
+    func testAnotherPageOpensAtTheTop() throws {
+        let memory = FormScrollMemory()
+        memory.offsets["wallpaper"] = 500
+        let (window, found) = hostForm(memory: memory, key: "covers")
+        defer { window.contentView = nil; window.close() }
+        XCTAssertEqual(try XCTUnwrap(found).documentVisibleRect.minY, 0, accuracy: 1)
+    }
 }
