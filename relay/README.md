@@ -134,7 +134,7 @@ The free plan includes one rate-limiting rule. Keep the relay's own limit in pla
 - No accounts. A room is a random 10-character id, and only the holder of its random 32-character host key can publish to it.
 - The relay keeps only the room's latest state (song, position, lyric timing, the optional display name). It's deleted when the host ends the room, or 10 minutes after the host disconnects.
 - The relay logs nothing, and `wrangler.toml` turns Cloudflare's Workers Logs off.
-- The web page asks Apple's iTunes Search API for the cover, song.link for links to other services, and Spotify for the player. It sets `no-referrer`, so those services don't learn the room's URL.
+- The web page asks Apple's iTunes Search API for the cover. Only after the visitor clicks **Start listening** does it load a player: Spotify's, or Apple Music's embed for a song the host plays from Apple Music. The links to other services are plain links built from the song's IDs or name; nothing is sent to song.link. The page sets `no-referrer`, so those services don't learn the room's URL.
 
 ## Development
 
@@ -152,4 +152,4 @@ node scripts/smoke.mjs          # against the local relay
 
 - Browsers block autoplay, so listening starts with a **Start listening** button. That loads Spotify's [iFrame API](https://developer.spotify.com/documentation/embeds/references/iframe-api) and keeps the embed on the host's song: it follows track changes and play/pause, and seeks when it drifts more than 2 seconds from the host.
 - Full songs need a Spotify login in that browser. Without one, Spotify plays 30-second previews; the page detects this, says so, and stops trying to seek.
-- When the host sends no `spotifyId` (for example while playing from Apple Music), the page asks song.link for it. **As of November 2026 song.link's public API refuses keyless requests** (`401 PUBLIC_API_ACCESS_DEPRECATED`), so in that case the page usually can't find the song on Spotify. It then offers Apple Music, YouTube Music and song.link page links instead (song.link's own pages still work). Songs the host plays from Spotify always carry a `spotifyId` and play normally.
+- When the host sends no `spotifyId` (for example while playing from Apple Music), Spotify's player can't follow. If the song has an Apple ID (sent by the host, or found through the iTunes Search API), the page shows Apple Music's embed instead (`embed.music.apple.com/<storefront>/song/<id>`, the visitor's storefront from their browser language). It plays a preview without sign-in and can't follow the host's position or play state. The page always offers Spotify, Apple Music, YouTube Music and song.link page links too. song.link's API is not used: it refuses keyless requests (`401 PUBLIC_API_ACCESS_DEPRECATED`) as of November 2026.
