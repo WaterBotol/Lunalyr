@@ -198,6 +198,8 @@ final class LunalyrExtras: ObservableObject {
         }
     }
     @Published private(set) var note: Note?
+    /// Whether Discord is there for the presence, for Settings to show.
+    @Published var discordStatus: DiscordPresence.ConnectionStatus = .off
 
     /// A mirroring that stops for less than this and starts again is still
     /// the same one: display reconfigurations and flaky HDMI or AirPlay
@@ -337,6 +339,7 @@ final class LunalyrExtras: ObservableObject {
         } else {
             discord?.stop()
             discord = nil
+            discordStatus = .off
         }
         GlobalHotkeys.shared.setEnabled(shortcutsEnabled)
         applyListenAlong()
