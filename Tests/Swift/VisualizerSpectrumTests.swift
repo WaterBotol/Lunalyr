@@ -183,6 +183,73 @@ final class VisualizerSpectrumTests: XCTestCase {
         XCTAssertEqual(lead, 0.155 * rate, accuracy: 1, "Web scenes receive the same delay-aligned window")
     }
 
+    /// An inaudible DC offset used to read as a bass glow at half height
+    /// (0.002 lit the lowest bands to 0.5 once the auto-gain boosted it) and
+    /// kept a silent source "audible", so the idle scene never returned.
+    func testADCOffsetIsInvisibleAndMusicOnTopOfItIsUnchanged() {
+        let rate = 48_000.0
+        for offset in [Float(0.002), 0.05] {
+            let audio = VisualizerAudio(now: { 0 })
+            var buffer = [Float](repeating: offset, count: 480)
+            var time = 1_000.0
+            for _ in 0..<300 {
+                time += 0.01
+                buffer.withUnsafeBufferPointer {
+                    audio.append($0.baseAddress!, count: 480, sampleRate: rate, channel: 0, hostTime: time)
+                }
+            }
+            let still = audio.latest(at: time)
+            XCTAssertLessThan(still.bands.max()!, 0.02, "offset \(offset)")
+            XCTAssertLessThan(still.level, 0.02, "offset \(offset)")
+            XCTAssertLessThan(still.wavefield.rms, 0.0012 * 2.4, "A constant offset is not sound")
+            XCTAssertEqual(still.beat, 0, accuracy: 0.001)
+            let window = audio.pcm(count: 2048, at: time)
+            XCTAssertLessThan(window?.samples.map(abs).max() ?? 1, 0.001, "Web scenes receive the music without the offset")
+
+            // A 110 Hz note riding on the offset reads as it does without it.
+            var sample = 0
+            let plain = AudioAnalyzer(), shifted = AudioAnalyzer()
+            plain.setAutoGainEnabled(false); shifted.setAutoGainEnabled(false)
+            for step in 0..<50 {
+                for i in buffer.indices { buffer[i] = Float(0.25 * sin(2 * .pi * 110 * Double(sample + i) / rate)) }
+                sample += buffer.count
+                let end = 2_000 + Double(step + 1) * 0.01
+                buffer.withUnsafeBufferPointer { plain.append($0.baseAddress!, count: 480, sampleRate: rate, hostTime: end) }
+                for i in buffer.indices { buffer[i] += offset }
+                buffer.withUnsafeBufferPointer { shifted.append($0.baseAddress!, count: 480, sampleRate: rate, hostTime: end) }
+            }
+            let a = plain.latest(at: 2_000.5), b = shifted.latest(at: 2_000.5)
+            for band in a.bands.indices { XCTAssertEqual(a.bands[band], b.bands[band], accuracy: 0.02, "band \(band)") }
+            XCTAssertEqual(a.level, b.level, accuracy: 0.01)
+        }
+    }
+
+    /// Capture sanitises its samples, but nothing non-finite that reaches
+    /// the analyser may reach a shader, a web scene or the sound types.
+    func testNonFiniteSamplesNeverReachReaders() {
+        let rate = 48_000.0
+        let audio = VisualizerAudio(now: { 0 })
+        var buffer = [Float](repeating: 0, count: 480)
+        var time = 10.0
+        for step in 0..<100 {
+            for i in buffer.indices { buffer[i] = Float(0.3 * sin(2 * .pi * 220 * Double(step * 480 + i) / rate)) }
+            if step == 40 { buffer[7] = .nan; buffer[8] = .infinity; buffer[9] = -.infinity }
+            time += 0.01
+            buffer.withUnsafeBufferPointer {
+                audio.append($0.baseAddress!, count: 480, sampleRate: rate, channel: 0, hostTime: time)
+            }
+            if step == 42 || step == 99 {
+                let snapshot = audio.latest(at: time)
+                XCTAssertTrue(snapshot.bands.allSatisfy(\.isFinite))
+                XCTAssertTrue(snapshot.waveform.allSatisfy(\.isFinite))
+                XCTAssertTrue(snapshot.level.isFinite && snapshot.wavefield.rms.isFinite)
+                XCTAssertTrue(snapshot.sound.bass.isFinite && snapshot.sound.pad.isFinite && snapshot.sound.vocal.isFinite)
+                XCTAssertTrue(audio.pcm(count: 4096, at: time)?.samples.allSatisfy(\.isFinite) ?? false)
+            }
+        }
+        XCTAssertGreaterThan(audio.latest(at: time).bands.max()!, 0.3, "The note still shows once the bad samples pass")
+    }
+
     func testTransientsRiseWithinAFrameWhileBandsKeepTheirSoftAttack() {
         var smoother = VisualizerSmoother(), hit = AudioSnapshot()
         hit.beat = 1; hit.bass = 1

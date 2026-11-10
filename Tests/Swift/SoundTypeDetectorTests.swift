@@ -215,6 +215,14 @@ final class SoundTypeDetectorTests: XCTestCase {
         }
         XCTAssertEqual(passes.count, 12_000 / 512, "One spectrum per quarter window, full passes and halfway points alike")
         let reference = PlainSpectrum(fftSize: 2048)
+        // The analyser removes any DC offset first (AudioAnalyzer.dcCutoff).
+        let pole = Float(exp(-2 * Double.pi * AudioAnalyzer.dcCutoff / fs))
+        var previousInput: Float = 0, previousOutput: Float = 0
+        let analysed = samples.map { x -> Float in
+            let y = x - previousInput + pole * previousOutput
+            previousInput = x; previousOutput = y
+            return y
+        }
         for (k, pass) in passes.enumerated() {
             XCTAssertEqual(pass.position, (k + 1) * 512)
             XCTAssertEqual(pass.time, Self.origin + Double(pass.position) / fs, accuracy: 1e-9, "The newest sample's capture time")
@@ -224,7 +232,7 @@ final class SoundTypeDetectorTests: XCTestCase {
             XCTAssertEqual(pass.power[0], 0)
             // Full passes reuse the padded transform; between them a plain FFT
             // runs. Both are the plain FFT of the newest window.
-            let expected = samples.withUnsafeBufferPointer { Array(reference.compute($0.baseAddress!, endingAt: pass.position)) }
+            let expected = analysed.withUnsafeBufferPointer { Array(reference.compute($0.baseAddress!, endingAt: pass.position)) }
             let scale = try XCTUnwrap(expected.max())
             XCTAssertLessThan(zip(pass.power, expected).map { abs($0 - $1) }.max() ?? 1, scale * 1e-4, "pass \(k)")
             if pass.position >= 2048 {

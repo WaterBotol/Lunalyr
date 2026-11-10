@@ -93,6 +93,7 @@ When merging, keep every entry and combine duplicate headings.
 - Listen along: quickly skipping through songs as host no longer leaves friends on the wrong song for up to ten seconds.
 - Listen along: when the host plays from Apple Music, Spotify listeners are told the song can't be found on Spotify from here, instead of that it isn't on their Spotify.
 - Web listen-along page: a paused song no longer shows the wrong time for late joiners. For songs the host plays from Apple Music, the page now offers Apple Music's own player (a preview) and plain Spotify, Apple Music, YouTube Music and song.link links; it no longer asks song.link's API, which has stopped working.
+- Visualisers: a silent source with a tiny constant offset in its audio no longer shows a stuck bass glow and keeps the idle scene away.
 
 ## [1.0.0] - 2026-11-08
 

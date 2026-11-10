@@ -196,6 +196,12 @@ final class AudioAnalyzer: @unchecked Sendable {
     private var pending = 0
     /// When the newest sample was captured, on the `CACurrentMediaTime` clock.
     private var newestSampleTime = -Double.infinity
+    /// The history holds the input minus its DC offset (a one-pole high-pass
+    /// at `dcCutoff`). An inaudible offset of 0.002 used to read as a bass
+    /// glow at half height and kept a silent source "audible" for ever.
+    static let dcCutoff = 5.0
+    private var dcPole: Float = 1
+    private var dcInput: Float = 0, dcOutput: Float = 0
 
     // MARK: Analysis scratch
 
@@ -491,7 +497,7 @@ final class AudioAnalyzer: @unchecked Sendable {
             let boundary = spectrumObserver != nil && pending < half ? half : hop
             let chunk = min(count - offset, boundary - pending)
             writeHistory(samples + offset, count: chunk)
-            detectTransients(samples + offset, count: chunk, firstIndex: firstIndex + offset,
+            detectTransients(count: chunk, firstIndex: firstIndex + offset,
                              lastIndex: firstIndex + count - 1, hostTime: hostTime)
             offset += chunk
             pending += chunk
@@ -520,6 +526,7 @@ final class AudioAnalyzer: @unchecked Sendable {
         hop = fftSize / 2
         hopSeconds = Double(hop) / sampleRate
         binCount = transformSize / 2
+        dcPole = Float(exp(-2 * Double.pi * Self.dcCutoff / sampleRate))
         window.withUnsafeMutableBufferPointer {
             vDSP_hann_window($0.baseAddress!, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
         }
@@ -540,6 +547,7 @@ final class AudioAnalyzer: @unchecked Sendable {
         written = 0
         pending = 0
         spectrumPosition = 0
+        dcInput = 0; dcOutput = 0
         newestSampleTime = -Double.infinity
         for i in smoothed.indices { smoothed[i] = 0; raw[i] = 0; previousRaw[i] = 0 }
         fluxEnvelope = 0
@@ -613,17 +621,26 @@ final class AudioAnalyzer: @unchecked Sendable {
 
     // MARK: - Writing helpers (call with lock held)
 
+    /// Stores `samples` with the DC offset removed and non-finite samples
+    /// replaced by silence, so neither reaches any analysis or reader.
     private func writeHistory(_ samples: UnsafePointer<Float>, count: Int) {
-        let capacity = Self.historyCapacity
-        var copied = 0
+        let capacity = Self.historyCapacity, pole = dcPole
+        var previousInput = dcInput, previousOutput = dcOutput
         history.withUnsafeMutableBufferPointer { ring in
-            while copied < count {
-                let start = (written + copied) % capacity
-                let run = min(count - copied, capacity - start)
-                (ring.baseAddress! + start).update(from: samples + copied, count: run)
-                copied += run
+            var index = written % capacity
+            for i in 0..<count {
+                let x = samples[i].isFinite ? samples[i] : 0
+                let y = x - previousInput + pole * previousOutput
+                previousInput = x
+                previousOutput = y
+                ring[index] = y
+                index += 1
+                if index == capacity { index = 0 }
             }
         }
+        dcInput = previousInput
+        // Silence decays the filter towards subnormals; stop there.
+        dcOutput = abs(previousOutput) < 1e-20 ? 0 : previousOutput
         written += count
     }
 
@@ -659,13 +676,14 @@ final class AudioAnalyzer: @unchecked Sendable {
     /// about 5 ms. Each onset is stamped with the capture time of the block
     /// that fired it, so a kick reaches the screen tens of milliseconds
     /// sooner than an FFT hop allows and can be aligned to the output.
-    private func detectTransients(_ samples: UnsafePointer<Float>, count: Int, firstIndex: Int,
-                                  lastIndex: Int, hostTime: Double) {
+    /// It reads the `count` samples just written to the history at `firstIndex`.
+    private func detectTransients(count: Int, firstIndex: Int, lastIndex: Int, hostTime: Double) {
         let blockSeconds = Double(blockLength) / sampleRate
         let kickFollow = Float(1 - exp(-blockSeconds / TimeConstant.kickAverage))
         let trebleFollow = Float(1 - exp(-blockSeconds / TimeConstant.trebleAverage))
+        let capacity = Self.historyCapacity
         for i in 0..<count {
-            let x = samples[i].isFinite ? samples[i] : 0
+            let x = history[(firstIndex + i) % capacity]
             let low = lowFilter.process(x), high = highFilter.process(x)
             blockLow += low * low
             blockHigh += high * high
