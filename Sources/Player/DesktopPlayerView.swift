@@ -441,12 +441,21 @@ private struct CoverStrip: View {
 /// coming into view) are read in one script; a cover scrolled away before its
 /// turn is not read at all.
 enum LibraryArtwork {
-    private static let cache = NSCache<NSString, NSImage>()
+    private static let cache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 160
+        return cache
+    }()
     private static let batcher = ArtworkBatcher(desk: .shared)
+    /// Covers are drawn at `DesktopPlayerView.cover` points; a library
+    /// cover can be thousands of pixels, decoded on the main thread.
+    static let maxPixelSize = 400
 
     static func image(persistentID id: String) async -> NSImage? {
         if let hit = cache.object(forKey: id as NSString) { return hit }
-        guard let data = await batcher.data(for: id), data.count > 100, let image = NSImage(data: data) else { return nil }
+        guard let data = await batcher.data(for: id), data.count > 100,
+              let decoded = await ArtworkImage.decodeDetached(data, maxPixelSize: maxPixelSize) else { return nil }
+        let image = ArtworkImage.image(decoded)
         cache.setObject(image, forKey: id as NSString)
         return image
     }

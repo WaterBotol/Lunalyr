@@ -16,8 +16,14 @@ actor ArtworkProvider {
     /// Larger than any real cover; anything bigger is not one.
     static let maxImageBytes = 20_000_000
 
+    /// Covers kept for songs played again this session. Bounded: the app
+    /// runs all day, and a 600px cover is around 100 KB.
+    static let cacheCapacity = 64
+    static let cacheBytes = 16_000_000
+
     private let session: URLSession
-    private var cache: [String: Data] = [:]
+    private var cache = BoundedCache<String, Data>(capacity: ArtworkProvider.cacheCapacity,
+                                                   maxCost: ArtworkProvider.cacheBytes, cost: { $0.count })
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -25,7 +31,7 @@ actor ArtworkProvider {
 
     func artworkData(title: String, artist: String, album: String?, duration: Double) async -> Data? {
         let key = "\(title)|\(artist)|\(album ?? "")"
-        if let hit = cache[key] { return hit }
+        if let hit = cache.value(for: key) { return hit }
         // A catalogue cover is only right if it is this artist's. Without
         // an artist to check against, a title search is a guess.
         guard !Self.normalize(artist).isEmpty, !Self.normalize(title).isEmpty else { return nil }
@@ -40,7 +46,7 @@ actor ArtworkProvider {
                 guard !Task.isCancelled else { return nil }
                 if let image = await search(term: term, country: country, title: title, artist: artist,
                                             album: album, duration: duration) {
-                    cache[key] = image
+                    cache.insert(image, for: key)
                     return image
                 }
             }
