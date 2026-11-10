@@ -123,6 +123,7 @@ When merging, keep every entry and combine duplicate headings.
 - Lyrics without word timing: the line being replaced no longer brightens for a moment as the next line appears, and the previewed first word of a line stays in place instead of blinking out and jumping when its line starts.
 - Lyrics: a line now starts leaving a little earlier and lifts away as the next one arrives, so two lines no longer sit on top of each other in the middle of the screen at every change.
 - Lyrics: words in very fast lines stay on screen for a moment instead of flashing, and after two very short lines the line before them finishes leaving instead of being cut off.
+- Hinge, Broadside, Portal, Mosaic, Torque and Fable: lyrics without word timing now bring the line's words in together from its start, instead of building the line on guessed word times.
 
 ## [1.0.0] - 2026-11-08
 

@@ -306,4 +306,18 @@ final class LyricMotionPolishTests: XCTestCase {
         }
         XCTAssertGreaterThan(last, 0.95)
     }
+
+    // MARK: L23
+
+    func testStageLayoutsBringLineTimedWordsInTogether() {
+        let phrase = LyricsFetcher.makeLine(text: "one two three four five six seven eight nine ten eleven twelve",
+                                            start: 20, end: 30)
+        let readings = [phrase.words[1].presentationID: "ni"]
+        let staged = LyricLayer.stageReveal(phrase.words, readings: readings, lineStart: 20)
+        XCTAssertEqual(staged.words.map(\.text), phrase.words.map(\.text))
+        XCTAssertEqual(staged.words[0].start, 20)
+        XCTAssertEqual(staged.words[1].start, 20.06, accuracy: 1e-9)
+        XCTAssertEqual(staged.words.last?.start ?? 0, 20.5, accuracy: 1e-9, "all in within half a second")
+        XCTAssertEqual(staged.readings[staged.words[1].presentationID], "ni")
+    }
 }

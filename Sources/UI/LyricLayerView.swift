@@ -824,11 +824,15 @@ struct LyricLayer: View {
         // and dropped it back to the entrance's starting pose.
         let holdsFirstRun = !previewing && !stage && heldPreview
             && (pose.progress < 1 || pose.arrival != 1) && pose.exit <= 0
+        // A stage layout builds its line word by word, but these word times
+        // are invented: the words come in together from the line's start.
+        let staged = stage ? Self.stageReveal(words, readings: annotations, lineStart: line.start)
+            : (words: words, readings: annotations)
         let lineView = { (firstRun: Double?, held: Bool, hides: Bool) in
-            LyricLineView(words: words, time: time, stageSize: stageSize,
+            LyricLineView(words: staged.words, time: time, stageSize: stageSize,
                 baseSize: stage ? baseSize * 0.8 * CGFloat(min(1.5, max(0.7, self.settings.lyricScale))) : base,
                 mood: self.mood, composition: stage ? composition : .scattered, seed: seed, presence: pose.presence,
-                readings: annotations, wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
+                readings: staged.readings, wordTimed: false, phraseSweep: LyricPhraseTiming.sweep(of: line, at: time),
                 exitStart: stage && !previewing ? Self.stageExitStart(line, pose: pose) : .infinity,
                 glue: glue, firstRunOnly: firstRun, heldFirstRun: held, hidesFirstRun: hides)
         }
@@ -841,6 +845,22 @@ struct LyricLayer: View {
                 lineView(Self.heldFirstRunOpacity(presence: pose.presence) * (1 - 0.5 * yield), true, false)
             }
         }
+    }
+
+    /// A line-timed line in a stage layout: its estimated word times are
+    /// replaced by a quick stagger from the line's start (60 ms a word, all
+    /// in within half a second), with the readings re-keyed to match.
+    static func stageReveal(_ words: [LyricsFetcher.Word], readings: [TimedWordKey: String],
+                            lineStart: Double) -> (words: [LyricsFetcher.Word], readings: [TimedWordKey: String]) {
+        var moved: [LyricsFetcher.Word] = [], keys: [TimedWordKey: String] = [:]
+        moved.reserveCapacity(words.count)
+        for (index, word) in words.enumerated() {
+            let start = lineStart + min(0.5, Double(index) * 0.06)
+            let next = LyricsFetcher.Word(text: word.text, start: start, end: max(start, word.end))
+            if let reading = readings[word.presentationID] { keys[next.presentationID] = reading }
+            moved.append(next)
+        }
+        return (moved, keys)
     }
 
     /// The previewed first word of a line-timed line as the line arrives:
