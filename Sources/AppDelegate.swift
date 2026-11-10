@@ -28,6 +28,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // plays something in them (or asks from the menu bar).
             NowPlayingMonitor.shared.start()
         }
+        // Links that launched the app run once everything above has started.
+        LunalyrLinkRouter.shared.becameReady()
+    }
+
+    /// `lunalyr://` links, from a browser, Shortcuts or `open`. Unknown or
+    /// malformed ones are ignored; a join is asked about before following.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard !AppRuntime.isUnitTesting else { return }
+        LunalyrLinkRouter.shared.open(urls)
     }
 
     /// Opening Lunalyr again (from Applications, Spotlight or the Dock)

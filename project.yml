@@ -47,6 +47,12 @@ targets:
         # its display from VisualizerGPU instead, and the artwork palette's
         # Core Image context is allowed the low-power GPU.
         NSSupportsAutomaticGraphicsSwitching: true
+        # lunalyr://join/<room>, toggle, card, settings (LunalyrLinks.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: local.verso.custom.link
+            CFBundleTypeRole: Viewer
+            CFBundleURLSchemes:
+              - lunalyr
     dependencies:
       - package: Yams
         product: Yams
