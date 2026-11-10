@@ -1150,8 +1150,11 @@ struct FableLayout: Layout {
                 rows[rows.count - 1].append(index); width += add
             }
         }
-        // No lone word left at the end when the row above can spare one.
-        if rows.count > 1, rows[rows.count - 1].count == 1, rows[rows.count - 2].count >= 3 {
+        // No lone word left at the end when the row above can spare one and
+        // the two still fit the row width (a long last word may not).
+        if rows.count > 1, rows[rows.count - 1].count == 1, rows[rows.count - 2].count >= 3,
+           let spare = rows[rows.count - 2].last,
+           sizes[spare].width + gap + sizes[rows[rows.count - 1][0]].width <= wrap {
             let moved = rows[rows.count - 2].removeLast()
             rows[rows.count - 1].insert(moved, at: 0)
         }
