@@ -69,7 +69,8 @@ struct LyricLayer: View {
     }
 
     private var sceneContent: LyricSceneContent {
-        LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized, plainLines: lyricsVM.plainLines,
+        LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized,
+            machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
             duration: nowPlaying.current?.duration ?? 0)
@@ -286,7 +287,8 @@ struct LyricLayer: View {
                 }
             }
         case .synced:
-            let lines = SceneLines(lines: content.lines, romanized: content.romanized, fingerprint: key.fingerprint)
+            let lines = SceneLines(lines: content.lines, romanized: content.romanized, fingerprint: key.fingerprint,
+                                   machineTranslations: content.machineTranslations)
             let gap = live && settings.showInterludes ? instrumentalGap(at: time) : nil
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
@@ -381,6 +383,8 @@ struct LyricLayer: View {
         let lines: [LyricsFetcher.Line]
         let romanized: [Int: [LyricsFetcher.Word]]
         let fingerprint: Int
+        /// Translations made on this Mac; a line's own translation wins.
+        var machineTranslations: [Int: String] = [:]
     }
 
     /// Outgoing ink finishes its exit after a line boundary: every word of
@@ -598,8 +602,9 @@ struct LyricLayer: View {
                 // Laid out in a preview as well (it is unseen until the line
                 // starts): the line is centred with it, so leaving it out
                 // made the previewed word jump up when the line arrived.
-                let translation = extras.showsTranslations ? line.translation?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) : nil
+                let translation = extras.showsTranslations
+                    ? (line.translation ?? scene.machineTranslations[index])?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    : nil
                 // Dense web layouts set long lines smaller.
                 let density = line.words.reduce(0) { $0 + $1.text.count + 3 }
                 let densityScale = line.wordTimed && composition.hasConnections
@@ -608,7 +613,8 @@ struct LyricLayer: View {
                 // A rolling stage keeps a band for translations clear of its
                 // words whenever the song has any, so its size never changes
                 // from line to line.
-                let band = rolls && extras.showsTranslations && cache.hasTranslations(lines, fingerprint: scene.fingerprint)
+                let band = rolls && extras.showsTranslations
+                    && (cache.hasTranslations(lines, fingerprint: scene.fingerprint) || !scene.machineTranslations.isEmpty)
                     ? translationSize * 2.7 + baseSize * 0.3 : 0
                 let fit = LyricLineStack.Fit(available: composition.hasConnections
                     ? CGSize(width: stageSize.width * 0.92, height: stageSize.height * 0.86)

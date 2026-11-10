@@ -59,6 +59,8 @@ struct LyricSceneKey: Equatable {
 struct LyricSceneContent {
     var lines: [LyricsFetcher.Line] = []
     var romanized: [Int: [LyricsFetcher.Word]] = [:]
+    /// Lines translated on this Mac, for lines the source left untranslated.
+    var machineTranslations: [Int: String] = [:]
     var plainLines: [String] = []
     var title = ""
     var artist = ""
