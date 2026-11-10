@@ -160,9 +160,18 @@ struct LyricPhraseTiming {
         lines.indices.contains(row + 1) && handOver(after: row, in: lines) > lines[row + 1].start
     }
 
+    /// How long a line in `composition` takes to leave once its exit has
+    /// begun. Hinge folds its words shut one after another over most of a
+    /// second, longer than the other layouts' exits: drawn only for
+    /// `exitSpan`, its last words were cut off part-way through the fold.
+    static func exitSpan(for composition: LyricComposition) -> Double {
+        composition == .hinge ? 1.0 : exitSpan
+    }
+
     /// Whether an earlier line still has words on their way out.
-    static func stillLeaving(_ line: LyricsFetcher.Line, nextStart: Double, time: Double) -> Bool {
-        time < exitStart(of: line, nextStart: nextStart) + exitSpan
+    static func stillLeaving(_ line: LyricsFetcher.Line, nextStart: Double, time: Double,
+                             span: Double = exitSpan) -> Bool {
+        time < exitStart(of: line, nextStart: nextStart) + span
     }
 
     static func firstWordOnset(of line: LyricsFetcher.Line) -> Double? {

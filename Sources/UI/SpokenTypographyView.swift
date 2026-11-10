@@ -59,17 +59,30 @@ struct SpokenTypographyView: View {
     /// How far the stage has rolled: one step per onset. Each step is a
     /// seeded spring paced by the gap to the next word, so quick passages
     /// move briskly, slow ones glide, and overlapping steps add their
-    /// velocities instead of restarting from rest. Reduce Motion uses the
-    /// nearest settled position and draws each word once.
+    /// velocities instead of restarting from rest. With Reduce Motion each
+    /// step is a short dissolve instead (`stacks`).
     static func cursor(_ prepared: [SpokenTypography.Word], time: Double, intensity: Double,
                        reduceMotion: Bool) -> Double {
         var total = 0.0
         for word in prepared {
             let age = time - word.source.start
-            total += reduceMotion ? vc_settle(age, 0.32)
+            total += reduceMotion ? Easing.smoothstep(age / WallpaperMotion.reducedDissolve)
                 : vc_rolling_handoff(age, word.cadence, word.seed, intensity)
         }
         return total
+    }
+
+    /// Where the stack is drawn, and how strongly. In motion: once, at the
+    /// cursor. With Reduce Motion the words never travel: the stack is drawn
+    /// at settled positions only, and an onset dissolves from one settled
+    /// position to the next over `reducedDissolve` rather than jumping the
+    /// whole column a rank in one frame.
+    static func stacks(cursor: Double, reduceMotion: Bool) -> [(position: Double, opacity: Double)] {
+        guard reduceMotion else { return [(cursor, 1)] }
+        let low = cursor.rounded(.down), share = cursor - low
+        if share < 0.001 { return [(low, 1)] }
+        if share > 0.999 { return [(low + 1, 1)] }
+        return [(low, 1 - share), (low + 1, share)]
     }
 
     var body: some View {
@@ -82,36 +95,49 @@ struct SpokenTypographyView: View {
         let style: Int32 = composition == .spoken ? 0 : composition == .cascade ? 1 : 2
         GeometryReader { geometry in
             let cursor = Self.cursor(prepared, time: time, intensity: intensity, reduceMotion: reduceMotion)
-            let position = reduceMotion ? cursor.rounded() : cursor
-            let next = nextIndex
-            // The words keep clear of the band at the foot of the stage.
-            let stage = CGSize(width: geometry.size.width, height: max(1, geometry.size.height - bottomInset))
-            // Rank 0 -- the word in focus -- sits here; every other word is
-            // stacked above or below it by measured size (`RollingStack`).
-            let anchor = CGPoint(x: stage.width * 0.5,
-                                 y: stage.height * 0.54 + CGFloat(vc_rolling_baseline(style, 0)) * baseSize)
-            RollingStackLayout(anchor: anchor, gap: baseSize * 0.16) {
-                ForEach(prepared) { word in
-                    let rank = position - 1 - Double(word.index)
-                    if rank >= -2 && rank <= 5.2 {
-                        let chosen = settings.arrival(in: composition, for: word.source)
-                        let arrival = chosen.motion(in: composition)
-                        let eligible = word.index > 0 ? prepared[word.index - 1].source.start : -Double.infinity
-                        let highlight = chosen.highlightsSungWords && !word.tile
-                            ? Self.highlight(word, lineEnd: lineEnds[word.source.presentationID] ?? defaultEnd,
-                                             time: time, reduceMotion: reduceMotion)
-                            : .hidden
-                        token(word, next: next, rank: rank, size: stage, arrival: arrival,
-                              intensity: intensity, eligibleSince: eligible, highlight: highlight)
-                    }
+            let stacks = Self.stacks(cursor: cursor, reduceMotion: reduceMotion)
+            ZStack {
+                ForEach(stacks.indices, id: \.self) { index in
+                    stack(prepared, position: stacks[index].position, geometry: geometry, style: style,
+                          intensity: intensity, defaultEnd: defaultEnd)
+                        .opacity(stacks[index].opacity)
                 }
             }
-            .coordinateSpace(.named(RollingStack.space))
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .frame(height: max(baseSize * stageHeightInTypeSizes, stageHeight ?? 0))
         .accessibilityElement(children: .combine)
     }
+    /// The words stacked about `position` (see `cursor`).
+    private func stack(_ prepared: [SpokenTypography.Word], position: Double, geometry: GeometryProxy, style: Int32,
+                       intensity: Double, defaultEnd: Double) -> some View {
+        let next = nextIndex
+        // The words keep clear of the band at the foot of the stage.
+        let stage = CGSize(width: geometry.size.width, height: max(1, geometry.size.height - bottomInset))
+        // Rank 0 -- the word in focus -- sits here; every other word is
+        // stacked above or below it by measured size (`RollingStack`).
+        let anchor = CGPoint(x: stage.width * 0.5,
+                             y: stage.height * 0.54 + CGFloat(vc_rolling_baseline(style, 0)) * baseSize)
+        return RollingStackLayout(anchor: anchor, gap: baseSize * 0.16) {
+            ForEach(prepared) { word in
+                let rank = position - 1 - Double(word.index)
+                if rank >= -2 && rank <= 5.2 {
+                    let chosen = settings.arrival(in: composition, for: word.source)
+                    let arrival = chosen.motion(in: composition)
+                    let eligible = word.index > 0 ? prepared[word.index - 1].source.start : -Double.infinity
+                    let highlight = chosen.highlightsSungWords && !word.tile
+                        ? Self.highlight(word, lineEnd: lineEnds[word.source.presentationID] ?? defaultEnd,
+                                         time: time, reduceMotion: reduceMotion)
+                        : .hidden
+                    token(word, next: next, rank: rank, size: stage, arrival: arrival,
+                          intensity: intensity, eligibleSince: eligible, highlight: highlight)
+                }
+            }
+        }
+        .coordinateSpace(.named(RollingStack.space))
+        .frame(width: geometry.size.width, height: geometry.size.height)
+    }
+
     /// A rolling window can show words from more than one line.
     static func highlight(_ word: SpokenTypography.Word, lineEnd: Double, time: Double,
                           reduceMotion: Bool) -> LyricHighlightTiming.Pose {

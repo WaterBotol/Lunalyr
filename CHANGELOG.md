@@ -118,6 +118,8 @@ When merging, keep every entry and combine duplicate headings.
 - Lyrics: scrubbing or seeking within a song cross-fades smoothly instead of popping, and the line on screen no longer dims and blurs for a moment after a seek.
 - Lyrics: a better lyric source arriving at the start of a song no longer makes the previous song's fading lyrics vanish; one that shows a different line cross-fades instead of cutting.
 - Lyrics: the loading spinner and the "Nothing playing" notice fade out instead of disappearing in one frame.
+- Hinge: a line's last words now finish folding away instead of being cut off part-way.
+- Spoken, Cascade and Cutout with Reduce Motion: the column of words now dissolves to its next place at each word instead of jumping.
 
 ## [1.0.0] - 2026-11-08
 

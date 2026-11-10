@@ -192,4 +192,52 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertFalse(LyricSceneMemory.activeLineDiffers(LyricSceneContent(lines: sheet),
                                                            LyricSceneContent(lines: reworded), at: 25))
     }
+
+    // MARK: L5
+
+    /// Hinge's fold runs 0.9 s: its line is drawn until the fold is done,
+    /// not cut at the other layouts' 0.7 s.
+    func testAHingeLineIsDrawnUntilItsFoldEnds() {
+        let first = line(words(["fold", "away"], start: 10), end: 11)
+        let lines = [first, line(words(["next"], start: 11.5))]
+        let exit = LyricPhraseTiming.exitStart(of: first, nextStart: 11.5)
+        let late = exit + 0.85
+        XCTAssertFalse(LyricLayer.isLeaving(0, current: 1, lines: lines, time: late, rolls: { _ in false }))
+        XCTAssertTrue(LyricLayer.isLeaving(0, current: 1, lines: lines, time: late,
+                                           span: { _ in LyricPhraseTiming.exitSpan(for: .hinge) }, rolls: { _ in false }))
+        XCTAssertEqual(LyricPhraseTiming.exitSpan(for: .scattered), LyricPhraseTiming.exitSpan)
+    }
+
+    // MARK: L11
+
+    /// With Reduce Motion the rolling column no longer jumps a rank in one
+    /// frame at each onset: it dissolves between two settled positions.
+    func testReduceMotionDissolvesTheRollingColumnBetweenSettledPlaces() {
+        let sung = words(["one", "two", "three"], start: 10, step: 1)
+        let prepared = SpokenTypography.prepare(.init(words: sung, baseSize: 40, mood: .neutral, composition: .spoken,
+                                                      fontIdentity: LyricFontIdentity(settings: .shared), readings: [:]),
+                                                settings: .shared)
+        var previous: [Double: Double] = [:]
+        var time = 9.9
+        while time < 12.5 {
+            let cursor = SpokenTypographyView.cursor(prepared, time: time, intensity: 0, reduceMotion: true)
+            let stacks = SpokenTypographyView.stacks(cursor: cursor, reduceMotion: true)
+            XCTAssertLessThanOrEqual(stacks.count, 2)
+            XCTAssertEqual(stacks.map(\.opacity).reduce(0, +), 1, accuracy: 1e-9)
+            var now: [Double: Double] = [:]
+            for stack in stacks {
+                XCTAssertEqual(stack.position, stack.position.rounded(), "a settled place only")
+                now[stack.position] = stack.opacity
+            }
+            for position in Set(now.keys).union(previous.keys) where !previous.isEmpty {
+                XCTAssertLessThan(abs((now[position] ?? 0) - (previous[position] ?? 0)), 0.25,
+                                  "the column jumped at \(time)")
+            }
+            previous = now
+            time += 1.0 / 60
+        }
+        XCTAssertEqual(SpokenTypographyView.cursor(prepared, time: 10 + WallpaperMotion.reducedDissolve, intensity: 0,
+                                                   reduceMotion: true), 1, accuracy: 1e-9)
+        XCTAssertEqual(SpokenTypographyView.stacks(cursor: 1.37, reduceMotion: false).map(\.position), [1.37])
+    }
 }

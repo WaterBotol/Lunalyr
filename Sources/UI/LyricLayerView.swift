@@ -190,7 +190,9 @@ struct LyricLayer: View {
                 // is earlier than the phrase's: measured from the phrase's,
                 // those exits played at 12 or 24 fps.
                 let exit = renderedExitStart(row, in: lines)
-                if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan + 0.1 { return .active }
+                if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan(for: composition(at: row)) + 0.1 {
+                    return .active
+                }
                 for word in line.words where time >= word.start - lead && time <= word.end + 1.2 {
                     return .active
                 }
@@ -457,20 +459,25 @@ struct LyricLayer: View {
 
     /// Whether an earlier line is still being sung or finishing its exit.
     private func leaving(_ line: Int, current: Int, in lines: [LyricsFetcher.Line], time: Double) -> Bool {
-        Self.isLeaving(line, current: current, lines: lines, time: time) {
+        Self.isLeaving(line, current: current, lines: lines, time: time,
+                       span: { LyricPhraseTiming.exitSpan(for: composition(at: $0)) }) {
             lines[$0].wordTimed && composition(at: $0).arrivalOnly
         }
     }
 
-    /// `leaving`, given which lines roll (`rolls`).
+    /// `leaving`, given which lines roll (`rolls`) and how long each takes
+    /// to leave (`span`).
     static func isLeaving(_ line: Int, current: Int, lines: [LyricsFetcher.Line], time: Double,
+                          span: (Int) -> Double = { _ in LyricPhraseTiming.exitSpan },
                           rolls: (Int) -> Bool) -> Bool {
         guard line >= 0, line < current, lines.indices.contains(current) else { return false }
         // An earlier renderer cannot reappear after a short intervening line.
         guard !changesTiming(lines[line], lines[current]),
               !(line..<current).contains(where: { changesTiming(lines[$0], lines[$0 + 1]) }) else { return false }
         let handOver = Self.handOver(after: line, in: lines, rolls: rolls)
-        guard LyricPhraseTiming.stillLeaving(lines[line], nextStart: handOver, time: time) else { return false }
+        guard LyricPhraseTiming.stillLeaving(lines[line], nextStart: handOver, time: time, span: span(line)) else {
+            return false
+        }
         // A rolling line followed by another rolling line has no exit of its
         // own: its words carry on in that line's stage and fade with it.
         if rolls(line) && rolls(line + 1) { return false }
