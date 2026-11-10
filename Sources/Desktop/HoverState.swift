@@ -22,6 +22,12 @@ final class HoverState: ObservableObject {
     /// again. Lunalyr runs all day; most of it with the pointer still.
     nonisolated static let restingInterval: TimeInterval = 0.25
     nonisolated static let restAfter: TimeInterval = 1.5
+    /// The poll while the player is up or an intent is building: quick
+    /// enough to judge the pointer's speed, and for a click on a control to
+    /// reach it rather than the desktop underneath.
+    nonisolated static let revealingInterval: TimeInterval = 0.045
+    /// Whether the pointer means to bring the player up (`HoverIntent`).
+    private var intent = HoverIntent()
     /// When the pointer last moved, or the controls were last up.
     private var lastMotion: TimeInterval = 0
     private var started = false
@@ -76,6 +82,23 @@ final class HoverState: ObservableObject {
         !active && stillFor >= restAfter ? restingInterval : interval
     }
 
+    /// As above, and quicker still while the player is up or a reveal is pending.
+    nonisolated static func pollInterval(stillFor: TimeInterval, shown: Bool, pending: Bool) -> TimeInterval {
+        shown || pending ? revealingInterval : pollInterval(stillFor: stillFor, active: false)
+    }
+
+    /// The display the hover logic settles on this poll, after the reveal
+    /// intent and the dismiss guards: a new reveal waits for intent; a shown
+    /// player stays while something holds it (`PlayerDismissGuard`).
+    nonisolated static func decide(proposed: CGDirectDisplayID?, previous: CGDirectDisplayID?,
+                                   intentReady: Bool, holds: Bool) -> CGDirectDisplayID? {
+        if let proposed, proposed != previous, !intentReady {
+            return holds ? previous : nil
+        }
+        if proposed == nil, holds { return previous }
+        return proposed
+    }
+
     private func schedule(_ interval: TimeInterval) {
         timer?.invalidate()
         let tick = Timer(timeInterval: interval, repeats: true) { _ in
@@ -88,6 +111,7 @@ final class HoverState: ObservableObject {
 
     func reset() {
         session = VCHoverSession()
+        intent.reset()
         lastHit = nil
         if activeDisplayID != nil { activeDisplayID = nil }
     }
@@ -100,12 +124,13 @@ final class HoverState: ObservableObject {
         lastButtons = buttons
         let now = ProcessInfo.processInfo.systemUptime
         let shown = session.activeDisplayID != 0 || activeDisplayID != nil
-        if moved || shown { lastMotion = now }
-        let wanted = Self.pollInterval(stillFor: now - lastMotion, active: shown)
+        if moved || shown || intent.isPending { lastMotion = now }
+        let wanted = Self.pollInterval(stillFor: now - lastMotion, shown: shown, pending: intent.isPending)
         if let timer, timer.timeInterval != wanted { schedule(wanted) }
         // A resting pointer cannot start a reveal; an active one still needs
-        // its linger timed and its controls kept in reach.
-        guard moved || session.activeDisplayID != 0 else { return }
+        // its linger timed and its controls kept in reach, and a pending one
+        // its dwell.
+        guard moved || session.activeDisplayID != 0 || intent.isPending || PlayerInteraction.shared.dragging else { return }
         let screens = NSScreen.screens
         let displays = screens.compactMap { screen -> VCDisplayFrame? in
             guard let id = screen.versoDisplayID else { return nil }
@@ -116,14 +141,34 @@ final class HoverState: ObservableObject {
         guard index >= 0 else { reset(); return }
         let screen = displays[Int(index)]
         let held = buttons != 0
-        let potentialHover = (!held && vc_hover_hot_zone(screen.frame).rect.contains(location))
-            || session.activeDisplayID == screen.displayID
+        let inHotZone = vc_hover_hot_zone(screen.frame).rect.contains(location)
+        let potentialHover = (!held && inHotZone) || session.activeDisplayID == screen.displayID
         let blocked = potentialHover && !isExposed(at: location, moved: moved)
-        let next = displays.withUnsafeBufferPointer {
+        let previous = session.activeDisplayID
+        let stepped = displays.withUnsafeBufferPointer {
             vc_hover_step(&session, $0.baseAddress, Int32($0.count), point,
-                          blocked ? 1 : 0, held ? 1 : 0, ProcessInfo.processInfo.systemUptime, lingerDuration)
+                          blocked ? 1 : 0, held ? 1 : 0, now, lingerDuration)
         }
-        var active: CGDirectDisplayID? = next == 0 ? nil : next
+        let proposed: CGDirectDisplayID? = stepped == 0 ? nil : stepped
+        let previousDisplay: CGDirectDisplayID? = previous == 0 ? nil : previous
+        // Intent is judged only while a reveal could start here.
+        let intentReady = intent.sample(location, at: now,
+                                        inHotZone: !held && !blocked && inHotZone && previous != screen.displayID)
+        let interaction = PlayerInteraction.shared
+        let holds = previousDisplay != nil && PlayerDismissGuard.holds(
+            dragging: interaction.dragging, searchFocused: interaction.searchFocused, lastClick: interaction.lastClick,
+            now: now, overWindow: blocked)
+        var active = Self.decide(proposed: proposed, previous: previousDisplay, intentReady: intentReady, holds: holds)
+        // Keep the C session in step: a reveal refused for intent is not a
+        // reveal (its keep-zone must not apply), and a held one keeps its linger.
+        if let active {
+            if session.activeDisplayID != active { session.activeDisplayID = active }
+            // After a drag the usual linger runs from the release.
+            if holds && interaction.dragging { session.deadline = now + lingerDuration }
+            intent.reset()
+        } else if session.activeDisplayID != 0 {
+            session = VCHoverSession()
+        }
         // A search in progress keeps the player up while the pointer is elsewhere.
         // Forget a display that has been unplugged since.
         if let pinned = pinnedDisplay, !displays.contains(where: { $0.displayID == pinned }) { pinnedDisplay = nil }
@@ -131,7 +176,9 @@ final class HoverState: ObservableObject {
            displays.contains(where: { $0.displayID == pinned }) { active = pinned }
         if let active, pinnedDisplay != active { pinnedDisplay = active }
         if active != activeDisplayID {
-            withAnimation(.easeOut(duration: 0.3)) { activeDisplayID = active }
+            withAnimation(PlayerMotion.reveal(shown: active != nil, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)) {
+                activeDisplayID = active
+            }
         }
         ControlPanelController.shared.updatePointer(buttonsHeld: held)
     }

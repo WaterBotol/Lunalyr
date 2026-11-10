@@ -7,6 +7,14 @@ import SwiftUI
 private final class PlayerPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// A click anywhere on the player gives it the keyboard (still without
+    /// activating Lunalyr), so its keys work: Space, the arrows, Esc.
+    /// Handed back when the player goes away (`releaseKeyboard`).
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown, !isKeyWindow { makeKey() }
+        super.sendEvent(event)
+    }
 }
 
 /// One non-activating controls panel per display. Panels are click-through
@@ -23,6 +31,7 @@ final class ControlPanelController {
     private var masksStale = true
     private var cancellables: Set<AnyCancellable> = []
     private var screenObserver: NSObjectProtocol?
+    private var keyMonitor: Any?
     var windowIDs: Set<CGWindowID> {
         Set(panels.values.compactMap(\.windowServerID))
     }
@@ -48,12 +57,25 @@ final class ControlPanelController {
             Task { @MainActor [weak self] in self?.rebuild() }
         }.store(in: &cancellables)
         rebuild()
+        // The player's keys, only while one of its panels has the keyboard.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            MainActor.assumeIsolated {
+                guard let window = event.window, window.isKeyWindow,
+                      let displayID = ControlPanelController.shared.displayID(of: window),
+                      PlayerKeyboard.shared.handle(event, on: displayID) else { return event }
+                return nil
+            }
+        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.rebuild() }
         }
+    }
+
+    private func displayID(of window: NSWindow) -> CGDirectDisplayID? {
+        panels.first { $0.value === window }?.key
     }
 
     private func rebuild() {
