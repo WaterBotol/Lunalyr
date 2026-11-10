@@ -183,7 +183,7 @@ struct LyricLayer: View {
             let lines = lyricsVM.lines
             let index = lyricsVM.activeLineIndex(at: time) ?? 0
             let lead = max(0.9, settings.nextWordPreviewLead + 0.15)
-            for row in max(0, index - 2)...min(lines.count - 1, index + 1) where lines.indices.contains(row) {
+            for row in max(0, index - 3)...max(0, min(lines.count - 1, index + 1)) where lines.indices.contains(row) {
                 let line = lines[row]
                 if time >= line.start - lead, time <= line.start + 0.8 { return .active }
                 // Where the renderer starts the exit, which for most layouts
@@ -410,6 +410,10 @@ struct LyricLayer: View {
         let index = activeIndex ?? 0
         let stageSize = CGSize(width: maxWidth, height: maxHeight)
         LyricLineStack(stageSize: stageSize, gap: baseSize * 0.3) {
+            // Three back: after two very short lines the one before them
+            // can still be leaving, and was cut off.
+            earlierLine(index - 3, current: index, scene: scene, time: time, stageSize: stageSize, energy: energy,
+                        live: live, lyricOpacity: lyricOpacity)
             earlierLine(index - 2, current: index, scene: scene, time: time, stageSize: stageSize, energy: energy,
                         live: live, lyricOpacity: lyricOpacity)
             earlierLine(index - 1, current: index, scene: scene, time: time, stageSize: stageSize, energy: energy,
