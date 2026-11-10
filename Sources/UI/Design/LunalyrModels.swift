@@ -130,6 +130,9 @@ struct LyricNow: Equatable {
     /// The line being sung; nil between lines, in instrumental breaks, and
     /// without timed lyrics.
     var line: String?
+    /// The index of the line being sung, so a line repeated word for word
+    /// ("yeah / yeah") still reads as a new line; nil with no line.
+    var index: Int?
     /// The next line, when there is one.
     var next: String?
     /// "LRCLIB", "Apple Music"…, when lyrics are showing.
@@ -165,6 +168,7 @@ struct LyricNow: Equatable {
         // After the voice stops, the next line reads better than a stale one.
         let finished = time > line.end + 1.5 && index + 1 < model.lines.count
         now.line = finished ? nil : text(index)
+        now.index = now.line == nil ? nil : index
         now.next = text(index + 1)
         return now
     }

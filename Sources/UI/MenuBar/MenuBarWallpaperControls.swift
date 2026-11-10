@@ -15,6 +15,7 @@ struct MenuBarWallpaperControls: View {
     @Model(\.nowPlaying) private var playing
     @Environment(\.lunalyrModels) private var models
     @ObservedObject private var musicVideo = MusicVideoController.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let navigation = models.resolved.navigation
@@ -79,9 +80,12 @@ struct MenuBarWallpaperControls: View {
             .padding(.top, LunalyrDesign.Spacing.xSmall)
             if extras.wallpaperPaused {
                 InspectorCaption(Self.pausedNote)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: extras.wallpaperPaused)
     }
 
     static let pausedNote = "Paused: your desktop is frozen until you resume it."

@@ -3,22 +3,18 @@ import SwiftUI
 /// The top of the menu-bar panel: the song (or the idle prompt), the music's
 /// own transport centred beneath it, the line being sung with its source and
 /// precision, and -- right under the line it moves -- this song's lyric
-/// timing. Idle, the prompt, a dimmed transport and where the lyrics will
-/// appear stay in place, so nothing jumps when a song starts; the timing,
-/// which belongs to a song, waits for one.
+/// timing. Idle, the prompt, a dimmed transport, where the lyrics will
+/// appear and the (disabled) timing all stay in place, at the height they
+/// have with a song, so nothing jumps when a song starts or stops.
 struct MenuBarNowPlaying: View {
-    @Model(\.nowPlaying) private var playing
-
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
             TrackSummary()
             TransportControls()
                 .frame(maxWidth: .infinity)
             MenuBarLyricLine()
-            if playing.current != nil {
-                MenuBarLyricTiming()
-                    .padding(.top, LunalyrDesign.Spacing.hairline)
-            }
+            MenuBarLyricTiming()
+                .padding(.top, LunalyrDesign.Spacing.hairline)
         }
     }
 }
@@ -28,6 +24,7 @@ struct MenuBarNowPlaying: View {
 struct MenuBarLyricTiming: View {
     @ObservedObject private var tapSync = LyricTapSyncController.shared
     @Model(\.offsets) private var offsets
+    @Model(\.nowPlaying) private var playing
 
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xSmall) {
@@ -45,6 +42,8 @@ struct MenuBarLyricTiming: View {
                 }
             }
             .controlSize(.small)
+            // Belongs to a song: shown, but disabled, with nothing playing.
+            .disabled(playing.current == nil && !tapSync.isListening)
         }
     }
 }
@@ -57,7 +56,7 @@ struct MenuBarLyricTiming: View {
 /// panel's window sizes itself to its content, so a block that grew and
 /// shrank with each line would move every control below it, under the
 /// pointer, several times a minute -- and Hide lyrics would jump away from the
-/// click that pressed it. Idle, the line's own prompt takes one row.
+/// click that pressed it. Idle, the prompt sits in the same block.
 ///
 /// Hidden lyrics, by the person or for a mirrored display, never show here
 /// (the menu-bar line says "Lyrics hidden" too), so presenting can't put them
@@ -88,7 +87,16 @@ struct MenuBarLyricLine: View {
     var body: some View {
         switch Self.display(hasTrack: playing.current != nil, lyricsVisible: extras.lyricsVisible) {
         case .prompt:
-            LyricQuoteView(now: .none, hasTrack: false)
+            let prompt = LyricQuoteView(now: .none, hasTrack: false).placeholder
+            MenuBarLyricBlock(source: nil, centred: true) {
+                Text(prompt)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Current lyric")
+            .accessibilityValue(prompt)
         case .hidden:
             // The source and precision still show: they reveal no lyrics.
             let models = models.resolved
@@ -147,7 +155,9 @@ struct MenuBarLyricQuote: View {
                         }
                         lineText(line)
                     }
-                    .id(line)
+                    // By index, so a line sung twice in a row ("yeah / yeah")
+                    // still rolls in as a new line.
+                    .id(now.index ?? -1)
                     .transition(transition)
                 case .between(let next):
                     VStack(alignment: .leading, spacing: MenuBarLyricBlock<EmptyView>.rowSpacing) {
@@ -165,16 +175,24 @@ struct MenuBarLyricQuote: View {
                 }
             }
         }
-        .animation(LunalyrDesign.Motion.animation(.smooth(duration: 0.3), reduceMotion: reduceMotion), value: content)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                   value: AnimationKey(content: content, index: now.index))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Current lyric")
         .accessibilityValue(Self.spoken(content, placeholder: placeholder))
         .accessibilityAddTraits(.updatesFrequently)
     }
 
+    /// What a change animates on: the content, and the line's index for a
+    /// line repeated word for word.
+    private struct AnimationKey: Equatable {
+        let content: Content
+        let index: Int?
+    }
+
     /// Moves up into place; a fade under Reduce Motion.
     private var transition: AnyTransition {
-        reduceMotion ? .opacity : .asymmetric(insertion: .offset(y: 8).combined(with: .opacity), removal: .opacity)
+        LyricQuoteView.lineTransition(reduceMotion: reduceMotion)
     }
 
     private func lineText(_ line: String) -> some View {

@@ -42,6 +42,7 @@ struct StatusBanner<Actions: View>: View {
     var symbol: String?
     var density: Density = .regular
     let actions: Actions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ status: LunalyrStatus, title: String, message: String? = nil, symbol: String? = nil,
          density: Density = .regular, @ViewBuilder actions: () -> Actions) {
@@ -61,13 +62,16 @@ struct StatusBanner<Actions: View>: View {
                 Image(systemName: symbol ?? status.symbol)
                     .foregroundStyle(status.text)
                     .imageScale(.medium)
+                    .contentTransition(LunalyrDesign.Motion.symbolSwap(reduceMotion: reduceMotion))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(density == .compact ? .callout.weight(.semibold) : .body.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
                     if let message {
                         Text(message).lunalyrText(.caption)
+                            .contentTransition(.opacity)
                     }
                 }
                 .accessibilityElement(children: .combine)
@@ -92,6 +96,10 @@ struct StatusBanner<Actions: View>: View {
             RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
                 .strokeBorder(status.border, lineWidth: 1)
         )
+        // A banner that changes its state (a reconnect, a refusal answered)
+        // cross-fades rather than cutting.
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: [status.rawValue, title, message ?? "", symbol ?? ""])
         .accessibilityElement(children: .contain)
     }
 

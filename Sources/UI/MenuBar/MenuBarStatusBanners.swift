@@ -37,18 +37,28 @@ enum MenuBarStatus: CaseIterable, Hashable {
 struct MenuBarStatusBanners: View {
     /// From `raised(…)`; the panel leaves the group out when it is empty.
     let statuses: [MenuBarStatus]
+    /// Where the system-audio banner is in a failure and its recovery.
+    var audioPhase: MenuBarAudioStatus.Phase = .attention
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
             ForEach(statuses, id: \.self) { status in
-                switch status {
-                case .automation: AutomationStatusBanner(density: .compact)
-                case .audio: MenuBarAudioStatus()
-                case .mirroring: MenuBarMirroringBanner()
-                case .powerSaving: MenuBarPowerSavingBanner()
+                Group {
+                    switch status {
+                    case .automation: AutomationStatusBanner(density: .compact)
+                    case .audio: MenuBarAudioStatus(phase: audioPhase)
+                    case .mirroring: MenuBarMirroringBanner()
+                    case .powerSaving: MenuBarPowerSavingBanner()
+                    }
                 }
+                // Fades in; leaves at once, so the controls below never
+                // glide under the pointer.
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
             }
         }
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: statuses)
     }
 
     /// The statuses raised now, at most `MenuBarStatus.limit` of them.
@@ -77,6 +87,32 @@ struct MenuBarStatusBanners: View {
 /// also publishes meter levels many times a second, which must not redraw
 /// the menu.
 struct MenuBarAudioStatus: View {
+    /// A failure, then -- after Reconnect -- the attempt and its success,
+    /// in one banner that stays put instead of vanishing while it reconnects
+    /// and popping back if that fails.
+    enum Phase: Equatable {
+        case hidden
+        case attention
+        case reconnecting
+        /// "Hearing the music again", for `recoveredHold`, then hidden.
+        case recovered
+    }
+
+    /// How long the success shows before the banner goes.
+    static let recoveredHold: TimeInterval = 2
+
+    /// The next phase for a new capture state.
+    static func phase(after phase: Phase, state: AudioCaptureState) -> Phase {
+        if state.needsAttention { return .attention }
+        switch (phase, state) {
+        case (.attention, .connecting), (.reconnecting, .connecting): return .reconnecting
+        case (.reconnecting, .receiving), (.reconnecting, .quiet): return .recovered
+        case (.recovered, _): return .recovered
+        default: return .hidden
+        }
+    }
+
+    var phase: Phase = .attention
     @Environment(\.lunalyrModels) private var models
     // Filled from the controller as the view appears (a published value
     // arrives on subscription).
@@ -91,17 +127,29 @@ struct MenuBarAudioStatus: View {
         let fixes = Self.fixes(for: state, offersReconnect: audio.offersReconnect,
                                suggestsPrivacySettings: audio.suggestsPrivacySettings,
                                offersCompatibilityCapture: audio.offersCompatibilityCapture)
-        StatusBanner(.warning, title: Self.title, message: status, density: .compact) {
-            ForEach(fixes, id: \.self) { fix in
-                Button(fix.title) {
-                    switch fix {
-                    case .reconnect: audio.reconnect()
-                    // The pane that matches the capture method in use.
-                    case .privacySettings: audio.openPrivacySettings()
-                    case .compatibilityCapture: audio.tryCompatibilityCapture()
+        Group {
+            switch phase {
+            case .reconnecting:
+                StatusBanner(.warning, title: Self.title, message: Self.reconnecting, density: .compact) {
+                    ProgressView().controlSize(.small)
+                        .accessibilityLabel(Self.reconnecting)
+                }
+            case .recovered:
+                StatusBanner(.success, title: Self.recovered, density: .compact)
+            case .attention, .hidden:
+                StatusBanner(.warning, title: Self.title, message: status, density: .compact) {
+                    ForEach(fixes, id: \.self) { fix in
+                        Button(fix.title) {
+                            switch fix {
+                            case .reconnect: audio.reconnect()
+                            // The pane that matches the capture method in use.
+                            case .privacySettings: audio.openPrivacySettings()
+                            case .compatibilityCapture: audio.tryCompatibilityCapture()
+                            }
+                        }
+                        .help(fix.help)
                     }
                 }
-                .help(fix.help)
             }
         }
         .onReceive(audio.$status.removeDuplicates()) { status = $0 }
@@ -112,6 +160,8 @@ struct MenuBarAudioStatus: View {
     /// What the failure means for the wallpaper; the controller's status
     /// sentence beneath it says why and what to do.
     static let title = "The visualiser can’t hear the music"
+    static let reconnecting = "Reconnecting…"
+    static let recovered = "Hearing the music again"
 
     /// Only a problem shows here, while a visualiser is drawn with System
     /// audio on. Working capture says so in Settings › Wallpaper.

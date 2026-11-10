@@ -108,9 +108,10 @@ struct WallpaperModeGrid: View {
             chooseImport()
             return
         }
-        withAnimation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion)) {
-            settings.backgroundMode = mode
-        }
+        // No transaction here: it would animate every view the change
+        // touches (whole Settings sections). The tile lights with its own
+        // scoped animation; pages animate their own sections.
+        settings.backgroundMode = mode
     }
 }
 
@@ -122,6 +123,7 @@ private struct ModeTile: View {
     /// Power saving draws this instead of the chosen type.
     let standsIn: Bool
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -140,8 +142,10 @@ private struct ModeTile: View {
                     }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous))
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                           value: selected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ModeTilePressStyle())
         .help("\(mode.title): \(mode.summary)")
         .accessibilityLabel(mode.title)
         .accessibilityValue(standsIn ? "Shown by power saving for now" : "")
@@ -166,6 +170,15 @@ private struct ModeTile: View {
                     .minimumScaleFactor(0.8)
             }
         }
+    }
+}
+
+/// A wallpaper tile dims slightly while pressed, so the click registers
+/// before the new look arrives.
+private struct ModeTilePressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .brightness(configuration.isPressed ? -0.08 : 0)
     }
 }
 
@@ -249,6 +262,7 @@ struct TimingNudge: View {
     let earlier: () -> Void
     let later: () -> Void
     let reset: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 6) {
@@ -259,6 +273,9 @@ struct TimingNudge: View {
             Text(Self.format(offset))
                 .lunalyrText(.value)
                 .foregroundStyle(offset == 0 ? .secondary : .primary)
+                .contentTransition(reduceMotion ? .opacity : .numericText(value: offset))
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                           value: offset)
                 .frame(minWidth: 56)
                 .accessibilityHidden(true)
             Button("Later", action: later)
@@ -353,6 +370,12 @@ struct MenuRowButtonStyle: ButtonStyle {
                 .fill(hovering && enabled ? Color.primary.opacity(configuration.isPressed ? 0.14 : 0.08) : .clear))
             .opacity(enabled ? 1 : 0.45)
             .onHover { hovering = $0 }
+            // A panel that closes under the pointer never hears it leave:
+            // forget the hover, so the row isn't lit when the panel reopens.
+            .onDisappear { hovering = false }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+                hovering = false
+            }
         }
     }
 }
