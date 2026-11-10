@@ -56,6 +56,8 @@ When merging, keep every entry and combine duplicate headings.
 ### Fixed
 
 - Desktop player: song and search text containing line breaks or other hidden control characters no longer breaks the Music script it is sent in.
+- Desktop player: while you type a search with two displays, the player stays on the display you typed on instead of showing on both.
+- Desktop player: a song that played in Spotify or a browser no longer shows in the Music strip's history, where clicking it could only fail.
 - Desktop player: a "Lunalyr Queue" left behind when Music or Lunalyr quit part-way through starting a song is now removed the next time you pick a song, instead of staying as a second "Lunalyr Queue".
 - Fable: long lines no longer run off the stage or under the menu bar, and earlier words no longer fade away before the line has been read. Lines are wrapped, then shrunk only if they still do not fit.
 - Fable: Arabic and other joined scripts are no longer split into reversed, unjoined letters, and right-to-left lines read from the right.

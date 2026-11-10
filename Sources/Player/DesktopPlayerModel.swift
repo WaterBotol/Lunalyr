@@ -102,15 +102,28 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     private func noteTrack(_ track: NowPlayingMonitor.Track?) {
-        defer { lastTrack = track }
-        guard let previous = lastTrack, let track, !previous.title.isEmpty,
-              !(previous.title == track.title && previous.artist == track.artist),
-              NowPlayingMonitor.shared.activePlayer == .appleMusic || NowPlayingMonitor.shared.activePlayer == nil else { return }
+        let kind = NowPlayingMonitor.shared.activePlayer
+        defer { lastTrack = track; lastKind = kind }
+        guard let previous = lastTrack, let track,
+              Self.belongsInHistory(previous: previous, from: lastKind, next: track, in: kind) else { return }
         historyCount += 1
         history.append(PlayerQueueItem(id: "h-\(historyCount)", title: previous.title, artist: previous.artist,
                                        index: 0, persistentID: previous.persistentID))
         if history.count > 24 { history.removeFirst(history.count - 24) }
         recompose()
+    }
+
+    /// The player `lastTrack` came from.
+    private var lastKind: PlayerKind?
+
+    /// Only Music's own songs go into the strip's history, and only when the
+    /// next song is Music's too: a Spotify or web song's id means nothing to
+    /// Music, and clicking it would only fail.
+    nonisolated static func belongsInHistory(previous: NowPlayingMonitor.Track, from previousKind: PlayerKind?,
+                                             next: NowPlayingMonitor.Track, in kind: PlayerKind?) -> Bool {
+        guard !previous.title.isEmpty, !(previous.title == next.title && previous.artist == next.artist),
+              previousKind == .appleMusic, kind == .appleMusic || kind == nil else { return false }
+        return true
     }
 
     /// History first (what really played, in order), then the song playing,

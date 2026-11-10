@@ -65,7 +65,7 @@ struct DesktopPlayerView: View {
     @State private var recenter = 0
 
     var body: some View {
-        let shown = hover.isActive(on: displayID) || model.isPinned
+        let shown = hover.showsPlayer(on: displayID, searching: model.isPinned)
         VStack(spacing: 10) {
             Group {
                 if model.isSearching {

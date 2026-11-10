@@ -105,14 +105,29 @@ final class HoverState: ObservableObject {
         if let pinned = pinnedDisplay, !displays.contains(where: { $0.displayID == pinned }) { pinnedDisplay = nil }
         if active == nil, DesktopPlayerModel.shared.isPinned, let pinned = pinnedDisplay ?? activeDisplayID,
            displays.contains(where: { $0.displayID == pinned }) { active = pinned }
-        if let active { pinnedDisplay = active }
+        if let active, pinnedDisplay != active { pinnedDisplay = active }
         if active != activeDisplayID {
             withAnimation(.easeOut(duration: 0.3)) { activeDisplayID = active }
         }
         ControlPanelController.shared.updatePointer(buttonsHeld: held)
     }
 
-    private var pinnedDisplay: CGDirectDisplayID?
+    /// The display the player was last shown on: a search in progress stays
+    /// there, and only there.
+    @Published private(set) var pinnedDisplay: CGDirectDisplayID?
+
+    /// Whether the player shows on `displayID`: where the pointer hovers, and,
+    /// while a search is typed, on the one display it was typed on -- not on
+    /// every screen at once.
+    nonisolated static func showsPlayer(on displayID: CGDirectDisplayID, active: CGDirectDisplayID?,
+                                        pinned: CGDirectDisplayID?, searching: Bool) -> Bool {
+        if active == displayID { return true }
+        return searching && active == nil && pinned == displayID
+    }
+
+    func showsPlayer(on displayID: CGDirectDisplayID, searching: Bool) -> Bool {
+        Self.showsPlayer(on: displayID, active: activeDisplayID, pinned: pinnedDisplay, searching: searching)
+    }
 
     /// The same window keeps the same layer, so a pointer resting over (or
     /// moving within) one window needs one window-server query, not two.
