@@ -97,7 +97,7 @@ final class MachineTranslationTests: XCTestCase {
     }
 
     func testOptionsAreOffByDefaultAndSaved() {
-        let defaults = UserDefaults(suiteName: "MachineTranslationTests-\(UUID().uuidString)")!
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("MachineTranslationTests")
         let options = MachineTranslationOptions(defaults: defaults)
         XCTAssertFalse(options.enabled)
         XCTAssertEqual(options.target, "")

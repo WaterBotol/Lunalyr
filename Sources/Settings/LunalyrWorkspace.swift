@@ -286,6 +286,17 @@ enum WorkspaceCopy {
         return "Images stay still. \(videos) Lunalyr keeps a copy so moving the original won’t break your wallpaper."
     }
 
+    /// The imported file's name under File, or why there is none to show.
+    static func importedFileLabel(name: String, path: String,
+                                  available: (String) -> Bool = CustomWallpaperStore.isAvailable) -> String {
+        if path.isEmpty { return "None chosen" }
+        if !available(path) {
+            return name.isEmpty ? "The imported file is missing. Choose it again."
+                : "“\(name)” is missing. Choose it again."
+        }
+        return name.isEmpty ? "Imported file" : name
+    }
+
     /// Under System audio while power saving shows another wallpaper type:
     /// capture only runs while a visualiser is on screen.
     static func systemAudioWaits(showing effective: Settings.BackgroundMode) -> String {

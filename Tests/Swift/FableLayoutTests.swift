@@ -72,10 +72,7 @@ final class FableRenderTests: XCTestCase {
     }
 
     static func settings() -> VersoCustom.Settings {
-        let suite = "lunalyr.tests.fable.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return Settings(defaults: defaults, notifications: NotificationCenter())
+        Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("lunalyr.tests.fable"), notifications: NotificationCenter())
     }
 
     static func stage(_ c: Case, on display: Display, at time: Double, seed: Int = 3, settings: VersoCustom.Settings,

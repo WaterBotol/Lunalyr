@@ -11,7 +11,7 @@ final class MatchTheMusicTests: XCTestCase {
     }
 
     func testEachNewSongTakesADifferentLayoutThanTheLast() {
-        let suite = UserDefaults(suiteName: "MatchTheMusicTests.\(UUID().uuidString)")!
+        let suite = LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests")
         let rotation = LyricLayoutRotation(defaults: suite)
         var previous: LyricComposition?
         for (index, mood) in moods().enumerated() {
@@ -23,7 +23,7 @@ final class MatchTheMusicTests: XCTestCase {
     }
 
     func testReplayingASongKeepsItsLayout() {
-        let rotation = LyricLayoutRotation(defaults: UserDefaults(suiteName: "MatchTheMusicTests.\(UUID().uuidString)")!)
+        let rotation = LyricLayoutRotation(defaults: LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests"))
         let mood = TrackMood.neutral
         let first = rotation.layout(for: "A|One", mood: mood)
         _ = rotation.layout(for: "B|Two", mood: mood)
@@ -31,7 +31,7 @@ final class MatchTheMusicTests: XCTestCase {
     }
 
     func testRotationVisitsEveryLayoutOverEnoughSongs() {
-        let rotation = LyricLayoutRotation(defaults: UserDefaults(suiteName: "MatchTheMusicTests.\(UUID().uuidString)")!)
+        let rotation = LyricLayoutRotation(defaults: LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests"))
         var seen = Set<LyricComposition>()
         for index in 0..<24 { seen.insert(rotation.layout(for: "A|\(index)", mood: .neutral)) }
         XCTAssertEqual(seen, Set(LyricComposition.allCases))
@@ -40,7 +40,7 @@ final class MatchTheMusicTests: XCTestCase {
     func testSlowSongsSkipTheBusyLayouts() {
         let slow = TrackMood.derive(genre: "ambient", wordsPerSecond: 0.8, artworkSaturation: 0.5, seed: 1)
         XCTAssertLessThan(slow.energy, 0.3)
-        let rotation = LyricLayoutRotation(defaults: UserDefaults(suiteName: "MatchTheMusicTests.\(UUID().uuidString)")!)
+        let rotation = LyricLayoutRotation(defaults: LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests"))
         for index in 0..<16 {
             let layout = rotation.layout(for: "S|\(index)", mood: slow)
             XCTAssertFalse([.cascade, .constellation, .constellationEditorial].contains(layout))
@@ -85,7 +85,7 @@ final class UnknownGenreMoodTests: XCTestCase {
 @MainActor
 final class LayoutRotationChoiceTests: XCTestCase {
     private func rotation() -> LyricLayoutRotation {
-        LyricLayoutRotation(defaults: UserDefaults(suiteName: "LayoutRotationChoiceTests.\(UUID().uuidString)")!)
+        LyricLayoutRotation(defaults: LunalyrTestEnvironment.isolatedDefaults("LayoutRotationChoiceTests"))
     }
 
     func testALayoutSetToZeroNeverAppears() {
@@ -122,7 +122,7 @@ final class LayoutRotationChoiceTests: XCTestCase {
     }
 
     func testTheChoicesSurviveARelaunch() {
-        let suite = UserDefaults(suiteName: "LayoutRotationChoiceTests.\(UUID().uuidString)")!
+        let suite = LunalyrTestEnvironment.isolatedDefaults("LayoutRotationChoiceTests")
         let first = LyricLayoutRotation(defaults: suite)
         first.setCount(4, for: .echo)
         first.setCount(0, for: .cascade)

@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppFont.preload()
         DesktopWallpaperController.shared.start()
         ControlPanelController.shared.start()
-        HoverState.shared.start()
         AudioReactiveController.shared.resumeIfEnabled()
         LunalyrExtras.shared.start()
         MusicVideoController.shared.start()
@@ -22,15 +21,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // counts; quit with it open, and it shows again next launch.
             OnboardingWindowController.shared.present(firstRun: true) { ending in
                 OnboardingWindowController.completeFirstRun(ending, models: .live)
+                HoverState.shared.start()
             }
         } else {
             // Players macOS has not asked about yet wait until the user
             // plays something in them (or asks from the menu bar).
             NowPlayingMonitor.shared.start()
         }
+        if Self.startsHoverAtLaunch(hasOnboarded: Settings.shared.hasOnboarded) {
+            HoverState.shared.start()
+        }
         // Links that launched the app run once everything above has started.
         LunalyrLinkRouter.shared.becameReady()
     }
+
+    /// The desktop player reads the music player's queue as soon as it
+    /// shows on hover. Before the first run's welcome has explained macOS's
+    /// Automation prompt -- and before the player monitor has silently
+    /// checked what was decided -- that read is the first Apple event to an
+    /// open Music, and raises the prompt out of the blue. So on a first run
+    /// the hover controls start once the welcome has finished.
+    static func startsHoverAtLaunch(hasOnboarded: Bool) -> Bool { hasOnboarded }
 
     /// `lunalyr://` links, from a browser, Shortcuts or `open`. Unknown or
     /// malformed ones are ignored; a join is asked about before following.

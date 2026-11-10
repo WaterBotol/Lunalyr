@@ -105,7 +105,7 @@ struct WallpaperPage: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text("File")
-                Text(s.customWallpaperName.isEmpty ? "None chosen" : s.customWallpaperName)
+                Text(WorkspaceCopy.importedFileLabel(name: s.customWallpaperName, path: s.customWallpaperPath))
                     .lunalyrText(.caption)
                     .lineLimit(2)
                     .truncationMode(.middle)
