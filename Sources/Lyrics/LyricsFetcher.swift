@@ -433,6 +433,9 @@ final class LyricsFetcher {
     private static func order(_ source: LyricSourceID, in options: LyricSourceOptions.Snapshot) -> Int {
         options.enabled.firstIndex(of: source) ?? 999
     }
+    /// The highest `confidence`: both names exact and, when the playing
+    /// length is known, the same length.
+    private static func closestMatch(_ query: LyricQuery) -> Double { query.duration > 0 ? 2.25 : 2 }
     private static func confidence(_ candidate: LyricCandidate, _ query: LyricQuery) -> Double {
         // How closely the name matches, and a little more for a recording whose
         // length is nearly the playing one's (never enough to outweigh a name).
@@ -474,6 +477,22 @@ final class LyricsFetcher {
         }
         return nil
     }
+    /// Whether a search hit names the playing recording, as `rejection`
+    /// judges a candidate, before its lyrics are fetched or chosen. A
+    /// service offers one match, so a hit that fails the check must not be
+    /// picked over one that passes it, however close its name.
+    static func namesRecording(_ source: LyricSourceID, title: String, artist: String, duration: Double?,
+                               query: LyricQuery) -> Bool {
+        let probe = LyricCandidate(source: source, result: .plain([], Provenance(precision: "", source: "")),
+                                   title: title, artist: artist, duration: duration, score: 0)
+        return rejection(probe, query: query) == nil
+    }
+    /// The highest-scoring of one service's candidates, preferring those
+    /// that pass the recording check.
+    static func bestOffer(_ candidates: [LyricCandidate], query: LyricQuery) -> LyricCandidate? {
+        candidates.map { (candidate: $0, passes: rejection($0, query: query) == nil) }
+            .max { ($0.passes ? 1 : 0, $0.candidate.score) < ($1.passes ? 1 : 0, $1.candidate.score) }?.candidate
+    }
     private static func annotate(_ base: [LyricSourceID: String], _ screened: Screened, shown: LyricSourceID?) -> [LyricSourceID: String] {
         var states = base
         for candidate in screened.accepted {
@@ -500,8 +519,11 @@ final class LyricsFetcher {
         if ceiling != timing { return ceiling > timing }
         let lead = Self.lead(source, timing: timing), bestLead = Self.lead(best.source, timing: timing)
         if lead != bestLead { return lead < bestLead }
-        // Accuracy first: a closer title and artist match could still arrive.
-        if options.mode == .smart, confidence(best, query) < 2 { return true }
+        // Accuracy first: a closer match could still arrive, the same names
+        // with a length that fits (as `outranks` weighs it) included. A match
+        // naming no length stopped such a source, so which one showed, was
+        // cached and kept the song's offset depended on which answered first.
+        if options.mode == .smart, confidence(best, query) < closestMatch(query) { return true }
         return order(source, in: options) < order(best.source, in: options)
     }
     /// Structural equality, so re-running a lookup that finds the same lyrics
@@ -623,6 +645,7 @@ final class LyricsFetcher {
         var syncedLyrics: String?
         var lyricsfile: String?
         var plainLyrics: String?
+        var instrumental: Bool?
     }
     static func requestLRCLIB(_ path: String, parameters: [String:String], session: URLSession = .shared) async throws -> Data? {
         try Task.checkCancellation()
@@ -663,6 +686,12 @@ final class LyricsFetcher {
             } catch is CancellationError { throw CancellationError() }
             catch { exactError = error }
         }
+        // The exact recording is marked instrumental. A search would only
+        // find a sung edition with the same name and length (an album's
+        // instrumental version), so there are no lyrics to show.
+        if payloads.first?.instrumental == true, payloads.first.map({ LyricQuery.similarity(query.title, $0.trackName ?? query.title) >= 0.95 }) == true {
+            return nil
+        }
         let exactTimed = payloads.contains { $0.syncedLyrics?.isEmpty == false || $0.lyricsfile?.isEmpty == false }
         if !exactTimed {
             let search = query.hasArtist ? ["track_name":query.title,"artist_name":query.artist] : ["track_name":query.title]
@@ -691,7 +720,7 @@ final class LyricsFetcher {
             return LyricCandidate(source:.lrclib,result:result,title:title,artist:artist,duration:payload.duration,
                 score:score-(lines.isEmpty ? 12 : 0))
         }
-        return candidates.max {$0.score<$1.score}
+        return bestOffer(candidates, query: query)
     }
 
     // MARK: - lyricsfile (YAML) parsing
@@ -778,7 +807,12 @@ final class LyricsFetcher {
             let ns=row as NSString
             let tags=lineStamp.matches(in:row,range:NSRange(location:0,length:ns.length))
             var leading:[NSTextCheckingResult]=[],end=0
-            for tag in tags {guard tag.range.location==end else {break};leading.append(tag);end=NSMaxRange(tag.range)}
+            // Stamps written apart ("[00:12.00] [00:45.00]Chorus") all lead the row.
+            for tag in tags {
+                guard tag.range.location>=end,
+                      ns.substring(with:NSRange(location:end,length:tag.range.location-end)).allSatisfy(\.isWhitespace) else {break}
+                leading.append(tag);end=NSMaxRange(tag.range)
+            }
             guard let first=leading.first else {continue}
             let body=ns.substring(from:end).trimmingCharacters(in:.whitespaces)
             let bodyNS=body as NSString

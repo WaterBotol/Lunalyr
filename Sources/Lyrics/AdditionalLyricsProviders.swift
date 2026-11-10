@@ -8,6 +8,16 @@ enum AdditionalLyricsProviders {
             duration.map { abs($0 - query.duration) } ?? 0, duration != nil && query.duration > 0 ? 1 : 0,
             0, 1, 0)
     }
+    /// Hits that name the playing recording first (`LyricsFetcher.namesRecording`),
+    /// then by score, so a close name with the wrong length is not fetched
+    /// and offered ahead of the right recording.
+    private static func ordered<Hit>(_ hits: [Hit], _ source: LyricSourceID, query: LyricQuery,
+                                     _ fields: (Hit) -> (title: String, artist: String, duration: Double?, score: Double)) -> [Hit] {
+        hits.map { hit -> (hit: Hit, passes: Int, score: Double) in
+            let f = fields(hit)
+            return (hit, LyricsFetcher.namesRecording(source, title: f.title, artist: f.artist, duration: f.duration, query: query) ? 1 : 0, f.score)
+        }.sorted { ($0.passes, $0.score) > ($1.passes, $1.score) }.map(\.hit)
+    }
     private static func candidate(_ source: LyricSourceID, lrc: String, query: LyricQuery,
                                   title: String, artist: String, duration: Double?) -> LyricCandidate? {
         let lines = LyricsFetcher.parseLRC(LyricHTTP.text(lrc), trackDuration: query.duration)
@@ -31,8 +41,8 @@ enum AdditionalLyricsProviders {
             let duration = (song["interval"] as? NSNumber)?.doubleValue
             let value = score(query,title:title,artist:singers,duration:duration)
             return value > 0 ? (song,title,singers,duration,value) : nil
-        }.sorted { $0.score > $1.score }
-        for hit in ranked.prefix(3) {
+        }
+        for hit in ordered(ranked, .qqMusic, query: query, { ($0.title, $0.artist, $0.duration, $0.score) }).prefix(3) {
             try Task.checkCancellation()
             guard let mid = hit.song["songmid"] as? String else { continue }
             let payload = try await LyricHTTP.json("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg",
@@ -58,8 +68,8 @@ enum AdditionalLyricsProviders {
             let duration = (song["duration"] as? NSNumber)?.doubleValue
             let value = score(query,title:title,artist:artist,duration:duration)
             return value > 0 ? (song,title,artist,duration,value) : nil
-        }.sorted { $0.score > $1.score }
-        for hit in ranked.prefix(2) {
+        }
+        for hit in ordered(ranked, .kugou, query: query, { ($0.title, $0.artist, $0.duration, $0.score) }).prefix(2) {
             try Task.checkCancellation()
             guard let hash = hit.song["hash"] as? String else { continue }
             let search = try await LyricHTTP.json("https://lyrics.kugou.com/search",
@@ -102,14 +112,14 @@ extension AdditionalLyricsProviders {
             let duration = LyricHTTP.string(song["DURATION"]).flatMap(Double.init)
             let value = score(query, title: title, artist: artist, duration: duration)
             return value > 0 ? (String(id), title, artist, duration, value) : nil
-        }.sorted { $0.4 > $1.4 }
-        for hit in ranked.prefix(2) {
+        }
+        for hit in ordered(ranked, .kuwo, query: query, { ($0.1, $0.2, $0.3, $0.4) }).prefix(2) {
             let json = try await LyricHTTP.json("https://www.kuwo.cn/openapi/v1/www/lyric/getlyric", ["musicId": hit.0], referer: "https://www.kuwo.cn/", session: session)
             guard let data = json["data"] as? [String: Any], let rows = data["lrclist"] as? [[String: Any]] else { continue }
             let lrc = rows.compactMap { row -> String? in
                 guard let time = LyricHTTP.string(row["time"]).flatMap(Double.init), time.isFinite, time >= 0,
                       let text = row["lineLyric"] as? String else { return nil }
-                return String(format: "[%02d:%05.2f]", Int(time / 60), time.truncatingRemainder(dividingBy: 60)) + text
+                return "[" + KugouKRC.clock(time) + "]" + text
             }.joined(separator: "\n")
             if let match = candidate(.kuwo, lrc: lrc, query: query, title: hit.1, artist: hit.2, duration: hit.3) { return match }
         }
