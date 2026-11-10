@@ -121,6 +121,7 @@ When merging, keep every entry and combine duplicate headings.
 - Hinge: a line's last words now finish folding away instead of being cut off part-way.
 - Spoken, Cascade and Cutout with Reduce Motion: the column of words now dissolves to its next place at each word instead of jumping.
 - Lyrics without word timing: the line being replaced no longer brightens for a moment as the next line appears, and the previewed first word of a line stays in place instead of blinking out and jumping when its line starts.
+- Lyrics: a line now starts leaving a little earlier and lifts away as the next one arrives, so two lines no longer sit on top of each other in the middle of the screen at every change.
 
 ## [1.0.0] - 2026-11-08
 

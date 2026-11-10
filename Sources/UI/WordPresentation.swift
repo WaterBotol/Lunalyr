@@ -131,8 +131,12 @@ struct LyricPhraseTiming {
         UInt64(bitPattern: Int64(exactly: (seconds * 1000).rounded()) ?? 0)
     }
 
+    /// A line starts to leave a quarter second before the next one, so the
+    /// two are not both mostly visible in the middle of the stage -- but
+    /// never before its own last word has been sung.
     static func exitStart(of line: LyricsFetcher.Line, nextStart: Double) -> Double {
-        min(line.end + 0.12, nextStart - 0.08)
+        let lastWordEnd = line.words.map(\.end).max() ?? -.infinity
+        return max(lastWordEnd + 0.10, min(line.end + 0.12, nextStart - 0.25))
     }
 
     /// The longest a line still being sung keeps the stage once the next

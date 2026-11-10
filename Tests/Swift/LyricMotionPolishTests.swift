@@ -278,4 +278,32 @@ final class LyricMotionPolishTests: XCTestCase {
         XCTAssertEqual(LyricLayer.heldFirstRunOpacity(presence: 0.02), 0.25, "never fainter than the preview")
         XCTAssertEqual(LyricLayer.heldFirstRunOpacity(presence: 0.8), 0.8)
     }
+
+    // MARK: L8
+
+    /// A line starts leaving a quarter second before the next line, not
+    /// 80 ms before it -- but never before its own last word is sung.
+    func testALineLeavesBeforeTheNextOneArrivesButNotBeforeItsLastWord() {
+        let early = line(words(["done", "early"], start: 10), end: 12)
+        XCTAssertEqual(LyricPhraseTiming.exitStart(of: early, nextStart: 12), 11.75, accuracy: 1e-9)
+        let busy = line([LyricsFetcher.Word(text: "right", start: 10, end: 11),
+                         LyricsFetcher.Word(text: "through", start: 11, end: 11.95)], end: 12)
+        XCTAssertEqual(LyricPhraseTiming.exitStart(of: busy, nextStart: 12), 12.05, accuracy: 1e-9)
+        // A line that ends well before the next keeps its own end.
+        let short = line(words(["short"], start: 10), end: 10.4)
+        XCTAssertEqual(LyricPhraseTiming.exitStart(of: short, nextStart: 20), 10.52, accuracy: 1e-9)
+    }
+
+    func testALeavingLineLiftsAsTheNextArrives() {
+        let lines = [line(words(["first"], start: 10), end: 12), line(words(["second"], start: 12), end: 14)]
+        let handOver = { LyricPhraseTiming.handOver(after: $0, in: lines) }
+        XCTAssertEqual(LyricLayer.incomingArrival(after: 0, in: lines, time: 11.9, handOver: handOver), 0)
+        var last = 0.0
+        for frame in 0...60 {
+            let value = LyricLayer.incomingArrival(after: 0, in: lines, time: 12 + Double(frame) / 60, handOver: handOver)
+            XCTAssertLessThan(abs(value - last), 0.2)
+            last = value
+        }
+        XCTAssertGreaterThan(last, 0.95)
+    }
 }

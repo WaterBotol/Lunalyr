@@ -701,7 +701,12 @@ struct LyricLayer: View {
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
                             rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:])
                         let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
-                        let slide: CGFloat = still ? 0 : CGFloat((1 - pose.arrival) * 0.20 - pose.exit * 0.10) * baseSize
+                        // A line leaving lifts away as the next one rises
+                        // into the same place, rather than sitting under it.
+                        let makesWay: Double = outgoing && !composition.fillsStage
+                            ? Self.incomingArrival(after: index, in: lines, time: time) { handOver(after: $0, in: lines) } : 0
+                        let travel: Double = (1 - pose.arrival) * 0.20 - pose.exit * 0.10 - 0.30 * makesWay
+                        let slide: CGFloat = still ? 0 : CGFloat(travel) * baseSize
                         lineView
                             .opacity(stagePresence)
                             .scaleEffect(swell)
@@ -756,6 +761,15 @@ struct LyricLayer: View {
         } else {
             Color.clear
         }
+    }
+
+    /// 0...1: how far the line after `row` has arrived (its spring), or 0
+    /// before it starts. A held line moves aside instead (`heldShift`).
+    static func incomingArrival(after row: Int, in lines: [LyricsFetcher.Line], time: Double,
+                                handOver: (Int) -> Double) -> Double {
+        guard lines.indices.contains(row + 1), time >= lines[row + 1].start,
+              !LyricPhraseTiming.isHeld(row, in: lines) else { return 0 }
+        return min(1, max(0, LyricPhraseTiming(line: lines[row + 1], nextStart: handOver(row + 1), time: time).arrival))
     }
 
     /// A line with only a line timestamp, set as one level phrase of words.
