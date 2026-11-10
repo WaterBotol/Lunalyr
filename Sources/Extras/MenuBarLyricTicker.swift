@@ -204,7 +204,7 @@ final class MenuBarLyricTicker: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        for entry in Self.menuEntries(extras: extras, hotkeys: .shared) {
+        for entry in Self.menuEntries(extras: extras, hotkeys: .shared, tapSync: .shared) {
             guard let entry else { menu.addItem(.separator()); continue }
             let item = NSMenuItem(title: entry.title, action: entry.action, keyEquivalent: entry.key?.key ?? "")
             item.target = self
@@ -222,10 +222,20 @@ final class MenuBarLyricTicker: NSObject, NSMenuDelegate {
 
     /// The menu, top to bottom; nil is a separator. The names match the
     /// menu-bar window's.
-    static func menuEntries(extras: LunalyrExtras?, hotkeys: GlobalHotkeys) -> [MenuEntry?] {
+    static func menuEntries(extras: LunalyrExtras?, hotkeys: GlobalHotkeys,
+                            tapSync: LyricTapSyncController? = nil) -> [MenuEntry?] {
         let shortcuts = extras?.shortcutsEnabled == true
         func key(_ action: GlobalHotkeys.Action) -> (key: String, modifiers: NSEvent.ModifierFlags)? {
             shortcuts ? hotkeys.keyEquivalent(for: action) : nil
+        }
+        var tapEntries: [MenuEntry?] = []
+        if let tapSync {
+            tapEntries.append(MenuEntry(title: tapSync.actionTitle, action: #selector(MenuBarLyricTicker.tapSync),
+                                        key: key(.tapSyncLyrics)))
+            if tapSync.canUndo {
+                tapEntries.append(MenuEntry(title: LyricTapSyncController.undoTitle,
+                                            action: #selector(MenuBarLyricTicker.undoTapSync), key: nil))
+            }
         }
         return [
             MenuEntry(title: extras?.lyricsActionTitle ?? LunalyrExtras.Titles.hideLyrics,
@@ -233,6 +243,7 @@ final class MenuBarLyricTicker: NSObject, NSMenuDelegate {
             MenuEntry(title: extras?.pauseActionTitle ?? LunalyrExtras.Titles.pauseWallpaper,
                       action: #selector(MenuBarLyricTicker.togglePause), key: key(.pauseWallpaper)),
             MenuEntry(title: LunalyrExtras.Titles.copyCard, action: #selector(MenuBarLyricTicker.copyCard), key: key(.copyCard)),
+        ] + tapEntries + [
             nil,
             MenuEntry(title: LunalyrExtras.Titles.settings, action: #selector(MenuBarLyricTicker.openSettings), key: nil),
             MenuEntry(title: "Hide This Line from the Menu Bar", action: #selector(MenuBarLyricTicker.hideTicker), key: nil),
@@ -242,6 +253,8 @@ final class MenuBarLyricTicker: NSObject, NSMenuDelegate {
     @objc private func toggleLyrics() { extras?.toggleLyrics() }
     @objc private func togglePause() { extras?.toggleWallpaperPause() }
     @objc private func copyCard() { extras?.copyLyricCard() }
+    @objc private func tapSync() { LyricTapSyncController.shared.toggle() }
+    @objc private func undoTapSync() { LyricTapSyncController.shared.undo() }
     @objc private func openSettings() { LunalyrNavigation.shared.openSettings() }
     @objc private func hideTicker() { extras?.showsMenuBarLine = false }
 }
