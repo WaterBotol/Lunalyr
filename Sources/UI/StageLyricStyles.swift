@@ -170,9 +170,18 @@ extension CGRect { fileprivate var center: CGPoint { CGPoint(x: midX, y: midY) }
 
 struct StageLayout: Layout {
     var place: ([CGSize], CGRect) -> [CGPoint]
+    /// The room the words need, from their measured sizes, when it may be
+    /// more than the stage: the layout then reports it, for the caller to
+    /// scale down to fit. Nil takes the stage as offered.
+    var needs: (([CGSize]) -> CGSize)? = nil
+
+    init(place: @escaping ([CGSize], CGRect) -> [CGPoint]) { self.place = place }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        CGSize(width: proposal.width ?? 400, height: proposal.height ?? 300)
+        let offered = CGSize(width: proposal.width ?? 400, height: proposal.height ?? 300)
+        guard let needs else { return offered }
+        let need = needs(subviews.map { $0.sizeThatFits(.unspecified) })
+        return CGSize(width: max(offered.width, need.width), height: max(offered.height, need.height))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -254,6 +263,83 @@ struct StageLyricView: View {
         // contrasting face, as in the other layouts. The same words every time for a line.
         let alternate = settings.editorialTypography && chance(id, 60) < 0.34 && chance(id, 61) < settings.editorialAmount
         return settings.lyricFont(size: size, hero: hero, mood: mood, seed: UInt64(abs(seed &+ id)), alternate: alternate)
+    }
+
+    // MARK: Readings
+    //
+    // "Below lyrics": a word's reading sits under it, part of the word's own
+    // view, so it arrives, scales, tilts and leaves with the word, and the
+    // layouts measure and fit it with the word. Set smaller, in the same
+    // face, in the reading colour; where a word sits on a bar or a pill the
+    // reading is in the bar's text colour, as on the rolling layouts' tiles.
+
+    /// A reading's size against its word's: between Fable's (0.36) and the
+    /// rolling layouts' (0.56), as these layouts set their words larger.
+    static let readingRatio: CGFloat = 0.45
+
+    /// The type size of the reading under a word set at `size`: never below
+    /// 12 pt, unless the word itself is set about that small.
+    static func readingSize(_ size: CGFloat) -> CGFloat { max(size * readingRatio, min(12, size * 0.9)) }
+
+    /// The gap between a word and its reading.
+    static func readingGap(_ size: CGFloat) -> CGFloat { size * 0.04 }
+
+    /// The room a reading takes under a word set at `size`: the gap and one
+    /// line, held to this height so the layouts can count on it.
+    static func readingSlot(_ size: CGFloat, gap: CGFloat? = nil) -> CGFloat {
+        (gap ?? readingGap(size)) + readingSize(size) * 1.25
+    }
+
+    /// The reading drawn under `run`: its parts' readings in order, or nil
+    /// when it has none (or "Below lyrics" is off, so there are none).
+    static func reading(of run: StageRun, in readings: [TimedWordKey: String]) -> String? {
+        guard !readings.isEmpty else { return nil }
+        let text = run.parts.compactMap { $0.source.flatMap { readings[$0] } }.joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    /// `word` with its reading under it, or `word` alone when it has none.
+    /// The reading is `colour`, or, given `live`, blends from `colour` to
+    /// `liveColour` as the word being sung does. `maxWidth` is the word's
+    /// own limit; a long reading shrinks to it rather than spill. `shown`
+    /// fades the reading alone, keeping its room.
+    @ViewBuilder
+    fileprivate func withReading<Word: View>(_ run: StageRun, size: CGFloat, colour: Color, liveColour: Color? = nil,
+                                             live: Double = 0, alignment: HorizontalAlignment = .center,
+                                             gap: CGFloat? = nil, maxWidth: CGFloat, shadow: Bool = true,
+                                             shown: Double = 1, @ViewBuilder word: () -> Word) -> some View {
+        if let text = Self.reading(of: run, in: readings) {
+            let face = readingFont(size, id: run.id)
+            let line = { (colour: Color) in
+                Text(text).font(face).foregroundStyle(colour)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+            }
+            VStack(alignment: alignment, spacing: gap ?? Self.readingGap(size)) {
+                word()
+                ZStack {
+                    if let liveColour {
+                        if live < 0.999 { line(colour) }
+                        if live > 0.001 { line(liveColour).opacity(live) }
+                    } else {
+                        line(colour)
+                    }
+                }
+                .frame(maxWidth: maxWidth)
+                .frame(height: Self.readingSize(size) * 1.25)
+                .shadow(color: .black.opacity(shadow ? 0.35 : 0), radius: max(2, Self.readingSize(size) * 0.18), y: 1)
+                .opacity(shown)
+            }
+        } else {
+            word()
+        }
+    }
+
+    /// The reading's face: the word's own (editorial or not), not bold.
+    private func readingFont(_ size: CGFloat, id: Int) -> Font {
+        let alternate = settings.editorialTypography && chance(id, 60) < 0.34 && chance(id, 61) < settings.editorialAmount
+        return settings.lyricFont(size: Self.readingSize(size), hero: false, mood: mood, seed: UInt64(abs(seed &+ id)),
+                                  alternate: alternate)
     }
 
     private func sample(_ run: StageRun, of count: Int) -> LyricInkSample {
@@ -351,24 +437,52 @@ struct StageLyricView: View {
     /// How much the whole Hinge corner is scaled to fit the stage, and how
     /// much its column has shrunk. Every word counts by its weight (how far
     /// it has arrived), so neither steps as a word is added.
+    /// `readings` are the words' readings ("Below lyrics"), counted in the
+    /// height and width they add, so a corner with them is shrunk to fit too.
+    /// How much more room than its own height a reading takes in Hinge's
+    /// column and pair, whose words overlap their neighbours' leading
+    /// (and the column is drawn 10% taller than measured).
+    static let hingeReadingRoom: CGFloat = 1.4
+
+    /// The size Hinge's pair sizes its readings from: larger than the pair's
+    /// own type, which is shown small once it is pushed into the corner.
+    static func hingePairReadingBase(unit u: CGFloat) -> CGFloat { u * 0.95 * 1.4 }
+
     static func hingeFit(_ texts: [String], weights: [CGFloat], settle: Double, unit u: CGFloat,
-                         stage: CGSize) -> (fit: CGFloat, shrink: CGFloat) {
+                         stage: CGSize, readings: [String?] = []) -> (fit: CGFloat, shrink: CGFloat) {
         let columnCount = max(0, min(texts.count, weights.count) - 3)
         let columnWeights = (0..<columnCount).map { weights[$0 + 3] }
         let shrink = CGFloat(StageMotion.hingeColumnShrink(Double(columnWeights.reduce(0, +))))
-        let heightSum = (0..<columnCount).map { hingeColumnFont($0, unit: u) * shrink * 0.95 * columnWeights[$0] }.reduce(0, +)
+        func reading(_ index: Int) -> String? { readings.indices.contains(index) ? readings[index] : nil }
+        /// The room a word's reading adds below it, and the reading's width.
+        func readingRoom(_ index: Int, font: CGFloat) -> (height: CGFloat, width: CGFloat) {
+            guard let text = reading(index), !text.isEmpty else { return (0, 0) }
+            return (readingSlot(font), CGFloat(text.count) * readingSize(font) * 0.55)
+        }
+        let heightSum = (0..<columnCount).map { j -> CGFloat in
+            let font = hingeColumnFont(j, unit: u)
+            return (font * 0.95 + readingRoom(j + 3, font: font).height * hingeReadingRoom) * shrink * columnWeights[j]
+        }.reduce(0, +)
         // The whole corner grows to fill the stage once it has a bar to hang from.
-        let barWidth: CGFloat = texts.count > 2 ? CGFloat(texts[2].count) * u * 1.7 * 0.66 : 0
+        let barReading = texts.count > 2 ? readingRoom(2, font: u * 1.6) : (height: 0, width: 0)
+        let barWidth: CGFloat = texts.count > 2 ? max(CGFloat(texts[2].count) * u * 1.7 * 0.66, barReading.width) : 0
         var columnWidth: CGFloat = 0
         for j in 0..<columnCount {
-            let width = CGFloat(texts[j + 3].count) * hingeColumnFont(j, unit: u) * shrink * 0.66 * 0.84 * columnWeights[j]
+            let font = hingeColumnFont(j, unit: u)
+            let word = CGFloat(texts[j + 3].count) * font * 0.66
+            let width = max(word, readingRoom(j + 3, font: font).width) * shrink * 0.84 * columnWeights[j]
             columnWidth = max(columnWidth, width)
         }
         let widest: CGFloat = max(barWidth, columnWidth)
         let structureWidth: CGFloat = max(2 * widest + u * 0.3, u * 3)
-        let structureHeight = max(heightSum, u * 2.4) + u * 0.8
+        // The pair's readings stack above the bar, with the pair at its
+        // corner size (a little over half its own).
+        let pairReadings = (0..<min(2, texts.count)).map {
+            readingRoom($0, font: hingePairReadingBase(unit: u)).height * hingeReadingRoom * 0.6
+        }.reduce(0, +)
+        let structureHeight = max(heightSum, u * 2.4 + barReading.height) + u * 0.8 + pairReadings
         let fill: CGFloat = min(2.0, stage.width * 0.8 / structureWidth, stage.height * 0.78 / structureHeight)
-        let fitHeight: CGFloat = min(1, stage.height * 0.74 / max(heightSum + u * 0.8, 1))
+        let fitHeight: CGFloat = min(1, stage.height * 0.74 / max(heightSum + u * 0.8 + pairReadings, 1))
         let grow: CGFloat = (max(fill, 1) - 1) * CGFloat(settle)
         return (fitHeight * (1 + grow), shrink)
     }
@@ -387,7 +501,8 @@ struct StageLyricView: View {
         let columnCount = max(0, runs.count - 3)
         let columnWeights = (0..<columnCount).map { weights[$0 + 3] }
         let u = unit
-        let (fit, shrink) = Self.hingeFit(runs.map(\.text), weights: weights, settle: settle, unit: u, stage: stageSize)
+        let (fit, shrink) = Self.hingeFit(runs.map(\.text), weights: weights, settle: settle, unit: u, stage: stageSize,
+                                          readings: runs.map { Self.reading(of: $0, in: readings) })
         // Type is set at its resting size and scaled, so no word is
         // re-shaped every frame; the layout scales what it measured to match.
         func columnFont(_ j: Int) -> CGFloat { Self.hingeColumnFont(j, unit: u) }
@@ -403,6 +518,15 @@ struct StageLyricView: View {
         let leftRuns = runs.filter { $0.id < 3 }
         let rightRuns = runs.filter { $0.id >= 3 }
         let stage = stageSize
+        // The room each word's reading takes under it, at the word's resting
+        // size: the layout counts it apart from the word, which overlaps
+        // its neighbours' leading where a reading cannot.
+        let slots: [CGFloat] = runs.map { run in
+            guard Self.reading(of: run, in: readings) != nil else { return 0 }
+            return Self.readingSlot(run.id < 2 ? Self.hingePairReadingBase(unit: u)
+                                    : run.id == 2 ? u * 1.6 : Self.hingeColumnFont(run.id - 3, unit: u))
+        }
+        let room = Self.hingeReadingRoom
         let face: (Bool) -> AnyView = { isLeft in
             let items = isLeft ? leftRuns : rightRuns
             return AnyView(StageLayout(place: { measured, bounds in
@@ -411,26 +535,42 @@ struct StageLyricView: View {
                 if isLeft {
                     let barSize = measured.count > 2
                         ? CGSize(width: measured[2].width * barScale, height: measured[2].height * barScale) : .zero
-                    let totalColumn = rightRuns.indices.map { columnSize($0) * 0.95 * columnWeights[$0] }.reduce(0, +)
+                    let totalColumn = rightRuns.indices.map {
+                        (columnSize($0) * 0.95 + slots[$0 + 3] * room * shrink) * columnWeights[$0]
+                    }.reduce(0, +)
                     // The bar moves up beside the column as its first word arrives.
                     let top = bounds.midY - (u + (totalColumn / 2 - u) * firstColumn)
                     var centres = [CGPoint](repeating: CGPoint(x: edge / 2, y: bounds.midY), count: measured.count)
+                    // The bar is placed by its word; its reading hangs below.
+                    let barSlot = measured.count > 2 ? slots[2] * barScale : 0
+                    let barWord = barSize.height - barSlot
                     if measured.count > 2 {
                         let settledX = edge - gap - barSize.width / 2
-                        let settledY = bounds.midY + (top + barSize.height * 0.45 - bounds.midY) * firstColumn
+                        let settledY = bounds.midY + (top + barWord * 0.45 - bounds.midY) * firstColumn
                         centres[2] = CGPoint(x: edge / 2 + (settledX - edge / 2) * settle, y: bounds.midY + (settledY - bounds.midY) * settle)
                     }
-                    let pairHeight = (measured.first?.height ?? 0) * pairScale * 0.78
+                    // The pair's words overlap a little; their readings do not.
+                    func pairRoom(_ index: Int) -> CGFloat {
+                        guard measured.indices.contains(index) else { return pairRoom(0) }
+                        return (measured[index].height - slots[index]) * 0.78 + slots[index] * room
+                    }
+                    let pairRead = slots.prefix(2).contains { $0 > 0 }
+                    let pairHeight = measured.isEmpty ? 0 : (pairRead ? (pairRoom(0) + pairRoom(1)) / 2 : pairRoom(0)) * pairScale
                     let home = CGPoint(x: edge / 2, y: bounds.midY)
+                    // A reading under the pair's lower word lifts the pair clear of the bar.
+                    let lowerSlot = measured.count > 1 ? slots[1] * room * pairScale : 0
                     let corner = measured.count > 2
-                        ? CGPoint(x: centres[2].x + barSize.width * 0.28, y: centres[2].y - barSize.height * 0.62) : home
+                        ? CGPoint(x: centres[2].x + barSize.width * 0.28, y: centres[2].y - barWord * 0.62 - lowerSlot) : home
                     let spot = CGPoint(x: home.x + (corner.x - home.x) * pushed, y: home.y + (corner.y - home.y) * pushed)
                     let split = pairHeight * 0.5 * pairWeight
                     if !measured.isEmpty { centres[0] = CGPoint(x: spot.x, y: spot.y - split) }
                     if measured.count > 1 { centres[1] = CGPoint(x: spot.x, y: spot.y + split * (1 - 0.25 * pushed)) }
+                    if measured.count > 2 { centres[2].y += barSlot / 2 }
                     return centres
                 }
-                let heights = measured.indices.map { measured[$0].height * 0.9 * columnScale($0) * columnWeights[$0] }
+                let heights = measured.indices.map {
+                    ((measured[$0].height - slots[$0 + 3]) * 0.9 + slots[$0 + 3] * room) * columnScale($0) * columnWeights[$0]
+                }
                 var cursor = bounds.midY - heights.reduce(0, +) / 2
                 return measured.indices.map { index in
                     defer { cursor += heights[index] }
@@ -448,10 +588,19 @@ struct StageLyricView: View {
                     // Words fold away oldest first.
                     let out = reduceMotion ? 0
                         : StageMotion.hingeFold(order: Double(run.id) / Double(max(total - 1, 1)), at: time, exitStart: exitStart)
-                    word(run, tile ? ink.tileText : isPair ? sample.rest.opacity(0.95) : sample.sung, uppercase: true)
-                        .font(font(fontSize, hero: true, id: run.id))
-                        .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stage.width * 0.4 / max(scale, 0.05))
-                        .background { tileBackground(tile, size: fontSize) }
+                    let widest = stage.width * 0.4 / max(scale, 0.05)
+                    // The reading hangs from the word's hinge side, as the word does.
+                    // The bar arrives huge and settles into place; its reading
+                    // comes once it is nearly there, rather than swing in huge.
+                    withReading(run, size: isPair ? Self.hingePairReadingBase(unit: u) : fontSize,
+                                colour: isPair ? sample.reading.opacity(0.95) : sample.reading,
+                                alignment: isPair ? .center : isLeft ? .trailing : .leading, maxWidth: widest,
+                                shown: isBar ? Easing.smoothstep((settle - 0.5) / 0.5) : 1) {
+                        word(run, tile ? ink.tileText : isPair ? sample.rest.opacity(0.95) : sample.sung, uppercase: true)
+                            .font(font(fontSize, hero: true, id: run.id))
+                            .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: widest)
+                            .background { tileBackground(tile, size: fontSize) }
+                    }
                         .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: 7, y: 2)
                         .scaleEffect(x: scale * (isBar || isPair ? 1 : 0.86), y: scale * (isBar || isPair ? 1 : 1.1))
                         // Each word unfolds from the edge like a panel on a hinge, with a
@@ -493,6 +642,43 @@ struct StageLyricView: View {
         Self.little.contains(text.lowercased().trimmingCharacters(in: .punctuationCharacters)) && text.count <= 5
     }
 
+    /// Where Broadside puts each word's centre: big words in a row, the
+    /// strip glided so the newest big word reaches the centre; a little
+    /// word lies across the big one before it. `slots` is the room each
+    /// big word's reading takes under it (0 for none): the word itself is
+    /// what sits on the strip's line, its reading below.
+    static func broadsidePlaces(_ measured: [CGSize], little: [Bool], slots: [CGFloat], moves: [Double], unit: CGFloat,
+                                in bounds: CGRect) -> [CGPoint] {
+        func slot(_ index: Int) -> CGFloat { slots.indices.contains(index) ? slots[index] : 0 }
+        var xs = [CGFloat](repeating: 0, count: measured.count)
+        var ys = [CGFloat](repeating: bounds.midY, count: measured.count)
+        var cursor: CGFloat = 0
+        var previousBig: Int?
+        var bigOrder: [Int] = []
+        var littlesSinceBig = 0
+        for index in measured.indices {
+            // The first little word after a big one lies across it; any
+            // more follow it in the row rather than piling on top.
+            if little[index], let prior = previousBig, littlesSinceBig == 0 {
+                xs[index] = xs[prior] + measured[prior].width * 0.2
+                ys[index] = bounds.midY + (measured[prior].height - slot(prior)) * 0.2
+                littlesSinceBig += 1
+                continue
+            }
+            let width = measured[index].width
+            xs[index] = cursor + width / 2
+            ys[index] = bounds.midY + slot(index) / 2
+            cursor += width + (little[index] ? unit * 0.2 : unit * 0.45)
+            if little[index] { littlesSinceBig += 1 } else { previousBig = index; bigOrder.append(index); littlesSinceBig = 0 }
+        }
+        // The strip glides so the newest big word reaches the centre.
+        var camera = bigOrder.first.map { xs[$0] } ?? 0
+        for (n, index) in bigOrder.enumerated() where n > 0 {
+            camera += moves[index] * (xs[index] - xs[bigOrder[n - 1]])
+        }
+        return measured.indices.map { CGPoint(x: xs[$0] - camera + bounds.midX, y: ys[$0]) }
+    }
+
     private func broadside(_ runs: [StageRun], total: Int) -> some View {
         // Snappy: each word springs in, and the strip glides along with it;
         // the glide hands over from word to word without a jolt.
@@ -523,34 +709,14 @@ struct StageLyricView: View {
             ((anchor[index] + 1)..<max(runs.count, anchor[index] + 1)).filter { !little[$0] }.map { moves[$0] }.reduce(0, +)
         }
         let keep: [Double] = bigAfter.map { max(0, min(1, 1 - ($0 - 1.6) * 0.9)) }
+        // A big word's reading hangs under it, in a slot of known height,
+        // so the words themselves stay on one line across the strip.
+        let slots: [CGFloat] = runs.map {
+            !little[$0.id] && Self.reading(of: $0, in: readings) != nil ? Self.readingSlot(bigSize) : 0
+        }
+        let u = unit
         return StageLayout(place: { measured, bounds in
-            // Big words in a row; a little word lies across the one before.
-            var xs = [CGFloat](repeating: 0, count: measured.count)
-            var ys = [CGFloat](repeating: bounds.midY, count: measured.count)
-            var cursor: CGFloat = 0
-            var previousBig: Int?
-            var bigOrder: [Int] = []
-            var littlesSinceBig = 0
-            for index in measured.indices {
-                // The first little word after a big one lies across it; any
-                // more follow it in the row rather than piling on top.
-                if little[index], let prior = previousBig, littlesSinceBig == 0 {
-                    xs[index] = xs[prior] + measured[prior].width * 0.2
-                    ys[index] = bounds.midY + measured[prior].height * 0.2
-                    littlesSinceBig += 1
-                    continue
-                }
-                let width = measured[index].width
-                xs[index] = cursor + width / 2
-                cursor += width + (little[index] ? unit * 0.2 : unit * 0.45)
-                if little[index] { littlesSinceBig += 1 } else { previousBig = index; bigOrder.append(index); littlesSinceBig = 0 }
-            }
-            // The strip glides so the newest big word reaches the centre.
-            var camera = bigOrder.first.map { xs[$0] } ?? 0
-            for (n, index) in bigOrder.enumerated() where n > 0 {
-                camera += moves[index] * (xs[index] - xs[bigOrder[n - 1]])
-            }
-            return measured.indices.map { CGPoint(x: xs[$0] - camera + bounds.midX, y: ys[$0]) }
+            Self.broadsidePlaces(measured, little: little, slots: slots, moves: moves, unit: u, in: bounds)
         }) {
             ForEach(runs) { run in
                 let sample = sample(run, of: total)
@@ -558,9 +724,13 @@ struct StageLyricView: View {
                 if little[run.id] {
                     // With "Cutout · Highlight" the labels grow into real tiles.
                     let labelSize = tiled(run) ? smallSize * 1.4 : smallSize
-                    word(run, ink.tileText)
-                        .font(font(labelSize, hero: true, id: run.id))
-                        .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
+                    // A label's reading is printed on the label with it.
+                    withReading(run, size: labelSize, colour: ink.tileText.opacity(LyricHighlight.readingOpacity),
+                                maxWidth: stageSize.width * 0.7, shadow: false) {
+                        word(run, ink.tileText)
+                            .font(font(labelSize, hero: true, id: run.id))
+                            .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
+                    }
                         .padding(.horizontal, labelSize * 0.34).padding(.vertical, labelSize * 0.16)
                         .background(ink.tileColour, in: RoundedRectangle(cornerRadius: 3))
                         .rotationEffect(.degrees(run.id.isMultiple(of: 2) ? -3 : 2.5))
@@ -568,13 +738,15 @@ struct StageLyricView: View {
                         .opacity(min(1, a * 1.6) * keep[run.id])
                 } else {
                     let tile = tiled(run)
-                    ZStack {
-                        word(run, .black.opacity(tile ? 0 : 0.34)).offset(x: hard, y: hard * 1.15)
-                        word(run, tile ? ink.tileText : sample.sung)
+                    withReading(run, size: bigSize, colour: sample.reading, maxWidth: stageSize.width * 0.7) {
+                        ZStack {
+                            word(run, .black.opacity(tile ? 0 : 0.34)).offset(x: hard, y: hard * 1.15)
+                            word(run, tile ? ink.tileText : sample.sung)
+                        }
+                        .font(font(bigSize, hero: true, id: run.id))
+                        .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
+                        .background { tileBackground(tile, size: bigSize) }
                     }
-                    .font(font(bigSize, hero: true, id: run.id))
-                    .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7)
-                    .background { tileBackground(tile, size: bigSize) }
                     .scaleEffect(reduceMotion ? 1 : 0.86 + 0.14 * a)
                     .opacity(min(1, a * 1.6) * keep[run.id])
                 }
@@ -601,6 +773,21 @@ struct StageLyricView: View {
     }
 
     private static let badges = ["arrow.up.right", "arrow.right", "sparkle", "play.fill", "plus", "bolt.fill"]
+
+    /// A Portal pill's shown size against its resting size: older pills are smaller.
+    static func portalScale(rank: Double) -> CGFloat { CGFloat(max(0.4, 1 - 0.4 * min(rank, 1.5))) }
+
+    /// `centre` moved, if it must be, so a pill measured at `size` and shown
+    /// at `scale` stays inside `bounds`, with a little room for its landing
+    /// squash and tilt. A pill too big for the stage is centred on it.
+    static func keepOnStage(_ centre: CGPoint, size: CGSize, scale: CGFloat, in bounds: CGRect) -> CGPoint {
+        let halfWidth = size.width * scale * 0.54, halfHeight = size.height * scale * 0.54
+        func clamp(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat {
+            low > high ? (low + high) / 2 : min(max(value, low), high)
+        }
+        return CGPoint(x: clamp(centre.x, bounds.minX + halfWidth, bounds.maxX - halfWidth),
+                       y: clamp(centre.y, bounds.minY + halfHeight, bounds.maxY - halfHeight))
+    }
 
     private func portal(_ runs: [StageRun], total: Int) -> some View {
         let speed = lineSpeed
@@ -631,6 +818,8 @@ struct StageLyricView: View {
         let leaving = leave
         // Quick songs get less float and a shorter run-in, so the eye can follow.
         let drift: CGFloat = reduceMotion ? 0 : CGFloat(1 / speed)
+        // Older pills are shown smaller (the same scale as below).
+        let scales = ranks.map { Self.portalScale(rank: $0) }
         return StageLayout(place: { measured, bounds in
             measured.indices.map { index -> CGPoint in
                 let p = along(ranks[index])
@@ -647,7 +836,8 @@ struct StageLyricView: View {
                 let comeY: CGFloat = rise * CGFloat(sin(heading)) * bounds.height * 0.1 * drift
                 let x: CGFloat = bounds.midX + shiftX + p.x + sway + comeX
                 let y: CGFloat = bounds.midY + lift + p.y + bob + comeY
-                return CGPoint(x: x, y: y)
+                // A pill with its reading is taller; none is pushed off the stage.
+                return Self.keepOnStage(CGPoint(x: x, y: y), size: measured[index], scale: scales[index], in: bounds)
             }
         }) {
             ForEach(runs) { run in
@@ -661,7 +851,7 @@ struct StageLyricView: View {
                 let tile = tiled(run)
                 // Set at its resting size; older pills are scaled down, not re-set.
                 let size = unit * (1.2 + 0.3 * chance(run.id, 10))
-                let scale = max(0.4, 1 - 0.4 * min(rank, 1.5))
+                let scale = Self.portalScale(rank: rank)
                 // Shapes run from nearly square to a full capsule; some pills are only outlined.
                 let corner = size * (0.24 + 0.26 * chance(run.id, 11))
                 let outlined = chance(run.id, 12) < 0.25 && !tile
@@ -681,12 +871,19 @@ struct StageLyricView: View {
                 let liveColour = outlined ? ink.tileColour : ink.tileText
                 HStack(spacing: size * 0.3) {
                     if badgeSide < 0.6 { badgeView }
-                    ZStack {
-                        if live < 0.999 { word(run, restColour) }
-                        if live > 0.001 { word(run, liveColour).opacity(live) }
+                    // The reading sits in the pill under its word and takes the
+                    // live pill's text colour with it.
+                    withReading(run, size: size,
+                                colour: tile ? ink.tileText.opacity(LyricHighlight.readingOpacity) : sample.reading,
+                                liveColour: liveColour.opacity(LyricHighlight.readingOpacity), live: live,
+                                maxWidth: stageSize.width * 0.7 / scale, shadow: false) {
+                        ZStack {
+                            if live < 0.999 { word(run, restColour) }
+                            if live > 0.001 { word(run, liveColour).opacity(live) }
+                        }
+                        .font(font(size, hero: true, id: run.id))
+                        .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7 / scale)
                     }
-                    .font(font(size, hero: true, id: run.id))
-                    .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stageSize.width * 0.7 / scale)
                     if badgeSide >= 0.6 && badgeSide < 0.85 { badgeView }
                 }
                 .padding(.horizontal, size * 0.5).padding(.vertical, size * 0.26)
@@ -756,6 +953,15 @@ extension StageLyricView {
     // across a pale panel, or letter by letter on jumping baselines -- while the
     // words before it shrink into a small stack above.
 
+    /// The size Mosaic's small stack sets its words at.
+    static func mosaicSmallSize(unit: CGFloat) -> CGFloat { unit * 0.6 }
+
+    /// How far apart Mosaic's stack sets its rows: a word, and its reading
+    /// when the line has readings.
+    static func mosaicStackStep(unit: CGFloat, readings: Bool) -> CGFloat {
+        unit * 0.85 + (readings ? readingSlot(mosaicSmallSize(unit: unit)) : 0)
+    }
+
     fileprivate func mosaic(_ runs: [StageRun], total: Int) -> some View {
         let speed = lineSpeed
         let arrivals = runs.map { arrive($0, speed: speed) }
@@ -764,6 +970,9 @@ extension StageLyricView {
         // A word on a tile (Cutout · Highlight) is always the huge kind, which can carry one.
         let kinds = runs.map { tiled($0) ? 0 : Int(chance($0.id, 20) * 3) % 3 }
         let stage = stageSize
+        let u = unit
+        // The stack's rows make room for readings when the line has any.
+        let step = Self.mosaicStackStep(unit: u, readings: runs.contains { Self.reading(of: $0, in: readings) != nil })
         return StageLayout(place: { measured, bounds in
             measured.indices.map { index in
                 // One continuous path: the word sits where it landed, then glides into the stack.
@@ -773,7 +982,7 @@ extension StageLyricView {
                 let home = CGPoint(x: bounds.midX + sway, y: bounds.midY + (chance(index, 22) - 0.5) * 0.16 * bounds.height)
                 let slot = CGFloat(min(3, max(rank, 1)))
                 let stack = CGPoint(x: bounds.midX - bounds.width * 0.2 + CGFloat(index % 2) * bounds.width * 0.04,
-                                    y: bounds.minY + bounds.height * 0.12 + (slot - 1) * unit * 0.85)
+                                    y: bounds.minY + bounds.height * 0.12 + (slot - 1) * step)
                 return CGPoint(x: home.x + (stack.x - home.x) * settle, y: home.y + (stack.y - home.y) * settle)
             }
         }) {
@@ -793,11 +1002,13 @@ extension StageLyricView {
                             // Huge, running off the edge, with a star beside it.
                             let size = unit * 3.0
                             ZStack(alignment: .topTrailing) {
-                                word(run, tile ? ink.tileText : sample.sung)
-                                    .font(font(size, hero: true, id: run.id))
-                                    .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
-                                    .background { tileBackground(tile, size: size) }
-                                    .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                                withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 1.1) {
+                                    word(run, tile ? ink.tileText : sample.sung)
+                                        .font(font(size, hero: true, id: run.id))
+                                        .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
+                                        .background { tileBackground(tile, size: size) }
+                                        .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                                }
                                 Star4().fill(ink.tileColour).frame(width: size * 0.32, height: size * 0.32)
                                     .rotationEffect(.degrees(reduceMotion ? 0 : time * 40))
                                     .offset(x: size * 0.1, y: -size * 0.12)
@@ -819,8 +1030,11 @@ extension StageLyricView {
                                     .offset(x: size * 0.12, y: size * 0.1)
                                     .opacity(Self.glide((time - (run.start + 0.05)) / 0.3))
                                     .scaleEffect(x: reduceMotion ? 1 : 0.6 + 0.4 * Self.glide((time - (run.start + 0.05)) / 0.3), y: 1)
-                                // The bar wipes across, then the word lands on it.
-                                plain.hidden()
+                                // The bar wipes across, then the word lands on it; a
+                                // reading is printed on the bar under its word.
+                                let readingInk = ink.tileText.opacity(LyricHighlight.readingOpacity)
+                                withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) { plain }
+                                    .hidden()
                                     .padding(.horizontal, size * 0.28).padding(.vertical, size * 0.06)
                                     .background {
                                         ink.tileColour
@@ -829,22 +1043,27 @@ extension StageLyricView {
                                             }
                                     }
                                     .rotationEffect(.degrees(tilt))
-                                word(run, ink.tileText)
-                                    .font(font(size, hero: true, id: run.id))
-                                    .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
+                                withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) {
+                                    word(run, ink.tileText)
+                                        .font(font(size, hero: true, id: run.id))
+                                        .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
+                                }
                                     .rotationEffect(.degrees(tilt))
                                     .opacity(Self.glide((time - (run.start + 0.1)) / 0.2))
                                     .offset(x: reduceMotion ? 0 : CGFloat(1 - wipe) * size * 0.5 * side)
                                 Star4().fill(Color.white).frame(width: size * 0.3, height: size * 0.3)
                                     .shadow(color: .black.opacity(0.2), radius: 3)
                                     .rotationEffect(.degrees(reduceMotion ? 0 : time * 50))
-                                    .offset(x: side * size * 0.1, y: -size * 0.62)
+                                    // Above the word, which a reading under it lifts.
+                                    .offset(x: side * size * 0.1, y: -size * 0.62
+                                            - (Self.reading(of: run, in: readings) == nil ? 0 : Self.readingSlot(size) / 2))
                                     .scaleEffect(wipe)
                             }
                             .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
                         } else {
                             // Letter by letter, each on its own baseline.
                             let size = unit * 2.4
+                            withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 0.8) {
                             HStack(spacing: size * 0.02) {
                                 ForEach(Array(run.text.enumerated()), id: \.offset) { index, character in
                                     let reveal = Self.glide((time - (run.start + Double(index) * 0.05)) / 0.25)
@@ -858,6 +1077,7 @@ extension StageLyricView {
                                 }
                             }
                             .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.8)
+                            }
                             .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
                         }
                     }
@@ -865,9 +1085,13 @@ extension StageLyricView {
                     .opacity(min(1, a * 1.6) * morph.bigOpacity)
                     // The small version it becomes, taking over once the big one has
                     // shrunk to its size.
-                    word(run, sample.rest.opacity(0.75 * max(0, 1 - (rank - 1.5) * 0.6)))
-                        .font(font(unit * 0.6, hero: true, id: run.id))
-                        .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
+                    let fade = max(0, 1 - (rank - 1.5) * 0.6)
+                    let small = Self.mosaicSmallSize(unit: unit)
+                    withReading(run, size: small, colour: sample.reading.opacity(fade), maxWidth: stage.width * 0.4) {
+                        word(run, sample.rest.opacity(0.75 * fade))
+                            .font(font(small, hero: true, id: run.id))
+                            .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
+                    }
                         .opacity(morph.smallOpacity)
                 }
             }
@@ -889,6 +1113,20 @@ extension StageLyricView {
         var scales: [CGFloat]
         /// The share of its room each word takes in the stack.
         var weights: [CGFloat]
+        /// The room each word's reading takes under it, at the resting size
+        /// (0 for none; `torqueReadingSlot`).
+        var slots: [CGFloat] = []
+    }
+
+    /// Torque's words rest at this many units.
+    static func torqueRestSize(unit: CGFloat) -> CGFloat { unit * 2.0 }
+
+    /// The gap between a Torque word and its reading: clear of the thick edge.
+    static func torqueReadingGap(_ restSize: CGFloat) -> CGFloat { restSize * 0.16 }
+
+    /// The room a reading takes under a Torque word.
+    static func torqueReadingSlot(_ restSize: CGFloat) -> CGFloat {
+        readingSlot(restSize, gap: torqueReadingGap(restSize))
     }
 
     static func torqueState(_ runs: [StageRun], at time: Double, speed: Double, seed: Int,
@@ -908,10 +1146,27 @@ extension StageLyricView {
 
     /// Where Torque puts each word's centre, from the sizes measured at the
     /// resting size.
+    /// The room each word takes in Torque's stack. Words overlap their
+    /// neighbours' leading; a reading takes all its room and a little more,
+    /// as the stack sways and turns.
+    static func torqueHeights(_ measured: [CGSize], _ state: TorqueState) -> [CGFloat] {
+        func slot(_ index: Int) -> CGFloat { state.slots.indices.contains(index) ? state.slots[index] : 0 }
+        return measured.indices.map {
+            ((measured[$0].height - slot($0)) * 0.82 + slot($0) * 1.2) * state.scales[$0] * state.weights[$0]
+        }
+    }
+
+    /// The height Torque's stack needs: its words, and room at either end
+    /// for the overlap and the turn. Taller than the stage (big type,
+    /// readings), the stack is scaled down to fit.
+    static func torqueHeight(_ measured: [CGSize], _ state: TorqueState, restSize: CGFloat) -> CGFloat {
+        torqueHeights(measured, state).reduce(0, +) + restSize * 0.3
+    }
+
     static func torqueStack(_ measured: [CGSize], _ state: TorqueState, seed: Int, in bounds: CGRect) -> [CGPoint] {
         let ranks = state.ranks
         // The stack is centred whatever its height.
-        let heights = measured.indices.map { measured[$0].height * 0.82 * state.scales[$0] * state.weights[$0] }
+        let heights = torqueHeights(measured, state)
         var cursor = bounds.midY + heights.reduce(0, +) / 2
         var placed = measured.indices.reversed().map { index -> (Int, CGPoint) in
             let rank = ranks[index]
@@ -922,13 +1177,16 @@ extension StageLyricView {
         }
         // The newest word is the biggest and sits lowest, so a stack centred
         // by height still looks bottom-heavy. Centre it by weight instead,
-        // as far as the stage has room to move it.
+        // as far as the stage has room to move it. A stack taller than its
+        // bounds keeps its foot in them: the word being sung stays whole,
+        // and the oldest words, already fading, go off the top. (The view
+        // gives the stack the room it needs and scales it to the stage.)
         let total = heights.reduce(0, +)
         let weight = placed.reduce(CGFloat(0)) { $0 + heights[$1.0] * heights[$1.0] }
         if total > 0, weight > 0 {
             let centroid = placed.reduce(CGFloat(0)) { $0 + heights[$1.0] * heights[$1.0] * $1.1.y } / weight
-            let room = max(0, (bounds.height - total) / 2)
-            let shift = max(-room, min(room, bounds.midY - centroid))
+            let room = (bounds.height - total) / 2
+            let shift = room >= 0 ? max(-room, min(room, bounds.midY - centroid)) : room
             placed = placed.map { ($0.0, CGPoint(x: $0.1.x, y: $0.1.y + shift)) }
         }
         return placed.sorted { $0.0 < $1.0 }.map(\.1)
@@ -936,15 +1194,19 @@ extension StageLyricView {
 
     fileprivate func torque(_ runs: [StageRun], total: Int) -> some View {
         let speed = lineSpeed
-        let state = Self.torqueState(runs, at: time, speed: speed, seed: seed, reduceMotion: reduceMotion)
+        let restSize = Self.torqueRestSize(unit: unit)
+        var moment = Self.torqueState(runs, at: time, speed: speed, seed: seed, reduceMotion: reduceMotion)
+        moment.slots = runs.map { Self.reading(of: $0, in: readings) != nil ? Self.torqueReadingSlot(restSize) : 0 }
+        let state = moment
         let arrivals = state.arrivals, ranks = state.ranks, scales = state.scales
         let leaving = leave
         let stage = stageSize
-        let restSize = unit * 2.0
         let seed = seed
-        return StageLayout(place: { measured, bounds in
+        var stack = StageLayout(place: { measured, bounds in
             Self.torqueStack(measured, state, seed: seed, in: bounds)
-        }) {
+        })
+        stack.needs = { measured in CGSize(width: 0, height: Self.torqueHeight(measured, state, restSize: restSize)) }
+        return stack {
             ForEach(runs) { run in
                 let a = arrivals[run.id]
                 let rank = ranks[run.id]
@@ -963,27 +1225,34 @@ extension StageLyricView {
                 let lean = min(rank, 2) * 3 * (run.id.isMultiple(of: 2) ? 1 : -1)
                 let restColour = tile ? ink.tileText : sample.rest.opacity(0.85)
                 let liveColour = tile ? ink.tileText : sample.sung
-                ZStack {
-                    // The thick edge: darker copies stepping back, thinning away
-                    // as the word hands over.
-                    if live > 0.001 {
-                        ZStack {
-                            ForEach(1..<7, id: \.self) { step in
-                                word(run, sample.sung.opacity(0.55))
-                                    .offset(x: CGFloat(step) * restSize * 0.012, y: CGFloat(step) * restSize * 0.022)
-                                    .brightness(-0.25)
-                            }
-                        }
-                        .opacity(live)
-                    }
+                // The reading takes the sung colour while its word is the one
+                // being sung, then settles back to the reading colour. It is
+                // set clear of the thick edge below the word.
+                withReading(run, size: restSize, colour: sample.reading,
+                            liveColour: (tile ? sample.reading : sample.sung).opacity(LyricHighlight.readingOpacity),
+                            live: live, gap: Self.torqueReadingGap(restSize), maxWidth: stage.width * 0.7 / scale) {
                     ZStack {
-                        if live < 0.999 { word(run, restColour) }
-                        if live > 0.001 { word(run, liveColour).opacity(live) }
+                        // The thick edge: darker copies stepping back, thinning away
+                        // as the word hands over.
+                        if live > 0.001 {
+                            ZStack {
+                                ForEach(1..<7, id: \.self) { step in
+                                    word(run, sample.sung.opacity(0.55))
+                                        .offset(x: CGFloat(step) * restSize * 0.012, y: CGFloat(step) * restSize * 0.022)
+                                        .brightness(-0.25)
+                                }
+                            }
+                            .opacity(live)
+                        }
+                        ZStack {
+                            if live < 0.999 { word(run, restColour) }
+                            if live > 0.001 { word(run, liveColour).opacity(live) }
+                        }
+                        .background { tileBackground(tile, size: restSize) }
                     }
-                    .background { tileBackground(tile, size: restSize) }
+                    .font(font(restSize, hero: true, id: run.id))
+                    .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stage.width * 0.7 / scale)
                 }
-                .font(font(restSize, hero: true, id: run.id))
-                .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: stage.width * 0.7 / scale)
                 .scaleEffect(scale)
                 .shadow(color: .black.opacity(0.15 + 0.15 * live), radius: 6, y: 3)
                 .rotationEffect(.degrees(reduceMotion ? 0 : -4 * live + lean * (1 - live)))
@@ -996,6 +1265,10 @@ extension StageLyricView {
                 .blur(radius: reduceMotion ? 0 : size * 0.07 * (1 - min(a, 1)))
                 .opacity(min(1, a * 1.6) * StageMotion.torqueVisibility(rank: rank))
             }
+        }
+        // A stack taller than the stage (`needs`) is shrunk to fit it.
+        .visualEffect { stack, geometry in
+            stack.scaleEffect(LyricStageFit.scale(content: geometry.size, available: stage))
         }
         .rotation3DEffect(.degrees(reduceMotion ? 0 : -10), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
         .offset(y: reduceMotion ? 0 : stage.height * 0.12 * leaving)

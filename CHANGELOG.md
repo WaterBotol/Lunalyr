@@ -108,6 +108,7 @@ When merging, keep every entry and combine duplicate headings.
 - Desktop player: the time and lyric shown over the seek bar no longer sit on top of the song titles under the covers; the titles step aside while they show.
 - Desktop player: with Reduce Motion, the wallpaper lyrics behind the player only fade, without blurring.
 - Shortcut confirmations on the wallpaper stay sharp while the desktop player is up, and are no longer shown twice when the small confirmation under the menu bar already showed them.
+- Romanisation set to "Below lyrics" now shows under the words in the Portal, Hinge, Broadside, Mosaic and Torque layouts too (only Fable showed it before). Each reading moves, scales and fades with its word, takes the highlight colour with the word being sung, and is counted when a layout shrinks to fit the screen.
 - Imported wallpaper pictures are decoded off the main thread, so a large photo no longer stalls the wallpaper.
 - Torque: long lines no longer sink and run off the bottom of the stage.
 - Hinge: the last words of a line are no longer cut off half-way through folding away.
