@@ -27,6 +27,10 @@ final class AppleLyricTranslator: LyricTranslating {
             TranslationSession.Request(sourceText: $0.element, clientIdentifier: String($0.offset))
         }
         let responses: [TranslationSession.Response]
+        // `TranslationSession(installedSource:target:)` is in the macOS 26 SDK
+        // only; CI and release builds use Xcode 16 (Swift 6.1, macOS 15 SDK),
+        // where `#available` alone still fails to compile the call.
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             let session = TranslationSession(installedSource: from, target: to)
             responses = try await withTaskCancellationHandler(operation: {
@@ -35,6 +39,9 @@ final class AppleLyricTranslator: LyricTranslating {
         } else {
             responses = try await TranslationHost.shared.translate(requests, source: from, target: to)
         }
+        #else
+        responses = try await TranslationHost.shared.translate(requests, source: from, target: to)
+        #endif
         var answers = Array(repeating: "", count: texts.count)
         for response in responses {
             guard let id = response.clientIdentifier.flatMap(Int.init), answers.indices.contains(id) else { continue }
