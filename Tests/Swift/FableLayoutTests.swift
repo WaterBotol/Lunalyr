@@ -317,4 +317,13 @@ final class FableStyleTests: XCTestCase {
         XCTAssertGreaterThan(Set(long.frames.map { Int($0.minY / 10) }).count, 2, "a long line should take several rows")
         XCTAssertGreaterThan(long.scale, 0.6)
     }
+
+    /// Short words then one very long one: the long word gets its own row
+    /// rather than pulling a short word down beside it past the stage's edge.
+    func testALoneLongLastWordKeepsItsRowWithinTheWidth() {
+        let sizes = [100, 100, 100, 1150].map { CGSize(width: $0, height: 90) }
+        let laid = FableLayout.arrange(sizes, shape: .wave, rightToLeft: false,
+                                       available: CGSize(width: 1210, height: 707), gap: 4, rowGap: 6)
+        XCTAssertEqual(laid.scale, 1, accuracy: 0.001)
+    }
 }

@@ -21,6 +21,10 @@ struct SongAudioClip: Equatable {
     func covers(_ range: ClosedRange<Double>) -> Bool {
         songStart <= range.lowerBound + 0.35 && songEnd >= range.upperBound - 0.35
     }
+
+    /// Whether the file is Lunalyr's own recording (a temporary file it may
+    /// delete), not the song's own file in the library.
+    var isRecording: Bool { SongAudioSource.isRecording(url) }
 }
 
 extension LyricCard {
@@ -104,6 +108,32 @@ enum SongAudioSource {
 
     private static let plainFileTypes: Set<String> = ["m4a", "mp3", "aac", "wav", "aif", "aiff", "caf", "flac"]
 
+    /// Recordings are written to the temporary folder with this prefix.
+    nonisolated static let recordingPrefix = "Lunalyr song "
+
+    nonisolated static func recordingURL(in folder: URL = FileManager.default.temporaryDirectory) -> URL {
+        folder.appendingPathComponent("\(recordingPrefix)\(UUID().uuidString).caf")
+    }
+
+    /// Only Lunalyr's own recordings: never a song file from the library.
+    nonisolated static func isRecording(_ url: URL, in folder: URL = FileManager.default.temporaryDirectory) -> Bool {
+        url.isFileURL && url.pathExtension == "caf" && url.lastPathComponent.hasPrefix(recordingPrefix)
+            && url.deletingLastPathComponent().standardizedFileURL.path == folder.standardizedFileURL.path
+    }
+
+    /// Deletes a recording that is no longer used (each is up to two minutes of
+    /// uncompressed sound). The song's own file is never touched.
+    nonisolated static func discard(_ clip: SongAudioClip?, in folder: URL = FileManager.default.temporaryDirectory) {
+        guard let clip, isRecording(clip.url, in: folder) else { return }
+        try? FileManager.default.removeItem(at: clip.url)
+    }
+
+    /// Deletes recordings left by an earlier run (quit or crash mid-card).
+    nonisolated static func discardLeftoverRecordings(in folder: URL = FileManager.default.temporaryDirectory) {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        for file in files where isRecording(file, in: folder) { try? FileManager.default.removeItem(at: file) }
+    }
+
     /// The playing track's own file, when Apple Music has a plain one. Downloaded
     /// Apple Music tracks (protected packages) and streams have none.
     static func localFile() async -> URL? {
@@ -169,7 +199,7 @@ enum SongAudioSource {
             update(String(format: "Recording the song… %.0f s left", max(0, range.upperBound + 0.5 - monitor.playbackTime())))
             try await Task.sleep(nanoseconds: 150_000_000)
         }
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("Lunalyr song \(UUID().uuidString).caf")
+        let file = recordingURL()
         guard let written = try recorder.finish(to: file) else {
             throw Failure.notRecordable("Nothing was heard. Allow Lunalyr to record system audio, and turn the volume up.")
         }

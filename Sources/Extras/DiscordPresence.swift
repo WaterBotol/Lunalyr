@@ -47,8 +47,9 @@ struct DiscordOptions: Equatable {
 ///   artist, the line, the album on hover, the cover and a progress bar.
 /// - The album cover is found on Apple's public search (title and artist
 ///   only) and cached; without one, the Lunalyr icon is shown.
-/// - Discord allows five updates per twenty seconds: updates are spaced out,
-///   so a very fast song skips some lines rather than being refused.
+/// - Discord allows five updates per twenty seconds: lines are spaced out
+///   (`DiscordUpdateBudget`), so a fast song skips some lines rather than
+///   being refused, and a new song, a pause or a clear always has a slot.
 /// - Two buttons, both for others: "Play this song" (a song.link page that
 ///   lists the song on Spotify, Apple Music, YouTube Music and more) and
 ///   "Get Lunalyr". Discord never shows a person their own buttons.
@@ -57,10 +58,17 @@ final class DiscordPresence {
     nonisolated static let applicationID = "1568919234367717506"
     static let getLunalyrURL = "https://github.com/WaterBotol/Lunalyr/releases/latest"
     static let iconURL = "https://raw.githubusercontent.com/WaterBotol/Lunalyr/main/Sources/Assets.xcassets/AppIcon.appiconset/icon_256.png"
-    /// Shortest gap between two activity updates.
-    static let minimumUpdateGap: TimeInterval = 3
     /// How often the line is checked while a song plays.
     static let tickInterval: TimeInterval = 0.5
+    /// How often it is checked while paused or with nothing playing: play,
+    /// pause and song changes arrive on their own, so this is only a backstop.
+    static let idleTickInterval: TimeInterval = 5
+
+    /// Fast while a song plays (the line moves on) or an update is held back
+    /// for Discord's rate limit; slow otherwise.
+    nonisolated static func tickInterval(playing: Bool, heldBack: Bool) -> TimeInterval {
+        playing || heldBack ? tickInterval : idleTickInterval
+    }
     /// How often a missing Discord is looked for again.
     nonisolated static let reconnectInterval: TimeInterval = 20
 
@@ -80,11 +88,25 @@ final class DiscordPresence {
         return data
     }
 
-    /// Discord wants 2...128 characters in each text field.
+    /// Discord wants 2...128 characters in each text field and refuses the
+    /// whole activity otherwise. It counts UTF-16 units, so an accented, Thai
+    /// or emoji line is measured that way, and cut between whole characters.
     static func field(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let clipped = trimmed.count > 128 ? String(trimmed.prefix(127)) + "…" : trimmed
-        return clipped.count < 2 ? clipped + " ♪" : clipped
+        var clipped = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clipped.utf16.count > 128 {
+            while clipped.utf16.count > 127 { clipped.removeLast() }
+            clipped += "…"
+        }
+        return clipped.utf16.count < 2 ? clipped + " ♪" : clipped
+    }
+
+    /// Discord refuses the whole activity over one bad button: the label must
+    /// be 1...32 characters and the link http(s), well formed and at most 512.
+    nonisolated static func isValidButton(label: String, url: String) -> Bool {
+        guard (1...32).contains(label.utf16.count), url.utf16.count <= 512,
+              let parsed = URL(string: url), let scheme = parsed.scheme?.lowercased(),
+              scheme == "https" || scheme == "http", let host = parsed.host, !host.isEmpty else { return false }
+        return true
     }
 
     struct Playing: Equatable {
@@ -127,7 +149,8 @@ final class DiscordPresence {
     nonisolated static func songLink(spotifyURI: String?, appleTrackID: Int?) -> String? {
         if let uri = spotifyURI, uri.hasPrefix("spotify:track:") {
             let id = uri.dropFirst("spotify:track:".count)
-            if !id.isEmpty, id.allSatisfy({ $0.isLetter || $0.isNumber }) { return "https://song.link/s/\(id)" }
+            // Spotify IDs are base62; anything else would make a link Discord refuses.
+            if !id.isEmpty, id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) { return "https://song.link/s/\(id)" }
         }
         if let appleTrackID, appleTrackID > 0 { return "https://song.link/i/\(appleTrackID)" }
         return nil
@@ -181,6 +204,7 @@ final class DiscordPresence {
             if options.showsButton {
                 buttons.append(["label": "Get Lunalyr", "url": getLunalyrURL])
             }
+            buttons.removeAll { !isValidButton(label: $0["label"] ?? "", url: $0["url"] ?? "") }
             if !buttons.isEmpty { activity["buttons"] = buttons }
         }
         if options.showsProgress && !playing.paused {
@@ -306,8 +330,9 @@ final class DiscordPresence {
     private let transport = DiscordTransport()
     private var changes: Set<AnyCancellable> = []
     private var timer: Timer?
+    private var timerInterval: TimeInterval = 0
     private var lastSent: Playing??
-    private var lastSentAt = Date.distantPast
+    private var budget = DiscordUpdateBudget()
     /// The timestamps already shown, so a line change does not move the bar.
     private var anchor: (start: Int, trackKey: String)?
     private var running = false
@@ -336,12 +361,6 @@ final class DiscordPresence {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.update() }
             .store(in: &changes)
-        let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.update() }
-        }
-        timer.tolerance = 0.2
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
         update()
     }
 
@@ -352,6 +371,7 @@ final class DiscordPresence {
         running = false
         timer?.invalidate()
         timer = nil
+        timerInterval = 0
         changes.removeAll()
         transport.stopListening()
         transport.send(Self.setActivityPayload(nil, pid: ProcessInfo.processInfo.processIdentifier, nonce: UUID().uuidString),
@@ -438,16 +458,70 @@ final class DiscordPresence {
 
     private func update() {
         guard running else { return }
+        let heldBack = !sendIfChanged()
+        scheduleTimer(Self.tickInterval(playing: NowPlayingMonitor.shared.isPlaying, heldBack: heldBack))
+    }
+
+    /// (Re)starts the tick at `interval` when it differs from the running one.
+    private func scheduleTimer(_ interval: TimeInterval) {
+        guard running, interval != timerInterval else { return }
+        timer?.invalidate()
+        timerInterval = interval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.update() }
+        }
+        timer.tolerance = interval * 0.4
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    /// Sends the activity if it changed; false when a change is held back.
+    private func sendIfChanged() -> Bool {
         let playing = currentPlaying()
-        if let lastSent, lastSent == playing { return }
-        // Spaced out; a clear (nil) is sent at once so a pause shows.
-        if playing != nil, Date().timeIntervalSince(lastSentAt) < Self.minimumUpdateGap { return }
+        if let lastSent, lastSent == playing { return true }
+        // Within Discord's limit; a new song, a pause or a clear goes first.
+        // Held back, the latest state goes on a later tick.
+        let now = Date()
+        guard budget.allows(urgent: Self.isUrgent(from: lastSent, to: playing), at: now) else { return false }
+        budget.record(now)
         lastSent = .some(playing)
-        lastSentAt = Date()
         if playing == nil { anchor = nil }
         transport.send(Self.setActivityPayload(playing.map(Self.activity(for:)),
                                                pid: ProcessInfo.processInfo.processIdentifier,
                                                nonce: UUID().uuidString))
+        return true
+    }
+}
+
+extension DiscordPresence {
+    /// A change that should not wait behind lyric lines: the first update, a
+    /// new song, play or pause, or the presence being cleared.
+    static func isUrgent(from last: Playing??, to next: Playing?) -> Bool {
+        guard let last else { return true }
+        guard let last, let next else { return true }
+        return last.title != next.title || last.artist != next.artist || last.paused != next.paused
+    }
+}
+
+/// Discord takes five activity updates in twenty seconds and silently drops
+/// the rest. Lines are spaced at least `lineGap` apart and use four of the
+/// five; the fifth is kept for an urgent change (a new song, a pause, a clear).
+struct DiscordUpdateBudget {
+    static let window: TimeInterval = 20
+    static let limit = 5
+    static let lineGap: TimeInterval = 5
+    private(set) var sent: [Date] = []
+
+    func allows(urgent: Bool, at now: Date) -> Bool {
+        let recent = sent.filter { now.timeIntervalSince($0) < Self.window }
+        if urgent { return recent.count < Self.limit }
+        if let last = recent.last, now.timeIntervalSince(last) < Self.lineGap { return false }
+        return recent.count < Self.limit - 1
+    }
+
+    mutating func record(_ now: Date) {
+        sent.removeAll { now.timeIntervalSince($0) >= Self.window }
+        sent.append(now)
     }
 }
 
@@ -457,11 +531,12 @@ final class DiscordPresence {
 final class CatalogueMatches: ObservableObject {
     static let shared = CatalogueMatches()
 
-    /// Search results by song.
-    private var matches: [String: DiscordPresence.SearchMatch] = [:]
+    /// Search results by song, the most recently used kept.
+    private var matches = RecentCache<DiscordPresence.SearchMatch>(capacity: CatalogueMatches.capacity)
     /// Songs whose lookup failed or found nothing, and when: asked again
     /// after `lookupRetry`, so a network blip does not last the session.
-    private var misses: [String: Date] = [:]
+    private var misses = RecentCache<Date>(capacity: CatalogueMatches.capacity)
+    static let capacity = 256
     private var lookingUp: Set<String> = []
     static let lookupRetry: TimeInterval = 600
     /// Bumped when a lookup finishes, so whoever asked can look again.
@@ -475,14 +550,14 @@ final class CatalogueMatches: ObservableObject {
     /// unless `lookUpIfMissing` is false.
     func match(title: String, artist: String, album: String?, lookUpIfMissing: Bool = true) -> DiscordPresence.SearchMatch? {
         let key = Self.key(title: title, artist: artist, album: album)
-        if let known = matches[key] { return known }
-        if let missed = misses[key], Date().timeIntervalSince(missed) < Self.lookupRetry { return nil }
+        if let known = matches.value(for: key) { return known }
+        if let missed = misses.value(for: key), Date().timeIntervalSince(missed) < Self.lookupRetry { return nil }
         guard lookUpIfMissing, !lookingUp.contains(key), !AppRuntime.isUnitTesting else { return nil }
         lookingUp.insert(key)
         Task { [weak self] in
             let found = await Self.lookUp(title: title, artist: artist)
             guard let self else { return }
-            if let found { matches[key] = found; misses[key] = nil } else { misses[key] = Date() }
+            if let found { matches.set(found, for: key); misses.remove(key) } else { misses.set(Date(), for: key) }
             lookingUp.remove(key)
             revision += 1
         }
@@ -503,8 +578,42 @@ final class CatalogueMatches: ObservableObject {
     }
 }
 
+/// A small map that keeps the `capacity` most recently used entries.
+struct RecentCache<Value> {
+    let capacity: Int
+    private var values: [String: Value] = [:]
+    /// Keys from least to most recently used.
+    private var order: [String] = []
+
+    init(capacity: Int) { self.capacity = max(1, capacity) }
+
+    var count: Int { values.count }
+
+    mutating func value(for key: String) -> Value? {
+        guard let value = values[key] else { return nil }
+        touch(key)
+        return value
+    }
+
+    mutating func set(_ value: Value, for key: String) {
+        values[key] = value
+        touch(key)
+        while order.count > capacity { values[order.removeFirst()] = nil }
+    }
+
+    mutating func remove(_ key: String) {
+        values[key] = nil
+        order.removeAll { $0 == key }
+    }
+
+    private mutating func touch(_ key: String) {
+        order.removeAll { $0 == key }
+        order.append(key)
+    }
+}
+
 /// The socket to Discord, on its own serial queue. Connects on demand,
-/// remembers the last activity and re-sends it after Discord restarts.
+/// remembers the last activity and re-sends it after Discord starts or restarts.
 final class DiscordTransport: @unchecked Sendable {
     private let queue = DispatchQueue(label: "lunalyr.discord-ipc", qos: .utility)
     private var fd: Int32 = -1
@@ -520,9 +629,20 @@ final class DiscordTransport: @unchecked Sendable {
     private var loops = 0
     /// Off in tests: the loop never touches Discord's socket.
     private let connects: Bool
+    /// The last activity shown, framed, so a Discord that starts or restarts
+    /// gets it again; nil once it was cleared.
+    private var lastActivity: Data?
+    private var retryScheduled = false
+    /// How long after a failed connection Discord is looked for again.
+    private let retryInterval: TimeInterval
+    /// Tests hand over one end of a socket pair instead of Discord's socket.
+    private let dial: (@Sendable () -> Int32?)?
 
-    init(connects: Bool = !AppRuntime.isUnitTesting) {
+    init(connects: Bool = !AppRuntime.isUnitTesting, retryInterval: TimeInterval = DiscordPresence.reconnectInterval,
+         dial: (@Sendable () -> Int32?)? = nil) {
         self.connects = connects
+        self.retryInterval = retryInterval
+        self.dial = dial
     }
 
     /// How many read loops are running (one at most).
@@ -553,10 +673,12 @@ final class DiscordTransport: @unchecked Sendable {
         }
     }
 
+    private var mayConnect: Bool { connects || dial != nil }
+
     private func readLoop(_ token: Int) {
         guard listening, token == generation else { loops -= 1; return }
         if fd < 0 {
-            if connects, Date().timeIntervalSince(lastFailure) >= DiscordPresence.reconnectInterval, !connect() { lastFailure = Date() }
+            if mayConnect, Date().timeIntervalSince(lastFailure) >= retryInterval, !connect(replay: true) { lastFailure = Date() }
         } else {
             drain()
         }
@@ -571,31 +693,55 @@ final class DiscordTransport: @unchecked Sendable {
         }
     }
 
-    /// Sends a SET_ACTIVITY payload. If Discord is not running it is dropped
-    /// and the next update tries again, at most every `reconnectInterval`.
+    /// Sends a payload. If Discord is not running, an activity is kept and
+    /// sent when Discord is found, looked for every `retryInterval`; if
+    /// Discord went away since the last write, it is looked for at once.
     func send(_ payload: [String: Any], thenDisconnect: Bool = false) {
         nonisolated(unsafe) let payload = payload
         queue.async { [self] in
-            if fd < 0 {
-                guard Date().timeIntervalSince(lastFailure) >= DiscordPresence.reconnectInterval else { return }
-                guard connect() else { lastFailure = Date(); return }
+            guard let data = DiscordPresence.frame(.frame, payload) else { return }
+            if payload["cmd"] as? String == "SET_ACTIVITY" {
+                let shows = (payload["args"] as? [String: Any])?["activity"] != nil
+                lastActivity = shows && !thenDisconnect ? data : nil
             }
-            guard let data = DiscordPresence.frame(.frame, payload), write(data) else {
-                disconnect(); lastFailure = Date(); return
+            if fd < 0 {
+                guard mayConnect, Date().timeIntervalSince(lastFailure) >= retryInterval else { scheduleRetry(); return }
+                guard connect(replay: false) else { lastFailure = Date(); scheduleRetry(); return }
+            }
+            if !write(data) {
+                // Discord quit or restarted since the last write: find it again now.
+                disconnect()
+                guard connect(replay: false), write(data) else {
+                    disconnect(); lastFailure = Date(); scheduleRetry(); return
+                }
             }
             drain()
             if thenDisconnect { disconnect() }
         }
     }
 
-    private func connect() -> Bool {
+    /// Looks for Discord again later while there is an activity it hasn't got.
+    private func scheduleRetry() {
+        guard mayConnect, !retryScheduled, lastActivity != nil else { return }
+        retryScheduled = true
+        queue.asyncAfter(deadline: .now() + retryInterval) { [self] in
+            retryScheduled = false
+            guard fd < 0, lastActivity != nil else { return }
+            if connect(replay: true) { drain() } else { lastFailure = Date(); scheduleRetry() }
+        }
+    }
+
+    private func connect(replay: Bool) -> Bool {
+        if let dial {
+            guard let sock = dial() else { return false }
+            return handshake(sock, replay: replay)
+        }
+        guard connects else { return false }
         let base = NSTemporaryDirectory().hasSuffix("/") ? String(NSTemporaryDirectory().dropLast()) : NSTemporaryDirectory()
         for index in 0..<10 {
             let path = "\(base)/discord-ipc-\(index)"
             let sock = socket(AF_UNIX, SOCK_STREAM, 0)
             guard sock >= 0 else { continue }
-            var noSigPipe: Int32 = 1
-            setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
             var address = sockaddr_un()
             address.sun_family = sa_family_t(AF_UNIX)
             let bytes = Array(path.utf8CString)
@@ -609,14 +755,27 @@ final class DiscordTransport: @unchecked Sendable {
                 }
             }
             guard result == 0 else { close(sock); continue }
-            fd = sock
-            let hello: [String: Any] = ["v": 1, "client_id": DiscordPresence.applicationID]
-            if let data = DiscordPresence.frame(.handshake, hello), write(data), awaitReady() {
-                subscribe()
-                return true
-            }
-            disconnect()
+            if handshake(sock, replay: replay) { return true }
         }
+        return false
+    }
+
+    /// Says hello on a connected socket and waits for READY; then subscribes
+    /// and, with `replay`, shows the last activity again.
+    private func handshake(_ sock: Int32, replay: Bool) -> Bool {
+        fd = sock
+        var noSigPipe: Int32 = 1
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+        // A Discord that hangs without reading can't block the queue for good.
+        var timeout = timeval(tv_sec: 2, tv_usec: 0)
+        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        let hello: [String: Any] = ["v": 1, "client_id": DiscordPresence.applicationID]
+        if let data = DiscordPresence.frame(.handshake, hello), write(data), awaitReady() {
+            subscribe()
+            if replay, let lastActivity { _ = write(lastActivity) }
+            return true
+        }
+        disconnect()
         return false
     }
 
@@ -659,7 +818,11 @@ final class DiscordTransport: @unchecked Sendable {
         guard fd >= 0, let header = readExactly(8, timeout: timeout) else { return nil }
         let opcode = header.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 0, as: UInt32.self) }.littleEndian
         let length = Int(header.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt32.self) }.littleEndian)
-        guard length < 1 << 20, let body = length == 0 ? Data() : readExactly(length, timeout: 1) else { return nil }
+        // A header without its body leaves the stream mid-packet: start again.
+        guard length < 1 << 20, let body = length == 0 ? Data() : readExactly(length, timeout: 1) else {
+            disconnect()
+            return nil
+        }
         return (opcode, body)
     }
 
@@ -668,7 +831,11 @@ final class DiscordTransport: @unchecked Sendable {
         while data.count < count {
             var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
             let ready = poll(&descriptor, 1, Int32(timeout * 1000))
-            if ready <= 0 { return nil }
+            if ready <= 0 {
+                // Part of a packet read and the rest late: the framing is lost.
+                if !data.isEmpty { disconnect() }
+                return nil
+            }
             var buffer = [UInt8](repeating: 0, count: count - data.count)
             let n = read(fd, &buffer, buffer.count)
             if n <= 0 { disconnect(); return nil }

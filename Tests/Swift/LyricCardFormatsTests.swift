@@ -74,6 +74,17 @@ final class LyricCardFormatsTests: XCTestCase {
         XCTAssertNotNil(board.pasteboardItems?.last?.data(forType: .png), "the PNG also travels as image data")
     }
 
+    func testSavingTwiceIntoOneFolderKeepsBothCards() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cards-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = await LyricCard.export(content(aspect: .square), formats: [.png, .mp4], to: directory)
+        let second = await LyricCard.export(content(aspect: .square), formats: [.png, .mp4], to: directory)
+        XCTAssertEqual(first.map(\.1.lastPathComponent), ["Lunalyr Lyric Card.mp4", "Lunalyr Lyric Card.png"])
+        // The MP4 writer refuses a file that exists, so the second MP4 used to fail.
+        XCTAssertEqual(second.map(\.1.lastPathComponent), ["Lunalyr Lyric Card 2.mp4", "Lunalyr Lyric Card 2.png"])
+        for (_, url) in first + second { XCTAssertGreaterThan(try Data(contentsOf: url).count, 1000) }
+    }
+
     func testAStillHoldsAtMostThreeLinesOneUnderAnother() {
         var many = content(aspect: .portrait)
         let page = many.pages[0]

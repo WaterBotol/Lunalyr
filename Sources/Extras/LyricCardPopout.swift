@@ -79,7 +79,10 @@ final class LyricCardPopoutModel: ObservableObject {
     /// The MP4's length for the current choices.
     @Published var clipPlan: LyricCard.ClipPlan?
     /// The song's own sound for the selected lines, once fetched or recorded.
-    @Published var songClip: SongAudioClip?
+    @Published var songClip: SongAudioClip? {
+        // A replaced recording is deleted (the song's own file never is).
+        didSet { if let oldValue, oldValue.url != songClip?.url { SongAudioSource.discard(oldValue) } }
+    }
     /// The stretch of the song the selected lines need.
     @Published var songRange: ClosedRange<Double>?
     @Published var songStatus = ""
@@ -103,6 +106,7 @@ final class LyricCardPopoutModel: ObservableObject {
         let saved = (defaults.stringArray(forKey: Keys.formats) ?? []).compactMap(CardFormat.init(rawValue:))
         formats = saved.isEmpty ? [.mp4, .png] : Set(saved)
         useSong = defaults.bool(forKey: Keys.useSong)
+        DispatchQueue.global(qos: .utility).async { SongAudioSource.discardLeftoverRecordings() }
         textScale = defaults.object(forKey: Keys.textScale) as? Double ?? 0.85
         if let path = defaults.string(forKey: Keys.background), FileManager.default.fileExists(atPath: path) {
             Task { [weak self] in
@@ -127,7 +131,8 @@ final class LyricCardPopoutModel: ObservableObject {
     /// Gets the song's own sound for the selected lines: from its file if the
     /// player has a plain one, otherwise by playing those lines once and recording.
     func fetchSong() {
-        guard !songBusy, let range = songRange else { return }
+        // Not mid-export: the card being made may be reading the current recording.
+        guard !songBusy, progress == nil, let range = songRange else { return }
         songBusy = true
         songStatus = "Looking for the song’s file…"
         songTask = Task { [weak self] in
@@ -316,8 +321,14 @@ final class LyricCardPopoutModel: ObservableObject {
             let files = await LyricCard.export(content, formats: chosen, to: directory, notes: { warnings.append($0) }) { value in
                 Task { @MainActor in self?.progress = value }
             }
-            guard let self, !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                // Cancelled: nothing half-made is left behind (an MP4 may have lost its sound).
+                LyricCard.discardExport(files, in: directory, ownsDirectory: folder == nil)
+                return
+            }
+            guard let self else { return }
             self.progress = nil
+            if files.isEmpty, folder == nil { try? FileManager.default.removeItem(at: directory) }
             defer {
                 if !warnings.isEmpty { self.status += "\n" + warnings.joined(separator: "\n") }
                 if folder == nil { self.onFinished?() }
@@ -475,7 +486,7 @@ struct LyricCardPopoutView: View {
                         Button("Cancel") { model.cancelSong() }.controlSize(.small)
                     } else {
                         Button(model.songNeedsFetching ? "Get the song’s sound" : "Redo") { model.fetchSong() }
-                            .controlSize(.small).disabled(model.songRange == nil)
+                            .controlSize(.small).disabled(model.songRange == nil || model.progress != nil)
                     }
                 }
                 soundLevelRow(value: $model.soundVolume) { Text("Song level") }

@@ -73,6 +73,15 @@ When merging, keep every entry and combine duplicate headings.
 - Music video: a YouTube video that loads but never starts playing (a sign-in or bot check, or a block YouTube reports no error for) now falls back to the normal wallpaper after 20 seconds, and is tried once more later, instead of leaving the colour gradient up for the whole song.
 - Music video: when YouTube refuses to play a found video outside its site (age-restricted, not embeddable, removed), the song's next official video is tried, up to three, before the normal wallpaper is shown for it.
 - Music video: the YouTube player is checked and muted again on every sync check, in case anything unmuted it.
+- Lyric cards: saving a second card into the same folder no longer fails to make the MP4; the new files are named "Lunalyr Lyric Card 2" and so on, and nothing is overwritten.
+- Lyric cards: cancelling no longer leaves a half-made card (such as an MP4 without its sound) in the folder or the temporary folder.
+- Lyric cards: recordings of the song are deleted when they are replaced, when the song changes and on the next launch, instead of piling up in the temporary folder.
+- Lyric cards: a background video whose sound stops before its picture now repeats its sound in step with the picture, and a song that stops almost at once fades out instead of jumping quieter.
+- Discord: the song now shows when Discord is opened after Lunalyr, or restarted, without waiting for the next song.
+- Discord: updates stay within Discord's limit of five every 20 seconds, with room kept for a new song or a pause, so they are no longer dropped by Discord.
+- Discord: long lines in scripts such as Thai, or with emoji, and a bad button link no longer make Discord reject the whole status.
+- Discord: while paused or with nothing playing, Lunalyr checks for changes every 5 seconds instead of twice a second.
+- Fable: a line ending in one very long word no longer shrinks when it fits.
 - Fable: long lines no longer run off the stage or under the menu bar, and earlier words no longer fade away before the line has been read. Lines are wrapped, then shrunk only if they still do not fit.
 - Fable: Arabic and other joined scripts are no longer split into reversed, unjoined letters, and right-to-left lines read from the right.
 - Fable: with romanisation set to Below, each word's reading now shows under it. Fable used to drop readings that were split by word.

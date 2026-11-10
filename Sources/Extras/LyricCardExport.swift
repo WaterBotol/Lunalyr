@@ -136,8 +136,12 @@ extension LyricCard {
               let soundLength = try? await sound.load(.duration), soundLength.seconds > 0.05 else { return nil }
         return SoundLayer(volume: volume, role: role) { seconds in
             let frames = Int((seconds * LyricCardMix.sampleRate).rounded())
-            guard let source = await LyricCardMix.decode(soundURL, seconds: min(soundLength.seconds, seconds + 0.05)),
-                  !source.isEmpty else { return nil }
+            let wanted = min(soundLength.seconds, seconds + 0.05)
+            guard var source = await LyricCardMix.decode(soundURL, seconds: wanted), !source.isEmpty else { return nil }
+            // A video's sound track can stop before its picture does: pad it with
+            // silence to the file's length, so each repeat starts with the picture's.
+            let padded = Int((wanted * LyricCardMix.sampleRate).rounded()) * LyricCardMix.channels
+            if role == .background, source.count < padded { source += repeatElement(0, count: padded - source.count) }
             return Rendered(LyricCardMix.loop(source, to: frames, crossfade: Int(crossfade * LyricCardMix.sampleRate)))
         }
     }
@@ -268,7 +272,9 @@ extension LyricCard {
         var made: [(CardFormat, URL)] = []
         for (index, format) in order.enumerated() {
             guard !Task.isCancelled else { break }
-            let file = directory.appendingPathComponent("Lunalyr Lyric Card.\(format.rawValue)")
+            // A folder that already holds a card gets "Lunalyr Lyric Card 2.mp4" and
+            // so on: nothing is overwritten, and the MP4 writer refuses an existing file.
+            let file = availableFile(named: "Lunalyr Lyric Card", extension: format.rawValue, in: directory)
             let share: (Double) -> Void = { progress((Double(index) + $0) / Double(order.count)) }
             switch format {
             case .png:
@@ -314,6 +320,29 @@ extension LyricCard {
             share(1)
         }
         return made
+    }
+
+    /// Removes what a cancelled export made: the whole folder when it is
+    /// Lunalyr's own temporary one, otherwise only the files it wrote.
+    static func discardExport(_ files: [(CardFormat, URL)], in directory: URL, ownsDirectory: Bool) {
+        let manager = FileManager.default
+        if ownsDirectory {
+            try? manager.removeItem(at: directory)
+        } else {
+            for (_, file) in files { try? manager.removeItem(at: file) }
+        }
+    }
+
+    /// `name.ext` in `directory`, or `name 2.ext`, `name 3.ext`… when that is taken.
+    static func availableFile(named name: String, extension ext: String, in directory: URL) -> URL {
+        let files = FileManager.default
+        var candidate = directory.appendingPathComponent("\(name).\(ext)")
+        var number = 2
+        while files.fileExists(atPath: candidate.path), number < 10_000 {
+            candidate = directory.appendingPathComponent("\(name) \(number).\(ext)")
+            number += 1
+        }
+        return candidate
     }
 
     /// Puts the files on the pasteboard as separate attachments (a PNG also
