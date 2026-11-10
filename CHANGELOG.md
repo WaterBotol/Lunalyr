@@ -115,6 +115,9 @@ When merging, keep every entry and combine duplicate headings.
 - Visualisers: switching from a heavy scene such as Spectrum Tunnel to a lighter one no longer leaves the new scene at reduced resolution.
 - Lyrics: a word sung more than about nine seconds into a long line now appears, and a long held last word is no longer faded out while it is still being sung.
 - Lyrics: lines that leave a moment after their last word now leave at the full frame rate instead of stepping.
+- Lyrics: scrubbing or seeking within a song cross-fades smoothly instead of popping, and the line on screen no longer dims and blurs for a moment after a seek.
+- Lyrics: a better lyric source arriving at the start of a song no longer makes the previous song's fading lyrics vanish; one that shows a different line cross-fades instead of cutting.
+- Lyrics: the loading spinner and the "Nothing playing" notice fade out instead of disappearing in one frame.
 
 ## [1.0.0] - 2026-11-08
 

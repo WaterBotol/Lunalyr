@@ -129,13 +129,18 @@ struct LyricLayer: View {
         ZStack {
             if shown > 0.001 {
                 ZStack {
-                    if let outgoing = transition.outgoing, transition.outgoingPresence > 0.001 {
-                        let dissolve = 1 - transition.outgoingPresence
-                        scene(outgoing.content, key: outgoing.key, time: outgoing.renderTime(at: wall),
-                              live: false, energy: energy, ink: ink)
-                            .opacity(transition.outgoingPresence)
-                            .blur(radius: reduceMotion ? 0 : dissolve * 5)
-                            .scaleEffect(reduceMotion ? 1 : 1 - 0.012 * dissolve)
+                    ForEach(transition.leaving, id: \.scene.id) { leaving in
+                        if leaving.presence > 0.001 {
+                            // A song change dissolves softly; a seek or a
+                            // source upgrade redraws the same place and
+                            // only fades.
+                            let dissolve = reduceMotion || !leaving.scene.blurs ? 0 : 1 - leaving.presence
+                            scene(leaving.scene.content, key: leaving.scene.key,
+                                  time: leaving.scene.renderTime(at: wall), live: false, energy: energy, ink: ink)
+                                .opacity(leaving.presence)
+                                .blur(radius: dissolve * 5)
+                                .scaleEffect(1 - 0.012 * dissolve)
+                        }
                     }
                     scene(sceneContent, key: key, time: time, live: true, energy: energy, ink: ink)
                         .opacity(transition.incomingPresence)
@@ -157,7 +162,7 @@ struct LyricLayer: View {
     private func level(key: LyricSceneKey, transition: LyricSceneMemory.Transition, shown: Double,
                        target: Double, ink: LyricInk, wall: Double) -> LyricPace.Level {
         if let note = extras.note, wall - note.at < 2.7 { return .active }
-        if shown > 0.001, transition.outgoing != nil || transition.incomingPresence < 1 { return .active }
+        if shown > 0.001, !transition.leaving.isEmpty || transition.incomingPresence < 1 { return .active }
         let drifting = ink.mode.drifts || ink.mode == .musicReactive || !ink.settled
         let noticeAge: TimeInterval?
         switch key.kind {
