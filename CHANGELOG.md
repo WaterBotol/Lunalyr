@@ -63,6 +63,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Lyrics from a broken source with an impossibly late line time no longer crash Lunalyr when that line or the break before it is shown.
 - Song titles and credits: brackets such as "(Remix)" or "(feat. …)" now stay in the title shown as a song starts, instead of being drawn small and apart like a backing vocal.
 - Hinge, Broadside, Portal, Mosaic and Torque: lyrics whose word times run out of order no longer crash Lunalyr; their words now appear in reading order.
 - Echo: Lunalyr could crash as a song started when the layout (or the backing-vocal style) was Echo, while drawing the song's title in the background. Credits now also look the same on every launch.

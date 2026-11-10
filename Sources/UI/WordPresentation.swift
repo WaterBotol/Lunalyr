@@ -118,11 +118,17 @@ struct LyricPhraseTiming {
         let duration = max(0, min(line.end, nextStart) - line.start)
         let attack = line.wordTimed ? 0.22 : min(0.32, max(0.12, duration * 0.18))
         progress = vc_settle(time - line.start, attack)
-        let seed = UInt64(bitPattern: Int64((line.start * 1000).rounded())) ^ 0x51ED_C0DE
+        let seed = Self.timeSeed(line.start) ^ 0x51ED_C0DE
         arrival = vc_spring_step(time - line.start,
             VCSpring(omega: 3.36 / max(0.14, attack * 1.6), zeta: 0.82 + 0.06 * vc_jitter(seed, 1)))
         exitStart = Self.exitStart(of: line, nextStart: nextStart)
         exit = vc_settle(time - exitStart, Self.exitDuration)
+    }
+
+    /// A seed from a time, by the millisecond. Never traps: a time too large
+    /// for 64 bits (a malformed source's) or not a number gives 0 instead.
+    static func timeSeed(_ seconds: Double) -> UInt64 {
+        UInt64(bitPattern: Int64(exactly: (seconds * 1000).rounded()) ?? 0)
     }
 
     static func exitStart(of line: LyricsFetcher.Line, nextStart: Double) -> Double {

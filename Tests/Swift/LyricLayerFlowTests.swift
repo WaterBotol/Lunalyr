@@ -471,4 +471,16 @@ final class LyricLayerFlowTests: XCTestCase {
         let unit = try size(RollingUnit(token: word, readingWidth: 500))
         XCTAssertLessThanOrEqual(unit.width, 500 + 4 + 1)
     }
+
+    /// A malformed source's line can start beyond what 64 bits of
+    /// milliseconds hold; posing it, or a break before it, used to trap.
+    func testHugeOrInvalidLineTimesNeverTrapTheSeeds() {
+        XCTAssertEqual(LyricPhraseTiming.timeSeed(12.3456), UInt64(12_346), "Ordinary times seed as before")
+        for start in [1e20, -1e20, .infinity, .nan] {
+            _ = LyricPhraseTiming.timeSeed(start)
+            let line = LyricsFetcher.Line(start: start, end: start, text: "hi", words: [], isInstrumental: false)
+            _ = LyricPhraseTiming(line: line, nextStart: .infinity, time: 3)
+            _ = VCVocalGap(start: start, end: start + 10, nextVocal: 1).instrumentalCue(at: start + 1, previewLead: 0.5)
+        }
+    }
 }

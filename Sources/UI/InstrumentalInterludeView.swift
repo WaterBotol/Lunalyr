@@ -45,7 +45,7 @@ extension VCVocalGap {
         let fadeOut = knownEnd ? Easing.smoothstep((cueEnd - time) / 0.24) : 1
         let opacity = min(fadeIn, fadeOut)
         let progress = knownEnd ? min(1, max(0, elapsed / max(0.01, cueEnd - start))) : nil
-        let seed = UInt64(bitPattern: Int64((start * 1000).rounded())) ^ 0x1D07_5EED
+        let seed = LyricPhraseTiming.timeSeed(start) ^ 0x1D07_5EED
         return opacity > 0 ? InstrumentalCue(elapsed: elapsed, opacity: opacity, progress: progress,
                                              seed: seed, energy: energy) : nil
     }
