@@ -128,24 +128,57 @@ enum AppleMusicCachedLyrics {
         return data
     }
 
-    private static func matchesRecording(_ song: Song, query: LyricQuery) -> Bool {
+    /// How surely a cached song is the playing recording: 2 for the same
+    /// title, artist and album, 1 when the names differ only in ways that
+    /// keep the recording (no album reported, " - Single" or a deluxe or
+    /// remastered album, a feat. credit), 0 otherwise. Length must agree
+    /// within 1.5 s either way, and a version tag (Live, Remix…) never may differ.
+    static func matchLevel(_ song: Song, query: LyricQuery) -> Int {
         let metadata = song.attributes
         let duration = Double(metadata.durationInMillis) / 1000
-        guard song.type == "songs", !song.id.isEmpty, let album = query.album,
-              !LyricQuery.normalize(album).isEmpty, query.duration > 0, duration > 0,
-              abs(duration - query.duration) <= 1.5 else { return false }
-        return Self.exact(metadata.name, query.title)
-            && Self.exact(metadata.artistName, query.artist)
-            && Self.exact(metadata.albumName, album)
+        guard song.type == "songs", !song.id.isEmpty, query.duration > 0, duration > 0,
+              abs(duration - query.duration) <= 1.5 else { return 0 }
+        let album = query.album.map(LyricQuery.normalize) ?? ""
+        if exact(metadata.name, query.title), exact(metadata.artistName, query.artist),
+           !album.isEmpty, exact(metadata.albumName, query.album ?? "") { return 2 }
+        guard VersionTags.tags(metadata.name) == VersionTags.tags(query.title),
+              LyricQuery.similarity(metadata.name, query.title) >= 0.95,
+              LyricQuery.similarity(metadata.artistName, query.artist) >= 0.95 else { return 0 }
+        if album.isEmpty { return 1 }
+        let mine = albumCore(query.album ?? ""), theirs = albumCore(metadata.albumName)
+        return !mine.isEmpty && mine == theirs && VersionTags.tags(metadata.albumName) == VersionTags.tags(query.album ?? "") ? 1 : 0
     }
+
+    private static func matchesRecording(_ song: Song, query: LyricQuery) -> Bool { matchLevel(song, query: query) > 0 }
 
     private static func exact(_ a: String, _ b: String) -> Bool {
         let left = LyricQuery.normalize(a)
         return !left.isEmpty && left == LyricQuery.normalize(b)
     }
 
+    private static let editionWords: Set<String> = ["deluxe", "edition", "remaster", "remastered", "expanded",
+                                                    "anniversary", "bonus", "version", "special", "single", "ep"]
+    private static let albumBracket = try! NSRegularExpression(pattern: #"\s*[(\[]([^)\]]*)[)\]]"#)
+    private static let albumSuffix = try! NSRegularExpression(pattern: #"\s+-\s+(single|ep)\s*$"#, options: .caseInsensitive)
+
+    /// The album name without its release kind and edition (" - Single",
+    /// "(Deluxe Edition)", "[2011 Remaster]"), normalised.
+    static func albumCore(_ name: String) -> String {
+        let value = NSMutableString(string: name)
+        albumSuffix.replaceMatches(in: value, range: NSRange(location: 0, length: value.length), withTemplate: "")
+        for match in albumBracket.matches(in: value as String, range: NSRange(location: 0, length: value.length)).reversed() {
+            let words = LyricQuery.normalize(value.substring(with: match.range(at: 1))).split(separator: " ").map(String.init)
+            if words.contains(where: editionWords.contains) { value.deleteCharacters(in: match.range) }
+        }
+        return LyricQuery.normalize(value as String)
+    }
+
     static func candidate(_ query: LyricQuery, songs: [Song]) -> LyricCandidate? {
-        let matches = songs.filter { matchesRecording($0, query: query) }
+        // The surest level that names exactly one song wins; two songs at the
+        // surest level found are ambiguous, and nothing is guessed.
+        let levels = songs.map { matchLevel($0, query: query) }
+        guard let top = levels.max(), top > 0 else { return nil }
+        let matches = zip(songs, levels).filter { $0.1 == top }.map(\.0)
         guard Set(matches.map(\.id)).count == 1 else { return nil }
         for song in matches {
             for resource in song.relationships?["syllable-lyrics"]?.data ?? [] where resource.type == "syllable-lyrics" {

@@ -66,6 +66,7 @@ final class LyricSourceOptions: ObservableObject {
         let music = LyricSourceID.appleMusicCache.title, lrclib = LyricSourceID.lrclib.title
         return "Word-by-word and Mixed timing lyrics come first: \(music), then \(lrclib), then your other sources. "
             + "Line-synced lyrics come next, again with \(music) first."
+            + " Timed lyrics for another version of the song (Live, Remix, Acoustic…) come after timed lyrics for the version playing."
     }
     /// What a lookup asks and ranks by. Timing, and the lead of Music's own
     /// lyrics and LRCLIB's, are fixed (`LyricsFetcher.outranks`); the order
@@ -85,7 +86,8 @@ final class LyricSourceOptions: ObservableObject {
         /// Chinese, Thai) line, which it had joined into one word.
         /// v10: production credits are kept (as `Line.credit`) for the credits layer.
         /// v9: AMLL's word-timed database and Kugou's word-timed KRC.
-        static let cachePolicy = "v10"
+        /// v11: lyrics for another version (Live, Remix…) rank below the playing one's.
+        static let cachePolicy = "v11"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
@@ -265,6 +267,8 @@ struct LyricCandidate: Identifiable {
     /// form that can be checked (not at all, or in another script); title
     /// and artist then repeat the search.
     var metadataReported = true
+    /// What the other sources in the same lookup say about it (`LyricsFetcher.weighAgreement`).
+    var agreement = LyricAgreement()
     var id: String { source.rawValue }
     var hasReadings: Bool {
         if case .synced(let lines, _) = result { return lines.contains { $0.romanization?.isEmpty == false } }

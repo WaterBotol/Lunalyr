@@ -144,9 +144,10 @@ final class LyricPriorityTests: XCTestCase {
         let order: [LyricSourceID] = [.netEase, .lyricsPlus, .lrclib, .appleMusicCache]
         let accuracy = LyricSourceOptions.Snapshot(enabled: order, mode: .smart, localFolder: "", localVersion: "")
         let sourceOrder = LyricSourceOptions.Snapshot(enabled: order, mode: .priority, localFolder: "", localVersion: "")
-        let live = candidate(.netEase, .word, title: "Our Song (Live)"), exact = candidate(.lyricsPlus, .mixed)
-        XCTAssertEqual(winner([live, exact], accuracy), .lyricsPlus)
-        XCTAssertEqual(winner([live, exact], sourceOrder), .netEase)
+        // A credit is not a version, so only Accuracy first weighs it (another version always ranks lower: VersionTagTests).
+        let credited = candidate(.netEase, .word, title: "Our Song (feat. Guest)"), exact = candidate(.lyricsPlus, .mixed)
+        XCTAssertEqual(winner([credited, exact], accuracy), .lyricsPlus)
+        XCTAssertEqual(winner([credited, exact], sourceOrder), .netEase)
         // A closer match never lifts another source above LRCLIB or Music.
         let remaster = candidate(.lrclib, .mixed, title: "Our Song - Remastered 2011")
         for options in [accuracy, sourceOrder] {
