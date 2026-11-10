@@ -98,6 +98,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 
+- Romanisation set to "Below lyrics" now shows under the words in the Portal, Hinge, Broadside, Mosaic and Torque layouts too (only Fable showed it before). Each reading moves, scales and fades with its word, takes the highlight colour with the word being sung, and is counted when a layout shrinks to fit the screen.
 - Imported wallpaper pictures are decoded off the main thread, so a large photo no longer stalls the wallpaper.
 - Torque: long lines no longer sink and run off the bottom of the stage.
 - Hinge: the last words of a line are no longer cut off half-way through folding away.
