@@ -1,12 +1,7 @@
-using System.Text;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Ranking;
-
-/// <summary>A run of consecutive sung lines started faster than anyone could sing them.</summary>
-/// <param name="Count">Lines in the run, including the one the quick lines lead into.</param>
-/// <param name="Start">Start of the run's first line.</param>
-/// <param name="End">Start of the run's last line.</param>
-public readonly record struct BunchedRun(int Count, double Start, double End);
 
 /// <summary>
 /// How precisely lyrics are timed (the tiers ranking compares) and whether that timing is sound. Ported from the
@@ -15,15 +10,6 @@ public readonly record struct BunchedRun(int Count, double Start, double End);
 /// </summary>
 public static class LyricTimingRules
 {
-    /// <summary>A word-timed line squeezed under this many seconds a syllable is crammed.</summary>
-    public const double CrushedSecondsPerSyllable = 0.06;
-
-    /// <summary>Lines started under this many seconds a syllable (and under 0.6 s) are too quick to sing.</summary>
-    public const double BunchedSecondsPerSyllable = 0.08;
-
-    /// <summary>The fewest quick lines in a row that make a fault; four quick ad-libs are a stutter.</summary>
-    public const int BunchedRunLength = 5;
-
     /// <summary>
     /// Whether a line's own word timing can be trusted: the words spell the line (letters and numbers), and each is
     /// timed inside it in order.
@@ -103,9 +89,9 @@ public static class LyricTimingRules
         var vocal = lines.Where(line => !line.IsInstrumental).ToList();
         if (vocal.Count > 0 && vocal.All(ValidWordTiming))
         {
-            return "Word-by-word";
+            return LyricLines.WordByWord;
         }
-        return vocal.Any(ValidWordTiming) ? "Mixed timing" : "Line-synced";
+        return vocal.Any(ValidWordTiming) ? LyricLines.MixedTiming : LyricLines.LineSynced;
     }
 
     /// <summary>
@@ -125,11 +111,11 @@ public static class LyricTimingRules
 
     public static string? TimingFault(IReadOnlyList<LyricLine> lines)
     {
-        if (FindBunchedRun(lines) is { } run)
+        if (LyricGapTiming.FindBunchedRun(lines) is { } run)
         {
             return $"{run.Count} lines bunched at {LyricQuery.Clock(run.Start)}";
         }
-        var crushed = CrushedLines(lines);
+        var crushed = LyricGapTiming.CrushedLines(lines);
         if (crushed.Count == 0)
         {
             return null;
@@ -137,135 +123,5 @@ public static class LyricTimingRules
         return crushed.Count == 1
             ? $"a line crammed at {LyricQuery.Clock(crushed[0])}"
             : $"{crushed.Count} lines crammed from {LyricQuery.Clock(crushed[0])}";
-    }
-
-    /// <summary>
-    /// The longest run of consecutive sung lines that start faster than anyone could sing them (each line's window
-    /// shorter than <see cref="BunchedSecondsPerSyllable"/> a syllable, and under 0.6 s), or null when no run reaches
-    /// <see cref="BunchedRunLength"/> lines. A listener-made LRC sometimes stamps a whole chorus within a few seconds.
-    /// </summary>
-    public static BunchedRun? FindBunchedRun(IReadOnlyList<LyricLine> lines)
-    {
-        // Credit lines ("Lyrics by: …") are often stamped a moment apart before the song starts.
-        var sung = lines.Where(line => !line.IsInstrumental && !string.IsNullOrWhiteSpace(line.Text)
-            && double.IsFinite(line.Start) && !RankingCredits.IsCredit(line.Text)).ToList();
-        BunchedRun? best = null;
-        int? runStart = null;
-        for (var index = 0; index < sung.Count; index++)
-        {
-            var tooQuick = false;
-            if (index + 1 < sung.Count)
-            {
-                var window = sung[index + 1].Start - sung[index].Start;
-                var limit = Math.Min(0.6, Math.Max(1, EstimatedSyllables(sung[index].Text)) * BunchedSecondsPerSyllable);
-                tooQuick = window >= 0 && window < limit;
-            }
-            if (tooQuick)
-            {
-                runStart ??= index;
-            }
-            else if (runStart is { } first)
-            {
-                // The run's last line is the one the quick lines lead into.
-                var count = index - first + 1;
-                if (count >= BunchedRunLength && count > (best?.Count ?? 0))
-                {
-                    best = new BunchedRun(count, sung[first].Start, sung[index].Start);
-                }
-                runStart = null;
-            }
-        }
-        return best;
-    }
-
-    /// <summary>
-    /// Word-timed lines whose words are crammed into far less time than singing them takes (under
-    /// <see cref="CrushedSecondsPerSyllable"/> a syllable, four syllables or more). The start of each, in order.
-    /// </summary>
-    public static IReadOnlyList<double> CrushedLines(IReadOnlyList<LyricLine> lines)
-    {
-        var starts = new List<double>();
-        foreach (var line in lines)
-        {
-            if (!line.WordTimed || line.IsInstrumental || line.Words.Count < 3)
-            {
-                continue;
-            }
-            var first = line.Words.Min(w => w.Start);
-            var last = line.Words.Max(w => w.End);
-            if (!double.IsFinite(first) || !double.IsFinite(last) || RankingCredits.IsCredit(line.Text))
-            {
-                continue;
-            }
-            var syllables = EstimatedSyllables(line.Text);
-            if (syllables >= 4 && last - first < syllables * CrushedSecondsPerSyllable)
-            {
-                starts.Add(line.Start);
-            }
-        }
-        return starts;
-    }
-
-    /// <summary>
-    /// A rough syllable count: one per Han, kana or Hangul character, one per vowel group in Latin words and one per
-    /// two letters in other scripts. Ported from the Mac's <c>LyricGapTiming.estimatedSyllables</c>; a
-    /// de-duplication candidate with the gap-timing workstream.
-    /// </summary>
-    public static int EstimatedSyllables(string text)
-    {
-        var folded = LyricTextFolding.Fold(text);
-        var count = 0;
-        var word = new List<string>();
-        foreach (var cluster in LyricTextFolding.Graphemes(folded))
-        {
-            if (Rune.DecodeFromUtf16(cluster, out var first, out _) == System.Buffers.OperationStatus.Done
-                && LyricTextFolding.IsLetterOrNumber(first))
-            {
-                word.Add(cluster);
-            }
-            else
-            {
-                count += CountWord(word);
-                word.Clear();
-            }
-        }
-        count += CountWord(word);
-        return count;
-
-        static int CountWord(List<string> characters)
-        {
-            if (characters.Count == 0)
-            {
-                return 0;
-            }
-            int vowels = 0, others = 0;
-            bool inVowel = false, hasAscii = false;
-            foreach (var character in characters)
-            {
-                var ascii = character.All(c => c < 0x80);
-                hasAscii |= ascii;
-                if (RankingScript.KeepsSyllables(character))
-                {
-                    // Counted directly below.
-                    inVowel = false;
-                }
-                else if (ascii)
-                {
-                    var vowel = character.Length == 1 && "aeiouy".Contains(character[0], StringComparison.Ordinal);
-                    if (vowel && !inVowel)
-                    {
-                        vowels++;
-                    }
-                    inVowel = vowel;
-                }
-                else
-                {
-                    others++;
-                    inVowel = false;
-                }
-            }
-            var syllabic = characters.Count(RankingScript.KeepsSyllables);
-            return syllabic + Math.Max(vowels, hasAscii ? 1 : 0) + (others + 1) / 2;
-        }
     }
 }

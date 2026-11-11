@@ -1,5 +1,6 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Timing;
+using Lunalyr.Core.Lyrics.Parsing;
 
 namespace Lunalyr.Core.Motion;
 
@@ -48,7 +49,7 @@ public sealed record StageRun(int Id, string Text, double Start, double End, IRe
     private static bool Joins(string text, int index, IReadOnlyList<bool> glue, string? previous)
     {
         if (index <= 0 || index >= glue.Count || !glue[index] || previous is null) return false;
-        return TextElements.Count(previous) + TextElements.Count(text) <= (TextElements.KeepsSyllables(text) ? 3 : 12);
+        return TextElements.Count(previous) + TextElements.Count(text) <= (LyricScript.KeepsSyllables(text) ? 3 : 12);
     }
 
     /// <summary>

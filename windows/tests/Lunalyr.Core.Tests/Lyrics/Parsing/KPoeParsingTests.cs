@@ -1,5 +1,6 @@
 using System.Globalization;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -57,8 +58,8 @@ public class KPoeParsingTests
         Assert.Equal(9.3, lines[4].Words[1].Start, 1e-9);
         Assert.Equal(10.1, lines[4].Words[1].End, 1e-9);
         Assert.Equal(10.2, lines[4].Words[2].Start, 1e-9);
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
-        Assert.Equal("Word-by-word", LyricLines.Precision(lines));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
+        Assert.Equal("Word-by-word", LyricTimingRules.Precision(lines));
     }
 
     [Theory]

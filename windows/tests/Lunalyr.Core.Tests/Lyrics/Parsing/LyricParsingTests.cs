@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -21,7 +22,7 @@ public class LyricParsingTests
         Assert.Equal(1, lines[0].Words[0].Start, Tol);
         Assert.Equal(4, lines[0].Words[1].End, Tol);
         Assert.False(lines[1].WordTimed);
-        Assert.Equal("Mixed timing", LyricLines.Precision(lines));
+        Assert.Equal("Mixed timing", LyricTimingRules.Precision(lines));
     }
 
     // Ported from LyricParsingTests.swift: testLineOnlyDataIsExplicitlyEstimated
@@ -31,7 +32,7 @@ public class LyricParsingTests
         var lines = Lrc("[00:01]A small line\n[00:05]Another line", 10);
         Assert.Equal(2, lines.Count);
         Assert.False(lines[0].WordTimed);
-        Assert.Equal("Line-synced", LyricLines.Precision(lines));
+        Assert.Equal("Line-synced", LyricTimingRules.Precision(lines));
         Assert.All(lines[0].Words, word => Assert.True(word.Start >= 1 && word.End <= 5));
     }
 
@@ -78,7 +79,7 @@ public class LyricParsingTests
         Assert.Equal([false, true], lines.Select(line => line.WordTimed));
         Assert.Equal(["Keep", "moving"], lines[0].Words.Select(word => word.Text));
         Assert.Equal([4.0, 5.0], lines[1].Words.Select(word => word.Start));
-        Assert.Equal("Mixed timing", LyricLines.Precision(lines));
+        Assert.Equal("Mixed timing", LyricTimingRules.Precision(lines));
     }
 
     // Ported from LyricParsingTests.swift: testWordStampsBeyondTheNextLineFallBackToEstimatedTiming
@@ -173,7 +174,7 @@ public class LyricParsingTests
         Assert.Equal(1, lines[0].Words[0].Start, Tol);
         Assert.Equal(1.5 + 3.5 * 5 / 8, lines[0].Words[1].Start, Tol);
         Assert.Equal(5, lines[0].Words[1].End, Tol);
-        Assert.True(LyricLines.ValidWordTiming(lines[0]));
+        Assert.True(LyricTimingRules.ValidWordTiming(lines[0]));
     }
 
     // Ported from LyricParsingTests.swift: testEnhancedSyllableStampsJoinIntoWords
@@ -185,7 +186,7 @@ public class LyricParsingTests
         Assert.Equal(["beautiful", "day"], lines[0].Words.Select(word => word.Text));
         Assert.Equal([2.0, 3.0], lines[0].Words.Select(word => word.End));
         Assert.Equal(["君", "の"], lines[1].Words.Select(word => word.Text));
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
     }
 
     // Ported from LyricParsingTests.swift: testCreditLinesAreDroppedButLyricsAboutInstrumentsStay

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Lunalyr.Core.Lyrics.Parsing;
 
 namespace Lunalyr.Core.Lyrics.Timing;
 
@@ -245,7 +246,7 @@ public sealed class LyricLineIndex
 
     private static bool IsTimingCopy(LyricLine fallback, LyricLine timed, double vocalEnd)
     {
-        var multipleSyllables = fallback.Words.Count > 1 || TextElements.KeepsSyllables(fallback.Text);
+        var multipleSyllables = fallback.Words.Count > 1 || LyricScript.KeepsSyllables(fallback.Text);
         return MixedTimingCopy(fallback.Start, fallback.End, fallback.EndFromNextLine == true, multipleSyllables,
                                timed.Start, vocalEnd);
     }

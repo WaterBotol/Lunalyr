@@ -1,5 +1,6 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -33,7 +34,7 @@ public class NetEaseParsingTests
         Assert.Equal(["都", "是", "勇", "敢", "的"], lines[0].Words.Select(word => word.Text));
         Assert.Equal(22.31, lines[0].Start, Tol);
         Assert.Equal(26.61, lines[0].End, Tol);
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
     }
 
     // Ported from NetEaseParsingTests.swift: testLyricsThatMentionInstrumentsOrProductionAreKept
@@ -82,7 +83,7 @@ public class NetEaseParsingTests
         // A bracket timed on its own opens the next word instead of trailing the previous one.
         Assert.Equal(["Oh", "(yeah)", "baby"], lines[1].Words.Select(word => word.Text));
         Assert.Equal(5.4, lines[1].Words[1].Start, Tol);
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
         Assert.All(lines, AssertWordsReadAsTheLine);
     }
 
@@ -123,7 +124,7 @@ public class NetEaseParsingTests
         Assert.Equal(["Je", "t'aime", "!"], lines[3].Words.Select(word => word.Text));
         Assert.Equal(16, lines[3].Words[2].End, Tol);
         Assert.Equal(["爱，", "你", "（我）"], lines[4].Words.Select(word => word.Text));
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
         Assert.All(lines, AssertWordsReadAsTheLine);
     }
 

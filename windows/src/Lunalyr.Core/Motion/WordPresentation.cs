@@ -1,6 +1,7 @@
 using System.Text;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Timing;
+using Lunalyr.Core.Lyrics.Parsing;
 
 namespace Lunalyr.Core.Motion;
 
@@ -110,7 +111,7 @@ public static class PreviewWords
         var previousWasJoiner = false;
         foreach (var rune in text.EnumerateRunes())
         {
-            if (TextElements.KeepsSyllables(rune.Value))
+            if (LyricScript.KeepsSyllables(rune.Value))
             {
                 if (++words > 1) return false;
                 inWord = false;

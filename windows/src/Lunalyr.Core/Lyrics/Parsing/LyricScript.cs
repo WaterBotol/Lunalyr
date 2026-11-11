@@ -23,19 +23,25 @@ public static class LyricScript
     /// Han, kana and Hangul, and the scripts written without spaces between words (Thai, Lao, Myanmar, Khmer), keep
     /// every timed syllable as its own token: joining them would lose karaoke progress or swallow a phrase.
     /// </summary>
-    public static bool KeepsSyllables(string text)
+    public static bool KeepsSyllables(string text) => KeepsSyllables(text.AsSpan());
+
+    /// <summary><see cref="KeepsSyllables(string)"/> without allocating (per-frame layout code calls it).</summary>
+    public static bool KeepsSyllables(ReadOnlySpan<char> text)
     {
         foreach (var rune in text.EnumerateRunes())
         {
-            var v = rune.Value;
-            if (v is >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xA960 and <= 0xA97F or >= 0xAC00 and <= 0xD7FF) return true;
-            if (v is >= 0x3040 and <= 0x30FF or >= 0x31F0 and <= 0x31FF or >= 0xFF66 and <= 0xFF9F) return true;
-            if (v is 0x3005 or 0x3007 or 0x303B or >= 0x3400 and <= 0x4DBF or >= 0x4E00 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF
-                or >= 0x20000 and <= 0x323AF) return true;
-            if (v is >= 0x0E00 and <= 0x0EFF or >= 0x1000 and <= 0x109F or >= 0x1780 and <= 0x17FF) return true;
+            if (KeepsSyllables(rune.Value)) return true;
         }
         return false;
     }
+
+    /// <summary>Whether one code point is a Hangul, kana, Han, Thai, Lao, Myanmar or Khmer syllable.</summary>
+    public static bool KeepsSyllables(int v) =>
+        v is >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xA960 and <= 0xA97F or >= 0xAC00 and <= 0xD7FF // Hangul
+            or >= 0x3040 and <= 0x30FF or >= 0x31F0 and <= 0x31FF or >= 0xFF66 and <= 0xFF9F // Kana
+            or 0x3005 or 0x3007 or 0x303B or >= 0x3400 and <= 0x4DBF or >= 0x4E00 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF
+            or >= 0x20000 and <= 0x323AF // Han
+            or >= 0x0E00 and <= 0x0EFF or >= 0x1000 and <= 0x109F or >= 0x1780 and <= 0x17FF; // Thai, Lao, Myanmar, Khmer
 
     /// <summary>Letters or digits, i.e. anything sung rather than punctuation.</summary>
     public static bool HasLetters(string text) => TextRules.HasLetterOrNumber(text);

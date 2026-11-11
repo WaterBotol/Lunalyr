@@ -1,6 +1,7 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Ranking;
 using static Lunalyr.Core.Lyrics.LyricSourceId;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Tests.Lyrics.Ranking;
 
@@ -138,27 +139,27 @@ public sealed class LyricRankingTests
     [Fact]
     public void ABunchedChorusIsFoundAndSteadyLinesAreNot()
     {
-        var run = LyricTimingRules.FindBunchedRun(BunchedChorus());
+        var run = LyricGapTiming.FindBunchedRun(BunchedChorus());
         Assert.Equal(18, run?.Count);
         Assert.Equal(92, run?.Start ?? 0, 2);
-        Assert.Null(LyricTimingRules.FindBunchedRun(Steady()));
+        Assert.Null(LyricGapTiming.FindBunchedRun(Steady()));
         // Fast but singable: eight syllables a second over 1 s lines.
-        Assert.Null(LyricTimingRules.FindBunchedRun(Steady(gap: 1)));
+        Assert.Null(LyricGapTiming.FindBunchedRun(Steady(gap: 1)));
         // Four quick ad-libs in a row are a stutter, not a broken file.
         var stutter = Steady();
         for (var index = 0; index < 3; index++)
         {
             stutter.Insert(9 + index, L.Line("Hey", 30.1 + index * 0.1, 30.2));
         }
-        Assert.Null(LyricTimingRules.FindBunchedRun([.. stutter.OrderBy(l => l.Start)]));
+        Assert.Null(LyricGapTiming.FindBunchedRun([.. stutter.OrderBy(l => l.Start)]));
         // Credits stamped half a second apart before the song are not lyrics.
         var credits = new[] { "Human Nature - Yot Club", "Lyrics by：Ryan Kaiser", "Composed by：Ryan Kaiser", "Produced by：Ryan Kaiser" }
             .Select((text, i) => L.Line(text, i * 0.5, (i + 1) * 0.5));
-        Assert.Null(LyricTimingRules.FindBunchedRun([.. credits, .. Steady()]));
+        Assert.Null(LyricGapTiming.FindBunchedRun([.. credits, .. Steady()]));
         // Instrumental markers and blank lines do not count as sung.
         var marked = Steady();
         marked.Insert(5, new LyricLine { Start = 20.1, End = 22, Text = "", IsInstrumental = true });
-        Assert.Null(LyricTimingRules.FindBunchedRun(marked));
+        Assert.Null(LyricGapTiming.FindBunchedRun(marked));
     }
 
     // Windows-only: credits stamped a moment apart, long enough to be a bunched run if they were counted.
@@ -167,10 +168,10 @@ public sealed class LyricRankingTests
     {
         var credits = new[] { "作词：方文山", "作曲：周杰伦", "编曲：林迈可", "制作人：周杰伦", "混音：杨瑞代", "Producer: Max Martin", "Lyrics by: Tove Lo" }
             .Select((text, i) => L.Line(text, i * 0.1, (i + 1) * 0.1));
-        Assert.Null(LyricTimingRules.FindBunchedRun([.. credits, .. Steady()]));
+        Assert.Null(LyricGapTiming.FindBunchedRun([.. credits, .. Steady()]));
         // The same rhythm for sung lines is a fault.
         var sung = Enumerable.Range(0, 7).Select(i => L.Line("No place I'd rather be", i * 0.1, (i + 1) * 0.1));
-        Assert.Equal(7, LyricTimingRules.FindBunchedRun([.. sung, .. Steady()])?.Count);
+        Assert.Equal(7, LyricGapTiming.FindBunchedRun([.. sung, .. Steady()])?.Count);
     }
 
     // Ported from LyricRankingTests.swift: testSoundTimingOutranksBunchedTimingButNotPlainText
@@ -208,7 +209,7 @@ public sealed class LyricRankingTests
     {
         var song = WordTimed(Steady());
         Assert.Null(LyricTimingRules.TimingFault(song));
-        Assert.Equal([99.09], LyricTimingRules.CrushedLines([.. song, Crammed()]));
+        Assert.Equal([99.09], LyricGapTiming.CrushedLines([.. song, Crammed()]));
         Assert.Equal("a line crammed at 1:39", LyricTimingRules.TimingFault([.. song, Crammed()]));
         Assert.Equal("2 lines crammed from 1:39", LyricTimingRules.TimingFault([.. song, Crammed(), Crammed(120)]));
         // A quick "oh-oh-oh" is three syllables: not enough to judge.

@@ -104,33 +104,6 @@ internal static class TextRules
             CultureInfo.InvariantCulture, out value);
     }
 
-    /// <summary>
-    /// Case and diacritic folded, then cut into its runs of letters, digits and marks, joined by single spaces. This
-    /// is the behaviour of the Mac's <c>LyricQuery.normalize</c>, whose lines trace to the Verso import, re-implemented
-    /// from that description. A private copy for the credit heading rules; the ranking code owns the shared one.
-    /// </summary>
-    public static string Normalize(string text)
-    {
-        var folded = FoldCaseAndDiacritics(text);
-        var builder = new StringBuilder(folded.Length);
-        var pendingSpace = false;
-        foreach (var rune in folded.EnumerateRunes())
-        {
-            var category = Rune.GetUnicodeCategory(rune);
-            var alphanumeric = Rune.IsLetter(rune) || Rune.IsNumber(rune) || category is UnicodeCategory.NonSpacingMark
-                or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark;
-            if (!alphanumeric)
-            {
-                pendingSpace = builder.Length > 0;
-                continue;
-            }
-            if (pendingSpace) builder.Append(' ');
-            pendingSpace = false;
-            builder.Append(rune.ToString());
-        }
-        return builder.ToString();
-    }
-
     /// <summary>Lower-cased with combining marks removed (Foundation's diacritic- and case-insensitive folding).</summary>
     public static string FoldCaseAndDiacritics(string text)
     {

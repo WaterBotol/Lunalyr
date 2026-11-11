@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Lunalyr.Core.Lyrics.Parsing;
 
 namespace Lunalyr.Core.Lyrics.Timing;
 
@@ -75,7 +76,7 @@ public static class EstimatedWords
             while (enumerator.MoveNext())
             {
                 var element = enumerator.GetTextElement();
-                if (TextElements.KeepsSyllables(element))
+                if (LyricScript.KeepsSyllables(element))
                 {
                     tokens.Emit(run.ToString());
                     run.Clear();

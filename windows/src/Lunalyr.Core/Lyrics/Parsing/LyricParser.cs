@@ -3,6 +3,7 @@
 // ones that need the playing song's names (LyricCredits.Flagging) is a separate step, as on the Mac.
 
 using Lunalyr.Core.Lyrics.Sources;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
 
@@ -44,7 +45,7 @@ public static class LyricParser
                 return PlainResult(raw.Payload, raw.Source);
             case LyricFormat.KPoeJson:
                 if (KPoeJsonParser.Parse(raw.Payload) is not { } hit) return null;
-                return new LyricResult.Synced(hit.Lines, new LyricProvenance(LyricLines.Precision(hit.Lines), hit.Source + " via Lyrics+"));
+                return new LyricResult.Synced(hit.Lines, new LyricProvenance(LyricTimingRules.Precision(hit.Lines), hit.Source + " via Lyrics+"));
             case LyricFormat.Ttml:
                 lines = TtmlParser.Parse(raw.Payload, duration, options?.PreferredLanguages);
                 if (!lines.Any(line => !line.IsInstrumental)) lines = [];
@@ -73,7 +74,7 @@ public static class LyricParser
         }
         if (lines.Count > 0)
         {
-            return new LyricResult.Synced(lines, new LyricProvenance(LyricLines.Precision(lines), source));
+            return new LyricResult.Synced(lines, new LyricProvenance(LyricTimingRules.Precision(lines), source));
         }
         return Extra(RawLyricsExtras.Plain) is { } plain ? PlainResult(plain, raw.Source) : null;
     }
@@ -88,7 +89,7 @@ public static class LyricParser
         if (extra(RawLyricsExtras.SidecarTtml) is { } ttml)
         {
             var native = TtmlParser.Parse(ttml, duration, options?.PreferredLanguages);
-            if (native.Any(LyricLines.ValidWordTiming)) lines = LocalSidecars.Supplement(native, lines);
+            if (native.Any(LyricTimingRules.ValidWordTiming)) lines = LocalSidecars.Supplement(native, lines);
         }
         else if (extra(RawLyricsExtras.SidecarYrc) is { } yrc)
         {

@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Lyrics.Timing;
 
@@ -108,12 +110,12 @@ public static class LyricGapTiming
     /// shown as it is, the lyrics race through those lines and land at the end of them.
     /// </summary>
     /// <param name="lines">The lines, in order.</param>
-    /// <param name="isCredit">Whether a line is a production credit (the credits code's rule): credits are often
-    /// stamped a moment apart before the song starts, so they are left out.</param>
-    public static BunchedRun? FindBunchedRun(IReadOnlyList<LyricLine> lines, Func<string, bool> isCredit)
+    /// <param name="isCredit">Whether a line is a production credit (<see cref="LyricCredits.IsCredit"/> when null):
+    /// credits are often stamped a moment apart before the song starts, so they are left out.</param>
+    public static BunchedRun? FindBunchedRun(IReadOnlyList<LyricLine> lines, Func<string, bool>? isCredit = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
-        ArgumentNullException.ThrowIfNull(isCredit);
+        isCredit ??= IsCredit;
         var sung = lines.Where(l => !l.IsInstrumental && !string.IsNullOrWhiteSpace(l.Text) && double.IsFinite(l.Start)
                                     && !isCredit(l.Text)).ToList();
         BunchedRun? best = null;
@@ -149,10 +151,10 @@ public static class LyricGapTiming
     /// squeezes a line, often one with backing vocals, into a split second, and the highlight shoots to its end. The
     /// start of each, in order.
     /// </summary>
-    public static List<double> CrushedLines(IReadOnlyList<LyricLine> lines, Func<string, bool> isCredit)
+    public static List<double> CrushedLines(IReadOnlyList<LyricLine> lines, Func<string, bool>? isCredit = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
-        ArgumentNullException.ThrowIfNull(isCredit);
+        isCredit ??= IsCredit;
         var starts = new List<double>();
         foreach (var line in lines)
         {
@@ -217,7 +219,7 @@ public static class LyricGapTiming
     public static int EstimatedSyllables(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var folded = Fold(text);
+        var folded = LyricTextFolding.Fold(text);
         var count = 0;
         int vowels = 0, others = 0;
         bool inVowel = false, inWord = false, hasAscii = false;
@@ -235,7 +237,7 @@ public static class LyricGapTiming
             inWord = true;
             var ascii = IsAscii(element);
             hasAscii |= ascii;
-            if (TextElements.KeepsSyllables(element))
+            if (LyricScript.KeepsSyllables(element))
             {
                 count++;
                 inVowel = false;
@@ -256,6 +258,8 @@ public static class LyricGapTiming
         return count;
     }
 
+    private static bool IsCredit(string text) => LyricCredits.IsCredit(text);
+
     private static int WordSyllables(int vowels, int others, bool hasAscii) =>
         Math.Max(vowels, hasAscii ? 1 : 0) + (others + 1) / 2;
 
@@ -264,15 +268,5 @@ public static class LyricGapTiming
         foreach (var c in element)
             if (c > 0x7F) return false;
         return true;
-    }
-
-    // Diacritics and case folded away (é → e, Ä → a); recomposed so Hangul syllables stay whole.
-    private static string Fold(string text)
-    {
-        var decomposed = text.Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder(decomposed.Length);
-        foreach (var c in decomposed)
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark) builder.Append(c);
-        return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
     }
 }

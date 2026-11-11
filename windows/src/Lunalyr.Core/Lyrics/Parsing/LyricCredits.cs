@@ -132,12 +132,12 @@ public static partial class LyricCredits
 
         public TrackNames(string title, string artist)
         {
-            _title = TextRules.Normalize(title);
-            _artist = TextRules.Normalize(artist);
+            _title = LyricQuery.Normalize(title);
+            _artist = LyricQuery.Normalize(artist);
             // "Yot Club & Someone", "A, B", "A feat. B": the first name.
             var first = artist.Split([',', '&', ';', '/', '、'])[0];
             var lead = first.Split(" feat", StringSplitOptions.None)[0].Split(" ft", StringSplitOptions.None)[0];
-            _primaryArtist = TextRules.Normalize(lead);
+            _primaryArtist = LyricQuery.Normalize(lead);
         }
 
         private bool Usable => _title.Length > 0;
@@ -146,7 +146,7 @@ public static partial class LyricCredits
         public bool IsHeading(string text)
         {
             if (!Usable || _primaryArtist.Length == 0) return false;
-            var line = TextRules.Normalize(text);
+            var line = LyricQuery.Normalize(text);
             return TextRules.CharacterCount(line) <= TextRules.CharacterCount(_title) + TextRules.CharacterCount(_artist) + 14
                 && Contains(line, _title) && Contains(line, _primaryArtist);
         }
@@ -155,7 +155,7 @@ public static partial class LyricCredits
         public bool IsLoneName(string text)
         {
             if (!Usable) return false;
-            var line = TextRules.Normalize(text);
+            var line = LyricQuery.Normalize(text);
             return line.Length > 0 && (line == _title || line == _artist || line == _primaryArtist);
         }
 

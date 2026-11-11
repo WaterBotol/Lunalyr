@@ -1,4 +1,5 @@
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -72,7 +73,7 @@ public class LyricsfileTests
         Assert.Equal([true, true, true, true, false, false], lines.Select(line => line.WordTimed));
         Assert.Equal(44.26, lines[^1].End, 1e-9);
         Assert.True(lines[^1].EndFromNextLine);
-        Assert.Equal("Mixed timing", LyricLines.Precision(lines));
+        Assert.Equal("Mixed timing", LyricTimingRules.Precision(lines));
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public class LyricsfileTests
         Assert.Equal(4, lines.Count);
         Assert.Equal([12.67, 17.17, 19.98, 26.03], lines.Select(line => line.Start));
         Assert.All(lines, line => Assert.False(line.WordTimed));
-        Assert.Equal("Line-synced", LyricLines.Precision(lines));
+        Assert.Equal("Line-synced", LyricTimingRules.Precision(lines));
     }
 
     [Fact]

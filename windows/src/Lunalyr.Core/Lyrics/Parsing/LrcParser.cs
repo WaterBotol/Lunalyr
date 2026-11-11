@@ -15,6 +15,7 @@
 
 using System.Text;
 using System.Text.RegularExpressions;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
 
@@ -141,7 +142,7 @@ public static partial class LrcParser
             if (!line.IsInstrumental && words.Count > 0 && words.All(word => word.Start < end))
             {
                 var timed = line with { Words = words, WordTimed = true };
-                if (LyricLines.ValidWordTiming(timed)) line = timed;
+                if (LyricTimingRules.ValidWordTiming(timed)) line = timed;
             }
             if (!line.IsInstrumental) line = line with { Romanization = item.Romanization, Translation = item.Translation };
             lines.Add(line);

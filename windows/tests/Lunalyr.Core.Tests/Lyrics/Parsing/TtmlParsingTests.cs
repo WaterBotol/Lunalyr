@@ -1,6 +1,7 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
 using static Lunalyr.Core.Lyrics.Parsing.TranslationLanguages;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -36,8 +37,8 @@ public class TtmlParsingTests
         Assert.Equal(["Ev'ry", "beautiful", "day", "(oh", "yeah)"], line.Words.Select(word => word.Text));
         Assert.Equal([10, 10.6, 11.6, 12.5, 13], line.Words.Select(word => word.Start));
         Assert.Equal([10.6, 11.6, 12.4, 13, 13.9], line.Words.Select(word => word.End));
-        Assert.True(LyricLines.ValidWordTiming(line));
-        Assert.Equal("Word-by-word", LyricLines.Precision([line]));
+        Assert.True(LyricTimingRules.ValidWordTiming(line));
+        Assert.Equal("Word-by-word", LyricTimingRules.Precision([line]));
     }
 
     // Ported from TTMLParsingTests.swift: testCJKSyllablesStaySeparateTimedTokens
@@ -60,7 +61,7 @@ public class TtmlParsingTests
         Assert.Equal(["사", "랑", "해", "너", "를"], lines[1].Words.Select(word => word.Text));
         Assert.Equal("LOVEして", lines[2].Text);
         Assert.Equal(["LOVE", "し", "て"], lines[2].Words.Select(word => word.Text));
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
     }
 
     // Ported from TTMLParsingTests.swift: testOverlappingBackgroundVocalsFollowTheMainWords
@@ -78,8 +79,8 @@ public class TtmlParsingTests
         Assert.Equal(21.6, line.Words[3].Start, Tol);
         Assert.Equal(23.5, line.Words[4].End, Tol);
         Assert.True(line.WordTimed);
-        Assert.True(LyricLines.ValidWordTiming(line));
-        Assert.Equal("Word-by-word", LyricLines.Precision([line]));
+        Assert.True(LyricTimingRules.ValidWordTiming(line));
+        Assert.Equal("Word-by-word", LyricTimingRules.Precision([line]));
     }
 
     // Ported from TTMLParsingTests.swift: testBackgroundSungFirstLeadsAndUnbracketedBackgroundIsParenthesised
@@ -94,7 +95,7 @@ public class TtmlParsingTests
         Assert.Equal(["(Hey!) Here we go", "Stay (oh yeah)"], lines.Select(line => line.Text));
         Assert.Equal(["(Hey!)", "Here", "we", "go"], lines[0].Words.Select(word => word.Text));
         Assert.Equal(["Stay", "(oh", "yeah)"], lines[1].Words.Select(word => word.Text));
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
     }
 
     private const string AppleHead =
@@ -127,7 +128,7 @@ public class TtmlParsingTests
         Assert.Equal("ai (ai)", english[1].Romanization);
         Assert.Null(english[2].Romanization);
         Assert.Null(english[2].Translation);
-        Assert.All(english, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(english, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
         Assert.Equal("你的名字是", Parse(Document(AppleBody, AppleHead, "ja"), 180, "zh-Hans-CN", "en")[0].Translation);
         Assert.Equal("What is your name", Parse(Document(AppleBody, AppleHead, "ja"), 180, "fr-FR")[0].Translation);
         // Songwriter metadata never becomes lyric text.
@@ -216,7 +217,7 @@ public class TtmlParsingTests
         Assert.Equal(["你", "好", "(你好)"], lines[0].Words.Select(word => word.Text));
         Assert.Equal("ni hao (ni hao)", lines[0].Romanization);
         Assert.Equal("Hello", lines[0].Translation);
-        Assert.True(LyricLines.ValidWordTiming(lines[0]));
+        Assert.True(LyricTimingRules.ValidWordTiming(lines[0]));
         Assert.True(lines[1].WordTimed);
     }
 
@@ -264,7 +265,7 @@ public class TtmlParsingTests
         Assert.Null(Parse(xml, 300, "en-AU")[0].Translation);
         Assert.Equal(153.21, lines[1].Words[0].Start, Tol);
         Assert.Equal(268.069, lines[2].End, Tol);
-        Assert.All(lines, line => Assert.True(LyricLines.ValidWordTiming(line)));
+        Assert.All(lines, line => Assert.True(LyricTimingRules.ValidWordTiming(line)));
     }
 
     // Ported from TTMLParsingTests.swift: testOverlappingDuetPartsReportTheLineStillBeingSung (the parsing assertion;
