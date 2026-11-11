@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The desktop renderer: Direct3D 11 + Direct2D + DirectWrite through Vortice. Layers (backgrounds, lyric
+       compositions) draw into a D2D device context once per frame on the render thread. No XAML here. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Lunalyr.Render</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct2D1" />
+    <PackageReference Include="Vortice.Direct3D11" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
+  </ItemGroup>
+</Project>

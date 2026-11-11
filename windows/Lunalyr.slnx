@@ -2,6 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/Lunalyr.Core/Lunalyr.Core.csproj" />
     <Project Path="src/Lunalyr.Platform.Windows/Lunalyr.Platform.Windows.csproj" />
+    <Project Path="src/Lunalyr.Render/Lunalyr.Render.csproj">
+      <Platform Project="x64" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Lunalyr.Core.Tests/Lunalyr.Core.Tests.csproj" />
