@@ -11,3 +11,8 @@ holds an invented KRC, encrypted the way Kugou serves it.
 - AMLL TTML DB: NetEase id 536622304 ("Lemon")
 - QQ Music, Kuwo: 周杰伦, "晴天"
 - Kugou: 米津玄師, "Lemon"
+- MusicBrainz: artist searches for "Kenshi Yonezu" and "Jay Chou" (`/ws/2/artist?query="…"&limit=5&fmt=json`), recorded
+  12 Nov 2026 with the same generic agent and kept whole (no lyrics in them).
+
+The end-to-end tests (`Lyrics/Pipeline`) also build replies in code (`ServiceReplies`) in these same envelopes, filled with
+invented lines, so each test can choose the timing and names it needs.
