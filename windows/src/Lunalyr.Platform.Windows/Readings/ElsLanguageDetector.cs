@@ -6,8 +6,9 @@ namespace Lunalyr.Platform.Readings;
 /// <summary>
 /// Language detection with Windows' Extended Linguistic Services ("Microsoft Language Detection", elscore.dll),
 /// which is built into Windows and works offline. It ranks candidate languages but gives no confidence, so unlike the
-/// Mac's NLLanguageRecognizer (which needs 0.6) it cannot say "unsure": short texts of a spaced script (under 12
-/// letters) are treated as unknown, and Han or kana text with no ELS answer falls back to
+/// Mac's NLLanguageRecognizer (which needs 0.6) it cannot say "unsure": short texts of an alphabetic script (under 12
+/// letters; Han, kana and Hangul are exempt, as a few of them already say a lot) are treated as unknown, and CJK text
+/// with no ELS answer falls back to
 /// <see cref="ScriptLanguageGuesser"/>. Accuracy limits are in docs/READINGS-WINDOWS.md (it took Ukrainian for
 /// Bulgarian in testing).
 /// </summary>
@@ -86,7 +87,11 @@ public sealed unsafe partial class ElsLanguageDetector : ILanguageGuesser, ILyri
         {
             if (!ReadingText.IsAlphabetic(rune)) continue;
             letters++;
-            if (ReadingText.IsHanScript(rune) || ReadingText.IsHiraganaScript(rune) || ReadingText.IsKatakanaScript(rune)) cjk = true;
+            if (ReadingText.IsHanScript(rune) || ReadingText.IsHiraganaScript(rune) || ReadingText.IsKatakanaScript(rune)
+                || rune.Value is >= 0xAC00 and <= 0xD7A3)
+            {
+                cjk = true;
+            }
         }
         if (letters == 0) return null;
         if (!cjk && letters < ShortestSpacedSample) return null;
