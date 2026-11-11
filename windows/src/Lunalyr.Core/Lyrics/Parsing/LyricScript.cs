@@ -2,6 +2,8 @@
 // Lyrics+ parsers. Reading-versus-translation detection differs on Windows; see IsReading.
 
 using System.Text;
+using Lunalyr.Core.Lyrics.Timing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
 
@@ -97,14 +99,14 @@ public static class LyricScript
         var span = token.End - token.Start;
         // A piece with no real end (an open last stamp) cannot be shared out.
         if (parts.Length <= 1 || !(span > 0) || !(span < 3600)) return [token];
-        double total = parts.Sum(TextRules.CharacterCount);
+        double total = parts.Sum(part => TextElements.Count(part));
         var result = new TimedToken[parts.Length];
         double cursor = token.Start;
         var consumed = 0;
         for (var index = 0; index < parts.Length; index++)
         {
             var start = cursor;
-            consumed += TextRules.CharacterCount(parts[index]);
+            consumed += TextElements.Count(parts[index]);
             cursor = index == parts.Length - 1 ? token.End : token.Start + span * (consumed / total);
             result[index] = new TimedToken(parts[index], start, cursor, index == 0 ? token.Glued : !HasLetters(parts[index]));
         }
@@ -252,7 +254,7 @@ public static class LyricScript
     /// <summary>Folded to plain lower-case ASCII, cut at anything that is not an ASCII letter.</summary>
     internal static List<string> AsciiWords(string text)
     {
-        var folded = TextRules.FoldCaseAndDiacritics(text);
+        var folded = LyricTextFolding.Fold(text);
         var result = new List<string>();
         var current = new StringBuilder();
         foreach (var c in folded)

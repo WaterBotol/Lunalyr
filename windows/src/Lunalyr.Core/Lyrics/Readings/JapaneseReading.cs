@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Readings;
 
@@ -344,7 +345,7 @@ public sealed partial class JapaneseReading(IJapaneseTokenizer tokenizer, IScrip
         if (!IsHiragana(first)) return true;
         // へ does come before another particle (へと, への).
         if (token.Source == "は"
-            && ((ReadingText.GraphemeCount(next.Source) == 1 && Particles.Contains(next.Source)) || Endings.Contains(next.Source)))
+            && ((TextElements.Count(next.Source) == 1 && Particles.Contains(next.Source)) || Endings.Contains(next.Source)))
         {
             var more = index + 2 < tokens.Count && tokens[index + 2].Kind == Kind.Japanese
                 && ReadingText.FirstScalar(tokens[index + 2].Source) is { } third && IsHiragana(third);
@@ -587,7 +588,7 @@ public sealed partial class JapaneseReading(IJapaneseTokenizer tokenizer, IScrip
     {
         if (ReadingText.FirstScalar(word) is not { } first || ReadingText.LastScalar(previous) is not { } last) return false;
         if (Continuations.Contains(first.Value) || FollowsAWord(word) || PhraseEndings.Contains(word)) return true;
-        var single = ReadingText.GraphemeCount(word) == 1;
+        var single = TextElements.Count(word) == 1;
         if (single && (IsHiragana(first) || first.Value is >= 0x30A1 and <= 0x30FA)) return true;
         if (Negatives.Contains(word)) return !Particles.Contains(previous);
         if (single && ReadingText.IsIdeographic(first)) return ReadingText.IsIdeographic(last);

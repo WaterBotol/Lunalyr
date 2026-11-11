@@ -1,6 +1,7 @@
 // Ported from the Mac app's LyricCredits.swift (Lunalyr's own code).
 
 using System.Text.RegularExpressions;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
 
@@ -24,7 +25,7 @@ public static partial class LyricCredits
         var colon = ColonInFirstCharacters(line, 48);
         if (colon < 0) return inCredits && IsColonlessCredit(line);
         var label = TrimLabel(line[..colon]);
-        if (label.Length == 0 || TextRules.CharacterCount(label) > 32) return false;
+        if (label.Length == 0 || TextElements.Count(label) > 32) return false;
         var kind = EnglishRole(label) ?? ChineseRole(TextRules.Characters(label));
         if (kind is null) return false;
         return kind == Kind.Specific || (inCredits && LooksLikeNames(line[(colon + 1)..]));
@@ -147,7 +148,7 @@ public static partial class LyricCredits
         {
             if (!Usable || _primaryArtist.Length == 0) return false;
             var line = LyricQuery.Normalize(text);
-            return TextRules.CharacterCount(line) <= TextRules.CharacterCount(_title) + TextRules.CharacterCount(_artist) + 14
+            return TextElements.Count(line) <= TextElements.Count(_title) + TextElements.Count(_artist) + 14
                 && Contains(line, _title) && Contains(line, _primaryArtist);
         }
 
@@ -401,7 +402,7 @@ public static partial class LyricCredits
                 var characters = TextRules.Characters(word);
                 if (characters.Any(SungCharacters.Contains)) return false;
                 if (characters.Length <= 24 && Organisations.Any(ending =>
-                        characters.Length > TextRules.CharacterCount(ending) && word.EndsWith(ending, StringComparison.Ordinal))) return true;
+                        characters.Length > TextElements.Count(ending) && word.EndsWith(ending, StringComparison.Ordinal))) return true;
                 return characters.Length is >= 2 and <= 4 && characters.Distinct().Count() * 2 > characters.Length;
             });
         });

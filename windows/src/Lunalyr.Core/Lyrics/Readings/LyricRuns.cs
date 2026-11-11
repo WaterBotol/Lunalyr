@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Readings;
 
@@ -131,7 +132,7 @@ public static class LyricRuns
     private static readonly Dictionary<string, HashSet<int>> KnownStarts = [];
 
     private static bool IsLight(string word) =>
-        ReadingText.GraphemeCount(word) <= 1 || word.EnumerateRunes().All(rune => rune.Value is >= 0x3041 and <= 0x309F or 0x30FC);
+        TextElements.Count(word) <= 1 || word.EnumerateRunes().All(rune => rune.Value is >= 0x3041 and <= 0x309F or 0x30FC);
 
     /// <summary>Where phrases or words begin in a string, by UTF-16 offset. The system's word segmentation parts out
     /// every particle and ending (沈む よう に, and Chinese nearly character by character), so some words stay with the
@@ -153,7 +154,7 @@ public static class LyricRuns
             {
                 Parting.Phrases => IsLight(word),
                 _ when japanese => previous is not null && JapaneseReading.ContinuesPhrase(word, previous),
-                _ => ReadingText.GraphemeCount(word) <= 1,
+                _ => TextElements.Count(word) <= 1,
             };
             if (!stays) starts.Add(start);
             previous = word;

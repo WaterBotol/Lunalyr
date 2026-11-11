@@ -44,17 +44,6 @@ internal static class TextRules
         return builder.ToString();
     }
 
-    /// <summary>Only the letters and digits of the text (Swift's <c>isLetter || isNumber</c>), per scalar.</summary>
-    public static string LettersAndNumbers(string text)
-    {
-        var builder = new StringBuilder(text.Length);
-        foreach (var rune in text.EnumerateRunes())
-        {
-            if (Rune.IsLetter(rune) || Rune.IsNumber(rune)) builder.Append(rune.ToString());
-        }
-        return builder.ToString();
-    }
-
     public static bool HasLetterOrNumber(string text)
     {
         foreach (var rune in text.EnumerateRunes())
@@ -63,9 +52,6 @@ internal static class TextRules
         }
         return false;
     }
-
-    /// <summary>Grapheme clusters, as Swift's <c>String.count</c> counts them.</summary>
-    public static int CharacterCount(string text) => text.Length == 0 ? 0 : new StringInfo(text).LengthInTextElements;
 
     /// <summary>The text split into grapheme clusters (Swift Characters).</summary>
     public static string[] Characters(string text)
@@ -102,18 +88,5 @@ internal static class TextRules
         }
         return double.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent,
             CultureInfo.InvariantCulture, out value);
-    }
-
-    /// <summary>Lower-cased with combining marks removed (Foundation's diacritic- and case-insensitive folding).</summary>
-    public static string FoldCaseAndDiacritics(string text)
-    {
-        var decomposed = text.Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder(decomposed.Length);
-        foreach (var c in decomposed)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
-            builder.Append(c);
-        }
-        return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
     }
 }

@@ -127,9 +127,6 @@ internal static class LyricTextFolding
         }
     }
 
-    /// <summary>The number of grapheme clusters (the Mac's String.count).</summary>
-    public static int GraphemeCount(string text) => StringInfo.ParseCombiningCharacters(text).Length;
-
     /// <summary>Only the grapheme clusters that start with a letter or number, in canonical composed form.</summary>
     public static string LettersAndNumbers(string text)
     {

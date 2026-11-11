@@ -141,7 +141,7 @@ public sealed class LyricRomanizer(ReadingServices services)
     {
         var sung = line.Words.Select(word => ReadingText.LettersAndNumbers(word.Text)).Where(text => text.Length > 0).ToList();
         if (sung.Count < 2) return false;
-        return sung.Count(text => ReadingText.GraphemeCount(text) == 1) * 4 >= sung.Count * 3;
+        return sung.Count(text => TextElements.Count(text) == 1) * 4 >= sung.Count * 3;
     }
 
     /// <summary>

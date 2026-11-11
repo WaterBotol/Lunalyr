@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics;
 
@@ -203,7 +204,7 @@ public sealed partial record LyricQuery
 
     private static bool ContainsWholeWords(string a, string b)
     {
-        var (longer, shorter) = LyricTextFolding.GraphemeCount(a) >= LyricTextFolding.GraphemeCount(b) ? (a, b) : (b, a);
+        var (longer, shorter) = TextElements.Count(a) >= TextElements.Count(b) ? (a, b) : (b, a);
         if ((" " + longer + " ").Contains(" " + shorter + " ", StringComparison.Ordinal))
         {
             return true;

@@ -37,18 +37,6 @@ public static class ReadingText
         return result;
     }
 
-    /// <summary>How many grapheme clusters <paramref name="text"/> has (Swift's <c>String.count</c>).</summary>
-    public static int GraphemeCount(string text)
-    {
-        var count = 0;
-        for (var offset = 0; offset < text.Length; count++)
-        {
-            var length = StringInfo.GetNextTextElementLength(text, offset);
-            offset += length <= 0 ? 1 : length;
-        }
-        return count;
-    }
-
     /// <summary>The Unicode scalars of <paramref name="text"/>.</summary>
     public static IEnumerable<Rune> Scalars(string text) => text.EnumerateRunes();
 
