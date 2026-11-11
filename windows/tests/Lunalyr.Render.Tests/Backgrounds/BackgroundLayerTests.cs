@@ -112,8 +112,8 @@ public sealed class BackgroundLayerTests : IDisposable
         var centreEmpty = Pixel(empty, Width / 2, Height / 2);
         var centreShown = Pixel(shown, Width / 2, Height / 2);
         Assert.True(centreShown.R < centreEmpty.R - 40, $"{centreShown} vs {centreEmpty}");
-        // Nothing at the screen's edge.
-        Assert.Equal(Pixel(empty, 0, Height / 2), Pixel(shown, 0, Height / 2));
+        // Nothing in the screen's corners (the feathered shade reaches past the sides, see FeatheredBacking).
+        Assert.InRange(Pixel(empty, 0, 0).R - Pixel(shown, 0, 0).R, 0, 2);
         // White type reaches the pastel target (6.5:1) in the middle of the stage. The colour field is judged by the
         // Mac's estimate (its brightest mass at 85% over the base), which a one-colour field slightly exceeds.
         var luminance = LyricLegibility.Luminance(new Double3(centreShown.R / 255.0, centreShown.G / 255.0, centreShown.B / 255.0));
@@ -125,11 +125,13 @@ public sealed class BackgroundLayerTests : IDisposable
         Assert.Equal(centreEmpty, Pixel(Frame(playing, Quiet(pale), 1.95), Width / 2, Height / 2));
     }
 
-    // Ported from LyricLegibilityTests.swift: testTheDrawnBackingFollowsTheShapeAndAManualAmountKeepsItsEllipse. The
+    // Adapted from LyricLegibilityTests.swift: testTheDrawnBackingFollowsTheShapeAndAManualAmountKeepsItsEllipse. The
     // Mac draws the shade alone at 0.5 over white; here the whole layer draws it over a white field with no scrim, at
-    // 0.6, the cap the automatic amount reaches over white, so the two can be compared at the centre.
+    // 0.6, the cap the automatic amount reaches over white, so the two can be compared at the centre. Windows'
+    // automatic shape differs on purpose (FeatheredBacking: the Mac's stage rectangle showed as a dark box with light
+    // edges over bright covers), so the automatic half checks the feathered shape; the manual ellipse is the Mac's.
     [Fact]
-    public void TheDrawnBackingFollowsTheShapeAndAManualAmountKeepsItsEllipse()
+    public void TheDrawnBackingIsFeatheredAndAManualAmountKeepsItsEllipse()
     {
         var white = Uniform(1, 1, 1);
         var song = new SceneSnapshot { Palette = white, Title = "Song" };
@@ -138,11 +140,16 @@ public sealed class BackgroundLayerTests : IDisposable
             using var layer = new GradientLayerFactory(options).Create();
             _surface.Prepare(layer);
             var pixels = Frame(layer, song, 1);
+            // The same field with an empty stage, so only the backing is measured (the field itself is not quite
+            // even at the screen's edges).
+            using var quiet = new GradientLayerFactory(options).Create();
+            _surface.Prepare(quiet);
+            var field = Frame(quiet, Quiet(white), 1);
             return (x, y) =>
             {
                 var column = Math.Clamp((int)(x * Width), 0, Width - 1);
                 var row = Math.Clamp((int)(y * Height), 0, Height - 1);
-                return 1 - Pixel(pixels, column, row).R / 255.0;
+                return 1 - Pixel(pixels, column, row).R / Math.Max(1.0, Pixel(field, column, row).R);
             };
         }
         var half = LyricLegibility.StageHalfExtent;
@@ -150,14 +157,30 @@ public sealed class BackgroundLayerTests : IDisposable
         var automatic = Darkening(Plain with { ScrimStrength = 0 });
         var centre = automatic(0.5, 0.5);
         Assert.True(centre > 0.2);
-        // As dark at the stage's edges and corners as in its middle...
-        foreach (var (x, y) in new[] { (left, 0.5), (1 - left, 0.5), (0.5, top), (0.5, 1 - top), (left, top), (1 - left, 1 - top) })
+        // As dark where the lyrics are set (the middle 60% × 50% of the screen, corners included) as in the middle...
+        foreach (var (x, y) in new[] { (0.2, 0.5), (0.8, 0.5), (0.5, 0.25), (0.5, 0.75), (0.2, 0.25), (0.8, 0.75) })
             Assert.Equal(centre, automatic(x, y), 0.03);
-        // ...easing out across the margin, to nothing at the screen's edge.
-        var margin = automatic(left / 2, 0.5);
-        Assert.True(margin > 0.05);
-        Assert.True(margin < centre - 0.05);
-        foreach (var (x, y) in new[] { (0.0, 0.5), (0.999, 0.5), (0.5, 0.0), (0.5, 0.999), (0.0, 0.0), (0.999, 0.999) })
+        // ...still most of it at the stage's sides...
+        Assert.True(automatic(left, 0.5) > centre * 0.85);
+        Assert.True(automatic(1 - left, 0.5) > centre * 0.85);
+        // ...then easing out (only ever lighter towards the edges; FeatheredBackingTests checks the shape's smoothness),
+        // to nothing in the screen's corners.
+        for (var column = Width / 2 + 1; column < Width; column++)
+        {
+            double inner = automatic((column - 1.0) / Width, 0.5), outer = automatic((double)column / Width, 0.5);
+            Assert.True(outer <= inner + 0.01, $"darker outwards at column {column}");
+        }
+        for (var row = Height / 2 + 1; row < Height; row++)
+        {
+            double inner = automatic(0.5, (row - 1.0) / Height), outer = automatic(0.5, (double)row / Height);
+            Assert.True(outer <= inner + 0.01, $"darker outwards at row {row}");
+        }
+        // Across the band where the Mac's rectangle ends, a gentle slope: no more than half the backing over the last
+        // tenth of the screen's width (the Mac's goes from all of it to nothing there).
+        Assert.True(automatic(left, 0.5) - automatic(0.0, 0.5) < centre * 0.55);
+        Assert.True(automatic(0.02, 0.5) < centre * 0.6, "the shade has faded by the screen's sides");
+        Assert.True(automatic(0.5, 0.02) < centre * 0.4, "the shade has faded by the screen's top");
+        foreach (var (x, y) in new[] { (0.0, 0.0), (0.999, 0.0), (0.0, 0.999), (0.999, 0.999) })
             Assert.True(automatic(x, y) < 0.03, $"at ({x}, {y})");
         // The user's own amount keeps its old look: lighter at the stage's ends than its middle, nothing at its corners.
         var ellipse = Darkening(Plain with { ScrimStrength = 0, ManualBacking = 0.6 });
