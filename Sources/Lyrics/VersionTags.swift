@@ -7,6 +7,8 @@ import Foundation
 /// writes "Song - Live". Remasters, mono/stereo, editions and credits name the
 /// same recording and are not tags, and a bare "Version" says nothing. Names
 /// that only translate the qualifier ("现场" for "Live") fold to the same tag.
+/// A language version ("English Version", "Eng ver.", "(English)", "英語ver.")
+/// is a version too (`languages`): the same tune, sung in other words.
 enum VersionTags {
     /// The version tags `name` declares.
     static func tags(_ name: String) -> Set<String> {
@@ -24,6 +26,9 @@ enum VersionTags {
         let album = tags(query.album ?? "")
         return offered.subtracting(playing).subtracting(album).union(playing.subtracting(offered))
     }
+
+    /// The tags naming a language version.
+    static let languages: Set<String> = ["english", "japanese", "korean", "chinese"]
 
     /// "Live", or "Live / Remix", for the source list.
     static func describe(_ tags: Set<String>) -> String {
@@ -81,6 +86,13 @@ enum VersionTags {
         "sped up": "sped up", "speed up": "sped up", "piano version": "piano", "piano ver": "piano",
         "dj mix": "dj mix", "continuous mix": "dj mix",
     ]
+    /// A language named before "Version" / "Ver." ("English Version", "Eng ver."),
+    /// or alone in a qualifier ("(English)").
+    private static let languageWords: [String: String] = [
+        "english": "english", "eng": "english", "japanese": "japanese", "jpn": "japanese", "jp": "japanese",
+        "korean": "korean", "kor": "korean", "chinese": "chinese", "mandarin": "chinese",
+    ]
+    private static let versionWords: Set<String> = ["version", "ver", "vers", "edition"]
     /// Matched inside the segment, for scripts written without spaces.
     private static let spanTags: [String: String] = [
         "现场": "live", "現場": "live", "ライブ": "live", "라이브": "live",
@@ -91,6 +103,10 @@ enum VersionTags {
         "清唱": "a cappella", "아카펠라": "a cappella",
         "加速": "sped up", "降速": "slowed", "慢速": "slowed",
         "アコースティック": "acoustic", "어쿠스틱": "acoustic",
+        "英語": "english", "英文": "english", "英語版": "english", "영어": "english",
+        "日本語": "japanese", "日文": "japanese", "일본어": "japanese",
+        "韓国語": "korean", "韓國語": "korean", "韩语": "korean", "한국어": "korean",
+        "中文版": "chinese", "中国語": "chinese",
     ]
 
     private static func segmentTags(_ segment: String) -> Set<String> {
@@ -98,9 +114,11 @@ enum VersionTags {
         var found = Set<String>()
         // Music's DJ Mix albums mark each track "[Mixed]"; "Mixed by X" is a credit.
         if list == ["mixed"] { found.insert("dj mix") }
+        if list.count == 1, let language = languageWords[list[0]], list[0].count > 3 { found.insert(language) }
         for (index, word) in list.enumerated() {
             if let tag = wordTags[word] { found.insert(tag) }
             if index + 1 < list.count, let tag = pairTags[word + " " + list[index + 1]] { found.insert(tag) }
+            if index + 1 < list.count, let language = languageWords[word], versionWords.contains(list[index + 1]) { found.insert(language) }
             // "Club Mix", "Extended Mix": another mix, but "Original Mix" is the original.
             if word == "mix", index > 0, !["original", "dj", "continuous", "album"].contains(list[index - 1]) {
                 found.insert(list[index - 1] == "extended" ? "extended" : "remix")
