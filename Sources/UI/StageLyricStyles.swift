@@ -1404,7 +1404,9 @@ extension StageLyricView {
         let tile = tiled(run)
         let onTile = style.accent == .tile && !tile
         let tight = LyricScript.keepsSyllables(run.text)
-        let reading = run.parts.compactMap { $0.source.flatMap { readings[$0] } }.joined(separator: " ")
+        // The parts' shares written together (joining them with spaces
+        // read 思い出 as "omo i da"), filling in as the parts are sung.
+        let reading = Self.revealedReading(of: run, in: readings, at: time, colour: sample.rest.opacity(0.9))
         let face = font(size, hero: true, id: run.id)
         let word = ZStack {
             self.word(run, tile ? ink.tileText : sample.sung).font(face)
@@ -1428,7 +1430,7 @@ extension StageLyricView {
         }
         VStack(spacing: size * 0.06) {
             word
-            if !reading.isEmpty {
+            if let reading {
                 Text(reading)
                     .font(settings.lyricFont(size: max(12, size * 0.36), hero: false, mood: mood))
                     .foregroundStyle(sample.rest.opacity(0.9))
