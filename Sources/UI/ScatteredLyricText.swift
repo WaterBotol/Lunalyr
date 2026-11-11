@@ -743,6 +743,10 @@ struct ScatteredRunFrame: Equatable {
     /// The reveal mask does not cover a glued run's reading, which comes
     /// with the run's first token, as a single word's does.
     var readingOpacity: Double { presentation.preview ? 0 : reveal?.first ?? 1 }
+    /// Per token of a glued run, how far its share of the reading shows
+    /// (`LyricReadingInk.shareOpacities`), relative to `readingOpacity`:
+    /// the reading fills in with the run's syllables. Nil shows it whole.
+    var readingReveal: [Double]? = nil
     /// "Cutout · Highlight": the tiles on this run's sung words and their
     /// colours, while any shows.
     var highlight: Highlight? = nil
@@ -775,6 +779,8 @@ struct ScatteredRunFrame: Equatable {
                 driftScale: first.driftScale, driftAngle: first.driftAngle, ink: colours, reveal: nil,
                 visible: first.presentation.opacity, highlight: highlight)
         }
+        let readingReveal = run.reading?.shareOpacities(at: time, syllables: reveals ? tokenOpacities(run, states) : nil,
+                                                        reduceMotion: reduceMotion)
         var heat = 0.0, glow = 0.0, fill = 0.0, tint = 0.0, visible = 0.0
         var x = 0.0, y = 0.0, scale = 1.0, angle = 0.0
         var opacities: [Double] = []
@@ -794,7 +800,14 @@ struct ScatteredRunFrame: Equatable {
         if reveals { presentation.opacity = 1 }
         return ScatteredRunFrame(presentation: presentation, heat: heat, fill: fill, tint: tint, glow: glow,
             driftX: x, driftY: y, driftScale: scale, driftAngle: angle, ink: colours,
-            reveal: reveals ? opacities : nil, visible: visible, highlight: highlight)
+            reveal: reveals ? opacities : nil, visible: visible, readingReveal: readingReveal, highlight: highlight)
+    }
+
+    /// Each token's opacity relative to the run's first, which the reading
+    /// as a whole already takes (`readingOpacity`).
+    private static func tokenOpacities(_ run: ScatteredTypography.Run, _ states: [ScatteredWordState]) -> [Double] {
+        let first = max(states[run.tokens.lowerBound].frame.presentation.opacity, 0.001)
+        return run.tokens.map { min(1, states[$0].frame.presentation.opacity / first) }
     }
 
     /// The run's tiles on this frame, or nil while none shows.
@@ -847,7 +860,7 @@ private struct ScatteredRunInk: View, Equatable {
                                                 rightToLeft: run.rightToLeft)
                         }
                     }
-                run.reading?.tinted(frame.ink.reading).opacity(frame.readingOpacity)
+                run.reading?.revealing(frame.readingReveal).tinted(frame.ink.reading).opacity(frame.readingOpacity)
             }
             .rotationEffect(.degrees(run.metrics.rotation))
             .modifier(CappedGrowth(scale: ScatteredRunFrame.swell(heat: frame.heat, glow: frame.glow,

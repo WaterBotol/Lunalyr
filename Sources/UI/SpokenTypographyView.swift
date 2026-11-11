@@ -157,6 +157,8 @@ struct SpokenTypographyView: View {
         let sung = RollingTokenState.sweep(token, time: time)
         let entrance = state.slot, scale = state.scale, angle = state.angle
         let stageMargin = baseSize * 0.22
+        let reveal = RollingTokenState.partReveal(token, time: time, composition: composition,
+            runOpacity: presentation.opacity, intensity: intensity, reduceMotion: reduceMotion)
         // Cutout's label: one width rule before and after the onset, a
         // sliver under the faint preview, then pressed on with the word's
         // spring, so it lands with a little give. (It used to show full
@@ -176,8 +178,9 @@ struct SpokenTypographyView: View {
                            readingColour: colours.reading,
                            readingOpacity: presentation.preview ? 0 : 1,
                            readingWidth: size.width * 0.8,
-                           reveal: RollingTokenState.partReveal(token, time: time, composition: composition,
-                               runOpacity: presentation.opacity, intensity: intensity, reduceMotion: reduceMotion),
+                           reveal: reveal,
+                           readingReveal: token.reading?.shareOpacities(at: time, syllables: reveal,
+                                                                         reduceMotion: reduceMotion),
                            tile: tile, tileText: ink.tileText)
             .background {
                 if let tile {
@@ -332,6 +335,8 @@ struct RollingUnit: View {
     var readingWidth: CGFloat?
     /// A glued run's tokens arriving one by one (`RollingTokenState.partReveal`).
     var reveal: [Double]?
+    /// Its reading filling in with them (`LyricReadingInk.shareOpacities`).
+    var readingReveal: [Double]?
     /// The cutout tile behind the unit, if any, and the colour the word and
     /// its reading take where the tile has pressed in.
     var tile: Tile?
@@ -371,7 +376,7 @@ struct RollingUnit: View {
                             rightToLeft: token.rightToLeft)
                 .modifier(LyricSweepUnderline(colour: sweepUnderline, progress: tint, rightToLeft: token.rightToLeft))
                 .modifier(TokenReveal(boundaries: token.boundaries, opacities: reveal, rightToLeft: token.rightToLeft))
-            if let reading = token.reading?.tinted(reading.opacity(readingOpacity)) {
+            if let reading = token.reading?.revealing(readingReveal).tinted(reading.opacity(readingOpacity)) {
                 if let readingWidth { reading.wrapping(at: readingWidth) } else { reading }
             }
         }
