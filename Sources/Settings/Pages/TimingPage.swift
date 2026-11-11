@@ -197,8 +197,8 @@ struct TimingPage: View {
                           // Rows are keyed by source, so they slide to their new places.
                           move: { step in withAnimation(motion) { options.move(source, by: step) } })
             }
-            Toggle("Search under artists’ other names", isOn: $artistAliases)
-            InspectorCaption("When NetEase, QQ, Kugou or Kuwo find nothing under a name like “Kenshi Yonezu”, they search again as “米津玄師”. The other names come from MusicBrainz, which receives the artist’s name.")
+            Toggle("Search under other names", isOn: $artistAliases)
+            InspectorCaption("When NetEase, QQ, Kugou or Kuwo find nothing under a name like “Kenshi Yonezu”, they search again as “米津玄師”. The other names come from MusicBrainz, which receives the artist’s name. A song listed under an English title, like “Racing into the Night”, is searched again under its Japanese title, “夜に駆ける”, from Apple’s catalogue, which receives the title and artist.")
             InspectorCaption("Online sources receive song metadata.", more: "Online services receive song metadata. Apple Music’s local cache stays on this Mac. New sources are available to enable here; existing choices are preserved.")
         }
     }
