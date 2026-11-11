@@ -97,6 +97,21 @@ enum LyricReadingPairs {
         return result
     }
 
+    /// `parts` over the tokens a line actually draws (`LyricRuns.visible`),
+    /// for the layouts that set a line by those runs (Scattered, Editorial,
+    /// Constellation, Echo, the rolling stages, lyric cards). A glued run's
+    /// shares written together read exactly as `match` writes the run's
+    /// reading on its first token, so the run reads as before; each share
+    /// can now show as its own token is sung (`LyricReadingInk.Share`).
+    static func shares(_ readings: [LyricsFetcher.Word]?, to words: [LyricsFetcher.Word],
+                       glue: [Bool]) -> [TimedWordKey: String] {
+        guard let readings, readings.count == words.count else { return [:] }
+        guard glue.contains(true) else { return match(readings, to: words) }
+        let kept = words.indices.filter { LyricRuns.isVisible(words[$0].text) }
+        let visible = LyricRuns.visible(words, glue: glue)
+        return parts(kept.map { readings[$0] }, to: visible.words, glue: visible.glue)
+    }
+
     /// A saved or source reading that could not be split by word, which
     /// `match` places under no word: it is drawn once under the whole line.
     /// Nil when the readings are drawn word by word, and when not "Below
@@ -111,13 +126,13 @@ enum LyricReadingPairs {
     }
 
     /// For a rolling stage, which sets words one at a time with no line of
-    /// their own: the readings by word (by run, given the line's `glue`),
-    /// and a reading of the whole line under the line's first word,
-    /// arriving with it.
+    /// their own: the readings by word (by run, given the line's `glue`,
+    /// each token keeping its share, see `shares`), and a reading of the
+    /// whole line under the line's first word, arriving with it.
     static func rolling(_ readings: [LyricsFetcher.Word]?, for line: LyricsFetcher.Line,
                         glue: [Bool] = []) -> [TimedWordKey: String] {
         guard let whole = self.line(readings, for: line, display: .below) else {
-            return match(readings, to: line.words, glue: glue)
+            return shares(readings, to: line.words, glue: glue)
         }
         guard let first = line.words.first(where: { LyricRuns.isVisible($0.text) }) else { return [:] }
         return [first.presentationID: whole]

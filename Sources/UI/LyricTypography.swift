@@ -194,9 +194,10 @@ enum ScatteredTypography {
                 running += Double(text.count)
                 boundaries.append(min(1, running / total))
             }
-            let readings = range.compactMap { key.readings[words[$0].presentationID] }
+            // Each token's share of the run's reading, so the reading can
+            // fill in as the run is sung (`LyricReadingInk.shares`).
             runs.append(Run(index: runIndex, tokens: range, label: label, font: font, metrics: metrics,
-                reading: readings.isEmpty ? nil : LyricReadingInk(text: readings.joined(), font: readingFont),
+                reading: LyricReadingInk(tokens: Array(words[range]), readings: key.readings, font: readingFont),
                 source: source, seed: seed, order: order,
                 sustain: range.count == 1 ? tokens[range.lowerBound].sustain : 0,
                 rightToLeft: LyricScript.isRightToLeft(label), glyphMotion: LyricScript.allowsGlyphMotion(label),
@@ -388,9 +389,18 @@ enum SpokenTypography {
                 rightToLeft: LyricScript.isRightToLeft(word.text), hero: hero, pointSize: pointSize,
                 tile: tile,
                 font: settings.lyricFont(size: pointSize, hero: heavy, mood: key.mood, seed: seed, alternate: alternate),
-                reading: reading.map { LyricReadingInk(text: $0,
-                    font: settings.lyricFont(size: pointSize * 0.56, hero: false, mood: key.mood,
-                        seed: seed, alternate: alternate)) },
+                reading: reading.map { text in
+                    let font = settings.lyricFont(size: pointSize * 0.56, hero: false, mood: key.mood,
+                                                  seed: seed, alternate: alternate)
+                    // A glued run's reading, kept by its tokens' shares so it
+                    // fills in as they are sung; the same text either way.
+                    if let tokens = key.parts[word.presentationID],
+                       let shared = LyricReadingInk(tokens: tokens, readings: key.readings, font: font),
+                       shared.text == text {
+                        return shared
+                    }
+                    return LyricReadingInk(text: text, font: font)
+                },
                 slot: Word.slot(ordinal: key.ordinals[word.presentationID] ?? index),
                 parts: key.parts[word.presentationID] ?? [],
                 boundaries: key.parts[word.presentationID].map(LyricRuns.boundaries) ?? [],
@@ -409,6 +419,38 @@ struct LyricReadingInk: View, Equatable {
     /// on one line. A rolling stage hangs a reading of the whole line under
     /// the line's first word, where on one line it could run off the stage.
     var maxWidth: CGFloat?
+    /// A glued word's reading, token by token: each token's share of it
+    /// (`LyricReadingPairs.shares`) and when that token is sung. Written
+    /// together they are `text`. Empty for a reading of one token.
+    var shares: [Share] = []
+    /// Per share, how far it shows on this frame (`revealing`). Nil shows
+    /// the whole reading.
+    var reveal: [Double]?
+
+    struct Share: Equatable {
+        var text: String
+        var start: Double
+    }
+
+    init(text: String, font: Font, colour: Color = .white.opacity(0.7), maxWidth: CGFloat? = nil) {
+        self.text = text; self.font = font; self.colour = colour; self.maxWidth = maxWidth
+    }
+
+    /// The reading of a run of tokens, from each token's share (missing
+    /// shares are empty). Nil when no token has one. The first share's
+    /// leading space is dropped, so the text is exactly the shares joined.
+    init?(tokens: [LyricsFetcher.Word], readings: [TimedWordKey: String], font: Font) {
+        var shares: [Share] = []
+        for token in tokens {
+            var share = readings[token.presentationID] ?? ""
+            if shares.allSatisfy({ $0.text.isEmpty }) { share = String(share.drop(while: \.isWhitespace)) }
+            shares.append(Share(text: share, start: token.start))
+        }
+        let text = shares.map(\.text).joined()
+        guard !text.isEmpty else { return nil }
+        self.init(text: text, font: font)
+        if shares.count > 1 { self.shares = shares }
+    }
 
     /// The same reading in the colour of the word it belongs to.
     func tinted(_ colour: Color) -> LyricReadingInk {
@@ -424,16 +466,61 @@ struct LyricReadingInk: View, Equatable {
         return copy
     }
 
+    /// The same reading with each share showing as far as `opacities` say
+    /// (one per share; see `shareOpacities`). A share not shown yet is
+    /// clear but keeps its room, so the reading never shifts or resizes as
+    /// it fills in.
+    func revealing(_ opacities: [Double]?) -> LyricReadingInk {
+        var copy = self
+        copy.reveal = opacities.flatMap { $0.count == shares.count && $0.contains { $0 < 1 } ? $0 : nil }
+        return copy
+    }
+
+    /// How far each share shows at `time`: from its token's onset it fades
+    /// in over `StageMotion.syllableFade` (as a stage word's syllables do),
+    /// and never ahead of its own syllable, whose opacity (relative to the
+    /// word's) is `syllables` where the layout reveals a word syllable by
+    /// syllable. The first share comes with the word. With Reduce Motion a
+    /// share appears at its onset. Nil for a reading of one token.
+    func shareOpacities(at time: Double, syllables: [Double]? = nil, reduceMotion: Bool) -> [Double]? {
+        guard shares.count > 1 else { return nil }
+        return shares.indices.map { index in
+            guard index > 0 else { return 1 }
+            let age = time - (shares[index].start - 0.03)
+            if reduceMotion { return age >= 0 ? 1 : 0 }
+            let own = vc_settle(age, StageMotion.syllableFade)
+            guard let syllables, syllables.count == shares.count else { return own }
+            return min(own, max(0, syllables[index]))
+        }
+    }
+
+    /// The reading as drawn: one string, each share in `colour` as far as
+    /// it shows.
+    static func revealed(_ shares: [Share], _ reveal: [Double], colour: Color) -> AttributedString {
+        var result = AttributedString()
+        for (share, shown) in zip(shares, reveal) where !share.text.isEmpty {
+            var piece = AttributedString(share.text)
+            piece.foregroundColor = shown <= 0.001 ? .clear : colour.opacity(min(1, shown))
+            result.append(piece)
+        }
+        return result
+    }
+
+    private var label: Text {
+        guard let reveal, reveal.count == shares.count else { return Text(text) }
+        return Text(Self.revealed(shares, reveal, colour: colour))
+    }
+
     var body: some View {
         if let maxWidth {
             CappedWidthLayout(maxWidth: maxWidth) {
-                Text(text)
+                label
                     .font(font)
                     .foregroundStyle(colour)
                     .multilineTextAlignment(.center)
             }
         } else {
-            Text(text)
+            label
                 .font(font)
                 .foregroundStyle(colour)
                 .fixedSize()

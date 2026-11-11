@@ -191,8 +191,11 @@ enum LyricCard {
             let weight = LyricCard.weight(labels)
             self.cardTypeSize = max(126, 224 * sqrt(5 / max(5, weight)))
             self.glue = rolling == nil ? glue : []
-            self.readings = display == .below
-                ? rolling?.readings ?? LyricReadingPairs.match(romanized, to: line.words, glue: glue) : [:]
+            // Paired as the wallpaper pairs them, so a word's reading fills
+            // in as it is sung here too: by each token's share of its run.
+            self.readings = display != .below ? [:] : rolling?.readings ?? (composition.fillsStage
+                ? LyricReadingPairs.parts(romanized, to: line.words, glue: StageRun.glue(source, glue: glue))
+                : LyricReadingPairs.shares(romanized, to: line.words, glue: glue))
         }
     }
 

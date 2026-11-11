@@ -973,13 +973,14 @@ struct LyricLayer: View {
 
     /// Reading pairs for a line set in runs, built once per line rather
     /// than per frame.
-    /// `byPart`: each token's share of its run's reading, for the stage
-    /// layouts, which reveal a run part by part (`LyricReadingPairs.parts`).
+    /// Each token keeps its share of its run's reading, so the reading fills
+    /// in as the run is sung: by the stage's own runs given `byPart`
+    /// (`LyricReadingPairs.parts`), else by the line's (`shares`).
     private func readingPairs(_ index: Int, readings: [LyricsFetcher.Word]?, words: [LyricsFetcher.Word],
                               glue: [Bool], byPart: Bool = false, scene: SceneLines, live: Bool) -> [TimedWordKey: String] {
         guard live else {
             return byPart ? LyricReadingPairs.parts(readings, to: words, glue: glue)
-                : LyricReadingPairs.match(readings, to: words, glue: glue)
+                : LyricReadingPairs.shares(readings, to: words, glue: glue)
         }
         return cache.readingPairs(line: index, fingerprint: scene.fingerprint, readings: readings, words: words,
                                   glue: glue, byPart: byPart)
@@ -1123,6 +1124,9 @@ final class LyricLayerCache: ObservableObject {
             // Glued syllables and characters roll as the word they form.
             let runs = LyricRuns.merged(source, glue: glue, readings: pairs)
             readings.merge(runs.readings) { first, _ in first }
+            // Each token's share too, by the token: a glued word's reading
+            // fills in as its tokens are sung (`SpokenTypography.prepare`).
+            readings.merge(pairs) { first, _ in first }
             parts.merge(runs.tokens) { first, _ in first }
             var place = offsets[row]
             for word in runs.words where LyricRuns.isVisible(word.text) {
@@ -1207,7 +1211,7 @@ final class LyricLayerCache: ObservableObject {
         let signature = hasher.finalize()
         if let hit = pairs[line], hit.signature == signature { return hit.value }
         let value = byPart ? LyricReadingPairs.parts(readings, to: words, glue: glue)
-            : LyricReadingPairs.match(readings, to: words, glue: glue)
+            : LyricReadingPairs.shares(readings, to: words, glue: glue)
         if pairs.count > 48 { pairs.removeAll() }
         pairs[line] = (signature, value)
         return value
