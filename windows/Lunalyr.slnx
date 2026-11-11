@@ -5,9 +5,15 @@
     <Project Path="src/Lunalyr.Render/Lunalyr.Render.csproj">
       <Platform Project="x64" />
     </Project>
+    <Project Path="src/Lunalyr.Shell/Lunalyr.Shell.csproj">
+      <Platform Project="x64" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Lunalyr.Core.Tests/Lunalyr.Core.Tests.csproj" />
     <Project Path="tests/Lunalyr.Platform.Windows.Tests/Lunalyr.Platform.Windows.Tests.csproj" />
+    <Project Path="tests/Lunalyr.Shell.Tests/Lunalyr.Shell.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
   </Folder>
 </Solution>

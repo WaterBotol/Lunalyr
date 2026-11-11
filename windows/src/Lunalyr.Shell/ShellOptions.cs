@@ -1,0 +1,111 @@
+using System.Globalization;
+using Lunalyr.Core.Logging;
+
+namespace Lunalyr.Shell;
+
+/// <summary>
+/// The command line.
+/// <list type="table">
+/// <item><term><c>--no-playback</c></term><description>Turns off every playback command to players and every sound
+/// Lunalyr could make, for the whole process (the owner's test flag).</description></item>
+/// <item><term><c>--data &lt;folder&gt;</c></term><description>Keep settings, logs and caches in this folder instead
+/// of <c>%LOCALAPPDATA%\Lunalyr</c> (for testing). Instances with different data folders are separate.</description></item>
+/// <item><term><c>--seconds &lt;N&gt;</c></term><description>Quit after N seconds (for checks).</description></item>
+/// <item><term><c>--log-level &lt;debug|info|warn|error&gt;</c></term><description>Minimum log level (default info).</description></item>
+/// <item><term><c>--settings</c></term><description>Open the settings window (also what a second launch does).</description></item>
+/// <item><term><c>--no-network</c></term><description>Don't look lyrics up online (for checks; nothing is sent to any lyric service).</description></item>
+/// <item><term><c>lunalyr://…</c></term><description>A link to act on (forwarded to the running instance).</description></item>
+/// </list>
+/// </summary>
+public sealed record ShellOptions
+{
+    public bool NoPlayback { get; init; }
+
+    public string? DataRoot { get; init; }
+
+    public double? QuitAfterSeconds { get; init; }
+
+    public LogLevel LogLevel { get; init; } = LogLevel.Info;
+
+    public bool OpenSettings { get; init; }
+
+    public bool NoNetwork { get; init; }
+
+    public IReadOnlyList<string> Links { get; init; } = [];
+
+    /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
+    public IReadOnlyList<string> Problems { get; init; } = [];
+
+    public const string LinkScheme = "lunalyr:";
+
+    public static ShellOptions Parse(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        var options = new ShellOptions();
+        var links = new List<string>();
+        var problems = new List<string>();
+        for (var i = 0; i < args.Count; i++)
+        {
+            var arg = args[i];
+            string? Value()
+            {
+                if (i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) return args[++i];
+                problems.Add($"{arg} needs a value.");
+                return null;
+            }
+
+            switch (arg.ToLowerInvariant())
+            {
+                case "--no-playback":
+                    options = options with { NoPlayback = true };
+                    break;
+                case "--no-network":
+                    options = options with { NoNetwork = true };
+                    break;
+                case "--settings":
+                    options = options with { OpenSettings = true };
+                    break;
+                case "--data":
+                    if (Value() is { } folder)
+                    {
+                        if (folder.Trim().Length == 0) problems.Add("--data needs a folder.");
+                        else options = options with { DataRoot = Path.GetFullPath(folder.Trim()) };
+                    }
+                    break;
+                case "--seconds":
+                    if (Value() is { } text)
+                    {
+                        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) && seconds > 0 && double.IsFinite(seconds))
+                            options = options with { QuitAfterSeconds = seconds };
+                        else problems.Add($"--seconds {text}: expected a positive number of seconds.");
+                    }
+                    break;
+                case "--log-level":
+                    if (Value() is { } level)
+                    {
+                        if (TryParseLevel(level, out var parsed)) options = options with { LogLevel = parsed };
+                        else problems.Add($"--log-level {level}: expected debug, info, warn or error.");
+                    }
+                    break;
+                default:
+                    if (arg.StartsWith(LinkScheme, StringComparison.OrdinalIgnoreCase)) links.Add(arg);
+                    else problems.Add($"Unknown argument {arg}.");
+                    break;
+            }
+        }
+
+        return options with { Links = links, Problems = problems };
+    }
+
+    public static bool TryParseLevel(string text, out LogLevel level)
+    {
+        switch (text.Trim().ToLowerInvariant())
+        {
+            case "debug": level = LogLevel.Debug; return true;
+            case "info": level = LogLevel.Info; return true;
+            case "warn" or "warning": level = LogLevel.Warn; return true;
+            case "error": level = LogLevel.Error; return true;
+            default: level = LogLevel.Info; return false;
+        }
+    }
+}

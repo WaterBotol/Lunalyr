@@ -1,0 +1,671 @@
+using Lunalyr.Core.Logging;
+using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Lyrics.Readings;
+using Lunalyr.Core.Lyrics.Timing;
+using Lunalyr.Core.NowPlaying;
+using Lunalyr.Core.Playback;
+using Lunalyr.Platform.NowPlaying;
+using Lunalyr.Render.Scene;
+using Lunalyr.Shell.Lyrics;
+using Lunalyr.Shell.Rendering;
+using Lunalyr.Shell.Settings;
+
+namespace Lunalyr.Shell;
+
+/// <summary>Tuning for <see cref="AppController"/>; tests shorten the waits.</summary>
+public sealed record AppControllerOptions
+{
+    /// <summary>
+    /// How long to wait after a track change for the player's timeline (its length and position), which arrives after
+    /// the title. A track that still has no length after this is treated as a stream; no timeline at all means the
+    /// player doesn't share its position.
+    /// </summary>
+    public TimeSpan TimelineWait { get; init; } = TimeSpan.FromSeconds(2);
+
+    public TimeSpan TimelinePoll { get; init; } = TimeSpan.FromMilliseconds(100);
+
+    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
+
+    public SongClockOptions? Clock { get; init; }
+}
+
+/// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>
+public sealed record AppStatus
+{
+    /// <summary>The followed player's name ("Spotify"), or null when nothing is playing.</summary>
+    public string? Player { get; init; }
+
+    /// <summary>The player's GSMTC app id.</summary>
+    public string? PlayerAppId { get; init; }
+
+    public PlaybackStatus Playback { get; init; } = PlaybackStatus.Closed;
+
+    public string? Title { get; init; }
+
+    public string? Artist { get; init; }
+
+    public string? Album { get; init; }
+
+    /// <summary>The song length the lookup used, in seconds.</summary>
+    public double? Duration { get; init; }
+
+    /// <summary>Where the lyrics on screen came from ("Word-by-word · LRCLIB"), or null.</summary>
+    public string? LyricSource { get; init; }
+
+    /// <summary>One calm line (<see cref="StatusText"/>).</summary>
+    public string Status { get; init; } = StatusText.NothingPlaying;
+
+    public bool WallpaperPaused { get; init; }
+
+    /// <summary>Why playback commands are off (<c>--no-playback</c>), or null.</summary>
+    public string? PlaybackCommandsBlocked { get; init; }
+
+    /// <summary>Lyric lookups started since launch.</summary>
+    public int Lookups { get; init; }
+}
+
+/// <summary>
+/// The app's wiring: the system's media sessions → <see cref="NowPlayingMonitor"/> → on each track change a lyric
+/// lookup (with progress) → <see cref="SceneSnapshot"/>s for the renderer, plus the song clock it reads every frame
+/// (the player's position + the global offset + the song's own offset). Every failure ends in a calm status line.
+/// </summary>
+/// <remarks>
+/// <para>Read-only towards players: it never sends a playback command. Pausing the wallpaper stops the renderer, not
+/// the music.</para>
+/// <para>Thread-safe. Monitor events arrive on arbitrary threads; each track change starts a new lookup generation
+/// and cancels the previous one, and results from an older generation are dropped. <see cref="StatusChanged"/> is
+/// raised on whichever thread made the change.</para>
+/// </remarks>
+public sealed class AppController : IAsyncDisposable
+{
+    private readonly IMediaSessionSource _source;
+    private readonly ILyricLookup _lyrics;
+    private readonly IWallpaperRenderer _renderer;
+    private readonly SongOffsets _offsets;
+    private readonly LyricRomanizer _romanizer;
+    private readonly PlaybackGuard _guard;
+    private readonly ILyricConnectivity? _connectivity;
+    private readonly AppControllerOptions _options;
+    private readonly CategoryLogger _app;
+    private readonly CategoryLogger _player;
+    private readonly CategoryLogger _lyricLog;
+    private readonly Lock _gate = new();
+    private readonly Func<(double Seconds, bool Playing)> _clockReader;
+
+    private AppSettings _settings;
+    private SceneSnapshot _scene;
+    private AppStatus _status;
+    private long _generation;
+    private CancellationTokenSource? _lookupCts;
+    private MediaTrackInfo? _lookupTrack;
+    private LyricQuery? _query;
+    private LyricResult? _shown;
+    private bool _retryWhenOnline;
+    private bool _started;
+    private bool _disposed;
+    private readonly List<Task> _work = [];
+
+    // Read every frame without the lock.
+    private string? _recordingKey;
+    private double _globalOffset;
+    private int _hasSession;
+
+    public AppController(IMediaSessionSource source, ILyricLookup lyrics, IWallpaperRenderer renderer, AppSettings settings,
+        SongOffsets songOffsets, ReadingServices readings, PlaybackGuard guard, Logger logger,
+        ILyricConnectivity? connectivity = null, AppControllerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(lyrics);
+        ArgumentNullException.ThrowIfNull(renderer);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(songOffsets);
+        ArgumentNullException.ThrowIfNull(readings);
+        ArgumentNullException.ThrowIfNull(guard);
+        ArgumentNullException.ThrowIfNull(logger);
+        _source = source;
+        _lyrics = lyrics;
+        _renderer = renderer;
+        _offsets = songOffsets;
+        _romanizer = new LyricRomanizer(readings);
+        _guard = guard;
+        _connectivity = connectivity;
+        _options = options ?? new AppControllerOptions();
+        _app = logger.App;
+        _player = logger.Player;
+        _lyricLog = logger.Lyrics;
+        _settings = settings.Normalized();
+        _globalOffset = _settings.LyricOffset;
+        _scene = new SceneSnapshot { Style = _settings.Style() };
+        _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
+        _clockReader = ReadClock;
+        Monitor = new NowPlayingMonitor(source, _options.TimeProvider, _options.Clock, message => _player.Debug(message));
+    }
+
+    /// <summary>The now-playing monitor the controller follows (read-only).</summary>
+    public NowPlayingMonitor Monitor { get; }
+
+    /// <summary>The scene last handed to the renderer.</summary>
+    public SceneSnapshot Scene
+    {
+        get { lock (_gate) return _scene; }
+    }
+
+    public AppStatus Status
+    {
+        get { lock (_gate) return _status; }
+    }
+
+    public AppSettings Settings
+    {
+        get { lock (_gate) return _settings; }
+    }
+
+    /// <summary><see cref="Status"/> or <see cref="Scene"/> changed. Raised on any thread.</summary>
+    public event EventHandler? StatusChanged;
+
+    /// <summary>Hands the renderer its clock, layers and first scene, starts it unless paused, and starts following players.</summary>
+    public void Start()
+    {
+        AppSettings settings;
+        SceneSnapshot scene;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_started) return;
+            _started = true;
+            settings = _settings;
+            scene = _scene;
+        }
+
+        _renderer.SetClock(_clockReader);
+        _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
+        _renderer.SetFrameRate(settings.AnimationRate);
+        _renderer.SetScene(scene);
+        if (!settings.WallpaperPaused) _renderer.Start();
+        else _app.Info("Wallpaper starts paused (paused from the tray last time).");
+
+        Monitor.SessionChanged += OnSessionChanged;
+        Monitor.TrackChanged += OnTrackChanged;
+        Monitor.PlaybackChanged += OnPlaybackChanged;
+        if (_connectivity is not null) _connectivity.Restored += OnConnectivityRestored;
+        if (_guard.Reason is { } reason) _app.Info($"Playback commands are off for this run ({reason}).");
+        Monitor.Start();
+    }
+
+    /// <summary>
+    /// The lyric time for the renderer: the player's position plus the global and this song's offsets, and whether it
+    /// is moving; NaN when nothing is playing or the player gives no position. Called every frame: no allocation.
+    /// </summary>
+    public (double Seconds, bool Playing) ReadClock()
+    {
+        if (Volatile.Read(ref _hasSession) == 0) return (double.NaN, false);
+        var reading = Monitor.Clock.Read();
+        if (!reading.HasTimeline) return (double.NaN, false);
+        var key = Volatile.Read(ref _recordingKey);
+        var song = key is null ? 0 : _offsets.OffsetFor(key);
+        return (SongOffsets.LyricTime(reading.Position.TotalSeconds, Volatile.Read(ref _globalOffset), song), reading.IsPlaying);
+    }
+
+    /// <summary>Takes in changed settings: style, layers, frame rate, offset, pause, readings, and the lyric sources.</summary>
+    public void ApplySettings(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings = settings.Normalized();
+        AppSettings old;
+        SceneSnapshot? scene = null;
+        MediaTrackInfo? relook = null;
+        LyricResult? rereadings = null;
+        long generation;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            old = _settings;
+            _settings = settings;
+            Volatile.Write(ref _globalOffset, settings.LyricOffset);
+            generation = _generation;
+            var style = settings.Style();
+            if (style != _scene.Style)
+            {
+                _scene = _scene with { Style = style };
+                scene = _scene;
+            }
+
+            if ((!old.SourceSnapshot().Equals(settings.SourceSnapshot()) || old.RepairQQGaps != settings.RepairQQGaps)
+                && _lookupTrack is not null)
+            {
+                relook = _lookupTrack;
+            }
+            else if (old.Readings() != settings.Readings() && _shown is not null)
+            {
+                rereadings = _shown;
+            }
+
+            if (old.WallpaperPaused != settings.WallpaperPaused) _status = _status with { WallpaperPaused = settings.WallpaperPaused };
+        }
+
+        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition)
+            _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
+        if (old.AnimationRate != settings.AnimationRate) _renderer.SetFrameRate(settings.AnimationRate);
+        if (old.WallpaperPaused != settings.WallpaperPaused)
+        {
+            if (settings.WallpaperPaused) _renderer.Stop();
+            else _renderer.Start();
+            _app.Info(settings.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
+        }
+
+        if (scene is not null) _renderer.SetScene(scene);
+        if (relook is not null)
+        {
+            _lyricLog.Info("Lyric source settings changed: looking the song up again.");
+            BeginLookup(relook);
+        }
+        else if (rereadings is not null)
+        {
+            StartReadings(generation, rereadings, settings.Readings());
+        }
+
+        RaiseStatusChanged();
+    }
+
+    /// <summary>Completes when no lookup or readings work is running (for tests and orderly shutdown).</summary>
+    internal async Task WhenIdleAsync()
+    {
+        while (true)
+        {
+            Task[] work;
+            lock (_gate)
+            {
+                _work.RemoveAll(task => task.IsCompleted);
+                work = [.. _work];
+            }
+
+            if (work.Length == 0) return;
+            await Task.WhenAll(work).ConfigureAwait(false);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _generation++;
+            _lookupCts?.Cancel();
+        }
+
+        Monitor.SessionChanged -= OnSessionChanged;
+        Monitor.TrackChanged -= OnTrackChanged;
+        Monitor.PlaybackChanged -= OnPlaybackChanged;
+        if (_connectivity is not null) _connectivity.Restored -= OnConnectivityRestored;
+        Monitor.Dispose();
+        try
+        {
+            await WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _app.Warn("A lyric lookup was still finishing at shutdown.");
+        }
+
+        _renderer.Stop();
+    }
+
+    // ---- Now playing ----
+
+    private void OnSessionChanged(object? sender, EventArgs e)
+    {
+        var session = Monitor.Session;
+        Volatile.Write(ref _hasSession, session is null ? 0 : 1);
+        SceneSnapshot scene;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            // A different player: whatever was being looked up belongs to the old one.
+            CancelLookupLocked();
+            _scene = new SceneSnapshot { Style = _settings.Style() };
+            _status = _status with
+            {
+                Player = session?.SourceApp.DisplayName,
+                PlayerAppId = session?.SourceAppUserModelId,
+                Playback = Monitor.PlaybackInfo.Status,
+                Title = null,
+                Artist = null,
+                Album = null,
+                Duration = null,
+                LyricSource = null,
+                Status = session is null ? StatusText.NothingPlaying : StatusText.WaitingForTrack,
+            };
+            scene = _scene;
+        }
+
+        _player.Info(session is null ? "No player is sharing what it plays." : $"Following {session.SourceApp.DisplayName} ({session.SourceAppUserModelId}).");
+        _renderer.SetScene(scene);
+        RaiseStatusChanged();
+    }
+
+    private void OnTrackChanged(object? sender, EventArgs e)
+    {
+        if (Monitor.Track is { } track) BeginLookup(track);
+    }
+
+    private void OnPlaybackChanged(object? sender, EventArgs e)
+    {
+        var playback = Monitor.PlaybackInfo.Status;
+        lock (_gate)
+        {
+            if (_disposed || _status.Playback == playback) return;
+            _status = _status with { Playback = playback };
+        }
+
+        _player.Debug($"Playback: {playback}.");
+        RaiseStatusChanged();
+    }
+
+    private void OnConnectivityRestored(object? sender, EventArgs e)
+    {
+        MediaTrackInfo? track;
+        lock (_gate)
+        {
+            if (_disposed || !_retryWhenOnline) return;
+            _retryWhenOnline = false;
+            track = _lookupTrack;
+        }
+
+        if (track is null) return;
+        _lyricLog.Info("Back online: looking the song up again.");
+        BeginLookup(track);
+    }
+
+    // ---- Lookups ----
+
+    private void BeginLookup(MediaTrackInfo track)
+    {
+        long generation;
+        CancellationTokenSource cts;
+        SceneSnapshot scene;
+        var disabled = _lyrics.DisabledReason;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            CancelLookupLocked();
+            generation = _generation;
+            cts = new CancellationTokenSource();
+            _lookupCts = cts;
+            _lookupTrack = track;
+            _scene = new SceneSnapshot
+            {
+                Title = track.Title,
+                Artist = track.Artist,
+                Style = _settings.Style(),
+                Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
+            };
+            _status = _status with
+            {
+                Title = track.Title,
+                Artist = track.Artist,
+                Album = track.AlbumTitle.Length > 0 ? track.AlbumTitle : null,
+                Duration = null,
+                LyricSource = null,
+                Status = _scene.Status!,
+                Lookups = _status.Lookups + (disabled is null ? 1 : 0),
+            };
+            scene = _scene;
+        }
+
+        _player.Info($"Now playing: \"{track.Title}\" by \"{track.Artist}\".");
+        _renderer.SetScene(scene);
+        RaiseStatusChanged();
+        if (disabled is not null)
+        {
+            _lyricLog.Info($"Not looking lyrics up: {disabled}.");
+            cts.Dispose();
+            lock (_gate)
+            {
+                if (ReferenceEquals(_lookupCts, cts)) _lookupCts = null;
+            }
+
+            return;
+        }
+
+        Track(RunLookupAsync(generation, track, cts));
+    }
+
+    // Must hold _gate. Moves to a new generation so anything still running for the old one is ignored.
+    private void CancelLookupLocked()
+    {
+        _generation++;
+        _lookupCts?.Cancel();
+        _lookupCts = null;
+        _lookupTrack = null;
+        _query = null;
+        _shown = null;
+        _retryWhenOnline = false;
+        Volatile.Write(ref _recordingKey, null);
+        _offsets.ActiveSource = null;
+    }
+
+    private async Task RunLookupAsync(long generation, MediaTrackInfo track, CancellationTokenSource cts)
+    {
+        var ct = cts.Token;
+        try
+        {
+            await Task.Yield(); // Off the player's event thread.
+            var reading = await WaitForTimelineAsync(ct).ConfigureAwait(false);
+            if (!reading.HasTimeline)
+            {
+                _lyricLog.Info("The player gave no position for this track, so lyrics can't follow it.");
+                Finish(generation, StatusText.NoPosition);
+                return;
+            }
+
+            if (reading.Duration is not { } duration || duration <= TimeSpan.Zero)
+            {
+                _lyricLog.Info("The track has no length (a stream or radio), so lyrics aren't looked up.");
+                Finish(generation, StatusText.Stream);
+                return;
+            }
+
+            var query = new LyricQuery(track.Title, track.Artist, track.AlbumTitle.Length > 0 ? track.AlbumTitle : null, duration.TotalSeconds);
+            LyricSourceSnapshot options;
+            bool repair;
+            lock (_gate)
+            {
+                if (generation != _generation) return;
+                _query = query;
+                Volatile.Write(ref _recordingKey, query.RecordingKey);
+                _status = _status with { Duration = duration.TotalSeconds };
+                options = _settings.SourceSnapshot();
+                repair = _settings.RepairQQGaps;
+            }
+
+            var shownRevision = 0;
+            var report = await _lyrics.LookupAsync(query, options, update =>
+            {
+                if (update.Result is not null && update.Revision != shownRevision)
+                {
+                    shownRevision = update.Revision;
+                    Show(generation, query, update.Result, repair, complete: false);
+                }
+
+                return ValueTask.CompletedTask;
+            }, ct).ConfigureAwait(false);
+
+            if (report.Result is not null)
+            {
+                if (report.Revision != shownRevision || shownRevision == 0) Show(generation, query, report.Result, repair, complete: true);
+                else MarkComplete(generation);
+                _lyricLog.Info($"Showing {report.Result.Provenance.Label}{(report.Cached ? " (saved)" : "")}.");
+            }
+            else if (report.Offline)
+            {
+                lock (_gate)
+                {
+                    if (generation == _generation) _retryWhenOnline = true;
+                }
+
+                _lyricLog.Info("No lyrics: offline. Looking again when the connection is back.");
+                Finish(generation, StatusText.Offline);
+            }
+            else if (report.SkippedStream)
+            {
+                Finish(generation, StatusText.Stream);
+            }
+            else
+            {
+                _lyricLog.Info("No lyrics found for this song.");
+                Finish(generation, StatusText.NoLyrics);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A newer track (or shutdown) took over.
+        }
+        catch (Exception ex)
+        {
+            _lyricLog.Error("The lyric lookup failed.", ex);
+            Finish(generation, StatusText.LookupFailed);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_lookupCts, cts)) _lookupCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private async Task<SongClockReading> WaitForTimelineAsync(CancellationToken ct)
+    {
+        var reading = Monitor.Clock.Read();
+        var waited = TimeSpan.Zero;
+        while ((!reading.HasTimeline || reading.Duration is null) && waited < _options.TimelineWait)
+        {
+            await Task.Delay(_options.TimelinePoll, _options.TimeProvider, ct).ConfigureAwait(false);
+            waited += _options.TimelinePoll;
+            reading = Monitor.Clock.Read();
+        }
+
+        return reading;
+    }
+
+    private void Show(long generation, LyricQuery query, LyricResult result, bool repair, bool complete)
+    {
+        var presented = LyricPresentation.Prepare(result, query, repair, _lyrics.WordDistributor);
+        if (presented is null)
+        {
+            if (complete) Finish(generation, StatusText.NoLyrics);
+            return;
+        }
+
+        SceneSnapshot scene;
+        RomanizationOptions readings;
+        lock (_gate)
+        {
+            if (generation != _generation) return;
+            _shown = presented;
+            _offsets.ActiveSource = result.Provenance.Source;
+            _scene = _scene with { Lyrics = presented, Readings = new Dictionary<int, string>(), Status = null };
+            _status = _status with { LyricSource = presented.Provenance.Label, Status = complete ? StatusText.Showing : StatusText.LookingUp };
+            scene = _scene;
+            readings = _settings.Readings();
+        }
+
+        _renderer.SetScene(scene);
+        RaiseStatusChanged();
+        StartReadings(generation, presented, readings);
+    }
+
+    private void MarkComplete(long generation)
+    {
+        lock (_gate)
+        {
+            if (generation != _generation || _status.Status == StatusText.Showing) return;
+            _status = _status with { Status = StatusText.Showing };
+        }
+
+        RaiseStatusChanged();
+    }
+
+    // Readings come from the system's language services and can take a moment on a long Japanese song, so they are
+    // worked out off the lookup's flow and added to the scene when ready.
+    private void StartReadings(long generation, LyricResult shown, RomanizationOptions options)
+    {
+        if (shown is not LyricResult.Synced || options.Display == RomanizationDisplay.Off)
+        {
+            SceneSnapshot? cleared = null;
+            lock (_gate)
+            {
+                if (generation == _generation && ReferenceEquals(_shown, shown) && _scene.Readings.Count > 0)
+                {
+                    _scene = _scene with { Readings = new Dictionary<int, string>() };
+                    cleared = _scene;
+                }
+            }
+
+            if (cleared is not null) _renderer.SetScene(cleared);
+            return;
+        }
+
+        Track(Task.Run(() =>
+        {
+            try
+            {
+                var readings = LyricPresentation.Readings(shown, _romanizer, options);
+                SceneSnapshot scene;
+                lock (_gate)
+                {
+                    if (generation != _generation || !ReferenceEquals(_shown, shown)) return;
+                    _scene = _scene with { Readings = readings };
+                    scene = _scene;
+                }
+
+                _renderer.SetScene(scene);
+                RaiseStatusChanged();
+            }
+            catch (Exception ex)
+            {
+                _lyricLog.Warn("Couldn't work out the readings for this song.", ex);
+            }
+        }));
+    }
+
+    private void Finish(long generation, string status)
+    {
+        SceneSnapshot scene;
+        lock (_gate)
+        {
+            if (generation != _generation) return;
+            _scene = _scene with { Lyrics = null, Readings = new Dictionary<int, string>(), Status = status };
+            _status = _status with { Status = status, LyricSource = null };
+            scene = _scene;
+        }
+
+        _renderer.SetScene(scene);
+        RaiseStatusChanged();
+    }
+
+    private void Track(Task task)
+    {
+        lock (_gate)
+        {
+            _work.RemoveAll(t => t.IsCompleted);
+            _work.Add(task);
+        }
+    }
+
+    private void RaiseStatusChanged()
+    {
+        try
+        {
+            StatusChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _app.Warn("A status listener failed.", ex);
+        }
+    }
+}
