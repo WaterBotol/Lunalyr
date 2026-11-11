@@ -176,11 +176,21 @@ public class SettingsRecoveryTests
             Assert.Equal(SettingsProblemKind.Unreadable, problem.Kind);
             Assert.Null(problem.PreservedAs);
             Assert.False(store.HasUnsavedChanges);
+
+            // The possibly-newer main file is not overwritten just because it was locked for a moment...
+            Assert.Equal(2, CounterIn(main));
+            Assert.Equal(1, CounterIn(temp.File("settings.json.bak")));
+            Assert.DoesNotContain(temp.FileNames(), f => f.Contains("corrupt", StringComparison.Ordinal));
+
+            // ...and once the user changes settings, it is copied aside before saves rotate it away.
+            store.Set(new SampleSettings { Counter = 7 });
+            Assert.True(await store.FlushAsync());
+            store.Set(new SampleSettings { Counter = 8 });
+            Assert.True(await store.FlushAsync());
         }
-        // The possibly-newer main file is not overwritten just because it was locked for a moment.
-        Assert.Equal(2, CounterIn(main));
-        Assert.Equal(1, CounterIn(temp.File("settings.json.bak")));
-        Assert.DoesNotContain(temp.FileNames(), f => f.Contains("corrupt", StringComparison.Ordinal));
+        var kept = Assert.Single(temp.FileNames(), f => f.StartsWith("settings.json.unread-", StringComparison.Ordinal));
+        Assert.Equal(2, CounterIn(temp.File(kept)));
+        Assert.Equal(8, CounterIn(main));
 
         static Task<SettingsStore<SampleSettings>> OpenWhileLockedAsync(string path, TempFolder temp)
         {

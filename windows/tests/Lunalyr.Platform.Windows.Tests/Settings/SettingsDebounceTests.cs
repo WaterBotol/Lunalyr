@@ -89,9 +89,9 @@ public class SettingsDebounceTests
         Assert.True(await store.FlushAsync());
         Assert.Equal(1, store.SaveCount);
         Assert.Equal(3, SavedCounter(temp));
+        Assert.Equal(0, time.ActiveTimerCount); // The debounce timer was stopped.
 
         time.Advance(TimeSpan.FromSeconds(5));
-        await Task.Delay(20, TestContext.Current.CancellationToken); // Let a (wrongly) scheduled save run if there were one.
         Assert.Equal(1, store.SaveCount);
     }
 }

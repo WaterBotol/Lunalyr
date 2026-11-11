@@ -55,6 +55,7 @@ public sealed class SettingsStore<T> : IAsyncDisposable
     private bool _disposed;
     private volatile Exception? _lastSaveError;
     private int _saveCount;
+    private bool _keepUnreadableMainBeforeSave; // Only touched at load and under _ioLock.
 
     private SettingsStore(SettingsStoreOptions<T> options)
     {
@@ -165,7 +166,25 @@ public sealed class SettingsStore<T> : IAsyncDisposable
     /// Writes any pending change now. Returns true when the latest settings are on disk; on failure
     /// <see cref="SaveFailed"/> has been raised and <see cref="LastSaveError"/> says why. Never throws.
     /// </summary>
-    public Task<bool> FlushAsync() => SaveNowAsync();
+    public async Task<bool> FlushAsync()
+    {
+        var saved = await SaveNowAsync().ConfigureAwait(false);
+        if (saved)
+        {
+            // Nothing left for the debounce timer to do: stop it.
+            CancellationTokenSource? pending = null;
+            lock (_gate)
+            {
+                if (_savedSeq >= _changeSeq)
+                {
+                    pending = _debounce;
+                    _debounce = null;
+                }
+            }
+            pending?.Cancel();
+        }
+        return saved;
+    }
 
     /// <summary>Flushes pending changes and stops accepting updates.</summary>
     public async ValueTask DisposeAsync()
@@ -229,6 +248,10 @@ public sealed class SettingsStore<T> : IAsyncDisposable
             {
                 var bytes = Serialize(value);
                 Directory.CreateDirectory(_options.Folder);
+                if (_keepUnreadableMainBeforeSave)
+                {
+                    KeepUnreadableMain();
+                }
                 AtomicFile.Write(FilePath, bytes, _options.IoRetryDelay, _options.BeforeCommit);
             }
             catch (Exception ex)
@@ -323,6 +346,9 @@ public sealed class SettingsStore<T> : IAsyncDisposable
         {
             problems.Add(Problem(FilePath, main));
         }
+        // A main file we couldn't open may be fine (and newer). Saves rotate it into .bak and then away, so copy it
+        // aside first.
+        _keepUnreadableMainBeforeSave = main.Status == ReadStatus.Unreadable;
 
         var backup = ReadFile(backupPath);
         if (backup.Status == ReadStatus.Ok)
@@ -499,6 +525,26 @@ public sealed class SettingsStore<T> : IAsyncDisposable
             : new ReadResult(ReadStatus.Ok, value, version, migrated, string.Empty);
 
         ReadResult Corrupt(string detail) => new(ReadStatus.Corrupt, null, null, false, detail);
+    }
+
+    private void KeepUnreadableMain()
+    {
+        var stamp = _options.TimeProvider.GetUtcNow().ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
+        var copy = $"{FilePath}.unread-{stamp}";
+        try
+        {
+            if (File.Exists(FilePath))
+            {
+                File.Copy(FilePath, copy, overwrite: true);
+                _log.Info($"Kept the settings file that couldn't be read at start-up as {copy}");
+            }
+            _keepUnreadableMainBeforeSave = false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Still locked: the save will most likely fail too, and we try again next time.
+            _log.Warn($"Couldn't copy {FilePath} aside yet", ex);
+        }
     }
 
     private static void MergeInto(JsonObject target, JsonObject source)
