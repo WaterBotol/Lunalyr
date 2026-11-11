@@ -65,6 +65,22 @@ public class RomanizationTests
         Assert.Null(LyricReadingPairs.Line(_t.Readings(word), word, RomanizationDisplay.Below));
     }
 
+    // Ported from RomanizationTests.swift: testRollingStageDrawsAnUnsplittableReadingUnderTheLinesFirstWord (the
+    // readings a rolling stage pairs, LyricReadingPairs.Rolling; the layer cache's window is view code)
+    [Fact]
+    public void RollingStageDrawsAnUnsplittableReadingUnderTheLinesFirstWord()
+    {
+        var line = Line(["사랑해", "같이"], spaced: true, reading: "saranghae gachi gaja");
+        var placed = _t.Readings(line);
+        Assert.NotNull(placed);
+        Assert.Equal(new Dictionary<LyricWord, string> { [line.Words[0]] = "saranghae gachi gaja" },
+            LyricReadingPairs.Rolling(placed, line, LyricRuns.Glue(line, line.Words)));
+        // Readings that do split by word stay with their words.
+        var split = Line(["사랑해", "같이"], spaced: true, reading: "saranghae gachi");
+        Assert.Equal(new Dictionary<LyricWord, string> { [split.Words[0]] = "saranghae", [split.Words[1]] = "gachi" },
+            LyricReadingPairs.Rolling(_t.Readings(split), split, LyricRuns.Glue(split, split.Words)));
+    }
+
     // Ported from RomanizationTests.swift: testSavedChineseReadingsAlignByCharacter
     [Fact]
     public void SavedChineseReadingsAlignByCharacter()
