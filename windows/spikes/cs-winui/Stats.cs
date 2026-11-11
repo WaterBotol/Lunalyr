@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace LunalyrSpike;
 
@@ -30,45 +31,45 @@ internal sealed class Stats
         }
     }
 
-    static object Pct(List<double> v)
+    static JsonObject Pct(List<double> v)
     {
-        if (v.Count == 0) return new { avg = 0.0, p50 = 0.0, p95 = 0.0, p99 = 0.0 };
+        if (v.Count == 0) return new JsonObject { ["avg"] = 0.0, ["p50"] = 0.0, ["p95"] = 0.0, ["p99"] = 0.0 };
         var s = v.OrderBy(x => x).ToArray();
         double P(double q) => s[Math.Min(s.Length - 1, (int)(q * s.Length))];
-        return new { avg = Math.Round(s.Average(), 3), p50 = Math.Round(P(0.5), 3), p95 = Math.Round(P(0.95), 3), p99 = Math.Round(P(0.99), 3) };
+        return new JsonObject { ["avg"] = Math.Round(s.Average(), 3), ["p50"] = Math.Round(P(0.5), 3), ["p95"] = Math.Round(P(0.95), 3), ["p99"] = Math.Round(P(0.99), 3) };
     }
 
-    public void Write(string path, string adapter, IEnumerable<object> monitors, int refreshHz)
+    public void Write(string path, string adapter, IEnumerable<JsonObject> monitors, int refreshHz)
     {
         var p = Process.GetCurrentProcess();
         p.Refresh();
         double wallS = _wall.Elapsed.TotalSeconds;
         double cpuS = (p.TotalProcessorTime - _cpuAtStart).TotalSeconds;
         double refreshMs = 1000.0 / Math.Max(1, refreshHz);
-        object result;
+        JsonObject result;
         lock (_lock)
         {
-            result = new
+            result = new JsonObject
             {
-                stack = "cs-winui-d2d",
-                adapter,
-                monitors,
-                seconds = Math.Round(wallS, 2),
-                frames = _cpu.Count,
-                fps = Math.Round(_cpu.Count / wallS, 1),
-                cpuMsPerFrame = Pct(_cpu),
-                frameIntervalMs = Pct(_interval),
-                slowFrames = _interval.Count(x => x > refreshMs * 1.5),
-                startupMs = Math.Round(StartupMs, 1),
-                workingSetMB = Math.Round(p.WorkingSet64 / 1048576.0, 1),
-                peakWorkingSetMB = Math.Round(p.PeakWorkingSet64 / 1048576.0, 1),
-                privateMB = Math.Round(p.PrivateMemorySize64 / 1048576.0, 1),
-                processCpuPercent = Math.Round(cpuS / wallS / Environment.ProcessorCount * 100, 2),
-                notes = Notes,
+                ["stack"] = System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? "cs-winui-d2d" : "cs-winui-d2d-aot",
+                ["adapter"] = adapter,
+                ["monitors"] = new JsonArray(monitors.Select(m => (JsonNode)m.DeepClone()).ToArray()),
+                ["seconds"] = Math.Round(wallS, 2),
+                ["frames"] = _cpu.Count,
+                ["fps"] = Math.Round(_cpu.Count / wallS, 1),
+                ["cpuMsPerFrame"] = Pct(_cpu),
+                ["frameIntervalMs"] = Pct(_interval),
+                ["slowFrames"] = _interval.Count(x => x > refreshMs * 1.5),
+                ["startupMs"] = Math.Round(StartupMs, 1),
+                ["workingSetMB"] = Math.Round(p.WorkingSet64 / 1048576.0, 1),
+                ["peakWorkingSetMB"] = Math.Round(p.PeakWorkingSet64 / 1048576.0, 1),
+                ["privateMB"] = Math.Round(p.PrivateMemorySize64 / 1048576.0, 1),
+                ["processCpuPercent"] = Math.Round(cpuS / wallS / Environment.ProcessorCount * 100, 2),
+                ["notes"] = new JsonArray(Notes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
             };
         }
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        File.WriteAllText(path, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        File.WriteAllText(path, result.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     }
 }
 

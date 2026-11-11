@@ -104,13 +104,6 @@ internal sealed class Renderer : IDisposable
             }
             if (_surfaces.Count == 0) { Thread.Sleep(16); continue; }
 
-            if (_opt.FpsCap > 0 && lastRendered >= 0)
-            {
-                // Capped: sleep until the next frame is due (before taking a swap-chain slot).
-                double due = lastRendered + 1000.0 / _opt.FpsCap;
-                double wait = due - _clock.Elapsed.TotalMilliseconds;
-                if (wait > 1.5) Thread.Sleep((int)(wait - 1));
-            }
             var handles = _surfaces.Select(s => s.Waitable).ToArray();
             Native.WaitForMultipleObjects((uint)handles.Length, handles, true, 1000);
 
@@ -305,7 +298,9 @@ internal sealed class Renderer : IDisposable
             _snapshotDone = true;
             try { Snapshot(s, _opt.SnapshotPath); } catch (Exception ex) { _stats.Notes.Add("snapshot failed: " + ex.Message); }
         }
-        s.Swap!.Present(1, PresentFlags.None);
+        // A frame-rate cap presents every Nth vblank (sync interval N), which keeps frames evenly paced.
+        uint interval = _opt.FpsCap > 0 ? (uint)Math.Clamp(Math.Round((double)s.Hz / _opt.FpsCap), 1, 4) : 1;
+        s.Swap!.Present(interval, PresentFlags.None);
     }
 
     void Snapshot(Surface s, string path)

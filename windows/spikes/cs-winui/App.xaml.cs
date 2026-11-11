@@ -11,6 +11,10 @@ public partial class App : Application
     internal App(Options opt)
     {
         _opt = opt;
+        UnhandledException += (_, e) =>
+        {
+            File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "spike-crash.log"), $"{DateTime.Now:O} {e.Exception}\n{e.Message}\n");
+        };
         InitializeComponent();
     }
 

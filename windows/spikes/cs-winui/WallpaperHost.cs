@@ -19,7 +19,7 @@ internal sealed class WallpaperHost : IDisposable
     readonly uint _taskbarCreated;
     nint _msgWindow;
     readonly List<nint> _windows = [];
-    public List<object> MonitorReport { get; } = [];
+    public List<System.Text.Json.Nodes.JsonObject> MonitorReport { get; } = [];
     public int RefreshHz { get; private set; } = 60;
     public Action? OnQuit;
     public string LastTree = "";
@@ -65,7 +65,7 @@ internal sealed class WallpaperHost : IDisposable
             GetClientRect(hwnd, out var cr);
             _windows.Add(hwnd);
             surfaces.Add(new Surface(hwnd, cr.Width, cr.Height, scale, m.Hz));
-            MonitorReport.Add(new { w = cr.Width, h = cr.Height, dpi = m.Dpi, hz = m.Hz, mode = "windowed" });
+            MonitorReport.Add(new() { ["w"] = cr.Width, ["h"] = cr.Height, ["dpi"] = m.Dpi, ["hz"] = m.Hz, ["mode"] = "windowed" });
         }
         else
         {
@@ -83,7 +83,7 @@ internal sealed class WallpaperHost : IDisposable
                     SetWindowPos(hwnd, target.InsertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 _windows.Add(hwnd);
                 surfaces.Add(new Surface(hwnd, m.Bounds.Width, m.Bounds.Height, m.Dpi / 96f, m.Hz));
-                MonitorReport.Add(new { w = m.Bounds.Width, h = m.Bounds.Height, dpi = m.Dpi, hz = m.Hz, mode = target.Mode == AttachMode.Win24H2 ? "24h2" : "legacy" });
+                MonitorReport.Add(new() { ["w"] = m.Bounds.Width, ["h"] = m.Bounds.Height, ["dpi"] = m.Dpi, ["hz"] = m.Hz, ["mode"] = target.Mode == AttachMode.Win24H2 ? "24h2" : "legacy" });
             }
             LastTree = DesktopAttach.DumpTree();
         }
