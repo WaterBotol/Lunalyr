@@ -12,6 +12,8 @@ internal sealed class Options
     public bool Settings;
     public bool Layered;
     public string? GpuPreference;
+    public double CloseSettingsAfter;
+    public HashSet<string> Exp = []; // --exp a,b: timing experiments
 
     public static Options Parse(string[] args)
     {
@@ -32,6 +34,8 @@ internal sealed class Options
                 case "--settings": o.Settings = true; break;
                 case "--layered": o.Layered = true; break;
                 case "--gpu": o.GpuPreference = Next(); break; // low-power | high-performance
+                case "--close-settings-after": o.CloseSettingsAfter = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--exp": foreach (var e in Next().Split(',')) o.Exp.Add(e); break;
                 case "--no-playback": break; // the spike never plays anything
             }
         }

@@ -90,7 +90,7 @@ internal sealed class Renderer : IDisposable
 
     void Run(object? readyObj)
     {
-        Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
+        if (!_opt.Exp.Contains("normalprio")) Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
         InitDevice();
         ((ManualResetEventSlim)readyObj!).Set();
         var frameWatch = new Stopwatch();
@@ -144,7 +144,9 @@ internal sealed class Renderer : IDisposable
             [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0], out _d3d!, out _d3dCtx!).CheckError();
         chosen?.Dispose();
         using var dxgiDevice = _d3d.QueryInterface<IDXGIDevice1>();
-        dxgiDevice.SetMaximumFrameLatency(1);
+        // Only the swap chains get a frame latency of 1 (below). Setting it on the device too made Present block
+        // for up to 4.5 ms (p95) and raised CPU by ~50%; --exp devlat brings it back for comparison.
+        if (_opt.Exp.Contains("devlat")) dxgiDevice.SetMaximumFrameLatency(1);
         using var adapter = dxgiDevice.GetAdapter();
         AdapterName = adapter.Description.Description;
         _dxgiFactory = adapter.GetParent<IDXGIFactory2>();
@@ -277,7 +279,7 @@ internal sealed class Renderer : IDisposable
     void RenderSurface(Surface s, double nowMs)
     {
         var (li, lineStart) = Scene.LineAt(nowMs, _opt.StartLine);
-        if (li != s.LineIndex) BuildLine(s, li);
+        if (li != s.LineIndex) { long tb = Stopwatch.GetTimestamp(); BuildLine(s, li); _stats.AddPhase("buildLine", Stopwatch.GetElapsedTime(tb).TotalMilliseconds); }
 
         _ctx.Target = s.Target;
         _ctx.BeginDraw();
@@ -314,8 +316,10 @@ internal sealed class Renderer : IDisposable
                 _ctx.DrawImage(w.Out, new Vector2(w.Pos.X, w.Pos.Y + (float)(0.12 * em * (1 - e))), InterpolationMode.Linear, CompositeMode.SourceOver);
             }
         }
+        long tEnd0 = Stopwatch.GetTimestamp();
         _ctx.EndDraw();
-        _ctx.Target = null;
+        _stats.AddPhase("endDraw", Stopwatch.GetElapsedTime(tEnd0).TotalMilliseconds);
+        if (!_opt.Exp.Contains("keeptarget")) _ctx.Target = null;
 
         if (!_snapshotDone && _opt.SnapshotPath != null && nowMs >= _opt.SnapshotAt * 1000 && ReferenceEquals(s, _surfaces[0]))
         {
@@ -324,7 +328,9 @@ internal sealed class Renderer : IDisposable
         }
         // A frame-rate cap presents every Nth vblank (sync interval N), which keeps frames evenly paced.
         uint interval = _opt.FpsCap > 0 ? (uint)Math.Clamp(Math.Round((double)s.Hz / _opt.FpsCap), 1, 4) : 1;
+        long tP0 = Stopwatch.GetTimestamp();
         s.Swap!.Present(interval, PresentFlags.None);
+        _stats.AddPhase("present", Stopwatch.GetElapsedTime(tP0).TotalMilliseconds);
     }
 
     void Snapshot(Surface s, string path)

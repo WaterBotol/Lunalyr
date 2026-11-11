@@ -1,0 +1,41 @@
+{
+  "stack": "cs-winui-d2d-aot",
+  "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "monitors": [
+    {
+      "w": 2560,
+      "h": 1440,
+      "dpi": 120,
+      "hz": 60,
+      "mode": "24h2"
+    }
+  ],
+  "seconds": 24.01,
+  "frames": 1256,
+  "fps": 52.3,
+  "cpuMsPerFrame": {
+    "avg": 1.63,
+    "p50": 0.94,
+    "p95": 5.15,
+    "p99": 5.617
+  },
+  "frameIntervalMs": {
+    "avg": 19.1,
+    "p50": 16.673,
+    "p95": 20.669,
+    "p99": 21.496
+  },
+  "slowFrames": 6,
+  "startupMs": 241.7,
+  "workingSetMB": 72.4,
+  "peakWorkingSetMB": 72.4,
+  "privateMB": 102.9,
+  "processCpuPercent": 0.75,
+  "gcGen0": 0,
+  "gcGen2": 0,
+  "allocatedMB": 2,
+  "notes": [
+    "TaskbarCreated at 23:49:42: re-attaching",
+    "tree after attach:\nProgman 3054E ex=200080\r\n  SHELLDLL_DefView         70BE4 vis=True ex=80000 rect=(0,0,2560x1440)\r\n  LunalyrSpikeSurface      30608 vis=True ex=8000080 rect=(0,0,2560x1440)\r\n  WorkerW                  6011C vis=True ex=80000A0 rect=(0,0,2560x1440)\r\n"
+  ]
+}

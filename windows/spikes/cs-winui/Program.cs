@@ -13,7 +13,7 @@ public static class Program
         _ = Launch.IsRunning; // start the launch clock now (static fields initialise lazily)
         var opt = Options.Parse(args);
         SetProcessDpiAwarenessContext(-4); // per-monitor v2 (also in the manifest)
-        timeBeginPeriod(1);
+        if (!opt.Exp.Contains("notimer")) timeBeginPeriod(1);
 
         if (opt.Settings)
         {

@@ -11,13 +11,15 @@ internal sealed class Stats
     readonly List<double> _cpu = new(100_000), _interval = new(100_000);
     readonly object _lock = new();
     public readonly List<string> Notes = [];
+    readonly Dictionary<string, List<double>> _phases = [];
+    public void AddPhase(string name, double ms) { lock (_lock) { if (!_phases.TryGetValue(name, out var l)) _phases[name] = l = new(100_000); l.Add(ms); } }
     public double StartupMs;
     readonly Stopwatch _wall = Stopwatch.StartNew();
     TimeSpan _cpuAtStart = Process.GetCurrentProcess().TotalProcessorTime;
 
     public void ResetWindow()
     {
-        lock (_lock) { _cpu.Clear(); _interval.Clear(); }
+        lock (_lock) { _cpu.Clear(); _interval.Clear(); foreach (var l in _phases.Values) l.Clear(); }
         _wall.Restart();
         _cpuAtStart = Process.GetCurrentProcess().TotalProcessorTime;
     }
@@ -65,6 +67,7 @@ internal sealed class Stats
                 ["peakWorkingSetMB"] = Math.Round(p.PeakWorkingSet64 / 1048576.0, 1),
                 ["privateMB"] = Math.Round(p.PrivateMemorySize64 / 1048576.0, 1),
                 ["processCpuPercent"] = Math.Round(cpuS / wallS / Environment.ProcessorCount * 100, 2),
+                ["phasesMs"] = new JsonObject(_phases.Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)Pct(kv.Value)))),
                 ["gcGen0"] = GC.CollectionCount(0), ["gcGen2"] = GC.CollectionCount(2),
                 ["allocatedMB"] = Math.Round(GC.GetTotalAllocatedBytes() / 1048576.0, 1),
                 ["notes"] = new JsonArray(Notes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
