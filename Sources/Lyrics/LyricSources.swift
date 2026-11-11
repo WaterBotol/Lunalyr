@@ -66,7 +66,7 @@ final class LyricSourceOptions: ObservableObject {
         let music = LyricSourceID.appleMusicCache.title, lrclib = LyricSourceID.lrclib.title
         return "Word-by-word and Mixed timing lyrics come first: \(music), then \(lrclib), then your other sources. "
             + "Line-synced lyrics come next, again with \(music) first."
-            + " Timed lyrics for another version of the song (Live, Remix, Acoustic…) come after timed lyrics for the version playing."
+            + " Timed lyrics for another version of the song (Live, Remix, Acoustic, English Version…), or in another language than the song’s, come after timed lyrics for the version playing."
     }
     /// What a lookup asks and ranks by. Timing, and the lead of Music's own
     /// lyrics and LRCLIB's, are fixed (`LyricsFetcher.outranks`); the order
@@ -87,7 +87,10 @@ final class LyricSourceOptions: ObservableObject {
         /// v10: production credits are kept (as `Line.credit`) for the credits layer.
         /// v9: AMLL's word-timed database and Kugou's word-timed KRC.
         /// v11: lyrics for another version (Live, Remix…) rank below the playing one's.
-        static let cachePolicy = "v12"
+        /// v13: a language version (English Version…), or lyrics in another
+        /// language than the song's, rank below the playing one's; songs listed
+        /// under an English title are searched under their original title too.
+        static let cachePolicy = "v13"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
@@ -149,6 +152,9 @@ struct LyricQuery {
     var artist: String
     var album: String?
     var duration: Double
+    /// The player's genre ("J-Pop"), a hint at the language sung
+    /// (`LyricLanguage`). Not part of `recordingKey`.
+    var genre: String? = nil
     init(title: String, artist: String, album: String?, duration: Double) {
         self.title=title;self.artist=artist;self.album=album
         self.duration=duration.isFinite ? min(max(duration,0),864000) : 0
@@ -269,6 +275,12 @@ struct LyricCandidate: Identifiable {
     var metadataReported = true
     /// What the other sources in the same lookup say about it (`LyricsFetcher.weighAgreement`).
     var agreement = LyricAgreement()
+    /// Its lyrics are in another language than the song's (`LyricLanguage`),
+    /// set when candidates are screened: it ranks as another version.
+    var languageMismatch = false
+    /// Found by searching under the song's original title
+    /// (`OriginalTitles`), which shows the song is sung in that language.
+    var viaOriginalTitle = false
     var id: String { source.rawValue }
     var hasReadings: Bool {
         if case .synced(let lines, _) = result { return lines.contains { $0.romanization?.isEmpty == false } }

@@ -10,7 +10,7 @@ import Foundation
 /// 30 days, so a song played again asks nothing.
 actor ArtistAliases {
     static let shared = ArtistAliases()
-    /// Whether the lookup may run ("Search under artists' other names").
+    /// Whether the lookup may run ("Search under other names").
     static var enabled: Bool { UserDefaults.standard.object(forKey: "custom.artistAliases") as? Bool ?? true }
     /// The sources searched again under another name.
     static let catalogues: Set<LyricSourceID> = [.netEase, .qqMusic, .kugou, .kuwo]
