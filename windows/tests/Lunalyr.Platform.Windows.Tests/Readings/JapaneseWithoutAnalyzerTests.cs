@@ -8,10 +8,10 @@ using Lunalyr.Core.Motion;
 namespace Lunalyr.Platform.Windows.Tests.Readings;
 
 /// <summary>
-/// What Windows gives for Japanese without the Japanese language installed: ICU word breaks, kana read by ICU's
-/// Any-Latin, kanji unread. Pinned here on inputs from the Mac's tests, each beside the Mac's own output, so a change
-/// shows. These run on every PC, whether or not the analyzer is installed (the services are built without it).
-/// Listed in docs/READINGS-WINDOWS.md.
+/// What Windows gives for Japanese without a Japanese analyser, the fallback should the bundled dictionary ever fail
+/// to open: ICU word breaks, kana read by ICU's Any-Latin, kanji unread. Pinned here on inputs from the Mac's tests,
+/// each beside the Mac's own output, so a change shows (the services are built without the dictionary). Listed in
+/// docs/READINGS-WINDOWS.md.
 /// </summary>
 public class JapaneseWithoutAnalyzerTests
 {

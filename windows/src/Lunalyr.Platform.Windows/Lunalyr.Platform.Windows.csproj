@@ -10,4 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The Japanese dictionary (IPAdic), built by tools/JapaneseDictionaryBuilder: see docs/READINGS-WINDOWS.md. -->
+    <EmbeddedResource Include="Readings\Data\ipadic.lunadic.br" LogicalName="Lunalyr.Platform.Readings.Data.ipadic.lunadic.br" />
+  </ItemGroup>
 </Project>
