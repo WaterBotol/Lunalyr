@@ -56,8 +56,8 @@ public sealed record LyricStyle
     /// <summary>Lyric size relative to the monitor's height (the Mac's slider maps onto this).</summary>
     public float SizeFraction { get; init; } = 0.075f;
 
-    /// <summary>Reveal style id, e.g. "softFocus", "floatUp", "pop"… (the Mac's raw values).</summary>
-    public string Reveal { get; init; } = "softFocus";
+    /// <summary>Reveal style, as the Mac's `WordArrival` raw values: "automatic", "fade" (Soft focus), "lift" (Float up), "pop", "orbit", "glide", "unfold", "cutoutFold", "cutoutSlide", "cutoutHighlight", "satinRibbon", "splitInk", "mix".</summary>
+    public string Reveal { get; init; } = "fade";
 
     /// <summary>Show readings below the lyric, instead of it, or not at all.</summary>
     public ReadingPlacement Readings { get; init; } = ReadingPlacement.Below;

@@ -8,7 +8,7 @@
     <Platforms>x64;ARM64</Platforms>
     <Company>Lunalyr</Company>
     <Product>Lunalyr for Windows</Product>
-    <Copyright>Lunalyr contributors. Derived from Verso (AkkiCode06/verso).</Copyright>
+    <Copyright>© Lunalyr. All rights reserved.</Copyright>
     <!-- Each worktree builds into its own folder, so parallel agents never share outputs. -->
     <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts\bin\$(MSBuildProjectName)\</BaseOutputPath>
     <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
