@@ -745,7 +745,7 @@ struct LyricLayer: View {
                         let annotations = readingOptions.display == .below
                             ? rolling?.readings ?? readingPairs(index, readings: readings, words: line.words,
                                                                  glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
-                                                                 scene: scene, live: live) : [:]
+                                                                 byPart: composition.fillsStage, scene: scene, live: live) : [:]
                         // Reduce Motion: the line fades; it does not slide or swell.
                         let still = rolls || reduceMotion
                         let lineBase: CGFloat = rolls ? baseSize * 0.75 * userScale
@@ -782,7 +782,7 @@ struct LyricLayer: View {
                             annotations: readingOptions.display == .below
                                 ? readingPairs(index, readings: readings, words: line.words,
                                                glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
-                                               scene: scene, live: live) : [:],
+                                               byPart: composition.fillsStage, scene: scene, live: live) : [:],
                             yield: yield,
                             heldPreview: !previewing && live && index > 0 && time - line.start < 1
                                 && nextLinePreview(after: index - 1, in: scene, time: line.start.nextDown) == index)
@@ -925,11 +925,16 @@ struct LyricLayer: View {
 
     /// Reading pairs for a line set in runs, built once per line rather
     /// than per frame.
+    /// `byPart`: each token's share of its run's reading, for the stage
+    /// layouts, which reveal a run part by part (`LyricReadingPairs.parts`).
     private func readingPairs(_ index: Int, readings: [LyricsFetcher.Word]?, words: [LyricsFetcher.Word],
-                              glue: [Bool], scene: SceneLines, live: Bool) -> [TimedWordKey: String] {
-        guard live else { return LyricReadingPairs.match(readings, to: words, glue: glue) }
+                              glue: [Bool], byPart: Bool = false, scene: SceneLines, live: Bool) -> [TimedWordKey: String] {
+        guard live else {
+            return byPart ? LyricReadingPairs.parts(readings, to: words, glue: glue)
+                : LyricReadingPairs.match(readings, to: words, glue: glue)
+        }
         return cache.readingPairs(line: index, fingerprint: scene.fingerprint, readings: readings, words: words,
-                                  glue: glue)
+                                  glue: glue, byPart: byPart)
     }
 
     /// The words a rolling stage holds. Rebuilt only when a word actually
@@ -1141,7 +1146,7 @@ final class LyricLayerCache: ObservableObject {
     private var pairs: [Int: (signature: Int, value: [TimedWordKey: String])] = [:]
 
     func readingPairs(line: Int, fingerprint: Int, readings: [LyricsFetcher.Word]?,
-                      words: [LyricsFetcher.Word], glue: [Bool] = []) -> [TimedWordKey: String] {
+                      words: [LyricsFetcher.Word], glue: [Bool] = [], byPart: Bool = false) -> [TimedWordKey: String] {
         if fingerprint != pairsFingerprint { pairs.removeAll(); pairsFingerprint = fingerprint }
         var hasher = Hasher()
         hasher.combine(Self.signature(words))
@@ -1150,9 +1155,11 @@ final class LyricLayerCache: ObservableObject {
             hasher.combine(reading.text); hasher.combine(reading.start); hasher.combine(reading.end)
         }
         hasher.combine(glue)
+        hasher.combine(byPart)
         let signature = hasher.finalize()
         if let hit = pairs[line], hit.signature == signature { return hit.value }
-        let value = LyricReadingPairs.match(readings, to: words, glue: glue)
+        let value = byPart ? LyricReadingPairs.parts(readings, to: words, glue: glue)
+            : LyricReadingPairs.match(readings, to: words, glue: glue)
         if pairs.count > 48 { pairs.removeAll() }
         pairs[line] = (signature, value)
         return value

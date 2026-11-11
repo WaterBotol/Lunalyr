@@ -317,13 +317,35 @@ struct StageLyricView: View {
         (gap ?? readingGap(size)) + readingSize(size) * 1.25
     }
 
-    /// The reading drawn under `run`: its parts' readings in order, or nil
-    /// when it has none (or "Below lyrics" is off, so there are none).
+    /// The reading drawn under `run`: its parts' shares written together
+    /// (each carries the space before it where a phrase starts, see
+    /// `LyricReadingPairs.parts`), or nil when it has none (or "Below
+    /// lyrics" is off, so there are none).
     static func reading(of run: StageRun, in readings: [TimedWordKey: String]) -> String? {
         guard !readings.isEmpty else { return nil }
-        let text = run.parts.compactMap { $0.source.flatMap { readings[$0] } }.joined(separator: " ")
+        let text = run.parts.compactMap { $0.source.flatMap { readings[$0] } }.joined()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text
+    }
+
+    /// The reading of `run` with each part's share showing as that part is
+    /// sung, fading in with it (`StageRun.partOpacity`); a share not yet sung
+    /// is invisible but keeps its room, so the reading never shifts as it
+    /// fills in. Nil when the run has no reading.
+    static func revealedReading(of run: StageRun, in readings: [TimedWordKey: String], at time: Double,
+                                colour: Color) -> AttributedString? {
+        guard reading(of: run, in: readings) != nil else { return nil }
+        var result = AttributedString()
+        var started = false
+        for (index, part) in run.parts.enumerated() {
+            guard var share = part.source.flatMap({ readings[$0] }), !share.isEmpty else { continue }
+            if !started { share = String(share.drop(while: \.isWhitespace)); started = true }
+            var piece = AttributedString(share)
+            let shown = StageRun.partOpacity(index, of: run.parts, at: time)
+            piece.foregroundColor = shown <= 0 ? .clear : colour.opacity(min(1, shown))
+            result.append(piece)
+        }
+        return result
     }
 
     /// `word` with its reading under it, or `word` alone when it has none.
@@ -339,7 +361,8 @@ struct StageLyricView: View {
         if let text = Self.reading(of: run, in: readings) {
             let face = readingFont(size, id: run.id)
             let line = { (colour: Color) in
-                Text(text).font(face).foregroundStyle(colour)
+                Text(Self.revealedReading(of: run, in: readings, at: time, colour: colour) ?? AttributedString(text))
+                    .font(face).foregroundStyle(colour)
                     .lineLimit(1).minimumScaleFactor(0.5)
             }
             VStack(alignment: alignment, spacing: gap ?? Self.readingGap(size)) {

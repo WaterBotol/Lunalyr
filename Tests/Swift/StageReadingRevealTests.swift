@@ -30,8 +30,33 @@ final class StageReadingRevealTests: XCTestCase {
         let line = Self.lines[index]
         let readings = LyricRomanizer.readings(Self.lines, options: Self.options)[index]
         let glue = LyricRuns.glue(line: line, words: line.words)
-        let pairs = LyricReadingPairs.match(readings, to: line.words, glue: StageRun.glue(line.words, glue: glue))
+        let pairs = LyricReadingPairs.parts(readings, to: line.words, glue: StageRun.glue(line.words, glue: glue))
         return StageRun.make(line.words, glue: glue).map { StageLyricView.reading(of: $0, in: pairs) }
+    }
+
+    /// The part of `run`'s reading that shows at `time`.
+    private func visibleReading(line index: Int, run runIndex: Int, at time: Double) -> String {
+        let line = Self.lines[index]
+        let readings = LyricRomanizer.readings(Self.lines, options: Self.options)[index]
+        let glue = LyricRuns.glue(line: line, words: line.words)
+        let pairs = LyricReadingPairs.parts(readings, to: line.words, glue: StageRun.glue(line.words, glue: glue))
+        let run = StageRun.make(line.words, glue: glue)[runIndex]
+        guard let shown = StageLyricView.revealedReading(of: run, in: pairs, at: time, colour: .white) else { return "" }
+        return shown.runs.filter { $0.foregroundColor != .clear }
+            .map { String(shown[$0.range].characters) }.joined()
+    }
+
+    /// The reading fills in with the syllables it reads: 思 (omo), い (i),
+    /// 出 (da), each shown as it is sung, not the whole run at once.
+    func testReadingFillsInSyllableBySyllable() {
+        // 思い出 is sung 思 19.56, い 20.57, 出 20.92.
+        XCTAssertEqual(visibleReading(line: 1, run: 1, at: 19.0), "")
+        XCTAssertEqual(visibleReading(line: 1, run: 1, at: 19.8), "omo")
+        XCTAssertEqual(visibleReading(line: 1, run: 1, at: 20.7), "omoi")
+        XCTAssertEqual(visibleReading(line: 1, run: 1, at: 21.0), "omoida")
+        // 時間の: toki, then no.
+        XCTAssertEqual(visibleReading(line: 0, run: 1, at: 16.5), "toki")
+        XCTAssertEqual(visibleReading(line: 0, run: 1, at: 17.4), "toki no")
     }
 
     func testEachRunCarriesOnlyItsOwnReading() {

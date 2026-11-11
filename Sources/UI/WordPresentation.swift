@@ -64,6 +64,39 @@ enum LyricReadingPairs {
         return result
     }
 
+    /// For the stage layouts, which reveal a run part by part as it is sung:
+    /// each token's own share of its run's reading, led by a space where a
+    /// new phrase starts inside the run (the rule `LyricRuns.reading` uses).
+    /// The parts of a run written together read as the run's reading, and
+    /// each part's share can show with that part.
+    static func parts(_ readings: [LyricsFetcher.Word]?, to words: [LyricsFetcher.Word],
+                      glue: [Bool]) -> [TimedWordKey: String] {
+        guard let readings, readings.count == words.count else { return [:] }
+        var result: [TimedWordKey: String] = [:]
+        for range in LyricRuns.ranges(glue, count: words.count) {
+            var shares: [(key: TimedWordKey, text: String)] = []
+            var phrase: (start: Double, end: Double)?
+            var previous: LyricsFetcher.Word?
+            var reads = false
+            for index in range {
+                let token = words[index], reading = readings[index]
+                defer { previous = token }
+                let piece = reading.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let own = (start: reading.start, end: reading.end)
+                let continues = phrase.map { $0.start == own.start && $0.end == own.end } ?? true
+                phrase = own
+                guard !piece.isEmpty else { continue }
+                if isDistinct(piece, from: token.text) { reads = true }
+                let spaced = !shares.isEmpty && !continues
+                    && (LyricRuns.writtenWithoutSpaces(token.text) || previous.map { LyricRuns.writtenWithoutSpaces($0.text) } == true)
+                shares.append((token.presentationID, (spaced ? " " : "") + piece))
+            }
+            guard reads else { continue }
+            for share in shares where result[share.key] == nil { result[share.key] = share.text }
+        }
+        return result
+    }
+
     /// A saved or source reading that could not be split by word, which
     /// `match` places under no word: it is drawn once under the whole line.
     /// Nil when the readings are drawn word by word, and when not "Below
