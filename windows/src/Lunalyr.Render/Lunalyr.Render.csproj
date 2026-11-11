@@ -14,5 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
+    <!-- Desktop attach, monitors and power/session signals live with the other Windows services. -->
+    <ProjectReference Include="..\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
   </ItemGroup>
 </Project>
