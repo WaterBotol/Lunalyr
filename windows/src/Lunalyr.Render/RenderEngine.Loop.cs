@@ -198,10 +198,7 @@ public sealed partial class RenderEngine
         }
         // Playing/paused flips and seeks are new input for idle and paused surfaces.
         var last = _lastClock;
-        bool changed = playing != last.Playing
-            || (playing && Math.Abs(song - last.Song - (now - last.At)) > 0.5)
-            || (!playing && !(Math.Abs(song - last.Song) <= 0.05));
-        if (changed)
+        if (SongClockChange.IsNewInput(last.Song, last.Playing, song, playing, now - last.At))
         {
             foreach (var s in _surfaces) s.NeedsFrame = true;
             _lastClock = (song, playing, now);
@@ -270,7 +267,10 @@ public sealed partial class RenderEngine
         switch (s.State)
         {
             case SurfaceState.Hidden:
-                return false;
+                // A swap chain that has never presented shows nothing at all. Under windows or a full-screen app
+                // part of it may still peek through (coverage allows slivers), so it gets one still frame; with the
+                // displays off or the session locked nothing can be seen and nothing is drawn.
+                return !s.Presented && s.Reason is PauseReason.Covered or PauseReason.FullScreenApp;
             case SurfaceState.Frozen:
                 return s.NeedsFrame; // one still frame for whatever changed, then nothing
             default:
@@ -337,6 +337,10 @@ public sealed partial class RenderEngine
             s.Dead = true;
             _log.Warn($"Present failed on surface {s.Index} (0x{present.Code:X8}); waiting for re-attach");
             _host?.RequestVisibilityCheck();
+        }
+        else
+        {
+            s.Presented = true;
         }
         s.LastFrameWall = now;
         s.NeedsFrame = false;
@@ -470,6 +474,10 @@ public sealed partial class RenderEngine
         }
         _lastFrameAt = double.NaN;
         UpdateStates(now);
+        // A paused wallpaper can't run its fade-in: its still frame shows the background at once.
+        foreach (var s in _surfaces)
+            if (s.State != SurfaceState.Drawing && s.Backgrounds is { Entries.Count: 1 } fade)
+                s.Backgrounds = new LayerCrossfade<LayerSlot>(fade.Current, ready: true);
         PublishStatus();
         _surfacesCreated.Set();
     }
@@ -533,6 +541,7 @@ public sealed partial class RenderEngine
             new BitmapProperties1(new D2DPixelFormat(Format.B8G8R8A8_UNorm, D2DAlphaMode.Ignore), 96, 96,
                 BitmapOptions.Target | BitmapOptions.CannotDraw));
         s.NeedsFrame = true;
+        s.Presented = false;
         s.Dead = false;
         s.LastFrameWall = double.NaN;
     }

@@ -47,6 +47,8 @@ internal sealed class RenderSurface(int index, SurfaceWindow window)
     public double NextDue;
     public double LastFrameWall = double.NaN;
     public bool NeedsFrame = true;
+    /// <summary>The current swap chain has presented at least once.</summary>
+    public bool Presented;
     public bool Idle;
     /// <summary>Present failed for a reason other than device loss (the window went away): skipped until the next rebuild.</summary>
     public bool Dead;

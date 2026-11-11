@@ -1,7 +1,7 @@
 // Manual check of the render engine. Usage:
 //   EngineHarness --seconds N [--windowed] [--fps display|60|30|15] [--snapshot out.png [--snapshot-at S]]
 //                 [--stats out.json] [--pause-covered] [--low-power] [--no-playback] [--log]
-//                 [--rebuild-at S] [--device-loss-at S] [--crossfade-at S] [--pause-at S] [--resume-at S]
+//                 [--no-lyrics] [--nan-clock] [--rebuild-at S] [--device-loss-at S] [--crossfade-at S] [--pause-at S] [--resume-at S]
 // Shows a solid colour and the debug text layer on every monitor behind the desktop icons (or in one window with
 // --windowed) for N seconds, then prints frame statistics. --seconds is required so nothing is left behind the icons.
 // It plays nothing, reads no media session and changes no setting: the song clock is a made-up timer.
@@ -49,7 +49,7 @@ var engine = new RenderEngine(new RenderEngineOptions
 {
     Windowed = Flag("--windowed"),
     BackgroundId = "solid",
-    LyricId = "debug",
+    LyricId = Flag("--no-lyrics") ? null : "debug",
     StatsLogInterval = TimeSpan.FromSeconds(10),
     Performance = PerformanceOptions.Default with
     {
@@ -62,7 +62,11 @@ var engine = new RenderEngine(new RenderEngineOptions
 }, logger);
 engine.RegisterLayer(new SolidColorLayerFactory("solid-b", new Vector4(0.10f, 0.35f, 0.30f, 1)));
 engine.SetScene(new SceneSnapshot { Title = "Lunalyr engine harness", Artist = "solid + debug layers" });
-if (!Flag("--no-playback"))
+if (Flag("--nan-clock"))
+{
+    engine.SongClock = () => (double.NaN, false); // "nothing playing", as the app reports it
+}
+else if (!Flag("--no-playback"))
 {
     var song = Stopwatch.StartNew();
     engine.SongClock = () => (song.Elapsed.TotalSeconds, true);
@@ -99,7 +103,7 @@ At(snapshotPath is null ? null : snapshotAt, "snapshot", () =>
 });
 At(Seconds("--rebuild-at"), "rebuild", engine.RequestRebuild);
 At(Seconds("--device-loss-at"), "device loss", engine.SimulateDeviceLoss);
-At(Seconds("--crossfade-at"), "crossfade", () => engine.SetLayers("solid-b", "debug"));
+At(Seconds("--crossfade-at"), "crossfade", () => engine.SetLayers("solid-b", Flag("--no-lyrics") ? null : "debug"));
 At(Seconds("--pause-at"), "pause wallpaper", () => engine.SetPerformance(engine.Performance with { PauseWallpaper = true }));
 At(Seconds("--resume-at"), "resume wallpaper", () => engine.SetPerformance(engine.Performance with { PauseWallpaper = false }));
 actions.Sort((a, b) => a.At.CompareTo(b.At));

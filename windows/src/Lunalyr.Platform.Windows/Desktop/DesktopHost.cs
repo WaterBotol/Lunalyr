@@ -42,7 +42,6 @@ public sealed unsafe class DesktopHost : IDisposable
     // Host-thread state.
     private nint _messageWindow;
     private uint _taskbarCreated;
-    private nint _attachedProgman;
     private readonly List<SurfaceWindow> _windows = [];
     private readonly HashSet<nint> _own = [];
     private List<MonitorInfo> _monitors = [];
@@ -255,7 +254,6 @@ public sealed unsafe class DesktopHost : IDisposable
                 }
                 foreach (var monitor in monitors) CreateWallpaperWindow(monitor, target, inst);
                 Mode = target.Mode;
-                _attachedProgman = FindWindow("Progman", null);
                 LastTree = DesktopAttach.DescribeTree();
             }
             _generation++;
@@ -528,13 +526,6 @@ public sealed unsafe class DesktopHost : IDisposable
     {
         if (msg == _taskbarCreated && _taskbarCreated != 0)
         {
-            // The lost-window poll may already have re-attached to the new Explorer: don't rebuild twice.
-            if (!_options.Windowed && _windows.Count > 0 && _attachedProgman != 0 && FindWindow("Progman", null) == _attachedProgman
-                && _windows.TrueForAll(w => IsWindow(w.Hwnd)))
-            {
-                _log.Info("Explorer restarted (TaskbarCreated): already attached to the new desktop");
-                return 0;
-            }
             _log.Info("Explorer restarted (TaskbarCreated): re-attaching");
             ScheduleLayout(force: true, "Explorer restarted");
             return 0;
