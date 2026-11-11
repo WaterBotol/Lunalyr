@@ -29,13 +29,31 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// A capsule's backing: frosted, or solid under Reduce Transparency.
-    @ViewBuilder
+    /// A capsule's backing: the album's deep shade with a rim of its colour
+    /// on the player card, frosted elsewhere, solid under Reduce Transparency.
     func playerCapsule(_ look: PlayerLook) -> some View {
+        modifier(PlayerCapsuleBacking(look: look))
+    }
+}
+
+private struct PlayerCapsuleBacking: ViewModifier {
+    let look: PlayerLook
+    @Environment(\.playerPalette) private var palette
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         if look.reduceTransparency {
-            background(Color(white: 0.12).opacity(0.95), in: Capsule())
+            content
+                .background(Color(white: 0.08), in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(look.increaseContrast ? 0.6 : 0.3), lineWidth: 1))
+        } else if let palette {
+            content
+                .background(palette.deepColor.opacity(0.95), in: shape)
+                .overlay(shape.strokeBorder(palette.accentColor.opacity(look.increaseContrast ? 0.9 : 0.55), lineWidth: 1))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
         } else {
-            background(.ultraThinMaterial, in: Capsule())
+            content
+                .background(.ultraThinMaterial, in: Capsule())
                 .background(Color.black.opacity(0.35), in: Capsule())
         }
     }
@@ -65,15 +83,18 @@ enum ScrubRowKind: Equatable {
     }
 }
 
-/// The seek bar with its times: 560 × 28 pt, the bar 456 pt in the middle.
-/// Hairline at rest; on hover it thickens, shows the knob, the line ticks
-/// and a time and lyric capsule at the pointer; under a press it thickens
-/// again, takes the player's colour, and the capsules show the target.
+/// The seek bar with its times under it: 364 × 34 pt, the width of the
+/// card's column. Hairline at rest; on hover it thickens, shows the knob,
+/// the line ticks and a time and lyric capsule at the pointer; under a press
+/// it thickens again, takes the album's colour, and the capsules show the
+/// target. Elapsed on the left, remaining (or the length) on the right.
 struct ScrubRow: View {
-    static let rowWidth: CGFloat = 560
-    static let height: CGFloat = 28
+    static let rowWidth = CGFloat(ScrubMath.barWidth)
     static let barWidth = CGFloat(ScrubMath.barWidth)
-    static let labelWidth: CGFloat = 44
+    /// The bar's own band: where the pointer scrubs.
+    static let barHeight: CGFloat = 20
+    static let timesHeight: CGFloat = 14
+    static let height: CGFloat = barHeight + timesHeight
 
     @ObservedObject var controller: ScrubController
     let kind: ScrubRowKind
@@ -99,12 +120,16 @@ struct ScrubRow: View {
                     }
                 case .elapsedOnly:
                     TimelineView(.animation(minimumInterval: 0.25, paused: !shown || !isPlaying)) { _ in
-                        Text(ScrubMath.timestamp(controller.playback()))
-                            .font(.system(size: 11).monospacedDigit())
-                            .foregroundStyle(.white.opacity(timeOpacity(active: false)))
+                        HStack(spacing: 8) {
+                            Text(ScrubMath.timestamp(controller.playback())).font(.system(size: 11).monospacedDigit())
+                            Text("Length unknown").font(.system(size: 11)).opacity(0.6)
+                        }
+                        .foregroundStyle(.white.opacity(timeOpacity(active: false)))
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 case .live:
                     LiveCapsule(shown: shown)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 case .hidden:
                     EmptyView()
                 }
@@ -120,7 +145,7 @@ struct ScrubRow: View {
     private var mask: some View {
         switch kind {
         case .seekable:
-            Color.black.opacity(0.3).frame(width: Self.rowWidth, height: Self.height + 16)
+            Color.black.opacity(0.3).frame(width: Self.rowWidth + 16, height: Self.height + 16)
         case .readOnly, .advert, .elapsedOnly, .live:
             // The time label toggles; the rest only shows.
             Color.black.opacity(0.3).frame(width: Self.rowWidth, height: Self.height)
@@ -138,14 +163,19 @@ struct ScrubRow: View {
 
     private func row(elapsed: Double) -> some View {
         let duration = controller.context.duration
-        return HStack(spacing: 8) {
-            Text(kind == .advert ? "" : ScrubMath.timestamp(elapsed))
-                .frame(width: Self.labelWidth, alignment: .trailing)
-                .accessibilityHidden(true)
+        return VStack(spacing: 0) {
             bar(elapsed: elapsed)
-                .frame(width: Self.barWidth, height: Self.height)
-            trailingLabel(elapsed: elapsed, duration: duration)
-                .frame(width: Self.labelWidth, alignment: .leading)
+                .frame(width: Self.barWidth, height: Self.barHeight)
+            HStack(spacing: 8) {
+                if kind == .advert {
+                    Text("Advertisement").font(.system(size: 10, weight: .medium))
+                } else {
+                    Text(ScrubMath.timestamp(elapsed)).accessibilityHidden(true)
+                }
+                Spacer(minLength: 0)
+                trailingLabel(elapsed: elapsed, duration: duration)
+            }
+            .frame(width: Self.barWidth, height: Self.timesHeight)
         }
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(.white.opacity(timeOpacity(active: active)))
@@ -172,8 +202,8 @@ struct ScrubRow: View {
     // MARK: The bar
 
     private var thickness: CGFloat {
-        guard kind == .seekable else { return 3 }
-        return dragging ? 8 : active ? 6 : 3
+        guard kind == .seekable else { return 4 }
+        return dragging ? 9 : active ? 7 : 4
     }
 
     private func bar(elapsed: Double) -> some View {
@@ -220,34 +250,29 @@ struct ScrubRow: View {
                         .transition(.opacity)
                 }
             }
-            .frame(width: Self.barWidth, height: Self.height)
+            .frame(width: Self.barWidth, height: Self.barHeight)
             // The rubber band: the bar stretches a little past an end.
             .scaleEffect(x: 1 + abs(overshoot) / Self.barWidth, y: 1, anchor: overshoot < 0 ? .trailing : .leading)
             if kind == .seekable, let hover = controller.hover, session == nil {
-                Rectangle().fill(.white.opacity(0.5)).frame(width: 1, height: 14)
+                Rectangle().fill(.white.opacity(0.5)).frame(width: 1, height: 16)
                     .offset(x: CGFloat(hover.x) - 0.5)
                     .allowsHitTesting(false)
             }
             if kind == .seekable, active {
                 Circle().fill(.white)
-                    .frame(width: dragging ? 12 : 10, height: dragging ? 12 : 10)
+                    .frame(width: dragging ? 14 : 12, height: dragging ? 14 : 12)
                     .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
-                    .offset(x: playX - (dragging ? 6 : 5))
+                    .offset(x: playX - (dragging ? 7 : 6))
                     .transition(.opacity)
                     .allowsHitTesting(false)
             }
             if kind == .seekable, preview == nil {
                 ScrubberEvents(controller: controller)
-                    .frame(width: Self.barWidth + 16, height: Self.height)
+                    .frame(width: Self.barWidth + 16, height: Self.barHeight)
                     .offset(x: -8)
             }
-            if kind == .advert {
-                Text("Advertisement").font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .frame(width: Self.barWidth).offset(y: -11)
-            }
         }
-        .frame(width: Self.barWidth, height: Self.height, alignment: .leading)
+        .frame(width: Self.barWidth, height: Self.barHeight, alignment: .leading)
         .animation(look.reduceMotion ? nil : .spring(duration: 0.18, bounce: 0), value: thickness)
         .animation(look.reduceMotion ? .linear(duration: 0.1) : .spring(duration: 0.18, bounce: 0), value: active)
         .overlay(alignment: .top) { capsules(elapsed: elapsed) }
@@ -274,15 +299,15 @@ struct ScrubRow: View {
                 ClampedCenter(x: CGFloat(shown.x)) {
                     VStack(spacing: 4) {
                         lyricCapsule(at: shown.time)
-                        VStack(spacing: 0) {
+                        HStack(spacing: 6) {
                             Text(ScrubMath.timestamp(shown.time))
-                                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                                .font(.system(size: 11, weight: .bold).monospacedDigit())
                             if let rate = controller.session?.rateLabel {
-                                Text(rate).font(.system(size: 9, weight: .medium)).opacity(0.75)
+                                Text(rate).font(.system(size: 10, weight: .medium)).opacity(0.75)
                             }
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
                         .playerCapsule(look)
                     }
                     .fixedSize()
@@ -306,7 +331,7 @@ struct ScrubRow: View {
                 let replaced = context.romanization == .replace ? line.romanized : nil
                 VStack(spacing: 1) {
                     Text(replaced ?? line.text)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 15, weight: .bold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
                     if context.romanization == .below, let roman = line.romanized {
@@ -315,13 +340,13 @@ struct ScrubRow: View {
                 }
                 .animation(.easeOut(duration: 0.12), value: index)
                 .foregroundStyle(.white)
-                .frame(maxWidth: 420)
-                .padding(.horizontal, 12).padding(.vertical, 5)
+                .frame(maxWidth: 330)
+                .padding(.horizontal, 14).padding(.vertical, 7)
                 .playerCapsule(look)
             case .instrumental:
-                Text("\u{266A} instrumental").font(.system(size: 13, weight: .semibold).italic())
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.horizontal, 12).padding(.vertical, 5)
+                Text("\u{266A} instrumental").font(.system(size: 14, weight: .semibold).italic())
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.horizontal, 14).padding(.vertical, 7)
                     .playerCapsule(look)
             case .none:
                 EmptyView()

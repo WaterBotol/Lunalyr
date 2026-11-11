@@ -45,15 +45,59 @@ extension EnvironmentValues {
     }
 }
 
-/// The player that lives on the desktop: a strip of covers with what played,
-/// what plays now (in the middle) and what plays next; under it the seek bar,
-/// then one small line to pick the player, play, pause, skip and search.
-/// Searching swaps the strip for the results.
+/// What the player draws of the song: the monitor's, or a preview's.
+struct PlayerNow: Equatable {
+    var track: NowPlayingMonitor.Track?
+    var isPlaying = false
+    /// The player that is playing it.
+    var player: PlayerKind?
+    var artwork: NSImage?
+    var canControl = true
+    var idleTitle = "Nothing playing"
+}
+
+/// The player that lives on the desktop, "Sleeve": one card washed in the
+/// album's own colours. On the left the cover, with the record peeking out
+/// of it (it slides back in on pause); on the right the player, the song,
+/// the seek bar and a row with play, search, the queue and the film button.
+/// Search and the queue take over the right-hand column; the cover stays as
+/// the anchor, with the song and the transport under it.
 struct DesktopPlayerView: View {
-    static let width: CGFloat = 720
-    static let stripHeight: CGFloat = 214
-    static let resultsHeight: CGFloat = 372
-    static let cover: CGFloat = 150
+    static let width: CGFloat = 640
+    static let cover: CGFloat = 176
+    static let column: CGFloat = 364
+    static let artWidth: CGFloat = 216
+    static let padding: CGFloat = 20
+    static let radius: CGFloat = 28
+    /// The card at rest.
+    static let restHeight: CGFloat = cover + 2 * padding
+    /// The card at its tallest (the queue open).
+    static var tallestHeight: CGFloat { columnHeight(.queue) + 2 * padding }
+
+    /// Where the card's top sits in the panel: just under the middle of the
+    /// screen, so the lyric (in the middle) stays above it, and the card
+    /// grows downwards; never past the panel's bottom.
+    static func cardTop(panelHeight: CGFloat) -> CGFloat {
+        max(0, min(panelHeight / 2 + 8, panelHeight - tallestHeight))
+    }
+
+    /// The right-hand column's height for each pane. A queue of a song or
+    /// two (Spotify shares only the one playing) keeps to the height of the
+    /// cover with the song and transport under it.
+    static func columnHeight(_ pane: DesktopPlayerModel.Pane, queueRows: Int = .max) -> CGFloat {
+        switch pane {
+        case .song: return cover
+        case .search: return 300
+        case .queue: return queueRows <= 2 ? compactArtHeight : 334
+        }
+    }
+
+    /// The cover with the song's title and the small transport under it.
+    static let compactArtHeight: CGFloat = cover + 96
+
+    /// The song's titles while the seek bar's capsules are up over them:
+    /// all but gone, so the capsules read.
+    static func titleOpacity(dimmed: Bool) -> Double { dimmed ? 0.08 : 1 }
 
     @ObservedObject var model: DesktopPlayerModel
     let displayID: CGDirectDisplayID
@@ -62,34 +106,31 @@ struct DesktopPlayerView: View {
     @ObservedObject private var lyrics = LyricsViewModel.shared
     @ObservedObject private var readings = RomanizationOptions.shared
     @Environment(\.playerMaskRender) private var maskRender
+    @Environment(\.playerPreview) private var preview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.playerLookOverride) private var lookOverride
     @FocusState private var searchFocused: Bool
-    /// Not observed here: the bar redraws itself; the strip only follows
+    /// Not observed here: the bar redraws itself; the titles only follow
     /// `ScrubActivity`, which changes when hover or a drag starts and ends.
     @State private var scrub: ScrubController
-    /// Bumped whenever the player appears or goes away, so the strip returns to
-    /// the song that is playing.
-    @State private var recenter = 0
-    /// The appearing scale (0.97) is only set while hidden, so leaving is a
-    /// plain fade.
-    @State private var scaleArmed = true
+    /// The rise on appearing is only set while hidden, so leaving is a plain fade.
+    @State private var riseArmed = true
     @State private var noteTrigger = 0
     @State private var playToggle = OptimisticToggle()
     @State private var toggleRefresh = 0
-    /// The strip item a Next press slid to before the player answered.
+    /// The queue row a Next press moved to before the player answered.
     @State private var optimisticCurrent: String?
     @State private var pendingCoverToggle: Task<Void, Never>?
     /// The music video is being lined up: its bar's capsule is up for good,
-    /// so the strip's titles and side covers make way meanwhile.
-    @State private var aligning = false
+    /// so the titles make way meanwhile.
+    @State private var aligningLive = false
 
-    init(model: DesktopPlayerModel, displayID: CGDirectDisplayID) {
+    init(model: DesktopPlayerModel, displayID: CGDirectDisplayID, scrub: ScrubController? = nil) {
         self.model = model
         self.displayID = displayID
-        _scrub = State(initialValue: ScrubController(displayID: displayID))
+        _scrub = State(initialValue: scrub ?? ScrubController(displayID: displayID))
     }
 
     private var look: PlayerLook {
@@ -97,79 +138,99 @@ struct DesktopPlayerView: View {
                                    increaseContrast: contrast == .increased)
     }
 
+    /// The song as drawn: a preview's, else the monitor's.
+    private var now: PlayerNow {
+        if let fixture = preview?.now { return fixture }
+        return PlayerNow(track: nowPlaying.current, isPlaying: nowPlaying.isPlaying, player: nowPlaying.activePlayer,
+                         artwork: nowPlaying.currentTrackArtwork, canControl: nowPlaying.canControlPlayback,
+                         idleTitle: nowPlaying.idleTitle)
+    }
+
+    private var playingKind: PlayerKind { now.player ?? model.player }
+    private var aligning: Bool { preview.map { $0.align != nil } ?? aligningLive }
+
+    private var pane: DesktopPlayerModel.Pane {
+        model.showsSearch ? .search : model.showsQueue ? .queue : .song
+    }
+
     var body: some View {
-        let shown = hover.showsPlayer(on: displayID, searching: model.isPinned)
+        let shown = preview != nil || hover.showsPlayer(on: displayID, searching: model.isPinned)
         let look = self.look
-        let rowKind = model.isSearching ? .hidden : ScrubRowKind.of(track: nowPlaying.current, canSeek: canSeek)
-        PlayerColumn(scrubKind: rowKind) {
-            top(shown: shown)
-        } scrub: {
-            SeekOrAlignRow(musicVideo: MusicVideoController.shared, scrub: scrub, kind: rowKind,
-                           tint: model.playingKind.tint, isPlaying: displayedPlaying, shown: shown,
-                           showsRemaining: $model.showsRemaining)
-        } controls: {
-            ControlsOrAlign(musicVideo: MusicVideoController.shared, tint: model.playingKind.tint) { controls }
+        let now = self.now
+        let palette = ArtworkPalette.of(now.track == nil ? nil : now.artwork)
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                Color.clear.frame(height: Self.cardTop(panelHeight: proxy.size.height))
+                card(now: now, palette: palette, shown: shown)
+                Spacer(minLength: 0)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.colorScheme, .dark)
         .environment(\.playerLook, look)
+        .environment(\.playerPalette, palette)
         .opacity(shown ? 1 : 0)
-        .scaleEffect(shown || !scaleArmed || look.reduceMotion ? 1 : 0.97)
+        .offset(y: shown || !riseArmed || look.reduceMotion ? 0 : 8)
         .animation(PlayerMotion.reveal(shown: shown, reduceMotion: look.reduceMotion), value: shown)
-        .animation(look.reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.34), value: model.isSearching)
+        .animation(look.reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.32), value: pane)
         .onChange(of: shown) { _, now in shownChanged(now) }
         .onChange(of: searchFocused) { _, focused in
-            guard !maskRender else { return }
+            guard !maskRender, preview == nil else { return }
             PlayerInteraction.shared.searchFocused = focused
             if !focused { ControlPanelController.shared.releaseKeyboard() }
         }
         .onChange(of: contextKey, initial: true) { _, _ in
-            if !maskRender { scrub.update(scrubContext) }
+            if !maskRender && preview == nil { scrub.update(scrubContext) }
         }
-        .onChange(of: nowPlaying.isPlaying) { _, playing in
+        .onChange(of: now.isPlaying) { _, playing in
             playToggle.reconcile(actual: playing, now: Self.uptime)
         }
         .onChange(of: model.playNoteToken) { _, _ in noteTrigger += 1 }
         .onChange(of: model.queue) { _, queue in
             if let optimisticCurrent, queue.first(where: \.isCurrent)?.id == optimisticCurrent { self.optimisticCurrent = nil }
         }
-        .onReceive(MusicVideoController.shared.$align.map { $0 != nil }.removeDuplicates()) { aligning = $0 }
-        .onAppear { if !maskRender { registerKeys() } }
-        .onDisappear { if !maskRender { PlayerKeyboard.shared.unregister(displayID) } }
+        .onReceive(alignPublisher) { aligningLive = $0 }
+        .onAppear { if !maskRender && preview == nil { registerKeys() } }
+        .onDisappear { if !maskRender && preview == nil { PlayerKeyboard.shared.unregister(displayID) } }
+    }
+
+    private var alignPublisher: AnyPublisher<Bool, Never> {
+        guard preview == nil else { return Just(false).eraseToAnyPublisher() }
+        return MusicVideoController.shared.$align.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
     }
 
     private static var uptime: Double { ProcessInfo.processInfo.systemUptime }
 
     private func shownChanged(_ now: Bool) {
-        recenter += 1
+        guard !maskRender, preview == nil else { return }
         if now {
-            scaleArmed = false
-            if model.takeShuffleNote() { noteTrigger += 1 }
-            guard !maskRender else { return }
+            riseArmed = false
             model.refreshQueue()
             registerKeys()
         } else {
             searchFocused = false
             scrub.pointerExited()
+            // The queue closes with the player; a typed search stays.
+            model.closePane()
             // Re-armed out of sight, after the fade.
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 260_000_000)
                 guard !hover.showsPlayer(on: displayID, searching: model.isPinned) else { return }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
-                withTransaction(transaction) { scaleArmed = true }
+                withTransaction(transaction) { riseArmed = true }
             }
-            if !maskRender { ControlPanelController.shared.releaseKeyboard() }
+            ControlPanelController.shared.releaseKeyboard()
         }
     }
 
     // MARK: Seek context
 
-    private var canSeek: Bool { nowPlaying.activePlayer != nil && nowPlaying.canControlPlayback }
+    private var canSeek: Bool { now.player != nil && now.canControl }
 
     private var trackKey: String {
-        guard let track = nowPlaying.current else { return "" }
+        guard let track = now.track else { return "" }
         return "\(track.title)|\(track.artist)|\(track.persistentID ?? "")|\(Int(track.duration))"
     }
 
@@ -191,13 +252,18 @@ struct DesktopPlayerView: View {
     }
 
     private var contextKey: ContextKey {
-        ContextKey(track: trackKey, duration: nowPlaying.current?.duration ?? 0, canSeek: canSeek,
+        // A preview brings its own bar, and never reads the app's lyrics or settings.
+        guard preview == nil else {
+            return ContextKey(track: "", duration: 0, canSeek: false, lines: 0, first: 0, last: 0, offset: 0,
+                              display: .off, readings: 0)
+        }
+        return ContextKey(track: trackKey, duration: now.track?.duration ?? 0, canSeek: canSeek,
                    lines: lyrics.lines.count, first: lyrics.lines.first?.start ?? 0, last: lyrics.lines.last?.start ?? 0,
                    offset: lyricOffset, display: readings.display, readings: lyrics.romanized.count)
     }
 
     private var scrubContext: ScrubController.Context {
-        let track = nowPlaying.current
+        let track = now.track
         let readingsOn = readings.display != .off
         let romanized: [Int: String] = readingsOn ? lyrics.romanized.mapValues { words in
             words.map { $0.text.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
@@ -209,54 +275,105 @@ struct DesktopPlayerView: View {
                                        romanization: readings.display)
     }
 
-    // MARK: Strip
+    // MARK: Card
 
-    @ViewBuilder
-    private func top(shown: Bool) -> some View {
-        if model.isSearching {
-            resultsList
-                .frame(width: Self.width, height: Self.resultsHeight)
-                .glass(radius: 26, tint: model.player.tint, look: look)
-        } else {
-            ScrubActivityReader(activity: scrub.activity) { activity in
-                // The bar's capsules rise over the titles under the covers:
-                // the titles make way while they are up.
-                strip(shown: shown, labelsDimmed: activity.capsulesUp || aligning,
-                      sidesDimmed: activity.dragging || aligning)
+    private func card(now: PlayerNow, palette: ArtworkPalette, shown: Bool) -> some View {
+        let pane = self.pane
+        return HStack(alignment: .top, spacing: Self.padding) {
+            artColumn(now: now, palette: palette, compact: pane != .song)
+            Group {
+                switch pane {
+                case .song: songColumn(now: now, palette: palette, shown: shown)
+                case .search: searchColumn
+                case .queue: queueColumn(now: now)
+                }
             }
-            .frame(width: Self.width, height: Self.stripHeight)
+            .frame(width: Self.column, height: Self.columnHeight(pane, queueRows: model.queue.count), alignment: .topLeading)
+            .transition(.opacity)
         }
+        .padding(Self.padding)
+        .frame(width: Self.width, alignment: .topLeading)
+        .background(SleeveCardBackground(palette: palette, hasSong: now.track != nil))
+        .overlay(alignment: .top) {
+            PlayerNoteToast(note: model.playNote, trigger: noteTrigger, alwaysShown: preview != nil)
+                .alignmentGuide(.top) { $0[.bottom] + 10 }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Lunalyr player")
+    }
+
+    // MARK: Art column
+
+    private func artColumn(now: PlayerNow, palette: ArtworkPalette, compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ZStack(alignment: .leading) {
+                if let track = now.track, !track.isAdvert {
+                    // The record slides back into the sleeve on pause; under
+                    // Reduce Motion it stays where it is.
+                    let out = displayedPlaying || look.reduceMotion
+                    SleeveRecord(size: Self.cover - 6, palette: palette)
+                        .offset(x: out ? 40 : 14)
+                        .animation(look.reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.1), value: out)
+                        .accessibilityHidden(true)
+                }
+                coverButton(now: now)
+            }
+            .frame(width: Self.artWidth, height: Self.cover, alignment: .leading)
+            if compact {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(now.track?.title ?? now.idleTitle).font(.system(size: 13, weight: .bold)).lineLimit(1)
+                    if let artist = now.track?.artist, !artist.isEmpty {
+                        Text(artist).font(.system(size: 11)).foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.7))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(width: Self.cover, alignment: .leading)
+                transport(.small)
+            }
+        }
+        .frame(width: Self.artWidth, alignment: .topLeading)
+    }
+
+    private func coverButton(now: PlayerNow) -> some View {
+        Button(action: coverClicked) {
+            coverImage(now: now)
+                .frame(width: Self.cover, height: Self.cover)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(.white.opacity(look.increaseContrast ? 0.5 : 0.12), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.45), radius: 10, x: 4, y: 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(CoverButtonStyle())
+        .disabled(now.track == nil)
+        .help(now.track == nil ? "" : "Click to play or pause, double-click to open \(playingKind.shortName)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(now.track.map { $0.artist.isEmpty ? "Cover, \($0.title)" : "Cover, \($0.title) by \($0.artist)" }
+                            ?? now.idleTitle)
+        .accessibilityHint(now.track == nil ? "" : "Plays or pauses. Double-click opens \(playingKind.shortName)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: displayedPlaying ? "Pause" : "Play") { playPause() }
+        .accessibilityAction(named: "Open \(playingKind.shortName)") { openPlayerApp() }
     }
 
     @ViewBuilder
-    private func strip(shown: Bool, labelsDimmed: Bool, sidesDimmed: Bool) -> some View {
-        let paused = nowPlaying.current != nil && !displayedPlaying
-        if maskRender {
-            Color.black.opacity(0.3)
-        } else if model.queue.isEmpty, let now = nowPlaying.current {
-            // A player that shares no queue (Spotify): just what is playing.
-            CoverStrip(items: [PlayerQueueItem(id: "now", title: now.title, artist: now.artist, index: 0, isCurrent: true)],
-                       tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork, recenter: recenter,
-                       shown: shown, paused: paused, labelsDimmed: labelsDimmed, sidesDimmed: sidesDimmed,
-                       onTap: coverTapped)
-        } else if model.queue.isEmpty {
-            EmptyPlayerTile(title: nowPlaying.idleTitle)
+    private func coverImage(now: PlayerNow) -> some View {
+        if now.track != nil, let artwork = now.artwork {
+            Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
         } else {
-            CoverStrip(items: model.queue, tint: model.playingKind.tint, artwork: nowPlaying.currentTrackArtwork,
-                       recenter: recenter,
-                       note: model.playNote ?? (model.shuffleOn ? "Shuffle is on: this is the playlist\u{2019}s order" : nil),
-                       noteTrigger: noteTrigger, shown: shown, paused: paused, labelsDimmed: labelsDimmed,
-                       sidesDimmed: sidesDimmed, optimisticCurrent: optimisticCurrent, onTap: coverTapped)
+            ZStack {
+                Color.white.opacity(0.1)
+                Image(systemName: now.track?.isStream == true ? "dot.radiowaves.left.and.right" : "music.note")
+                    .font(.system(size: 40)).foregroundStyle(.white.opacity(0.4))
+            }
         }
     }
 
-    /// A click on the playing cover plays or pauses; a double-click brings
-    /// the player's app forward instead (Sleeve's convention). The single
-    /// click waits out a short double-click window for that.
-    private func coverTapped(_ entry: PlayerQueueItem) {
+    /// A click on the cover plays or pauses; a double-click brings the
+    /// player's app forward instead (Sleeve's convention). The single click
+    /// waits out a short double-click window for that.
+    private func coverClicked() {
         PlayerInteraction.shared.noteClick()
-        let isCurrent = optimisticCurrent.map { $0 == entry.id } ?? entry.isCurrent
-        guard isCurrent else { model.play(entry); return }
         if (NSApp.currentEvent?.clickCount ?? 1) >= 2 {
             pendingCoverToggle?.cancel()
             pendingCoverToggle = nil
@@ -273,20 +390,119 @@ struct DesktopPlayerView: View {
     }
 
     private func openPlayerApp() {
-        guard !AppRuntime.isUnitTesting, let kind = nowPlaying.activePlayer ?? nowPlaying.transportTarget else { return }
+        guard !AppRuntime.isUnitTesting, preview == nil,
+              let kind = nowPlaying.activePlayer ?? nowPlaying.transportTarget else { return }
         NSRunningApplication.runningApplications(withBundleIdentifier: kind.bundleID).first?.activate()
+    }
+
+    // MARK: Song column
+
+    private func songColumn(now: PlayerNow, palette: ArtworkPalette, shown: Bool) -> some View {
+        let kind = ScrubRowKind.of(track: now.track, canSeek: canSeek)
+        return VStack(alignment: .leading, spacing: 0) {
+            playerLabel
+            ScrubActivityReader(activity: scrub.activity) { activity in
+                titles(now: now)
+                    .opacity(Self.titleOpacity(dimmed: (activity.capsulesUp && kind == .seekable) || aligning))
+                    .animation(activity.capsulesUp ? .easeIn(duration: 0.10) : .easeOut(duration: 0.14),
+                               value: activity.capsulesUp)
+            }
+            Spacer(minLength: 0)
+            if kind != .hidden || aligning {
+                seekRow(kind: kind, shown: shown)
+            }
+            alignOrControls(kind: kind)
+                .padding(.top, 8)
+        }
+    }
+
+    /// The player that is playing, small, over the song. A click opens the
+    /// search, where the switch is.
+    private var playerLabel: some View {
+        Button { openSearch() } label: {
+            HStack(spacing: 5) {
+                Circle().fill(playingKind.tint).frame(width: 6, height: 6)
+                Text(playingKind.shortName.uppercased()).font(.system(size: 10, weight: .bold)).tracking(1.2)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.7))
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Search \(model.player.shortName), or switch the player search uses")
+        .accessibilityLabel("Playing in \(playingKind.shortName)")
+        .accessibilityHint("Opens search, where you choose the player to search")
+    }
+
+    private func titles(now: PlayerNow) -> some View {
+        let track = now.track
+        let artist = track?.artist ?? "Search to start something"
+        let album = track?.album.flatMap { $0.isEmpty || $0 == track?.title ? nil : $0 }
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(track?.title ?? now.idleTitle)
+                .font(.system(size: 25, weight: .bold))
+                .lineLimit(1).minimumScaleFactor(0.75)
+                .padding(.top, 8)
+            if !artist.isEmpty {
+                Text(artist).font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(look.increaseContrast ? 0.95 : 0.8)).lineLimit(1)
+                    .padding(.top, 1)
+            }
+            if let album {
+                Text(album).font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(look.increaseContrast ? 0.85 : 0.55)).lineLimit(1)
+                    .padding(.top, 1)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func seekRow(kind: ScrubRowKind, shown: Bool) -> some View {
+        let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint
+        if let preview {
+            if let align = preview.align {
+                VideoAlignRow(display: align, tint: accent)
+            } else {
+                ScrubRow(controller: scrub, kind: kind, tint: accent, isPlaying: displayedPlaying, shown: shown,
+                         showsRemaining: $model.showsRemaining)
+            }
+        } else {
+            SeekOrAlignRow(musicVideo: MusicVideoController.shared, scrub: scrub, kind: kind, tint: accent,
+                           isPlaying: displayedPlaying, shown: shown, showsRemaining: $model.showsRemaining)
+        }
+    }
+
+    private var palette: ArtworkPalette { ArtworkPalette.of(now.track == nil ? nil : now.artwork) }
+
+    /// The transport row, or Automatic / Cancel / Done while the music video is lined up.
+    @ViewBuilder
+    private func alignOrControls(kind: ScrubRowKind) -> some View {
+        let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint
+        if let preview {
+            if preview.align != nil {
+                VideoAlignControls(canReset: preview.align?.origin == .manual, tint: accent,
+                                   onReset: {}, onCancel: {}, onDone: {})
+            } else {
+                controlsRow(kind: kind)
+            }
+        } else {
+            ControlsOrAlign(musicVideo: MusicVideoController.shared, tint: accent) { controlsRow(kind: kind) }
+        }
     }
 
     // MARK: Transport
 
     private var displayedPlaying: Bool {
         _ = toggleRefresh
-        return playToggle.displayed(actual: nowPlaying.isPlaying, now: Self.uptime)
+        return playToggle.displayed(actual: now.isPlaying, now: Self.uptime)
     }
 
     /// The glyph flips now; the player's answer settles it, or after 1.5 s
     /// the glyph goes back to the truth.
     private func playPause() {
+        guard preview == nil else { return }
         playToggle.press(actual: nowPlaying.isPlaying, now: Self.uptime)
         nowPlaying.playPause()
         Task { @MainActor in
@@ -296,11 +512,11 @@ struct DesktopPlayerView: View {
         }
     }
 
-    /// Next slides the strip at once when what comes next is known (Music,
-    /// shuffle off), and the bar goes to 0:00. Otherwise the press shows and
-    /// the real change moves things, so the strip never shows a guess.
+    /// Next moves the queue's highlight at once when what comes next is
+    /// known (Music, shuffle off), and the bar goes to 0:00. Otherwise the
+    /// press shows and the real change moves things, so nothing shows a guess.
     private func skip(forward: Bool) {
-        guard nowPlaying.current != nil else { return }
+        guard preview == nil, nowPlaying.current != nil else { return }
         if forward {
             if let next = DesktopPlayerModel.optimisticNext(queue: model.queue, shuffleOn: model.shuffleOn,
                                                              kind: nowPlaying.activePlayer) {
@@ -317,17 +533,40 @@ struct DesktopPlayerView: View {
         }
     }
 
-    private var controls: some View {
-        PlayerControlsRow(
-            kinds: switchKinds, selected: model.player, onSelect: { model.player = $0 },
-            canControl: nowPlaying.canControlPlayback, hasSong: nowPlaying.current != nil,
-            isPlaying: displayedPlaying,
-            onPrevious: { skip(forward: false) }, onPlayPause: playPause, onNext: { skip(forward: true) },
-            query: $model.query, searchFocused: $searchFocused, onSubmit: { model.playSelection() })
+    private func transport(_ size: PlayerTransport.Size) -> some View {
+        PlayerTransport(size: size, canControl: now.canControl, hasSong: now.track != nil, isPlaying: displayedPlaying,
+                        onPrevious: { skip(forward: false) }, onPlayPause: playPause, onNext: { skip(forward: true) })
+    }
+
+    private func controlsRow(kind: ScrubRowKind) -> some View {
+        PlayerControlsRow(searchOpen: pane == .search, queueOpen: pane == .queue,
+                          onSearch: { openSearch(toggle: true) }, onQueue: { model.toggle(.queue) }) {
+            transport(.large)
+        } film: {
+            filmButton(kind: kind)
+        }
+    }
+
+    @ViewBuilder
+    private func filmButton(kind: ScrubRowKind) -> some View {
+        let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint
+        if let preview {
+            if preview.musicVideo {
+                VideoAlignButton(on: preview.align != nil, reason: { nil }, tint: accent) {}
+            }
+        } else {
+            LiveAlignButton(musicVideo: MusicVideoController.shared, kind: kind, tint: accent)
+        }
+    }
+
+    private func openSearch(toggle: Bool = false) {
+        if toggle { model.toggle(.search) } else { model.pane = .search }
+        if model.pane == .search { searchFocused = true }
     }
 
     private var switchKinds: [PlayerKind] {
-        DesktopPlayerModel.switchKinds(
+        if let preview { return preview.kinds }
+        return DesktopPlayerModel.switchKinds(
             installed: DesktopPlayerModel.installed, running: nowPlaying.runningPlayers,
             followed: nowPlaying.followedPlayers,
             webSeen: Set(PlayerKind.browsers.filter { WebTabMemory.shared.entry(for: $0) != nil }),
@@ -340,11 +579,19 @@ struct DesktopPlayerView: View {
             scrub: scrub,
             playPause: { playPause() },
             track: { skip(forward: $0) },
-            focusSearch: { focus.wrappedValue = true },
+            focusSearch: {
+                model.pane = .search
+                focus.wrappedValue = true
+            },
             clearSearch: {
-                guard !model.query.isEmpty || focus.wrappedValue else { return false }
-                model.query = ""
-                focus.wrappedValue = false
+                if !model.query.isEmpty || focus.wrappedValue {
+                    model.query = ""
+                    focus.wrappedValue = false
+                    model.pane = .song
+                    return true
+                }
+                guard model.pane != .song else { return false }
+                model.pane = .song
                 return true
             },
             hasResults: { model.isSearching && !model.results.isEmpty },
@@ -352,147 +599,61 @@ struct DesktopPlayerView: View {
             playSelection: { model.playSelection() }), for: displayID)
     }
 
-    // MARK: Results
+    // MARK: Search column
 
-    @ViewBuilder
-    private var resultsList: some View {
-        if maskRender { Color.black.opacity(0.3) } else { resultsScroll }
+    private var searchColumn: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                PlayerPicker(kinds: switchKinds, selected: model.player) { model.player = $0 }
+                Spacer(minLength: 0)
+                PaneCloseButton(label: "Close search") {
+                    model.query = ""
+                    searchFocused = false
+                    model.pane = .song
+                }
+            }
+            PlayerSearchField(query: $model.query, focused: $searchFocused, player: model.player,
+                              shownFocused: preview?.searchFocused ?? searchFocused) { model.playSelection() }
+            PlayerResultsList(results: model.results, status: model.status, selection: model.selection,
+                              player: model.player) { model.play($0) }
+        }
+        .onAppear { if !maskRender && preview == nil { searchFocused = true } }
     }
 
-    private var resultsScroll: some View {
-        PlayerResultsList(results: model.results, status: model.status, selection: model.selection,
-                          player: model.player) { model.play($0) }
-    }
-}
+    // MARK: Queue column
 
-/// The search results that replace the strip; the selected one (↑ ↓) is lit
-/// and plays on Return.
-struct PlayerResultsList: View {
-    let results: [PlayerSearchResult]
-    let status: DesktopPlayerModel.Status
-    let selection: Int
-    let player: PlayerKind
-    let onPlay: (PlayerSearchResult) -> Void
-    @Environment(\.playerPreview) private var preview
-
-    var body: some View {
-        if preview != nil {
-            VStack(alignment: .leading, spacing: 2) { rows }.padding(10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    private func queueColumn(now: PlayerNow) -> some View {
+        let items: [PlayerQueueItem]
+        var footnote: String?
+        if model.queue.isEmpty, let track = now.track {
+            // A player that shares no queue (Spotify): just what is playing.
+            items = [PlayerQueueItem(id: "now", title: track.title, artist: track.artist, index: 0, isCurrent: true)]
+            footnote = DesktopPlayerModel.emptyQueueMessage(for: playingKind)
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) { rows }.padding(10)
+            items = model.queue
+            if items.isEmpty { footnote = DesktopPlayerModel.emptyQueueMessage(for: playingKind) }
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("QUEUE").font(.system(size: 10, weight: .bold)).tracking(1.2)
+                Spacer(minLength: 0)
+                if model.shuffleOn, !model.queue.isEmpty {
+                    Label("Playlist order, shuffle is on", systemImage: "shuffle")
+                        .font(.system(size: 10))
+                        .help("Shuffle is on: this is the playlist\u{2019}s order, not the order songs will play in")
                 }
-                .onChange(of: selection) { _, index in
-                    guard results.indices.contains(index) else { return }
-                    proxy.scrollTo(results[index].id)
-                }
+                PaneCloseButton(label: "Close queue") { model.pane = .song }
             }
+            .foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.65))
+            PlayerQueueList(items: items, optimisticCurrent: optimisticCurrent, isPlaying: displayedPlaying,
+                            artwork: now.artwork, footnote: footnote, onTap: queueTapped)
         }
     }
 
-    @ViewBuilder
-    private var rows: some View {
-        statusLine
-        ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
-            row(result, selected: index == selection).id(result.id)
-        }
-    }
-
-    @ViewBuilder
-    private var statusLine: some View {
-        switch status {
-        case .searching: Text("Searching\u{2026}").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).padding(8)
-        case .message(let text): Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)).padding(8)
-        case .idle: EmptyView()
-        }
-    }
-
-    private func row(_ result: PlayerSearchResult, selected: Bool) -> some View {
-        Button { onPlay(result) } label: {
-            HStack(spacing: 10) {
-                Group {
-                    if let image = preview?.covers[result.id] {
-                        Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                    } else if preview != nil {
-                        RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.1))
-                    } else {
-                        RemoteCover(url: result.artworkURL, symbol: result.kind == .album ? "square.stack" : "music.note",
-                                    lookup: result.artworkURL == nil && player == .appleMusic ? (result.title, result.artist) : nil,
-                                    persistentID: { if case .libraryTrack(let id) = result.target { return id } else { return nil } }())
-                    }
-                }
-                .frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(result.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    Text(subtitle(result)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
-                }
-                Spacer()
-                if result.inLibrary {
-                    Text("Library").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.5))
-                } else if result.kind == .album {
-                    Text("Album").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.5))
-                }
-            }
-            .padding(6).contentShape(Rectangle())
-            .background(selected ? Color.white.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(RowButtonStyle())
-    }
-
-    private func subtitle(_ result: PlayerSearchResult) -> String {
-        if result.kind == .album || result.album.isEmpty || result.album == result.title { return result.artist }
-        return "\(result.artist) \u{00B7} \(result.album)"
-    }
-}
-
-/// Reveal and dismiss: in on a soft spring with no bounce, out quicker as a
-/// plain fade. Under Reduce Motion, short fades.
-enum PlayerMotion {
-    static func reveal(shown: Bool, reduceMotion: Bool) -> Animation {
-        if reduceMotion { return shown ? .easeOut(duration: 0.15) : .easeIn(duration: 0.12) }
-        return shown ? .spring(duration: 0.32, bounce: 0) : .spring(duration: 0.20, bounce: 0)
-    }
-}
-
-/// The player's three rows: the strip (or results), the seek bar, the
-/// controls. The seek row folds away while searching or with no song.
-struct PlayerColumn<Top: View, Scrub: View, Controls: View>: View {
-    let scrubKind: ScrubRowKind
-    @ViewBuilder let top: () -> Top
-    @ViewBuilder let scrub: () -> Scrub
-    @ViewBuilder let controls: () -> Controls
-
-    var body: some View {
-        let folded = scrubKind == .hidden
-        VStack(spacing: 0) {
-            top()
-            scrub()
-                .frame(height: folded ? 0 : ScrubRow.height)
-                .opacity(folded ? 0 : 1)
-                .padding(.top, folded ? 10 : 8)
-            controls()
-                .padding(.top, folded ? 0 : 6)
-        }
-    }
-}
-
-/// Nothing playing: one plain tile where the cover would be.
-struct EmptyPlayerTile: View {
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.1))
-                .overlay(Image(systemName: "music.note").font(.system(size: 34)).foregroundStyle(.white.opacity(0.4)))
-                .frame(width: DesktopPlayerView.cover, height: DesktopPlayerView.cover)
-            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.8))
-        }
-        .shadow(color: .black.opacity(0.6), radius: 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
+    private func queueTapped(_ item: PlayerQueueItem) {
+        PlayerInteraction.shared.noteClick()
+        let isCurrent = optimisticCurrent.map { $0 == item.id } ?? item.isCurrent
+        if isCurrent { playPause() } else { model.play(item) }
     }
 }
 
@@ -505,51 +666,42 @@ private struct ScrubActivityReader<Content: View>: View {
     var body: some View { content(activity) }
 }
 
-private struct StripOffsetKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+/// Reveal and dismiss: in on a soft spring with no bounce, out quicker as a
+/// plain fade. Under Reduce Motion, short fades.
+enum PlayerMotion {
+    static func reveal(shown: Bool, reduceMotion: Bool) -> Animation {
+        if reduceMotion { return shown ? .easeOut(duration: 0.15) : .easeIn(duration: 0.12) }
+        return shown ? .spring(duration: 0.32, bounce: 0) : .spring(duration: 0.20, bounce: 0)
+    }
 }
 
-/// Turns the mouse wheel's up and down into sideways scrolling over the
-/// panel's strip, which only listens to sideways movement on its own.
-private final class WheelBridge {
-    private var monitor: Any?
-
-    func start() {
-        guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            guard let window = event.window, window.title == ControlPanelController.windowTitle,
-                  event.scrollingDeltaX == 0, event.scrollingDeltaY != 0, !event.hasPreciseScrollingDeltas,
-                  var view = window.contentView?.hitTest(event.locationInWindow) else { return event }
-            while !(view is NSScrollView) {
-                guard let up = view.superview else { return event }
-                view = up
-            }
-            guard let scroll = view as? NSScrollView, scroll.documentView != nil else { return event }
-            let clip = scroll.contentView
-            // The clip view knows the strip's margins (insets) and its ends.
-            var wanted = clip.bounds
-            wanted.origin.x -= event.scrollingDeltaY * 24
-            clip.setBoundsOrigin(clip.constrainBoundsRect(wanted).origin)
-            scroll.reflectScrolledClipView(clip)
-            return nil
-        }
-    }
-
-    func stop() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
-    }
-
-    deinit { stop() }
-}
-
-/// Set by previews drawn offscreen: the strip and results draw as plain
-/// rows (scroll views come out blank in an image), with these covers by id,
-/// and AppKit-backed pieces (mouse tracking, the text field) are left out.
-/// Never set in the app.
+/// Set by previews drawn offscreen: made-up songs, covers by id and the
+/// scene behind the glass; lists draw as plain rows (scroll views come out
+/// blank in an image), and AppKit-backed pieces (mouse tracking, the text
+/// field) are left out. Never set in the app.
 struct PlayerPreview: Equatable {
     var covers: [String: NSImage] = [:]
+    /// The song, instead of the monitor's.
+    var now: PlayerNow?
+    /// Lining up the music video: the video's bar, instead of the music video's.
+    var align: MusicVideoAlignDisplay?
+    /// A music video is the wallpaper (the film button shows).
+    var musicVideo = false
+    /// The players the switch offers.
+    var kinds: [PlayerKind] = [.appleMusic, .spotify]
+    /// The search field drawn with the keyboard in it.
+    var searchFocused = false
+    /// What the glass shows through, placed in the `PlayerPreview.space`
+    /// coordinate space: an image can't draw the system's materials.
+    var backdrop: AnyView?
+
+    static let space = "playerPreviewScene"
+
+    static func == (lhs: PlayerPreview, rhs: PlayerPreview) -> Bool {
+        lhs.covers == rhs.covers && lhs.now == rhs.now && lhs.align == rhs.align && lhs.musicVideo == rhs.musicVideo
+            && lhs.kinds == rhs.kinds && lhs.searchFocused == rhs.searchFocused
+            && (lhs.backdrop == nil) == (rhs.backdrop == nil)
+    }
 }
 
 private struct PlayerPreviewKey: EnvironmentKey { static let defaultValue: PlayerPreview? = nil }
@@ -560,243 +712,9 @@ extension EnvironmentValues {
     }
 }
 
-/// A row of covers that scrolls sideways with the trackpad or the wheel,
-/// opening on the song that is playing, and settling on a cover after a
-/// flick. Click a cover to play it. The faster it scrolls, the more the
-/// covers bend, blur and brighten, like light passing through thick glass
-/// (none of that under Reduce Motion). On reveal the side covers fan out
-/// from behind the one in the middle.
-struct CoverStrip: View {
-    let items: [PlayerQueueItem]
-    let tint: Color
-    var artwork: NSImage?
-    var recenter = 0
-    var note: String?
-    /// Bumped when the shuffle note should show (once per change).
-    var noteTrigger = 0
-    var shown = true
-    var paused = false
-    var labelsDimmed = false
-    var sidesDimmed = false
-    /// The item a Next press slid to, shown as current until the player answers.
-    var optimisticCurrent: String?
-    let onTap: (PlayerQueueItem) -> Void
-    @Environment(\.playerLook) private var look
-    @Environment(\.playerPreview) private var preview
-    @State private var velocity: CGFloat = 0
-    @State private var lastOffset: CGFloat?
-    @State private var lastTime: TimeInterval = 0
-    @State private var decay: Task<Void, Never>?
-    @State private var wheel = WheelBridge()
-    @State private var noteShown = false
-    @State private var noteShownFor = 0
-    @State private var fanned = true
-
-    private var currentID: String? {
-        if let optimisticCurrent, items.contains(where: { $0.id == optimisticCurrent }) { return optimisticCurrent }
-        return items.first(where: \.isCurrent)?.id ?? items.first?.id
-    }
-
-    private var currentIndex: Int { currentID.flatMap { id in items.firstIndex { $0.id == id } } ?? 0 }
-
-    /// The titles under the covers while the seek bar's capsules are up:
-    /// gone, since the capsules sit right over them (dimmed, they still
-    /// showed through the time and lyric).
-    static func labelOpacity(dimmed: Bool) -> Double { dimmed ? 0 : 1 }
-
-    /// Long enough to read the note: 2.5 s for a short one, up to 7 s.
-    nonisolated static func noteSeconds(_ note: String?) -> Double {
-        min(7, max(2.5, Double(note?.count ?? 0) / 14))
-    }
-
-    var body: some View {
-        Group {
-            if preview != nil { staticRow } else { scrollingRow }
-        }
-        .overlay(alignment: .top) {
-            if let note, noteShown {
-                Text(note).font(.system(size: 10)).foregroundStyle(.white.opacity(0.8))
-                    .padding(.horizontal, 10).padding(.vertical, 3)
-                    .playerCapsule(look)
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.3), value: noteShown)
-        .onChange(of: noteTrigger) { _, trigger in
-            noteShown = true
-            noteShownFor = trigger
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(Self.noteSeconds(note) * 1_000_000_000))
-                // A newer note keeps its own time on screen.
-                if noteShownFor == trigger { noteShown = false }
-            }
-        }
-        .onChange(of: shown) { _, now in
-            guard now, !look.reduceMotion, preview == nil else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { fanned = false }
-            Task { @MainActor in fanned = true }
-        }
-    }
-
-    // MARK: Scrolling
-
-    private var scrollingRow: some View {
-        let bend = max(-1, min(1, velocity / 1800))
-        let strength = abs(bend)
-        let still = look.reduceMotion
-        return ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 14) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        tile(item, index: index)
-                            .id(item.id)
-                            .scrollTransition(axis: .horizontal) { content, phase in
-                                let edge = abs(phase.value)
-                                let moving = still ? 0 : strength
-                                return content
-                                    .scaleEffect((phase.isIdentity ? 1 : 0.84) - 0.1 * moving * edge)
-                                    .opacity(phase.isIdentity ? 1 : 0.6)
-                                    .rotation3DEffect(.degrees(still ? 0 : phase.value * (-24 - 16 * strength)),
-                                                      axis: (0, 1, 0), perspective: 0.6)
-                                    // Squeezed towards the middle, like a lens, and
-                                    // blurred and lit by how fast it moves.
-                                    .offset(x: -phase.value * moving * 34)
-                                    .blur(radius: moving * (1 + 3 * edge))
-                                    .brightness(moving * 0.12 * (1 - edge))
-                                    .saturation(1 + moving * 0.25)
-                            }
-                    }
-                }
-                .scrollTargetLayout()
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: StripOffsetKey.self, value: proxy.frame(in: .named("strip")).minX)
-                })
-            }
-            // Margins rather than padding, so a flick settles with a cover in the middle.
-            .contentMargins(.horizontal, (DesktopPlayerView.width - DesktopPlayerView.cover) / 2, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
-            .coordinateSpace(name: "strip")
-            .onPreferenceChange(StripOffsetKey.self) { measured(offset: $0) }
-            .task(id: "\(currentID ?? "")|\(items.count)") {
-                // The row is laid out lazily; give it a moment before centring.
-                try? await Task.sleep(nanoseconds: 80_000_000)
-                guard !Task.isCancelled, let id = currentID else { return }
-                withAnimation(look.reduceMotion ? nil : .smooth(duration: 0.4)) { proxy.scrollTo(id, anchor: .center) }
-            }
-            .onChange(of: recenter) { _, _ in
-                // Back on the playing song every time, with no visible scroll.
-                Task { @MainActor in
-                    for delay in [30, 150] as [UInt64] {
-                        try? await Task.sleep(nanoseconds: delay * 1_000_000)
-                        if let id = currentID { proxy.scrollTo(id, anchor: .center) }
-                    }
-                }
-            }
-        }
-        .onAppear { wheel.start() }
-        .onDisappear { wheel.stop() }
-    }
-
-    /// For previews: the same tiles, laid out as the strip rests.
-    private var staticRow: some View {
-        let step = DesktopPlayerView.cover + 14
-        return ZStack {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                let distance = index - currentIndex
-                if abs(distance) <= 3 {
-                    tile(item, index: index)
-                        .scaleEffect(distance == 0 ? 1 : 0.84)
-                        .opacity(distance == 0 ? 1 : 0.6)
-                        .rotation3DEffect(.degrees(look.reduceMotion || distance == 0 ? 0 : (distance > 0 ? -24 : 24)),
-                                          axis: (0, 1, 0), perspective: 0.6)
-                        .offset(x: CGFloat(distance) * step)
-                }
-            }
-        }
-        .frame(width: DesktopPlayerView.width, height: DesktopPlayerView.stripHeight)
-        .clipped()
-    }
-
-    // MARK: Tile
-
-    private func tile(_ item: PlayerQueueItem, index: Int) -> some View {
-        let isCurrent = item.id == currentID
-        let distance = index - currentIndex
-        return Button { onTap(item) } label: {
-            VStack(spacing: 6) {
-                cover(item, isCurrent: isCurrent)
-                    .frame(width: DesktopPlayerView.cover, height: DesktopPlayerView.cover)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(tint, lineWidth: isCurrent ? 2 : 0))
-                    .shadow(color: .black.opacity(0.5), radius: 12, y: 6)
-                    // A paused song's cover sits back a little.
-                    .scaleEffect(isCurrent && paused ? 0.94 : 1)
-                    .animation(look.reduceMotion ? nil : .smooth(duration: 0.35), value: paused)
-                VStack(spacing: 1) {
-                    Text(item.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                    Text(item.artist).font(.system(size: 10)).foregroundStyle(.white.opacity(0.65)).lineLimit(1)
-                }
-                .frame(width: DesktopPlayerView.cover)
-                .shadow(color: .black.opacity(0.7), radius: 5)
-                .opacity(Self.labelOpacity(dimmed: labelsDimmed))
-                .animation(labelsDimmed ? .easeIn(duration: 0.10) : .easeOut(duration: 0.12), value: labelsDimmed)
-            }
-        }
-        .buttonStyle(CoverButtonStyle())
-        .disabled(!item.isPlayable)
-        .opacity(sidesDimmed && !isCurrent ? 0.5 : 1)
-        .animation(.easeOut(duration: 0.15), value: sidesDimmed)
-        // The fan: side covers start tucked behind the middle one.
-        .offset(x: fanned || isCurrent ? 0 : CGFloat(distance > 0 ? -40 : 40))
-        .opacity(fanned || isCurrent ? 1 : 0)
-        .animation(.spring(duration: 0.38, bounce: 0).delay(0.018 * Double(min(abs(distance), 8))), value: fanned)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(item.artist.isEmpty ? item.title : "\(item.title) by \(item.artist)")
-        .accessibilityHint(isCurrent ? "Now playing" : distance < 0 ? "Played earlier" : "Up next")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: isCurrent ? (paused ? "Play" : "Pause") : "Play") { onTap(item) }
-    }
-
-    @ViewBuilder
-    private func cover(_ item: PlayerQueueItem, isCurrent: Bool) -> some View {
-        if let image = preview?.covers[item.id] {
-            Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-        } else if preview != nil {
-            Rectangle().fill(.white.opacity(0.1))
-        } else if item.isCurrent, item.persistentID == nil, let artwork {
-            Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-        } else {
-            RemoteCover(url: nil, symbol: "music.note", lookup: (item.title, item.artist), persistentID: item.persistentID)
-        }
-    }
-
-    private func measured(offset: CGFloat) {
-        guard !look.reduceMotion else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        defer { lastOffset = offset; lastTime = now }
-        guard let last = lastOffset, now > lastTime else { return }
-        let instant = (offset - last) / CGFloat(now - lastTime)
-        guard instant.isFinite else { return }
-        let next = velocity * 0.6 + instant * 0.4
-        if abs(next - velocity) > 30 { velocity = next }
-        decay?.cancel()
-        decay = Task { @MainActor in
-            while abs(velocity) > 12 {
-                try? await Task.sleep(nanoseconds: 33_000_000)
-                guard !Task.isCancelled else { return }
-                velocity *= 0.82
-            }
-            velocity = 0
-        }
-    }
-}
-
 /// A cover gives a little on mouse-down, so the press is felt at once even
 /// when the click waits to see whether it is a double-click.
-private struct CoverButtonStyle: ButtonStyle {
+struct CoverButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
@@ -804,6 +722,7 @@ private struct CoverButtonStyle: ButtonStyle {
                        value: configuration.isPressed)
     }
 }
+
 /// A song's own cover, straight from the Music library: the exact artwork of
 /// that track, not a guess by name. Covers asked for together (a strip
 /// coming into view) are read in one script; a cover scrolled away before its
@@ -1018,26 +937,9 @@ struct RemoteCover: View {
     }
 }
 
-private struct RowButtonStyle: ButtonStyle {
+struct RowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? Color.white.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-private extension View {
-    /// Frosted dark glass with a hairline edge; solid under Reduce Transparency.
-    @ViewBuilder
-    func glass(radius: CGFloat, tint: Color, look: PlayerLook = PlayerLook()) -> some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        if look.reduceTransparency {
-            background(Color(white: 0.12).opacity(0.95), in: shape)
-                .overlay(shape.strokeBorder(.white.opacity(look.increaseContrast ? 0.4 : 0.14), lineWidth: 0.5))
-        } else {
-            background(.ultraThinMaterial, in: shape)
-                .background(Color.black.opacity(0.28), in: shape)
-                .overlay(shape.strokeBorder(.white.opacity(look.increaseContrast ? 0.4 : 0.14), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.35), radius: 24, y: 8)
-        }
     }
 }

@@ -18,6 +18,11 @@ final class DesktopPlayerModel: ObservableObject {
         case message(String)
     }
 
+    /// What the card's right-hand column shows: the song, the search, or the queue.
+    enum Pane: Equatable {
+        case song, search, queue
+    }
+
     /// The player the search box and the queue talk to.
     @Published var player: PlayerKind {
         didSet {
@@ -29,6 +34,9 @@ final class DesktopPlayerModel: ObservableObject {
         }
     }
     @Published var query = ""
+    /// The search or the queue opened over the song's column. Shared by the
+    /// panel and its hit mask (a separate render), so both see the same card.
+    @Published var pane: Pane = .song
     @Published private(set) var results: [PlayerSearchResult] = [] {
         didSet { if results != oldValue { selection = 0 } }
     }
@@ -61,11 +69,16 @@ final class DesktopPlayerModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var queueTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
+    /// A preview's model: holds made-up songs, never searches, reads the
+    /// queue or plays anything.
+    let isPreview: Bool
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, preview: Bool = false) {
         self.defaults = defaults
+        isPreview = preview
         player = PlayerKind(rawValue: defaults.string(forKey: Self.playerKey) ?? "") ?? .appleMusic
         showsRemaining = defaults.string(forKey: Self.timeModeKey) != "total"
+        guard !preview else { return }
         $query.removeDuplicates().debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.runSearch() }.store(in: &cancellables)
         // Songs that finish are remembered, in the order they played.
@@ -93,12 +106,44 @@ final class DesktopPlayerModel: ObservableObject {
 
     var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
+    /// The column shows the search: opened, or something is typed.
+    var showsSearch: Bool { pane == .search || isSearching }
+    var showsQueue: Bool { pane == .queue && !isSearching }
+
+    /// Search or queue, from the transport's buttons: a second press closes it.
+    func toggle(_ wanted: Pane) {
+        if wanted == .search, isSearching { pane = .search; return }
+        pane = pane == wanted ? .song : wanted
+    }
+
+    /// Esc, and the player going away with nothing typed: back to the song.
+    func closePane() {
+        guard !isSearching else { return }
+        pane = .song
+    }
+
+    /// Previews only: made-up songs and results, set straight in.
+    func loadPreview(queue: [PlayerQueueItem], shuffle: Bool, results: [PlayerSearchResult] = [], selection: Int = 0,
+                     status: Status = .idle, query: String = "", pane: Pane = .song, playNote: String? = nil) {
+        guard isPreview else { return }
+        fetched = queue
+        self.queue = queue
+        shuffleOn = shuffle
+        self.query = query
+        self.results = results
+        self.selection = selection
+        self.status = status
+        self.pane = pane
+        self.playNote = playNote
+    }
+
     /// The player that is playing now, when it is one the search can drive.
     func followNowPlaying() {
         if let active = NowPlayingMonitor.shared.activePlayer, active != player { player = active }
     }
 
     func runSearch() {
+        guard !isPreview else { return }
         searchTask?.cancel()
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count >= 2 else {
@@ -167,6 +212,7 @@ final class DesktopPlayerModel: ObservableObject {
 
     /// Reloads the strip: the songs before this one, this one, the songs after.
     func refreshQueue() {
+        guard !isPreview else { return }
         queueTask?.cancel()
         let searcher = playingKind.searcher
         if queueKind != searcher.kind { queue = []; fetched = []; queueKind = searcher.kind }
@@ -239,6 +285,7 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     func play(_ result: PlayerSearchResult) {
+        guard !isPreview else { return }
         let searcher = self.searcher
         perform(searcher) { try await searcher.playNoting(result) }
         if case .spotifySearch = result.target { return }
@@ -246,7 +293,7 @@ final class DesktopPlayerModel: ObservableObject {
     }
 
     func play(_ item: PlayerQueueItem) {
-        guard item.isPlayable else { return }
+        guard item.isPlayable, !isPreview else { return }
         let searcher = playingKind.searcher
         // The strip moves to the song at once; the player catches up after.
         // It plays inside the playlist that is playing, which carries on after it.
@@ -266,6 +313,7 @@ final class DesktopPlayerModel: ObservableObject {
     private func collapseAfterPlaying() {
         query = ""
         results = []
+        pane = .song
     }
 
     private func perform(_ searcher: any PlayerSearching, _ work: @escaping @Sendable () async throws -> String?) {

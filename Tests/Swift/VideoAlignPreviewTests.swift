@@ -14,10 +14,10 @@ final class VideoAlignPreviewTests: XCTestCase {
         if let directory { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
         for state in AlignPreviewState.allCases {
             let renderer = ImageRenderer(content: AlignPreviewScene(state: state)
-                .frame(width: PlayerPreviewScene.size.width, height: PlayerPreviewScene.size.height))
-            renderer.scale = 2
+                .frame(width: SleeveScene.size.width, height: SleeveScene.size.height))
+            renderer.scale = directory == nil ? 0.5 : 2
             let image = try XCTUnwrap(renderer.cgImage, "\(state)")
-            XCTAssertEqual(image.width, Int(PlayerPreviewScene.size.width * 2))
+            XCTAssertEqual(image.width, Int(SleeveScene.size.width * renderer.scale))
             if let directory {
                 try DesktopPlayerPreviewTests.write(image, to: directory.appendingPathComponent("\(state.fileName).png"))
             }
@@ -69,66 +69,19 @@ enum AlignPreviewState: String, CaseIterable {
     }
 }
 
-/// One state over a made-up video frame.
+/// One state of the real player over a made-up video frame.
 @MainActor
 private struct AlignPreviewScene: View {
     let state: AlignPreviewState
-    @FocusState private var focus: Bool
-    private let scrub: ScrubController
-    private let tint = PlayerKind.appleMusic.tint
-
-    init(state: AlignPreviewState) {
-        self.state = state
-        let elapsed = 64.0
-        let scrub = ScrubController(displayID: 1, seek: { _ in }, playback: { elapsed }, haptics: .silent,
-                                    now: { 0 }, reduceMotion: { true }, previewsOnWallpaper: false)
-        scrub.update(.init(duration: 200, trackKey: "preview", lines: PlayerPreviewScene.lines, canSeek: true))
-        if state == .button { scrub.pointerMoved(x: ScrubMath.x(time: 64, duration: 200), y: 0) }
-        self.scrub = scrub
-    }
 
     var body: some View {
-        ZStack {
-            VideoFrame(shift: state.display.offset)
-            // The lyric stays readable while lining up, to judge it by.
-            Text("I said, ooh, I\u{2019}m blinded by the lights")
-                .font(.system(size: 46, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.4), radius: 10)
-                .blur(radius: state.aligning ? 4 : 22)
-                .opacity(state.aligning ? 0.8 : 0.3)
-                .offset(y: -150)
-            PlayerColumn(scrubKind: .seekable) {
-                CoverStrip(items: PlayerPreviewScene.queue, tint: tint, paused: state == .unavailable,
-                           labelsDimmed: true, sidesDimmed: state.aligning, onTap: { _ in })
-                    .frame(width: DesktopPlayerView.width, height: DesktopPlayerView.stripHeight)
-            } scrub: {
-                Group {
-                    if state.aligning {
-                        VideoAlignRow(display: state.display, tint: tint)
-                    } else {
-                        ScrubRow(controller: scrub, kind: .seekable, tint: tint, isPlaying: state != .unavailable,
-                                 shown: true, showsRemaining: .constant(true))
-                    }
-                }
-                .overlay(alignment: .trailing) {
-                    VideoAlignButton(on: state.aligning,
-                                     reason: { state == .unavailable ? MusicVideoAlignAvailability.notPlaying : nil },
-                                     tint: tint) {}
-                        .offset(x: VideoAlignButton.outset)
-                }
-            } controls: {
-                if state.aligning {
-                    VideoAlignControls(canReset: state == .kept, tint: tint, onReset: {}, onCancel: {}, onDone: {})
-                } else {
-                    PlayerControlsRow(kinds: [.appleMusic, .spotify], selected: .appleMusic, onSelect: { _ in },
-                                      canControl: true, hasSong: true, isPlaying: state != .unavailable,
-                                      onPrevious: {}, onPlayPause: {}, onNext: {}, query: .constant(""),
-                                      searchFocused: $focus, onSubmit: {})
-                }
-            }
-            .foregroundStyle(.white)
-            .offset(y: 60)
+        var fixture = SleeveFixture(state: state == .button ? .hover : state == .unavailable ? .paused : .rest,
+                                    backdrop: AnyView(frame))
+        fixture.preview.align = state.aligning ? state.display : nil
+        return ZStack {
+            frame
+            fixture.player
+                .position(x: SleeveScene.size.width / 2, y: SleeveScene.size.height / 2)
             VStack {
                 Spacer()
                 Text(state.caption).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.9))
@@ -137,8 +90,24 @@ private struct AlignPreviewScene: View {
                     .padding(.bottom, 12)
             }
         }
+        .frame(width: SleeveScene.size.width, height: SleeveScene.size.height)
+        .coordinateSpace(name: PlayerPreview.space)
         .environment(\.colorScheme, .dark)
-        .environment(\.playerPreview, PlayerPreview(covers: PlayerPreviewScene.covers))
+    }
+
+    /// The video, and the lyric over it: readable while lining up, to judge it by.
+    private var frame: some View {
+        ZStack {
+            VideoFrame(shift: state.display.offset)
+            Text("I said, ooh, I\u{2019}m blinded by the lights")
+                .font(.system(size: 46, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.4), radius: 10)
+                .blur(radius: state.aligning ? 4 : 22)
+                .opacity(state.aligning ? 0.8 : 0.3)
+                .offset(y: -40)
+        }
+        .frame(width: SleeveScene.size.width, height: SleeveScene.size.height)
     }
 }
 

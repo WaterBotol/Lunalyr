@@ -35,7 +35,8 @@ enum ScrubLyric: Equatable {
 /// snapping to lyric lines, the rubber band past the ends, where a seek
 /// lands, and what the bar draws for the lyric structure.
 enum ScrubMath {
-    static let barWidth: Double = 456
+    /// The seek bar spans the player card's right-hand column.
+    static let barWidth: Double = 364
     /// Snap radius at full speed; scaled by the gain, so fine modes barely snap.
     static let snapRadius: Double = 7
     /// A sweep faster than this (pt/s) is never sticky.
