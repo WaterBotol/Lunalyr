@@ -25,6 +25,10 @@ final class OpeningTitlePreviewTests: XCTestCase {
         /// The moments the old heading was drawn at (the "before" set).
         let moments: [(String, Double)]
         var reduceMotion = false
+        /// The cover's two colours; nil for a song with no artwork.
+        var cover: (Color, Color)? = (Color(red: 0.95, green: 0.5, blue: 0.35), Color(red: 0.25, green: 0.15, blue: 0.45))
+        /// "Show the album cover" switched off.
+        var coverOff = false
 
         /// The moments drawn: through the card's entrance, held, half-way
         /// out, and once the first line has begun.
@@ -70,7 +74,27 @@ final class OpeningTitlePreviewTests: XCTestCase {
         Song(name: "e-reduce-motion", title: "Human Nature", artist: "Yot Club", album: "Rare Hymns",
              lines: [spaced("Always felt like you were gonna stick around", start: 11.0)],
              moments: [("1-entering", 0.9), ("3-holding", 5.0), ("4-leaving", 9.4)], reduceMotion: true),
+        Song(name: "g-cover-off", title: "Human Nature", artist: "Yot Club", album: "Rare Hymns",
+             lines: [spaced("Always felt like you were gonna stick around", start: 11.0)],
+             moments: [], coverOff: true),
+        Song(name: "h-no-artwork", title: "Human Nature", artist: "Yot Club", album: "Rare Hymns",
+             lines: [spaced("Always felt like you were gonna stick around", start: 11.0)],
+             moments: [], cover: nil),
     ]
+
+    /// A made-up album cover: a two-colour gradient with a ring, as PNG.
+    static func coverPNG(_ colours: (Color, Color)) -> Data? {
+        let view = ZStack {
+            LinearGradient(colors: [colours.0, colours.1], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Circle().stroke(Color.white.opacity(0.85), lineWidth: 14).frame(width: 170, height: 170)
+            Circle().fill(colours.0.opacity(0.9)).frame(width: 60, height: 60).offset(x: 60, y: 70)
+        }
+        .frame(width: 300, height: 300)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        guard let image = renderer.cgImage else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+    }
 
     func testRenderOpeningTitlePreviews() throws {
         let environment = ProcessInfo.processInfo.environment
@@ -102,13 +126,26 @@ final class OpeningTitlePreviewTests: XCTestCase {
         extras.lyricsHidden = false
         if readings.display != .below { readings.display = .below }
 
-        for song in Self.songs {
+        let coverSetting = UserDefaults.standard.object(forKey: OpeningTitle.coverKey)
+        defer {
+            if let coverSetting { UserDefaults.standard.set(coverSetting, forKey: OpeningTitle.coverKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.coverKey) }
+        }
+        for song in Self.songs where label == "after" || !song.moments.isEmpty {
+            UserDefaults.standard.set(!song.coverOff, forKey: OpeningTitle.coverKey)
             let music = FakeMusicApp()
-            music.queue = [FakeMusicApp.Song(id: "00000000000000A1", name: song.title, artist: song.artist, album: song.album)]
+            music.queue = [FakeMusicApp.Song(id: "00000000000000A1", name: song.title, artist: song.artist, album: song.album,
+                                             artwork: song.cover.flatMap(Self.coverPNG))]
             music.position = 0
             let harness = PlayerHarness(music: music)
             harness.start()
             model.lines = song.lines
+            // Let the cover arrive, as the wallpaper's does.
+            let artDeadline = Date().addingTimeInterval(3)
+            while song.cover != nil, harness.monitor.currentTrackArtwork == nil, Date() < artDeadline {
+                harness.scheduler.drain()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            }
             let deadline = Date().addingTimeInterval(5)
             while Date() < deadline, song.lines.contains(where: { LyricRomanizer.containsNonLatin($0.text) }),
                   model.romanized.isEmpty {
@@ -137,7 +174,7 @@ final class OpeningTitlePreviewTests: XCTestCase {
                 }
             }
             // The floating lyrics draw a compact card, centred in the window.
-            if label != "before", song.name == "a-standard" || song.name == "c-japanese" {
+            if label != "before", ["a-standard", "c-japanese", "h-no-artwork"].contains(song.name) {
                 let textSize = CGFloat(FloatingLyricsOptions.SizePreset.medium.rawValue)
                 let window = FloatingFrame.defaultSize(textSize: textSize,
                     in: CGRect(origin: .zero, size: Self.screen).insetBy(dx: 0, dy: 60))
