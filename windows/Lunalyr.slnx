@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lunalyr.Core/Lunalyr.Core.csproj" />
+    <Project Path="src/Lunalyr.Platform.Windows/Lunalyr.Platform.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lunalyr.Core.Tests/Lunalyr.Core.Tests.csproj" />
+    <Project Path="tests/Lunalyr.Platform.Windows.Tests/Lunalyr.Platform.Windows.Tests.csproj" />
+  </Folder>
+</Solution>
