@@ -19,26 +19,19 @@ public interface ILyricLookup
         Func<LyricLookupReport, ValueTask>? onUpdate, CancellationToken cancellationToken);
 }
 
-/// <summary>The real pipeline.</summary>
-public sealed class LyricServiceLookup(LyricService service) : ILyricLookup
+/// <summary>
+/// The real pipeline. With a <paramref name="disabledReason"/> (<c>--no-network</c>) the service is still built, but
+/// nothing is asked: every lookup returns an empty report and nothing is sent to any lyric service.
+/// </summary>
+public sealed class LyricServiceLookup(LyricService service, string? disabledReason = null) : ILyricLookup
 {
-    public string? DisabledReason => null;
+    public string? DisabledReason { get; } = disabledReason;
 
     public WordDistributor? WordDistributor => service.WordDistributor;
 
     public Task<LyricLookupReport> LookupAsync(LyricQuery query, LyricSourceSnapshot options,
         Func<LyricLookupReport, ValueTask>? onUpdate, CancellationToken cancellationToken) =>
-        service.LookupAsync(query, options, force: false, onUpdate, cancellationToken);
-}
-
-/// <summary>No lookups at all: nothing is sent to any lyric service (<c>--no-network</c>).</summary>
-public sealed class DisabledLyricLookup(string reason) : ILyricLookup
-{
-    public string? DisabledReason { get; } = reason;
-
-    public WordDistributor? WordDistributor => null;
-
-    public Task<LyricLookupReport> LookupAsync(LyricQuery query, LyricSourceSnapshot options,
-        Func<LyricLookupReport, ValueTask>? onUpdate, CancellationToken cancellationToken) =>
-        Task.FromResult(new LyricLookupReport());
+        DisabledReason is null
+            ? service.LookupAsync(query, options, force: false, onUpdate, cancellationToken)
+            : Task.FromResult(new LyricLookupReport());
 }

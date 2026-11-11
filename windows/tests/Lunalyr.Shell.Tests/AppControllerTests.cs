@@ -35,7 +35,13 @@ public sealed class AppControllerTests : IAsyncDisposable
     {
         _controller = new AppController(_source, _lyrics, _renderer, settings ?? new AppSettings(), _offsets, ReadingServices.Basic,
             _guard, Logger.Null, _connectivity,
-            new AppControllerOptions { TimeProvider = _time, TimelineWait = TimeSpan.FromMilliseconds(60), TimelinePoll = TimeSpan.FromMilliseconds(10) });
+            new AppControllerOptions
+            {
+                TimeProvider = _time,
+                TimelineWait = TimeSpan.FromMilliseconds(60),
+                TimelinePoll = TimeSpan.FromMilliseconds(10),
+                LateTimelinePoll = TimeSpan.FromMilliseconds(20),
+            });
         return _controller;
     }
 
@@ -201,11 +207,31 @@ public sealed class AppControllerTests : IAsyncDisposable
         _source.Add(Playing("Song", timeline: false));
         var controller = Controller();
         controller.Start();
-        await controller.WhenIdleAsync();
+        await WaitUntil(() => _renderer.Last?.Status == StatusText.NoPosition);
 
+        await Task.Delay(100, TestContext.Current.CancellationToken); // it keeps waiting, quietly
         Assert.Empty(_lyrics.Queries);
         Assert.Equal(StatusText.NoPosition, _renderer.Last!.Status);
         Assert.Equal("Song", _renderer.Last.Title);
+        Assert.Equal(StatusText.NoPosition, controller.Status.Status);
+    }
+
+    [Fact]
+    public async Task ATimelineThatArrivesLateStillGetsTheSongItsLyrics()
+    {
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Late but here")));
+        var session = _source.Add(Playing("Song", timeline: false));
+        var controller = Controller();
+        controller.Start();
+        await WaitUntil(() => _renderer.Last?.Status == StatusText.NoPosition);
+
+        session.SetTimeline(3, 200);
+        await WaitUntil(() => _renderer.Last?.Lyrics is not null);
+        await controller.WhenIdleAsync();
+
+        Assert.Equal(200, Assert.Single(_lyrics.Queries).Duration);
+        Assert.Null(_renderer.Last!.Status);
+        Assert.Equal(StatusText.Showing, controller.Status.Status);
     }
 
     [Fact]
@@ -214,10 +240,37 @@ public sealed class AppControllerTests : IAsyncDisposable
         _source.Add(Playing("Radio Station", duration: null));
         var controller = Controller();
         controller.Start();
-        await controller.WhenIdleAsync();
+        await WaitUntil(() => _renderer.Last?.Status == StatusText.Stream);
 
+        await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.Empty(_lyrics.Queries);
         Assert.Equal(StatusText.Stream, _renderer.Last!.Status);
+    }
+
+    [Fact]
+    public async Task ANewTrackOnTheSamePlayerReplacesALookupStillRunning()
+    {
+        var held = _lyrics.Hold("Song A");
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from B")));
+        var session = _source.Add(Playing("Song A"));
+        var controller = Controller();
+        controller.Start();
+        await WaitUntil(() => _lyrics.Queries.Count == 1);
+
+        // The player moves on: new metadata, then its timeline for the new track.
+        session.SetTrack("Song B");
+        session.SetTimeline(1, 180);
+        await WaitUntil(() => _lyrics.Queries.Count == 2);
+        Assert.True(_lyrics.Tokens[0].IsCancellationRequested);
+        Assert.Equal(180, _lyrics.Queries[1].Duration);
+
+        held.SetResult(TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from A")));
+        await controller.WhenIdleAsync();
+
+        Assert.Equal("Song B", _renderer.Last!.Title);
+        Assert.Equal("Line from B", Assert.IsType<LyricResult.Synced>(_renderer.Last.Lyrics).Lines[0].Text);
+        Assert.Equal("Song B", controller.Status.Title);
+        Assert.Equal(StatusText.Showing, controller.Status.Status);
     }
 
     [Fact]

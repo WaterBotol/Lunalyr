@@ -25,6 +25,12 @@ public sealed record AppControllerOptions
 
     public TimeSpan TimelinePoll { get; init; } = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>
+    /// After a "no position" or "stream" verdict, how often to look again for a timeline that arrives late (some
+    /// players send theirs seconds after the title); the lookup runs as soon as one with a length appears.
+    /// </summary>
+    public TimeSpan LateTimelinePoll { get; init; } = TimeSpan.FromSeconds(1);
+
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     public SongClockOptions? Clock { get; init; }
@@ -453,18 +459,36 @@ public sealed class AppController : IAsyncDisposable
         {
             await Task.Yield(); // Off the player's event thread.
             var reading = await WaitForTimelineAsync(ct).ConfigureAwait(false);
-            if (!reading.HasTimeline)
+            string? verdict = null;
+            TimeSpan duration;
+            // Until the player gives a position and a length, say why nothing shows, and keep looking: a timeline that
+            // arrives late still gets the song its lyrics. The next track change cancels the wait.
+            while (true)
             {
-                _lyricLog.Info("The player gave no position for this track, so lyrics can't follow it.");
-                Finish(generation, StatusText.NoPosition);
-                return;
+                if (reading.HasTimeline && reading.Duration is { } known && known > TimeSpan.Zero)
+                {
+                    duration = known;
+                    break;
+                }
+
+                var now = reading.HasTimeline ? StatusText.Stream : StatusText.NoPosition;
+                if (now != verdict)
+                {
+                    verdict = now;
+                    _lyricLog.Info(reading.HasTimeline
+                        ? "The track has no length (a stream or radio), so lyrics aren't looked up unless one appears."
+                        : "The player gave no position for this track yet, so lyrics can't follow it.");
+                    ShowStatus(generation, now);
+                }
+
+                await Task.Delay(_options.LateTimelinePoll, _options.TimeProvider, ct).ConfigureAwait(false);
+                reading = Monitor.Clock.Read();
             }
 
-            if (reading.Duration is not { } duration || duration <= TimeSpan.Zero)
+            if (verdict is not null)
             {
-                _lyricLog.Info("The track has no length (a stream or radio), so lyrics aren't looked up.");
-                Finish(generation, StatusText.Stream);
-                return;
+                _lyricLog.Info("The player's timeline arrived: looking the song up.");
+                ShowStatus(generation, StatusText.LookingUp);
             }
 
             var query = new LyricQuery(track.Title, track.Artist, track.AlbumTitle.Length > 0 ? track.AlbumTitle : null, duration.TotalSeconds);
@@ -506,16 +530,16 @@ public sealed class AppController : IAsyncDisposable
                 }
 
                 _lyricLog.Info("No lyrics: offline. Looking again when the connection is back.");
-                Finish(generation, StatusText.Offline);
+                ShowStatus(generation, StatusText.Offline);
             }
             else if (report.SkippedStream)
             {
-                Finish(generation, StatusText.Stream);
+                ShowStatus(generation, StatusText.Stream);
             }
             else
             {
                 _lyricLog.Info("No lyrics found for this song.");
-                Finish(generation, StatusText.NoLyrics);
+                ShowStatus(generation, StatusText.NoLyrics);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -525,7 +549,7 @@ public sealed class AppController : IAsyncDisposable
         catch (Exception ex)
         {
             _lyricLog.Error("The lyric lookup failed.", ex);
-            Finish(generation, StatusText.LookupFailed);
+            ShowStatus(generation, StatusText.LookupFailed);
         }
         finally
         {
@@ -557,7 +581,7 @@ public sealed class AppController : IAsyncDisposable
         var presented = LyricPresentation.Prepare(result, query, repair, _lyrics.WordDistributor);
         if (presented is null)
         {
-            if (complete) Finish(generation, StatusText.NoLyrics);
+            if (complete) ShowStatus(generation, StatusText.NoLyrics);
             return;
         }
 
@@ -633,7 +657,7 @@ public sealed class AppController : IAsyncDisposable
         }));
     }
 
-    private void Finish(long generation, string status)
+    private void ShowStatus(long generation, string status)
     {
         SceneSnapshot scene;
         lock (_gate)
