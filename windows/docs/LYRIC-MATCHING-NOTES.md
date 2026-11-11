@@ -16,3 +16,5 @@ What the lyric core should do (to confirm against the Mac app's version-tag and 
 - An explicit "English version" tag → English lyrics are correct; treat the tag as a version tag so the Japanese
   original ranks below it, just as Live and Remix rank below the playing version.
 - Needs a live check with real Apple Music for Windows playback (what GSMTC reports for title, artist and album).
+- The Mac app has an agent working on exactly this on branch `next/localized-titles` (per the 11 Nov context file).
+  Port that logic once it's in a refreshed bundle, rather than inventing a separate rule here.
