@@ -153,7 +153,7 @@ final class FloatingLyricsOptions: ObservableObject {
 
     static let textSizeRange: ClosedRange<Double> = 22...110
     static let defaultTextSize = SizePreset.medium.rawValue
-    static let defaultBackdrop = 0.55
+    static let defaultBackdrop = 0.6
 
     /// Desktop by default, so nothing changes until someone picks Floating.
     @Published var surface: LyricsSurface {

@@ -143,10 +143,14 @@ struct FloatingLocationPicker: View {
                 placement = .custom
             } label: {
                 Label("Custom", systemImage: placement == .custom ? "hand.draw.fill" : "hand.draw")
+                    .font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(placement == .custom ? Color.lunalyrAccent : Color.primary.opacity(0.1)))
+                    .foregroundStyle(placement == .custom ? Color.white : Color.primary)
+                    .contentShape(Capsule())
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .foregroundStyle(placement == .custom ? Color.lunalyrAccentText : Color.secondary)
+            .buttonStyle(.plain)
             .help("The place and size you set with Edit position")
             .accessibilityLabel(FloatingPlacement.custom.title)
             .accessibilityAddTraits(placement == .custom ? .isSelected : [])

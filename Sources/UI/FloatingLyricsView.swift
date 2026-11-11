@@ -102,9 +102,9 @@ struct FloatingLyricsLook {
     }
 }
 
-/// A soft dark shade behind the floating lyrics: a stretched radial fade,
-/// darkest where the words sit, gone at the window's edge, so there is no
-/// box. Reduce Transparency draws a plain, nearly opaque panel instead.
+/// A soft dark shade behind the floating lyrics, fading out towards every
+/// edge so there is no box. Reduce Transparency draws a plain, nearly
+/// opaque panel instead.
 struct FloatingLyricsBackdrop: View {
     let strength: Double
     let reduceTransparency: Bool
@@ -117,19 +117,23 @@ struct FloatingLyricsBackdrop: View {
                     .fill(Color.black.opacity(0.86))
                     .padding(4)
             } else if strength > 0.01 {
-                let amount = FloatingBackdrop.maximumShade * min(1, strength)
-                let side = max(1, size.height)
-                RadialGradient(stops: [.init(color: .black.opacity(amount), location: 0),
-                                       .init(color: .black.opacity(amount * 0.8), location: 0.55),
-                                       .init(color: .black.opacity(0), location: 1)],
-                               center: .center, startRadius: 0, endRadius: side / 2)
-                    .frame(width: side, height: side)
-                    .scaleEffect(x: max(1, size.width / side), y: 1)
-                    .frame(width: size.width, height: size.height)
+                // A plain fill under two gradient masks: soft on every
+                // side, no blur to redraw while the words above animate.
+                Rectangle()
+                    .fill(Color.black.opacity(FloatingBackdrop.maximumShade * min(1, strength)))
+                    .mask(LinearGradient(stops: Self.fade(edge: 0.22),
+                                         startPoint: .leading, endPoint: .trailing))
+                    .mask(LinearGradient(stops: Self.fade(edge: 0.3), startPoint: .top, endPoint: .bottom))
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// Clear at both ends, full from `edge` in from each.
+    static func fade(edge: Double) -> [Gradient.Stop] {
+        [.init(color: .clear, location: 0), .init(color: .black, location: edge),
+         .init(color: .black, location: 1 - edge), .init(color: .clear, location: 1)]
     }
 }
 
