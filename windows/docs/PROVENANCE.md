@@ -26,7 +26,32 @@ need copying. This replaces the original brief's "keep Verso's licence and attri
 
 ## Do-not-translate list
 
-_Pending: needs the Mac bundle (`C:\LunalyrKit\lunalyr-mac.bundle`)._
+Summary from the Mac's LUNALYR session, measured at `next/integration` `d63068a` (12 Nov 2026). The full report is
+`VERSO-PROVENANCE.md` (14,360 bytes, sha256 `af524bb4…f144528`). It goes into `C:\LunalyrKit\` once the user OKs the
+upload. Verify it there, and re-run the check against the bundle once that's here too.
+
+- **Method:** Verso is one commit, `9354e2f` ("Verso 0.1.0"). Lunalyr's history starts at `a99fd65`, a squashed
+  import of Verso. A line counts as Verso when `git blame -w -M -C` puts it in `a99fd65` **and** its text also
+  appears in `9354e2f`.
+- **Extent:** 2,210 of 53,934 counted lines in `Sources/` (about 4.1%), 2,171 of them in 36 files. `Tests/` has 2
+  incidental lines.
+- **This is a minimum.** Verso code edited later, or Verso algorithms rewritten line by line, isn't counted. Treat every
+  file listed below as describe-then-reimplement, whatever its percentage.
+
+**Never port (byte-identical Verso, or almost all Verso):**
+`FractalBackgroundView.swift`, `VersoPalette.swift`, `BehaviourSection.swift`, `TrackMood.swift` (93%), the Verso
+assets (`Flower.png`, `Wordmark.png`, `Wordmark@2x.png`, the AppIcon `Contents.json`), and `LICENSE` /
+`Verso-LICENSE.txt`.
+
+**Re-implement from behaviour only (large Verso share; lines still Verso-attributed in brackets):**
+`Settings.swift` (228), `ShaderBackgroundView.swift` (176), `LyricComposition.swift` (124),
+`ScatteredLyricText.swift` (107), `KPoeLyricsProvider.swift` (99), `NowPlayingView.swift` (76), `VisualClock.swift`
+(71), `MotionArtworkView.swift` (68), `AnimatedGradientView.swift` (64), `ArtworkProvider.swift` (60),
+`LyricTypography.swift` (60), `NetEaseLyricsProvider.swift` (56), and `Sources/UI/Shaders.metal` (about 72%
+Verso). For these, write a behaviour description first (inputs, outputs, edge cases) and port the parts that
+Lunalyr's own commits added. The visualiser shaders in particular are written fresh in HLSL, not translated.
+
+The remaining files of the 36 are listed in the full report.
 
 ## Third-party code and data
 
