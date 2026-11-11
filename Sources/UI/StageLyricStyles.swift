@@ -38,9 +38,7 @@ struct StageRun: Equatable, Identifiable {
         for (index, word) in words.enumerated() {
             let text = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
-            let limit = LyricScript.keepsSyllables(text) ? 3 : 12
-            if index > 0, glue.indices.contains(index), glue[index], let previous = runs.last,
-               previous.text.count + text.count <= limit {
+            if joins(text, at: index, glue: glue, after: runs.last?.text) {
                 var last = runs.removeLast()
                 last.text += text
                 last.end = max(last.end, word.end)
@@ -52,6 +50,35 @@ struct StageRun: Equatable, Identifiable {
             }
         }
         return runs
+    }
+
+    /// Whether the word `text` at `index` joins the run before it: glued to
+    /// it, and the two together still short enough to read as one word.
+    private static func joins(_ text: String, at index: Int, glue: [Bool], after previous: String?) -> Bool {
+        guard index > 0, glue.indices.contains(index), glue[index], let previous else { return false }
+        return previous.count + text.count <= (LyricScript.keepsSyllables(text) ? 3 : 12)
+    }
+
+    /// The glue of the runs `make` builds: true where a word joins the run
+    /// before it. "Below lyrics" pairs readings by this in the stage layouts,
+    /// so each run carries its own reading and it arrives with the run. Paired
+    /// by the line's longer runs instead, an unspaced line's whole reading sat
+    /// on its first run and showed as soon as the line began.
+    static func glue(_ words: [LyricsFetcher.Word], glue: [Bool]) -> [Bool] {
+        var result = [Bool](repeating: false, count: words.count)
+        var last: String?
+        for (index, word) in words.enumerated() {
+            let text = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A blank word belongs to no run of its own.
+            guard !text.isEmpty else { result[index] = index > 0; continue }
+            if joins(text, at: index, glue: glue, after: last) {
+                result[index] = true
+                last = (last ?? "") + text
+            } else {
+                last = text
+            }
+        }
+        return result
     }
 
     /// How visible one part is: the first arrives with its word; each later

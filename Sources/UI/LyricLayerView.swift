@@ -743,7 +743,8 @@ struct LyricLayer: View {
                         let glue = rolls ? [] : glue(index, words: words, scene: scene, live: live,
                                                      splitsWords: composition.hasConnections)
                         let annotations = readingOptions.display == .below
-                            ? rolling?.readings ?? readingPairs(index, readings: readings, words: line.words, glue: glue,
+                            ? rolling?.readings ?? readingPairs(index, readings: readings, words: line.words,
+                                                                 glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
                                                                  scene: scene, live: live) : [:]
                         // Reduce Motion: the line fades; it does not slide or swell.
                         let still = rolls || reduceMotion
@@ -779,7 +780,8 @@ struct LyricLayer: View {
                             stageSize: stageSize, composition: composition, seed: index, previewing: previewing,
                             previewSince: previewSince, glue: glue,
                             annotations: readingOptions.display == .below
-                                ? readingPairs(index, readings: readings, words: line.words, glue: glue,
+                                ? readingPairs(index, readings: readings, words: line.words,
+                                               glue: composition.fillsStage ? StageRun.glue(words, glue: glue) : glue,
                                                scene: scene, live: live) : [:],
                             yield: yield,
                             heldPreview: !previewing && live && index > 0 && time - line.start < 1
