@@ -1,0 +1,60 @@
+{
+  "stack": "cs-winui-d2d-aot",
+  "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "monitors": [
+    {
+      "w": 2560,
+      "h": 1440,
+      "dpi": 120,
+      "hz": 60,
+      "mode": "24h2"
+    }
+  ],
+  "seconds": 35,
+  "frames": 2053,
+  "fps": 58.7,
+  "cpuMsPerFrame": {
+    "avg": 0.523,
+    "p50": 0.456,
+    "p95": 0.81,
+    "p99": 1.018
+  },
+  "frameIntervalMs": {
+    "avg": 17.044,
+    "p50": 16.667,
+    "p95": 17.087,
+    "p99": 33.476
+  },
+  "slowFrames": 45,
+  "startupMs": 255.7,
+  "workingSetMB": 74.4,
+  "peakWorkingSetMB": 74.4,
+  "privateMB": 104.7,
+  "processCpuPercent": 0.32,
+  "phasesMs": {
+    "buildLine": {
+      "avg": 8.11,
+      "p50": 4.567,
+      "p95": 36.418,
+      "p99": 36.418
+    },
+    "endDraw": {
+      "avg": 0.347,
+      "p50": 0.32,
+      "p95": 0.637,
+      "p99": 0.777
+    },
+    "present": {
+      "avg": 0.082,
+      "p50": 0.077,
+      "p95": 0.114,
+      "p99": 0.181
+    }
+  },
+  "gcGen0": 1,
+  "gcGen2": 1,
+  "allocatedMB": 4.5,
+  "notes": [
+    "tree after attach:\nProgman 10294 ex=200080\r\n  SHELLDLL_DefView         1029E vis=True ex=80000 rect=(0,0,2560x1440)\r\n  LunalyrSpikeSurface      E084E vis=True ex=8000080 rect=(0,0,2560x1440)\r\n  WorkerW                  102CC vis=True ex=80000A0 rect=(0,0,2560x1440)\r\n"
+  ]
+}

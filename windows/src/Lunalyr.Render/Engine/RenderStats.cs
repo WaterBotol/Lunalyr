@@ -95,11 +95,18 @@ internal sealed class FrameRecorder
 
     public (double Seconds, int Frames, Percentiles Cpu, Percentiles Interval, int Slow) Read()
     {
+        double seconds;
+        int frames, slow;
+        double[] cpu, interval;
+        // Copy under the lock (the render thread takes it every frame), sort outside it.
         lock (_gate)
         {
-            double seconds = System.Diagnostics.Stopwatch.GetElapsedTime(_startTimestamp).TotalSeconds;
-            return (seconds, _frames, Percentiles.Of(_cpu.AsSpan(0, Math.Min(_frames, Capacity))),
-                Percentiles.Of(_interval.AsSpan(0, Math.Min(_intervals, Capacity))), _slow);
+            seconds = System.Diagnostics.Stopwatch.GetElapsedTime(_startTimestamp).TotalSeconds;
+            frames = _frames;
+            slow = _slow;
+            cpu = _cpu.AsSpan(0, Math.Min(_frames, Capacity)).ToArray();
+            interval = _interval.AsSpan(0, Math.Min(_intervals, Capacity)).ToArray();
         }
+        return (seconds, frames, Percentiles.Of(cpu), Percentiles.Of(interval), slow);
     }
 }

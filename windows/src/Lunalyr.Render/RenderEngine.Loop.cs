@@ -37,7 +37,8 @@ public sealed partial class RenderEngine
     private double _nextHousekeeping, _nextCatalogCheck, _nextStatsLog;
     private double _lastFrameAt = double.NaN;
     private (double Song, bool Playing, double At) _lastClock = (double.NaN, false, 0);
-    private (int Frames, double CpuMs) _logWindow;
+    private (int Frames, double CpuMs) _logWindow, _statusWindow;
+    private double _statusWindowStart;
     private RenderSurface[] _due = [];
     private nint[] _waitHandles = [];
 
@@ -156,6 +157,7 @@ public sealed partial class RenderEngine
                 double interval = double.IsNaN(_lastFrameAt) ? double.NaN : (now - _lastFrameAt) * 1000;
                 _recorder.Add(cpuMs, interval, expected);
                 _logWindow = (_logWindow.Frames + 1, _logWindow.CpuMs + cpuMs);
+                _statusWindow = (_statusWindow.Frames + 1, _statusWindow.CpuMs + cpuMs);
                 _lastFrameAt = now;
             }
             RecoverLostDevices();
@@ -742,8 +744,12 @@ public sealed partial class RenderEngine
             _logWindow = default;
             _nextStatsLog = now + _options.StatsLogInterval.TotalSeconds;
         }
-        var stats = _recorder.Read();
-        _statusLine = $"{(stats.Seconds > 0 ? stats.Frames / stats.Seconds : 0):0.0} fps · {stats.Cpu.Avg:0.00} ms/frame · "
+        // Running counters only: percentiles sort tens of thousands of samples, far too slow for the render thread.
+        var (statusFrames, statusCpu) = _statusWindow;
+        double statusSeconds = now - _statusWindowStart;
+        _statusWindow = default;
+        _statusWindowStart = now;
+        _statusLine = $"{(statusSeconds > 0 ? statusFrames / statusSeconds : 0):0.0} fps · {(statusFrames > 0 ? statusCpu / statusFrames : 0):0.00} ms/frame · "
             + string.Join(" | ", _surfaces.Select(s => $"{s.Gpu?.Name ?? "-"} sync {s.Plan.SyncInterval}{(s.Plan.IsGated ? "g" : "")} {s.State}{(s.Reason != PauseReason.None ? $" ({s.Reason})" : "")}"))
             + (_power is { } p ? $" · {p.Reason}" : "");
     }
