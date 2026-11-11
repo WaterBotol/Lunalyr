@@ -95,42 +95,41 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertTrue(bare.allSatisfy { $0.credit != true })
     }
 
-    func testEverySongOpensWithItsTitleAndArtist() {
+    /// The old opening "Title - Artist" cue is gone: the opening title
+    /// (`OpeningTitle`) names the song. Real credits stay, and the source's
+    /// own title and artist headings are still dropped.
+    func testNoTitleCueOnlyRealCredits() {
         let none = LyricsFetcher.parseLRC("[00:12.00]Hello\n[00:16.00]World", trackDuration: 30)
-        let cues = LyricCreditCues.cues(in: none, title: "Human Nature", artist: "Yot Club")
-        XCTAssertEqual(cues.map(\.text), ["Human Nature - Yot Club"])
-        // Not added twice when the lyrics carry it.
+        XCTAssertTrue(LyricCreditCues.cues(in: none, title: "Human Nature", artist: "Yot Club").isEmpty)
+        XCTAssertTrue(LyricCreditCues.cues(in: [], title: "Human Nature", artist: "Yot Club").isEmpty)
         let listed = LyricsFetcher.parseLRC("[00:00.00]Yot Club - Human Nature\n[00:00.50]Produced by: A B\n[00:12.00]Hello", trackDuration: 30)
         let flagged = LyricCredits.flagging(listed, title: "Human Nature", artist: "Yot Club")
-        XCTAssertEqual(LyricCreditCues.cues(in: flagged, title: "Human Nature", artist: "Yot Club").count, 2)
+        XCTAssertEqual(LyricCreditCues.cues(in: flagged, title: "Human Nature", artist: "Yot Club").map(\.text), ["Produced by: A B"])
     }
 
-    func testTitleAndArtistShowOnlyOnce() {
+    func testTitleAndArtistHeadingsAreDroppedAndCreditsShowOnce() {
         func credit(_ text: String, _ start: Double) -> LyricsFetcher.Line {
             LyricsFetcher.Line(start: start, end: start + 0.01, text: text, words: [], isInstrumental: true, credit: true)
         }
         let lines = [credit("Human Nature", 0), credit("Human Nature - Yot Club", 0.5), credit("Yot Club - Human Nature", 1),
-                     credit("Yot Club", 1.5), credit("Produced by: A B", 2), credit("Produced by: A B", 3)]
+                     credit("Yot Club", 1.5), credit("Produced by: A B", 2), credit("Produced by: A B", 3),
+                     credit("作词 : 方文山", 4)]
         let cues = LyricCreditCues.cues(in: lines, title: "Human Nature", artist: "Yot Club")
-        XCTAssertEqual(cues.map(\.text), ["Human Nature - Yot Club", "Produced by: A B"])
+        XCTAssertEqual(cues.map(\.text), ["Produced by: A B", "作词 : 方文山"])
+        XCTAssertEqual(cues.map(\.id), [0, 1])
         let bare = LyricCreditCues.cues(in: [credit("Human Nature", 0), credit("Yot Club", 1)], title: "Human Nature", artist: "Yot Club")
-        XCTAssertEqual(bare.map(\.text), ["Human Nature - Yot Club"])
+        XCTAssertTrue(bare.isEmpty)
     }
 
-    func testOpeningCueNamesTheArtistForHighlighting() {
-        let cues = LyricCreditCues.cues(in: [], title: "Human Nature", artist: "Yot Club")
-        XCTAssertEqual(cues.first?.title, "Human Nature")
-        XCTAssertEqual(cues.first?.artist, "Yot Club")
-    }
-
-    func testArtistWordsAreMarkedForTheHighlightTile() throws {
-        let cue = try XCTUnwrap(LyricCreditCues.cues(in: [], title: "Human Nature", artist: "Yot Club").first)
-        XCTAssertEqual(cue.words.map(\.text), ["Human", "Nature", "-", "Yot", "Club"])
-        XCTAssertEqual(cue.highlightFrom, cue.words[3].start)
-        XCTAssertTrue(cue.words.prefix(3).allSatisfy { $0.start < (cue.highlightFrom ?? 0) })
-        XCTAssertTrue(zip(cue.words, cue.words.dropFirst()).allSatisfy { $0.start <= $1.start })
-        let credit = LyricsFetcher.Line(start: 1, end: 1.01, text: "Produced by: A B", words: [], isInstrumental: true, credit: true)
-        XCTAssertNil(LyricCreditCues.cues(in: [credit], title: "Human Nature", artist: "Yot Club")[1].highlightFrom)
+    /// Credits wait for the opening title to leave rather than sharing the
+    /// screen with it.
+    func testCreditsWaitForTheOpeningTitle() {
+        let lines = LyricsFetcher.parseLRC("[00:00.00]Produced by: A B\n[00:00.00]Mixed by: C D\n[00:20.00]Hello", trackDuration: 30)
+        let cues = LyricCreditCues.cues(in: lines, notBefore: 9.2)
+        XCTAssertEqual(cues.first?.start ?? 0, 9.2, accuracy: 1e-9)
+        XCTAssertEqual(cues[1].start, 9.2 + LyricCreditCues.stagger, accuracy: 1e-9)
+        let late = LyricsFetcher.parseLRC("[00:30.00]Produced by: A B\n[00:40.00]Hello", trackDuration: 60)
+        XCTAssertEqual(LyricCreditCues.cues(in: late, notBefore: 9.2).first?.start ?? 0, 30, accuracy: 1e-9)
     }
 
     func testStageRunsCutLongGluedLinesIntoShortRuns() {
@@ -162,11 +161,12 @@ final class CreditsLayerTests: XCTestCase {
         }
     }
 
-    /// A title such as "Song (Remix)" used to lose "(Remix)" to the backing
-    /// vocal layer, drawn small and apart from the rest of the title.
+    /// A credit such as "Remix (Night Edit) by: A B" used to lose its
+    /// bracket to the backing vocal layer, drawn small and apart.
     @MainActor
-    func testBracketsInATitleOrCreditStayInTheLine() {
-        let cue = LyricCreditCues.cues(in: [], title: "Song (Remix)", artist: "Band")[0]
+    func testBracketsInACreditStayInTheLine() {
+        let credit = LyricsFetcher.Line(start: 1, end: 1.01, text: "Remix (Night Edit) by: A B", words: [], isInstrumental: true, credit: true)
+        let cue = LyricCreditCues.cues(in: [credit])[0]
         XCTAssertFalse(BackingVocals.split(cue.words, glue: []).backing.isEmpty, "Lyrics would lift this group")
         XCTAssertFalse(LyricLineView.liftsBacking(wordTimed: true, firstRunOnly: nil,
                                                   allowed: CreditsLayer.liftsBackingVocals, settingOn: true))

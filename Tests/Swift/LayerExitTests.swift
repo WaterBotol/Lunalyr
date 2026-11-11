@@ -3,7 +3,7 @@ import XCTest
 
 final class LayerExitTests: XCTestCase {
     func testEachKindLeavesItsOwnWayAndHoldsStillUntilItGoes() {
-        for exit in [LayerExit.credit(towardTop: true), .title, .backing] {
+        for exit in [LayerExit.credit(towardTop: true), .backing] {
             let held = exit.pose(0, size: 100)
             XCTAssertEqual(held.offset, 0); XCTAssertEqual(held.scale, 1); XCTAssertEqual(held.blur, 0)
         }
@@ -11,8 +11,6 @@ final class LayerExitTests: XCTestCase {
         let low = LayerExit.credit(towardTop: false).pose(1, size: 100)
         XCTAssertLessThan(credit.offset, 0); XCTAssertGreaterThan(low.offset, 0)
         XCTAssertGreaterThan(credit.blur, 0)
-        let title = LayerExit.title.pose(1, size: 100)
-        XCTAssertGreaterThan(title.scale, 1); XCTAssertGreaterThan(title.blur, credit.blur)
         let backing = LayerExit.backing.pose(1, size: 100)
         XCTAssertLessThan(backing.scale, 1); XCTAssertEqual(backing.blur, 0); XCTAssertGreaterThan(backing.offset, 0)
     }

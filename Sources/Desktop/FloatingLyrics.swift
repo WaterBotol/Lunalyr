@@ -72,8 +72,9 @@ struct LyricStyleProfiles {
         "custom.wordRevealByStyle", "custom.wordArrivalByStyle", "custom.nextWordPreviewByStyle",
         "custom.nextWordPreviewLead", "custom.wordEntranceMix", "echoStrength", "lyricScale", "custom.showInterludes",
         "custom.editorialTypography", "custom.editorialAmount", "custom.randomizeLyricFonts",
-        // Layout rotation, backing vocals, credits
+        // Layout rotation, backing vocals, credits, the opening title
         LyricLayoutRotation.enabledKey, BackingVocals.settingKey, BackingVocals.styleKey, LyricCreditCues.settingKey,
+        OpeningTitle.settingKey, OpeningTitle.coverKey,
         // Readings and translations shown
         RomanizationOptions.displayKey, LunalyrExtras.Keys.translations,
         // Text and highlight colours

@@ -64,6 +64,12 @@ struct LyricSceneContent {
     var plainLines: [String] = []
     var title = ""
     var artist = ""
+    var album = ""
+    /// The song's cover as the wallpaper has it, for the opening title.
+    var artwork: NSImage?
+    /// The song time Lunalyr first saw this song at (0 from its start), for
+    /// the opening title (`OpeningTitle`): an outgoing scene keeps its own.
+    var joined = 0.0
     var notFoundAt: Date?
     var idleSince: Date?
     var duration: Double = 0
