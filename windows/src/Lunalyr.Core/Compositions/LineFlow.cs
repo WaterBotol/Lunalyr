@@ -12,8 +12,10 @@ namespace Lunalyr.Core.Compositions;
 /// <param name="RevealsWords">Words arrive one by one as they are sung.</param>
 /// <param name="PreviewsNextWord">The next word shows faintly just before it is sung.</param>
 /// <param name="PreviewLead">How many seconds ahead the preview begins.</param>
+/// <param name="FillsStage">The composition sets the whole stage itself (Hinge, Broadside, Portal, Mosaic, Torque, Fable): it
+/// draws nothing for a line-timed preview, so none is made.</param>
 public readonly record struct StageRules(bool RollsWordTimed, bool RevealsWords = true, bool PreviewsNextWord = true,
-                                         double PreviewLead = 0.45)
+                                         double PreviewLead = 0.45, bool FillsStage = false)
 {
     /// <summary>Whether line <paramref name="row"/> rolls.</summary>
     public bool Rolls(IReadOnlyList<LyricLine> lines, int row) =>
@@ -131,6 +133,7 @@ public static class LineFlow
             || !(time < lines[next].Start)) return null;
         if (!rules.PreviewsNextWord || (lines[next].WordTimed && !rules.RevealsWords)) return null;
         if (lines[index].WordTimed && lines[next].WordTimed && rules.RollsWordTimed) return null;
+        if (!lines[next].WordTimed && rules.FillsStage) return null;
         // One preview at a time, even if two lines overlap in the source.
         if (lines[index].WordTimed)
         {
