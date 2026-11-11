@@ -54,8 +54,8 @@ public sealed class LyricLookup
     public const string Searching = "Searching…";
     public const string NoUsableMatch = "No usable match / unavailable";
     public const string MatchFound = "Match found";
-    public const string TimedOut = "Timed out";
-    public const string Cancelled = "Cancelled";
+    public const string TimedOut = "No answer in time";
+    public const string Cancelled = "Stopped";
     public const string RecentMiss = "No match a few minutes ago";
     public const string SavedMatch = "Saved match";
     public const string NotCheckedSaved = "Not checked: a saved match was used";
