@@ -99,7 +99,7 @@ public static class LocalSidecars
             {
                 result[index] = line.IsInstrumental
                     ? line with { End = nextStart }
-                    : line with { End = nextStart, Words = LyricLines.DistributeWords(line.Text, line.Start, nextStart) };
+                    : line with { End = nextStart, Words = EstimatedWords.Distribute(line.Text, line.Start, nextStart) };
             }
         }
         return result;

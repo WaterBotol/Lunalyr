@@ -3,6 +3,7 @@ using System.Text;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -307,12 +308,12 @@ public class LyricParsingTests
     [Fact]
     public void EstimatedWordsShareTheWindowByLength()
     {
-        var words = LyricLines.DistributeWords("Hold on, tight", 0, 10);
+        var words = EstimatedWords.Distribute("Hold on, tight", 0, 10);
         Assert.Equal(["Hold", "on,", "tight"], words.Select(word => word.Text));
         Assert.Equal(0, words[0].Start);
         Assert.Equal(8.8, words[^1].End, 1e-9);
-        Assert.Equal(["君", "の", "名", "は"], LyricLines.DistributeWords("君の名は", 0, 4).Select(word => word.Text));
-        Assert.Equal(["사랑해", "너를"], LyricLines.DistributeWords("사랑해 너를", 0, 4).Select(word => word.Text));
-        Assert.Equal(["can't", "stop"], LyricLines.DistributeWords("can't stop", 0, 4).Select(word => word.Text));
+        Assert.Equal(["君", "の", "名", "は"], EstimatedWords.Distribute("君の名は", 0, 4).Select(word => word.Text));
+        Assert.Equal(["사랑해", "너를"], EstimatedWords.Distribute("사랑해 너를", 0, 4).Select(word => word.Text));
+        Assert.Equal(["can't", "stop"], EstimatedWords.Distribute("can't stop", 0, 4).Select(word => word.Text));
     }
 }

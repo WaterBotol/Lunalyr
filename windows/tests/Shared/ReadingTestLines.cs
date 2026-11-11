@@ -1,5 +1,7 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Readings;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Tests.Shared;
 
@@ -46,7 +48,7 @@ internal sealed class ReadingTestLines(ReadingServices services)
     }
 
     public LyricLine LineTimed(string text, double start = 0, string? reading = null) =>
-        EstimatedWords.LineTimed(text, start, start + 4, Services.WordBreaker) with { Romanization = reading };
+        LyricLines.MakeLine(text, start, start + 4, EstimatedWords.Distributor(Services.WordBreaker)) with { Romanization = reading };
 
     public List<LyricWord>? Readings(LyricLine line, RomanizationOptions? options = null, IReadOnlyList<LyricLine>? song = null)
     {

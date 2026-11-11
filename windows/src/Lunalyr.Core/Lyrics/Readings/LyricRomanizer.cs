@@ -1,4 +1,6 @@
 using System.Text;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Readings;
 
@@ -500,7 +502,7 @@ public sealed class LyricRomanizer(ReadingServices services)
                 {
                     var estimated = line.WordTimed
                         ? EstimatedWords.Distribute(text, words[0].Start, words[^1].End, breaker)
-                        : EstimatedWords.Distribute(text, line.Start, EstimatedWords.SweepEnd(line), breaker);
+                        : EstimatedWords.Distribute(text, line.Start, EstimatedWords.EstimatedSweepEnd(line), breaker);
                     return estimated.Count == 0 ? null : estimated;
                 }
                 return [new LyricWord(text, words[0].Start, words[^1].End)];

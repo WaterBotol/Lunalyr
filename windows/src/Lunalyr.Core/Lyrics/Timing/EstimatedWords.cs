@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Readings;
 
 namespace Lunalyr.Core.Lyrics.Timing;
 
@@ -8,19 +9,20 @@ namespace Lunalyr.Core.Lyrics.Timing;
 public delegate IReadOnlyList<LyricWord> WordDistributor(string text, double start, double end);
 
 /// <summary>
-/// Estimated word timing for lyrics without any, and the sweep and line-end estimates built on it.
+/// Estimated word timing for lyrics without any, and the sweep and line-end estimates built on it. The one place the
+/// parsers, the timing code and the readings spread a line's words over its window.
 /// </summary>
 /// <remarks>
-/// <see cref="Distribute"/> is re-implemented from a description of the Mac's behaviour (its lines trace back to the
-/// squashed import commit): the window (at least 0.3 s) is trimmed to <see cref="EstimatedWordShare"/> of itself, as a
-/// sung line normally finishes a little before the next begins, but never below 0.42 s a word nor beyond the window;
-/// each word then takes a share in proportion to its length in characters plus 1.5, so longer words hold longer, laid
-/// end to end from the line's start.
+/// <see cref="Spread"/> is re-implemented from a description of the Mac's behaviour (its <c>distributeWords</c> lines
+/// trace back to the squashed import commit): the window (at least 0.3 s) is trimmed to <see cref="EstimatedWordShare"/>
+/// of itself, as a sung line normally finishes a little before the next begins, but never below 0.42 s a word nor
+/// beyond the window; each word then takes a share in proportion to its length in characters plus 1.5, so longer words
+/// hold longer, laid end to end from the line's start.
 /// <para>
-/// Open question: the Mac splits words with the system's word breaker (ICU, dictionary-based for Chinese and
-/// Japanese). <see cref="Tokenize"/> approximates it (whitespace, one token per Han/kana/Hangul character, punctuation
-/// kept with the word before it). The parser workstream should supply the shared word splitter; every API here that
-/// spreads words takes a <see cref="WordDistributor"/> so it can be swapped in.
+/// The Mac splits words with the system's word breaker (ICU, dictionary-based for Chinese and Japanese). Where a word
+/// breaker is supplied (the readings' <see cref="IWordBreaker"/>, ICU on Windows) its word starts are used
+/// (<see cref="Distribute(string, double, double, IWordBreaker)"/>, <see cref="Distributor"/>); without one,
+/// <see cref="Tokenize"/> approximates it.
 /// </para>
 /// </remarks>
 public static class EstimatedWords
@@ -36,6 +38,22 @@ public static class EstimatedWords
     {
         var tokens = Tokenize(text);
         return tokens.Count == 0 ? [] : Spread(tokens, start, end);
+    }
+
+    /// <summary>Words cut at <paramref name="breaker"/>'s word starts, then <see cref="Spread"/>.</summary>
+    public static List<LyricWord> Distribute(string text, double start, double end, IWordBreaker breaker)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(breaker);
+        var pieces = Pieces(text, [.. breaker.Words(text).Select(word => word.Start)]);
+        return pieces.Count == 0 ? [] : [.. Spread(pieces, start, end)];
+    }
+
+    /// <summary>A distributor over <paramref name="breaker"/>, for the parsers and the timing code.</summary>
+    public static WordDistributor Distributor(IWordBreaker breaker)
+    {
+        ArgumentNullException.ThrowIfNull(breaker);
+        return (text, start, end) => Distribute(text, start, end, breaker);
     }
 
     /// <summary>Lays <paramref name="tokens"/> over the window from <paramref name="start"/> to <paramref name="end"/>.</summary>
@@ -61,66 +79,80 @@ public static class EstimatedWords
     private static double Weight(string token) => TextElements.Count(token) + 1.5;
 
     /// <summary>
-    /// A line's words for estimated timing: whitespace-separated, with each Han, kana or Hangul character its own
-    /// word, and punctuation kept with the word before it (or the first word). Empty when nothing is sung.
+    /// The words of a line as a reader sees them, without a word breaker: runs of letters and digits (an apostrophe or
+    /// a separator inside one, "can't", "1,000", keeps it whole), each Han, kana or Thai character on its own (Hangul
+    /// is written with spaces, so its words stay whole), and punctuation kept with the word before it (or the first
+    /// word). Empty when nothing is sung.
     /// </summary>
     public static List<string> Tokenize(string text)
     {
-        var tokens = new TokenList();
-        if (string.IsNullOrWhiteSpace(text)) return tokens.Words;
-        var run = new StringBuilder();
-        foreach (var chunk in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        ArgumentNullException.ThrowIfNull(text);
+        var characters = Characters(text);
+        var starts = new List<int>();
+        var inWord = false;
+        for (var index = 0; index < characters.Count; index++)
         {
-            tokens.StartChunk();
-            var enumerator = StringInfo.GetTextElementEnumerator(chunk);
-            while (enumerator.MoveNext())
+            var kind = Kind(characters[index]);
+            if (kind == CharKind.Syllable)
             {
-                var element = enumerator.GetTextElement();
-                if (LyricScript.KeepsSyllables(element))
-                {
-                    tokens.Emit(run.ToString());
-                    run.Clear();
-                    tokens.Emit(element);
-                }
-                else
-                {
-                    run.Append(element);
-                }
+                starts.Add(index);
+                inWord = false;
+                continue;
             }
-            tokens.Emit(run.ToString());
-            run.Clear();
+            if (kind == CharKind.Word)
+            {
+                if (!inWord) starts.Add(index);
+                inWord = true;
+                continue;
+            }
+            var mid = inWord && index + 1 < characters.Count && Kind(characters[index + 1]) == CharKind.Word
+                && characters[index] is "'" or "’" or "." or ",";
+            if (!mid) inWord = false;
         }
-        return tokens.Words;
+        var tokens = new List<string>(starts.Count);
+        for (var i = 0; i < starts.Count; i++)
+        {
+            var from = i == 0 ? 0 : starts[i];
+            var to = i + 1 < starts.Count ? starts[i + 1] : characters.Count;
+            var token = string.Concat(characters.Skip(from).Take(to - from)).Trim();
+            if (token.Length > 0) tokens.Add(token);
+        }
+        return tokens;
     }
 
-    private sealed class TokenList
+    /// <summary>The text cut at each word start (UTF-16 offsets), trimmed, empty pieces dropped; anything before the first word goes with it.</summary>
+    private static List<string> Pieces(string text, List<int> starts)
     {
-        private string? _pending; // punctuation seen before the first word
-        private bool _chunkHasWord;
-
-        public List<string> Words { get; } = [];
-
-        public void StartChunk() => _chunkHasWord = false;
-
-        public void Emit(string piece)
+        var pieces = new List<string>(starts.Count);
+        for (var index = 0; index < starts.Count; index++)
         {
-            if (piece.Length == 0) return;
-            if (!TextElements.HasLettersOrDigits(piece))
-            {
-                // Punctuation stays with the word before it: joined within a chunk, after a space across chunks.
-                if (Words.Count > 0) Words[^1] += (_chunkHasWord ? "" : " ") + piece;
-                else _pending = _pending is null ? piece : _pending + " " + piece;
-                return;
-            }
-            if (_pending is not null)
-            {
-                piece = _pending + " " + piece;
-                _pending = null;
-            }
-            Words.Add(piece);
-            _chunkHasWord = true;
+            var from = index == 0 ? 0 : starts[index];
+            var to = index + 1 < starts.Count ? starts[index + 1] : text.Length;
+            var piece = text[from..to].Trim();
+            if (piece.Length > 0) pieces.Add(piece);
         }
+        return pieces;
     }
+
+    private static List<string> Characters(string text)
+    {
+        var result = new List<string>(text.Length);
+        var enumerator = StringInfo.GetTextElementEnumerator(text);
+        while (enumerator.MoveNext()) result.Add(enumerator.GetTextElement());
+        return result;
+    }
+
+    private enum CharKind { Other, Word, Syllable }
+
+    private static CharKind Kind(string character)
+    {
+        var rune = Rune.GetRuneAt(character, 0);
+        if (!(Rune.IsLetter(rune) || Rune.IsNumber(rune))) return CharKind.Other;
+        var v = rune.Value;
+        var hangul = v is >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F or >= 0xA960 and <= 0xA97F or >= 0xAC00 and <= 0xD7FF;
+        return !hangul && LyricScript.KeepsSyllables(v) ? CharKind.Syllable : CharKind.Word;
+    }
+
     /// <summary>
     /// Where the line-level sweep of a lyric without word timing ends: the line's end, unless its estimated words were
     /// spread over less than the window (the last line running on through the outro, or a line before a long break),

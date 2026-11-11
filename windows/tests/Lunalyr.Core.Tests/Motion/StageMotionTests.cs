@@ -167,6 +167,6 @@ public class StageMotionTests
         LyricWord[] words = [new("今", 1, 1.2), new("日", 1.2, 1.4), new("も", 1.4, 1.6), new("晴", 1.6, 1.8)];
         var runs = StageRun.Make(words, [false, true, true, true]);
         Assert.Equal(["今日も", "晴"], runs.Select(r => r.Text));
-        Assert.Equal([false, true, true, false], StageRun.RunGlue(words, [false, true, true, true]));
+        Assert.Equal([false, true, true, false], StageRun.Glue(words, [false, true, true, true]));
     }
 }

@@ -165,26 +165,44 @@ public static class LyricScript
         var target = string.Concat(targetWords);
         if (target.Length < 2) return false;
         var foreign = ReplaceLatinRuns(lyric);
-        var reading = cache.Read(foreign);
-        if (reading is not null) return Similarity(reading, target) >= 0.4;
-        return LatinSyllables.LooksLikeReading(targetWords, foreign);
+        var readings = cache.Read(foreign);
+        if (readings.Any(reading => Similarity(reading, target) >= 0.4)) return true;
+        // Han may be read as either language (kanji read as pinyin by a transliterator that knows no Japanese), so a
+        // line of romaji or pinyin syllables still counts there even when no reader agreed.
+        var han = foreign.EnumerateRunes().Any(rune => rune.Value is >= 0x3400 and <= 0x4DBF or >= 0x4E00 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF);
+        return (readings.Count == 0 || han) && LatinSyllables.LooksLikeReading(targetWords, foreign);
     }
 
-    /// <summary>Readings already made, kept while a file's rows are compared, so a repeated chorus costs nothing.</summary>
-    public sealed class ReadingCache(LatinReader? reader = null)
+    /// <summary>
+    /// Readings already made, kept while a file's rows are compared, so a repeated chorus costs nothing. Several
+    /// readers may be given (the readings layer's Japanese tokenizer and the system transliteration: kanji may be read
+    /// either way); the line is a reading when it matches any of theirs. The built-in reader when none is given.
+    /// </summary>
+    public sealed class ReadingCache
     {
-        private readonly LatinReader _reader = reader ?? BasicLatinReading.Read;
-        private readonly Dictionary<string, string?> _known = new(StringComparer.Ordinal);
+        private readonly LatinReader[] _readers;
+        private readonly Dictionary<string, List<string>> _known = new(StringComparer.Ordinal);
 
-        /// <summary>The text's reading as plain ASCII letters, or null when it cannot be read.</summary>
-        internal string? Read(string text)
+        public ReadingCache(LatinReader? reader = null) => _readers = [reader ?? BasicLatinReading.Read];
+
+        public ReadingCache(IEnumerable<LatinReader>? readers)
+        {
+            _readers = [.. readers ?? []];
+            if (_readers.Length == 0) _readers = [BasicLatinReading.Read];
+        }
+
+        /// <summary>The text's readings as plain ASCII letters, one per reader that could read it.</summary>
+        internal List<string> Read(string text)
         {
             if (_known.TryGetValue(text, out var known)) return known;
-            var reading = _reader(text);
-            var letters = reading is null ? null : string.Concat(AsciiWords(reading));
+            var readings = new List<string>(_readers.Length);
+            foreach (var reader in _readers)
+            {
+                if (reader(text) is { } reading && string.Concat(AsciiWords(reading)) is { Length: > 0 } letters) readings.Add(letters);
+            }
             if (_known.Count > 4096) _known.Clear();
-            _known[text] = letters;
-            return letters;
+            _known[text] = readings;
+            return readings;
         }
     }
 

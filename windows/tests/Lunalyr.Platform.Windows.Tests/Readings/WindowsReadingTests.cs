@@ -1,8 +1,10 @@
 using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Platform.Readings;
 using Lunalyr.Tests.Shared;
 using static Lunalyr.Tests.Shared.ReadingTestLines;
+using Lunalyr.Core.Motion;
 
 namespace Lunalyr.Platform.Windows.Tests.Readings;
 
@@ -18,6 +20,32 @@ public class WindowsReadingServicesTests
         Assert.IsType<IcuWordBreaker>(services.WordBreaker);
         Assert.IsType<ElsLanguageDetector>(services.LanguageGuesser);
         Assert.Equal(WindowsJapaneseTokenizer.IsAvailable, services.JapaneseTokenizer is WindowsJapaneseTokenizer);
+    }
+
+    // The readings services plug into the parsers' reading seam: LyricTextRulesTests.swift's
+    // testReadingsAreToldApartFromTranslations table, with Windows' readers in place of the built-in one.
+    [Fact]
+    public void TheParsersTellReadingsFromTranslationsWithTheWindowsReaders()
+    {
+        var options = WindowsReadingServices.Create().ParseOptions();
+        Assert.NotNull(options.Distribute); // ICU's word breaks spread estimated words
+        (string Candidate, string Lyric)[] readings =
+        [
+            ("kimi no na wa", "君の名は"), ("yu me na ra ba do re ho do yo ka tta de syo u", "夢ならばどれほどよかったでしょう"),
+            ("wǒ ài nǐ", "我爱你"), ("ngo5 oi3 nei5", "我爱你"), ("saranghae", "사랑해"), ("Ya tebya lyublyu", "Я тебя люблю"),
+            ("Hello sekai", "Hello 世界"), ("eien", "永遠"), ("wo ai ni", "我爱你"),
+        ];
+        (string Candidate, string Lyric)[] translations =
+        [
+            ("Your name", "君の名は"), ("I love you", "사랑해"), ("Hello world", "Hello 世界"), ("我爱你", "I love you"),
+            ("I love you", "I love you"), ("Forever", "永遠"), ("If only it were a dream", "夢ならばどれほどよかったでしょう"),
+        ];
+        var cache = options.ReadingCache();
+        foreach (var (candidate, lyric) in readings) Assert.True(LyricScript.IsReading(candidate, lyric, cache), candidate);
+        foreach (var (candidate, lyric) in translations) Assert.False(LyricScript.IsReading(candidate, lyric, cache), candidate);
+        // ICU splits unspaced Chinese into words for estimated timing, where the built-in splitting gives one per character.
+        var words = options.Distribute!("我们一起走", 0, 4).Select(word => word.Text).ToList();
+        Assert.True(words.Count < 5, string.Join("|", words));
     }
 
     [Fact]

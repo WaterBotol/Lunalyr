@@ -56,7 +56,7 @@ public sealed record StageRun(int Id, string Text, double Start, double End, IRe
     /// The glue of the runs <see cref="Make"/> builds: true where a word joins the run before it (a blank word belongs to
     /// no run of its own). Readings are paired by this, so each run carries its own reading.
     /// </summary>
-    public static bool[] RunGlue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
+    public static bool[] Glue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
     {
         var result = new bool[words.Count];
         string? last = null;
@@ -76,6 +76,26 @@ public sealed record StageRun(int Id, string Text, double Start, double End, IRe
         }
         return result;
     }
+
+    /// <summary>
+    /// The reading drawn under <paramref name="run"/>: its parts' readings in order, or null when it has none (or
+    /// "Below lyrics" is off, so there are none). <paramref name="readings"/> is keyed by the lyric words the run was cut
+    /// from (<c>LyricReadingPairs.Match</c>).
+    /// </summary>
+    public static string? Reading(StageRun run, IReadOnlyDictionary<LyricWord, string> readings)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(readings);
+        if (readings.Count == 0) return null;
+        var text = string.Join(" ", run.Parts
+            .Select(part => part.Source is { } key && readings.TryGetValue(new LyricWord(key.Text, key.Start, key.End), out var reading) ? reading : null)
+            .Where(reading => reading is not null)).Trim();
+        return text.Length == 0 ? null : text;
+    }
+
+    /// <summary>The runs that have arrived (<see cref="StageMotion.ShownCount"/>): always the first ones, in reading order.</summary>
+    public static List<StageRun> Shown(IReadOnlyList<StageRun> runs, double time) =>
+        [.. runs.Take(StageMotion.ShownCount(runs, time))];
 
     /// <summary>
     /// How visible one part is: the first arrives with its word; each later syllable fades in over a short settle as it

@@ -53,7 +53,11 @@ public static partial class LrcParser
     /// The lines of an LRC file. <paramref name="trackDuration"/> ends the last line (0 or non-finite when unknown:
     /// it then runs four seconds). <paramref name="reader"/> tells readings from translations on shared timestamps.
     /// </summary>
-    public static IReadOnlyList<LyricLine> Parse(string text, double trackDuration, LatinReader? reader = null)
+    public static IReadOnlyList<LyricLine> Parse(string text, double trackDuration, LatinReader? reader = null) =>
+        ParseWith(text, trackDuration, new LyricParseOptions(Reader: reader));
+
+    /// <summary><see cref="Parse"/> with the readers and word distribution of <paramref name="options"/>.</summary>
+    public static IReadOnlyList<LyricLine> ParseWith(string text, double trackDuration, LyricParseOptions? options)
     {
         if (Encoding.UTF8.GetByteCount(text) > InputLimit) return [];
         // LRC convention: a positive [offset:] (milliseconds) shows lyrics sooner, matching the app's own song offset.
@@ -115,7 +119,7 @@ public static partial class LrcParser
             }
         }
 
-        var merged = MergingSharedTimestamps(rows, new LyricScript.ReadingCache(reader));
+        var merged = MergingSharedTimestamps(rows, (options ?? new LyricParseOptions()).ReadingCache());
         var lastEnd = double.IsFinite(trackDuration) ? trackDuration : 0;
         var lines = new List<LyricLine>(merged.Count);
         for (var index = 0; index < merged.Count; index++)
@@ -135,7 +139,7 @@ public static partial class LrcParser
             }
             // A row an [offset:] pushed before the start is overtaken at 0.
             if (!(end > item.Start)) continue;
-            var line = LyricLines.MakeLine(item.Text, item.Start, end) with { EndFromNextLine = true };
+            var line = LyricLines.MakeLine(item.Text, item.Start, end, options?.Distribute) with { EndFromNextLine = true };
             // Words are built once the end is known: the last syllable stamp runs to it, so a final "tiful day" can
             // still be divided.
             var words = LyricScript.Words(item.Tokens.Select(token => token with { End = Math.Min(token.End, end) }).ToList());

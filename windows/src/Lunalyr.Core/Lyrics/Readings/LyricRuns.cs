@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using Lunalyr.Core.Lyrics.Parsing;
 
 namespace Lunalyr.Core.Lyrics.Readings;
 
@@ -334,97 +335,4 @@ public static class LyricReadingPairs
         var first = line.Words.FirstOrDefault(word => LyricRuns.IsVisible(word.Text));
         return first is null ? [] : new Dictionary<LyricWord, string> { [first] = whole };
     }
-}
-
-/// <summary>One glued run of a line as the stage layouts set it: "beau" "ti" "ful" is a single run, shown syllable by
-/// syllable as each is sung. Ported from the Mac's StageLyricStyles.swift (the pure parts).</summary>
-public sealed record StageRun(int Id, string Text, double Start, double End, IReadOnlyList<StageRun.Part> Parts)
-{
-    /// <summary>A part of a run; <paramref name="Source"/> is the lyric word it was cut from, for its reading.</summary>
-    public sealed record Part(string Text, double Start, LyricWord? Source);
-
-    /// <summary>How far ahead of its time a run arrives (the Mac's <c>StageMotion.lead</c>).</summary>
-    public const double Lead = 0.04;
-
-    /// <summary>Glued syllables join into one run, but never into a run too long to read as a word: an unspaced
-    /// Chinese, Japanese or Korean line, or a romanised one, is cut into short runs that arrive one by one.</summary>
-    public static List<StageRun> Make(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
-    {
-        var runs = new List<StageRun>();
-        for (var index = 0; index < words.Count; index++)
-        {
-            var word = words[index];
-            var text = word.Text.Trim();
-            if (text.Length == 0) continue;
-            if (Joins(text, index, glue, runs.Count > 0 ? runs[^1].Text : null))
-            {
-                var last = runs[^1];
-                runs[^1] = last with
-                {
-                    Text = last.Text + text,
-                    End = Math.Max(last.End, word.End),
-                    Parts = [.. last.Parts, new Part(text, word.Start, word)],
-                };
-            }
-            else
-            {
-                runs.Add(new StageRun(runs.Count, text, word.Start, Math.Max(word.End, word.Start), [new Part(text, word.Start, word)]));
-            }
-        }
-        return runs;
-    }
-
-    /// <summary>Whether the word <paramref name="text"/> at <paramref name="index"/> joins the run before it: glued to
-    /// it, and the two together still short enough to read as one word.</summary>
-    private static bool Joins(string text, int index, IReadOnlyList<bool> glue, string? previous)
-    {
-        if (index <= 0 || index >= glue.Count || !glue[index] || previous is null) return false;
-        return ReadingText.GraphemeCount(previous) + ReadingText.GraphemeCount(text) <= (LyricScript.KeepsSyllables(text) ? 3 : 12);
-    }
-
-    /// <summary>The glue of the runs <see cref="Make"/> builds: true where a word joins the run before it. "Below
-    /// lyrics" pairs readings by this in the stage layouts, so each run carries its own reading and it arrives with
-    /// the run.</summary>
-    public static List<bool> Glue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
-    {
-        var result = Enumerable.Repeat(false, words.Count).ToList();
-        string? last = null;
-        for (var index = 0; index < words.Count; index++)
-        {
-            var text = words[index].Text.Trim();
-            // A blank word belongs to no run of its own.
-            if (text.Length == 0) { result[index] = index > 0; continue; }
-            if (Joins(text, index, glue, last))
-            {
-                result[index] = true;
-                last = (last ?? "") + text;
-            }
-            else
-            {
-                last = text;
-            }
-        }
-        return result;
-    }
-
-    /// <summary>The reading drawn under <paramref name="run"/>: its parts' readings in order, or null when it has none
-    /// (or "Below lyrics" is off, so there are none).</summary>
-    public static string? Reading(StageRun run, IReadOnlyDictionary<LyricWord, string> readings)
-    {
-        if (readings.Count == 0) return null;
-        var text = string.Join(" ", run.Parts.Select(part => part.Source is { } source && readings.TryGetValue(source, out var reading) ? reading : null)
-            .Where(reading => reading is not null)).Trim();
-        return text.Length == 0 ? null : text;
-    }
-
-    /// <summary>The runs that have arrived: always the first ones, in reading order. A source whose word times run
-    /// backwards must not make a filter skip an earlier run.</summary>
-    public static List<StageRun> Shown(IReadOnlyList<StageRun> runs, double time) =>
-        runs.TakeWhile(run => time >= run.Start - Lead).ToList();
-
-    public bool Equals(StageRun? other) =>
-        other is not null && Id == other.Id && Text == other.Text && Start == other.Start && End == other.End
-        && Parts.SequenceEqual(other.Parts);
-
-    public override int GetHashCode() => HashCode.Combine(Id, Text, Start, End, Parts.Count);
 }

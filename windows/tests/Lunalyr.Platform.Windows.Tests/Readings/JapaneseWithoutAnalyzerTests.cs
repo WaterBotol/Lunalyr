@@ -3,6 +3,7 @@ using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Platform.Readings;
 using Lunalyr.Tests.Shared;
 using static Lunalyr.Tests.Shared.ReadingTestLines;
+using Lunalyr.Core.Motion;
 
 namespace Lunalyr.Platform.Windows.Tests.Readings;
 

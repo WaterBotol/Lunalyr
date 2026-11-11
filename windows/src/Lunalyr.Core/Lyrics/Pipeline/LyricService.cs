@@ -1,6 +1,7 @@
 using Lunalyr.Core.Logging;
 using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.Lyrics.Storage;
 
@@ -12,8 +13,14 @@ public sealed record LyricServiceOptions
     /// <summary>Sources only the platform layer can provide (Apple Music on Windows). They replace a built-in one for the same source.</summary>
     public IReadOnlyList<ILyricSource> PlatformSources { get; init; } = [];
 
-    /// <summary>Languages and reading detection for the parsers (the readings layer supplies its reader).</summary>
+    /// <summary>Languages, reading detection and word splitting for the parsers; from <see cref="Readings"/> when null.</summary>
     public LyricParseOptions? Parse { get; init; }
+
+    /// <summary>
+    /// The system's reading services (ICU, the Japanese tokenizer): they tell supplied readings from translations and
+    /// split words for estimated timing (<see cref="ReadingParseOptions.ParseOptions"/>). The built-in rules when null.
+    /// </summary>
+    public ReadingServices? Readings { get; init; }
 
     /// <summary>Whether the network is up; assumed up when null.</summary>
     public ILyricConnectivity? Connectivity { get; init; }
@@ -87,7 +94,8 @@ public sealed class LyricService
         var http = new LyricHttpClient(httpClient ?? LyricHttpClient.CreateDefaultHttpClient(),
             (options.Http ?? new LyricHttpOptions()) with { TimeProvider = options.TimeProvider }, options.Logger);
         var aliases = new ArtistAliases(cacheFolder, options.ArtistSearch ?? new MusicBrainzArtistSearch(http), options.TimeProvider);
-        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http), .. options.PlatformSources], aliases, options.Parse)
+        var parse = options.Parse ?? options.Readings?.ParseOptions();
+        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http), .. options.PlatformSources], aliases, parse)
         {
             UsesArtistAliases = options.UseArtistAliases,
         };

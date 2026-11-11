@@ -15,6 +15,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
 
@@ -33,12 +34,13 @@ public static class TtmlParser
     /// <paramref name="preferredLanguages"/> are the listener's languages, most preferred first (BCP 47 tags); they
     /// choose among supplied translations. Null means the current UI culture.
     /// </summary>
-    public static IReadOnlyList<LyricLine> Parse(string text, double duration, IReadOnlyList<string>? preferredLanguages = null)
+    public static IReadOnlyList<LyricLine> Parse(string text, double duration, IReadOnlyList<string>? preferredLanguages = null,
+        WordDistributor? distribute = null)
     {
         if (Encoding.UTF8.GetByteCount(text) > 2_000_000 || text.Contains("<!DOCTYPE", StringComparison.OrdinalIgnoreCase)
             || text.Contains("<!ENTITY", StringComparison.OrdinalIgnoreCase)) return [];
         var languages = preferredLanguages ?? [CultureInfo.CurrentUICulture.Name];
-        var reader = new Reader(duration, languages);
+        var reader = new Reader(duration, languages, distribute);
         try
         {
             if (!reader.Read(text)) return [];
@@ -124,7 +126,7 @@ public static class TtmlParser
         public string Background = background;
     }
 
-    private sealed class Reader(double duration, IReadOnlyList<string> preferredLanguages)
+    private sealed class Reader(double duration, IReadOnlyList<string> preferredLanguages, WordDistributor? distribute)
     {
         private readonly List<LyricLine> _lines = [];
         /// <summary>No sung line has come yet, or the line before was a credit.</summary>
@@ -378,7 +380,7 @@ public static class TtmlParser
                 _leadingBackground.Add(false);
                 return;
             }
-            var line = LyricLines.MakeLine(text, p.Start, end);
+            var line = LyricLines.MakeLine(text, p.Start, end, distribute);
             if (!line.IsInstrumental) _inCredits = false;
             if (line.IsInstrumental)
             {

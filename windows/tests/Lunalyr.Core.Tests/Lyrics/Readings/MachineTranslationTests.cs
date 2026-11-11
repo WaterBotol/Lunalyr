@@ -1,6 +1,7 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Readings;
 using Skip = Lunalyr.Core.Lyrics.Readings.MachineTranslationPolicy.Skip;
+using Lunalyr.Core.Lyrics.Parsing;
 
 namespace Lunalyr.Core.Tests.Lyrics.Readings;
 
@@ -270,10 +271,10 @@ public class TranslationLanguagesTests
     [Fact]
     public void ScriptsOfLanguageTagsFollowExplicitScripts()
     {
-        Assert.Equal([TranslationLanguages.Script.Latin], TranslationLanguages.ScriptsOfLanguage("sr-Latn"));
-        Assert.Equal([TranslationLanguages.Script.Cyrillic], TranslationLanguages.ScriptsOfLanguage("sr"));
-        Assert.Equal([TranslationLanguages.Script.Han], TranslationLanguages.ScriptsOfLanguage("zh-Hans-CN"));
-        Assert.Equal([TranslationLanguages.Script.Han, TranslationLanguages.Script.Kana], TranslationLanguages.ScriptsOfLanguage("ja_JP"));
+        Assert.Equal(TranslationLanguages.Script.Latin, TranslationLanguages.ScriptsOfLanguage("sr-Latn"));
+        Assert.Equal(TranslationLanguages.Script.Cyrillic, TranslationLanguages.ScriptsOfLanguage("sr"));
+        Assert.Equal(TranslationLanguages.Script.Han, TranslationLanguages.ScriptsOfLanguage("zh-Hans-CN"));
+        Assert.Equal(TranslationLanguages.Script.Han | TranslationLanguages.Script.Kana, TranslationLanguages.ScriptsOfLanguage("ja_JP"));
     }
 
     [Fact]
