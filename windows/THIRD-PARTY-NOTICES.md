@@ -96,3 +96,48 @@ above as far as the program is concerned.
 ```
 
 The dictionary's authors, from its `AUTHORS` file: Taku Kudo, Masayuki Asahara, Yuji Matsumoto.
+
+## MIT-licensed components
+
+These are compiled into `Lunalyr.exe` or shipped beside it. Each is under the MIT licence below, with its own
+copyright line.
+
+| Component | Version | Source | Copyright |
+| --- | --- | --- | --- |
+| Vortice.Windows: Vortice.Direct3D11, Vortice.Direct2D1 (Direct2D, DirectWrite, WIC), Vortice.DXGI, Vortice.DirectX | 3.8.3 | <https://github.com/amerkoleci/Vortice.Windows> | Copyright (c) Amer Koleci and Contributors |
+| Vortice.Mathematics | 2.1.0 | <https://github.com/amerkoleci/Vortice.Mathematics> | Copyright (c) Amer Koleci and Contributors |
+| SharpGen.Runtime, SharpGen.Runtime.COM | 2.4.2-beta | <https://github.com/SharpGenTools/SharpGenTools> | (c) 2010-2017 Alexandre Mutel, 2017-2023 Jeremy Koritzinsky, 2023-2024 Amer Koleci |
+| .NET runtime and libraries (compiled into the app by Native AOT) | 10.0 | <https://github.com/dotnet/runtime> | Copyright (c) .NET Foundation and Contributors |
+
+```text
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The .NET runtime also carries notices for code it includes from others. They are listed in its
+[THIRD-PARTY-NOTICES.TXT](https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT); the installer
+(milestone 8) will ship that file beside this one.
+
+## Windows App SDK (WinUI 3) 2.6.5
+
+The Windows App SDK files placed beside the app (`Microsoft.UI.*`, `Microsoft.Windows.*` and the rest) are
+Microsoft's, redistributed under the Microsoft Software License Terms for the Windows App SDK. Section 3 permits
+redistributing files that its NuGet package places with the app. The terms and Microsoft's own notices are in the
+package (`license.txt`, `NOTICE.txt`); the installer (milestone 8) will ship them beside this file.
