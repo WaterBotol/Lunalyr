@@ -98,9 +98,9 @@ public sealed class LyricLookup
 
     /// <summary>
     /// Test hook: called on the lookup's own flow whenever it is about to wait with no event queued, so a fake clock
-    /// can move to its next timer.
+    /// can move to its next timer. Returns false when there was nothing to move to.
     /// </summary>
-    internal Action? WhenIdle { get; set; }
+    internal Func<bool>? WhenIdle { get; set; }
 
     /// <summary>The key the automatic cache and the miss cache use for a query under these options.</summary>
     public static string CacheKey(LyricQuery query, LyricSourceSnapshot options) => query.RecordingKey + "|" + options.Fingerprint;
@@ -565,9 +565,9 @@ public sealed class LyricLookup
             {
                 return next;
             }
-            if (_owner.WhenIdle is { } idle)
+            // A fake clock moves to its next timer while nothing is queued; a timer may only start more work.
+            while (_owner.WhenIdle is { } idle && idle())
             {
-                idle();
                 if (reader.TryRead(out next))
                 {
                     return next;

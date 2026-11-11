@@ -1,4 +1,4 @@
-using Lunalyr.Core.Lyrics;
+﻿using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Ranking;
 using Lunalyr.Core.Lyrics.Storage;
 
@@ -14,7 +14,7 @@ internal static class L
     public static LyricLine Line(string text, double start, double end)
     {
         var cleaned = text.Trim();
-        var instrumental = cleaned.All(c => "♪♫•·-–—".Contains(c) || char.IsWhiteSpace(c));
+        var instrumental = cleaned.All(c => "â™ªâ™«â€¢Â·-â€“â€”".Contains(c) || char.IsWhiteSpace(c));
         return new LyricLine { Start = start, End = end, Text = instrumental ? "" : cleaned, IsInstrumental = instrumental };
     }
 
@@ -362,7 +362,7 @@ internal static class Lookups
         var lookup = new LyricLookup(new SavedLyrics(cacheFolder, clock), fetch, new FakeConnectivity(online), timing ?? Fast,
             misses ?? new LyricMissCache(timeProvider: clock), clock, localFingerprint)
         {
-            WhenIdle = () => clock.AdvanceToNextTimer(),
+            WhenIdle = clock.AdvanceToNextTimer,
         };
         return lookup;
     }
