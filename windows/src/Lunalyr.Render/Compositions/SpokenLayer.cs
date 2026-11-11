@@ -1,0 +1,276 @@
+// Spoken: each sung word takes focus; recent words settle around it. The rolling stage (window, measured stack, cursor,
+// word states, fit) is Lunalyr's own and ported (Lunalyr.Core.Compositions.RollingStage/RollingWindow); the
+// Verso-derived parts of SpokenTypography and SpokenTypographyView are re-implemented from docs/compositions/spoken.md.
+
+using System.Numerics;
+using Lunalyr.Core.Compositions;
+using Lunalyr.Core.Logging;
+using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Readings;
+using Lunalyr.Core.Motion;
+using Lunalyr.Render.Scene;
+using Vortice.Direct2D1;
+
+namespace Lunalyr.Render.Compositions;
+
+/// <summary>A rolling word with its reading, baked as one unit: exactly what the stack measures and the stage fits.</summary>
+internal sealed class SpokenUnit : IDisposable
+{
+    public required Ink Label { get; init; }
+    public Ink? Reading { get; init; }
+    public Vector2 LabelOffset { get; init; }
+    public Vector2 ReadingOffset { get; init; }
+    public SizeD Size { get; init; }
+    public long LastUsed { get; set; }
+
+    public void Dispose()
+    {
+        Label.Dispose();
+        Reading?.Dispose();
+    }
+}
+
+internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
+    : LyricCompositionLayer(CompositionKind.Spoken, breaker, logger)
+{
+    private RollingSong? _song;
+    private RollingWindow? _window;
+    private int _windowIndex = -1;
+    private RollingWord[] _prepared = [];
+    private SpokenUnit?[] _preparedUnits = [];
+    private readonly Dictionary<LyricWord, SpokenUnit> _units = [];
+    private readonly Dictionary<int, BackingPlan[]> _backing = [];
+    private int _trackSeed;
+
+    // Per-frame scratch, grown with the window.
+    private SizeD[] _sizes = [];
+    private RollingStack.Slot[] _slots = [];
+    private PointD[] _centres = [];
+    private int[] _order = [];
+    private double[] _stack = [];
+    private int[] _members = [];
+    private RollingTokenState[] _states = [];
+    private double[] _reveal = new double[16];
+
+    protected override void Invalidate()
+    {
+        base.Invalidate();
+        _song = null;
+        _window = null;
+        _windowIndex = -1;
+        _prepared = [];
+        _preparedUnits = [];
+        foreach (var unit in _units.Values) unit.Dispose();
+        _units.Clear();
+        foreach (var plans in _backing.Values)
+            foreach (var plan in plans) plan.Dispose();
+        _backing.Clear();
+    }
+
+    protected override void OnLyrics(IReadOnlyList<LyricLine> lines, SceneSnapshot scene)
+    {
+        var readings = scene.Style.Readings == ReadingPlacement.Off ? null : scene.Readings;
+        _song = new RollingSong(lines, Breaker, readings, scene.Style.Readings == ReadingPlacement.Instead);
+        _trackSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x7FFF_FFFF);
+    }
+
+    private double LineBase => BaseSize * 0.75 * Metrics.UserScale;
+
+    protected override void DrawRolling(ID2D1DeviceContext dc, int row, double time, double presence)
+    {
+        if (_song is null) return;
+        EnsureWindow(row, time);
+        var prepared = _prepared;
+        var n = prepared.Length;
+        if (n == 0) return;
+        var lineBase = LineBase;
+        DrawRollingBacking(dc, row, time, presence);
+        int? next = null;
+        for (var i = 0; i < n; i++)
+            if (prepared[i].Source.Start > time) { next = i; break; }
+        var intensity = OrganicMotion.VocalIntensity(_window!.Words, time);
+        var cursor = RollingWords.Cursor(prepared, time, intensity, false);
+        var stacks = RollingWords.Stacks(cursor, false);
+        DrawStack(dc, stacks.Position, stacks.Opacity * presence, time, next, intensity, lineBase);
+        if (stacks.Count > 1) DrawStack(dc, stacks.SecondPosition, stacks.SecondOpacity * presence, time, next, intensity, lineBase);
+    }
+
+    private void DrawStack(ID2D1DeviceContext dc, double position, double alpha, double time, int? next, double intensity,
+                           double lineBase)
+    {
+        var prepared = _prepared;
+        var stage = Stage;
+        var count = 0;
+        for (var k = 0; k < prepared.Length; k++)
+        {
+            var rank = position - 1 - k;
+            if (rank < -2 || rank > 5.2) continue;
+            var token = prepared[k];
+            var unit = _preparedUnits[k] ??= Unit(token, lineBase);
+            unit.LastUsed = Frame;
+            var eligible = k > 0 ? prepared[k - 1].Source.Start : double.NegativeInfinity;
+            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, Arrival,
+                                               Options, eligible);
+            _members[count] = k;
+            _sizes[count] = unit.Size;
+            _slots[count] = state.Slot;
+            _states[count] = state;
+            count++;
+        }
+        if (count == 0) return;
+        // Rank 0, the word in focus, sits here; every other word is stacked above or below it by its measured size.
+        var anchor = new PointD(stage.Width * 0.5, stage.Height * 0.54 + RollingMotion.Baseline(RollingTokenState.Style, 0) * lineBase);
+        RollingStack.Centres(_sizes.AsSpan(0, count), _slots.AsSpan(0, count), anchor, lineBase * 0.16,
+                             _centres.AsSpan(0, count), _order.AsSpan(0, count), _stack.AsSpan(0, count));
+        // The word in focus is drawn last (on top).
+        var order = _order.AsSpan(0, count);
+        for (var i = 0; i < count; i++) order[i] = i;
+        for (var i = 1; i < count; i++)
+        {
+            var member = order[i];
+            var j = i - 1;
+            while (j >= 0 && _states[order[j]].Focus > _states[member].Focus) { order[j + 1] = order[j]; j--; }
+            order[j + 1] = member;
+        }
+        var origin = StageOrigin;
+        var margin = lineBase * 0.22;
+        foreach (var m in order)
+        {
+            ref readonly var state = ref _states[m];
+            var opacity = state.Shown * alpha;
+            if (!(opacity > 0.002)) continue;
+            var slot = _slots[m];
+            var centre = _centres[m];
+            var fit = RollingStack.Fit(_sizes[m], slot, centre, stage, margin);
+            if (!(fit > 0)) continue;
+            var token = prepared[_members[m]];
+            var unit = _preparedUnits[_members[m]]!;
+            var world =
+                Matrix3x2.CreateScale((float)slot.EntranceScale)
+                * Matrix3x2.CreateRotation(Radians(slot.Turn))
+                * Matrix3x2.CreateTranslation((float)slot.EntranceX, (float)slot.EntranceY)
+                * Matrix3x2.CreateScale((float)(fit * state.Scale))
+                * Matrix3x2.CreateRotation(Radians(state.Angle))
+                * Matrix3x2.CreateTranslation(origin.X + (float)centre.X, origin.Y + (float)centre.Y);
+            var scale = (float)(slot.EntranceScale * fit * state.Scale);
+            var blur = Combine(Points(Arrival.Blur(state.Presentation.Progress)), Points(state.Pose.Blur)) * scale;
+            var reveal = Span<double>.Empty;
+            if (token.Parts.Count > 1)
+            {
+                if (_reveal.Length < token.Parts.Count) _reveal = new double[token.Parts.Count * 2];
+                if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, 0, false, Options, _reveal))
+                    reveal = _reveal.AsSpan(0, token.Parts.Count);
+            }
+            unit.Label.Draw(dc, Matrix3x2.CreateTranslation(unit.LabelOffset) * world, scale, (float)opacity, blur,
+                            GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
+            if (unit.Reading is { } reading && !state.Presentation.Preview)
+                reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1);
+        }
+    }
+
+    private static ReadOnlySpan<double> AsSpan(IReadOnlyList<double> values) =>
+        values is double[] array ? array : values.ToArray();
+
+    /// <summary>The words of the rolling stage: rebuilt only when a word joins or leaves the window.</summary>
+    private void EnsureWindow(int index, double time)
+    {
+        if (_window is not null && _windowIndex == index && _window.Holds(time)) return;
+        var lead = Math.Max(1.2, Options.PreviewLead);
+        _window = _song!.Window(index, time, lead);
+        _windowIndex = index;
+        _prepared = RollingWords.Prepare(_window.Words, LineBase, _window.Readings, _window.Following, _window.Ordinals, _window.Parts);
+        _preparedUnits = new SpokenUnit?[_prepared.Length];
+        for (var k = 0; k < _prepared.Length; k++)
+            if (_units.TryGetValue(_prepared[k].Source, out var unit) && unit.Size.Width > 0) _preparedUnits[k] = unit;
+        var n = Math.Max(1, _prepared.Length);
+        if (_sizes.Length < n)
+        {
+            _sizes = new SizeD[n * 2];
+            _slots = new RollingStack.Slot[n * 2];
+            _centres = new PointD[n * 2];
+            _order = new int[n * 2];
+            _stack = new double[n * 2];
+            _members = new int[n * 2];
+            _states = new RollingTokenState[n * 2];
+        }
+        // Units of words that have left the window go.
+        if (_units.Count > _prepared.Length + 24)
+        {
+            var keep = new HashSet<LyricWord>(_prepared.Select(word => word.Source));
+            foreach (var key in _units.Keys.Where(key => !keep.Contains(key)).ToList())
+            {
+                _units[key].Dispose();
+                _units.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>A rolling word and its reading, set in the heavy cut at the word's size and baked once.</summary>
+    private SpokenUnit Unit(RollingWord token, double lineBase)
+    {
+        if (_units.TryGetValue(token.Source, out var found)) return found;
+        var kit = Kit!;
+        var size = (float)token.PointSize;
+        var locale = TextKit.LocaleFor(token.Source.Text);
+        using var label = kit.Layout(token.Source.Text, Face.Heavy, size, locale, token.RightToLeft);
+        using var reading = token.Reading is { } text
+            ? kit.Layout(text, Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false, (float)(Stage.Width * 0.8))
+            : null;
+        var labelBox = label.Metrics;
+        var width = (double)labelBox.Width;
+        var height = (double)labelBox.Height;
+        if (reading is not null)
+        {
+            width = Math.Max(width, reading.Metrics.Width);
+            height += token.PointSize * 0.02 + reading.Metrics.Height;
+        }
+        width += 2 * Points(2);
+        var shadow = new ShadowSpec(0.25f, Points(7) * 0.5f, Points(2));
+        // Rasterised at the focus size (and its breath), and scaled down for the words around it.
+        const float raster = 1.16f;
+        var labelInk = kit.Bake(label, TextColour, raster, shadow);
+        var readingInk = reading is null ? null : kit.Bake(reading, ReadingColour, raster, shadow);
+        var unit = new SpokenUnit
+        {
+            Label = labelInk,
+            Reading = readingInk,
+            LabelOffset = new Vector2(0, (float)(-height / 2 + labelBox.Height / 2)),
+            ReadingOffset = readingInk is null ? default : new Vector2(0, (float)(height / 2 - readingInk.Box.Y / 2)),
+            Size = new SizeD(width, height),
+            LastUsed = Frame,
+        };
+        _units[token.Source] = unit;
+        return unit;
+    }
+
+    /// <summary>Backing vocals of the lines on the rolling stage, set in Editorial's typography (Spoken itself would take over the stage).</summary>
+    private void DrawRollingBacking(ID2D1DeviceContext dc, int index, double time, double presence)
+    {
+        var song = _song!;
+        var (first, last) = LyricPhraseTiming.RollingRange(index, song.Lines);
+        for (var row = Math.Max(first, index - 1); row <= Math.Min(last, index); row++)
+        {
+            var groups = song.Backing(row);
+            if (groups.Count == 0) continue;
+            if (!_backing.TryGetValue(row, out var plans))
+            {
+                var box = BackingVocalLayout.Box(Stage);
+                plans = new BackingPlan[groups.Count];
+                for (var g = 0; g < groups.Count; g++)
+                {
+                    var group = groups[g];
+                    var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id, wordTimed: true,
+                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width);
+                    plans[g] = new BackingPlan(group, plan);
+                }
+                _backing[row] = plans;
+            }
+            foreach (var plan in plans) DrawBackingGroup(dc, plan, time, presence, _trackSeed);
+        }
+    }
+}
+
+/// <summary>Editorial: two typefaces in one line, set like a spread.</summary>
+internal sealed class EditorialLayer(IWordBreaker breaker, Logger? logger)
+    : LyricCompositionLayer(CompositionKind.Editorial, breaker, logger);
