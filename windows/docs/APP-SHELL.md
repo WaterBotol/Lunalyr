@@ -24,7 +24,32 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--log-level <debug\|info\|warn\|error>` | Minimum log level (default `info`). |
 | `--settings` | Open the settings window (a second launch does this anyway). |
 | `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
+| `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
+| `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
+
+## Demo mode (`--demo`)
+
+For screenshots, and for trying the wallpaper without playing anything:
+
+```powershell
+Lunalyr.exe --demo                         # until "Quit Lunalyr" in the tray menu
+Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
+```
+
+- **Player:** `DemoMediaSessionSource` (`src/Lunalyr.Shell/Demo/`) stands in for GSMTC: one session, "Lunalyr demo",
+  always Playing, a timeline that advances in real time from launch and loops through the demo songs. There is no
+  audio at all, and every command (`TryPlayAsync`…) is refused (returns false). No system media session is opened.
+- **Songs** (`DemoSongs`, invented, built with `LyricBuilder` through the real TTML parser): "Neon Harbour" (37 s,
+  English: backing vocals at ~6 s, a duet answer held under the next line at ~11 s, a held note at ~14–18 s, an
+  instrumental break at 18–24.5 s, a wrapping line at ~25–30 s) then "Evening Road" (30 s, unspaced Japanese with
+  kanji; its readings are worked out by the app's own readings service, so they show below the lines). Each song has
+  a cover painted in code (`DemoCover`), so the album colours run through the real decode → palette path.
+- **Lyrics:** `DemoLyricLookup` answers only the demo songs; no lyric service is built and nothing touches the network
+  or the lyric cache.
+- **Data folder:** its own (`…\Lunalyr\Demo`), so it never changes the real settings; that also makes it a separate
+  instance, so quit the normal Lunalyr first or two wallpapers will compete for the desktop. Settings for the demo
+  (composition, background…) go in that folder's `settings.json`.
 
 ## Process
 
@@ -67,8 +92,19 @@ Status lines (`StatusText`), shown instead of lyrics: "Looking up lyrics…", "N
 doesn't share its position", "This looks like a live stream, so lyrics aren't looked up", "Couldn't look up lyrics
 for this song", "Lyric lookups are off for this run".
 
-The renderer is behind `IWallpaperRenderer` (`Start`, `Stop`, `SetScene`, `SetLayers`, `SetClock`,
-`SetFrameRate`); until the real one is wired in the app uses `NullWallpaperRenderer`, which only logs.
+**Album colours:** on each track change the controller reads the player's thumbnail
+(`IMediaSession.OpenThumbnailAsync`; if there is none yet it looks again after 0.5, 1, 2 and 4 s, as players often
+send the cover after the title), decodes it with `ArtworkDecoder`, maps it with `PaletteMapper` and puts the `Palette`
+in the `SceneSnapshot`, all off the caller's thread (`AppController.Artwork.cs`). Palettes are cached per track (last
+32); a new track or player cancels a cover still loading, and a late answer for an older track is dropped. The
+previous colours stay until the new cover is read (so the background fades once); a track without a readable cover,
+and no player at all, get `PaletteMapper.Fallback`. Looking the lyrics up again keeps the colours. Scenes are handed to
+the renderer under one lock that always reads the latest snapshot, so lyrics, readings and colours arriving on
+different threads can't leave it on an older one.
+
+The renderer is behind `IWallpaperRenderer` (`Start`, `Stop`, `SetScene`, `SetLayers`, `SetClock`, `SetFrameRate`);
+the app uses `EngineWallpaperRenderer` over `RenderEngine` with the "gradient" and "colour" backgrounds and the
+"editorial" and "spoken" compositions registered (`AppHost.CreateWallpaper`).
 
 ## Settings v1 (`{data}\settings.json`)
 
@@ -86,7 +122,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `romanizationLanguage` | `"automatic"` | `automatic`, `japanese`, `mandarin`, `cantonese`, `korean`, `other` | `custom.romanizationLanguage` |
 | `romanizationTones` | `true` | | `custom.romanizationTones` |
 | `romanizationSaved` | `true` | prefer readings that came with the lyrics | `custom.romanizationSaved` |
-| `backgroundMode` | `"gradient"` | `gradient` (Windows); the Mac's values as they are ported | `backgroundMode` |
+| `backgroundMode` | `"gradient"` | `gradient` (the album colour field), `colourOnly` (the Mac's value; the straight album gradient, layer `colour`; `colour` is accepted too), `auto` (= `gradient`); the Mac's other values as they are ported (unknown ones show `gradient`) | `backgroundMode` |
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
 | `animationRate` | `60` | `15`, `30`, `60`, `0` = follow the display | `custom.animationRate` (Mac default 30) |
 | `pauseWhenCovered` | `true` | | `custom.pauseWhenCovered` |

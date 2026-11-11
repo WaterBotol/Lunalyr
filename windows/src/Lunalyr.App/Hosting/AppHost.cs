@@ -16,10 +16,12 @@ using Lunalyr.Platform.NowPlaying;
 using Lunalyr.Platform.Readings;
 using Lunalyr.Platform.Settings;
 using Lunalyr.Shell;
+using Lunalyr.Shell.Demo;
 using Lunalyr.Shell.Lyrics;
 using Lunalyr.Shell.Rendering;
 using Lunalyr.Shell.Settings;
 using Lunalyr.Render;
+using Lunalyr.Render.Backgrounds;
 using Lunalyr.Render.Compositions;
 using Lunalyr.Render.Pacing;
 
@@ -48,8 +50,9 @@ internal sealed class AppHost
 
     // Created by the background start-up; read on the UI thread.
     private volatile AppController? _controller;
-    private volatile GsmtcMediaSessionSource? _sessions;
+    private volatile IMediaSessionSource? _sessions;
     private volatile NetworkConnectivity? _connectivity;
+    private Timer? _statsReset;
 
     private bool _uiRequested;
     private bool _quitting;
@@ -130,6 +133,10 @@ internal sealed class AppHost
     private EngineWallpaperRenderer CreateWallpaper(ReadingServices readings)
     {
         var engine = new RenderEngine(new RenderEngineOptions { Performance = PerformanceFrom(_settings.Current) }, Log);
+        // Backgrounds: the album colour field ("gradient", the default) and the colour-only album gradient ("colour",
+        // the Mac's "colourOnly"); the backgroundMode setting picks one (EngineWallpaperRenderer.BackgroundLayerFor).
+        engine.RegisterLayer(new GradientLayerFactory(BackgroundOptions.Default, Log));
+        engine.RegisterLayer(new ColourLayerFactory(BackgroundOptions.Default, Log));
         engine.RegisterLayer(new EditorialFactory(readings.WordBreaker, Log));
         engine.RegisterLayer(new SpokenFactory(readings.WordBreaker, Log));
         _settings.Changed += (_, e) => engine.SetPerformance(PerformanceFrom(e.NewValue));
@@ -159,23 +166,37 @@ internal sealed class AppHost
         {
             // The Japanese dictionary expands under the data folder, so --data test runs never touch the real one.
             var readings = WindowsReadingServices.Create(Path.Combine(DataRoot, "Dictionaries"));
-            _connectivity = new NetworkConnectivity(message => Log.Lyrics.Info(message));
-            // Built the same way with --no-network; only the lookups themselves are refused, so nothing is sent.
-            var service = LyricService.CreateDefault(Path.Combine(DataRoot, "Lyrics"), options: new LyricServiceOptions
+            ILyricLookup lookup;
+            if (_options.Demo)
             {
-                PlatformSources = [new AppleMusicWindowsSource()],
-                Readings = readings,
-                Connectivity = _connectivity,
-                Http = new LyricHttpOptions { UserAgent = UserAgent },
-                Logger = Log,
-            });
-            ILyricLookup lookup = new LyricServiceLookup(service, _options.NoNetwork ? "--no-network" : null);
-            _log.Info($"Lyric sources: {string.Join(", ", service.SourceList(_settings.Current.SourceSnapshot())
-                .Where(s => s.Enabled).Select(s => s.IsAvailable ? s.Title : $"{s.Title} (unavailable)"))}; "
-                + $"network {(_connectivity.IsOnline ? "online" : "offline")}.");
+                // The demo: a silent built-in player and invented lyrics. No system media session is opened, no lyric
+                // service is built, and nothing goes to the network.
+                lookup = new DemoLyricLookup();
+                _sessions = new DemoMediaSessionSource();
+                _log.Info($"Demo: following the built-in demo player ({string.Join(", ", DemoSongs.Songs.Select(s => $"\"{s.Title}\""))}, "
+                    + "in a loop); no real player is followed and nothing is looked up online.");
+            }
+            else
+            {
+                var connectivity = new NetworkConnectivity(message => Log.Lyrics.Info(message));
+                _connectivity = connectivity;
+                // Built the same way with --no-network; only the lookups themselves are refused, so nothing is sent.
+                var service = LyricService.CreateDefault(Path.Combine(DataRoot, "Lyrics"), options: new LyricServiceOptions
+                {
+                    PlatformSources = [new AppleMusicWindowsSource()],
+                    Readings = readings,
+                    Connectivity = connectivity,
+                    Http = new LyricHttpOptions { UserAgent = UserAgent },
+                    Logger = Log,
+                });
+                lookup = new LyricServiceLookup(service, _options.NoNetwork ? "--no-network" : null);
+                _log.Info($"Lyric sources: {string.Join(", ", service.SourceList(_settings.Current.SourceSnapshot())
+                    .Where(s => s.Enabled).Select(s => s.IsAvailable ? s.Title : $"{s.Title} (unavailable)"))}; "
+                    + $"network {(connectivity.IsOnline ? "online" : "offline")}.");
 
-            // Read-only: the guard refuses every command while --no-playback is set, and nothing here sends any.
-            _sessions = await GsmtcMediaSessionSource.CreateAsync(PlaybackGuard.Process, message => Log.Player.Debug(message)).ConfigureAwait(false);
+                // Read-only: the guard refuses every command while --no-playback is set, and nothing here sends any.
+                _sessions = await GsmtcMediaSessionSource.CreateAsync(PlaybackGuard.Process, message => Log.Player.Debug(message)).ConfigureAwait(false);
+            }
             var offsets = new SongOffsets(_settings.Current.SongOffsets,
                 saved => _settings.Update(s => s with { SongOffsets = new Dictionary<string, double>(saved) }));
             _wallpaper = CreateWallpaper(readings);
@@ -189,6 +210,11 @@ internal sealed class AppHost
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
                 + $"Readings: {WindowsReadingServices.Describe(readings)}.");
+            if (_options.StatsPath is not null)
+            {
+                // Measure the steady state: frame statistics restart once start-up has settled.
+                _statsReset = new Timer(_ => _wallpaper?.Engine.ResetStats(), null, TimeSpan.FromSeconds(3), Timeout.InfiniteTimeSpan);
+            }
         }
         catch (Exception ex)
         {
@@ -322,6 +348,9 @@ internal sealed class AppHost
                 _log.Warn("Start-up was still running at shutdown.");
             }
 
+            if (_statsReset is { } reset) await reset.DisposeAsync().ConfigureAwait(false);
+            // Read before the controller stops the renderer.
+            if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);
             _wallpaper?.Dispose(); // detaches from the desktop, leaving the system wallpaper
             _sessions?.Dispose();
@@ -357,4 +386,60 @@ internal sealed class AppHost
     }
 
     private double SinceLaunch() => (DateTime.Now - _processStart).TotalMilliseconds;
+
+    /// <summary>
+    /// <c>--stats</c>: the renderer's frame statistics since they were reset after start-up, in the shape the engine
+    /// harness writes (tools/measure.ps1 reads it).
+    /// </summary>
+    private void WriteStats(string path, RenderEngine engine)
+    {
+        try
+        {
+            var stats = engine.GetStats();
+            using var process = Process.GetCurrentProcess();
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var file = File.Create(path);
+            using var w = new System.Text.Json.Utf8JsonWriter(file, new System.Text.Json.JsonWriterOptions { Indented = true });
+            w.WriteStartObject();
+            w.WriteString("stack", "lunalyr-app-aot");
+            w.WriteString("adapter", string.Join(", ", stats.Surfaces.Select(s => s.Adapter).Distinct()));
+            w.WriteStartArray("monitors");
+            foreach (var s in stats.Surfaces)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("w", s.Width); w.WriteNumber("h", s.Height); w.WriteNumber("dpi", Math.Round(s.Scale * 96));
+                w.WriteNumber("hz", s.RefreshHz); w.WriteString("mode", s.Mode.ToString()); w.WriteString("state", s.State.ToString());
+                w.WriteString("reason", s.Reason.ToString()); w.WriteNumber("syncInterval", s.SyncInterval); w.WriteBoolean("hdr", s.Hdr);
+                w.WriteBoolean("adapterDrivesMonitor", s.AdapterDrivesMonitor); w.WriteBoolean("idle", s.Idle);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteNumber("seconds", stats.Seconds);
+            w.WriteNumber("frames", stats.Frames);
+            w.WriteNumber("fps", stats.Fps);
+            WritePercentiles(w, "cpuMsPerFrame", stats.FrameCpuMs);
+            WritePercentiles(w, "frameIntervalMs", stats.FrameIntervalMs);
+            w.WriteNumber("slowFrames", stats.SlowFrames);
+            w.WriteNumber("workingSetMB", Math.Round(process.WorkingSet64 / 1048576.0, 1));
+            w.WriteNumber("privateMB", Math.Round(process.PrivateMemorySize64 / 1048576.0, 1));
+            w.WriteNumber("gcGen0", GC.CollectionCount(0));
+            w.WriteNumber("gcGen2", GC.CollectionCount(2));
+            w.WriteNumber("allocatedMB", Math.Round(GC.GetTotalAllocatedBytes() / 1048576.0, 1));
+            w.WriteNumber("rebuilds", stats.Rebuilds);
+            w.WriteNumber("deviceRecoveries", stats.DeviceRecoveries);
+            w.WriteEndObject();
+            _log.Info($"Frame statistics written to {path} ({stats.Fps} fps over {stats.Seconds:0.#} s).");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn($"Couldn't write the frame statistics to {path}.", ex);
+        }
+
+        static void WritePercentiles(System.Text.Json.Utf8JsonWriter w, string name, Percentiles p)
+        {
+            w.WriteStartObject(name);
+            w.WriteNumber("avg", p.Avg); w.WriteNumber("p50", p.P50); w.WriteNumber("p95", p.P95); w.WriteNumber("p99", p.P99);
+            w.WriteEndObject();
+        }
+    }
 }

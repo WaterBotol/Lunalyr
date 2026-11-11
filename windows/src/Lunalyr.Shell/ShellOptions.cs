@@ -14,6 +14,10 @@ namespace Lunalyr.Shell;
 /// <item><term><c>--log-level &lt;debug|info|warn|error&gt;</c></term><description>Minimum log level (default info).</description></item>
 /// <item><term><c>--settings</c></term><description>Open the settings window (also what a second launch does).</description></item>
 /// <item><term><c>--no-network</c></term><description>Don't look lyrics up online (for checks; nothing is sent to any lyric service).</description></item>
+/// <item><term><c>--demo</c></term><description>Follow a silent built-in demo player with invented songs and lyrics instead
+/// of the system's players; implies <c>--no-network</c> and <c>--no-playback</c>, and keeps its own data folder.</description></item>
+/// <item><term><c>--stats &lt;file&gt;</c></term><description>On quitting, write the renderer's frame statistics to this JSON
+/// file (for measurements).</description></item>
 /// <item><term><c>lunalyr://…</c></term><description>A link to act on (forwarded to the running instance).</description></item>
 /// </list>
 /// </summary>
@@ -30,6 +34,12 @@ public sealed record ShellOptions
     public bool OpenSettings { get; init; }
 
     public bool NoNetwork { get; init; }
+
+    /// <summary>The built-in demo player and lyrics instead of the system's players and the lyric services.</summary>
+    public bool Demo { get; init; }
+
+    /// <summary>Where to write the renderer's frame statistics on quitting, or null.</summary>
+    public string? StatsPath { get; init; }
 
     public IReadOnlyList<string> Links { get; init; } = [];
 
@@ -64,6 +74,17 @@ public sealed record ShellOptions
                     break;
                 case "--settings":
                     options = options with { OpenSettings = true };
+                    break;
+                case "--demo":
+                    // Silent and offline by definition: no real player is followed and nothing is looked up.
+                    options = options with { Demo = true, NoNetwork = true, NoPlayback = true };
+                    break;
+                case "--stats":
+                    if (Value() is { } stats)
+                    {
+                        if (stats.Trim().Length == 0) problems.Add("--stats needs a file.");
+                        else options = options with { StatsPath = Path.GetFullPath(stats.Trim()) };
+                    }
                     break;
                 case "--data":
                     if (Value() is { } folder)
