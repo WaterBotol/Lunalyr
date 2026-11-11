@@ -13,5 +13,7 @@
   <ItemGroup>
     <!-- The Japanese dictionary (IPAdic), built by tools/JapaneseDictionaryBuilder: see docs/READINGS-WINDOWS.md. -->
     <EmbeddedResource Include="Readings\Data\ipadic.lunadic.br" LogicalName="Lunalyr.Platform.Readings.Data.ipadic.lunadic.br" />
+    <!-- Its licence asks for its notice with every copy: shipped next to the app (and anything referencing this). -->
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

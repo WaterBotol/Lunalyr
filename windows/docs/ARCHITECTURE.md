@@ -169,7 +169,8 @@ source; the final licence is the owner's call. Only Lunalyr's own logic and test
 Verso-derived parts of the Mac code are re-implemented from their behaviour. The rule and the do-not-translate list
 are in [PROVENANCE.md](PROVENANCE.md).
 
-Third-party components so far, from the package metadata:
+Third-party components so far, from the package metadata and licence files. Notices the licences ask to ship with
+the app are in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md), copied next to the app on build and publish:
 
 | Component | Licence |
 |---|---|
@@ -178,6 +179,7 @@ Third-party components so far, from the package metadata:
 | SharpGen.Runtime, SharpGen.Runtime.COM 2.4.2-beta | MIT |
 | System.Numerics.Tensors 9.0.0 (pulled in by the Windows App SDK) | MIT |
 | **Microsoft Windows App SDK 2.6.5** (WinUI 3 and friends) and Microsoft.Web.WebView2 | **Microsoft Software License Terms**: proprietary, redistributable. You must give end users terms that protect Microsoft, and you may not distribute it in a way that puts it under a licence requiring source disclosure. |
+| IPAdic (mecab-ipadic) 2.7.0-20070801: the bundled Japanese dictionary (data only; the analyser is Lunalyr's own) | IPAdic licence (NAIST / ICOT): permissive, closed-source commercial use allowed; its notice must go with every copy, see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) |
 | Windows SDK Build Tools (build time only) | Microsoft SDK licence |
 | Rust spike only: windows, windows-core and the other windows-* crates 0.62; proc-macro2, quote, syn, unicode-ident (build time) | MIT OR Apache-2.0 (unicode-ident also Unicode-3.0) |
 

@@ -9,9 +9,9 @@ public readonly record struct JapaneseToken(int Location, int Length, string? La
 
 /// <summary>
 /// Segments Japanese text into words and reads them. The Mac uses <c>CFStringTokenizer</c> with the "ja" locale;
-/// Windows has <c>JapanesePhoneticAnalyzer</c>, which works only where the Japanese language (its IME dictionary) is
-/// installed, and ICU word breaks otherwise (no kanji readings). Implementations need not be thread-safe for one
-/// instance; <see cref="LyricRomanizer"/> keeps one per pass.
+/// Windows uses the bundled dictionary and analyser (<see cref="Japanese.DictionaryJapaneseTokenizer"/>), and ICU word
+/// breaks (no kanji readings) should it ever fail to open. Implementations need not be thread-safe for one instance;
+/// <see cref="LyricRomanizer"/> keeps one per pass.
 /// </summary>
 public interface IJapaneseTokenizer
 {
