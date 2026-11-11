@@ -108,6 +108,13 @@ public sealed class LyricService
 
     public LyricSourceSet Sources => _sources;
 
+    /// <summary>
+    /// The word distributor the parsers use (the system word breaker when reading services were given), for the display
+    /// steps that spread estimated words again (<see cref="Timing.LyricGapTiming.EstimatingWords"/>,
+    /// <see cref="Timing.QQGapRepair"/>, <see cref="Timing.LyricLineIndex.RemovingMixedTimingCopies"/>); null for the built-in one.
+    /// </summary>
+    public Timing.WordDistributor? WordDistributor => _sources.ParseOptions?.Distribute;
+
     /// <summary>Every source in <paramref name="options"/>' order (switched-off ones after), with whether it works here.</summary>
     public IReadOnlyList<LyricSourceStatus> SourceList(LyricSourceSnapshot options)
     {

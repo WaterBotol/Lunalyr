@@ -30,6 +30,9 @@ public sealed class LyricSourceSet
         _parse = parse;
     }
 
+    /// <summary>What the parsers are given: languages, readers and the word distributor.</summary>
+    public LyricParseOptions? ParseOptions => _parse;
+
     /// <summary>The providers, by source.</summary>
     public IReadOnlyDictionary<LyricSourceId, ILyricSource> Sources => _sources;
 

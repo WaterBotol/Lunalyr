@@ -92,6 +92,11 @@ public static class LyricParser
     /// A local export: a TTML sidecar with any word timing, else a YRC sidecar, supplements the LRC's lines; then the
     /// reading and translation files attach by time. Lyrics running more than 8 s past the track are not this one's.
     /// </summary>
+    /// <remarks>
+    /// Re-implemented from this description: the Mac's lines choosing between the sidecars, the 8 s guard and the
+    /// reading attachment (LocalLyricBridge.swift) are blamed to the Verso import. The merge itself
+    /// (<see cref="LocalSidecars"/>) is Lunalyr's own code, ported.
+    /// </remarks>
     private static IReadOnlyList<LyricLine> WithLocalSidecars(IReadOnlyList<LyricLine> lines, Func<string, string?> extra, double duration,
         LyricParseOptions? options)
     {

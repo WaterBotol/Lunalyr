@@ -188,11 +188,12 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
 
     /// <summary>
     /// A file's <c>[length:]</c> in seconds: "03:41", "3:41.50", "221" or "221000ms"; a bare number too large to be
-    /// seconds is read as milliseconds. Null for a value that cannot be a song's length (outside 1 s … 3 h).
+    /// seconds is read as milliseconds (read as TTML times are, <see cref="TtmlParser.Seconds"/>, as the Mac does). Null for a value
+    /// that cannot be a song's length (outside 1 s … 3 h).
     /// </summary>
     public static double? Length(string? value)
     {
-        if (value is null || ClockSeconds(value) is not double seconds)
+        if (value is null || TtmlParser.Seconds(value) is not double seconds)
         {
             return null;
         }
@@ -218,34 +219,6 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
         var raw = query.Title.Trim();
         return raw.Length > 0 && name.Contains(raw, StringComparison.CurrentCultureIgnoreCase);
     }
-
-    /// <summary>A time as TTML and LRC tags write it: "12.5s", "1500ms", "03:41", "1:02:03.5"; null when unreadable.</summary>
-    private static double? ClockSeconds(string value)
-    {
-        var text = value.Trim();
-        double? result = null;
-        if (text.EndsWith("ms", StringComparison.Ordinal))
-        {
-            result = Number(text[..^2]) / 1000;
-        }
-        else if (text.EndsWith('s'))
-        {
-            result = Number(text[..^1]);
-        }
-        else
-        {
-            var parts = text.Split(':');
-            if (parts.Length is >= 1 and <= 3 && parts.All(p => Number(p) is not null))
-            {
-                result = parts.Aggregate(0.0, (total, part) => (total * 60) + Number(part)!.Value);
-            }
-        }
-        return result is double r && double.IsFinite(r) && r >= 0 && r <= 864_000 ? r : null;
-    }
-
-    private static double? Number(string text) =>
-        text.Length > 0 && !char.IsWhiteSpace(text[0]) && !char.IsWhiteSpace(text[^1])
-        && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null;
 
     /// <summary>The folder's visible entries (not recursive), at most 30,000.</summary>
     private static List<FileSystemInfo> Entries(string folder)

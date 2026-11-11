@@ -48,6 +48,27 @@ public class WindowsReadingServicesTests
         Assert.True(words.Count < 5, string.Join("|", words));
     }
 
+    // Every lyric source parses on its own thread-pool thread, so the readers and the word breaker the parsers get are
+    // called from many threads at once (the transliterator locks, the word breaker opens an iterator per call, the
+    // Japanese analyzer runs on its own STA thread).
+    [Fact]
+    public async Task TheParserServicesAreSafeFromManyThreadsAtOnce()
+    {
+        var options = WindowsReadingServices.Create().ParseOptions();
+        var expectedWords = options.Distribute!("我们一起走过的路", 0, 4).Select(word => word.Text).ToList();
+        var expectedReading = LyricScript.IsReading("kimi no na wa", "君の名は", options.ReadingCache());
+        var runs = Enumerable.Range(0, 64).Select(i => Task.Run(() =>
+        {
+            for (var round = 0; round < 20; round++)
+            {
+                Assert.Equal(expectedWords, options.Distribute!("我们一起走过的路", 0, 4).Select(word => word.Text));
+                Assert.Equal(expectedReading, LyricScript.IsReading("kimi no na wa", "君の名は", options.ReadingCache()));
+                Assert.False(LyricScript.IsReading("I love you", "我爱你", options.ReadingCache()));
+            }
+        }, TestContext.Current.CancellationToken));
+        await Task.WhenAll(runs);
+    }
+
     [Fact]
     public void IcuTransliteratesLikeApplesTransforms()
     {

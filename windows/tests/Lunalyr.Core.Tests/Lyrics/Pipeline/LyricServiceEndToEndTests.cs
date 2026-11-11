@@ -70,12 +70,12 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         .Set("search.kuwo.cn/r.s", Reply.Text(200, ServiceReplies.KuwoNoSongs));
 
     private LyricService Service(FixtureHandler handler, ILyricSource? apple = null, bool online = true, IArtistAliasSearch? aliases = null,
-        string? cacheFolder = null) =>
+        string? cacheFolder = null, LyricLookupTiming? timing = null) =>
         LyricService.CreateDefault(cacheFolder ?? _cache.Path, new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, new LyricServiceOptions
         {
             PlatformSources = [apple ?? new AppleMusic(null)],
             Http = new LyricHttpOptions { MinimumHostInterval = TimeSpan.Zero, IsNetworkAvailable = () => online },
-            Timing = Quick,
+            Timing = timing ?? Quick,
             ArtistSearch = aliases ?? new NoAliases(),
         });
 
@@ -126,6 +126,8 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         var shown = Synced(report.Result);
         Assert.Equal(new LyricProvenance("Word-by-word", "LRCLIB"), shown.Provenance);
         Assert.Equal(English.Select(l => l.Text), shown.Lines.Select(l => l.Text));
+        // The exact hit's timing is sound, so LRCLIB's search is not asked.
+        Assert.DoesNotContain("lrclib.net/api/search", handler.Addresses);
         Assert.True(report.IsComplete);
         Assert.False(report.Offline);
         Assert.StartsWith("Match found", report.States[Lrclib], StringComparison.Ordinal);
@@ -167,8 +169,10 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         // LRCLIB's upload stamps a run of lines a moment apart.
         SungLine[] bunched = [.. English.Select((l, i) => new SungLine(l.Text, 11 + (i * 0.1), 11 + (i * 0.1) + 0.09)),
             new("A sixth line arrives", 30, 32), new("Seventh and final words", 33, 36)];
-        var report = await Service(EnglishWorld(lrclibWords: false, lrclibLines: bunched)).LookupAsync(ShapeOfYou, Everything, force: true,
-            cancellationToken: Ct);
+        var handler = EnglishWorld(lrclibWords: false, lrclibLines: bunched);
+        var report = await Service(handler).LookupAsync(ShapeOfYou, Everything, force: true, cancellationToken: Ct);
+        // The exact hit's timing is unsound, so other uploads are searched too (the probe parses and checks it).
+        Assert.Contains("lrclib.net/api/search", handler.Addresses);
         Assert.Equal(LyricsPlus, report.Candidates[0].Source);
         Assert.Equal(Lrclib, report.Candidates[^2].Source); // below NetEase's sound line timing, above plain text
         Assert.Contains("lines bunched", report.States[Lrclib], StringComparison.Ordinal);
@@ -191,7 +195,9 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.Equal("Line-synced · Apple Music", lines.Candidates[2].Provenance.Label);
 
         var apple = new AppleMusic(wordTtml);
-        var words = await Service(EnglishWorld(), apple, cacheFolder: _cache.File("words")).LookupAsync(ShapeOfYou, Everything, cancellationToken: Ct);
+        // Apple Music is read before any service is asked; give it ample time so the check does not race the clock.
+        var words = await Service(EnglishWorld(), apple, cacheFolder: _cache.File("words"), timing: Quick with { MusicFirst = TimeSpan.FromSeconds(5) })
+            .LookupAsync(ShapeOfYou, Everything, cancellationToken: Ct);
         Assert.Equal(new LyricProvenance("Word-by-word", "Apple Music"), words.Result!.Provenance);
         // Nothing outranks Apple Music's own word timing, so an automatic lookup asks no service.
         Assert.All(new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, LyricsOvh, Amll },

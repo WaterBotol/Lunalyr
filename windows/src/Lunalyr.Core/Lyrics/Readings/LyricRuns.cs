@@ -243,10 +243,6 @@ public static class LyricRuns
         System.Globalization.UnicodeCategory.MathSymbol or System.Globalization.UnicodeCategory.CurrencySymbol
         or System.Globalization.UnicodeCategory.ModifierSymbol or System.Globalization.UnicodeCategory.OtherSymbol;
 
-    /// <summary>A source token or glued run can contain a whole phrase. Only preview a label that can be read as one
-    /// word.</summary>
-    public static bool IsPreviewWord(string text, IWordBreaker breaker) => breaker.Words(text).Count == 1;
-
     /// <summary>The visible tokens and their glue. A token stays glued across a dropped one only if nothing but glue
     /// separated them.</summary>
     public static (List<LyricWord> Words, List<bool> Glue) Visible(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
