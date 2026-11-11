@@ -14,6 +14,10 @@
     <ProjectReference Include="..\..\src\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Generated covers (make-fixtures.ps1): no artwork from anywhere. -->
+    <None Include="Fixtures\Artwork\*.jpg;Fixtures\Artwork\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Helpers shared by every test project (fake time). -->
     <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

@@ -8,6 +8,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <!-- WIC for artwork decoding: Vortice.WIC ships inside Vortice.Direct2D1, already pinned for the renderer. -->
+    <PackageReference Include="Vortice.Direct2D1" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
   </ItemGroup>
 </Project>
