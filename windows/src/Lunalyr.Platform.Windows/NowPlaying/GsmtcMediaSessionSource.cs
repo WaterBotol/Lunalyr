@@ -51,9 +51,10 @@ public sealed class GsmtcMediaSessionSource : IMediaSessionSource
     {
         var manager = await GsmtcManager.RequestAsync().AsTask(cancellationToken).ConfigureAwait(false);
         var source = new GsmtcMediaSessionSource(manager, log);
-        source.Refresh();
+        // Subscribe first so a change during the initial listing isn't missed.
         manager.SessionsChanged += source.OnSessionsChanged;
         manager.CurrentSessionChanged += source.OnCurrentSessionChanged;
+        source.Refresh();
         return source;
     }
 

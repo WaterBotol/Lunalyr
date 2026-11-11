@@ -178,6 +178,33 @@ public sealed class NowPlayingMonitorTests : IDisposable
     }
 
     [Fact]
+    public void MetadataPublishedInStagesDoesNotZeroTheClock()
+    {
+        var chrome = NewSession("Chrome");
+        chrome.SetTrack("A").SetPlayback(PlaybackStatus.Playing).SetTimeline(200);
+        _source.Add(chrome);
+        _monitor.Start();
+
+        chrome.SetTrack("B - YouTube", artist: "");     // Tab title first...
+        _time.AdvanceMilliseconds(200);
+        chrome.SetTimeline(0.1, duration: 180);
+        _time.AdvanceSeconds(2.5);
+        chrome.SetTrack("B", artist: "X");              // ...the real metadata later.
+        Assert.Equal(2.6, Sec, Tol);
+        Assert.Empty(_seeks);
+        Assert.Equal("B", _monitor.Track?.Title);
+    }
+
+    [Fact]
+    public void SubscribesBeforeTheFirstRead()
+    {
+        var s = _source.Add(Playing("Lemon", 30));
+        _monitor.Start();
+        Assert.True(s.Reads > 0);
+        Assert.Equal(0, s.ReadsWithoutSubscribers);
+    }
+
+    [Fact]
     public void MetadataRefreshForTheSameTrackDoesNotReset()
     {
         var s = _source.Add(Playing("Lemon", 30));

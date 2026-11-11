@@ -132,6 +132,12 @@ public sealed class NowPlayingMonitor : IDisposable
             _session = current;
             _track = null;
             request = ++_propertiesRequest;
+
+            // Subscribe before the first reads so no update falls in between (a seek-only player wouldn't repeat it).
+            // Handlers check the sender against _session, and block on the lock until this attach is done.
+            if (old is not null) Unsubscribe(old);
+            if (current is not null) Subscribe(current);
+
             Clock.ResetSession();
             if (current is null)
             {
@@ -147,8 +153,6 @@ public sealed class NowPlayingMonitor : IDisposable
             }
         }
 
-        if (old is not null) Unsubscribe(old);
-        if (current is not null) Subscribe(current);
         _log?.Invoke(current is null ? "Now playing: no session." : $"Now playing: following {current.SourceAppUserModelId}.");
         SessionChanged?.Invoke(this, EventArgs.Empty);
         PlaybackChanged?.Invoke(this, EventArgs.Empty);

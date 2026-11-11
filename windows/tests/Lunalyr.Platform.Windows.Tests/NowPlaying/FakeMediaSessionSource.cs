@@ -160,9 +160,29 @@ internal sealed class FakeMediaSession(string appId, ManualTimeProvider time) : 
     public Task<Stream?> OpenThumbnailAsync(int maxBytes = 16 * 1024 * 1024, CancellationToken cancellationToken = default) =>
         Task.FromResult<Stream?>(Thumbnail is { Length: > 0 } bytes && bytes.Length <= maxBytes ? new MemoryStream(bytes, writable: false) : null);
 
-    public MediaPlaybackInfo GetPlaybackInfo() => _playback;
+    /// <summary>Playback and timeline reads so far.</summary>
+    public int Reads { get; private set; }
 
-    public MediaTimeline? GetTimeline() => _timeline;
+    /// <summary>Reads made while nobody was subscribed to the change events (an update in that gap would be lost).</summary>
+    public int ReadsWithoutSubscribers { get; private set; }
+
+    public MediaPlaybackInfo GetPlaybackInfo()
+    {
+        CountRead();
+        return _playback;
+    }
+
+    public MediaTimeline? GetTimeline()
+    {
+        CountRead();
+        return _timeline;
+    }
+
+    private void CountRead()
+    {
+        Reads++;
+        if (!HasSubscribers) ReadsWithoutSubscribers++;
+    }
 
     public Task<bool> TryPlayAsync() => Record("play");
 
