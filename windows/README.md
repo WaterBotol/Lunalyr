@@ -38,5 +38,5 @@ Build output goes to `artifacts/` (per project), so separate git worktrees never
 
 ## Licence
 
-Lunalyr derives from Verso (AkkiCode06/verso), GPLv3 with the Commons Clause. The full licence text and attribution
-will be added from the Mac reference repo.
+The Windows port is written without any Verso code (see [docs/PROVENANCE.md](docs/PROVENANCE.md)), so it can be
+closed source. The owner will choose the final licence. Until then, all rights are reserved.

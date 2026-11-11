@@ -164,8 +164,10 @@ Risks and how they're handled:
 
 ## Licence
 
-Lunalyr derives from Verso (AkkiCode06/verso), GPLv3 with the Commons Clause. The licence text and attribution
-come over from the Mac reference repo once the hand-off kit is on this PC.
+**Owner's decision (12 Nov 2026):** the Windows port uses no Verso (AkkiCode06/verso) code, so it can be closed
+source; the final licence is the owner's call. Only Lunalyr's own logic and tests are ported faithfully, and the
+Verso-derived parts of the Mac code are re-implemented from their behaviour. The rule and the do-not-translate list
+are in [PROVENANCE.md](PROVENANCE.md).
 
 Third-party components so far, from the package metadata:
 
@@ -179,6 +181,6 @@ Third-party components so far, from the package metadata:
 | Windows SDK Build Tools (build time only) | Microsoft SDK licence |
 | Rust spike only: windows, windows-core and the other windows-* crates 0.62; proc-macro2, quote, syn, unicode-ident (build time) | MIT OR Apache-2.0 (unicode-ident also Unicode-3.0) |
 
-**Licence question to settle before shipping:** a GPLv3 app distributed together with the proprietary Windows App
-SDK needs care (GPLv3's "System Libraries" exception may or may not cover it). Using the Windows App SDK as a
-separately installed framework package, rather than bundling it, is the cleaner position. This is not legal advice.
+With the port closed source, the Windows App SDK's terms are straightforward. You redistribute its files with the app
+and give end users licence terms that protect Microsoft at least as well as its own, which a normal EULA does. This
+is not legal advice.
