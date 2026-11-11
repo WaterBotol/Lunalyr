@@ -5,8 +5,12 @@ using Lunalyr.Core.Lyrics.Sources;
 
 namespace Lunalyr.Core.Tests.Lyrics.Sources;
 
-/// <summary>A canned reply: status, body, optional headers; <see cref="Hang"/> never answers (for timeouts).</summary>
-internal sealed record Reply(int Status, byte[] Body, IReadOnlyDictionary<string, string>? Headers = null, bool Hang = false, bool Fail = false)
+/// <summary>
+/// A canned reply: status, body, optional headers; <see cref="Hang"/> never answers (for timeouts); <see cref="Wait"/>
+/// holds the answer until a task completes (to fix the order sources answer in).
+/// </summary>
+internal sealed record Reply(int Status, byte[] Body, IReadOnlyDictionary<string, string>? Headers = null, bool Hang = false, bool Fail = false,
+    Task? Wait = null)
 {
     public static Reply Text(int status, string body, IReadOnlyDictionary<string, string>? headers = null) =>
         new(status, Encoding.UTF8.GetBytes(body), headers);
@@ -73,6 +77,12 @@ internal sealed class FixtureHandler : HttpMessageHandler
         if (reply.Hang)
         {
             await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        if (reply.Wait is { } wait)
+        {
+            // Bounded, so a test whose condition never comes fails on its assertions rather than hanging.
+            await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(10), cancellationToken)).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
         }
         var response = new HttpResponseMessage((HttpStatusCode)reply.Status) { Content = new ByteArrayContent(reply.Body), RequestMessage = request };
         foreach (var (name, value) in reply.Headers ?? new Dictionary<string, string>())
