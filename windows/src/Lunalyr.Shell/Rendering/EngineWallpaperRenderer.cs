@@ -18,7 +18,7 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
     private readonly string _fallbackComposition;
     private readonly Lock _gate = new();
 
-    public EngineWallpaperRenderer(RenderEngine engine, Logger? logger = null, string fallbackBackground = "solid",
+    public EngineWallpaperRenderer(RenderEngine engine, Logger? logger = null, string fallbackBackground = "gradient",
         string fallbackComposition = "editorial")
     {
         _engine = engine;
@@ -47,10 +47,22 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
 
     public void SetScene(SceneSnapshot scene) => _engine.SetScene(scene);
 
+    /// <summary>
+    /// The background layer for a <c>backgroundMode</c> setting: the Mac's raw values where Windows has the layer
+    /// ("colourOnly" is the "colour" layer, the Mac's default "auto" the "gradient"), Windows' own ids as they are.
+    /// </summary>
+    public static string BackgroundLayerFor(string? backgroundMode) => backgroundMode switch
+    {
+        null or "" or "auto" => "gradient",
+        "colourOnly" or "colorOnly" => "colour",
+        _ => backgroundMode,
+    };
+
     public void SetLayers(string background, string composition)
     {
         var ids = _engine.LayerIds;
-        var bg = ids.Contains(background) ? background : _fallbackBackground;
+        background = BackgroundLayerFor(background);
+        var bg = ids.Contains(background) ? background : ids.Contains(_fallbackBackground) ? _fallbackBackground : "solid";
         var lyric = ids.Contains(composition) ? composition : _fallbackComposition;
         if (bg != background) _log.Warn($"Background \"{background}\" isn't available yet; showing \"{bg}\".");
         if (lyric != composition) _log.Warn($"Composition \"{composition}\" isn't available yet; showing \"{lyric}\".");

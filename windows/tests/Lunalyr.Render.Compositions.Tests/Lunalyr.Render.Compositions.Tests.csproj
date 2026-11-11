@@ -17,6 +17,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
     <ProjectReference Include="..\..\src\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
+    <!-- The invented-lyric builders (Lunalyr.Shell.Demo.LyricBuilder). -->
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The preview tool's offscreen stage and invented fixture songs. -->

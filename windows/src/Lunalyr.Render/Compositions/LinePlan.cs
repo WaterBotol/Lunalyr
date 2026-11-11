@@ -1,4 +1,5 @@
 using System.Numerics;
+using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
@@ -16,6 +17,8 @@ internal sealed class RunInk : IDisposable
     public Vector2 ReadingOffset { get; init; }
     public SizeD Unit { get; init; }
     public SizeD Slot { get; init; }
+    /// <summary>The glow of the run while it is held: its ink's glow colour.</summary>
+    public Vector4 Glow { get; init; } = Vector4.One;
     /// <summary>The slot's centre in the line's block (top-left origin), layout pixels.</summary>
     public PointD Centre { get; set; }
 
@@ -74,7 +77,8 @@ internal sealed class LinePlan : IDisposable
 internal readonly record struct PlanSpec(
     double BaseSize, double MinimumSize, int LineIndex, bool WordTimed, bool Editorial, bool Heavy, double MaxWidth,
     double Spacing, double LineSpacing, LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
-    Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow);
+    Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
+    LyricInk? Ink = null);
 
 internal static class LinePlans
 {
@@ -135,8 +139,12 @@ internal static class LinePlans
             for (var r = 0; r < count; r++)
             {
                 var run = typography.Runs[r];
-                var label = kit.Bake(labels[r], spec.Colour, raster, spec.Shadow);
-                Ink? reading = readings[r] is { } layout ? kit.Bake(layout, spec.ReadingColour, raster, spec.Shadow) : null;
+                // Each run takes its own colour from the ink, by its place along the line (the Mac's ink.sample).
+                var sample = spec.Ink?.Sample(run.Order, run.Seed);
+                var colour = sample is { } rest ? LyricInks.Vector(rest.Rest) : spec.Colour;
+                var readingColour = sample is { } read ? LyricInks.Vector(read.Reading) : spec.ReadingColour;
+                var label = kit.Bake(labels[r], colour, raster, spec.Shadow);
+                Ink? reading = readings[r] is { } layout ? kit.Bake(layout, readingColour, raster, spec.Shadow) : null;
                 var unit = units[r];
                 var labelHeight = labels[r].Metrics.Height;
                 runs[r] = new RunInk
@@ -148,6 +156,7 @@ internal static class LinePlans
                     Unit = unit,
                     Slot = slots[r],
                     Centre = centres[r],
+                    Glow = sample is { } glow ? LyricInks.Vector(glow.Glow) : colour,
                 };
             }
             var lineInk = lineLayout is null ? null : kit.Bake(lineLayout, spec.ReadingColour, raster, spec.LineReadingShadow);

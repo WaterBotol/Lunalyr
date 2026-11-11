@@ -34,6 +34,20 @@ public sealed record AppControllerOptions
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     public SongClockOptions? Clock { get; init; }
+
+    /// <summary>
+    /// Turns a track's artwork (the player's thumbnail) into the scene's colours, off the caller's thread; null when the
+    /// bytes are not an image. Default: <see cref="Artwork.ArtworkPalettes.FromStreamAsync"/> (WIC decode, the Mac's
+    /// colour grid, <see cref="PaletteMapper"/>).
+    /// </summary>
+    public Func<Stream, CancellationToken, Task<Palette?>> ArtworkPalette { get; init; } = Artwork.ArtworkPalettes.FromStreamAsync;
+
+    /// <summary>
+    /// How long to wait before each further look for a cover when the player has none yet: players often send the
+    /// artwork a moment after the title (and some never do; the default colours are used then).
+    /// </summary>
+    public IReadOnlyList<TimeSpan> ArtworkRetries { get; init; } =
+        [TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
 }
 
 /// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>
@@ -83,7 +97,7 @@ public sealed record AppStatus
 /// and cancels the previous one, and results from an older generation are dropped. <see cref="StatusChanged"/> is
 /// raised on whichever thread made the change.</para>
 /// </remarks>
-public sealed class AppController : IAsyncDisposable
+public sealed partial class AppController : IAsyncDisposable
 {
     private readonly IMediaSessionSource _source;
     private readonly ILyricLookup _lyrics;
@@ -142,7 +156,7 @@ public sealed class AppController : IAsyncDisposable
         _lyricLog = logger.Lyrics;
         _settings = settings.Normalized();
         _globalOffset = _settings.LyricOffset;
-        _scene = new SceneSnapshot { Style = _settings.Style() };
+        _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette };
         _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
         _clockReader = ReadClock;
         Monitor = new NowPlayingMonitor(source, _options.TimeProvider, _options.Clock, message => _player.Debug(message));
@@ -174,20 +188,18 @@ public sealed class AppController : IAsyncDisposable
     public void Start()
     {
         AppSettings settings;
-        SceneSnapshot scene;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_started) return;
             _started = true;
             settings = _settings;
-            scene = _scene;
         }
 
         _renderer.SetClock(_clockReader);
         _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
         _renderer.SetFrameRate(settings.AnimationRate);
-        _renderer.SetScene(scene);
+        PublishScene();
         if (!settings.WallpaperPaused) _renderer.Start();
         else _app.Info("Wallpaper starts paused (paused from the tray last time).");
 
@@ -260,7 +272,7 @@ public sealed class AppController : IAsyncDisposable
             _app.Info(settings.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
         }
 
-        if (scene is not null) _renderer.SetScene(scene);
+        if (scene is not null) PublishScene();
         if (relook is not null)
         {
             _lyricLog.Info("Lyric source settings changed: looking the song up again.");
@@ -299,6 +311,7 @@ public sealed class AppController : IAsyncDisposable
             _disposed = true;
             _generation++;
             _lookupCts?.Cancel();
+            CancelArtworkLocked();
         }
 
         Monitor.SessionChanged -= OnSessionChanged;
@@ -324,13 +337,15 @@ public sealed class AppController : IAsyncDisposable
     {
         var session = Monitor.Session;
         Volatile.Write(ref _hasSession, session is null ? 0 : 1);
-        SceneSnapshot scene;
         lock (_gate)
         {
             if (_disposed) return;
-            // A different player: whatever was being looked up belongs to the old one.
+            // A different player: whatever was being looked up belongs to the old one. Its colours stay until the new
+            // player's cover arrives; with nothing playing the wallpaper goes back to the default colours.
             CancelLookupLocked();
-            _scene = new SceneSnapshot { Style = _settings.Style() };
+            CancelArtworkLocked();
+            if (session is null) _palette = PaletteMapper.Fallback;
+            _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette };
             _status = _status with
             {
                 Player = session?.SourceApp.DisplayName,
@@ -343,17 +358,19 @@ public sealed class AppController : IAsyncDisposable
                 LyricSource = null,
                 Status = session is null ? StatusText.NothingPlaying : StatusText.WaitingForTrack,
             };
-            scene = _scene;
         }
 
         _player.Info(session is null ? "No player is sharing what it plays." : $"Following {session.SourceApp.DisplayName} ({session.SourceAppUserModelId}).");
-        _renderer.SetScene(scene);
+        PublishScene();
         RaiseStatusChanged();
     }
 
     private void OnTrackChanged(object? sender, EventArgs e)
     {
-        if (Monitor.Track is { } track) BeginLookup(track);
+        if (Monitor.Track is not { } track) return;
+        // The cover's colours load beside the lyric lookup (and even when lookups are off).
+        BeginArtwork(track, Monitor.Session);
+        BeginLookup(track);
     }
 
     private void OnPlaybackChanged(object? sender, EventArgs e)
@@ -390,7 +407,6 @@ public sealed class AppController : IAsyncDisposable
     {
         long generation;
         CancellationTokenSource cts;
-        SceneSnapshot scene;
         var disabled = _lyrics.DisabledReason;
         lock (_gate)
         {
@@ -402,6 +418,7 @@ public sealed class AppController : IAsyncDisposable
             _lookupTrack = track;
             _scene = new SceneSnapshot
             {
+                Palette = _palette,
                 Title = track.Title,
                 Artist = track.Artist,
                 Style = _settings.Style(),
@@ -417,11 +434,10 @@ public sealed class AppController : IAsyncDisposable
                 Status = _scene.Status!,
                 Lookups = _status.Lookups + (disabled is null ? 1 : 0),
             };
-            scene = _scene;
         }
 
         _player.Info($"Now playing: \"{track.Title}\" by \"{track.Artist}\".");
-        _renderer.SetScene(scene);
+        PublishScene();
         RaiseStatusChanged();
         if (disabled is not null)
         {
@@ -585,7 +601,6 @@ public sealed class AppController : IAsyncDisposable
             return;
         }
 
-        SceneSnapshot scene;
         RomanizationOptions readings;
         lock (_gate)
         {
@@ -594,11 +609,10 @@ public sealed class AppController : IAsyncDisposable
             _offsets.ActiveSource = result.Provenance.Source;
             _scene = _scene with { Lyrics = presented, Readings = new Dictionary<int, string>(), Status = null };
             _status = _status with { LyricSource = presented.Provenance.Label, Status = complete ? StatusText.Showing : StatusText.LookingUp };
-            scene = _scene;
             readings = _settings.Readings();
         }
 
-        _renderer.SetScene(scene);
+        PublishScene();
         RaiseStatusChanged();
         StartReadings(generation, presented, readings);
     }
@@ -620,17 +634,17 @@ public sealed class AppController : IAsyncDisposable
     {
         if (shown is not LyricResult.Synced || options.Display == RomanizationDisplay.Off)
         {
-            SceneSnapshot? cleared = null;
+            var cleared = false;
             lock (_gate)
             {
                 if (generation == _generation && ReferenceEquals(_shown, shown) && _scene.Readings.Count > 0)
                 {
                     _scene = _scene with { Readings = new Dictionary<int, string>() };
-                    cleared = _scene;
+                    cleared = true;
                 }
             }
 
-            if (cleared is not null) _renderer.SetScene(cleared);
+            if (cleared) PublishScene();
             return;
         }
 
@@ -639,15 +653,13 @@ public sealed class AppController : IAsyncDisposable
             try
             {
                 var readings = LyricPresentation.Readings(shown, _romanizer, options);
-                SceneSnapshot scene;
                 lock (_gate)
                 {
                     if (generation != _generation || !ReferenceEquals(_shown, shown)) return;
                     _scene = _scene with { Readings = readings };
-                    scene = _scene;
                 }
 
-                _renderer.SetScene(scene);
+                PublishScene();
                 RaiseStatusChanged();
             }
             catch (Exception ex)
@@ -659,16 +671,14 @@ public sealed class AppController : IAsyncDisposable
 
     private void ShowStatus(long generation, string status)
     {
-        SceneSnapshot scene;
         lock (_gate)
         {
             if (generation != _generation) return;
             _scene = _scene with { Lyrics = null, Readings = new Dictionary<int, string>(), Status = status };
             _status = _status with { Status = status, LyricSource = null };
-            scene = _scene;
         }
 
-        _renderer.SetScene(scene);
+        PublishScene();
         RaiseStatusChanged();
     }
 

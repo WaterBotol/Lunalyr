@@ -153,8 +153,21 @@ public sealed class LyricServiceEndToEndTests : IDisposable
     {
         // Lyrics+ and NetEase agree with each other, two seconds from LRCLIB's listener-made timing. LRCLIB's word
         // timing then has no lead over Lyrics+'s: in Source order, Lyrics+ (earlier in the list) wins.
+        // Agreement is weighed among the answers in hand (LyricRanking.CouldBeat), so LRCLIB answers last here: had it
+        // answered first, its word timing would lead with nothing yet to disagree and the other services would stop.
         var sourceOrder = Everything with { Mode = LyricMatchMode.SourceOrder };
-        var report = await Service(EnglishWorld(othersShift: 2)).LookupAsync(ShapeOfYou, sourceOrder, force: true, cancellationToken: Ct);
+        var othersIn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var world = EnglishWorld(othersShift: 2);
+        world.Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(1470135, "Shape of You", "Ed Sheeran", "Divide", 234,
+            English, true)) with { Wait = othersIn.Task });
+        var report = await Service(world).LookupAsync(ShapeOfYou, sourceOrder, force: true, onUpdate: progress =>
+        {
+            if (progress.Candidates.Any(c => c.Source == LyricsPlus) && progress.Candidates.Any(c => c.Source == NetEase))
+            {
+                othersIn.TrySetResult();
+            }
+            return ValueTask.CompletedTask;
+        }, cancellationToken: Ct);
         Assert.Equal(new LyricProvenance("Word-by-word", "Apple via Lyrics+"), report.Result!.Provenance);
         Assert.Equal([LyricsPlus, Lrclib, NetEase, LyricsOvh], report.Candidates.Select(c => c.Source));
         Assert.True(report.Candidates[1].Agreement.TimingOutlier);

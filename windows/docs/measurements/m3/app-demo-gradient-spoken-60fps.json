@@ -1,0 +1,45 @@
+{
+    "exe":  "Lunalyr.exe",
+    "args":  "--demo --data \"%TEMP%\\lunalyr-m3-measure\"",
+    "seconds":  30,
+    "samples":  12,
+    "onBattery":  false,
+    "cpuPercentAvg":  0.42,
+    "cpuPercentMax":  0.66,
+    "gpu3dPercentAvg":  0.25,
+    "gpuAllEnginesPercentAvg":  0.31,
+    "workingSetMBAvg":  92.2,
+    "privateMBAvg":  124.76,
+    "gpuDedicatedMBAvg":  79.62,
+    "fps":  58.8,
+    "frameIntervalMs":  {
+                            "avg":  17.009,
+                            "p50":  16.663,
+                            "p95":  16.933,
+                            "p99":  33.397
+                        },
+    "cpuMsPerFrame":  {
+                          "avg":  0.745,
+                          "p50":  0.702,
+                          "p95":  1.117,
+                          "p99":  1.846
+                      },
+    "slowFrames":  40,
+    "adapter":  "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "monitors":  [
+                     {
+                         "w":  2560,
+                         "h":  1440,
+                         "dpi":  120,
+                         "hz":  60,
+                         "mode":  "Progman24H2",
+                         "state":  "Drawing",
+                         "reason":  "None",
+                         "syncInterval":  1,
+                         "hdr":  false,
+                         "adapterDrivesMonitor":  true,
+                         "idle":  false
+                     }
+                 ],
+    "startupMs":  null
+}

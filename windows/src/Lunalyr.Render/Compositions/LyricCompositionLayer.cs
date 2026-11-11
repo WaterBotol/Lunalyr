@@ -4,6 +4,7 @@
 // lyrics and the calm status text.
 
 using System.Numerics;
+using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Logging;
 using Lunalyr.Core.Lyrics;
@@ -44,11 +45,30 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     protected LyricSheet? Sheet { get; private set; }
     protected SceneSnapshot? SceneShown { get; private set; }
     protected WordArrival Arrival { get; private set; } = WordArrival.Fade;
+    /// <summary>The palette's still text colour: status text, plain lyrics and anything not set word by word.</summary>
     protected Vector4 TextColour { get; private set; } = Vector4.One;
-    /// <summary>The glow of a held word: the palette's highlight (the Mac's ink glow).</summary>
-    protected Vector4 GlowColour => SceneShown?.Palette.Highlight ?? TextColour;
     protected Vector4 ReadingColour => new(TextColour.X, TextColour.Y, TextColour.Z, TextColour.W * 0.72f);
     protected long Frame { get; private set; }
+
+    // The lyric ink (the Mac's Album drift): settled once per palette, then drifted by song time.
+    private Palette? _inkPalette;
+    private LyricInk _ink = LyricInk.White;
+
+    /// <summary>
+    /// The ink for words sung around <paramref name="songSeconds"/>. The Mac drifts its ink through the album's
+    /// colours on the wall clock (about 45 s a loop) and redraws every glyph each frame; here the colours are baked
+    /// when a line is set, so a line takes the drift at its own start time. Keyed by song time, a frame still depends
+    /// only on the scene and the time.
+    /// </summary>
+    protected LyricInk InkAt(double songSeconds)
+    {
+        var ink = _ink;
+        ink.Phase = LyricInks.DriftPhase(songSeconds);
+        return ink;
+    }
+
+    /// <summary>The colours of a word at <paramref name="slot"/> along its line, sung around <paramref name="songSeconds"/>.</summary>
+    protected LyricInkSample InkSample(double songSeconds, double slot, ulong seed) => InkAt(songSeconds).Sample(slot, seed);
 
     private readonly Dictionary<int, LinePlan> _plans = [];
     private readonly Dictionary<int, LinePlan> _phrases = [];
@@ -157,7 +177,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     {
         var old = SceneShown;
         if (old is not null && ReferenceEquals(old.Lyrics, scene.Lyrics) && SameReadings(old.Readings, scene.Readings)
-            && old.Style == scene.Style && old.Palette.Text == scene.Palette.Text)
+            && old.Style == scene.Style && LyricInks.SameInk(old.Palette, scene.Palette))
         {
             SceneShown = scene;
             return;
@@ -167,6 +187,12 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         Kit!.SetFamily(scene.Style.FontFamily);
         Metrics = ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
         Arrival = WordArrivals.Parse(scene.Style.Reveal).Resolved(Kind);
+        if (!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
+        {
+            _ink = LyricInks.Settled(scene.Palette);
+            _inkPalette = scene.Palette;
+        }
+        // Status text and plain lyrics keep the palette's still text colour; timed words take the drifting ink.
         TextColour = scene.Palette.Text;
         if (scene.Lyrics is LyricResult.Synced synced)
         {
@@ -368,8 +394,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             }
         }
         var (runReadings, lineReading) = Readings(row, words, mainGlue);
-        var plan = BuildPlan(words, mainGlue, BaseSize, row, wordTimed: true, editorial: true, runReadings, lineReading,
-                             FitFor(row), Stage.Width, groups, row);
+        var plan = BuildPlan(words, mainGlue, BaseSize, row, line.Start, wordTimed: true, editorial: true, runReadings,
+                             lineReading, FitFor(row), Stage.Width, groups, row);
         plan.LastUsed = Frame;
         _plans[row] = plan;
         return plan;
@@ -399,18 +425,20 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         return (null, reading);
     }
 
+    /// <param name="inkTime">The song time whose drift the line's colours take (its start).</param>
     protected LinePlan BuildPlan(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize, int lineIndex,
-                                 bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading, LineFit fit,
-                                 double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
+                                 double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
+                                 LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
                                  bool heavy = false)
     {
+        var ink = InkAt(inkTime);
         var spec = new PlanSpec(
             BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorial,
             Heavy: heavy, MaxWidth: maxWidth, Spacing: baseSize * 0.02, LineSpacing: baseSize * 0.30, Fit: fit,
             RasterBoost: wordTimed ? 1.12 : 1.0,
             Shadow: wordTimed ? new ShadowSpec(0.52f, Points(7) * 0.5f, Points(2)) : new ShadowSpec(0.32f, Points(8) * 0.5f, Points(2)),
-            Colour: TextColour, ReadingColour: ReadingColour, LineReadingSize: BaseSize * 0.38,
-            LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)));
+            Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: BaseSize * 0.38,
+            LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading);
         if (groups is { Count: > 0 })
         {
@@ -510,7 +538,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             var scale = contentScale * swell * swellCap * held * transform.Scale * floatScale;
             var blur = Combine(Points(Arrival.Blur(presentation.Progress)), Points(2.4 * leave)) * (float)scale;
             var glow = frame.Glow > 0.002
-                ? new GlowSpec(new Vector4(GlowColour.X, GlowColour.Y, GlowColour.Z, (float)(0.6 * frame.Glow * frame.Fill)),
+                ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)(0.6 * frame.Glow * frame.Fill)),
                                Points(10 + 22 * frame.Glow) * (float)scale)
                 : GlowSpec.None;
             var shadow = (float)((0.28 + 0.24 * heat) / 0.52);
@@ -567,7 +595,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var glue = Sheet.Glue[row];
         var (runReadings, lineReading) = Readings(row, line.Words, glue);
         var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
-        var plan = BuildPlan(line.Words, glue, phraseBase, row, wordTimed: false, editorial: false, runReadings, lineReading,
+        var plan = BuildPlan(line.Words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
                              new LineFit(Stage, Metrics.UserScale, 0.75), Stage.Width);
         plan.LastUsed = Frame;
         _phrases[row] = plan;
@@ -629,8 +657,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     private void DrawCue(ID2D1DeviceContext dc, InstrumentalCue cue)
     {
         if (_dotBrush is null || SceneShown is null) return;
-        var accents = SceneShown.Palette.Accents;
-        var accent = accents.Count > 0 ? accents[0] : TextColour;
+        // The ink's dot colour (made readable against the backdrop), as the Mac colours its interlude dots.
+        var accent = _ink.Dot is { } dot ? LyricInks.Vector(dot) : TextColour;
         var diameter = (float)(Math.Min(40, Math.Max(15, BaseSize / Scale * 0.3)) * Scale);
         var spacing = diameter * 0.65f;
         var width = diameter * 3 + spacing * 2;

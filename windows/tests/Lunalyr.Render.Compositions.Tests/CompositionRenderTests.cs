@@ -181,6 +181,38 @@ public sealed class CompositionRenderTests : IDisposable
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
+    /// <summary>The average colour of the pixels lit by text (R, G, B in 0…1).</summary>
+    private static (double R, double G, double B) Tint(byte[] pixels)
+    {
+        double r = 0, g = 0, b = 0;
+        var count = 0;
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            if (pixels[i] + pixels[i + 1] + pixels[i + 2] <= 3 * 110) continue;
+            b += pixels[i]; g += pixels[i + 1]; r += pixels[i + 2];
+            count++;
+        }
+        return count == 0 ? (0, 0, 0) : (r / count / 255, g / count / 255, b / count / 255);
+    }
+
+    private static Palette Cover(byte r, byte g, byte b) =>
+        PaletteMapper.FromAlbum(new Core.Colour.AlbumWallpaperPalette(Core.Colour.AlbumColourGrid.Extract(Core.Colour.ArtworkPixels.Solid(64, 64, r, g, b))));
+
+    // The Mac's default lyric colour mode, Album drift: timed words take pastel tints of the cover's colours.
+    [Theory]
+    [InlineData("editorial")]
+    [InlineData("spoken")]
+    public void TheLyricColoursFollowTheAlbum(string composition)
+    {
+        using var layer = Layer(composition);
+        var scene = Fixtures.English();
+        var red = Tint(Frame(layer, scene with { Palette = Cover(200, 30, 40) }, 11.3));
+        var blue = Tint(Frame(layer, scene with { Palette = Cover(30, 60, 210) }, 11.3));
+        Assert.True(red.R > red.B + 0.05, $"red cover: {red}");
+        Assert.True(blue.B > blue.R + 0.05, $"blue cover: {blue}");
+        Assert.Empty(_sink.Entries);
+    }
+
     [Fact]
     public void ALargerSizeOrANewScaleSetsTheLineAgain()
     {

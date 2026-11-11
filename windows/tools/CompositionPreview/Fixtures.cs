@@ -1,61 +1,27 @@
 // Invented lyrics (not from any real song) for previews and rendering tests, built through the real parsers so the
-// lines carry what the app gives the layers: word timing from TTML, estimated words and line ends from LRC.
+// lines carry what the app gives the layers: word timing from TTML, estimated words and line ends from LRC. The
+// builders are the app's own (Lunalyr.Shell.Demo.LyricBuilder, which --demo uses too).
 
-using System.Globalization;
 using System.Numerics;
-using System.Text;
 using Lunalyr.Core.Lyrics;
-using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Timing;
 using Lunalyr.Render.Scene;
+using Lunalyr.Shell.Demo;
+using static Lunalyr.Shell.Demo.LyricBuilder;
 
 namespace Lunalyr.Tools.CompositionPreview;
 
 public static class Fixtures
 {
-    /// <summary>One sung word: its text and times, and whether a space follows it in the line.</summary>
-    public readonly record struct Sung(string Text, double Start, double End, bool Space = true, bool Backing = false);
-
     public static readonly Palette Night = new(
         new Vector4(0.075f, 0.063f, 0.125f, 1),
         [new(0.62f, 0.45f, 0.95f, 1), new(0.95f, 0.55f, 0.35f, 1)],
         new Vector4(1, 1, 1, 1),
         new Vector4(1, 0.93f, 0.82f, 1));
 
-    /// <summary>Words spread evenly from <paramref name="start"/>, each <paramref name="length"/> long.</summary>
-    public static Sung[] Even(double start, double step, double length, params string[] words) =>
-        [.. words.Select((word, index) => new Sung(word, start + index * step, start + index * step + length))];
-
-    /// <summary>A word-timed TTML document (Apple Music's shape) from lines of sung words.</summary>
-    public static string Ttml(string language, params Sung[][] lines)
-    {
-        static string S(double seconds) => seconds.ToString("0.000", CultureInfo.InvariantCulture);
-        var text = new StringBuilder();
-        text.Append($"""<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Word" xml:lang="{language}"><body><div>""");
-        foreach (var line in lines)
-        {
-            var end = line.Max(word => word.End);
-            text.Append($"""<p begin="{S(line[0].Start)}" end="{S(end)}">""");
-            var inBacking = false;
-            for (var i = 0; i < line.Length; i++)
-            {
-                var word = line[i];
-                if (word.Backing && !inBacking) { text.Append("""<span ttm:role="x-bg">"""); inBacking = true; }
-                text.Append($"""<span begin="{S(word.Start)}" end="{S(word.End)}">{System.Security.SecurityElement.Escape(word.Text)}</span>""");
-                var closes = inBacking && (i + 1 == line.Length || !line[i + 1].Backing);
-                if (closes) { text.Append("</span>"); inBacking = false; }
-                if (word.Space && i + 1 < line.Length) text.Append(' ');
-            }
-            text.Append("</p>");
-        }
-        text.Append("</div></body></tt>");
-        return text.ToString();
-    }
-
     private static LyricResult Parse(LyricFormat format, string payload, double duration)
     {
-        var raw = new RawLyrics(LyricSourceId.AppleMusicCache, format, payload, ReportedDuration: duration);
-        var result = LyricParser.Parse(raw) ?? throw new InvalidOperationException("The fixture did not parse.");
+        var result = LyricBuilder.Parse(format, payload, duration);
         if (result is LyricResult.Synced synced)
         {
             var prepared = LyricPauseTiming.Prepare(synced.Lines, synced.Provenance.Source, treatLongPausesAsInstrumental: true);

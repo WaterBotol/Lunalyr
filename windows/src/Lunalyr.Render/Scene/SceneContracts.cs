@@ -17,6 +17,18 @@ namespace Lunalyr.Render.Scene;
 /// <param name="Highlight">Colour for the sung/active word highlight.</param>
 public sealed record Palette(Vector4 Base, IReadOnlyList<Vector4> Accents, Vector4 Text, Vector4 Highlight)
 {
+    /// <summary>
+    /// The cover's nine colours (3×3 grid, row by row, gamma-encoded sRGB), which the compositions' lyric ink drifts
+    /// through (the Mac's Album drift). Empty for a palette not made from a cover: the ink then uses its own pastels.
+    /// </summary>
+    public IReadOnlyList<Vector3> ArtworkStops { get; init; } = [];
+
+    /// <summary>
+    /// The relative luminance the lyric ink is made readable against: the background behind the stage, its scrim and
+    /// the text backing (see <c>LyricBackdrop</c>).
+    /// </summary>
+    public double TextBackdrop { get; init; } = 0.08;
+
     public static Palette Default { get; } = new(
         new Vector4(0.106f, 0.063f, 0.208f, 1),
         [new(0.482f, 0.247f, 0.894f, 1), new(0.894f, 0.341f, 0.180f, 1), new(0.180f, 0.525f, 0.671f, 1), new(0.949f, 0.757f, 0.306f, 1)],

@@ -60,9 +60,10 @@ public sealed record AppSettings
     // ---- Wallpaper ----
 
     /// <summary>
-    /// The background: "gradient" (animated album colours; Windows' default and, so far, only one), then the Mac's
-    /// <c>backgroundMode</c> values as they are ported ("pattern", "shader", "visualizer", "colourOnly", "desktop",
-    /// "custom", "musicVideo").
+    /// The background: "gradient" (the animated album colour field; Windows' default) or the Mac's "colourOnly" (the
+    /// straight album gradient), then the Mac's other <c>backgroundMode</c> values as they are ported ("pattern",
+    /// "shader", "visualizer", "desktop", "custom", "musicVideo"). EngineWallpaperRenderer.BackgroundLayerFor maps a
+    /// value to its layer.
     /// </summary>
     public string BackgroundMode { get; init; } = "gradient";
 
