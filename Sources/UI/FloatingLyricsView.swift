@@ -39,20 +39,14 @@ struct FloatingLyricsView: View {
             let look = FloatingLyricsLook(grid: palette.grid, track: nowPlaying.current,
                                           wordsPerSecond: lyricsVM.wordsPerSecond)
             ZStack {
-                FloatingLyricsBackdrop(strength: options.backdrop, reduceTransparency: reduceTransparency)
-                LyricStage(size: geometry.size, mood: look.mood, accent: look.accent, trackSeed: look.seed,
-                           palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
-                           paused: !state.active, textSize: CGFloat(options.textSize))
-                    .equatable()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .environment(\.lyricSwipePalette, LyricSwipePalette(hue: look.albumAccent.x, saturation: look.albumAccent.y))
-                    .environment(\.lyricBackdropOverride,
-                                 FloatingBackdrop.luminance(strength: options.backdrop, reduceTransparency: reduceTransparency))
-                    // One soft shadow for the whole stage, so thin type
-                    // still reads where the shade fades out.
-                    .compositingGroup()
-                    .shadow(color: .black.opacity(0.35 + 0.35 * options.backdrop), radius: 6, y: 1)
-                    .accessibilityHidden(true)
+                FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
+                                    albumAccent: look.albumAccent) {
+                    LyricStage(size: geometry.size, mood: look.mood, accent: look.accent, trackSeed: look.seed,
+                               palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
+                               paused: !state.active, textSize: CGFloat(options.textSize))
+                        .equatable()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
                 if state.editing {
                     FloatingEditChrome(placeholder: nowPlaying.current == nil || lyricsVM.lines.isEmpty
                                        && lyricsVM.plainLines.isEmpty,
@@ -61,6 +55,29 @@ struct FloatingLyricsView: View {
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+/// The floating lyrics' surroundings: the shade behind, the text colours
+/// judged against it, and one soft shadow for the whole stage, so thin type
+/// still reads where the shade fades out.
+struct FloatingLyricsFrame<Stage: View>: View {
+    let backdrop: Double
+    let reduceTransparency: Bool
+    let albumAccent: SIMD3<Double>
+    @ViewBuilder let stage: () -> Stage
+
+    var body: some View {
+        ZStack {
+            FloatingLyricsBackdrop(strength: backdrop, reduceTransparency: reduceTransparency)
+            stage()
+                .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
+                .environment(\.lyricBackdropOverride,
+                             FloatingBackdrop.luminance(strength: backdrop, reduceTransparency: reduceTransparency))
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.35 + 0.35 * backdrop), radius: 6, y: 1)
+                .accessibilityHidden(true)
+        }
     }
 }
 

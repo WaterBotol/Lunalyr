@@ -333,7 +333,13 @@ struct NowPlayingView: View {
 
     /// Whether this surface draws the lyrics: not on the desktop while
     /// they float over the apps (`LyricsSurface`).
-    private var drawsLyrics: Bool { isSettingsPreview || !floatingOptions.isFloating }
+    private var drawsLyrics: Bool { Self.drawsLyrics(settingsPreview: isSettingsPreview, surface: floatingOptions.surface) }
+
+    /// The desktop draws the lyrics unless they float; the Settings preview
+    /// always does, to show the style being edited.
+    nonisolated static func drawsLyrics(settingsPreview: Bool, surface: LyricsSurface) -> Bool {
+        settingsPreview || surface == .desktop
+    }
 
     private var prefersTallArtwork: Bool {
         let size = viewportSize.width > 0 ? viewportSize
