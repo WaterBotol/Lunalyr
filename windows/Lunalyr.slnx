@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Lunalyr.App/Lunalyr.App.csproj">
+      <Platform Project="x64" />
+    </Project>
     <Project Path="src/Lunalyr.Core/Lunalyr.Core.csproj" />
     <Project Path="src/Lunalyr.Platform.Windows/Lunalyr.Platform.Windows.csproj" />
     <Project Path="src/Lunalyr.Render/Lunalyr.Render.csproj">
