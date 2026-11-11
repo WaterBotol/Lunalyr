@@ -48,3 +48,15 @@ written from them in its own structure; no Verso line was translated.
 - **Not in the snapshot:** the track's length (plain lyrics are shown as a still, fitted block rather than a slow
   scroll; instrumental breaks after the last line are open-ended), the track mood (the neutral mood is used), Reduce
   Motion, translations and credits.
+
+## Previews and cost
+
+`docs/previews/compositions/` holds frames rendered by `tools/CompositionPreview` (offscreen Direct2D on the hardware
+device, 1920×1080 at 125%) for invented fixture songs, named `<composition>-<fixture>-<song seconds>.png`:
+
+    dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions
+    dotnet run --project tools/CompositionPreview -- -bench -width 2560 -height 1440
+
+On the RTX 5060 at 2560×1440, a frame costs about 0.1–0.2 ms of render-thread time (draw calls and `EndDraw`, GPU
+work excluded). Once a line is set nothing is allocated per frame; Spoken allocates only on the frames where a word
+joins or leaves its rolling window (about 1 frame in 50).
