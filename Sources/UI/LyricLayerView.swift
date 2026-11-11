@@ -83,7 +83,7 @@ struct LyricLayer: View {
         LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized,
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
-            album: nowPlaying.current?.album ?? "", joined: opening.joined(track: key.track, at: time),
+            album: nowPlaying.current?.album ?? "", artwork: nowPlaying.currentTrackArtwork, joined: opening.joined(track: key.track, at: time),
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
             duration: nowPlaying.current?.duration ?? 0, seed: trackSeed, vocalWindows: lyricsVM.vocalWindows,
             loadingSince: loadingSince, offline: lyricsVM.notFound && !LyricConnectivity.shared.isOnline)
@@ -417,6 +417,7 @@ struct LyricLayer: View {
             OpeningTitleCard(phase: phase, title: content.title, artist: content.artist,
                              album: OpeningTitle.albumLine(album: content.album, title: content.title),
                              reading: opening.reading(of: content.title, options: readingOptions.snapshot),
+                             cover: OpeningTitle.cover(content.artwork, enabled: OpeningTitle.showsCover),
                              baseSize: baseSize, accent: accent, mood: mood, floating: backdropOverride != nil)
         }
     }

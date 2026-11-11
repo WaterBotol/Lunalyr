@@ -15,6 +15,24 @@ enum OpeningTitle {
 
     static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
 
+    /// The album cover beside the title.
+    static let coverKey = "custom.openingTitleCover"
+
+    static var showsCover: Bool { UserDefaults.standard.object(forKey: coverKey) as? Bool ?? true }
+
+    /// The cover to draw: the wallpaper's own artwork for the song, when the
+    /// setting is on and there is one. Nil keeps the text where it is.
+    static func cover(_ artwork: NSImage?, enabled: Bool) -> NSImage? {
+        guard enabled, let artwork, artwork.size.width > 0, artwork.size.height > 0 else { return nil }
+        return artwork
+    }
+
+    // Type sizes, as shares of the title's own size (before a long title is
+    // set smaller), so the hierarchy holds at every size.
+    static let artistShare: CGFloat = 0.32
+    static let readingShare: CGFloat = 0.32
+    static let albumShare: CGFloat = 0.26
+
     /// How much of the card is drawn.
     enum Size: Equatable {
         /// Rule, title, its reading, artist and album.
@@ -160,6 +178,8 @@ enum OpeningTitle {
     /// Reduce Motion fades the whole card in at once.
     struct Reveal: Equatable {
         var rule: Double
+        /// The cover: arrives a beat before the title's wipe.
+        var cover: Double
         var title: Double
         /// How far the soft wipe has uncovered the title, left to right.
         var wipe: Double
@@ -170,7 +190,7 @@ enum OpeningTitle {
         static func at(_ age: Double, size: Size, reduceMotion: Bool) -> Reveal {
             if reduceMotion {
                 let fade = Easing.smoothstep(age / 0.6)
-                return Reveal(rule: fade, title: fade, wipe: 1, reading: fade, artist: fade, album: fade)
+                return Reveal(rule: fade, cover: fade, title: fade, wipe: 1, reading: fade, artist: fade, album: fade)
             }
             // Staged: the rule draws in, the title is wiped on beside it,
             // then the reading, the artist and the album follow.
@@ -180,7 +200,7 @@ enum OpeningTitle {
             }
             // The wipe travels at an even, eased pace; everything else settles.
             let wipe = Easing.smoothstep((age - 0.1 * scale) / (1.2 * scale))
-            return Reveal(rule: part(0, 0.9), title: part(0.12, 1.15), wipe: wipe, reading: part(0.5, 0.9),
+            return Reveal(rule: part(0, 0.9), cover: part(0, 0.55), title: part(0.12, 1.15), wipe: wipe, reading: part(0.5, 0.9),
                           artist: part(0.45, 1.1), album: part(0.75, 0.85))
         }
     }
@@ -252,6 +272,8 @@ struct OpeningTitleCard: View {
     let artist: String
     let album: String?
     let reading: String?
+    /// The album cover, or nil for none.
+    var cover: NSImage? = nil
     /// The lyric's base size on this screen.
     let baseSize: CGFloat
     let accent: Color
@@ -310,67 +332,97 @@ struct OpeningTitleCard: View {
     @ViewBuilder
     private func card(unit: CGFloat, compact: Bool, reveal: OpeningTitle.Reveal, dark: Bool, width: CGFloat) -> some View {
         let type: Color = dark ? Color(white: 0.08) : .white
-        let alignment: HorizontalAlignment = floating ? .center : .leading
-        // A long title is set smaller rather than filling the corner.
-        let titleSize = unit * (compact ? 0.72 : 0.92) * OpeningTitle.lengthScale(title)
-        let artistSize = unit * (compact ? 0.25 : 0.26)
+        // The title's size; the lines under it take shares of it. A long
+        // title is set smaller, but they are not.
+        let nominal = unit * (compact ? 0.72 : 0.92)
+        let titleSize = nominal * OpeningTitle.lengthScale(title)
+        let artistSize = nominal * OpeningTitle.artistShare
+        let readingSize = nominal * OpeningTitle.readingShare
+        let albumSize = nominal * OpeningTitle.albumShare
+        let showsReading = reading != nil && !compact
+        let ruleHeight = max(2, unit * 0.04), ruleGap = unit * (compact ? 0.18 : 0.22)
+        let readingTop = nominal * 0.1, artistTop = nominal * (compact ? 0.2 : 0.26)
+        // The cover is as tall as the title block: the title, its reading
+        // and the artist.
+        let titleLines: CGFloat = OpeningTitle.lengthScale(title) < 1 ? 2 : 1
+        let side = titleLines * titleSize * 1.2 + (showsReading ? readingTop + readingSize * 1.25 : 0)
+            + artistTop + artistSize * 1.2
+        let gap = side * 0.16
+        let columnWidth = cover == nil ? width : max(width * 0.4, width - side - gap)
+        // Centred in the floating window without a cover; beside one, the
+        // words line up against it.
+        let centred = floating && cover == nil
         let rise = reduceMotion ? 0 : unit * 0.32
-        VStack(alignment: alignment, spacing: 0) {
-            Capsule()
-                .fill(accent)
-                .frame(width: unit * (compact ? 0.7 : 1.0), height: max(2, unit * 0.04))
-                .scaleEffect(x: reduceMotion ? 1 : reveal.rule, y: 1, anchor: floating ? .center : .leading)
-                .opacity(reveal.rule)
-                .padding(.bottom, unit * (compact ? 0.18 : 0.22))
-            Text(title)
-                .font(settings.lyricFont(size: titleSize, hero: true, mood: mood))
-                .foregroundStyle(type)
-                .multilineTextAlignment(floating ? .center : .leading)
-                .lineLimit(2)
-                .minimumScaleFactor(0.55)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: width, alignment: floating ? .center : .leading)
-                .mask { wipe(reveal.wipe) }
-                .opacity(min(1, reveal.title * 1.6))
-                .offset(y: (1 - reveal.title) * rise)
-            if let reading, !compact {
-                Text(reading)
-                    .font(settings.uiFont(size: unit * 0.26, mood: mood))
-                    .foregroundStyle(type.opacity(0.72))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: width, alignment: floating ? .center : .leading)
-                    .padding(.top, unit * 0.08)
-                    .opacity(reveal.reading)
-                    .offset(y: (1 - reveal.reading) * rise * 0.5)
+        HStack(alignment: .top, spacing: gap) {
+            if let cover {
+                Image(nsImage: cover)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: side, height: side)
+                    .clipShape(RoundedRectangle(cornerRadius: side * 0.07, style: .continuous))
+                    .shadow(color: .black.opacity(0.45), radius: side * 0.08, y: side * 0.03)
+                    .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * reveal.cover, anchor: .bottomLeading)
+                    .opacity(reveal.cover)
+                    .padding(.top, ruleHeight + ruleGap)
             }
-            if !artist.isEmpty {
-                // Wide tracking that closes up as it arrives.
-                Text(artist.uppercased())
-                    .font(settings.uiFont(size: artistSize, bold: true, mood: mood))
-                    .kerning(artistSize * (0.2 + (reduceMotion ? 0 : 0.35 * (1 - reveal.artist))))
-                    .foregroundStyle(type.opacity(0.9))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: width, alignment: floating ? .center : .leading)
-                    .padding(.top, unit * (compact ? 0.16 : 0.24))
-                    .opacity(reveal.artist)
+            CappedWidth(maximum: columnWidth) {
+            VStack(alignment: centred ? .center : .leading, spacing: 0) {
+                Capsule()
+                    .fill(accent)
+                    .frame(width: unit * (compact ? 0.7 : 1.0), height: ruleHeight)
+                    .scaleEffect(x: reduceMotion ? 1 : reveal.rule, y: 1, anchor: centred ? .center : .leading)
+                    .opacity(reveal.rule)
+                    .padding(.bottom, ruleGap)
+                Group {
+                    Text(title)
+                        .font(settings.lyricFont(size: titleSize, hero: true, mood: mood))
+                        .foregroundStyle(type)
+                        .multilineTextAlignment(centred ? .center : .leading)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.55)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .mask { wipe(reveal.wipe) }
+                        .opacity(min(1, reveal.title * 1.6))
+                        .offset(y: (1 - reveal.title) * rise)
+                    if let reading, showsReading {
+                        Text(reading)
+                            .font(settings.uiFont(size: readingSize, mood: mood))
+                            .foregroundStyle(type.opacity(0.78))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                                .padding(.top, readingTop)
+                            .opacity(reveal.reading)
+                            .offset(y: (1 - reveal.reading) * rise * 0.5)
+                    }
+                    if !artist.isEmpty {
+                        // Wide tracking that closes up as it arrives.
+                        Text(artist.uppercased())
+                            .font(settings.uiFont(size: artistSize, bold: true, mood: mood))
+                            .kerning(artistSize * (0.16 + (reduceMotion ? 0 : 0.3 * (1 - reveal.artist))))
+                            .foregroundStyle(type.opacity(0.92))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                                .padding(.top, artistTop)
+                            .opacity(reveal.artist)
+                    }
+                    if let album, !compact {
+                        Text(album)
+                            .font(settings.uiFont(size: albumSize, mood: mood))
+                            .kerning(albumSize * 0.02)
+                            .foregroundStyle(type.opacity(0.7))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                                .padding(.top, nominal * 0.1)
+                            .opacity(reveal.album)
+                    }
+                }
+                .compositingGroup()
+                // A soft shadow under the type, as the lyrics have.
+                .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
             }
-            if let album, !compact {
-                Text(album)
-                    .font(settings.uiFont(size: unit * 0.22, mood: mood))
-                    .kerning(unit * 0.01)
-                    .foregroundStyle(type.opacity(0.6))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: width, alignment: floating ? .center : .leading)
-                    .padding(.top, unit * 0.1)
-                    .opacity(reveal.album)
             }
         }
-        .compositingGroup()
-        // A soft shadow under the type, as the lyrics have.
-        .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
     }
 
     /// A soft left-to-right wipe: `progress` 0 hides everything, 1 shows it all.
@@ -381,5 +433,24 @@ struct OpeningTitleCard: View {
         return LinearGradient(stops: [.init(color: .black, location: max(0, edge)),
                                       .init(color: .clear, location: min(1, max(0.0001, edge + soft)))],
                               startPoint: .leading, endPoint: .trailing)
+    }
+}
+
+/// Offers its content at most `maximum` points of width and takes the size
+/// the content uses, so a short title's card hugs its words (and centres
+/// with its cover in the floating window) while a long one still wraps.
+struct CappedWidth: Layout {
+    let maximum: CGFloat
+
+    private func proposal(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: min(proposal.width ?? maximum, maximum), height: proposal.height)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(self.proposal(proposal)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: self.proposal(proposal))
     }
 }

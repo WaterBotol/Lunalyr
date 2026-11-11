@@ -86,6 +86,7 @@ struct LyricStylePage: View {
     @AppStorage(BackingVocals.styleKey) private var backingStyle = ""
     @AppStorage(LyricCreditCues.settingKey) private var showCredits = true
     @AppStorage(OpeningTitle.settingKey) private var showOpeningTitle = true
+    @AppStorage(OpeningTitle.coverKey) private var showOpeningCover = true
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
     private var layout: some View {
@@ -123,6 +124,9 @@ struct LyricStylePage: View {
             }
             RememberedStyleNote(aspect: .layout)
             Toggle("Show the song title at the start", isOn: $showOpeningTitle)
+            Toggle("Show the album cover", isOn: $showOpeningCover)
+                .padding(.leading, 20)
+                .disabled(!showOpeningTitle)
             InspectorCaption("The title and artist appear low on the left as the song begins.", more: "The song’s title, artist and album appear low on the left as a song begins, in the lyrics’ typeface, and leave before the first line is sung. A song that starts singing straight away gets a shorter one, or none.")
             Toggle("Show credits in the background", isOn: $showCredits)
             InspectorCaption("Credit lines appear one at a time behind the lyrics.", more: "Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.")

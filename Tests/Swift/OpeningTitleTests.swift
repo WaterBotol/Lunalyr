@@ -174,5 +174,30 @@ final class OpeningTitleTests: XCTestCase {
     @MainActor
     func testTheSettingIsPartOfEachSurfacesStyle() {
         XCTAssertTrue(LyricStyleProfiles.keys.contains(OpeningTitle.settingKey))
+        XCTAssertTrue(LyricStyleProfiles.keys.contains(OpeningTitle.coverKey))
+    }
+
+    func testTheCoverIsOnByDefaultAndOnlyWithArtwork() {
+        let key = OpeningTitle.coverKey
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) } }
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertTrue(OpeningTitle.showsCover)
+        UserDefaults.standard.set(false, forKey: key)
+        XCTAssertFalse(OpeningTitle.showsCover)
+        let art = NSImage(size: NSSize(width: 4, height: 4))
+        XCTAssertTrue(OpeningTitle.cover(art, enabled: true) === art)
+        XCTAssertNil(OpeningTitle.cover(art, enabled: false), "Setting off: no cover")
+        XCTAssertNil(OpeningTitle.cover(nil, enabled: true), "No artwork: no cover, the words stay put")
+        XCTAssertNil(OpeningTitle.cover(NSImage(size: .zero), enabled: true))
+    }
+
+    func testSecondaryLinesKeepTheHierarchy() {
+        XCTAssertGreaterThanOrEqual(OpeningTitle.artistShare, 0.30)
+        XCTAssertLessThanOrEqual(OpeningTitle.artistShare, 0.34)
+        XCTAssertEqual(OpeningTitle.albumShare, 0.26, accuracy: 0.01)
+        XCTAssertLessThan(OpeningTitle.albumShare, OpeningTitle.artistShare)
+        XCTAssertGreaterThan(T.Reveal.at(0.15, size: .full, reduceMotion: false).cover,
+                             T.Reveal.at(0.15, size: .full, reduceMotion: false).wipe, "The cover leads the wipe")
     }
 }
