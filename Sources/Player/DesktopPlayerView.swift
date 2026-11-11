@@ -328,15 +328,18 @@ struct DesktopPlayerView: View {
             }
             .frame(width: Self.artWidth, height: Self.cover, alignment: .leading)
             if compact {
-                VStack(alignment: .leading, spacing: 2) {
+                // The song and the transport sit centred under the cover.
+                VStack(alignment: .center, spacing: 2) {
                     Text(now.track?.title ?? now.idleTitle).font(.system(size: 13, weight: .bold)).lineLimit(1)
                     if let artist = now.track?.artist, !artist.isEmpty {
                         Text(artist).font(.system(size: 11)).foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.7))
                             .lineLimit(1)
                     }
                 }
-                .frame(width: Self.cover, alignment: .leading)
+                .multilineTextAlignment(.center)
+                .frame(width: Self.cover, alignment: .center)
                 transport(.small)
+                    .frame(width: Self.cover, alignment: .center)
             }
         }
         .frame(width: Self.artWidth, alignment: .topLeading)
