@@ -187,8 +187,6 @@ struct LyricLineView: View {
     /// See `ScatteredLyricText.heldFirstRun` and `hidesFirstRun`.
     var heldFirstRun = false
     var hidesFirstRun = false
-    /// Words from this time on always get the Cutout · Highlight tile.
-    var highlightFrom: Double?
     /// Rolling stages: room kept at the foot, the onset after the window,
     /// and each word's place in the song (its colour).
     var bottomInset: CGFloat = 0
@@ -287,8 +285,7 @@ struct LyricLineView: View {
                 glue: glue,
                 firstRunOnly: firstRunOnly,
                 heldFirstRun: heldFirstRun,
-                hidesFirstRun: hidesFirstRun,
-                highlightFrom: highlightFrom
+                hidesFirstRun: hidesFirstRun
               )
             }
         }

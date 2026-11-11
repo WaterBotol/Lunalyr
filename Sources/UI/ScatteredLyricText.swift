@@ -539,9 +539,6 @@ struct ScatteredLyricText: View {
     /// The other half of that: the line making its entrance without its
     /// first word's label, which `heldFirstRun` draws.
     var hidesFirstRun = false
-    /// Words starting at or after this time always get the "Cutout ·
-    /// Highlight" tile, whatever entrance is chosen (the artist in a credit).
-    var highlightFrom: Double?
 
     @ObservedObject private var settings = Settings.shared
     @StateObject private var typography = RenderMemo<ScatteredTypography.Key, ScatteredTypography.Layout>()
@@ -562,10 +559,7 @@ struct ScatteredLyricText: View {
         // Motion follows the voice: timing alone tells dense delivery and
         // held notes apart, and any live energy supplied only adds to it.
         let intensity = wordTimed ? max(energy, OrganicMotion.vocalIntensity(words, at: time)) : 0
-        let arrivals = layout.runs.map { run -> WordArrival in
-            if let from = highlightFrom, run.source.start >= from { return .cutoutHighlight }
-            return settings.arrival(in: composition, for: run.source)
-        }
+        let arrivals = layout.runs.map { settings.arrival(in: composition, for: $0.source) }
         let states: [ScatteredWordState] = wordTimed ? prepared.map {
             let release = layout.runs[$0.run].segments.first?.release ?? exitStart
             let leaves = arrivals[$0.run].highlightsSungWords ? max(exitStart, release) : exitStart

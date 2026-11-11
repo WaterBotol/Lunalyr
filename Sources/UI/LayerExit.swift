@@ -1,13 +1,11 @@
 import SwiftUI
 
 /// How a background layer leaves. Each kind always leaves the same way, so
-/// what is going (a credit, the title, backing vocals) can be told by how it
+/// what is going (a credit, backing vocals) can be told by how it
 /// goes, as well as by how it arrived.
 enum LayerExit {
     /// Production credits lift away toward the edge they sit on, softening.
     case credit(towardTop: Bool)
-    /// The opening "Title - Artist" blooms: it swells a little and dissolves.
-    case title
     /// Backing vocals sink: a small settle downward and shrink, no blur.
     case backing
 
@@ -16,7 +14,6 @@ enum LayerExit {
         let p = CGFloat(min(1, max(0, progress)))
         switch self {
         case .credit(let towardTop): return ((towardTop ? -1 : 1) * p * size * 0.45, 1, p * size * 0.09)
-        case .title: return (0, 1 + 0.08 * p, p * size * 0.2)
         case .backing: return (p * size * 0.3, 1 - 0.06 * p, 0)
         }
     }
