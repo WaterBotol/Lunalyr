@@ -31,7 +31,7 @@ internal static class SampleStore
         Name = "settings",
         TypeInfo = SampleSettingsJsonContext.Default.SampleSettings,
         CreateDefaults = () => new SampleSettings(),
-        TimeProvider = time ?? new ManualTimeProvider(),
+        TimeProvider = time ?? new TimerTimeProvider(),
         IoRetryDelay = TimeSpan.FromMilliseconds(1),
     };
 

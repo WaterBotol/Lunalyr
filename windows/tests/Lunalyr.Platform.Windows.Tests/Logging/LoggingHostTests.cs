@@ -10,7 +10,7 @@ public class LoggingHostTests
     {
         using var temp = new TempFolder();
         var logs = AppPaths.LogsFolder(temp.Path);
-        var time = new ManualTimeProvider(new DateTimeOffset(2026, 11, 12, 23, 30, 0, TimeSpan.Zero), TimeSpan.FromHours(2));
+        var time = new TimerTimeProvider(new DateTimeOffset(2026, 11, 12, 23, 30, 0, TimeSpan.Zero), TimeSpan.FromHours(2));
 
         await using (var host = LoggingHost.Create(logs, LogLevel.Debug, time))
         {

@@ -14,7 +14,7 @@ public class SettingsDebounceTests
     public async Task ABurstOfChangesIsWrittenOnceAfterTheQuietPeriod()
     {
         using var temp = new TempFolder();
-        var time = new ManualTimeProvider();
+        var time = new TimerTimeProvider();
         await using var store = SettingsStore<SampleSettings>.Open(SampleStore.Options(temp, time));
         var saved = SampleStore.WaitForSaveAsync(store);
 
@@ -39,7 +39,7 @@ public class SettingsDebounceTests
     public async Task EachChangeRestartsTheQuietPeriod()
     {
         using var temp = new TempFolder();
-        var time = new ManualTimeProvider();
+        var time = new TimerTimeProvider();
         await using var store = SettingsStore<SampleSettings>.Open(SampleStore.Options(temp, time));
         var saved = SampleStore.WaitForSaveAsync(store);
 
@@ -60,7 +60,7 @@ public class SettingsDebounceTests
     public async Task ContinuousChangesAreStillWrittenWithinTheMaximumDelay()
     {
         using var temp = new TempFolder();
-        var time = new ManualTimeProvider();
+        var time = new TimerTimeProvider();
         await using var store = SettingsStore<SampleSettings>.Open(SampleStore.Options(temp, time));
         var saved = SampleStore.WaitForSaveAsync(store);
 
@@ -82,7 +82,7 @@ public class SettingsDebounceTests
     public async Task FlushWritesImmediatelyAndThePendingTimerThenHasNothingToDo()
     {
         using var temp = new TempFolder();
-        var time = new ManualTimeProvider();
+        var time = new TimerTimeProvider();
         await using var store = SettingsStore<SampleSettings>.Open(SampleStore.Options(temp, time));
 
         store.Update(s => s with { Counter = 3 });

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Read-only diagnostic: prints what Windows' media sessions report and what the song clock makes of it.
+       It never sends a command to a player. Not part of the app or the solution. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

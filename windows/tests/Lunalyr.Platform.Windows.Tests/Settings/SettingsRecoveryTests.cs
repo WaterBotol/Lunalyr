@@ -203,7 +203,7 @@ public class SettingsRecoveryTests
     public async Task CorruptCopiesGetDistinctNamesWithinOneSecondAndArePruned()
     {
         using var temp = new TempFolder();
-        var time = new ManualTimeProvider();
+        var time = new TimerTimeProvider();
         var options = SampleStore.Options(temp, time);
         var kept = new List<string>();
         for (var i = 0; i < 7; i++)

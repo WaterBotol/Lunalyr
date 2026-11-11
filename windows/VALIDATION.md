@@ -19,3 +19,15 @@ Legend: **unit** = covered by unit tests · **PC** = checked by Claude on the de
 | WinUI 3 settings window: Mica, Fluent controls, accent, dark theme | PC | `spikes/cs-winui/results/aot-settings-window.png` |
 | Native AOT (C# renderer + WinUI) | PC | `aot-*.json` |
 | Packaging (MSIX / installer, auto-update, launch at login) | — | assessed only, built in milestone 8 |
+
+## Foundations (built ahead of milestone 2, while the Mac bundle is on its way)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Song clock: extrapolation, pause, rate, seek detection, drift slew, seek-only players, track change, bad timestamps | unit (106 Core tests) | `tests/Lunalyr.Core.Tests/NowPlaying/` |
+| Now-playing monitor over GSMTC, with a silent fake | unit (23 tests); the fake asserts no command is ever sent | `tests/Lunalyr.Platform.Windows.Tests/NowPlaying/` |
+| GSMTC adapter against real players | live, read-only | `tools/NowPlayingProbe` ran on 12 Nov with nothing playing (0 sessions). Rerun it while music plays: `NowPlayingProbe 60` (add `--hide-titles` to keep titles out of the output) |
+| Player capabilities and "not supported" reasons | unit | `PlayerCapabilities` tests |
+| Crash-safe settings: atomic write, backup, corruption recovery, migrations, debounce | unit | `tests/Lunalyr.Platform.Windows.Tests/Settings/` |
+| Logging: rolling files, EventSource `Lunalyr`, `tools/lunalyr-log.ps1` | unit; script run on PowerShell 5.1; collecting with ETW tools not yet tried | `docs/LOGGING.md` |
+| Native AOT for settings + logging | PC (throwaway console app, no trim warnings) | — |

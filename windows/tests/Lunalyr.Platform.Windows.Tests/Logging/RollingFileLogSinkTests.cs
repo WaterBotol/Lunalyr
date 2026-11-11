@@ -19,7 +19,7 @@ public class RollingFileLogSinkTests
     }
 
     private static RollingFileLogOptions Options(TempFolder temp, DateTimeOffset? now = null) =>
-        new(temp.Path) { TimeProvider = new ManualTimeProvider(now ?? Day1, (now ?? Day1).Offset) };
+        new(temp.Path) { TimeProvider = new TimerTimeProvider(now ?? Day1, (now ?? Day1).Offset) };
 
     [Fact]
     public async Task WritesOneUtf8FilePerDayThatCanBeReadWhileOpen()

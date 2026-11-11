@@ -32,13 +32,15 @@ internal sealed class TempFolder : IDisposable
 }
 
 /// <summary>A clock tests advance by hand. Timers fire synchronously inside <see cref="Advance"/>.</summary>
-internal sealed class ManualTimeProvider(DateTimeOffset start, TimeSpan? localOffset = null) : TimeProvider
+/// <summary>Fake time with fake timers, for the settings and logging tests. The song-clock tests use
+/// <c>Lunalyr.Tests.Shared.ManualTimeProvider</c>, which also fakes the monotonic timestamp. TODO: merge the two.</summary>
+internal sealed class TimerTimeProvider(DateTimeOffset start, TimeSpan? localOffset = null) : TimeProvider
 {
     private readonly object _gate = new();
     private readonly List<ManualTimer> _timers = [];
     private DateTimeOffset _now = start.ToUniversalTime();
 
-    public ManualTimeProvider()
+    public TimerTimeProvider()
         : this(new DateTimeOffset(2026, 11, 12, 9, 0, 0, TimeSpan.Zero))
     {
     }
@@ -97,7 +99,7 @@ internal sealed class ManualTimeProvider(DateTimeOffset start, TimeSpan? localOf
         return timer;
     }
 
-    private sealed class ManualTimer(ManualTimeProvider owner, TimerCallback callback, object? state) : ITimer
+    private sealed class ManualTimer(TimerTimeProvider owner, TimerCallback callback, object? state) : ITimer
     {
         private TimeSpan _period = Timeout.InfiniteTimeSpan;
 
