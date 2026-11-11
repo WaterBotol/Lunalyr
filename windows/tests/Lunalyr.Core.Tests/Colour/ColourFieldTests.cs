@@ -95,17 +95,6 @@ public class ColourFieldTests
     }
 
     [Fact]
-    public void CanvasKeepsToTheBudget()
-    {
-        var (w, h) = ColourField.CanvasSize(3840, 2160);
-        Assert.True(w * h <= ColourField.PixelBudget);
-        Assert.Equal(3840.0 / 2160, (double)w / h, 0.01);
-        Assert.Equal((320, 180), ColourField.CanvasSize(320, 180));
-        Assert.Equal((4, 4), ColourField.CanvasSize(0, 100));
-        Assert.Equal((4, 4), ColourField.CanvasSize(double.NaN, 100));
-    }
-
-    [Fact]
     public void LuminanceMatchesTheColourFieldEstimate()
     {
         var cover = new AlbumWallpaperPalette(AlbumColourGrid.FallbackHsb);

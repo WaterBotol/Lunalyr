@@ -6,14 +6,14 @@ namespace Lunalyr.Platform.Imaging;
 /// <summary>
 /// Decodes a track's artwork (the GSMTC thumbnail: JPEG, PNG, or anything else WIC reads) into a small straight-alpha
 /// RGBA buffer for the colour code. Decoding happens on the thread pool, never on the caller's (UI) thread; the image is
-/// scaled down inside WIC (JPEGs decode straight to a reduced size), so a 3000-pixel cover costs about what a small one
-/// does.
+/// scaled down inside WIC, so a 3000-pixel cover costs about what a small one does. Scaling is nearest-neighbour, as the
+/// Mac reads a cover for its palette: contrasting colour fields stay apart instead of averaging into a third colour (the
+/// player's palette averages the result itself).
 /// </summary>
 public static class ArtworkDecoder
 {
     /// <summary>
-    /// The longest side the colour code reads: twice the 72-pixel grid the palette samples, so the nearest-neighbour
-    /// read still lands on cover detail rather than on the averaging.
+    /// The longest side the colour code reads: twice the 72-pixel grid the palette samples.
     /// </summary>
     public const int DefaultMaxSide = 144;
 
@@ -64,11 +64,8 @@ public static class ArtworkDecoder
             var width = Math.Max(1, (int)Math.Round(size.Width * scale));
             var height = Math.Max(1, (int)Math.Round(size.Height * scale));
 
-            // Scale premultiplied, so transparent pixels' colour never bleeds into the edges, then unpremultiply.
-            using var premultiplied = factory.CreateFormatConverter();
-            premultiplied.Initialize(frame, PixelFormat.Format32bppPRGBA, BitmapDitherType.None, null, 0, BitmapPaletteType.Custom);
             using var scaler = factory.CreateBitmapScaler();
-            scaler.Initialize(premultiplied, (uint)width, (uint)height, BitmapInterpolationMode.Fant);
+            scaler.Initialize(frame, (uint)width, (uint)height, BitmapInterpolationMode.NearestNeighbor);
             using var straight = factory.CreateFormatConverter();
             straight.Initialize(scaler, PixelFormat.Format32bppRGBA, BitmapDitherType.None, null, 0, BitmapPaletteType.Custom);
             var pixels = new byte[width * height * 4];

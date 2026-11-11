@@ -27,6 +27,12 @@ public sealed record BackgroundOptions
     /// <summary>A text backing amount set by hand (0...1), or null for the automatic amount.</summary>
     public double? ManualBacking { get; init; }
 
+    /// <summary>Power saving: the colour field draws 60% of its usual pixels (the Mac's economical budget).</summary>
+    public bool Economical { get; init; }
+
+    /// <summary>Replaces the colour field's pixel budget; <see cref="double.PositiveInfinity"/> draws at native resolution.</summary>
+    public double? PixelBudget { get; init; }
+
     /// <summary>A fine grain over the field, which also dithers its dark gradients on 8-bit displays.</summary>
     public bool Grain { get; init; } = true;
 }

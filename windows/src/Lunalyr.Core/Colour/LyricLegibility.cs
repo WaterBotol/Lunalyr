@@ -69,6 +69,46 @@ public static class LyricLegibility
     /// <summary>The size the shade image is made at: small, as the shape is a share of the view whatever its size.</summary>
     public const int ShadeColumns = 256, ShadeRows = 144;
 
+    /// <summary>
+    /// A text backing amount the user set keeps the soft ellipse it has always been drawn with: a multiple of the stage
+    /// on each axis, and its strength from the centre (0) to the rim (1).
+    /// </summary>
+    public static (double Width, double Height) ManualBackingScale { get; } = (1.3, 1.4);
+
+    public static IReadOnlyList<(double Location, double Strength)> ManualBackingStops { get; } = [(0, 1), (0.55, 0.9), (0.8, 0.45), (1, 0)];
+
+    /// <summary>The manual backing's share at a point of the view, given from its centre in view sizes.</summary>
+    public static double ManualBackingStrength(double x, double y)
+    {
+        double rx = StageHalfExtent.X * ManualBackingScale.Width, ry = StageHalfExtent.Y * ManualBackingScale.Height;
+        var r = Math.Sqrt(x / rx * (x / rx) + y / ry * (y / ry));
+        if (!double.IsFinite(r)) return 0;
+        var stops = ManualBackingStops;
+        if (r >= stops[^1].Location) return stops[^1].Strength;
+        for (var i = 1; i < stops.Count; i++)
+        {
+            if (r > stops[i].Location) continue;
+            var (l0, s0) = stops[i - 1];
+            var (l1, s1) = stops[i];
+            return s0 + (s1 - s0) * (r - l0) / (l1 - l0);
+        }
+        return stops[0].Strength;
+    }
+
+    /// <summary>The manual backing's ellipse as an image, laid out as <see cref="ShadeImage"/>.</summary>
+    public static byte[]? ManualShadeImage(int columns, int rows)
+    {
+        if (columns <= 0 || rows <= 0) return null;
+        var pixels = new byte[columns * rows * 4];
+        for (var row = 0; row < rows; row++)
+        for (var column = 0; column < columns; column++)
+        {
+            double x = (column + 0.5) / columns - 0.5, y = (row + 0.5) / rows - 0.5;
+            pixels[(row * columns + column) * 4 + 3] = (byte)SwiftMath.Round(ManualBackingStrength(x, y) * 255);
+        }
+        return pixels;
+    }
+
     // Contrast
 
     public static double Linear(double channel)
@@ -217,6 +257,18 @@ public static class LyricLegibility
         if (!any)
             foreach (var cell in hsbGrid) { best = Math.Max(best, Luminance(ColourSpaces.Rgb(cell))); any = true; }
         return any ? best : UnknownBackdropLuminance;
+    }
+
+    /// <summary>
+    /// <see cref="CoverLuminance(IReadOnlyList{Double3})"/> of the colours on screen (a palette part way through a
+    /// fade): the brightest cell of the cover's middle row (the Mac's NowPlayingView.coverLuminance).
+    /// </summary>
+    public static double CoverLuminance(AlbumWallpaperPalette cover)
+    {
+        var best = double.NegativeInfinity;
+        for (var index = 3; index <= 5 && index < cover.ArtworkStops.Count; index++)
+            best = Math.Max(best, Luminance(Double3.From(cover.ArtworkStops[index])));
+        return double.IsNegativeInfinity(best) ? UnknownBackdropLuminance : best;
     }
 
     public static Double3 Rgb(Double3 hsb) => ColourSpaces.Rgb(hsb);

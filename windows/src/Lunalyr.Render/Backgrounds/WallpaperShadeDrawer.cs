@@ -49,7 +49,10 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         _scrimStops = dc.CreateGradientStopCollection(stops, Gamma.StandardRgb, ExtendMode.Clamp);
         _scrim = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(Vector2.Zero, new Vector2(0, 1)), _scrimStops);
 
-        var shade = LyricLegibility.ShadeImage(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!;
+        // The automatic amount covers the stage's shape; a hand-set amount keeps the Mac's soft ellipse.
+        var shade = _options.ManualBacking is null
+            ? LyricLegibility.ShadeImage(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!
+            : LyricLegibility.ManualShadeImage(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!;
         _backing = CreateBitmap(dc, LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows, shade);
 
         // Grain: each pixel faintly white or faintly black (premultiplied), so it lifts and lowers about evenly.

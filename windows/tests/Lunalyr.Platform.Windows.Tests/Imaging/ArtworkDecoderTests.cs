@@ -89,6 +89,20 @@ public class ArtworkDecoderTests
         Assert.Null(await ArtworkDecoder.DecodeAsync(junk, cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData("stripes.png")]
+    [InlineData("stripes.jpg")]
+    public void FineContrastingDetailKeepsBothColours(string name)
+    {
+        // The Mac reads covers nearest-neighbour so contrasting fields stay apart; an averaging downscale would turn
+        // 4 px red and cyan stripes into one grey-purple.
+        var image = ArtworkDecoder.Decode(Fixture(name));
+        Assert.NotNull(image);
+        var cover = new AlbumWallpaperPalette(AlbumColourGrid.Extract(image));
+        Assert.Contains(cover.Stops, s => s.X > 0.6 && s.Y < 0.3 && s.Z < 0.3);
+        Assert.Contains(cover.Stops, s => s.X < 0.3 && s.Y > 0.55 && s.Z > 0.55);
+    }
+
     [Fact]
     public void ACoverBecomesItsPalette()
     {

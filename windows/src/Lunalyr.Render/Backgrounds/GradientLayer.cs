@@ -93,7 +93,7 @@ public sealed class GradientLayer : IRenderLayer
 
     private void CreateCanvases()
     {
-        _canvas = ColourField.CanvasSize(_size.X, _size.Y);
+        _canvas = CanvasFor(_size, _scale);
         // Half-float keeps the five overlapping gradients free of banding; 8-bit where the device can't.
         _halfFloat = true;
         try
@@ -109,6 +109,9 @@ public sealed class GradientLayer : IRenderLayer
             _to.Bitmap = CreateCanvas(Format.B8G8R8A8_UNorm);
         }
     }
+
+    private (int Width, int Height) CanvasFor(Vector2 size, float scale) =>
+        ColourField.CanvasSize(size.X, size.Y, scale, _options.PixelBudget ?? ColourFieldBudget.Pixels(_options.Economical));
 
     private ID2D1Bitmap1 CreateCanvas(Format format) =>
         _fieldDc!.CreateBitmap(new SizeI(_canvas.Width, _canvas.Height), IntPtr.Zero, 0,

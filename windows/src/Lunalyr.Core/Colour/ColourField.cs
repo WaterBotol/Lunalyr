@@ -8,9 +8,11 @@
 // stretched. The rates (the field's clock at 0.70 × 0.34 of Motion speed, 0.15 of that with Reduce Motion), the base
 // and the pixel budget are Lunalyr's own lines and are kept.
 //
-// The motion model and every constant below are our own: each mass hovers near the part of the screen that matches
-// where its colour sits on the cover (the stops are the cover's corners and centre), wandering on a sum of two
-// incommensurate sinusoids per axis, with a biweight falloff.
+// The motion model, the layout, sizes, periods and falloff below are our own: each mass hovers near the part of the
+// screen that matches where its colour sits on the cover (the stops are the cover's corners and centre), wandering on
+// a sum of two incommensurate sinusoids per axis, with a biweight falloff. The peak opacity is the 85% that Lunalyr's
+// legibility estimate (LyricLegibility.colourFieldLuminance) assumes for the field's masses, so the text backing is
+// worked out for what is drawn. ColourFieldBudget (Lunalyr's own, in AnimatedGradientView.swift) is ported as it is.
 
 using System.Numerics;
 using Lunalyr.Core.Motion;
@@ -33,7 +35,7 @@ public static class ColourField
     public const float BaseBrightness = 0.45f;
 
     /// <summary>At most this many pixels are drawn per frame; the field is stretched over the rest (the Mac's budget).</summary>
-    public const double PixelBudget = 250_000;
+    public const double PixelBudget = ColourFieldBudget.Standard;
 
     /// <summary>A mass's centre (pixels) and radius (pixels) on a field of the given size.</summary>
     public readonly record struct Mass(double X, double Y, double Radius);
@@ -85,18 +87,22 @@ public static class ColourField
         return Peak * s * s;
     }
 
-    /// <summary>A mass's opacity at its centre.</summary>
+    /// <summary>A mass's opacity at its centre: the 85% the legibility estimate assumes (see the file's header).</summary>
     public const double Peak = 0.85;
 
     /// <summary>The stops a drawing layer approximates <see cref="Falloff"/> with (positions 0...1, evenly spaced).</summary>
     public const int FalloffStops = 17;
 
-    /// <summary>The size the field is drawn at for a surface, within <see cref="PixelBudget"/> (whole pixels, at least 4).</summary>
-    public static (int Width, int Height) CanvasSize(double width, double height, double budget = PixelBudget)
+    /// <summary>
+    /// The canvas the field is drawn at for a surface of <paramref name="pixelWidth"/> × <paramref name="pixelHeight"/>
+    /// physical pixels at DPI scale <paramref name="scale"/>, within <paramref name="budget"/> pixels: whole pixels, at
+    /// least 4 a side, the surface's own size when it fits.
+    /// </summary>
+    public static (int Width, int Height) CanvasSize(double pixelWidth, double pixelHeight, double scale = 1, double budget = PixelBudget)
     {
-        if (!(width > 0 && height > 0) || !double.IsFinite(width) || !double.IsFinite(height)) return (4, 4);
-        var factor = Math.Min(1, Math.Sqrt(Math.Max(1, budget) / (width * height)));
-        return (Math.Max(4, (int)Math.Floor(width * factor)), Math.Max(4, (int)Math.Floor(height * factor)));
+        var safeScale = double.IsFinite(scale) && scale > 0 ? scale : 1;
+        var canvas = ColourFieldBudget.Canvas(pixelWidth / safeScale, pixelHeight / safeScale, safeScale, budget);
+        return (Math.Max(4, (int)Math.Round(canvas.Width * safeScale)), Math.Max(4, (int)Math.Round(canvas.Height * safeScale)));
     }
 
     /// <summary>The colour field's luminance estimate from the stops alone (see <see cref="LyricLegibility.ColourFieldLuminance"/>).</summary>
@@ -114,6 +120,48 @@ public static class ColourField
         }
         var colour = brightest * 0.85 + sum / stops.Length * BaseBrightness * 0.15;
         return LyricLegibility.Luminance(colour.Clamped(0, 1));
+    }
+}
+
+/// <summary>
+/// How many pixels the colour field may draw per frame (ported from the Mac's <c>ColourFieldBudget</c>, sizes in points).
+/// </summary>
+public static class ColourFieldBudget
+{
+    /// <summary>A quarter of a megapixel: a 14-inch MacBook Pro's 6 MP and a 5K display's 15 MP both come down to it.</summary>
+    public const double Standard = 250_000.0;
+
+    public static double Pixels(bool economical) => economical ? Standard * 0.6 : Standard;
+
+    /// <summary>Where the field is drawn (points, a whole number of pixels at the scale) and how far it is stretched.</summary>
+    public readonly record struct CanvasSize(double Width, double Height, double StretchX, double StretchY)
+    {
+        /// <summary>The pixels drawn per frame.</summary>
+        public double PixelsAt(double scale) => Width * scale * (Height * scale);
+    }
+
+    /// <summary>The share of each side the field is drawn at: native when it fits the budget, else the same aspect scaled down.</summary>
+    public static double Factor(double width, double height, double scale, double budget)
+    {
+        if (!(width > 0 && height > 0 && double.IsFinite(width) && double.IsFinite(height))) return 1;
+        var safeScale = double.IsFinite(scale) && scale > 0 ? scale : 2;
+        var native = width * safeScale * (height * safeScale);
+        if (!double.IsFinite(budget)) return 1;
+        return Math.Min(1, Math.Sqrt(Math.Max(1, budget) / native));
+    }
+
+    /// <summary>
+    /// A canvas of whole pixels, so nothing is rounded off it, stretched to reach one of its pixels past each edge of
+    /// the screen: an offscreen pass rounded down by a pixel would otherwise leave a seam there.
+    /// </summary>
+    public static CanvasSize Canvas(double width, double height, double scale, double budget)
+    {
+        var factor = Factor(width, height, scale, budget);
+        if (!(factor < 1)) return new CanvasSize(width, height, 1, 1);
+        var safeScale = double.IsFinite(scale) && scale > 0 ? scale : 2;
+        double pixelsX = Math.Max(4, Math.Floor(width * factor * safeScale)), pixelsY = Math.Max(4, Math.Floor(height * factor * safeScale));
+        double sizeX = pixelsX / safeScale, sizeY = pixelsY / safeScale;
+        return new CanvasSize(sizeX, sizeY, width / sizeX * (pixelsX + 2) / pixelsX, height / sizeY * (pixelsY + 2) / pixelsY);
     }
 }
 

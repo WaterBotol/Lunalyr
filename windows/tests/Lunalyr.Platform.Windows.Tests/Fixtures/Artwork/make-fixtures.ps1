@@ -68,6 +68,15 @@ $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::
 $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(240, 130, 20))), 150, 0, 150, 100)
 $g.Dispose(); Save-Jpeg $bmp (Join-Path $Out 'wide.jpg') 95; $bmp.Dispose()
 
+# Fine detail: 4 px red and cyan stripes across a large cover (as PNG and JPEG).
+$bmp = New-Object System.Drawing.Bitmap 800, 800
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+for ($x = 0; $x -lt 800; $x += 8) {
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(235, 10, 8))), $x, 0, 4, 800)
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(8, 230, 235))), ($x + 4), 0, 4, 800)
+}
+$g.Dispose(); $bmp.Save((Join-Path $Out 'stripes.png'), [System.Drawing.Imaging.ImageFormat]::Png); Save-Jpeg $bmp (Join-Path $Out 'stripes.jpg') 92; $bmp.Dispose()
+
 # Not an image at all.
 [System.IO.File]::WriteAllBytes((Join-Path $Out 'broken.jpg'), [byte[]](0xFF, 0xD8, 0xFF, 0xE0, 0, 16, 74, 70, 73, 70, 0, 1, 2, 3, 4, 5))
 Get-ChildItem $Out | Select-Object Name, Length

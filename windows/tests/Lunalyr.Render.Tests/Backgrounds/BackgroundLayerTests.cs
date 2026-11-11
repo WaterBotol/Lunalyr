@@ -125,6 +125,95 @@ public sealed class BackgroundLayerTests : IDisposable
         Assert.Equal(centreEmpty, Pixel(Frame(playing, Quiet(pale), 1.95), Width / 2, Height / 2));
     }
 
+    // Ported from LyricLegibilityTests.swift: testTheDrawnBackingFollowsTheShapeAndAManualAmountKeepsItsEllipse. The
+    // Mac draws the shade alone at 0.5 over white; here the whole layer draws it over a white field with no scrim, at
+    // 0.6, the cap the automatic amount reaches over white, so the two can be compared at the centre.
+    [Fact]
+    public void TheDrawnBackingFollowsTheShapeAndAManualAmountKeepsItsEllipse()
+    {
+        var white = Uniform(1, 1, 1);
+        var song = new SceneSnapshot { Palette = white, Title = "Song" };
+        Func<double, double, double> Darkening(BackgroundOptions options)
+        {
+            using var layer = new GradientLayerFactory(options).Create();
+            _surface.Prepare(layer);
+            var pixels = Frame(layer, song, 1);
+            return (x, y) =>
+            {
+                var column = Math.Clamp((int)(x * Width), 0, Width - 1);
+                var row = Math.Clamp((int)(y * Height), 0, Height - 1);
+                return 1 - Pixel(pixels, column, row).R / 255.0;
+            };
+        }
+        var half = LyricLegibility.StageHalfExtent;
+        double left = 0.5 - half.X, top = 0.5 - half.Y;
+        var automatic = Darkening(Plain with { ScrimStrength = 0 });
+        var centre = automatic(0.5, 0.5);
+        Assert.True(centre > 0.2);
+        // As dark at the stage's edges and corners as in its middle...
+        foreach (var (x, y) in new[] { (left, 0.5), (1 - left, 0.5), (0.5, top), (0.5, 1 - top), (left, top), (1 - left, 1 - top) })
+            Assert.Equal(centre, automatic(x, y), 0.03);
+        // ...easing out across the margin, to nothing at the screen's edge.
+        var margin = automatic(left / 2, 0.5);
+        Assert.True(margin > 0.05);
+        Assert.True(margin < centre - 0.05);
+        foreach (var (x, y) in new[] { (0.0, 0.5), (0.999, 0.5), (0.5, 0.0), (0.5, 0.999), (0.0, 0.0), (0.999, 0.999) })
+            Assert.True(automatic(x, y) < 0.03, $"at ({x}, {y})");
+        // The user's own amount keeps its old look: lighter at the stage's ends than its middle, nothing at its corners.
+        var ellipse = Darkening(Plain with { ScrimStrength = 0, ManualBacking = 0.6 });
+        var middle = ellipse(0.5, 0.5);
+        Assert.Equal(centre, middle, 0.03);
+        Assert.True(ellipse(left, 0.5) < middle * 0.75);
+        Assert.True(ellipse(left, top) < 0.03);
+    }
+
+    // Ported from WallpaperEnergyTests.swift: testBoundedColourFieldLooksLikeTheNativeOne (with this layer's field)
+    [Fact]
+    public void BoundedColourFieldLooksLikeTheNativeOne()
+    {
+        (int Width, int Height, double Budget)[] cases =
+        [
+            (640, 360, ColourFieldBudget.Standard * (640 * 360) / (3024.0 * 1964)), (640, 360, 26_000), (1000, 777, 26_000), (333, 777, 5_000),
+        ];
+        var palette = new SceneSnapshot { Palette = PaletteMapper.FromAlbum(new AlbumWallpaperPalette(
+        [
+            new(0.02, 0.85, 0.95), new(0.1, 0.5, 0.5), new(0.58, 0.75, 0.85), new(0.3, 0.4, 0.6), new(0.8, 0.6, 0.7),
+            new(0.5, 0.5, 0.5), new(0.12, 0.9, 0.9), new(0.4, 0.3, 0.3), new(0.7, 0.7, 0.75),
+        ])) };
+        foreach (var (width, height, budget) in cases)
+        {
+            using var surface = new OffscreenSurface(width, height);
+            byte[] Render(double pixels)
+            {
+                using var layer = new GradientLayerFactory(Plain with { Vividness = 1.2, PixelBudget = pixels }).Create();
+                surface.Prepare(layer);
+                surface.Draw(layer, palette, 40 / ColourField.ClockRate);
+                return surface.ReadPixels();
+            }
+            var native = Render(double.PositiveInfinity);
+            var bounded = Render(budget);
+            double difference = 0, level = 0;
+            int worst = 0, seams = 0;
+            for (var i = 0; i < native.Length; i += 4)
+            {
+                for (var channel = 0; channel < 3; channel++)
+                {
+                    var delta = Math.Abs(native[i + channel] - bounded[i + channel]);
+                    difference += delta / 255.0;
+                    worst = Math.Max(worst, delta);
+                    level += native[i + channel] / 255.0;
+                }
+                if (bounded[i + 3] < 250) seams += 1;
+            }
+            var samples = native.Length / 4 * 3.0;
+            var label = $"{width}x{height} at {(int)budget} px";
+            Assert.True(level / samples > 0.05, $"{label}: the field rendered something");
+            Assert.True(difference / samples < 0.008, $"{label}: mean channel difference {difference / samples}");
+            Assert.True(worst <= 16, $"{label}: largest channel difference {worst}");
+            Assert.Equal(0, seams);
+        }
+    }
+
     [Fact]
     public void TheFieldDriftsSlowly()
     {
