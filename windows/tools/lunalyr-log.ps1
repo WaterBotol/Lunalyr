@@ -37,7 +37,8 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('app', 'queue', 'sync', 'lyrics', 'player', 'render', 'settings')]
+    # Not ValidateSet: "-File script.ps1 -Category queue,sync" passes one comma-joined string, split below.
+    [ArgumentCompleter({ param($c, $p, $word) 'app', 'queue', 'sync', 'lyrics', 'player', 'render', 'settings' | Where-Object { $_ -like "$word*" } })]
     [string[]]$Category,
 
     [ValidateSet('debug', 'info', 'warn', 'error')]
@@ -61,8 +62,18 @@ $ErrorActionPreference = 'Stop'
 
 $levelRank = @{ 'DEBUG' = 0; 'INFO' = 1; 'WARN' = 2; 'ERROR' = 3 }
 $minRank = $levelRank[$Level.ToUpperInvariant()]
+$knownCategories = @('app', 'queue', 'sync', 'lyrics', 'player', 'render', 'settings')
 $categories = @{}
-if ($Category) { foreach ($c in $Category) { $categories[$c.ToLowerInvariant()] = $true } }
+if ($Category) {
+    foreach ($c in ($Category -split ',')) {
+        $c = $c.Trim().ToLowerInvariant()
+        if ($c.Length -eq 0) { continue }
+        if ($knownCategories -notcontains $c) {
+            throw "Unknown category '$c'. Use one or more of: $($knownCategories -join ', ')."
+        }
+        $categories[$c] = $true
+    }
+}
 $invariant = [Globalization.CultureInfo]::InvariantCulture
 $utf8 = New-Object Text.UTF8Encoding($false)
 $headerPattern = [regex]'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2})\t([A-Z]+)\t([a-z]+)\t'

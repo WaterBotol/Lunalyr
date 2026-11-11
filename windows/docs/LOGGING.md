@@ -45,8 +45,9 @@ starts with a digit and filtering never separates a stack trace from its entry.
 
 ## Reading logs: `tools/lunalyr-log.ps1`
 
-Works in Windows PowerShell 5.1 and PowerShell 7. It reads the files as UTF-8, so lyrics and titles in any script
-show correctly.
+Written for (and tested with) Windows PowerShell 5.1, which every Windows 10/11 machine has. It reads the files as
+UTF-8, so lyrics and titles in any script show correctly. Categories can be given as `-Category queue,sync` both in
+a PowerShell session and through `powershell -File`.
 
 ```powershell
 tools\lunalyr-log.ps1                              # everything in the last 7 days
@@ -80,7 +81,8 @@ the file does. When no trace session is listening this costs one check per entry
 | Events | `Debug` (1, Verbose), `Info` (2, Informational), `Warn` (3, Warning), `Error` (4, Error) |
 | Payload | `category`, `message`, `exception` (empty when there is none) |
 
-Collecting:
+Collecting (standard commands for an EventSource provider; not yet run against the Lunalyr app, which doesn't exist
+yet):
 
 ```powershell
 # EventPipe, no admin needed
@@ -104,7 +106,8 @@ Native AOT turns EventSource off unless the app opts in. The app project must se
 <EventSourceSupport>true</EventSourceSupport>
 ```
 
-Without it the file log still works and the `Lunalyr` provider is silent. The logging and settings code was checked
-with a throwaway `PublishAot` console app (with `EventSourceSupport` on): no trim/AOT warnings, the native binary
-wrote the log file, and an in-process `EventListener` received the `Lunalyr` events. Collecting from outside the
-process with `dotnet-trace`, PerfView or WPR against the AOT app has not been tried yet.
+The logging and settings code was checked with a throwaway `PublishAot` console app, published both ways: no
+trim/AOT warnings either way, and the native binary wrote the log file and settings correctly either way. With
+`EventSourceSupport` on, an in-process `EventListener` received the `Lunalyr` events; with it off (the default) it
+received none and nothing failed. Collecting from outside the process with `dotnet-trace`, PerfView or WPR has not
+been tried yet.
