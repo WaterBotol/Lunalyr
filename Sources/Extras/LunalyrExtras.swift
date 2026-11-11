@@ -179,6 +179,11 @@ final class LunalyrExtras: ObservableObject {
     @Published var showsTranslations: Bool {
         didSet { defaults.set(showsTranslations, forKey: Keys.translations) }
     }
+    /// Rereads Show translations, part of a lyric style (`LyricStyleProfiles`).
+    func reloadTranslations() {
+        let saved = defaults.object(forKey: Keys.translations) as? Bool ?? true
+        if showsTranslations != saved { showsTranslations = saved }
+    }
     /// A display is mirrored -- usually a projector or a shared screen.
     @Published private(set) var mirroring = false {
         didSet {

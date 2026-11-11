@@ -47,6 +47,12 @@ struct OpenLunalyrSettingsIntent: AppIntent {
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { LunalyrCommand.dialogResult(.openSettings) }
 }
 
+struct ToggleFloatingLyricsIntent: AppIntent {
+    static let title: LocalizedStringResource = "Float Lyrics Over Apps"
+    static let description = IntentDescription("Moves the lyrics from the desktop to a window over every app, or back.")
+    @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { LunalyrCommand.dialogResult(.toggleFloating) }
+}
+
 extension LunalyrCommand {
     /// The note the command posted while it ran, else what it does: what a
     /// Shortcuts action says back.

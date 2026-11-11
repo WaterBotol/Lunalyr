@@ -21,6 +21,7 @@ struct NowPlayingView: View {
     @ObservedObject private var readingOptions = RomanizationOptions.shared
     @ObservedObject private var songOffsets = SongOffsets.shared
     @ObservedObject private var desktopOptions = DesktopOptions.shared
+    @ObservedObject private var floatingOptions = FloatingLyricsOptions.shared
     /// Published when an effect finishes compiling, so a crossfade into it
     /// can start.
     @ObservedObject private var effects = ShaderPipelineCache.shared
@@ -325,9 +326,19 @@ struct NowPlayingView: View {
             hasTrack: nowPlaying.current != nil, idleSince: nowPlaying.idleSince,
             isLoading: lyricsVM.isLoading, hasTimedLines: !lyricsVM.lines.isEmpty,
             hasPlainLines: !lyricsVM.plainLines.isEmpty, notFound: lyricsVM.notFound,
-            notFoundAt: lyricsVM.notFoundAt, noLyrics: settings.noLyrics, lyricsShown: extras.lyricsVisible),
+            notFoundAt: lyricsVM.notFoundAt, noLyrics: settings.noLyrics, lyricsShown: extras.lyricsVisible && drawsLyrics),
             at: date, timing: .init(idleHold: Self.idleHoldDuration, noticeHold: Self.noticeHoldDuration,
                                     noticeFade: Self.noticeFadeDuration))
+    }
+
+    /// Whether this surface draws the lyrics: not on the desktop while
+    /// they float over the apps (`LyricsSurface`).
+    private var drawsLyrics: Bool { Self.drawsLyrics(settingsPreview: isSettingsPreview, surface: floatingOptions.surface) }
+
+    /// The desktop draws the lyrics unless they float; the Settings preview
+    /// always does, to show the style being edited.
+    nonisolated static func drawsLyrics(settingsPreview: Bool, surface: LyricsSurface) -> Bool {
+        settingsPreview || surface == .desktop
     }
 
     private var prefersTallArtwork: Bool {
@@ -354,7 +365,7 @@ struct NowPlayingView: View {
         if lyricsVM.notFound, settings.noLyrics == .notice, let at = lyricsVM.notFoundAt {
             ends.append(at.addingTimeInterval(Self.noticeHoldDuration + Self.noticeFadeDuration))
         }
-        let lyricsAdvance = nowPlaying.current != nil && nowPlaying.isPlaying
+        let lyricsAdvance = drawsLyrics && nowPlaying.current != nil && nowPlaying.isPlaying
             && !lyricsVM.lines.isEmpty && lyricsVM.plainLines.isEmpty
         // An outgoing layer only needs the clock until its fade ends, which
         // is already one of the transition deadlines.
@@ -417,8 +428,13 @@ struct NowPlayingView: View {
                     }
                   }
                 } lyrics: {
+                  ZStack {
                     // The lyrics run on their own clock (see LyricStage), so
                     // this frame passes them by unless an input changed.
+                    // With Floating lyrics chosen they are drawn over the
+                    // apps instead, never here too (the Settings preview
+                    // still shows the style being edited).
+                    if drawsLyrics {
                     LyricStage(
                         size: geometry.size,
                         mood: mood,
@@ -438,11 +454,11 @@ struct NowPlayingView: View {
                     .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
                     // Under the player; clearer while its seek bar is dragged.
                     .modifier(PlayerHoverFocus(hovered: isHovered, displayID: effectDisplay))
-                    // Shortcut confirmations stay sharp over that blur.
-                    .overlay {
-                        WallpaperNoteLayer(size: geometry.size, mood: mood, interval: frameInterval)
-                            .equatable()
                     }
+                    // Shortcut confirmations stay sharp over that blur.
+                    WallpaperNoteLayer(size: geometry.size, mood: mood, interval: frameInterval)
+                        .equatable()
+                  }
                 }
                 // The words, copies and echoes on screen are decoration for
                 // assistive technology; the element below speaks for them.

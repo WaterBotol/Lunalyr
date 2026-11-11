@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppFont.preload()
         DesktopWallpaperController.shared.start()
         ControlPanelController.shared.start()
+        FloatingLyricsController.shared.start()
         AudioReactiveController.shared.resumeIfEnabled()
         LunalyrExtras.shared.start()
         MusicVideoController.shared.start()

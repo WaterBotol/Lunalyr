@@ -425,6 +425,45 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// Rereads every lyric-style preference (`LyricStyleProfiles.keys`)
+    /// after the floating and desktop styles swapped, with the same
+    /// fallbacks as at launch.
+    func reloadLyricStyle() {
+        let d = defaults
+        func set<T: Equatable>(_ path: ReferenceWritableKeyPath<Settings, T>, _ value: T) {
+            if self[keyPath: path] != value { self[keyPath: path] = value }
+        }
+        let savedComposition = d.string(forKey: "lyricComposition")
+        set(\.lyricComposition, savedComposition == "automatic" ? nil
+            : savedComposition.flatMap(LyricComposition.init(rawValue:)) ?? .constellationEditorial)
+        set(\.constellationSpread, d.object(forKey: "constellationSpread") as? Double ?? 1.0)
+        set(\.constellationLinkOpacity, d.object(forKey: "constellationLinkOpacity") as? Double ?? 0.20)
+        set(\.wordRevealByStyle, d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? [:])
+        set(\.wordArrivalByStyle, d.dictionary(forKey: "custom.wordArrivalByStyle") as? [String: String] ?? [:])
+        set(\.nextWordPreviewByStyle, d.dictionary(forKey: "custom.nextWordPreviewByStyle") as? [String: Bool] ?? [:])
+        set(\.nextWordPreviewLead, d.object(forKey: "custom.nextWordPreviewLead") as? Double ?? 0.45)
+        set(\.wordEntranceMix, d.stringArray(forKey: "custom.wordEntranceMix")
+            ?? [WordArrival.fade.rawValue, WordArrival.lift.rawValue, WordArrival.cutoutFold.rawValue])
+        set(\.echoStrength, d.object(forKey: "echoStrength") as? Double ?? 1.0)
+        set(\.lyricScale, d.object(forKey: "lyricScale") as? Double ?? 1.0)
+        set(\.showInterludes, d.object(forKey: "custom.showInterludes") as? Bool ?? true)
+        set(\.editorialTypography, d.bool(forKey: "custom.editorialTypography"))
+        set(\.editorialAmount, d.object(forKey: "custom.editorialAmount") as? Double ?? 1)
+        set(\.randomizeLyricFonts, d.bool(forKey: "custom.randomizeLyricFonts"))
+        let choice = FontChoice(rawValue: d.string(forKey: "fontChoice") ?? "") ?? .manrope
+        let family = d.string(forKey: "googleFontFamily") ?? ""
+        let fontChanged = choice != fontChoice || family != googleFontFamily
+        set(\.googleFontFamily, family)
+        set(\.fontChoice, choice)
+        guard fontChanged else { return }
+        googleFontLoadID = UUID()
+        // A Google or installed family loads as it does at launch; never
+        // inside the test host (see `init`).
+        if choice == .google, !family.isEmpty, !AppRuntime.isUnitTesting {
+            Task { await loadGoogleFont(family: family) }
+        }
+    }
+
     private func store(_ value: Any?, _ key: String) {
         if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
     }

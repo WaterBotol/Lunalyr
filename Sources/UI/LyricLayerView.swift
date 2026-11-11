@@ -46,6 +46,9 @@ struct LyricLayer: View {
     @StateObject private var cache = LyricLayerCache()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
+    /// What lies behind the text when it is not the wallpaper: the floating
+    /// lyrics' shaded backdrop (`FloatingBackdrop`).
+    @Environment(\.lyricBackdropOverride) private var backdropOverride
 
     /// How long the "no lyrics" notice stays up, and how long it takes to go.
     private static let noticeHoldDuration: TimeInterval = WallpaperMotion.noticeHold
@@ -129,7 +132,7 @@ struct LyricLayer: View {
         // The same backdrop the wallpaper's text backing is worked out for:
         // the picture's measured luminance, the album tint and scrim laid
         // over it, and that backing.
-        let backdrop = LyricBackdrop.luminance(mode: mode,
+        let backdrop = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
             motion: mode == .auto && settings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
             palette: palette, scrim: settings.scrimStrength, measured: measuredBackdrop,
             backing: DesktopOptions.shared.manualTextBacking,
@@ -1462,6 +1465,8 @@ struct LyricStage: View, Equatable {
     /// The display this stage is on: a drag on that display's seek bar
     /// previews its lyric here (`ScrubPreview`). Nil for previews elsewhere.
     var displayID: CGDirectDisplayID? = nil
+    /// The floating lyrics' text size; nil follows the screen's size.
+    var textSize: CGFloat? = nil
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
@@ -1472,11 +1477,11 @@ struct LyricStage: View, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.size == rhs.size && lhs.mood == rhs.mood && lhs.accent == rhs.accent && lhs.trackSeed == rhs.trackSeed
             && lhs.palette == rhs.palette && lhs.interval == rhs.interval && lhs.paused == rhs.paused
-            && lhs.backdrop == rhs.backdrop && lhs.displayID == rhs.displayID
+            && lhs.backdrop == rhs.backdrop && lhs.displayID == rhs.displayID && lhs.textSize == rhs.textSize
     }
 
     var body: some View {
-        let layout = LyricViewportMetrics(size: size)
+        let layout = LyricViewportMetrics(size: size, textSize: textSize)
         let previewed = scrubPreview.songTime(on: displayID)
         TimelineView(.animation(minimumInterval: previewed == nil ? pace.interval(full: interval) : interval,
                                 paused: paused || (pace.rests && previewed == nil))) { timeline in
@@ -1772,5 +1777,18 @@ private struct TranslationLine: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: width)
             .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+    }
+}
+
+/// The backdrop luminance the lyric colours are judged against, when the
+/// lyrics are not drawn over the wallpaper (the floating window).
+private struct LyricBackdropOverrideKey: EnvironmentKey {
+    static let defaultValue: Double? = nil
+}
+
+extension EnvironmentValues {
+    var lyricBackdropOverride: Double? {
+        get { self[LyricBackdropOverrideKey.self] }
+        set { self[LyricBackdropOverrideKey.self] = newValue }
     }
 }

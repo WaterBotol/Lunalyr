@@ -3,8 +3,14 @@ import SwiftUI
 /// Screen dimensions in logical points, shared by the wallpaper and preview.
 struct LyricViewportMetrics {
     let size: CGSize
-    var baseSize: CGFloat { min(124, max(24, min(size.width, size.height * 16 / 9) * 0.046)) }
-    var stageSize: CGSize { CGSize(width: size.width * 0.80, height: size.height * 0.72) }
+    /// A text size set outright (the floating lyrics' own), instead of one
+    /// following the screen; its stage then fills nearly the whole window.
+    var textSize: CGFloat? = nil
+    var baseSize: CGFloat { textSize ?? min(124, max(24, min(size.width, size.height * 16 / 9) * 0.046)) }
+    var stageSize: CGSize {
+        textSize == nil ? CGSize(width: size.width * 0.80, height: size.height * 0.72)
+            : CGSize(width: size.width * 0.94, height: size.height * 0.88)
+    }
 
     static func previewScale(desktop: CGSize, inside box: CGSize) -> CGFloat {
         guard desktop.width > 0, desktop.height > 0 else { return 0 }

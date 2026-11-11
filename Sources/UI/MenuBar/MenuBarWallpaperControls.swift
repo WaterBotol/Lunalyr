@@ -15,6 +15,8 @@ struct MenuBarWallpaperControls: View {
     @Model(\.nowPlaying) private var playing
     @Environment(\.lunalyrModels) private var models
     @ObservedObject private var musicVideo = MusicVideoController.shared
+    @ObservedObject private var floating = FloatingLyricsOptions.shared
+    @ObservedObject private var floatingState = FloatingLyricsController.shared.state
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -93,6 +95,13 @@ struct MenuBarWallpaperControls: View {
                 .accessibilityHint(extras.lyricsVisible ? "Hides the lyrics on every wallpaper"
                                    : extras.hiddenByMirroring ? "Shows the lyrics on every display until mirroring ends"
                                    : "Shows the lyrics again")
+                // Lyrics over the apps instead of on the desktop.
+                QuickToggle("Floating", symbol: "text.below.photo", isOn: floating.isFloating,
+                            accessibilityTitle: "Floating lyrics", state: "Lyrics floating over apps") {
+                    floating.toggleSurface()
+                }
+                .accessibilityHint(floating.isFloating ? "Puts the lyrics back on the desktop"
+                                   : "Shows the lyrics over every app instead of on the desktop")
                 QuickToggle("Lyric card", symbol: "photo.on.rectangle", detail: shortcut(.copyCard),
                             accessibilityTitle: LunalyrExtras.Titles.copyCard) { extras.copyLyricCard() }
                     .disabled(playing.current == nil)
@@ -100,6 +109,19 @@ struct MenuBarWallpaperControls: View {
                                        : "Copies a GIF of the cover and the selected lyrics")
             }
             .padding(.top, LunalyrDesign.Spacing.xSmall)
+            if floating.isFloating {
+                HStack(spacing: LunalyrDesign.Spacing.small) {
+                    Button(floatingState.editing ? "Done placing lyrics" : "Edit position…") {
+                        FloatingLyricsController.shared.toggleEditing()
+                    }
+                    .help(floatingState.editing ? "Locks the floating lyrics in place"
+                          : "Drag the floating lyrics to move them, or their corner to resize")
+                    Spacer(minLength: 0)
+                }
+                .buttonStyle(.link)
+                .controlSize(.small)
+                .transition(.opacity)
+            }
             if extras.wallpaperPaused {
                 InspectorCaption(Self.pausedNote)
                     .transition(.opacity)
@@ -108,6 +130,8 @@ struct MenuBarWallpaperControls: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
                    value: extras.wallpaperPaused)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: floating.isFloating)
     }
 
     static let pausedNote = "Paused: your desktop is frozen until you resume it."

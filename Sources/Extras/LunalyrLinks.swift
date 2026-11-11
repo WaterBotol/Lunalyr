@@ -3,7 +3,7 @@ import AppKit
 /// Something Lunalyr can be asked to do from outside: a `lunalyr://` link,
 /// a Shortcuts action or a global shortcut all end up here.
 enum LunalyrCommand: String, CaseIterable, Sendable {
-    case toggleLyrics, syncEarlier, syncLater, cycleLayout, lyricCard, pauseWallpaper, openSettings
+    case toggleLyrics, syncEarlier, syncLater, cycleLayout, lyricCard, pauseWallpaper, openSettings, toggleFloating
 
     /// Runs the command exactly as its menu item or global shortcut does.
     @MainActor
@@ -19,6 +19,7 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
             case .lyricCard: extras.copyLyricCard()
             case .pauseWallpaper: extras.toggleWallpaperPause()
             case .openSettings: LunalyrNavigation.shared.openSettings()
+            case .toggleFloating: FloatingLyricsOptions.shared.toggleSurface()
             }
         }
     }
@@ -34,6 +35,7 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
         case .lyricCard: return "Opening the lyric card"
         case .pauseWallpaper: return "Wallpaper paused or resumed"
         case .openSettings: return "Opening Lunalyr Settings"
+        case .toggleFloating: return "Lyrics moved between the desktop and floating"
         }
     }
 }
@@ -44,6 +46,7 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
 /// - `lunalyr://toggle`: show or hide the lyrics
 /// - `lunalyr://card`: a lyric card of the current line
 /// - `lunalyr://settings`: open Settings
+/// - `lunalyr://floating`: switch the lyrics between the desktop and floating
 ///
 /// A link can come from any web page or message, so anything else -- another
 /// scheme, extra path parts, a query, a user or port, a room that is not
@@ -69,9 +72,14 @@ enum LunalyrLink: Equatable, Sendable {
         case "join":
             guard parts.count == 1, ListenProtocol.isValidRoom(parts[0]) else { return nil }
             self = .join(room: parts[0])
-        case "toggle", "card", "settings":
+        case "toggle", "card", "settings", "floating":
             guard parts.isEmpty else { return nil }
-            self = .command(host == "toggle" ? .toggleLyrics : host == "card" ? .lyricCard : .openSettings)
+            switch host {
+            case "toggle": self = .command(.toggleLyrics)
+            case "card": self = .command(.lyricCard)
+            case "floating": self = .command(.toggleFloating)
+            default: self = .command(.openSettings)
+            }
         default:
             return nil
         }

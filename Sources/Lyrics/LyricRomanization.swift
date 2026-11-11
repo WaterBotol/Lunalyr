@@ -25,7 +25,8 @@ final class RomanizationOptions: ObservableObject {
         }
     }
     struct Snapshot { var display: Display; var language: Language; var toneMarks: Bool; var preferSaved: Bool }
-    @Published var display: Display { didSet { UserDefaults.standard.set(display.rawValue, forKey: "custom.romanizationDisplay") } }
+    static let displayKey = "custom.romanizationDisplay"
+    @Published var display: Display { didSet { UserDefaults.standard.set(display.rawValue, forKey: Self.displayKey) } }
     @Published var language: Language { didSet { UserDefaults.standard.set(language.rawValue, forKey: "custom.romanizationLanguage") } }
     @Published var toneMarks: Bool { didSet { UserDefaults.standard.set(toneMarks, forKey: "custom.romanizationTones") } }
     @Published var preferSaved: Bool { didSet { UserDefaults.standard.set(preferSaved, forKey: "custom.romanizationSaved") } }
@@ -36,6 +37,12 @@ final class RomanizationOptions: ObservableObject {
         language = Language(rawValue: d.string(forKey: "custom.romanizationLanguage") ?? "") ?? .automatic
         toneMarks = d.object(forKey: "custom.romanizationTones") as? Bool ?? true
         preferSaved = d.object(forKey: "custom.romanizationSaved") as? Bool ?? true
+    }
+    /// Rereads how readings are shown, part of a lyric style
+    /// (`LyricStyleProfiles`).
+    func reloadDisplay() {
+        let saved = Display(rawValue: UserDefaults.standard.string(forKey: Self.displayKey) ?? "") ?? .below
+        if display != saved { display = saved }
     }
 }
 

@@ -13,6 +13,7 @@ struct ReadingsPage: View {
     var body: some View {
         ThemedForm {
             ThemedSection("Romanisation") {
+                LyricStyleEditingNote()
                 ChoiceSegments("Display", selection: $o.display,
                                cases: Array(RomanizationOptions.Display.allCases), label: \.title)
                 ChoiceMenu("Language", selection: $o.language, selectedTitle: \.title) {
