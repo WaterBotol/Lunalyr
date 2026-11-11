@@ -43,6 +43,15 @@ final class LyricColourOptions: ObservableObject {
         customColours = customHex.compactMap(Self.oklab(hex:))
     }
 
+    /// Rereads the stored colours, after a lyric style swap (`LyricStyleProfiles`).
+    func reload() {
+        let fresh = LyricColourOptions(defaults: defaults)
+        if mode != fresh.mode { mode = fresh.mode }
+        if speed != fresh.speed { speed = fresh.speed }
+        if strength != fresh.strength { strength = fresh.strength }
+        if customHex != fresh.customHex { customHex = fresh.customHex }
+    }
+
     nonisolated static func clampedStrength(_ value: Double) -> Double {
         value.isFinite ? min(strengthRange.upperBound, max(strengthRange.lowerBound, value)) : 1
     }

@@ -24,7 +24,9 @@ final class DesktopWallpaperController {
         surfaces.compactMapValues { $0.window.windowServerID }
     }
     /// Last album palette, available to desktop companion views.
-    var currentPalette: [SIMD3<Double>] = ColorExtractor.fallbackHSBPalette
+    var currentPalette: [SIMD3<Double>] = ColorExtractor.fallbackHSBPalette {
+        didSet { if FloatingLyricsPalette.shared.grid != currentPalette { FloatingLyricsPalette.shared.grid = currentPalette } }
+    }
 
     func start() {
         guard screenObserver == nil else { return }

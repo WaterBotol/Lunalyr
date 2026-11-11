@@ -73,6 +73,13 @@ final class LyricHighlightOptions: ObservableObject {
         customColour = Self.oklab(hex: saved ?? Self.defaultCustom) ?? Self.fallback
     }
 
+    /// Rereads the stored highlight, after a lyric style swap (`LyricStyleProfiles`).
+    func reload() {
+        let fresh = LyricHighlightOptions(defaults: defaults)
+        if mode != fresh.mode { mode = fresh.mode }
+        if customHex != fresh.customHex { customHex = fresh.customHex }
+    }
+
     func setCustom(_ colour: Color) {
         guard let hex = Self.hex(colour) else { return }
         customHex = hex
