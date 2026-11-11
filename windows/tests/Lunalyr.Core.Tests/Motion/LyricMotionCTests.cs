@@ -38,14 +38,14 @@ public class LyricMotionCTests
             Assert.Equal(0, RollingMotion.Pose(style, 5, 1, 10, 197, .6, false).Opacity); // retires before a stage edge
             var a = RollingMotion.Pose(style, 0, .5, 3, 197, 0, false);
             var b = RollingMotion.Pose(style, 0, .5, 3, 197, 1, false);
-            Assert.True(b.Scale > a.Scale); // actual energy affects the active word
-            Assert.Equal(b, RollingMotion.Pose(style, 0, .5, 3, 197, 1, false)); // independent of frame history
-            Assert.Equal(0, RollingMotion.Pose(style, 1, 5, .4, 197, 1, false).Opacity); // no stale words during a long gap
+            Assert.True(b.Scale > a.Scale); // louder music swells the word being sung
+            Assert.Equal(b, RollingMotion.Pose(style, 0, .5, 3, 197, 1, false)); // the same inputs give the same pose, whatever came before
+            Assert.Equal(0, RollingMotion.Pose(style, 1, 5, .4, 197, 1, false).Opacity); // a word long finished has gone
             var reduced = RollingMotion.Pose(style, 0, .5, 3, 197, 1, true);
             Assert.True(reduced.Angle == 0 && reduced.Blur == 0);
             var hero = RollingMotion.Pose(style, 0, .2, .4, 197, 0, true);
             var neighbour = RollingMotion.Pose(style, 1, .2, .4, 197, 0, true);
-            Assert.True(hero.Y - neighbour.Y > 1.2); // two large words have clearance
+            Assert.True(hero.Y - neighbour.Y > 1.2); // rank 0 and rank 1 sit more than a type size apart
             for (var i = 0; i < 900; i++)
             {
                 var r = -1 + i * .01;

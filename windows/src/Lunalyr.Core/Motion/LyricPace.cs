@@ -181,7 +181,8 @@ public sealed class LyricPace(TimeProvider time)
 
 /// <summary>
 /// How present the lyrics are while they are shown or hidden. Each change starts from the current presence, so
-/// toggling mid-fade reverses smoothly instead of jumping to the far end first. A mutable struct: keep it in a field.
+/// toggling mid-fade reverses smoothly instead of jumping to the far end first. A mutable struct: keep it in a field,
+/// initialised with a constructor (a field left at <c>default</c> reads as hidden).
 /// </summary>
 public struct LyricVisibility
 {

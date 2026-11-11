@@ -52,7 +52,7 @@ public static class LyricGapTiming
                     end = Math.Max(end, word.End);
                 }
             }
-            // Estimated words do not supply an authoritative vocal end; the text's own estimate may shorten it.
+            // The spread words were only guessed, so their last end says nothing; the text's own estimate may shorten the line.
             else if (inferringPauses && line.EndFromNextLine == true && EndsAtNextLine(lines, index)
                      && EstimatedVocalEnd(line, pace) is { } sung)
             {

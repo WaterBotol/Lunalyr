@@ -5,7 +5,7 @@ namespace Lunalyr.Core.Motion;
 /// <summary>A damped spring: natural angular frequency (rad/s) and damping ratio.</summary>
 public readonly record struct Spring(double Omega, double Zeta);
 
-/// <summary>A word's pose. Coordinates are in lyric point-size units, independent of screen pixels; angle in degrees.</summary>
+/// <summary>A word's pose. X and Y are measured in multiples of the lyric type size (so the same at any display resolution); angle in degrees.</summary>
 public readonly record struct WordPose(double X, double Y, double Scale, double Angle, double Opacity, double Blur)
 {
     /// <summary>Exact rest: no offset, scale 1, fully opaque, no blur.</summary>

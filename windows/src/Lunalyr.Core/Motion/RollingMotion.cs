@@ -5,11 +5,11 @@ namespace Lunalyr.Core.Motion;
 /// <summary>The three rolling (word-at-a-time) arrangements.</summary>
 public enum RollingStyle
 {
-    /// <summary>A hero word, then a loose fan of receding fragments.</summary>
+    /// <summary>The sung word large, older words smaller and spread out sideways behind it.</summary>
     Fan = 0,
-    /// <summary>An uneven, flowing column: differences in type do the emphasis.</summary>
+    /// <summary>Words stacked in a gently wavering column, nearly all one size.</summary>
     Column = 1,
-    /// <summary>Labels travelling into a loose collage.</summary>
+    /// <summary>Words scattered left and right with stronger tilts, like pinned-up labels.</summary>
     Collage = 2,
 }
 

@@ -14,6 +14,38 @@ public class LyricGapTimingTests
 
     private static double NoSimilarity(string a, string b) => 0;
 
+    // Ported from LyricGapTimingTests.swift: testMixedTimingDropsEarlyWholePhraseCopiesBeforePlayback
+    // The six lines are built as the Mac's enhanced-LRC parser gives them (assumed: a word-timed row ends with its last
+    // word); the step under test is LyricLineIndex.RemovingMixedTimingCopies, which the Mac's presentation applies.
+    [Fact]
+    public void MixedTimingDropsEarlyWholePhraseCopiesBeforePlayback()
+    {
+        List<LyricLine> lines =
+        [
+            Make("The opening line", 1, 4) with { EndFromNextLine = true },
+            Make("Hold the light!", 4, 4.36) with { EndFromNextLine = true },
+            WordTimed(4.36, 5.8, "Hold the light", new LyricWord("Hold", 4.36, 4.7), new LyricWord("the", 4.7, 5.1),
+                      new LyricWord("light", 5.1, 5.8)),
+            Make("A line with only phrase timing", 7, 10) with { EndFromNextLine = true },
+            Make("Stay with me", 10, 10.51) with { EndFromNextLine = true },
+            WordTimed(10.51, 12, "Stay with me (oh)", new LyricWord("Stay", 10.51, 10.8), new LyricWord("with", 10.8, 11.15),
+                      new LyricWord("me", 11.15, 11.55), new LyricWord("(oh)", 11.55, 12)),
+        ];
+        Assert.Equal(6, lines.Count);
+        var shown = LyricLineIndex.RemovingMixedTimingCopies(lines, Normalize, NoSimilarity);
+        Assert.Equal(["The opening line", "Hold the light", "A line with only phrase timing", "Stay with me (oh)"], shown.Select(l => l.Text));
+        Assert.Equal([1, 4.36, 7, 10.51], shown.Select(l => l.Start));
+        Assert.Equal([false, true, false, true], shown.Select(l => l.WordTimed));
+        Assert.Equal(4.36, shown[0].End, 0.001);
+        Assert.Equal(4.36, shown[1].Words[0].Start);
+        var timeline = new LyricLineIndex(shown);
+        Assert.Equal(0, timeline.LineAt(4.2));
+        Assert.Equal(2, timeline.LineAt(10.2));
+        // The line before a dropped copy now runs on to the next kept line, its estimated words spread again.
+        Assert.Equal(10.51, shown[2].End, 0.001);
+        Assert.Equal(EstimatedWords.Distribute("The opening line", 1, 4.36), shown[0].Words);
+    }
+
     // Ported from LyricGapTimingTests.swift: testGenuinelyRepeatedLinesWithSeparateWindowsArePreserved
     [Fact]
     public void GenuinelyRepeatedLinesWithSeparateWindowsArePreserved()

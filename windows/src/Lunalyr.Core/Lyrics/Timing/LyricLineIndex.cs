@@ -9,14 +9,14 @@ public delegate string LyricNormalizer(string text);
 public delegate double LyricSimilarity(string a, string b);
 
 /// <summary>
-/// Finds the line being sung at a time. Prepared once for a lyric result (the starts are copied into an array);
+/// Finds the line being sung at a time. Build one per lyric result (it copies the starts into an array);
 /// <see cref="LineAt"/> is a binary search and allocation-free, so it can run every frame.
 /// </summary>
 /// <remarks>
 /// The search is re-implemented from a description of the Mac's behaviour (its lines trace back to the squashed
 /// import commit): the active line is the last one whose start is at or before the time; none before the first start.
 /// When the starts are not all finite and in order (a malformed import), the lines are scanned from the top and the
-/// scan stops at the first start after the time, as the original forward scan did.
+/// scan stops at the first start after the time, which is what the Mac did before it had a binary search.
 /// The rest of this type (held lines, mixed-timing copies) is Lunalyr's own and ported as is.
 /// </remarks>
 public sealed class LyricLineIndex

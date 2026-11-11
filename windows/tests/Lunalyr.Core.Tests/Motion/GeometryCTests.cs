@@ -13,7 +13,7 @@ public class GeometryCTests
     private static bool Inside(Box b, double x, double y) =>
         x > b.X + 1e-6 && x < b.X + b.Width - 1e-6 && y > b.Y + 1e-6 && y < b.Y + b.Height - 1e-6;
 
-    // Ported from geometry_test.c: every rotated/growing ink corner fits the fixed graph anchor
+    // Ported from geometry_test.c: the envelope holds every corner at every scale and turn up to its peak
     [Fact]
     public void EveryRotatedGrowingCornerFitsTheEnvelope()
     {
@@ -37,7 +37,7 @@ public class GeometryCTests
         Assert.Equal(0, ConstellationGeometry.WordEnvelope(double.NaN, 42, 1.2, 10).Width);
     }
 
-    // Ported from geometry_test.c: arrival is monotonic during playback and recomputes correctly on seek; preview
+    // Ported from geometry_test.c: word reveal (rises steadily, the same after a seek), preview and settle
     [Fact]
     public void RevealVisibilityAndSettle()
     {
@@ -51,16 +51,16 @@ public class GeometryCTests
         Assert.Equal(0, WordReveal.Reveal(.9, 1, 2));
         Assert.True(WordReveal.Reveal(1.1, 1, 2) > 0 && WordReveal.Reveal(1.1, 1, 2) < 1);
         Assert.Equal(1, WordReveal.Reveal(3, 1, 2));
-        Assert.Equal(0, WordReveal.Reveal(.5, 1, 2)); // backwards seek
+        Assert.Equal(0, WordReveal.Reveal(.5, 1, 2)); // earlier than the start again: back to 0
         Assert.Equal(0, WordReveal.Reveal(double.NaN, 1, 2));
         Assert.Equal(0, WordReveal.Visibility(.5, 1, 2, true, true, .5));
         Assert.True(Math.Abs(WordReveal.Visibility(.75, 1, 2, true, true, .5) - .125) < 1e-8);
         Assert.Equal(0, WordReveal.Visibility(.5, 1, 2, true, false, .5));
         Assert.Equal(0, WordReveal.Visibility(.5, 1, 2, false, true, .5));
-        Assert.Equal(.25, WordReveal.Visibility(1, 1, 2, true, false, .5)); // no blink at preview handoff
+        Assert.Equal(.25, WordReveal.Visibility(1, 1, 2, true, false, .5)); // the preview's quarter carries straight on at the onset
         Assert.True(WordReveal.Visibility(1.1, 1, 2, true, false, .5) > .25);
         Assert.Equal(1, WordReveal.Visibility(3, 1, 2, true, false, .5));
-        Assert.Equal(0, WordReveal.Visibility(.5, 1, 2, true, false, .5)); // backwards seek
+        Assert.Equal(0, WordReveal.Visibility(.5, 1, 2, true, false, .5)); // before the start again
         for (var i = 0; i <= 100; i++)
         {
             var settle = WordReveal.Settle(i / 100.0);
@@ -92,10 +92,10 @@ public class GeometryCTests
     [Fact]
     public void EstimatedLineEnds()
     {
-        Assert.Equal(14, EstimatedWords.EstimatedLineEnd(10, 14, 4, .45)); // normal verse
-        Assert.True(EstimatedWords.EstimatedLineEnd(10, 50, 4, .45) < 17); // long instrumental
-        Assert.Equal(30, EstimatedWords.EstimatedLineEnd(10, 30, 20, .50)); // a full long line
-        Assert.True(EstimatedWords.EstimatedLineEnd(10, 90, 4, double.NaN) < 17); // safe default
+        Assert.Equal(14, EstimatedWords.EstimatedLineEnd(10, 14, 4, .45)); // a short window is left alone
+        Assert.True(EstimatedWords.EstimatedLineEnd(10, 50, 4, .45) < 17); // a 40 s window for four words is cut
+        Assert.Equal(30, EstimatedWords.EstimatedLineEnd(10, 30, 20, .50)); // twenty words fill twenty seconds
+        Assert.True(EstimatedWords.EstimatedLineEnd(10, 90, 4, double.NaN) < 17); // an unknown pace falls back to the default
     }
 
     private static readonly Box View = new(0, 0, 1200, 700);
@@ -150,7 +150,7 @@ public class GeometryCTests
                 }
             }
         }
-        // A word growing to its peak stays clear of every existing connection.
+        // Enlarge one box by 10%: no link may cross any box afterwards.
         words[3] = words[3] with { Width = words[3].Width * 1.10, Height = words[3].Height * 1.10 };
         n = ConstellationGeometry.BuildConnections(words, View, 8, links);
         Assert.True(n <= 5);
@@ -163,7 +163,7 @@ public class GeometryCTests
         }
     }
 
-    // Ported from geometry_test.c: lighting/arrival redraws reuse geometry; only layout changes rebuild it
+    // Ported from geometry_test.c: the connection cache (a frame with the same layout reuses the links)
     [Fact]
     public void ConnectionCacheReusesGeometry()
     {
@@ -198,7 +198,7 @@ public class GeometryCTests
         var empty = new ConnectionCache();
         Box[] overlap = [new(20, 30, 150, 80), new(70, 50, 100, 80)];
         for (var frame = 0; frame < 10; frame++) Assert.Equal(0, empty.Connections(overlap, View, 6, cached));
-        Assert.Equal(1, empty.Builds); // Empty results are cached too.
+        Assert.Equal(1, empty.Builds); // a build that found no links is remembered as well
         Assert.Equal(0, memo.Connections(new Box[65], View, 8, cached));
         Assert.Equal(0, memo.Connections(words, View, 8, Span<Segment>.Empty));
     }

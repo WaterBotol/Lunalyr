@@ -11,7 +11,7 @@ namespace Lunalyr.Core.Lyrics.Timing;
 /// paces of 0.18–1.2 s a word; 0.45 s a word when there are none.</item>
 /// <item>Every line's <see cref="LyricLine.EndFromNextLine"/> is cleared: QQ's own pacing has now judged every end, so
 /// the generic pause inference (<see cref="LyricGapTiming"/>) leaves these lines alone.</item>
-/// <item>A word-timed line keeps its supplied word ends (a genuinely long held note included); only when the line
+/// <item>A word-timed line keeps its supplied word ends (however long its last note); only when the line
 /// runs on more than 2 s past its last word does it end 0.3 s after that word. A line-timed line ends at
 /// <see cref="EstimatedWords.EstimatedLineEnd"/> for its word count at the song's pace, with its estimated words spread
 /// again over the shorter window.</item>
@@ -68,7 +68,7 @@ public static class QQGapRepair
         return paces[paces.Count / 2];
     }
 
-    // A supplied word end is authoritative; the line is only cut when it runs on well past its last word.
+    // The source timed the words itself, so they stay; only a line running on more than 2 s past its last word is cut.
     private static double WordTimedEnd(LyricLine line)
     {
         var lastWord = double.NegativeInfinity;

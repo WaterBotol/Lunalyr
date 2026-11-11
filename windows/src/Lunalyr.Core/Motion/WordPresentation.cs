@@ -88,7 +88,11 @@ public readonly record struct WordPresentation(double Progress, double Arrival, 
 /// <param name="RevealsWords">Words arrive one by one as they are sung (otherwise the line is shown whole).</param>
 /// <param name="PreviewsNextWord">The next word shows faintly just before it is sung.</param>
 /// <param name="PreviewLead">How many seconds ahead the preview begins (Settings "Preview lead", 0.15–1.25; 0.45 by default).</param>
-public readonly record struct WordRevealOptions(bool RevealsWords = true, bool PreviewsNextWord = true, double PreviewLead = 0.45);
+public readonly record struct WordRevealOptions(bool RevealsWords = true, bool PreviewsNextWord = true, double PreviewLead = 0.45)
+{
+    /// <summary>Words revealed one by one, with the next-word preview 0.45 s ahead (the Mac's defaults).</summary>
+    public WordRevealOptions() : this(true, true, 0.45) { }
+}
 
 /// <summary>Which words the next-word preview may show.</summary>
 public static class PreviewWords
