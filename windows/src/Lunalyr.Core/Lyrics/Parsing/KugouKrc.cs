@@ -45,6 +45,20 @@ public static partial class KugouKrc
         }
     }
 
+    /// <summary>Encrypts KRC text the way Kugou serves it (for tests and fixtures).</summary>
+    public static byte[] Encode(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        using var packed = new MemoryStream();
+        using (var zlib = new ZLibStream(packed, CompressionLevel.Optimal, leaveOpen: true))
+        {
+            zlib.Write(Encoding.UTF8.GetBytes(text));
+        }
+        var bytes = packed.ToArray();
+        for (var index = 0; index < bytes.Length; index++) bytes[index] ^= Key[index % Key.Length];
+        return [.. "krc1"u8, .. bytes];
+    }
+
     public static string? EnhancedLrc(ReadOnlySpan<byte> data) => Decode(data) is { } text ? EnhancedLrcFromText(text) : null;
 
     [GeneratedRegex(@"^\[([0-9]+),([0-9]+)\]", RegexOptions.CultureInvariant)]

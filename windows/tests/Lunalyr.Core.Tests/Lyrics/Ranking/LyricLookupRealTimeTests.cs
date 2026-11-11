@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.Lyrics.Pipeline;
 using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.Lyrics.Storage;
 using static Lunalyr.Core.Lyrics.LyricSourceId;
 
@@ -96,14 +98,14 @@ public sealed class LyricLookupRealTimeTests : IDisposable
         Assert.Equal(LyricsPlus, new SavedLyrics(_folder.Path).ReadCandidate(LyricLookup.CacheKey(_query, options))?.Source);
     }
 
-    private sealed class BlockingSource(LyricSourceId id, TimeSpan block, LyricCandidate? answer) : ILyricSource
+    private sealed class BlockingSource(LyricSourceId id, TimeSpan block, RawLyrics? answer) : ILyricSource
     {
         public LyricSourceId Id => id;
 
-        public ValueTask<LyricCandidate?> FetchAsync(LyricQuery query, string localFolder, CancellationToken cancellationToken)
+        public Task<RawLyrics?> FetchAsync(LyricQuery query, CancellationToken ct)
         {
             Thread.Sleep(block); // A provider that blocks before its first await, like a slow file read.
-            return ValueTask.FromResult(answer);
+            return Task.FromResult(answer);
         }
     }
 
@@ -112,7 +114,8 @@ public sealed class LyricLookupRealTimeTests : IDisposable
     {
         var sources = new LyricSourceSet([
             new BlockingSource(NetEase, TimeSpan.FromMilliseconds(600), null),
-            new BlockingSource(Lrclib, TimeSpan.Zero, Candidate(Lrclib, false)),
+            new BlockingSource(Lrclib, TimeSpan.Zero,
+                new RawLyrics(Lrclib, LyricFormat.Lrc, "[00:01.00]Sing along\n[00:03.00]Next line", "Our Song", "Our Artist", 180)),
         ]);
         var lookup = Create(sources.Fetch);
         var clock = Stopwatch.StartNew();

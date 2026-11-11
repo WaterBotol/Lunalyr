@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 
+using Lunalyr.Core.Lyrics.Ranking;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>Settings for <see cref="QQMusicSource"/>.</summary>
@@ -20,7 +22,7 @@ public sealed class QQMusicSource(LyricHttpClient http, QQMusicOptions? options 
 {
     private const string Service = "QQ Music";
     private readonly QQMusicOptions _options = options ?? new QQMusicOptions();
-    private readonly ILyricPayloadProbe _probe = probe ?? BasicLyricPayloadProbe.Instance;
+    private readonly ILyricPayloadProbe _probe = probe ?? ParsedLyricPayloadProbe.Instance;
 
     public LyricSourceId Id => LyricSourceId.QQMusic;
 
@@ -36,7 +38,7 @@ public sealed class QQMusicSource(LyricHttpClient http, QQMusicOptions? options 
             hits = [.. search.RootElement.Get("data").Get("song").Get("list").Items()
                 .Select(song => Hit.From(song, query)).OfType<Hit>().Where(h => h.Score > 0)];
         }
-        var ordered = SourceMatching.Ordered(hits, LyricSourceId.QQMusic, query, h => (h.Title, h.Artist, h.Duration, h.Score));
+        var ordered = SourceHits.Ordered(hits, LyricSourceId.QQMusic, query, h => (h.Title, h.Artist, h.Duration, h.Score));
         foreach (var hit in ordered.Take(_options.SongsTried))
         {
             ct.ThrowIfCancellationRequested();
@@ -99,7 +101,7 @@ public sealed class QQMusicSource(LyricHttpClient http, QQMusicOptions? options 
             var singers = string.Join(" & ", song.Items("singer").Select(s => s.Str("name")).OfType<string>());
             var duration = song.Num("interval");
             var mid = song.Str("songmid") is { Length: > 0 } value ? value : null;
-            return new Hit(mid, title, singers, duration, SourceMatching.HitScore(query, title, singers, duration));
+            return new Hit(mid, title, singers, duration, LyricMatchScore.HitScore(query, title, singers, duration));
         }
     }
 }

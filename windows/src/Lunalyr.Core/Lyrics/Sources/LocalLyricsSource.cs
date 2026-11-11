@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 
 namespace Lunalyr.Core.Lyrics.Sources;
 
@@ -15,26 +17,35 @@ namespace Lunalyr.Core.Lyrics.Sources;
 /// <see cref="RawLyricsExtras.RomanizationLrc"/> and <see cref="RawLyricsExtras.TranslationLrc"/>. Merging a partial
 /// word-timed sidecar into the LRC's lines is the parser's job.
 /// </remarks>
-public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? probe = null) : ILyricSource
+public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? probe = null) : IFolderLyricSource
 {
     private const int MaxEntries = 30_000;
     private const int MaxFilesRead = 150;
     private const long MaxFileBytes = 2_000_000;
-    private readonly ILyricPayloadProbe _probe = probe ?? BasicLyricPayloadProbe.Instance;
+    private readonly ILyricPayloadProbe _probe = probe ?? ParsedLyricPayloadProbe.Instance;
 
     public LocalLyricsSource(string folder, ILyricPayloadProbe? probe = null)
         : this(() => folder, probe)
     {
     }
 
+    /// <summary>A source with no folder of its own: each lookup names the folder (<see cref="IFolderLyricSource"/>).</summary>
+    public LocalLyricsSource(ILyricPayloadProbe? probe = null)
+        : this(() => null, probe)
+    {
+    }
+
     public LyricSourceId Id => LyricSourceId.Lyrimuse;
 
-    public Task<RawLyrics?> FetchAsync(LyricQuery query, CancellationToken ct)
+    public Task<RawLyrics?> FetchAsync(LyricQuery query, CancellationToken ct) => FetchAsync(query, folder(), ct);
+
+    public Task<RawLyrics?> FetchAsync(LyricQuery query, string? folder, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var path = folder();
-        return Task.Run(() => Find(query, path, ct), ct);
+        return Task.Run(() => Find(query, folder, ct), ct);
     }
+
+    string IFolderLyricSource.Fingerprint(LyricQuery query, string? folder) => Fingerprint(query, folder);
 
     private RawLyrics? Find(LyricQuery query, string? path, CancellationToken ct)
     {
@@ -62,7 +73,7 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
                         && MayBelong(f.Name, query))
             .OrderBy(f => f.Name, StringComparer.Ordinal)
             .Take(MaxFilesRead);
-        var hasArtist = SourceMatching.HasArtist(query);
+        var hasArtist = query.HasArtist;
         RawLyrics? best = null;
         var bestScore = double.NegativeInfinity;
         foreach (var file in files)
@@ -78,22 +89,23 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
             {
                 continue;
             }
-            var titleMatch = SourceMatching.Similarity(query.Title, title);
-            var artistMatch = SourceMatching.ArtistScore(query, artist ?? "");
+            var titleMatch = LyricQuery.Similarity(query.Title, title);
+            var artistMatch = query.ArtistScore(artist ?? "");
             if (titleMatch < 0.92 || artistMatch < (hasArtist ? 0.85 : 0))
             {
                 continue;
             }
             var length = Length(LrcText.Tag("length", text));
             var album = LrcText.Tag("al", text);
-            if (!string.IsNullOrEmpty(query.Album) && album is not null && SourceMatching.Similarity(query.Album, album) < 0.80)
+            if (!string.IsNullOrEmpty(query.Album) && album is not null && LyricQuery.Similarity(query.Album, album) < 0.80)
             {
                 continue;
             }
             var stem = file.FullName[..^file.Extension.Length];
             var ttml = Read(stem + ".ttml");
             var yrc = ttml is null ? Read(stem + ".yrc") : null;
-            var timed = _probe.IsUsable(LyricFormat.Lrc, text);
+            var lines = LrcParser.Parse(text, query.Duration);
+            var timed = lines.Any(line => !line.IsInstrumental);
             var sidecar = (ttml is not null && LrcText.TtmlHasTimedSpans(ttml) && _probe.IsUsable(LyricFormat.Ttml, ttml))
                           || (yrc is not null && _probe.IsUsable(LyricFormat.Yrc, yrc));
             if (!timed && !sidecar)
@@ -101,14 +113,14 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
                 continue;
             }
             // Lyrics running well past the playing track are another recording's.
-            if (query.Duration > 0 && (LrcText.LastLineStart(text) ?? 0) > query.Duration + 8)
+            if (query.Duration > 0 && lines.Count > 0 && lines[^1].Start > query.Duration + 8)
             {
                 continue;
             }
-            var native = LrcText.HasWordStamps(text) || sidecar;
-            var albumMatches = album is not null && SourceMatching.Normalize(album) == SourceMatching.Normalize(query.Album ?? "");
-            var score = SourceMatching.MatchScore(titleMatch, artistMatch, length is double l ? Math.Abs(l - query.Duration) : 0,
-                length is not null && query.Duration > 0, native, lineTimed: true, albumMatches) + 32;
+            var native = lines.Any(line => line.WordTimed) || sidecar;
+            var albumMatches = album is not null && LyricQuery.Normalize(album) == LyricQuery.Normalize(query.Album ?? "");
+            var score = LyricMatchScore.Score(titleMatch, artistMatch, length is double l ? Math.Abs(l - query.Duration) : 0,
+                length is not null && query.Duration > 0, native, lineTimed: true, albumMatches) + LyricMatchScore.LocalFileBonus;
             if (best is not null && score <= bestScore)
             {
                 continue;
@@ -196,11 +208,11 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
     {
         ArgumentNullException.ThrowIfNull(query);
         var name = Path.GetFileNameWithoutExtension(fileName);
-        var core = SourceMatching.Core(query.Title);
-        var key = core.Length == 0 ? SourceMatching.Normalize(query.Title) : core;
+        var core = LyricQuery.Core(query.Title);
+        var key = core.Length == 0 ? LyricQuery.Normalize(query.Title) : core;
         if (key.Length > 0)
         {
-            return SourceMatching.Normalize(name).Contains(key, StringComparison.Ordinal);
+            return LyricQuery.Normalize(name).Contains(key, StringComparison.Ordinal);
         }
         // Titles made only of symbols match as written.
         var raw = query.Title.Trim();
@@ -264,7 +276,7 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
                 return null;
             }
             var bytes = File.ReadAllBytes(path);
-            return bytes.Length > MaxFileBytes ? null : LyricFileDecoder.Decode(bytes);
+            return bytes.Length > MaxFileBytes ? null : LyricTextDecoder.Decode(bytes);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

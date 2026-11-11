@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Lunalyr.Core.Logging;
+using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.Lyrics.Storage;
 
 namespace Lunalyr.Core.Lyrics.Ranking;
@@ -70,6 +71,7 @@ public sealed class LyricLookup
     private readonly TimeProvider _time;
     private readonly Func<LyricQuery, string, string?>? _localFingerprint;
     private readonly CategoryLogger _log;
+    private readonly Func<LyricSourceId, string?>? _unavailable;
 
     /// <param name="saved">Saved choices and the automatic cache.</param>
     /// <param name="fetch">Asks one source for its best match.</param>
@@ -82,10 +84,16 @@ public sealed class LyricLookup
     /// <see cref="RefreshLocalAsync"/> knows when they changed. Null when there is no local source.
     /// </param>
     /// <param name="logger">Where lookup summaries go.</param>
+    /// <param name="unavailable">
+    /// Why a source cannot be asked on this PC (Apple Music on Windows), or null when it can. An enabled source that is
+    /// unavailable is never asked; every report lists it with this reason as its state, so it is not hidden.
+    /// </param>
     public LyricLookup(SavedLyrics saved, LyricSourceFetch fetch, ILyricConnectivity? connectivity = null,
         LyricLookupTiming? timing = null, LyricMissCache? misses = null, TimeProvider? timeProvider = null,
-        Func<LyricQuery, string, string?>? localFingerprint = null, Logger? logger = null)
+        Func<LyricQuery, string, string?>? localFingerprint = null, Logger? logger = null,
+        Func<LyricSourceId, string?>? unavailable = null)
     {
+        _unavailable = unavailable;
         _saved = saved;
         _fetch = fetch;
         _connectivity = connectivity;
@@ -117,21 +125,30 @@ public sealed class LyricLookup
     {
         cancellationToken.ThrowIfCancellationRequested();
         var key = CacheKey(query, options);
+        // Sources this PC cannot ask are listed with the reason, never asked.
+        var blocked = new Dictionary<LyricSourceId, string>();
+        foreach (var id in options.Enabled)
+        {
+            if (_unavailable?.Invoke(id) is { } reason)
+            {
+                blocked[id] = reason;
+            }
+        }
         var pinned = _saved.Read(query.RecordingKey, pin: true);
         if (!force && pinned is not null)
         {
-            return new LyricLookupReport { Result = pinned, Pinned = true, Cached = true, Revision = 1 };
+            return new LyricLookupReport { Result = pinned, Pinned = true, Cached = true, Revision = 1, States = blocked };
         }
         // Station names make junk matches, and a stream's clock is not the song's.
         if (!force && query.Duration <= 0)
         {
-            return new LyricLookupReport { SkippedStream = true };
+            return new LyricLookupReport { SkippedStream = true, States = blocked };
         }
-        var local = options.Enabled.Where(LyricSourceInfo.IsLocal).ToList();
-        var online = options.Enabled.Where(s => !s.IsLocal()).ToList();
+        var local = options.Enabled.Where(id => id.IsLocal() && !blocked.ContainsKey(id)).ToList();
+        var online = options.Enabled.Where(id => !id.IsLocal() && !blocked.ContainsKey(id)).ToList();
         LyricCandidate? saved = null;
         var seeded = new List<LyricCandidate>();
-        var states = new Dictionary<LyricSourceId, string>();
+        var states = new Dictionary<LyricSourceId, string>(blocked);
         if (!force && online.Count > 0)
         {
             if (_saved.ReadCandidate(key) is { } candidate && online.Contains(candidate.Source))

@@ -1,5 +1,6 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Sources;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -43,10 +44,10 @@ public class LyricParserTests
     [Fact]
     public void ALyricsfileFallsBackToItsLrcThenItsPlainText()
     {
-        var extras = new Dictionary<string, string> { [LyricExtraKeys.Lrc] = "[00:01]From the LRC", [LyricExtraKeys.Plain] = "Plain one\nPlain two" };
+        var extras = new Dictionary<string, string> { [RawLyricsExtras.Lrc] = "[00:01]From the LRC", [RawLyricsExtras.Plain] = "Plain one\nPlain two" };
         var fromLrc = Synced(LyricParser.Parse(new RawLyrics(LyricSourceId.Lrclib, LyricFormat.Lyricsfile, "lines: [", Extras: extras)));
         Assert.Equal(["From the LRC"], fromLrc.Lines.Select(line => line.Text));
-        var plainOnly = new Dictionary<string, string> { [LyricExtraKeys.Plain] = "Plain one\nPlain two" };
+        var plainOnly = new Dictionary<string, string> { [RawLyricsExtras.Plain] = "Plain one\nPlain two" };
         var plain = Assert.IsType<LyricResult.Plain>(LyricParser.Parse(new RawLyrics(LyricSourceId.Lrclib, LyricFormat.Lyricsfile, "", Extras: plainOnly)));
         Assert.Equal(["Plain one", "Plain two"], plain.Lines);
         Assert.Equal("Not synced · LRCLIB", plain.Provenance.Label);
@@ -57,11 +58,11 @@ public class LyricParserTests
     [Fact]
     public void YrcTakesItsReadingsAndFallsBackToLrc()
     {
-        var extras = new Dictionary<string, string> { [LyricExtraKeys.Romanization] = "[00:00.273]mu te ki" };
+        var extras = new Dictionary<string, string> { [RawLyricsExtras.RomanizationLrc] = "[00:00.273]mu te ki" };
         var yrc = Synced(LyricParser.Parse(new RawLyrics(LyricSourceId.NetEase, LyricFormat.Yrc, "[273,3010](273,300,0)無(573,300,0)敵", Extras: extras)));
         Assert.Equal("mu te ki", yrc.Lines[0].Romanization);
         Assert.Equal("Word-by-word · NetEase", yrc.Provenance.Label);
-        var lrcExtras = new Dictionary<string, string> { [LyricExtraKeys.Lrc] = "[00:01]Line timed" };
+        var lrcExtras = new Dictionary<string, string> { [RawLyricsExtras.Lrc] = "[00:01]Line timed" };
         var fallback = Synced(LyricParser.Parse(new RawLyrics(LyricSourceId.NetEase, LyricFormat.Yrc, "", Extras: lrcExtras)));
         Assert.Equal("Line-synced · NetEase", fallback.Provenance.Label);
     }

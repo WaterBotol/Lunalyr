@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>
@@ -77,4 +79,38 @@ public sealed class LyricSourceException : Exception
 
     /// <summary>True when the PC looked offline: nothing should be remembered as a miss.</summary>
     public bool IsOffline => Failure == LyricSourceFailure.Offline;
+
+    /// <summary>
+    /// Whether <paramref name="error"/> means this PC has no connection, as opposed to one service being slow, missing
+    /// or broken: a <see cref="LyricSourceException"/> marked offline, or a socket error saying the network is down or
+    /// unreachable anywhere in its chain.
+    /// </summary>
+    public static bool IsOfflineError(Exception error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        for (Exception? current = error; current is not null; current = current.InnerException)
+        {
+            if (current is LyricSourceException { IsOffline: true })
+            {
+                return true;
+            }
+            if (current is SocketException { SocketErrorCode: SocketError.NetworkDown or SocketError.NetworkUnreachable or SocketError.NetworkReset })
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+/// <summary>
+/// A source that reads a folder chosen per lookup (the local Lyrimuse folder): the lookup passes the folder its
+/// options name, rather than the source holding one.
+/// </summary>
+public interface IFolderLyricSource : ILyricSource
+{
+    Task<RawLyrics?> FetchAsync(LyricQuery query, string? folder, CancellationToken ct);
+
+    /// <summary>Identity of the files in <paramref name="folder"/> that could hold this track's lyrics, so a change can be noticed.</summary>
+    string Fingerprint(LyricQuery query, string? folder);
 }

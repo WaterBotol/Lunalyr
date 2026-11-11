@@ -33,7 +33,7 @@ public sealed class AmllSource : ILyricSource
         _http = http;
         _catalog = new NetEaseCatalog(http, netEase);
         _options = options ?? new AmllOptions();
-        _probe = probe ?? BasicLyricPayloadProbe.Instance;
+        _probe = probe ?? ParsedLyricPayloadProbe.Instance;
     }
 
     public LyricSourceId Id => LyricSourceId.Amll;

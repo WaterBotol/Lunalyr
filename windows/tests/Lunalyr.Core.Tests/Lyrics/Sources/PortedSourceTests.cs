@@ -1,5 +1,7 @@
 using System.Text;
 using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
 using Lunalyr.Core.Lyrics.Sources;
 
 namespace Lunalyr.Core.Tests.Lyrics.Sources;
@@ -25,11 +27,11 @@ public class PortedSourceTests
     public void ConvertedStampsNeverSaySixtySeconds()
     {
         // Rounding the seconds alone wrote these as "00:60.00" and "01:60.00".
-        Assert.Equal("01:00.000", LrcText.Clock(59.9996));
-        Assert.Equal("01:59.998", LrcText.Clock(119.998));
-        Assert.Equal("00:00.000", LrcText.Clock(0));
-        Assert.Equal("00:00.000", LrcText.Clock(-2));
-        Assert.Equal("62:05.250", LrcText.Clock(3725.25));
+        Assert.Equal("01:00.000", KugouKrc.Clock(59.9996));
+        Assert.Equal("01:59.998", KugouKrc.Clock(119.998));
+        Assert.Equal("00:00.000", KugouKrc.Clock(0));
+        Assert.Equal("00:00.000", KugouKrc.Clock(-2));
+        Assert.Equal("62:05.250", KugouKrc.Clock(3725.25));
     }
 
     // Ported from LyricCoreReviewTests.swift: testLRCLIBOffersTheHitThatIsThePlayingRecording
@@ -43,7 +45,7 @@ public class PortedSourceTests
         var found = await new LrclibSource(handler.Client()).FetchAsync(Song, Ct);
         Assert.NotNull(found);
         Assert.Equal(180, found.ReportedDuration);
-        Assert.True(SourceMatching.NamesRecording(LyricSourceId.Lrclib, found.ReportedTitle!, found.ReportedArtist!, found.ReportedDuration, Song));
+        Assert.True(LyricRanking.NamesRecording(LyricSourceId.Lrclib, found.ReportedTitle!, found.ReportedArtist!, found.ReportedDuration, Song));
     }
 
     // Ported from LyricCoreReviewTests.swift: testKugouFetchesTheHitThatIsThePlayingRecordingFirst
@@ -61,7 +63,7 @@ public class PortedSourceTests
         var found = await new KugouSource(handler.Client()).FetchAsync(query, Ct);
         Assert.NotNull(found);
         Assert.Equal(120, found.ReportedDuration);
-        Assert.True(SourceMatching.NamesRecording(LyricSourceId.Kugou, found.ReportedTitle!, found.ReportedArtist!, found.ReportedDuration, query));
+        Assert.True(LyricRanking.NamesRecording(LyricSourceId.Kugou, found.ReportedTitle!, found.ReportedArtist!, found.ReportedDuration, query));
     }
 
     // Ported from LyricCoreReviewTests.swift: testAnInstrumentalRecordingOnLRCLIBHasNoLyrics
@@ -145,19 +147,19 @@ public class PortedSourceTests
     [Fact]
     public void KrcDecodesToTheLinesAndWords()
     {
-        var text = KugouKrcCipher.Decode(MacStyleKrc(KrcSample));
+        var text = KugouKrc.Decode(MacStyleKrc(KrcSample));
         Assert.NotNull(text);
         Assert.Contains("<0,500,0>Hello", text, StringComparison.Ordinal);
-        Assert.Equal(KrcSample, KugouKrcCipher.Decode(KugouKrcCipher.Encode(KrcSample)));
+        Assert.Equal(KrcSample, KugouKrc.Decode(KugouKrc.Encode(KrcSample)));
     }
 
     // Ported from AMLLAndKRCTests.swift: testAnythingThatIsNotKRCIsRefused
     [Fact]
     public void AnythingThatIsNotKrcIsRefused()
     {
-        Assert.Null(KugouKrcCipher.Decode("[00:01.00]plain"u8));
-        Assert.Null(KugouKrcCipher.Decode(Enumerable.Repeat((byte)1, 40).ToArray()));
-        Assert.Null(KugouKrcCipher.Decode([.. "krc1"u8, .. Enumerable.Repeat((byte)1, 40)]));
+        Assert.Null(KugouKrc.Decode("[00:01.00]plain"u8));
+        Assert.Null(KugouKrc.Decode(Enumerable.Repeat((byte)1, 40).ToArray()));
+        Assert.Null(KugouKrc.Decode([.. "krc1"u8, .. Enumerable.Repeat((byte)1, 40)]));
     }
 
     // Ported from AMLLAndKRCTests.swift: testAMLLAddressesTheFileByNetEaseID

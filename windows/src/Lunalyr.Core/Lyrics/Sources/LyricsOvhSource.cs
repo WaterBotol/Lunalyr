@@ -1,3 +1,5 @@
+using Lunalyr.Core.Lyrics.Ranking;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>Settings for <see cref="LyricsOvhSource"/>.</summary>
@@ -22,7 +24,7 @@ public sealed class LyricsOvhSource(LyricHttpClient http, LyricsOvhOptions? opti
     {
         ArgumentNullException.ThrowIfNull(query);
         // The endpoint is addressed by artist; there is nothing to ask without one.
-        if (!SourceMatching.HasArtist(query) || string.IsNullOrWhiteSpace(query.Title))
+        if (!query.HasArtist || string.IsNullOrWhiteSpace(query.Title))
         {
             return null;
         }

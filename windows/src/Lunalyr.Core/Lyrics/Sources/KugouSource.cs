@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>Settings for <see cref="KugouSource"/>.</summary>
@@ -30,7 +33,7 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
 {
     private const string Service = "Kugou";
     private readonly KugouOptions _options = options ?? new KugouOptions();
-    private readonly ILyricPayloadProbe _probe = probe ?? BasicLyricPayloadProbe.Instance;
+    private readonly ILyricPayloadProbe _probe = probe ?? ParsedLyricPayloadProbe.Instance;
 
     public LyricSourceId Id => LyricSourceId.Kugou;
 
@@ -46,7 +49,7 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
         {
             hits = [.. search.RootElement.Get("data").Get("info").Items().Select(song => Hit.From(song, query)).OfType<Hit>().Where(h => h.Score > 0)];
         }
-        var ordered = SourceMatching.Ordered(hits, LyricSourceId.Kugou, query, h => (h.Title, h.Artist, h.Duration, h.Score));
+        var ordered = SourceHits.Ordered(hits, LyricSourceId.Kugou, query, h => (h.Title, h.Artist, h.Duration, h.Score));
         foreach (var hit in ordered.Take(_options.SongsTried))
         {
             ct.ThrowIfCancellationRequested();
@@ -74,7 +77,7 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
                 try
                 {
                     if (await DownloadAsync(id, key, "krc", ct).ConfigureAwait(false) is { } encrypted
-                        && KugouKrcCipher.Decode(encrypted) is { } krc && LrcText.DecodeEntities(krc) is var text
+                        && KugouKrc.Decode(encrypted) is { } krc && LrcText.DecodeEntities(krc) is var text
                         && _probe.IsUsable(LyricFormat.Krc, text))
                     {
                         return Lyrics(LyricFormat.Krc, text, hit);
@@ -131,7 +134,7 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
             var title = song.Str("songname") ?? filename[^1];
             var artist = song.Str("singername") ?? filename[0];
             var duration = song.Num("duration");
-            return new Hit(hash, title, artist, duration, SourceMatching.HitScore(query, title, artist, duration));
+            return new Hit(hash, title, artist, duration, LyricMatchScore.HitScore(query, title, artist, duration));
         }
     }
 }

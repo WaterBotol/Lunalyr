@@ -146,9 +146,9 @@ public class LrclibSourceTests
     /// <summary>Calls "bunched" timing unsound, as a timing-fault check would.</summary>
     private sealed class BunchedProbe : ILyricPayloadProbe
     {
-        public bool IsUsable(LyricFormat format, string payload) => BasicLyricPayloadProbe.Instance.IsUsable(format, payload);
+        public bool IsUsable(LyricFormat format, string payload) => ParsedLyricPayloadProbe.Instance.IsUsable(format, payload);
 
         public bool HasSoundTiming(LyricFormat format, string payload) =>
-            BasicLyricPayloadProbe.Instance.HasSoundTiming(format, payload) && !payload.Contains("bunched", StringComparison.Ordinal);
+            ParsedLyricPayloadProbe.Instance.HasSoundTiming(format, payload) && !payload.Contains("bunched", StringComparison.Ordinal);
     }
 }

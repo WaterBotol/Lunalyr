@@ -1,5 +1,6 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.Lyrics.Storage;
 using static Lunalyr.Core.Lyrics.LyricSourceId;
 
@@ -590,7 +591,7 @@ public sealed class LyricLookupProgressTests : IDisposable
         var lookup = Lookups.Create(_folder.Path, (id, _, _, _) =>
         {
             calls.Call(id);
-            throw new LyricSourceException("No connection", isOffline: true);
+            throw new LyricSourceException(LyricSourceFailure.Offline, "No connection");
         }, _clock);
         var report = await lookup.LookupAsync(_query, options, cancellationToken: Ct);
         Assert.True(report.Offline);

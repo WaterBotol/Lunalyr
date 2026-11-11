@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 
+using Lunalyr.Core.Lyrics.Ranking;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>Settings for <see cref="LrclibSource"/>.</summary>
@@ -26,7 +28,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
 {
     private const string Service = "LRCLIB";
     private readonly LrclibOptions _options = options ?? new LrclibOptions();
-    private readonly ILyricPayloadProbe _probe = probe ?? BasicLyricPayloadProbe.Instance;
+    private readonly ILyricPayloadProbe _probe = probe ?? ParsedLyricPayloadProbe.Instance;
 
     public LyricSourceId Id => LyricSourceId.Lrclib;
 
@@ -36,7 +38,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
         var rows = new List<Row>();
         LyricSourceException? exactError = null;
         // The exact endpoint needs an artist; without one only search can match.
-        if (SourceMatching.HasArtist(query))
+        if (query.HasArtist)
         {
             var parameters = new Dictionary<string, string> { ["track_name"] = query.Title, ["artist_name"] = query.Artist };
             if (!string.IsNullOrEmpty(query.Album))
@@ -67,7 +69,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
         }
         // The exact recording is marked instrumental: a search would only find a sung edition with the same name and
         // length (an album's instrumental version), so there are no lyrics to show.
-        if (rows.Count > 0 && rows[0].Instrumental && SourceMatching.Similarity(query.Title, rows[0].TrackName ?? query.Title) >= 0.95)
+        if (rows.Count > 0 && rows[0].Instrumental && LyricQuery.Similarity(query.Title, rows[0].TrackName ?? query.Title) >= 0.95)
         {
             return null;
         }
@@ -76,7 +78,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
         if (!exactTimed)
         {
             var search = new Dictionary<string, string> { ["track_name"] = query.Title };
-            if (SourceMatching.HasArtist(query))
+            if (query.HasArtist)
             {
                 search["artist_name"] = query.Artist;
             }
@@ -183,8 +185,8 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
             var title = row.TrackName ?? query.Title;
             var artist = row.ArtistName ?? query.Artist;
             var delta = row.Duration is double d ? Math.Abs(d - query.Duration) : 0;
-            var albumMatches = SourceMatching.Normalize(row.AlbumName ?? "") == SourceMatching.Normalize(query.Album ?? "");
-            var score = SourceMatching.MatchScore(SourceMatching.Similarity(query.Title, title), SourceMatching.ArtistScore(query, artist),
+            var albumMatches = LyricQuery.Normalize(row.AlbumName ?? "") == LyricQuery.Normalize(query.Album ?? "");
+            var score = LyricMatchScore.Score(LyricQuery.Similarity(query.Title, title), query.ArtistScore(artist),
                 delta, row.Duration is not null && query.Duration > 0, wordTimed: false, lineTimed: true, albumMatches);
             if (score <= 0)
             {
@@ -223,7 +225,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
             {
                 return null;
             }
-            var passes = SourceMatching.NamesRecording(LyricSourceId.Lrclib, title, artist, row.Duration, query);
+            var passes = LyricRanking.NamesRecording(LyricSourceId.Lrclib, title, artist, row.Duration, query);
             var lyrics = new RawLyrics(LyricSourceId.Lrclib, format, payload, title, artist, row.Duration, extras);
             return new Offer(lyrics, score, passes);
         }

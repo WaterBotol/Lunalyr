@@ -2,6 +2,8 @@
 // following how each Mac provider labelled its result. Credits are flagged as the parsers find them; flagging the
 // ones that need the playing song's names (LyricCredits.Flagging) is a separate step, as on the Mac.
 
+using Lunalyr.Core.Lyrics.Sources;
+
 namespace Lunalyr.Core.Lyrics.Parsing;
 
 /// <summary>
@@ -12,25 +14,19 @@ namespace Lunalyr.Core.Lyrics.Parsing;
 /// </summary>
 public sealed record LyricParseOptions(double? TrackDuration = null, IReadOnlyList<string>? PreferredLanguages = null, LatinReader? Reader = null);
 
-/// <summary>Keys of <see cref="RawLyrics.Extras"/> the parsers read.</summary>
-public static class LyricExtraKeys
-{
-    /// <summary>A reading LRC timed like the lyrics (NetEase's romalrc), attached to the lines it reads.</summary>
-    public const string Romanization = "romanization";
-
-    /// <summary>Line-timed LRC to fall back on when the main payload (Lyricsfile, YRC) yields no lines.</summary>
-    public const string Lrc = "lrc";
-
-    /// <summary>Untimed text to fall back on when nothing timed could be read.</summary>
-    public const string Plain = "plain";
-}
-
 public static class LyricParser
 {
     public static LyricResult? Parse(RawLyrics raw) => Parse(raw, null);
 
+    /// <summary>
+    /// The lyrics in <paramref name="raw"/>, labelled as the Mac's providers label them, or null when it holds none.
+    /// Payloads sent alongside (<see cref="RawLyricsExtras"/>) are used as the Mac uses them: the line LRC and plain
+    /// text as fallbacks, NetEase's reading LRC attached to its lines, and a local export's word-timed sidecar, reading
+    /// and translation files merged into its LRC.
+    /// </summary>
     public static LyricResult? Parse(RawLyrics raw, LyricParseOptions? options)
     {
+        ArgumentNullException.ThrowIfNull(raw);
         var duration = options?.TrackDuration ?? raw.ReportedDuration ?? 0;
         var extras = raw.Extras;
         string? Extra(string key) => extras is not null && extras.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
@@ -38,6 +34,10 @@ public static class LyricParser
 
         IReadOnlyList<LyricLine> lines;
         var source = SourceLabel(raw.Source);
+        if (raw.Source == LyricSourceId.Lyrimuse && Extra(RawLyricsExtras.Upstream) is { } upstream)
+        {
+            source += " · " + upstream;
+        }
         switch (raw.Format)
         {
             case LyricFormat.Plain:
@@ -62,13 +62,43 @@ public static class LyricParser
                 lines = Lrc(raw.Payload);
                 break;
         }
-        if (lines.Count == 0 && raw.Format != LyricFormat.Lrc && Extra(LyricExtraKeys.Lrc) is { } fallback) lines = Lrc(fallback);
+        if (lines.Count == 0 && raw.Format != LyricFormat.Lrc && Extra(RawLyricsExtras.Lrc) is { } fallback) lines = Lrc(fallback);
+        if (raw.Source == LyricSourceId.Lyrimuse)
+        {
+            lines = WithLocalSidecars(lines, Extra, duration, options);
+        }
+        else if (lines.Count > 0 && Extra(RawLyricsExtras.RomanizationLrc) is { } readings)
+        {
+            lines = YrcParser.AttachingRomanization(readings, lines, duration);
+        }
         if (lines.Count > 0)
         {
-            if (Extra(LyricExtraKeys.Romanization) is { } readings) lines = YrcParser.AttachingRomanization(readings, lines, duration);
             return new LyricResult.Synced(lines, new LyricProvenance(LyricLines.Precision(lines), source));
         }
-        return Extra(LyricExtraKeys.Plain) is { } plain ? PlainResult(plain, raw.Source) : null;
+        return Extra(RawLyricsExtras.Plain) is { } plain ? PlainResult(plain, raw.Source) : null;
+    }
+
+    /// <summary>
+    /// A local export: a TTML sidecar with any word timing, else a YRC sidecar, supplements the LRC's lines; then the
+    /// reading and translation files attach by time. Lyrics running more than 8 s past the track are not this one's.
+    /// </summary>
+    private static IReadOnlyList<LyricLine> WithLocalSidecars(IReadOnlyList<LyricLine> lines, Func<string, string?> extra, double duration,
+        LyricParseOptions? options)
+    {
+        if (extra(RawLyricsExtras.SidecarTtml) is { } ttml)
+        {
+            var native = TtmlParser.Parse(ttml, duration, options?.PreferredLanguages);
+            if (native.Any(LyricLines.ValidWordTiming)) lines = LocalSidecars.Supplement(native, lines);
+        }
+        else if (extra(RawLyricsExtras.SidecarYrc) is { } yrc)
+        {
+            var native = YrcParser.Parse(yrc);
+            if (native.Count > 0) lines = LocalSidecars.Supplement(native, lines);
+        }
+        if (lines.Count == 0 || (duration > 0 && lines[^1].Start > duration + 8)) return [];
+        if (extra(RawLyricsExtras.RomanizationLrc) is { } readings) lines = LocalSidecars.AttachingReadings(readings, lines, duration);
+        if (extra(RawLyricsExtras.TranslationLrc) is { } translations) lines = LocalSidecars.AttachingTranslations(translations, lines, duration);
+        return lines;
     }
 
     private static LyricResult.Plain? PlainResult(string text, LyricSourceId source)

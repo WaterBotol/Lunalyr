@@ -1,6 +1,9 @@
 using System.Text;
 using System.Text.Json;
 
+using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Ranking;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>Settings for <see cref="KuwoSource"/>.</summary>
@@ -21,7 +24,7 @@ public sealed class KuwoSource(LyricHttpClient http, KuwoOptions? options = null
 {
     private const string Service = "Kuwo";
     private readonly KuwoOptions _options = options ?? new KuwoOptions();
-    private readonly ILyricPayloadProbe _probe = probe ?? BasicLyricPayloadProbe.Instance;
+    private readonly ILyricPayloadProbe _probe = probe ?? ParsedLyricPayloadProbe.Instance;
 
     public LyricSourceId Id => LyricSourceId.Kuwo;
 
@@ -37,7 +40,7 @@ public sealed class KuwoSource(LyricHttpClient http, KuwoOptions? options = null
         {
             hits = [.. search.RootElement.Items("abslist").Select(song => Hit.From(song, query)).OfType<Hit>().Where(h => h.Score > 0)];
         }
-        var ordered = SourceMatching.Ordered(hits, LyricSourceId.Kuwo, query, h => (h.Title, h.Artist, h.Duration, h.Score));
+        var ordered = SourceHits.Ordered(hits, LyricSourceId.Kuwo, query, h => (h.Title, h.Artist, h.Duration, h.Score));
         foreach (var hit in ordered.Take(_options.SongsTried))
         {
             ct.ThrowIfCancellationRequested();
@@ -73,7 +76,7 @@ public sealed class KuwoSource(LyricHttpClient http, KuwoOptions? options = null
             {
                 builder.Append('\n');
             }
-            builder.Append('[').Append(LrcText.Clock(time)).Append(']').Append(text.GetString());
+            builder.Append('[').Append(KugouKrc.Clock(time)).Append(']').Append(text.GetString());
         }
         return builder.ToString();
     }
@@ -95,7 +98,7 @@ public sealed class KuwoSource(LyricHttpClient http, KuwoOptions? options = null
                 return null;
             }
             var duration = song.Num("DURATION");
-            return new Hit(id, title, artist, duration, SourceMatching.HitScore(query, title, artist, duration));
+            return new Hit(id, title, artist, duration, LyricMatchScore.HitScore(query, title, artist, duration));
         }
     }
 }

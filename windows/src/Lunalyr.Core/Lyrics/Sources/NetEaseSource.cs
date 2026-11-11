@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 
+using Lunalyr.Core.Lyrics.Ranking;
+
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>Settings for the NetEase Cloud Music sources (<see cref="NetEaseSource"/>, and the search <see cref="AmllSource"/> uses).</summary>
@@ -62,15 +64,15 @@ public sealed class NetEaseCatalog(LyricHttpClient http, NetEaseOptions? options
     {
         ArgumentNullException.ThrowIfNull(songs);
         var query = new LyricQuery(title, artist, null, duration);
-        var hasArtist = SourceMatching.HasArtist(query);
+        var hasArtist = query.HasArtist;
         (NetEaseSong Song, double[] Key)? best = null;
         foreach (var song in songs)
         {
             var names = song.Artists.Where(name => name.Length > 0).ToList();
             var credit = string.Join(", ", names);
-            var titleMatch = SourceMatching.Similarity(title, song.Name);
+            var titleMatch = LyricQuery.Similarity(title, song.Name);
             var artistMatch = hasArtist
-                ? names.Select(name => SourceMatching.Similarity(artist, name)).Aggregate(SourceMatching.Similarity(artist, credit), Math.Max)
+                ? names.Select(name => LyricQuery.Similarity(artist, name)).Aggregate(LyricQuery.Similarity(artist, credit), Math.Max)
                 : 1;
             if (titleMatch < 0.75 || artistMatch < 0.65)
             {
@@ -136,7 +138,7 @@ public sealed class NetEaseSource : ILyricSource
     {
         _http = http;
         _catalog = new NetEaseCatalog(http, options);
-        _probe = probe ?? BasicLyricPayloadProbe.Instance;
+        _probe = probe ?? ParsedLyricPayloadProbe.Instance;
     }
 
     public LyricSourceId Id => LyricSourceId.NetEase;
