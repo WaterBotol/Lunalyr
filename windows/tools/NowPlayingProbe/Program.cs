@@ -1,5 +1,6 @@
 // Read-only now-playing probe. Usage: NowPlayingProbe [seconds] [--hide-titles]
 // It only reads sessions, metadata and timelines. It never calls a Try…Async command, so it can't play, pause or seek.
+using Lunalyr.Core.Playback;
 using Lunalyr.Platform.NowPlaying;
 
 int seconds = args.Length > 0 && int.TryParse(args[0], out var s) ? s : 30;
@@ -8,7 +9,10 @@ string Show(string? t) => t is null ? "(none)" : hide ? $"<{t.Length} chars>" : 
 var t0 = DateTime.Now;
 void Log(string m) => Console.WriteLine($"{(DateTime.Now - t0).TotalSeconds,7:F2}s  {m}");
 
-using var source = await GsmtcMediaSessionSource.CreateAsync(m => Log("[gsmtc] " + m));
+// The probe only reads, so its guard refuses every command outright.
+var guard = new PlaybackGuard();
+guard.Block("NowPlayingProbe is read-only");
+using var source = await GsmtcMediaSessionSource.CreateAsync(guard, m => Log("[gsmtc] " + m));
 Log($"sessions: {source.Sessions.Count}");
 foreach (var ses in source.Sessions) Log($"  session {ses.SourceAppUserModelId} -> {ses.SourceApp}");
 

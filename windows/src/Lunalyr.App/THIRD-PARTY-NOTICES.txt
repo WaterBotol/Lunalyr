@@ -1,0 +1,11 @@
+Lunalyr for Windows includes the following third-party components.
+
+.NET 10 runtime and libraries, Native AOT compiler — Microsoft Corporation. MIT licence.
+Windows App SDK 2.6.5 (WinUI 3, Foundation, Interactive Experiences) — Microsoft Corporation. Microsoft Software License Terms (redistributable).
+Microsoft.Web.WebView2 1.0.3719.77 (a dependency of WinUI) — Microsoft Corporation. BSD-style licence: Copyright (C) Microsoft Corporation. All rights reserved.
+C#/WinRT runtime (WinRT.Runtime) — Microsoft Corporation. MIT licence.
+Vortice.Direct2D1, Vortice.Direct3D11, Vortice.DXGI, Vortice.DirectX, Vortice.Mathematics — Amer Koleci and contributors. MIT licence.
+SharpGen.Runtime, SharpGen.Runtime.COM — SharpGenTools contributors. MIT licence.
+
+Lunalyr also uses services built into Windows (Global System Media Transport Controls, ICU, the Japanese phonetic analyzer, Extended Linguistic Services); they are part of Windows and are not redistributed.
+The full licence texts ship with each package and are available on request.

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The app shell's logic, with no XAML and no window: command line, settings, the controller that turns now
+       playing into lyric scenes, crash files. Lunalyr.App hosts it; tests drive it with fakes. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Lunalyr.Shell</RootNamespace>
+    <Platforms>x64</Platforms>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
+    <ProjectReference Include="..\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
+    <ProjectReference Include="..\Lunalyr.Render\Lunalyr.Render.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lunalyr.Shell.Tests" />
+  </ItemGroup>
+</Project>

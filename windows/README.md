@@ -21,6 +21,9 @@ Build output goes to `artifacts/` (per project), so separate git worktrees never
 |---|---|
 | `src/Lunalyr.Core` | Platform-independent logic ported from the Mac app (lyrics, ranking, timing, motion maths) |
 | `src/Lunalyr.Platform.Windows` | Windows services without UI: now playing (GSMTC), settings store, logging, desktop attach |
+| `src/Lunalyr.Render` | The desktop renderer (Direct2D/DirectWrite) and the scene contract |
+| `src/Lunalyr.Shell` | The app's logic without UI: command line, settings, the controller (now playing → lyrics → scenes) |
+| `src/Lunalyr.App` | The app: tray icon, single instance, WinUI 3 settings window. See [docs/APP-SHELL.md](docs/APP-SHELL.md) |
 | `tests/` | xUnit v3 tests. They never touch real settings, the network, media sessions or permission prompts |
 | `spikes/` | The milestone 1 stack spikes, frozen as measured |
 | `tools/` | Measurement and screenshot scripts |
