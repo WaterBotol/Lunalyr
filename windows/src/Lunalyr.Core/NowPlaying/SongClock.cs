@@ -72,6 +72,11 @@ public sealed class SongClock
     private MediaTimeline? _previousTrackSnapshot;
     private bool _timestampSuspect;
 
+    // Track changes: when the last one was (null: none since the session started) and whether the current timeline
+    // arrived after it (so it belongs to the track the metadata now describes).
+    private long? _trackChangeTimestamp;
+    private bool _timelineSinceTrackChange;
+
     // Drift slew: shown = target + offset, the offset decaying linearly to zero over _slewDuration of playing time.
     private TimeSpan _slewOffset;
     private long _slewStart;
@@ -218,6 +223,7 @@ public sealed class SongClock
             if (!_hasTimeline)
             {
                 ClearSlew(now);
+                _timelineSinceTrackChange = _trackChangeTimestamp is not null;
             }
             else
             {
@@ -270,10 +276,17 @@ public sealed class SongClock
     /// timeline arrives. The learned timeline quality is kept: it belongs to the player, not the track.
     /// </summary>
     /// <remarks>
-    /// Players send the new track's timeline and its metadata in either order. If a start-of-track snapshot (position
-    /// within <see cref="SongClockOptions.SeekThreshold"/>) arrived within <see cref="SongClockOptions.StatusSettleTime"/>
-    /// before this call, it is taken to be the new track's and kept. Otherwise the old track's last snapshot is
-    /// remembered, and an identical re-read of it is ignored.
+    /// <para>
+    /// Players send the new track's timeline and its metadata in either order, and may publish the metadata in
+    /// stages. The current timeline is therefore kept, not discarded, when either
+    /// </para>
+    /// <list type="bullet">
+    /// <item>it is a start-of-track snapshot (position within <see cref="SongClockOptions.SeekThreshold"/>) that
+    /// arrived within <see cref="SongClockOptions.StatusSettleTime"/> before this call (timeline first), or</item>
+    /// <item>it arrived after the previous track change, which was within
+    /// <see cref="SongClockOptions.MetadataSettleTime"/> (metadata still settling).</item>
+    /// </list>
+    /// <para>Otherwise the old track's last snapshot is remembered, and an identical re-read of it is ignored.</para>
     /// </remarks>
     public void ResetTrack()
     {
@@ -285,17 +298,31 @@ public sealed class SongClock
                 && last.RelativePosition <= _options.SeekThreshold
                 && _time.GetElapsedTime(_lastTimelineTimestamp, now) <= _options.StatusSettleTime)
             {
-                // A start-of-track snapshot that arrived just before the metadata change belongs to the new track
-                // (players send the two in either order): keep it rather than restart from 0.
                 _log?.Invoke("Song clock: track changed right after a start-of-track timeline; keeping that timeline.");
-                _previousTrackSnapshot = null;
-                _lastResetTimestamp = now;
-                _liveEvidence = 0;
+                KeepTimelineForNewTrack(now);
+                _trackChangeTimestamp = now;
+                return;
+            }
+
+            if (_hasTimeline && _timelineSinceTrackChange && _trackChangeTimestamp is { } previousChange
+                && _time.GetElapsedTime(previousChange, now) <= _options.MetadataSettleTime)
+            {
+                _log?.Invoke("Song clock: metadata changed again soon after a track change; keeping the timeline that came since.");
+                KeepTimelineForNewTrack(now);
                 return;
             }
 
             ResetTrackCore(now);
+            _trackChangeTimestamp = now;
         }
+    }
+
+    private void KeepTimelineForNewTrack(long now)
+    {
+        _previousTrackSnapshot = null;
+        _timelineSinceTrackChange = true;
+        _lastResetTimestamp = now;
+        _liveEvidence = 0;
     }
 
     /// <summary>Starts over for a different player: forgets everything, including the learned timeline quality.</summary>
@@ -306,6 +333,7 @@ public sealed class SongClock
         {
             ResetTrackCore(now);
             _previousTrackSnapshot = null;
+            _trackChangeTimestamp = null;
             _status = PlaybackStatus.Closed;
             _playing = false;
             _rate = 1.0;
@@ -325,6 +353,7 @@ public sealed class SongClock
         _anchorTimestamp = now;
         _duration = null;
         _timestampSuspect = false;
+        _timelineSinceTrackChange = false;
         _lastResetTimestamp = now;
         _lastTimelineTimestamp = now;
         _liveEvidence = 0;

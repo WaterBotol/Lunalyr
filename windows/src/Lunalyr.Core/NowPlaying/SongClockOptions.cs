@@ -23,8 +23,9 @@ public sealed record SongClockOptions
 
     /// <summary>
     /// A snapshot that disagrees with the clock by more than this is a seek: the clock jumps and raises
-    /// <see cref="SongClock.SeekDetected"/>. Smaller disagreements are drift and are slewed out. 1.5 s sits above
-    /// the update latency seen from GSMTC (a few hundred ms, more for browsers) yet below a typical lyric line
+    /// <see cref="SongClock.SeekDetected"/>. Smaller disagreements are drift and are slewed out. 1.5 s is meant to
+    /// sit above GSMTC's update latency (assumed a few hundred ms, more for browsers; not yet measured) yet below a
+    /// typical lyric line
     /// (2–5 s), so a real seek always moves the wallpaper to the right line.
     /// </summary>
     public TimeSpan SeekThreshold { get; init; } = TimeSpan.FromSeconds(1.5);
@@ -44,7 +45,8 @@ public sealed record SongClockOptions
 
     /// <summary>
     /// No timeline update for this long while playing (and no status change) marks the player
-    /// <see cref="TimelineQuality.SeekOnly"/>. Players that update live do so every 1–5 s, so 6 s avoids misfiring.
+    /// <see cref="TimelineQuality.SeekOnly"/>. Assumes live players update at least every 5 s (to be checked against
+    /// real players), so 6 s shouldn't misfire on them.
     /// </summary>
     public TimeSpan SeekOnlyAfter { get; init; } = TimeSpan.FromSeconds(6);
 
@@ -82,6 +84,13 @@ public sealed record SongClockOptions
     /// </summary>
     public TimeSpan DurationChangeTolerance { get; init; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// A metadata change this soon after the previous track change, with a timeline received in between, is the same
+    /// song's metadata still arriving in stages (e.g. a browser tab title first, the real title later): the timeline
+    /// is kept. The cost is that a skip this quick shows the skipped track's position until the new timeline arrives.
+    /// </summary>
+    public TimeSpan MetadataSettleTime { get; init; } = TimeSpan.FromSeconds(5);
+
     internal void Validate()
     {
         Positive(SeekThreshold, nameof(SeekThreshold));
@@ -93,6 +102,7 @@ public sealed record SongClockOptions
         NonNegative(FreshSnapshotAge, nameof(FreshSnapshotAge));
         NonNegative(FutureTolerance, nameof(FutureTolerance));
         NonNegative(DurationChangeTolerance, nameof(DurationChangeTolerance));
+        NonNegative(MetadataSettleTime, nameof(MetadataSettleTime));
         if (!(MaxBackwardSlewFraction > 0 && MaxBackwardSlewFraction < 1))
             throw new ArgumentOutOfRangeException(nameof(MaxBackwardSlewFraction), MaxBackwardSlewFraction, "Must be in (0, 1).");
         if (LiveEvidenceRequired < 1)

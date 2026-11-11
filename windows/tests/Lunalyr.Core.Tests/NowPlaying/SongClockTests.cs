@@ -724,6 +724,39 @@ public class SongClockTests
     }
 
     [Fact]
+    public void MetadataArrivingInStagesKeepsTheTimelineReceivedInBetween()
+    {
+        var clock = PlayingAt(200, duration: 240);
+        clock.ResetTrack();                              // Stage 1: e.g. the tab title.
+        _time.AdvanceMilliseconds(200);
+        var b = Snap(0.1, duration: 180);
+        clock.UpdateTimeline(b);
+        _time.AdvanceSeconds(2.5);
+        clock.ResetTrack();                              // Stage 2: the real title and artist.
+        Assert.False(clock.UpdateTimeline(b));           // The monitor's re-read is a duplicate, not the "old track".
+        Assert.Equal(2.6, Sec(clock), Tol);
+        Assert.True(clock.Read().HasTimeline);
+        Assert.Empty(_seeks);
+
+        _time.AdvanceSeconds(1);
+        clock.UpdateTimeline(Snap(3.6, duration: 180));  // Live updates carry on without a seek.
+        Assert.Empty(_seeks);
+    }
+
+    [Fact]
+    public void AMetadataChangeLongAfterTheLastTrackChangeIsANewTrack()
+    {
+        var clock = PlayingAt(200, duration: 240);
+        clock.ResetTrack();
+        _time.AdvanceMilliseconds(200);
+        clock.UpdateTimeline(Snap(0.1, duration: 180));
+        _time.AdvanceSeconds(6); // Past MetadataSettleTime.
+        clock.ResetTrack();
+        Assert.False(clock.Read().HasTimeline);
+        Assert.Equal(0, Sec(clock), Tol);
+    }
+
+    [Fact]
     public void NewTracksTimelineNeverLeavesThePositionPastTheNewDuration()
     {
         var clock = PlayingAt(200, duration: 240);
