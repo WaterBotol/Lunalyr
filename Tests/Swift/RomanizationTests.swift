@@ -257,7 +257,7 @@ final class RomanizationTests: XCTestCase {
 
     func testLineTimedJapaneseMapsPhrasesOntoWords() {
         let line = line(["思っ", "た", "より"], wordTimed: false)
-        XCTAssertEqual(texts(line), ["omotta", "", "yori"])
+        XCTAssertEqual(texts(line), ["omo", "tta", "yori"])
         XCTAssertNil(LyricRomanizer.lineReading(readings(line), for: line))
     }
 
@@ -277,8 +277,8 @@ final class RomanizationTests: XCTestCase {
         XCTAssertEqual(texts(line(["今", "日が", "沈む"], spaced: true)), ["ima", "hi ga", "shizumu"])
         // Spaces between single characters or syllables are still the markup's...
         XCTAssertEqual(texts(line(["今", "日", "も", "君に", "会いたい"], spaced: true)),
-                       ["kyou", "", "mo", "kimi ni", "aitai"])
-        XCTAssertEqual(texts(line(["きょ", "う", "も"], spaced: true)), ["kyou", "", "mo"])
+                       ["kyo", "u", "mo", "kimi ni", "aitai"])
+        XCTAssertEqual(texts(line(["きょ", "う", "も"], spaced: true)), ["kyo", "u", "mo"])
         // ...as is every space on a line timed one character at a time.
         let held = line(["抱", "きし", "め", "て"], spaced: true)
         XCTAssertEqual(LyricRomanizer.lineReading(readings(held), for: held), "dakishimete")
@@ -293,19 +293,19 @@ final class RomanizationTests: XCTestCase {
         // ...also when it starts the line, going on from the one before...
         XCTAssertEqual(texts(line(["は", "笑った", "ね"], spaced: true)), ["wa", "waratta", "ne"])
         // ...っ doubles the consonant of the ending after it (not omo ta),
-        // and a word written over several timed parts reads whole.
-        XCTAssertEqual(texts(line(["思っ", "た", "より"], spaced: true)), ["omotta", "", "yori"])
-        XCTAssertEqual(texts(line(["待っ", "て", "て"], spaced: true)), ["mattete", "", ""])
-        XCTAssertEqual(texts(line(["ちょっ", "と", "待っ", "て"], spaced: true)), ["chotto", "", "matte", ""])
+        // and a word sung over several timed parts is shared out over them.
+        XCTAssertEqual(texts(line(["思っ", "た", "より"], spaced: true)), ["omo", "tta", "yori"])
+        XCTAssertEqual(texts(line(["待っ", "て", "て"], spaced: true)), ["ma", "tte", "te"])
+        XCTAssertEqual(texts(line(["ちょっ", "と", "待っ", "て"], spaced: true)), ["cho", "tto", "ma", "tte"])
         XCTAssertEqual(texts(line(["はっ", "として", "グッと"], spaced: true)), ["hatto", "shite", "gutto"])
-        XCTAssertEqual(texts(line(["会い", "たい", "よ"], spaced: true)), ["aitai", "", "yo"])
-        XCTAssertEqual(texts(line(["知ら", "ない", "よ"], spaced: true)), ["shiranai", "", "yo"])
+        XCTAssertEqual(texts(line(["会い", "たい", "よ"], spaced: true)), ["ai", "tai", "yo"])
+        XCTAssertEqual(texts(line(["知ら", "ない", "よ"], spaced: true)), ["shira", "nai", "yo"])
         // Hiragana goes on from kanji with its okurigana or from katakana, a
         // single syllable from any word, and っ after kanji as a verb's does.
-        XCTAssertEqual(texts(line(["抱き", "しめ", "て"], spaced: true)), ["dakishimete", "", ""])
-        XCTAssertEqual(texts(line(["アイ", "して", "る"], spaced: true)), ["ai", "shiteru", ""])
-        XCTAssertEqual(texts(line(["さっ", "き", "まで"], spaced: true)), ["sakki", "", "made"])
-        XCTAssertEqual(texts(line(["引っ", "こし", "の", "日"], spaced: true)), ["hikkoshi", "", "no", "hi"])
+        XCTAssertEqual(texts(line(["抱き", "しめ", "て"], spaced: true)), ["daki", "shime", "te"])
+        XCTAssertEqual(texts(line(["アイ", "して", "る"], spaced: true)), ["ai", "shite", "ru"])
+        XCTAssertEqual(texts(line(["さっ", "き", "まで"], spaced: true)), ["sa", "kki", "made"])
+        XCTAssertEqual(texts(line(["引っ", "こし", "の", "日"], spaced: true)), ["hi", "kkoshi", "no", "hi"])
         // A space before a word in kanji is still a pause: っ is not doubled
         // across it (not akkimi).
         XCTAssertEqual(texts(line(["あっ", "君だ", "よ"], spaced: true)), ["a", "kimi da", "yo"])
@@ -347,7 +347,7 @@ final class RomanizationTests: XCTestCase {
             (["そらを", "みあげて", "ないた"], "sora wo miagete naita", ["sora wo", "miagete", "naita"]),
             (["えっ", "どうして", "なの"], "e doushite nano", ["e", "dou shite", "na no"]),
             (["あっ", "きみだ", "よ"], "a kimi da yo", ["a", "kimi da", "yo"]),
-            (["思っ", "た", "より"], "omotta yori", ["omotta", "", "yori"]),
+            (["思っ", "た", "より"], "omotta yori", ["omo", "tta", "yori"]),
         ]
         for (parts, source, expected) in sourced {
             XCTAssertEqual(texts(line(parts, spaced: true, reading: source)), expected, source)
@@ -383,7 +383,7 @@ final class RomanizationTests: XCTestCase {
         // must (一人ぼっち is hitoribotchi, 来ない konai, だきしめて dakishimete).
         XCTAssertEqual(texts(line(["一人", "ぼっち", "の", "夜"], spaced: true)), ["hitori", "botchi", "no", "yoru"])
         XCTAssertEqual(texts(line(["来", "ない", "よ"], spaced: true)), ["ki", "nai", "yo"])
-        XCTAssertEqual(texts(line(["だき", "しめ", "て"], spaced: true)), ["daki", "shimete", ""])
+        XCTAssertEqual(texts(line(["だき", "しめ", "て"], spaced: true)), ["daki", "shime", "te"])
     }
 
     // MARK: - Saved and source readings

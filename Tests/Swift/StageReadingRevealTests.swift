@@ -19,6 +19,7 @@ final class StageReadingRevealTests: XCTestCase {
             line("anata o omoidasu", [("あなたを", 18.61, 19.56), ("思", 19.56, 20.57), ("い", 20.57, 20.92), ("出", 20.92, 21.13), ("す", 21.13, 21.69)]),
             line("monouge ni nagameru gamen ni utsutta futari",
                  [("物憂げに", 22.34, 23.56), ("眺める", 23.73, 24.86), ("画面", 24.86, 25.53), ("に", 25.53, 25.78), ("映った", 25.78, 26.67), ("二人", 26.67, 27.63)]),
+            line("waratteta", [("笑っ", 27.64, 28.29), ("てい", 28.29, 28.57), ("た", 28.57, 28.87)]),
         ]
     }()
 
@@ -37,6 +38,20 @@ final class StageReadingRevealTests: XCTestCase {
         XCTAssertEqual(stageReadings(0), ["sugite yuku", "toki no", "naka"])
         XCTAssertEqual(stageReadings(1), ["anata o", "omoida", "su"])
         XCTAssertEqual(stageReadings(2), ["monou ge ni", "nagameru", "gamen ni", "utsutta", "futari"])
+        // One phrase sung over several parts is shared out over them, not
+        // all on the first part (waratteta under 笑っ, nothing after).
+        XCTAssertEqual(stageReadings(3), ["wara", "tteta"])
+    }
+
+    func testAPhraseIsSharedOverTheWordsItIsSungAcross() {
+        let readings = LyricRomanizer.readings(Self.lines, options: Self.options)
+        XCTAssertEqual(readings[3]?.map(\.text), ["wara", "tte", "ta"])
+        XCTAssertEqual(readings[1]?.map(\.text), ["anata o", "omo", "i", "da", "su"])
+        // The parts keep the phrase's time, so where they are drawn as one
+        // run they still read as one word.
+        let line = Self.lines[3]
+        let pairs = LyricReadingPairs.match(readings[3], to: line.words, glue: [false, true, true])
+        XCTAssertEqual(pairs[line.words[0].presentationID], "waratteta")
     }
 
     /// The bug: paired by the line's own (longer) runs, the first stage run

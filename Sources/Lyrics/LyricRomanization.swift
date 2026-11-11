@@ -453,8 +453,27 @@ enum LyricRomanizer {
                         return owner[index] == index ? words[index] : nil
                     }
                 }
-                let shown = fragments.flatMap { $0.count == words.count && LyricRomanizer.isCharacterTimed(line) ? $0 : nil }?
-                    .map { LyricRomanizer.normalized($0, toneMarks: toneMarks) } ?? texts
+                let shares = fragments.flatMap { $0.count == words.count ? $0 : nil }?
+                    .map { LyricRomanizer.normalized($0, toneMarks: toneMarks) }
+                var shown = texts
+                if let shares, LyricRomanizer.isCharacterTimed(line) {
+                    shown = shares
+                } else if let shares {
+                    // A phrase sung across several words (笑っ てい た) is
+                    // shared out over them (warat, tei, ta), so each word reads
+                    // itself as it is sung, rather than the first carrying the
+                    // whole phrase and the rest nothing. Only where the shares
+                    // spell the phrase exactly; otherwise the first keeps it.
+                    for start in words.indices where owner[start] == start && !texts[start].isEmpty {
+                        let last = end(of: start)
+                        guard last > start else { continue }
+                        let span = shares[start...last]
+                        func letters(_ text: String) -> String { text.filter { !$0.isWhitespace } }
+                        guard span.allSatisfy({ !$0.isEmpty }),
+                              letters(span.joined()) == letters(texts[start]) else { continue }
+                        for index in start...last { shown[index] = span[index] }
+                    }
+                }
                 return words.indices.map { index in
                     let start = owner[index]
                     return LyricsFetcher.Word(text: shown[index], start: words[start].start, end: words[end(of: start)].end)
