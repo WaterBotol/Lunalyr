@@ -44,6 +44,7 @@ struct LyricLayer: View {
     @ObservedObject private var memory = StyleMemory.shared
     @StateObject private var scenes = LyricSceneMemory()
     @StateObject private var cache = LyricLayerCache()
+    @StateObject private var opening = OpeningTitleMemory()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     /// What lies behind the text when it is not the wallpaper: the floating
@@ -78,10 +79,11 @@ struct LyricLayer: View {
                 shown.loadingSince)
     }
 
-    private func sceneContent(loadingSince: Double?) -> LyricSceneContent {
+    private func sceneContent(key: LyricSceneKey, loadingSince: Double?) -> LyricSceneContent {
         LyricSceneContent(lines: lyricsVM.lines, romanized: lyricsVM.romanized,
             machineTranslations: lyricsVM.machineTranslations, plainLines: lyricsVM.plainLines,
             title: nowPlaying.current?.title ?? "", artist: nowPlaying.current?.artist ?? "",
+            album: nowPlaying.current?.album ?? "", joined: opening.joined(track: key.track, at: time),
             notFoundAt: lyricsVM.notFoundAt, idleSince: nowPlaying.idleSince,
             duration: nowPlaying.current?.duration ?? 0, seed: trackSeed, vocalWindows: lyricsVM.vocalWindows,
             loadingSince: loadingSince, offline: lyricsVM.notFound && !LyricConnectivity.shared.isOnline)
@@ -151,14 +153,16 @@ struct LyricLayer: View {
         // tick; anything this frame starts must start from now.
         let wall = pace?.wall(self.wall) ?? self.wall
         let (key, loadingSince) = sceneKey(wall: wall)
-        let content = sceneContent(loadingSince: loadingSince)
+        let content = sceneContent(key: key, loadingSince: loadingSince)
         let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
         let ink = ink(energy: energy, wall: wall)
         let shown = animating ? extras.visibility.presence(at: wall) : (extras.lyricsVisible ? 1 : 0)
-        let _ = pace?.report(level(key: key, transition: transition, shown: shown,
-                                   target: animating ? extras.visibility.target : shown, ink: ink, wall: wall))
+        let _ = pace?.report(OpeningTitle.pace(level(key: key, transition: transition, shown: shown,
+                                   target: animating ? extras.visibility.target : shown, ink: ink, wall: wall),
+                                   phase: shown > 0.001 ? OpeningTitle.upcoming(openingSchedule(content, kind: key.kind), at: time) : nil,
+                                   playing: nowPlaying.isPlaying))
         ZStack {
             if shown > 0.001 {
                 ZStack {
@@ -168,15 +172,22 @@ struct LyricLayer: View {
                             // source upgrade redraws the same place and
                             // only fades.
                             let dissolve = reduceMotion || !leaving.scene.blurs ? 0 : 1 - leaving.presence
-                            scene(leaving.scene.content, key: leaving.scene.key,
-                                  time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
-                                  ink: ink)
+                            ZStack {
+                                scene(leaving.scene.content, key: leaving.scene.key,
+                                      time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
+                                      ink: ink)
+                                openingTitle(leaving.scene.content, kind: leaving.scene.key.kind,
+                                             time: leaving.scene.renderTime(at: wall))
+                            }
                                 .opacity(leaving.presence)
                                 .blur(radius: dissolve * 5)
                                 .scaleEffect(1 - 0.012 * dissolve)
                         }
                     }
-                    scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
+                    ZStack {
+                        scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
+                        openingTitle(content, kind: key.kind, time: time)
+                    }
                         .opacity(transition.incomingPresence)
                 }
                 // Hiding the lyrics dissolves them softly rather than cutting.
@@ -287,7 +298,9 @@ struct LyricLayer: View {
             // Nothing for a quick lookup; for a slower one, the song's name,
             // quietly, at the lyrics' own scale -- not a system spinner.
             if let since = content.loadingSince {
+                // The opening title already names the song.
                 let presence = Self.loadingPresence(age: wall - since)
+                    * OpeningTitle.yields(to: openingSchedule(content, kind: .loading), at: time)
                 if presence > 0.001 {
                     placeholder([content.title, content.artist].filter { !$0.isEmpty }.joined(separator: " · "),
                                 size: baseSize * 0.34, colour: fallback.rest)
@@ -346,9 +359,11 @@ struct LyricLayer: View {
             let gap = settings.showInterludes
                 ? instrumentalGap(at: time, windows: content.vocalWindows, duration: content.duration) : nil
             // The scene's own song: an outgoing scene's credits keep its
-            // title and placement instead of taking the new song's.
+            // title and placement instead of taking the new song's. They
+            // wait for the opening title to leave.
             let cues = LyricCreditCues.isOn
-                ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist) : []
+                ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist,
+                                       notBefore: openingSchedule(content, kind: .synced)?.end ?? 0) : []
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
                 .environment(\.lyricCreditBands, LyricCreditCues.bands(cues))
@@ -357,7 +372,11 @@ struct LyricLayer: View {
                 }
                 .overlay {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
+                        // In the floating window the opening title takes the
+                        // middle, where the dots are: they wait for it.
                         InstrumentalInterludeView(cue: cue, accent: accent, baseSize: baseSize)
+                            .opacity(backdropOverride == nil ? 1
+                                     : OpeningTitle.yields(to: openingSchedule(content, kind: .synced), at: time))
                     }
                 }
         }
@@ -371,6 +390,34 @@ struct LyricLayer: View {
             CreditsLayer(cues: cues, time: time, stageSize: CGSize(width: maxWidth, height: maxHeight),
                          baseSize: baseSize, seed: content.seed,
                          composition: composition(at: first), mood: mood)
+        }
+    }
+
+    /// The song's opening title for a scene, or nil when it has none: the
+    /// setting is off, nothing is playing, or the stage already shows the
+    /// song's name in its place ("Show the song's name" without lyrics).
+    private func openingSchedule(_ content: LyricSceneContent, kind: LyricSceneKey.Kind) -> OpeningTitle.Schedule? {
+        guard OpeningTitle.isOn, !content.title.isEmpty else { return nil }
+        let words: OpeningTitle.Words
+        switch kind {
+        case .idle: return nil
+        case .loading: words = .none
+        case .plain: words = .showing
+        case .missing:
+            guard settings.noLyrics != .trackName else { return nil }
+            words = .none
+        case .synced: words = .timed(firstLine: OpeningTitle.firstSung(content.lines))
+        }
+        return OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead)
+    }
+
+    @ViewBuilder
+    private func openingTitle(_ content: LyricSceneContent, kind: LyricSceneKey.Kind, time: Double) -> some View {
+        if let phase = OpeningTitle.phase(openingSchedule(content, kind: kind), at: time) {
+            OpeningTitleCard(phase: phase, title: content.title, artist: content.artist,
+                             album: OpeningTitle.albumLine(album: content.album, title: content.title),
+                             reading: opening.reading(of: content.title, options: readingOptions.snapshot),
+                             baseSize: baseSize, accent: accent, mood: mood, floating: backdropOverride != nil)
         }
     }
 
