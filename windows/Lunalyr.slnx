@@ -1,31 +1,24 @@
 <Solution>
   <Folder Name="/src/">
-<<<<<<< HEAD
     <Project Path="src/Lunalyr.App/Lunalyr.App.csproj">
       <Platform Project="x64" />
     </Project>
-=======
->>>>>>> wt/m3-compositions
     <Project Path="src/Lunalyr.Core/Lunalyr.Core.csproj" />
     <Project Path="src/Lunalyr.Platform.Windows/Lunalyr.Platform.Windows.csproj" />
     <Project Path="src/Lunalyr.Render/Lunalyr.Render.csproj">
       <Platform Project="x64" />
     </Project>
-<<<<<<< HEAD
     <Project Path="src/Lunalyr.Shell/Lunalyr.Shell.csproj">
       <Platform Project="x64" />
     </Project>
-=======
->>>>>>> wt/m3-compositions
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Lunalyr.Core.Tests/Lunalyr.Core.Tests.csproj" />
     <Project Path="tests/Lunalyr.Platform.Windows.Tests/Lunalyr.Platform.Windows.Tests.csproj" />
-<<<<<<< HEAD
-    <Project Path="tests/Lunalyr.Shell.Tests/Lunalyr.Shell.Tests.csproj">
-=======
     <Project Path="tests/Lunalyr.Render.Compositions.Tests/Lunalyr.Render.Compositions.Tests.csproj">
->>>>>>> wt/m3-compositions
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="tests/Lunalyr.Shell.Tests/Lunalyr.Shell.Tests.csproj">
       <Platform Project="x64" />
     </Project>
   </Folder>
