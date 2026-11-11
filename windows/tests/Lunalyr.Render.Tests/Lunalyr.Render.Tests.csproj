@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Render engine decisions (pausing, power, pacing, crossfades) as pure logic. No windows, devices or swap chains
-       are created here; the engine itself is checked live with tools/EngineHarness. -->
+  <!-- Render engine decisions (pausing, power, pacing, crossfades) as pure logic, plus render layers drawn offscreen
+       with Direct2D on WARP (no window, no GPU needed) and the palette mapper. The live engine is checked with
+       tools/EngineHarness. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
@@ -15,6 +16,7 @@
     <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Helpers shared by every test project (fake time). -->
     <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
