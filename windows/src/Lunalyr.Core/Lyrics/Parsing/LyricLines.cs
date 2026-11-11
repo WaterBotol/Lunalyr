@@ -10,7 +10,6 @@
 //   * Precision: "Word-by-word" when every sung line has valid source word timing, "Mixed timing" when some do,
 //     else "Line-synced". `ValidWordTiming` and `EstimatedWordShare` are Lunalyr's own and are ported as written.
 
-using System.Globalization;
 using System.Text;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
@@ -170,6 +169,4 @@ public static class LyricLines
         if (vocal > 0 && valid == vocal) return WordByWord;
         return valid > 0 ? MixedTiming : LineSynced;
     }
-
-    internal static string Invariant(double value) => value.ToString("R", CultureInfo.InvariantCulture);
 }
