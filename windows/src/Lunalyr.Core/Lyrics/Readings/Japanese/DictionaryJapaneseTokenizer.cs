@@ -44,7 +44,10 @@ public sealed class DictionaryJapaneseTokenizer(MorphologicalAnalyzer analyzer, 
             var word = words[index];
             var surface = slice.Slice(word.Start, word.Length);
             var next = index + 1 < words.Count && words[index + 1].Start == word.Start + word.Length ? words[index + 1] : (Word?)null;
-            if (next is { } person && slice.Slice(person.Start, person.Length) is "人" && People(surface) is var (count, digits))
+            // Not the end of a longer number (十二人 juuninin).
+            var afterNumber = index > 0 && words[index - 1].Start + words[index - 1].Length == word.Start
+                && dictionary.PartOfSpeech(words[index - 1].ContextId).StartsWith("名詞,数", StringComparison.Ordinal);
+            if (next is { } person && !afterNumber && slice.Slice(person.Start, person.Length) is "人" && People(surface) is var (count, digits))
             {
                 tokens.Add(new JapaneseToken(start + word.Start, word.Length + person.Length, digits ? null : Latin(count == 1 ? "ひとり" : "ふたり")));
                 index++;
@@ -135,12 +138,13 @@ public sealed class DictionaryJapaneseTokenizer(MorphologicalAnalyzer analyzer, 
 
     /// <summary>
     /// The analysis of <paramref name="text"/>, with a は or へ that begins it before hiragana read as the particle
-    /// where what follows reads as a word that comes after one. A lyric line often goes on from the one before with
-    /// its particle (は もう, は から), and the dictionary would otherwise take the two together for a rare verb
-    /// written in kana (はも|う, from hamoru; はから, from hakaru). What follows the particle is then analysed as a phrase
-    /// of its own (しあわせ, not し|あわ|せ). Where what follows is a verb, an adjective or a noun the word stays
-    /// whole (はしれ, はなれて, はかない); <see cref="JapaneseReading"/> then decides, as it does on the Mac, whether a
-    /// lone は before a one-kana particle begins a word (は|ね hane).
+    /// where the dictionary took it into a verb or adjective and what follows, on its own, is an adverb, a particle, a
+    /// conjunction, a pronoun or an adnominal of two kana or more. A lyric line often goes on from the one before with
+    /// its particle (は もう, は から), and the dictionary would otherwise read a rare verb written in kana (はも|う,
+    /// from hamoru; はから, from hakaru). Where the particle is already apart, what follows it is analysed as a phrase
+    /// of its own (しあわせ, not し|あわ|せ). Verbs, adjectives and nouns after は stay whole (はしれ, はなれて,
+    /// はかない), and so do nouns that begin with it (はか|の, へや) and words before a one-kana particle (はね|が);
+    /// <see cref="JapaneseReading"/> then decides, as it does on the Mac, whether a lone は begins a word.
     /// </summary>
     private List<Morpheme> LeadingParticle(string text)
     {
@@ -163,8 +167,17 @@ public sealed class DictionaryJapaneseTokenizer(MorphologicalAnalyzer analyzer, 
         }
         else
         {
+            // Only a verb or adjective taken together with the particle is in doubt (はも|う, はから); a noun stays
+            // (はか|の, へや). What follows must be a word of two kana or more: before a one-kana particle the word
+            // stays too (はね|が, はで|な).
+            var firstPart = dictionary.PartOfSpeech(first.ContextId);
             var part = dictionary.PartOfSpeech(rest[0].ContextId);
-            if (!rest[0].IsKnown || !FollowsAParticle.Any(prefix => part.StartsWith(prefix, StringComparison.Ordinal))) return morphemes;
+            if (!(firstPart.StartsWith("動詞", StringComparison.Ordinal) || firstPart.StartsWith("形容詞", StringComparison.Ordinal))
+                || !rest[0].IsKnown || rest[0].Length < 2
+                || !FollowsAParticle.Any(prefix => part.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                return morphemes;
+            }
             if (analyzer.Analyze(text, out _, 1, "助詞") is not [var forced, ..]) return morphemes;
             particle = forced;
         }

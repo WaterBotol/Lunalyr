@@ -41,9 +41,10 @@ breaks work on every PC without the Japanese language pack.
   copied next to the app on build and publish.
 - **Analyser: Lunalyr's own** (`MorphologicalAnalyzer`, about 200 lines): MeCab's model (a lattice of dictionary and
   unknown-word candidates, the cheapest path by word and connection cost) written from its published description
-  and file formats. No MeCab or NMeCab code. On 300 lyric-style lines, including every Japanese input of the Mac
-  tests, its segmentation and readings were identical to MeCab's (NMeCab 0.10.2 with its IPAdic, run outside the
-  repo as a check only; it is GPL/LGPL and is not used by the app).
+  and file formats (no MeCab or NMeCab source was opened while writing it; the owner may still wish to credit MeCab,
+  BSD option, in the notices). On 300 lyric-style lines, a selection of the Mac tests' Japanese inputs plus lines
+  written for the check, its segmentation and readings were identical to MeCab's (NMeCab 0.10.2 with its IPAdic, run
+  outside the repo as a check only; it is GPL/LGPL and is not used by the app).
 - **Format and size.** `tools/JapaneseDictionaryBuilder` turns the source (EUC-JP CSV and .def files) into Lunalyr's
   dictionary format (sorted surfaces, entries, readings, the connection matrix and the character table, laid out to
   be used in place) and compresses it with Brotli: `Readings/Data/ipadic.lunadic.br`, **4,395,495 bytes** (SHA-256
@@ -57,17 +58,20 @@ breaks work on every PC without the Japanese language pack.
 - To rebuild it: `dotnet run --project tools/JapaneseDictionaryBuilder -c Release -- build <mecab-ipadic folder>
   src/Lunalyr.Platform.Windows/Readings/Data/ipadic.lunadic.br`; `probe <file> <texts>` prints analyses.
 
-**Trade-offs considered.** *Analyser:* every NMeCab package on NuGet (LibNMeCab 0.10.2, its IpaDicBin, NMeCab
-0.6.4, NMeCabNetStandard, MeCab.DotNet, MeCab.NET) is GPL-2.0 or LGPL-2.1 only in its own package metadata, so out;
-Lucene.Net.Analysis.Kuromoji (Apache-2.0) is a beta that brings the Lucene.NET core and its reflection-based
-attribute system (not AOT-friendly) for one tokenizer; DotNetG2P.MeCab (Apache-2.0) is new, built for speech, and
-needs OpenJTalk's naist-jdic (about 100 MB, from SourceForge). An own analyser is small, AOT-safe by construction
-and fully under our control. *Dictionary:* IPAdic is small and its readings are what MeCab users know; UniDic (BSD
-option) is more modern but several times larger; Sudachi's small dictionary (Apache-2.0) needs a different engine;
-JMdict/KANJIDIC (CC BY-SA) are not acceptable for a closed-source app; Unihan per-character readings read compounds
-wrongly. *Shipping:* uncompressed in the exe would add 15.7 MB to the download; expanding into memory at every
-start would cost about 16 MB of private memory and the decompression each time; a separate file next to the exe
-would break the single-file AOT app. Compressed in the exe, expanded once and mapped is the middle way.
+**Trade-offs considered.** *Analyser:* the NMeCab packages on NuGet say in their own metadata: LibNMeCab 0.10.2,
+LibNMeCab.IpaDicBin 0.10.0 and MeCab.NET 1.0.0 `GPL-2.0-or-later OR LGPL-2.1-or-later`; NMeCabNetStandard 0.7.3 and
+MeCab.DotNet 1.2.0 `GPL-2.0-only OR LGPL-2.1-only`; NMeCab 0.6.4 gives no licence expression, only a link (not
+followed); Kawazu 1.1.4 gives none and depends on LibNMeCab. All out. Lucene.Net.Analysis.Kuromoji 4.8.0-beta00018
+ships a LICENSE.txt (not read; Lucene.NET is an Apache project) and brings the Lucene.NET core and its attribute
+system for one tokenizer; it was not tried, and its AOT behaviour was not measured. DotNetG2P.MeCab 1.10.0
+(Apache-2.0) is new, built for speech, and needs OpenJTalk's naist-jdic, a separate and larger dictionary (size not
+measured). An own analyser is small, AOT-safe by construction and fully under our control. *Dictionary:* IPAdic is
+small and its readings are what MeCab users know; UniDic (BSD option) is more modern but larger (not measured);
+Sudachi's small dictionary (Apache-2.0) needs a different engine; JMdict/KANJIDIC (CC BY-SA) are not acceptable for a
+closed-source app; Unihan per-character readings read compounds wrongly. *Shipping:* uncompressed in the exe would
+add 15.7 MB to the download; expanding into memory at every start would cost about 16 MB of private memory and the
+decompression each time; a separate file next to the exe would break the single-file AOT app.
+Compressed in the exe, expanded once and mapped is the middle way.
 
 ### How it is used
 
@@ -78,27 +82,31 @@ would break the single-file AOT app. Compressed in the exe, expanded once and ma
   lists: a ー drawn out after hiragana (すごーい) stays in its word; a small kana never begins a word (はくしゅ|して);
   the volitional stays on its verb (行こう, でしょう); 1 or 2 people (２人, 一人, 二人) is one token (hitori,
   futari); an interjection or adverb in っ takes its と (はっと|して); and は or へ beginning a phrase before an adverb,
-  a particle or a pronoun is the particle (は|もう, は|から, not はも|う, はから), with what follows analysed afresh.
+  a particle or a pronoun of two kana or more, where the dictionary took it into a verb or adjective, is the particle
+  (は|もう, は|から, not はも|う, はから); after a particle already apart, what follows is analysed afresh (しあわせ).
 - `JapaneseWordBreaker` (`IWordBreaker`) parts text with kana in it by the analyser, an auxiliary verb kept on what
   it inflects (会おう, いた), digits next to Japanese with it (５|時), and Latin words and punctuation by ICU. Text
   without kana (Chinese, Thai, Latin) goes to ICU as before.
 - `JapanesePhoneticAnalyzer`, which read nothing without the Japanese language installed (most likely it needs
-  the IME dictionary, not verified; on this PC it returned no words even for ありがとう), is removed: the bundled dictionary gives the same
-  answers on every PC. If the bundled dictionary could not be opened at all, the services fall back to
-  `SimpleJapaneseTokenizer` over ICU word breaks (kana only, kanji unread), pinned in `JapaneseWithoutAnalyzerTests`.
+  the IME dictionary, not verified; on this PC it returned no words even for ありがとう), is removed: the bundled
+  dictionary gives the same answers on every PC. If the bundled dictionary could not be opened at all, the services
+  fall back to `SimpleJapaneseTokenizer` over ICU word breaks (kana only, kanji unread), pinned in
+  `JapaneseWithoutAnalyzerTests`.
 
 ### The Mac's tests
 
 All 29 Japanese tests that were skipped run and pass, with the Mac's inputs and expectations, except these, where
-IPAdic splits or reads differently (each keeps the Mac's value in a `// Mac:` comment and asserts Windows'):
+IPAdic splits or reads differently (each keeps the Mac's value in a `// Mac:` comment and asserts Windows'). Two are
+defensible alternatives (bokura, doushite); the other three are IPAdic getting it wrong (a mis-split with the same
+letters, or a misreading):
 
 | Test | Input | Mac | Windows | Why |
 | --- | --- | --- | --- | --- |
-| WordsTheTokenizerSplitsAfterHaStayWhole | はぐして | hagushite | hagu shite | IPAdic: はぐ\|し\|て (剥ぐ + する), spaced as はくしゅ shite is. |
-| WordsTheTokenizerSplitsAfterHaStayWhole | へりくつ, へりくつを | herikutsu (wo) | heri kutsu (wo) | 屁理屈 is not in IPAdic in kana; same letters, spaced. |
-| FullWidthDigitsCountPeopleAsHalfWidthOnesDo | 僕ら２人 | boku ra futari | bokura futari | 僕ら is one IPAdic word. |
-| PhraseSpacesOfWordTimedLinesAreKept | えっ どうして なの + source "e doushite nano" | e / dou shite / na no | e / doushite / na no | どうして is one IPAdic adverb. |
-| SourceReadingsAreShownInHepburn | 雨が降り止むまでは帰れない + Kunrei source "…hu ri ya mu…" | …furiyamu… | …huriyamu… | IPAdic reads 降り here as ori (降りる), so the source's hu matches nothing of the app's and stays as written. |
+| WordsTheTokenizerSplitsAfterHaStayWhole | はぐして | hagushite | hagu shite | Mis-split: IPAdic reads はぐ\|し\|て (剥ぐ + する) rather than ハグ + して; same letters, spaced. |
+| WordsTheTokenizerSplitsAfterHaStayWhole | へりくつ, へりくつを | herikutsu (wo) | heri kutsu (wo) | Mis-split: 屁理屈 is not in IPAdic in kana; same letters, spaced. |
+| FullWidthDigitsCountPeopleAsHalfWidthOnesDo | 僕ら２人 | boku ra futari | bokura futari | Defensible: 僕ら is one IPAdic word. |
+| PhraseSpacesOfWordTimedLinesAreKept | えっ どうして なの + source "e doushite nano" | e / dou shite / na no | e / doushite / na no | Defensible: どうして is one IPAdic adverb. |
+| SourceReadingsAreShownInHepburn | 雨が降り止むまでは帰れない + Kunrei source "…hu ri ya mu…" | …furiyamu… | …huriyamu… | Misreading: IPAdic reads 降り here as ori (降りる, get off) for furi (降る, fall); generated alone the line reads "ame ga ori yamu made wa kaerenai". The source's hu then matches nothing of the app's and stays as written. |
 
 The word-break assertions that Windows had replaced now hold as on the Mac and are restored: rolling stages 窓辺に /
 座って / 海を / 見ていた, constellation 窓辺に / 座って海を見ていた (`ARollingStagePartsAnUnspacedLineIntoItsWords`), and
@@ -108,11 +116,11 @@ The word-break assertions that Windows had replaced now hold as on the Mac and a
 
 - IPAdic is from 2007: newer words, slang and most names are unknown. Unknown kana words are read as written;
   unknown kanji get no reading (never a Mandarin one), as before.
-- Readings are the dictionary's most likely ones in context and can be wrong where a kanji has several (降り ori for
-  furi above). Poetic readings that lyrics give kanji (運命 sadame, 本気 maji) are never generated; they come only
-  from saved or source readings, which still win.
-- Kana-only words IPAdic lacks may be split oddly (へりくつ); the Mac's tokenizer has its own such cases, which
-  `JapaneseReading`'s rules were written for.
+- Readings are the dictionary's most likely ones in context and can be wrong where a kanji has several (降り止む read
+  ori yamu, for furi yamu). Poetic readings that lyrics give kanji (運命 sadame, 本気 maji) are never generated;
+  they come only from saved or source readings, which still win.
+- Kana-only words IPAdic lacks may be split oddly (へりくつ heri kutsu, はぐして hagu shite, へいき e iki at the start of a
+  phrase); the Mac's tokenizer has its own such cases, which `JapaneseReading`'s rules were written for.
 - The analysis allocates its lattice per call (lyric lines are short); the dictionary is shared, read-only and
   thread-safe.
 

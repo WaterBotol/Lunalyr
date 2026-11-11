@@ -81,6 +81,7 @@ public class BundledJapaneseDictionaryTests
         Assert.Equal("一人:hitori", Tokens("一人"));
         Assert.Equal("二人:futari|の:no", Tokens("二人の"));
         Assert.Equal("3:?|人:nin", Tokens("3人"));
+        Assert.Equal("十:juu|二:ni|人:nin", Tokens("十二人"));
         // An interjection ending in っ takes the と after it.
         Assert.Equal("はっと:hatto|して:shite", Tokens("はっとして"));
         // A line that begins with its particle.
@@ -89,5 +90,10 @@ public class BundledJapaneseDictionaryTests
         Assert.Equal("は:ha|しあわせ:shiawase", Tokens("はしあわせ"));
         Assert.Equal("はしれ:hashire", Tokens("はしれ"));
         Assert.Equal("はかない:hakanai", Tokens("はかない"));
+        // Nouns that begin with は or へ, and words before a one-kana particle, stay whole.
+        Assert.Equal("はか:haka|の:no", Tokens("はかの"));
+        Assert.Equal("へや:heya", Tokens("へや"));
+        Assert.Equal("はね:hane|が:ga", Tokens("はねが"));
+        Assert.Equal("はで:hade|な:na", Tokens("はでな"));
     }
 }
