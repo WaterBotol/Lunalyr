@@ -38,6 +38,18 @@ public class PaletteMapperTests
     }
 
     [Fact]
+    public void TheCoversNineColoursAndTheTextBackdropGoWithThePaletteForTheLyricInk()
+    {
+        var cover = new AlbumWallpaperPalette(AlbumColourGrid.Extract(ArtworkPixels.Solid(64, 64, 240, 230, 200)));
+        var palette = PaletteMapper.FromAlbum(cover);
+        Assert.Equal(cover.ArtworkStops, palette.ArtworkStops);
+        Assert.Equal(LyricBackdrop.Luminance(WallpaperBackgroundMode.ColourOnly, false, cover.ArtworkStops, 1, pastelText: true),
+                     palette.TextBackdrop, 9);
+        // A palette not made from a cover leaves the ink its own pastels.
+        Assert.Empty(Palette.Default.ArtworkStops);
+    }
+
+    [Fact]
     public void FallbackIsTheMacsFallbackPalette()
     {
         var fallback = PaletteMapper.Fallback;

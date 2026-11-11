@@ -19,9 +19,9 @@ public static class PaletteMapper
     /// over the colour field (the Mac's default text mode).</item>
     /// <item><see cref="Palette.Highlight"/>: the highlight tile that complements it (the Mac's default highlight).</item>
     /// </list>
-    /// Text and highlight drift and ease per frame on the Mac; a composition that wants that runs its own
-    /// <see cref="LyricInkDirector"/> from <see cref="AlbumWallpaperPalette.ArtworkStops"/>. Takes a few milliseconds:
-    /// call it once per cover, off the render thread.
+    /// Text and highlight drift and ease per frame on the Mac; the compositions run their own
+    /// <see cref="LyricInkDirector"/> from <see cref="Palette.ArtworkStops"/> and <see cref="Palette.TextBackdrop"/>,
+    /// which are filled in here. Takes a few milliseconds: call it once per cover, off the render thread.
     /// </summary>
     public static Palette FromAlbum(AlbumWallpaperPalette cover, BackgroundOptionsForText? text = null)
     {
@@ -36,7 +36,11 @@ public static class PaletteMapper
         {
             Album = cover.ArtworkStops, Backdrop = backdrop, IncreaseContrast = options.IncreaseContrast,
         }, 0);
-        return new Palette(Opaque(average * ColourField.BaseBrightness), accents, Opaque(ink.Sample(0.5).Rest), Opaque(ink.TileColour));
+        return new Palette(Opaque(average * ColourField.BaseBrightness), accents, Opaque(ink.Sample(0.5).Rest), Opaque(ink.TileColour))
+        {
+            ArtworkStops = [.. cover.ArtworkStops],
+            TextBackdrop = backdrop,
+        };
     }
 
     /// <summary>The palette before artwork arrives, or for a track without any (the Mac's fallback colours).</summary>

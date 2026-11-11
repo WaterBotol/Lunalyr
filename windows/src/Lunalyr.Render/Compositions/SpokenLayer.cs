@@ -219,8 +219,10 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
         var shadow = new ShadowSpec(0.25f, Points(7) * 0.5f, Points(2));
         // Rasterised at the focus size (and its breath), and scaled down for the words around it.
         const float raster = 1.16f;
-        var labelInk = kit.Bake(label, TextColour, raster, shadow);
-        var readingInk = reading is null ? null : kit.Bake(reading, ReadingColour, raster, shadow);
+        // The word's own colour from the ink: its slot along the song's colours, at the drift of its onset.
+        var colours = InkSample(token.Source.Start, token.Slot, token.Seed);
+        var labelInk = kit.Bake(label, LyricInks.Vector(colours.Rest), raster, shadow);
+        var readingInk = reading is null ? null : kit.Bake(reading, LyricInks.Vector(colours.Reading), raster, shadow);
         var unit = new SpokenUnit
         {
             Label = labelInk,
@@ -271,7 +273,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
                 for (var g = 0; g < groups.Count; g++)
                 {
                     var group = groups[g];
-                    var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id, wordTimed: true,
+                    var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id,
+                                         group.Words.Count > 0 ? group.Words[0].Start : 0, wordTimed: true,
                                          editorial: true, null, null, new LineFit(box, 1, 1), box.Width);
                     plans[g] = new BackingPlan(group, plan);
                 }
