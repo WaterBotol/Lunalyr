@@ -18,10 +18,7 @@ final class MusicVideoController: ObservableObject {
             }),
             playability: AVMusicVideoPlayability(), http: URLSessionMusicVideoHTTP(),
             cache: MusicVideoCache(defaults: .standard), links: MusicVideoLinks(defaults: .standard))
-        return MusicVideoController(resolver: resolver, offsets: MusicVideoOffsets(defaults: .standard),
-                                    autoSync: AppRuntime.isUnitTesting ? nil : LiveMusicVideoAutoSync(resolver: resolver),
-                                    listener: AppRuntime.isUnitTesting ? nil : LiveMusicVideoListener(),
-                                    cutSync: !AppRuntime.isUnitTesting)
+        return MusicVideoController(resolver: resolver, offsets: MusicVideoOffsets(defaults: .standard))
     }()
 
     enum Status: Equatable {
@@ -56,28 +53,6 @@ final class MusicVideoController: ObservableObject {
     /// Seconds before a lookup that failed for a passing reason is retried.
     var retryDelay: TimeInterval = 45
 
-    /// An automatic offset is being looked for.
-    @Published private(set) var syncing = false
-    private let autoSync: MusicVideoAutoSyncing?
-    private let now: () -> Date
-    private let sleep: (TimeInterval) async -> Void
-    private var syncTask: Task<Void, Never>?
-    /// An audio offset is checked once more, this much later in the song.
-    var refineDelay: TimeInterval = 60
-
-    /// Capture runs briefly for a library video's alignment.
-    @Published private(set) var listening = false
-    private let listener: MusicVideoBriefListening?
-    /// Song and video pairs listened to already: once each.
-    private var listened: Set<String> = []
-    private var listenToken: UUID?
-    /// A library video's brief listen that could not start (paused, say):
-    /// tried once more when playback resumes.
-    private var missedListen: String?
-    private var resumeRetried: Set<String> = []
-    /// The longest a brief listen runs.
-    static let listenLimit: TimeInterval = 25
-
     /// Tap to sync.
     @Published private(set) var tapState: MusicVideoTapState = .idle
     /// This song and video's taps, as offsets, averaged into the user's.
@@ -90,41 +65,17 @@ final class MusicVideoController: ObservableObject {
     private var keyMonitor: Any?
     private var tapExpiry: Task<Void, Never>?
 
-    /// The video's cuts are being lined up with the beat (YouTube).
-    @Published private(set) var cutSyncing = false
-    private let cutSyncEnabled: Bool
-    private let captureActive: @MainActor () -> Bool
-    private let audioFrames: () -> [AudioEnvelopeRecorder.Frame]
-    /// Song and video pairs whose cuts were tried this session: once each.
-    private var cutTried: Set<String> = []
-    /// The pair being tried, and whether a brief listen was started for it.
-    private var cutPair: String?
-    private var cutListening = false
-
-    init(resolver: MusicVideoResolver, offsets: MusicVideoOffsets, autoSync: MusicVideoAutoSyncing? = nil,
-         listener: MusicVideoBriefListening? = nil,
-         cutSync: Bool = false,
-         captureActive: @escaping @MainActor () -> Bool = LiveMusicVideoAutoSync.captureIsActive,
-         audioFrames: @escaping () -> [AudioEnvelopeRecorder.Frame] = { AudioEnvelopeRecorder.shared.snapshot() },
+    init(resolver: MusicVideoResolver, offsets: MusicVideoOffsets,
          songClock: @escaping @MainActor () -> (time: Double, playing: Bool) = {
              (NowPlayingMonitor.shared.playbackPosition(), NowPlayingMonitor.shared.isPlaying)
          },
-         lyrics: @escaping @MainActor (MusicVideoSong) -> [MusicVideoLyricLine]? = LiveMusicVideoAutoSync.currentLyrics,
-         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-         now: @escaping () -> Date = Date.init,
-         sleep: @escaping (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }) {
+         lyrics: @escaping @MainActor (MusicVideoSong) -> [MusicVideoLyricLine]? = MusicVideoTapSync.currentLyrics,
+         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.resolver = resolver
         self.offsets = offsets
-        self.autoSync = autoSync
-        self.listener = listener
-        self.cutSyncEnabled = cutSync
-        self.captureActive = captureActive
-        self.audioFrames = audioFrames
         self.songClock = songClock
         self.lyrics = lyrics
         self.uptime = uptime
-        self.now = now
-        self.sleep = sleep
     }
 
     /// Follows the playing song and the settings. Started by the app
@@ -133,12 +84,6 @@ final class MusicVideoController: ObservableObject {
 
     func start(monitor: NowPlayingMonitor, settings: Settings) {
         guard cancellables.isEmpty else { return }
-        monitor.$isPlaying.removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] playing in
-                MainActor.assumeIsolated { self?.playbackChanged(playing: playing) }
-            }
-            .store(in: &cancellables)
         Publishers.CombineLatest3(monitor.$current.removeDuplicates(by: Self.sameSong),
                                   settings.$backgroundMode.removeDuplicates(),
                                   settings.$musicVideoOnline.removeDuplicates())
@@ -187,8 +132,6 @@ final class MusicVideoController: ObservableObject {
         pastedLooksStill = false
         lookup?.cancel()
         retry?.cancel()
-        stopAutoSync()
-        endCutSync()
         resetTaps()
         endAlign()
         guard enabled else { status = .off; return }
@@ -215,7 +158,6 @@ final class MusicVideoController: ObservableObject {
         case .found(let source):
             status = .showing(source, title: song.title)
             if case .youTube(let id) = source, resolver.links.videoID(for: song.key) == id { checkPastedStill(id, song) }
-            startAutoSync(song, source, force: false)
         case .missing(let miss):
             status = .missing(miss, title: song.title)
             if (miss == .rateLimited || miss == .lookupFailed) && retried != song.key { scheduleRetry(song) }
@@ -245,12 +187,11 @@ final class MusicVideoController: ObservableObject {
         }
     }
 
-    /// Waits for the lookup in flight (and a pasted link's still check,
-    /// and the automatic offset), for tests.
+    /// Waits for the lookup in flight (and a pasted link's still check),
+    /// for tests.
     func settle() async {
         await lookup?.value
         await stillCheck?.value
-        await syncTask?.value
     }
 
     /// The player could not show the video, and the wallpaper falls back
@@ -384,8 +325,6 @@ final class MusicVideoController: ObservableObject {
         pastedLooksStill = false
         lookup?.cancel()
         retry?.cancel()
-        stopAutoSync()
-        endCutSync()
         resetTaps()
         endAlign()
         objectWillChange.send()
@@ -403,29 +342,27 @@ final class MusicVideoController: ObservableObject {
     }
 
     /// How far into the video the song starts, for the playing song: the
-    /// user's nudge, else the automatic offset for this video, else the
-    /// length estimate, else 0.
+    /// user's nudge for this video, else the length estimate, else 0.
     /// While the video's bar is dragged, the offset under the hand.
     var currentOffset: Double {
         if isAlignDragging, let alignDrag { return MusicVideoTiming.clampedOffset(alignDrag.offset) }
-        return offsets.offset(for: song?.key, video: showingVideoKey, now: now())
+        return offsets.offset(for: song?.key, video: showingVideoKey)
     }
 
     /// Where `currentOffset` came from.
-    var offsetOrigin: MusicVideoOffsetOrigin { offsets.origin(for: song?.key, video: showingVideoKey, now: now()) }
+    var offsetOrigin: MusicVideoOffsetOrigin { offsets.origin(for: song?.key, video: showingVideoKey) }
 
     func offset(for track: NowPlayingMonitor.Track?) -> Double {
         let key = track.map { MusicVideoSong($0).key }
         if let key, key == song?.key { return currentOffset }
-        return offsets.offset(for: key, video: nil, now: now())
+        return offsets.offset(for: key, video: nil)
     }
 
     /// The user's nudge, from the offset in force; it wins from then on,
     /// for the video on screen.
     func nudgeOffset(by delta: Double) {
         guard let song else { return }
-        offsets.nudge(by: delta, for: song.key, video: showingVideoKey, now: now())
-        endCutSync()
+        offsets.nudge(by: delta, for: song.key, video: showingVideoKey)
         resetTaps()
         objectWillChange.send()
     }
@@ -438,31 +375,15 @@ final class MusicVideoController: ObservableObject {
     /// The video's moments come `fineNudge` later (it ran ahead).
     func videoLater() { nudgeOffset(by: -Self.fineNudge) }
 
-    /// Drops the user's nudge: back to the automatic offset, looked for
-    /// again if there is none yet.
+    /// Drops the user's nudge: back to the estimate.
     func resetOffset() {
         guard let song else { return }
         offsets.clearManual(song.key)
         resetTaps()
         objectWillChange.send()
-        if case .showing(let source, _) = status { startAutoSync(song, source, force: false) }
-    }
-
-    /// "Re-sync": forgets the user's nudge and what was found, and looks
-    /// for the offset again.
-    func resync() {
-        guard let song, case .showing(let source, _) = status else { return }
-        offsets.clearManual(song.key)
-        offsets.forgetAutomatic(song.key)
-        endCutSync()
-        if let video = MusicVideoOffsets.videoKey(source) { cutTried.remove(song.key + "\u{0}" + video) }
-        resetTaps()
-        objectWillChange.send()
-        startAutoSync(song, source, force: true)
     }
 
     var hasSong: Bool { song != nil }
-    var canResync: Bool { showingVideoKey != nil && autoSync != nil }
 
     /// A video's length, from its player: the starting guess for its intro
     /// when nothing better is known.
@@ -476,143 +397,14 @@ final class MusicVideoController: ObservableObject {
         if currentOffset != before { objectWillChange.send() }
     }
 
-    /// Playback resumed: a library video whose brief listen could not start
-    /// gets it now, once.
-    func playbackChanged(playing: Bool) {
-        guard playing, let pair = missedListen, let song, case .showing(let source, _) = status,
-              let video = MusicVideoOffsets.videoKey(source), pair == song.key + "\u{0}" + video,
-              !offsets.hasManual(song.key, video: video), offsets.automaticEntry(for: song.key, video: video, now: now()) == nil
-        else { return }
-        missedListen = nil
-        resumeRetried.insert(pair)
-        startAutoSync(song, source, force: false)
-    }
-
-    private func stopAutoSync() {
-        syncTask?.cancel()
-        syncTask = nil
-        syncing = false
-    }
-
-    /// Whether to listen briefly for a library video: a listener, not done
-    /// for this song and video yet (unless `force`, Re-sync), and allowed
-    /// just now (music playing, permission granted, power not spared).
-    private func shouldListen(_ pair: String, force: Bool) -> Bool {
-        guard let listener, force || !listened.contains(pair) else { return false }
-        return listener.mayListen
-    }
-
-    /// Runs capture for at most `listenLimit` while the soundtrack is lined
-    /// up with the song, then stops it, whatever the outcome.
-    private func listenBriefly(url: URL, song: MusicVideoSong, pair: String,
-                               autoSync: MusicVideoAutoSyncing) async -> MusicVideoAutoResult {
-        guard let listener, listener.start(for: Self.listenLimit) else { return .unavailable }
-        listened.insert(pair)
-        let token = UUID()
-        listenToken = token
-        listening = true
-        let attempt = Task { await autoSync.audioOffset(url: url, song: song) }
-        let limit = Self.listenLimit, sleep = self.sleep
-        let watchdog = Task {
-            await sleep(limit)
-            attempt.cancel()
-        }
-        let result = await withTaskCancellationHandler { await attempt.value } onCancel: { attempt.cancel() }
-        watchdog.cancel()
-        // Unless a newer listen (Re-sync) has taken over meanwhile.
-        if listenToken == token {
-            listener.stop()
-            listening = false
-            listenToken = nil
-        }
-        return result
-    }
-
-    /// Looks for the video's offset once: captions for YouTube (only with
-    /// online lookups on), the soundtrack for a library video. Skipped when
-    /// the user set the offset or one is remembered for this video, unless
-    /// `force` (Re-sync).
-    private func startAutoSync(_ song: MusicVideoSong, _ source: MusicVideoSource, force: Bool) {
-        stopAutoSync()
-        guard let autoSync, let video = MusicVideoOffsets.videoKey(source) else { return }
-        if !force && (offsets.hasManual(song.key, video: video) || offsets.automaticEntry(for: song.key, video: video, now: now()) != nil) {
-            return
-        }
-        if case .youTube = source, !online { return }
-        syncing = true
-        let pair = song.key + "\u{0}" + video
-        var briefly = false
-        if case .local = source {
-            briefly = shouldListen(pair, force: force)
-            missedListen = !briefly && listener != nil && !listened.contains(pair) && !resumeRetried.contains(pair) ? pair : nil
-        } else {
-            missedListen = nil
-        }
-        syncTask = Task { [weak self] in
-            let result: MusicVideoAutoResult
-            switch source {
-            case .youTube(let id): result = await autoSync.captionOffset(videoID: id, song: song)
-            case .local(let url):
-                if briefly, let self {
-                    result = await self.listenBriefly(url: url, song: song, pair: pair, autoSync: autoSync)
-                } else {
-                    result = await autoSync.audioOffset(url: url, song: song)
-                }
-            }
-            guard let self, !Task.isCancelled, self.song?.key == song.key, self.showingVideoKey == video else { return }
-            self.syncing = false
-            self.store(result, song: song, video: video)
-            // A brief listen is not repeated: capture is off again by now.
-            if !briefly, case .found(let first, .audio) = result, case .local(let url) = source {
-                await self.refine(first, url: url, song: song, video: video, autoSync: autoSync)
-            }
-        }
-    }
-
-    private func store(_ result: MusicVideoAutoResult, song: MusicVideoSong, video: String) {
-        switch result {
-        case .found(let offset, let origin):
-            offsets.storeAutomatic(offset, origin: origin, for: song.key, video: video, now: now())
-        case .unusable(let origin):
-            offsets.storeAutomatic(nil, origin: origin, for: song.key, video: video, now: now())
-        case .unavailable:
-            break
-        }
-        objectWillChange.send()
-    }
-
-    /// Once more, later in the song, with a fresh stretch of audio. Kept
-    /// when it agrees roughly (a refinement), not when it is somewhere else
-    /// entirely (a repeated chorus fooled one of them).
-    static let refineAgreement = 2.0
-
-    private func refine(_ first: Double, url: URL, song: MusicVideoSong, video: String,
-                        autoSync: MusicVideoAutoSyncing) async {
-        await sleep(refineDelay)
-        guard !Task.isCancelled, self.song?.key == song.key, showingVideoKey == video,
-              !offsets.hasManual(song.key, video: video) else { return }
-        let second = await autoSync.audioOffset(url: url, song: song)
-        guard !Task.isCancelled, self.song?.key == song.key, showingVideoKey == video,
-              !offsets.hasManual(song.key, video: video),
-              case .found(let offset, _) = second, abs(offset - first) <= Self.refineAgreement else { return }
-        store(second, song: song, video: video)
-    }
-
     /// The words beside the nudge buttons.
-    nonisolated static func timingLabel(origin: MusicVideoOffsetOrigin, syncing: Bool, listening: Bool = false,
-                                        watchingCuts: Bool = false) -> String? {
-        if watchingCuts && origin != .manual { return Self.watchingCutsLabel }
-        if listening && origin != .manual { return Self.listeningLabel }
+    nonisolated static func timingLabel(origin: MusicVideoOffsetOrigin) -> String? {
         switch origin {
         case .manual: return "Offset set by you"
-        case .captions, .audio, .cuts: return "Synced automatically"
-        case .estimated: return syncing ? "Estimated; syncing…" : "Estimated"
-        case .none: return syncing ? "Syncing…" : nil
+        case .estimated: return "Estimated"
+        case .none: return nil
         }
     }
-
-    nonisolated static let listeningLabel = "Listening to line up the video…"
-    nonisolated static let watchingCutsLabel = "Lining up the video’s cuts with the beat…"
 
     // MARK: Tap to sync
 
@@ -671,7 +463,6 @@ final class MusicVideoController: ObservableObject {
         taps.append(MusicVideoTapSync.offset(videoTimeAtTap: marked, lineStart: line.start, reaction: 0))
         let value = MusicVideoTapSync.averaged(taps) ?? 0
         offsets.set(value, for: song.key, video: showingVideoKey)
-        endCutSync()
         tapState = .done(offset: currentOffset, taps: taps.count, firstLine: firstLine)
         objectWillChange.send()
     }
@@ -716,98 +507,6 @@ final class MusicVideoController: ObservableObject {
         keyMonitor = nil
         tapExpiry?.cancel()
         tapExpiry = nil
-    }
-
-    // MARK: Cut-to-beat alignment
-
-    /// A brief listen for the cut alignment runs at most this long.
-    static let cutListenLimit: TimeInterval = MusicVideoCutCollector.limit
-
-    private func cutPairKey(_ source: MusicVideoSource) -> String? {
-        guard let song, isShowing(source), let video = MusicVideoOffsets.videoKey(source) else { return nil }
-        return song.key + "\u{0}" + video
-    }
-
-    /// Whether the YouTube video on screen should have its cuts lined up
-    /// with the beat: once per song and video, never over the user's own
-    /// offset or one already found for it, and only with the music heard
-    /// (System audio's capture running, or allowed to run briefly).
-    func cutSyncWanted(_ source: MusicVideoSource) -> Bool {
-        guard cutSyncEnabled, !cutSyncing, !isAligning, case .youTube = source, let song, let pair = cutPairKey(source),
-              let video = MusicVideoOffsets.videoKey(source), !cutTried.contains(pair),
-              !offsets.hasManual(song.key, video: video) else { return false }
-        if let entry = offsets.automaticEntry(for: song.key, video: video, now: now()),
-           entry.offset != nil || entry.origin == .cuts {
-            return false
-        }
-        return captureActive() || (listener?.mayListen ?? false)
-    }
-
-    /// Starts it: from now on the player collects frames. Starts a brief
-    /// listen when capture is not running already. False when it cannot.
-    func beginCutSync(_ source: MusicVideoSource) -> Bool {
-        guard cutSyncWanted(source), let pair = cutPairKey(source) else { return false }
-        if !captureActive() {
-            guard let listener, listener.start(for: Self.cutListenLimit) else { return false }
-            cutListening = true
-        }
-        cutTried.insert(pair)
-        cutPair = pair
-        cutSyncing = true
-        return true
-    }
-
-    /// Whether the alignment under way is still for `source` and still
-    /// wanted (no song change, no nudge or tap since).
-    func cutSyncContinues(_ source: MusicVideoSource) -> Bool {
-        guard cutSyncing, let pair = cutPairKey(source), pair == cutPair, let song,
-              let video = MusicVideoOffsets.videoKey(source) else { return false }
-        return !offsets.hasManual(song.key, video: video)
-    }
-
-    /// Asks for a verdict on the frames so far. True when it is over: an
-    /// offset was found and stored, or `final` and nothing more will come.
-    /// The offset stored is the one the frames were taken under, plus how
-    /// far the player was from it, plus how late the cuts fell.
-    @discardableResult
-    func checkCutSync(_ source: MusicVideoSource, frames: [MusicVideoCutAlign.Frame], offsetUsed: Double,
-                      drift: Double, final: Bool) -> Bool {
-        guard cutSyncContinues(source), let song, let video = MusicVideoOffsets.videoKey(source) else {
-            endCutSync()
-            return true
-        }
-        switch MusicVideoCutAlign.align(frames: frames, audio: audioFrames()) {
-        case .found(let result):
-            // The frames are from an offset no longer in force: wait for new ones.
-            guard abs(currentOffset - offsetUsed) < 0.001 else { return false }
-            offsets.storeAutomatic(offsetUsed + drift + result.lag, origin: .cuts, for: song.key, video: video, now: now())
-            endCutSync()
-            objectWillChange.send()
-            return true
-        case .unclear:
-            guard final else { return false }
-            offsets.storeAutomatic(nil, origin: .cuts, for: song.key, video: video, now: now())
-            endCutSync()
-            return true
-        case .tooLittle:
-            if final { endCutSync() }
-            return final
-        }
-    }
-
-    /// A player stops collecting for `source`: ends the alignment if it is
-    /// still the one under way (not a newer song's).
-    func endCutSync(of source: MusicVideoSource) {
-        guard let pair = cutPairKey(source), pair == cutPair else { return }
-        endCutSync()
-    }
-
-    /// Stops the alignment (and its brief listen) wherever it is.
-    func endCutSync() {
-        if cutListening { listener?.stop() }
-        cutListening = false
-        cutPair = nil
-        if cutSyncing { cutSyncing = false }
     }
 
     // MARK: Align by hand
@@ -874,7 +573,6 @@ final class MusicVideoController: ObservableObject {
         if isAligning { return true }
         guard alignAvailability.isAvailable, let song, let video = showingVideoKey else { return false }
         if case .armed = tapState { cancelTapSync() }
-        endCutSync()
         align = MusicVideoAlignSession(songKey: song.key, video: video, restore: offsets.manualEntry(song.key))
         alignDrag = nil
         alignTouched = false
@@ -896,7 +594,6 @@ final class MusicVideoController: ObservableObject {
             x: x, y: y, knobX: knob, offset: offset,
             secondsPerPoint: MusicVideoAlignBar.secondsPerPoint(videoLength: length, width: width),
             bounds: MusicVideoAlignBar.bounds(videoLength: length, songTime: clock.time, current: offset), option: option)
-        endCutSync()
     }
 
     /// The pointer moved with the button down. True when the knob just
@@ -916,7 +613,7 @@ final class MusicVideoController: ObservableObject {
     }
 
     /// The release keeps the offset under the hand, for this song's video,
-    /// as the user's own (it beats anything automatic from then on).
+    /// as the user's own (it beats the estimate from then on).
     func alignMouseUp(x: Double, y: Double, option: Bool = false) {
         guard isAligning, alignDrag != nil else { alignDrag = nil; return }
         alignMouseDragged(x: x, y: y, option: option)
@@ -924,7 +621,6 @@ final class MusicVideoController: ObservableObject {
         alignDrag = nil
         guard drag.changed else { return }
         offsets.set(drag.offset, for: song.key, video: showingVideoKey)
-        endCutSync()
         resetTaps()
         alignTouched = true
         objectWillChange.send()
@@ -938,7 +634,7 @@ final class MusicVideoController: ObservableObject {
         alignTouched = true
     }
 
-    /// Back to the automatic offset; align mode stays on to see it.
+    /// Reset: back to the estimate; align mode stays on to see it.
     func alignReset() {
         guard isAligning else { return }
         alignDrag = nil

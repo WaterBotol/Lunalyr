@@ -476,7 +476,7 @@ struct DesktopPlayerView: View {
 
     private var palette: ArtworkPalette { ArtworkPalette.of(now.track == nil ? nil : now.artwork) }
 
-    /// The transport row, or Automatic / Cancel / Done while the music video is lined up.
+    /// The transport row, or Reset / Cancel / Done while the music video is lined up.
     @ViewBuilder
     private func alignOrControls(kind: ScrubRowKind) -> some View {
         let accent = palette.fromArtwork ? palette.accentColor : playingKind.tint

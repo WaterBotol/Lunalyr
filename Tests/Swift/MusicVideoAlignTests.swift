@@ -49,10 +49,9 @@ final class MusicVideoAlignTests: XCTestCase {
                                           links: MusicVideoLinks(defaults: defaults), now: { [start] in start })
         resolver.links.set(videoID, for: song.key)
         let offsets = MusicVideoOffsets(defaults: defaults)
-        let controller = MusicVideoController(resolver: resolver, offsets: offsets, cutSync: true,
-                                              captureActive: { true }, audioFrames: { [] },
+        let controller = MusicVideoController(resolver: resolver, offsets: offsets,
                                               songClock: { (clock.song, clock.playing) }, lyrics: { _ in lyrics },
-                                              uptime: { clock.uptime }, now: { [start] in start })
+                                              uptime: { clock.uptime })
         controller.reduceMotion = { false }
         controller.update(track: track, enabled: true, online: false)
         await controller.settle()
@@ -326,7 +325,7 @@ final class MusicVideoAlignTests: XCTestCase {
         XCTAssertFalse(controller.isAlignDragging)
         XCTAssertEqual(controller.currentOffset, (expected * 100).rounded() / 100, accuracy: 1e-9,
                        "kept, to a hundredth")
-        XCTAssertEqual(controller.offsetOrigin, .manual, "the user's own: it beats anything automatic")
+        XCTAssertEqual(controller.offsetOrigin, .manual, "the user's own: it beats the estimate")
         XCTAssertTrue(offsets.hasManual(song.key, video: "yt:\(videoID)"))
         XCTAssertFalse(offsets.hasManual(song.key, video: "yt:BBBBBBBBBBB"), "for this video only")
         XCTAssertEqual(controller.alignDisplay()?.detail, "Kept for this video")
@@ -373,7 +372,7 @@ final class MusicVideoAlignTests: XCTestCase {
         XCTAssertEqual(offsets.manualEntry(song.key), .init(value: 16, video: "yt:\(videoID)"))
     }
 
-    func testCancelGoesBackToAutomaticWhenThereWasNoOffsetOfTheUsers() async {
+    func testCancelGoesBackToTheEstimateWhenThereWasNoOffsetOfTheUsers() async {
         let clock = Clock()
         let (controller, offsets) = await showing(clock)
         controller.beginAlign()
@@ -386,7 +385,7 @@ final class MusicVideoAlignTests: XCTestCase {
         XCTAssertEqual(controller.currentOffset, 15)
     }
 
-    func testResetReturnsToAutomaticAndStaysInAlignMode() async {
+    func testResetReturnsToTheEstimateAndStaysInAlignMode() async {
         let clock = Clock()
         let (controller, offsets) = await showing(clock)
         controller.beginAlign()
@@ -396,7 +395,8 @@ final class MusicVideoAlignTests: XCTestCase {
         XCTAssertTrue(controller.isAligning)
         XCTAssertFalse(offsets.hasManual(song.key))
         XCTAssertEqual(controller.currentOffset, 15)
-        XCTAssertEqual(controller.alignDisplay()?.detail, "Automatic")
+        XCTAssertEqual(controller.offsetOrigin, .estimated)
+        XCTAssertEqual(controller.alignDisplay()?.detail, "Estimated")
     }
 
     func testDragNudgesAndTapShareOneSavedOffset() async {
@@ -430,27 +430,6 @@ final class MusicVideoAlignTests: XCTestCase {
         XCTAssertEqual(controller.currentOffset, dragged + 0.15, accuracy: 0.006)
         XCTAssertEqual(offsets.values.count, 1, "one offset for the song")
         XCTAssertEqual(offsets.manualVideos[song.key], "yt:\(videoID)")
-    }
-
-    func testCutSyncNeverRunsDuringOrOverAnAlignment() async {
-        let clock = Clock()
-        let (controller, _) = await showing(clock)
-        XCTAssertTrue(controller.cutSyncWanted(source))
-        XCTAssertTrue(controller.beginCutSync(source))
-        controller.beginAlign()
-        XCTAssertFalse(controller.cutSyncing, "align mode stops the cut alignment")
-        XCTAssertFalse(controller.cutSyncWanted(source), "and none starts meanwhile")
-        let knob = controller.alignDisplay()!.layout(width: width).knob
-        controller.alignMouseDown(x: knob, y: 0, width: width)
-        controller.alignMouseDragged(x: knob + 20, y: 0)
-        controller.alignMouseUp(x: knob + 20, y: 0)
-        let kept = controller.currentOffset
-        controller.alignDone()
-        XCTAssertFalse(controller.cutSyncWanted(source), "never over the user's offset")
-        XCTAssertTrue(controller.checkCutSync(source, frames: [], offsetUsed: kept, drift: 0, final: true),
-                      "a late verdict finds nothing under way")
-        XCTAssertEqual(controller.currentOffset, kept)
-        XCTAssertEqual(controller.offsetOrigin, .manual)
     }
 
     func testASongChangeEndsAlignModeKeepingWhatWasSet() async {
@@ -505,7 +484,7 @@ final class MusicVideoAlignTests: XCTestCase {
 
     func testTheDisplaysWords() {
         var display = MusicVideoAlignDisplay(videoLength: 215, songDuration: 200, offset: 3.4, songTime: 10,
-                                             origin: .captions)
+                                             origin: .estimated)
         XCTAssertEqual(display.detail, "Drag until the picture matches the music")
         display.origin = .manual
         XCTAssertEqual(display.detail, "Set by you \u{00B7} drag to adjust")
@@ -516,6 +495,10 @@ final class MusicVideoAlignTests: XCTestCase {
         display.dragging = false
         display.touched = true
         XCTAssertEqual(display.detail, "Kept for this video")
+        display.origin = .estimated
+        XCTAssertEqual(display.detail, "Estimated", "after Reset")
+        display.origin = .none
+        XCTAssertEqual(display.detail, "No offset")
         display.songTime = 300
         XCTAssertEqual(display.videoTime, 215, "never past the video's end")
     }

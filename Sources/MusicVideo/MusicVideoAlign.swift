@@ -248,7 +248,7 @@ struct MusicVideoAlignSession: Equatable {
     var songKey: String
     var video: String
     /// The user's own offset before align mode, nil when there was none
-    /// (Esc goes back to automatic then).
+    /// (Esc goes back to the estimate then).
     var restore: MusicVideoOffsets.ManualEntry?
 }
 
@@ -285,6 +285,10 @@ struct MusicVideoAlignDisplay: Equatable {
             default: return "Drag until the picture matches the music"
             }
         }
-        return origin == .manual ? "Kept for this video" : "Automatic"
+        switch origin {
+        case .manual: return "Kept for this video"
+        case .estimated: return "Estimated"
+        case .none: return "No offset"
+        }
     }
 }
