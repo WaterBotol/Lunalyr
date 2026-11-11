@@ -56,10 +56,18 @@ final class PlayerSleeveTests: XCTestCase {
         XCTAssertEqual(model.queue.first(where: \.isCurrent)?.id, "q3", "nothing played")
     }
 
-    func testCardSitsUnderTheMiddleAndFitsThePanel() {
-        XCTAssertEqual(DesktopPlayerView.cardTop(panelHeight: 780), 398)
+    func testCardIsCentredAtEverySizeAndFitsThePanel() {
+        // At rest and with search or the queue open, the card's middle is the
+        // panel's (the screen's) middle.
+        for pane in [DesktopPlayerModel.Pane.song, .search, .queue] {
+            let card = DesktopPlayerView.cardHeight(pane, queueRows: 10)
+            let top = DesktopPlayerView.cardTop(panelHeight: 780, cardHeight: card)
+            XCTAssertEqual(top + card / 2, 390, accuracy: 0.5, "\(pane) centred")
+        }
+        XCTAssertEqual(DesktopPlayerView.cardHeight(.song), DesktopPlayerView.restHeight)
+        XCTAssertEqual(DesktopPlayerView.cardHeight(.queue), DesktopPlayerView.tallestHeight)
         for height in [780.0, 700, 500, 300] as [CGFloat] {
-            let top = DesktopPlayerView.cardTop(panelHeight: height)
+            let top = DesktopPlayerView.cardTop(panelHeight: height, cardHeight: DesktopPlayerView.tallestHeight)
             XCTAssertGreaterThanOrEqual(top, 0)
             if height >= DesktopPlayerView.tallestHeight {
                 XCTAssertLessThanOrEqual(top + DesktopPlayerView.tallestHeight, height, "the open queue fits, \(height)")
@@ -76,16 +84,15 @@ final class PlayerSleeveTests: XCTestCase {
     func testHitMaskCoversTheWholeCard() throws {
         let panel = SleeveScene.panel
         let left = (panel.width - DesktopPlayerView.width) / 2
-        let top = DesktopPlayerView.cardTop(panelHeight: panel.height)
         func point(x: CGFloat, fromTop y: CGFloat) -> CGPoint { CGPoint(x: x, y: panel.height - y) }
 
         for state in [SleeveState.rest, .search, .queue, .nothing, .align, .spotify] {
             let fixture = SleeveFixture(state: state)
             let mask = try XCTUnwrap(ControlHitMask.render(fixture.player.environment(\.playerMaskRender, true),
                                                            size: panel), "\(state)")
-            let height = DesktopPlayerView.columnHeight(fixture.model.showsSearch ? .search : fixture.model.showsQueue ? .queue : .song,
-                                                         queueRows: fixture.model.queue.count)
-                + 2 * DesktopPlayerView.padding
+            let pane: DesktopPlayerModel.Pane = fixture.model.showsSearch ? .search : fixture.model.showsQueue ? .queue : .song
+            let height = DesktopPlayerView.cardHeight(pane, queueRows: fixture.model.queue.count)
+            let top = DesktopPlayerView.cardTop(panelHeight: panel.height, cardHeight: height)
             let inside = [
                 point(x: left + 108, fromTop: top + 108),                                // the cover
                 point(x: left + DesktopPlayerView.width - 30, fromTop: top + 30),          // top right

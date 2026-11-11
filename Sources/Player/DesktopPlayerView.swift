@@ -74,11 +74,18 @@ struct DesktopPlayerView: View {
     /// The card at its tallest (the queue open).
     static var tallestHeight: CGFloat { columnHeight(.queue) + 2 * padding }
 
-    /// Where the card's top sits in the panel: just under the middle of the
-    /// screen, so the lyric (in the middle) stays above it, and the card
-    /// grows downwards; never past the panel's bottom.
-    static func cardTop(panelHeight: CGFloat) -> CGFloat {
-        max(0, min(panelHeight / 2 + 8, panelHeight - tallestHeight))
+    /// Where the card's top sits in the panel (centred on the screen): the
+    /// card is centred at every size, so opening search or the queue grows
+    /// it up and down alike and it stays in the middle.
+    static func cardTop(panelHeight: CGFloat, cardHeight: CGFloat = restHeight) -> CGFloat {
+        max(0, (panelHeight - cardHeight) / 2)
+    }
+
+    /// The card's height for each pane: the taller of the cover column (the
+    /// cover alone, or with the song and transport under it while search or
+    /// the queue is open) and the right-hand column, with the padding.
+    static func cardHeight(_ pane: DesktopPlayerModel.Pane, queueRows: Int = .max) -> CGFloat {
+        max(pane == .song ? cover : compactArtHeight, columnHeight(pane, queueRows: queueRows)) + 2 * padding
     }
 
     /// The right-hand column's height for each pane. A queue of a song or
@@ -160,7 +167,8 @@ struct DesktopPlayerView: View {
         let palette = ArtworkPalette.of(now.track == nil ? nil : now.artwork)
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                Color.clear.frame(height: Self.cardTop(panelHeight: proxy.size.height))
+                Color.clear.frame(height: Self.cardTop(panelHeight: proxy.size.height,
+                                                       cardHeight: Self.cardHeight(pane, queueRows: model.queue.count)))
                 card(now: now, palette: palette, shown: shown)
                 Spacer(minLength: 0)
             }
