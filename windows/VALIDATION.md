@@ -55,9 +55,8 @@ analyzer, which returns nothing without the Japanese language pack; 1 is an opt-
 ## Milestone 3: wallpaper with Editorial, Spoken and the gradient
 
 1078 tests (1077 pass, 1 skipped: the opt-in real-Lyricsfile test). Report: [docs/milestones/M3.md](docs/milestones/M3.md).
-One lyric-core test, untouched by milestone 3, is flaky:
-`LrclibLosesItsLeadWhenTwoOtherSourcesAgreeAgainstItsTiming`. When the agreeing sources answer after LRCLIB, LRCLIB
-keeps its lead (confirmed by delaying them). It failed in 4 of 10 full runs (every other test passed every time); see M3.md, "A flaky lyric-core test".
+The flaky `LrclibLosesItsLeadWhenTwoOtherSourcesAgreeAgainstItsTiming` is fixed (aacccfb): the test now fixes the
+order sources answer in. Four full runs in a row were green afterwards. See M3.md, "A flaky lyric-core test".
 
 | Item | Status | Evidence |
 |---|---|---|
