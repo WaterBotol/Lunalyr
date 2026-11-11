@@ -41,6 +41,7 @@ public sealed class AppControllerTests : IAsyncDisposable
                 TimelineWait = TimeSpan.FromMilliseconds(60),
                 TimelinePoll = TimeSpan.FromMilliseconds(10),
                 LateTimelinePoll = TimeSpan.FromMilliseconds(20),
+                ArtworkRetries = [],
             });
         return _controller;
     }
