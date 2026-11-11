@@ -1,0 +1,5 @@
+{ "stack": "rust-d2d", "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU", "monitors": [{"w":2560,"h":1440,"dpi":120,"hz":60,"mode":"24h2"}],
+  "seconds": 35.782, "frames": 2145, "fps": 59.92,
+  "cpuMsPerFrame": {"avg":0.632,"p50":0.510,"p95":0.990,"p99":1.249},
+  "frameIntervalMs": {"avg":16.689,"p50":16.663,"p95":17.177,"p99":21.370}, "slowFrames": 6,
+  "startupMs": 678.1, "workingSetMB": 70.8, "privateMB": 104.9, "processCpuPercent": 0.50 }

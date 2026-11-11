@@ -1,0 +1,5 @@
+[ui] Args { seconds: Some(3.0), stats: None, fps: None, windowed: true, snapshot: Some("results\\windowed-line5.png"), start_line: 5, snapshot_after: 1.0, layered: false, force_legacy: false }
+[ui] target 1280x720 dpi 120 60 Hz mode windowed
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[render] first present; startup 332.7 ms
+[render] snapshot 1280x720 at t=14.066s (line 5) -> C:\dev\Lunalyr-Windows-2\spikes\rust-d2d\results\windowed-line5.png

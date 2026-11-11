@@ -11,6 +11,7 @@ internal sealed class Options
     public int StartLine = 1;
     public bool Settings;
     public bool Layered;
+    public string? GpuPreference;
 
     public static Options Parse(string[] args)
     {
@@ -30,6 +31,7 @@ internal sealed class Options
                 case "--start-line": o.StartLine = int.Parse(Next()); break;
                 case "--settings": o.Settings = true; break;
                 case "--layered": o.Layered = true; break;
+                case "--gpu": o.GpuPreference = Next(); break; // low-power | high-performance
                 case "--no-playback": break; // the spike never plays anything
             }
         }

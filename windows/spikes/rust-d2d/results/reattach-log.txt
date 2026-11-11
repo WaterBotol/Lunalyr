@@ -1,0 +1,34 @@
+[ui] Args { seconds: Some(8.0), stats: Some("results\\reattach-stats.json"), fps: None, windowed: false, snapshot: None, start_line: 1, snapshot_after: 3.0, layered: false, force_legacy: false }
+[attach] 24H2 layout: Progman 0x101ae has child WorkerW 0x10254, DefView Some(0x20198)
+[attach] \\.\DISPLAY5 2560x1440 at (0,0) dpi 120 60 Hz -> hwnd 0x180068
+[tree] parent 0x101ae class=Progman exstyle=0x00200080 (NOREDIRECTIONBITMAP=true) rect=(0,0,2560,1440)
+[tree]  z=0 hwnd=0x20198 class=SHELLDLL_DefView visible=true style=0x56010000 exstyle=0x00080000 rect=(0,0,2560,1440)
+[tree]  z=1 hwnd=0x180068 class=LunalyrSpikeRsWallpaper (ours) visible=true style=0x5c000000 exstyle=0x08000000 rect=(0,0,2560,1440)
+[tree]  z=2 hwnd=0x860a52 class=LunalyrSpikeSurface visible=true style=0x5c000000 exstyle=0x08000080 rect=(0,0,2560,1440)
+[tree]  z=3 hwnd=0x10254 class=WorkerW visible=true style=0x58000000 exstyle=0x080000a0 rect=(0,0,2560,1440)
+[ui] target 2560x1440 dpi 120 60 Hz mode 24h2
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[render] first present; startup 417.4 ms
+[ui] TaskbarCreated (Explorer restarted) -> re-attach
+[ui] rebuild
+[attach] 24H2 layout: Progman 0x101ae has child WorkerW 0x10254, DefView Some(0x20198)
+[attach] \\.\DISPLAY5 2560x1440 at (0,0) dpi 120 60 Hz -> hwnd 0x190068
+[tree] parent 0x101ae class=Progman exstyle=0x00200080 (NOREDIRECTIONBITMAP=true) rect=(0,0,2560,1440)
+[tree]  z=0 hwnd=0x20198 class=SHELLDLL_DefView visible=true style=0x56010000 exstyle=0x00080000 rect=(0,0,2560,1440)
+[tree]  z=1 hwnd=0x190068 class=LunalyrSpikeRsWallpaper (ours) visible=true style=0x5c000000 exstyle=0x08000000 rect=(0,0,2560,1440)
+[tree]  z=2 hwnd=0x860a52 class=LunalyrSpikeSurface visible=true style=0x5c000000 exstyle=0x08000080 rect=(0,0,2560,1440)
+[tree]  z=3 hwnd=0x10254 class=WorkerW visible=true style=0x58000000 exstyle=0x080000a0 rect=(0,0,2560,1440)
+[ui] target 2560x1440 dpi 120 60 Hz mode 24h2
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[tree] at exit:
+[tree] parent 0x101ae class=Progman exstyle=0x00200080 (NOREDIRECTIONBITMAP=true) rect=(0,0,2560,1440)
+[tree]  z=0 hwnd=0x20198 class=SHELLDLL_DefView visible=true style=0x56010000 exstyle=0x00080000 rect=(0,0,2560,1440)
+[tree]  z=1 hwnd=0x190068 class=LunalyrSpikeRsWallpaper (ours) visible=true style=0x5c000000 exstyle=0x08000000 rect=(0,0,2560,1440)
+[tree]  z=2 hwnd=0x10254 class=WorkerW visible=true style=0x58000000 exstyle=0x080000a0 rect=(0,0,2560,1440)
+[ui] stats -> results\reattach-stats.json
+{ "stack": "rust-d2d", "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU", "monitors": [{"w":2560,"h":1440,"dpi":120,"hz":60,"mode":"24h2"}],
+  "seconds": 7.734, "frames": 451, "fps": 58.19,
+  "cpuMsPerFrame": {"avg":0.617,"p50":0.497,"p95":0.919,"p99":1.459},
+  "frameIntervalMs": {"avg":16.654,"p50":16.668,"p95":16.956,"p99":17.445}, "slowFrames": 0,
+  "startupMs": 417.4, "workingSetMB": 62.4, "privateMB": 74.3, "processCpuPercent": 0.76 }
+

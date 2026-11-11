@@ -1,0 +1,39 @@
+﻿{
+    "exe":  "lunalyr-spike-cs.exe",
+    "args":  "--gpu low-power",
+    "seconds":  30,
+    "samples":  12,
+    "onBattery":  false,
+    "cpuPercentAvg":  0.61,
+    "cpuPercentMax":  1.31,
+    "gpu3dPercentAvg":  33.02,
+    "gpuAllEnginesPercentAvg":  36.63,
+    "workingSetMBAvg":  318.66,
+    "privateMBAvg":  292.98,
+    "gpuDedicatedMBAvg":  40.64,
+    "fps":  59.2,
+    "frameIntervalMs":  {
+                            "avg":  16.879,
+                            "p50":  16.679,
+                            "p95":  17.141,
+                            "p99":  26.868
+                        },
+    "cpuMsPerFrame":  {
+                          "avg":  0.901,
+                          "p50":  0.806,
+                          "p95":  1.129,
+                          "p99":  1.42
+                      },
+    "slowFrames":  21,
+    "adapter":  "Intel(R) Graphics",
+    "monitors":  [
+                     {
+                         "w":  2560,
+                         "h":  1440,
+                         "dpi":  120,
+                         "hz":  60,
+                         "mode":  "24h2"
+                     }
+                 ],
+    "startupMs":  291.9
+}

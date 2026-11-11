@@ -32,6 +32,10 @@ internal sealed class Surface(nint hwnd, int width, int height, float scale, int
     public sealed class Word
     {
         public ID2D1Bitmap1 Sharp = null!, Blurred = null!;
+        public Vortice.Direct2D1.Effects.GaussianBlur Blur = null!; // per-word effect graph, built once per line
+        public Vortice.Direct2D1.Effects.Opacity Opacity = null!;
+        public ID2D1Image Out = null!;
+        public float W, H;
         public Vector2 Pos; // top-left of the bitmap (padding included)
     }
 }
@@ -57,6 +61,9 @@ internal sealed class Renderer : IDisposable
     IDWriteFactory _dw = null!;
     Vortice.Direct2D1.Effects.GaussianBlur _blur = null!;
     Vortice.Direct2D1.Effects.Opacity _opacity = null!;
+    // Effect outputs are fetched once: each .Output call wraps a new COM object that would otherwise wait for the finaliser.
+    ID2D1Image _blurOut = null!, _opacityOut = null!;
+    nint[] _handles = [];
     List<Surface> _surfaces = [];
     public string AdapterName { get; private set; } = "";
     readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -104,7 +111,8 @@ internal sealed class Renderer : IDisposable
             }
             if (_surfaces.Count == 0) { Thread.Sleep(16); continue; }
 
-            var handles = _surfaces.Select(s => s.Waitable).ToArray();
+            if (_handles.Length != _surfaces.Count || _handles.Length > 0 && _handles[0] != _surfaces[0].Waitable) _handles = _surfaces.Select(s => s.Waitable).ToArray();
+            var handles = _handles;
             Native.WaitForMultipleObjects((uint)handles.Length, handles, true, 1000);
 
             double now = _clock.Elapsed.TotalMilliseconds;
@@ -124,8 +132,17 @@ internal sealed class Renderer : IDisposable
 
     void InitDevice()
     {
-        D3D11.D3D11CreateDevice(null, DriverType.Hardware, DeviceCreationFlags.BgraSupport,
+        IDXGIAdapter1? chosen = null;
+        if (_opt.GpuPreference != null)
+        {
+            // Pick the integrated (minimum power) or discrete (high performance) GPU explicitly.
+            using var f6 = DXGI.CreateDXGIFactory1<IDXGIFactory6>();
+            var pref = _opt.GpuPreference == "low-power" ? GpuPreference.MinimumPower : GpuPreference.HighPerformance;
+            chosen = f6.EnumAdapterByGpuPreference<IDXGIAdapter1>(0, pref);
+        }
+        D3D11.D3D11CreateDevice(chosen, chosen == null ? DriverType.Hardware : DriverType.Unknown, DeviceCreationFlags.BgraSupport,
             [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0], out _d3d!, out _d3dCtx!).CheckError();
+        chosen?.Dispose();
         using var dxgiDevice = _d3d.QueryInterface<IDXGIDevice1>();
         dxgiDevice.SetMaximumFrameLatency(1);
         using var adapter = dxgiDevice.GetAdapter();
@@ -138,6 +155,9 @@ internal sealed class Renderer : IDisposable
         _dw = DWrite.DWriteCreateFactory<IDWriteFactory>();
         _blur = new Vortice.Direct2D1.Effects.GaussianBlur(_ctx) { BorderMode = BorderMode.Soft, Optimization = GaussianBlurOptimization.Balanced };
         _opacity = new Vortice.Direct2D1.Effects.Opacity(_ctx);
+        _opacity.SetInputEffect(0, _blur, true);
+        _blurOut = _blur.Output;
+        _opacityOut = _opacity.Output;
     }
 
     void CreateSwapChain(Surface s)
@@ -190,7 +210,7 @@ internal sealed class Renderer : IDisposable
 
     static void DisposeWords(Surface s)
     {
-        foreach (var w in s.Words) { w.Sharp.Dispose(); w.Blurred.Dispose(); }
+        foreach (var w in s.Words) { w.Out.Dispose(); w.Opacity.Dispose(); w.Blur.Dispose(); w.Sharp.Dispose(); w.Blurred.Dispose(); }
         s.Words = [];
     }
 
@@ -236,11 +256,19 @@ internal sealed class Renderer : IDisposable
             _ctx.Clear(new Color4(0, 0, 0, 0));
             _blur.SetInput(0, sharp, true);
             _blur.StandardDeviation = sigmaMax;
-            _ctx.DrawImage(_blur.Output, Vector2.Zero, InterpolationMode.Linear, CompositeMode.SourceOver);
+            _ctx.DrawImage(_blurOut, Vector2.Zero, InterpolationMode.Linear, CompositeMode.SourceOver);
             _ctx.EndDraw();
             _ctx.Target = null;
 
-            words[i] = new Surface.Word { Sharp = sharp, Blurred = blurred, Pos = new Vector2(x0 + h.Left - pad, y0 + h.Top - pad) };
+            var blur = new Vortice.Direct2D1.Effects.GaussianBlur(_ctx) { BorderMode = BorderMode.Soft, Optimization = GaussianBlurOptimization.Balanced };
+            blur.SetInput(0, sharp, true);
+            var opacity = new Vortice.Direct2D1.Effects.Opacity(_ctx);
+            opacity.SetInputEffect(0, blur, true);
+            words[i] = new Surface.Word
+            {
+                Sharp = sharp, Blurred = blurred, Blur = blur, Opacity = opacity, Out = opacity.Output, W = bw, H = bh,
+                Pos = new Vector2(x0 + h.Left - pad, y0 + h.Top - pad),
+            };
         }
         s.Words = words;
         s.LineIndex = lineIndex;
@@ -260,10 +288,8 @@ internal sealed class Renderer : IDisposable
         {
             var (cx, cy) = Scene.BlobCentre(i, tS);
             var c = new Vector2(cx * s.Width, cy * s.Height);
-            var brush = s.Blobs[i];
-            brush.Center = c;
-            float r = brush.RadiusX;
-            _ctx.FillEllipse(new Ellipse(c, r, r), brush);
+            s.Blobs[i].Center = c;
+            _ctx.FillRectangle(new Rect(0, 0, s.Width, s.Height), s.Blobs[i]);
         }
 
         double lineT = nowMs - lineStart;
@@ -274,20 +300,18 @@ internal sealed class Renderer : IDisposable
             double p = (lineT - Scene.WordStartMs(i)) / Scene.RevealMs;
             if (p <= 0)
             {
-                _ctx.DrawBitmap(w.Blurred, new Rect(w.Pos.X, w.Pos.Y + 0.12f * em, w.Blurred.PixelSize.Width, w.Blurred.PixelSize.Height), 0.3f, BitmapInterpolationMode.Linear, null);
+                _ctx.DrawBitmap(w.Blurred, new Rect(w.Pos.X, w.Pos.Y + 0.12f * em, w.W, w.H), 0.3f, BitmapInterpolationMode.Linear, null);
             }
             else if (p >= 1)
             {
-                _ctx.DrawBitmap(w.Sharp, new Rect(w.Pos.X, w.Pos.Y, w.Sharp.PixelSize.Width, w.Sharp.PixelSize.Height), 1f, BitmapInterpolationMode.Linear, null);
+                _ctx.DrawBitmap(w.Sharp, new Rect(w.Pos.X, w.Pos.Y, w.W, w.H), 1f, BitmapInterpolationMode.Linear, null);
             }
             else
             {
                 double e = Scene.EaseOutCubic(p);
-                _blur.SetInput(0, w.Sharp, true);
-                _blur.StandardDeviation = (float)(10.0 / 3.0 * s.Scale * (1 - e));
-                _opacity.SetInputEffect(0, _blur, true);
-                _opacity.Value = (float)(0.3 + 0.7 * e);
-                _ctx.DrawImage(_opacity.Output, new Vector2(w.Pos.X, w.Pos.Y + (float)(0.12 * em * (1 - e))), InterpolationMode.Linear, CompositeMode.SourceOver);
+                w.Blur.StandardDeviation = (float)(10.0 / 3.0 * s.Scale * (1 - e));
+                w.Opacity.Value = (float)(0.3 + 0.7 * e);
+                _ctx.DrawImage(w.Out, new Vector2(w.Pos.X, w.Pos.Y + (float)(0.12 * em * (1 - e))), InterpolationMode.Linear, CompositeMode.SourceOver);
             }
         }
         _ctx.EndDraw();

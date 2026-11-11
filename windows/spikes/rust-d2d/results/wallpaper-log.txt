@@ -1,0 +1,23 @@
+[ui] Args { seconds: Some(20.0), stats: Some("results\\wallpaper-stats.json"), fps: None, windowed: false, snapshot: Some("results\\wallpaper.png"), start_line: 1, snapshot_after: 3.0, layered: false, force_legacy: false }
+[attach] 24H2 layout: Progman 0x101ae has child WorkerW 0x10254, DefView Some(0x20198)
+[attach] \\.\DISPLAY5 2560x1440 at (0,0) dpi 120 60 Hz -> hwnd 0x4e0106
+[tree] parent 0x101ae class=Progman exstyle=0x00200080 (NOREDIRECTIONBITMAP=true) rect=(0,0,2560,1440)
+[tree]  z=0 hwnd=0x20198 class=SHELLDLL_DefView visible=true style=0x56010000 exstyle=0x00080000 rect=(0,0,2560,1440)
+[tree]  z=1 hwnd=0x4e0106 class=LunalyrSpikeRsWallpaper (ours) visible=true style=0x5c000000 exstyle=0x08000000 rect=(0,0,2560,1440)
+[tree]  z=2 hwnd=0x10254 class=WorkerW visible=true style=0x58000000 exstyle=0x080000a0 rect=(0,0,2560,1440)
+[ui] target 2560x1440 dpi 120 60 Hz mode 24h2
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[render] first present; startup 274.9 ms
+[render] snapshot 2560x1440 at t=3.015s (line 1) -> C:\dev\Lunalyr-Windows-2\spikes\rust-d2d\results\wallpaper.png
+[tree] at exit:
+[tree] parent 0x101ae class=Progman exstyle=0x00200080 (NOREDIRECTIONBITMAP=true) rect=(0,0,2560,1440)
+[tree]  z=0 hwnd=0x20198 class=SHELLDLL_DefView visible=true style=0x56010000 exstyle=0x00080000 rect=(0,0,2560,1440)
+[tree]  z=1 hwnd=0x4e0106 class=LunalyrSpikeRsWallpaper (ours) visible=true style=0x5c000000 exstyle=0x08000000 rect=(0,0,2560,1440)
+[tree]  z=2 hwnd=0x10254 class=WorkerW visible=true style=0x58000000 exstyle=0x080000a0 rect=(0,0,2560,1440)
+[ui] stats -> results\wallpaper-stats.json
+{ "stack": "rust-d2d", "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU", "monitors": [{"w":2560,"h":1440,"dpi":120,"hz":60,"mode":"24h2"}],
+  "seconds": 19.784, "frames": 1174, "fps": 59.29,
+  "cpuMsPerFrame": {"avg":0.632,"p50":0.472,"p95":0.953,"p99":1.167},
+  "frameIntervalMs": {"avg":16.871,"p50":16.663,"p95":17.172,"p99":19.968}, "slowFrames": 4,
+  "startupMs": 274.9, "workingSetMB": 80.5, "privateMB": 105.6, "processCpuPercent": 0.52 }
+

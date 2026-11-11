@@ -1,0 +1,11 @@
+[ui] Args { seconds: Some(5.0), stats: Some("results\\windowed-fps30-stats.json"), fps: Some(30.0), windowed: true, snapshot: None, start_line: 1, snapshot_after: 3.0, layered: false, force_legacy: false }
+[ui] target 1280x720 dpi 120 60 Hz mode windowed
+[render] adapter: NVIDIA GeForce RTX 5060 Laptop GPU; 'Segoe UI Variable Display' in system collection: true
+[render] first present; startup 356.4 ms
+[ui] stats -> results\windowed-fps30-stats.json
+{ "stack": "rust-d2d", "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU", "monitors": [{"w":1280,"h":720,"dpi":120,"hz":60,"mode":"windowed"}],
+  "seconds": 4.750, "frames": 144, "fps": 30.11,
+  "cpuMsPerFrame": {"avg":0.702,"p50":0.503,"p95":1.067,"p99":4.054},
+  "frameIntervalMs": {"avg":33.215,"p50":33.362,"p95":33.955,"p99":35.796}, "slowFrames": 0,
+  "startupMs": 356.4, "workingSetMB": 58.7, "privateMB": 70.3, "processCpuPercent": 0.63 }
+

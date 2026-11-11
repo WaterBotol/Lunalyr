@@ -65,6 +65,8 @@ internal sealed class Stats
                 ["peakWorkingSetMB"] = Math.Round(p.PeakWorkingSet64 / 1048576.0, 1),
                 ["privateMB"] = Math.Round(p.PrivateMemorySize64 / 1048576.0, 1),
                 ["processCpuPercent"] = Math.Round(cpuS / wallS / Environment.ProcessorCount * 100, 2),
+                ["gcGen0"] = GC.CollectionCount(0), ["gcGen2"] = GC.CollectionCount(2),
+                ["allocatedMB"] = Math.Round(GC.GetTotalAllocatedBytes() / 1048576.0, 1),
                 ["notes"] = new JsonArray(Notes.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
             };
         }
