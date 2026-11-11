@@ -13,4 +13,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Helpers shared by every test project (fake time). -->
+    <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>
