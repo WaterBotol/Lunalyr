@@ -42,7 +42,7 @@ public class WindowsReadingServicesTests
         Assert.Equal("我们|一起|走过|春天|的|小路", Words("我们一起走过春天的小路"));
         Assert.Equal("แมว|นอน|บน|โต๊ะ", Words("แมวนอนบนโต๊ะ"));
         Assert.Equal("Okay|you're|mine", Words("Okay, you're mine!"));
-        // Apple's tokenizer parts this 窓辺|に|座っ|て|海|を|見|て|い|た; ICU differently.
+        // ICU's split of a line the Mac tests use; Apple's differs (inferred from the Mac's expectations, not observed).
         Assert.Equal("窓辺|に|座|って|海|を|見|てい|た", Words("窓辺に座って海を見ていた"));
     }
 
@@ -306,12 +306,15 @@ public class WindowsLyricRunReadingTests
         var breaker = _t.Services.WordBreaker;
         var seaside = CharacterTimed("窓辺に座って海を見ていた");
         var glue = LyricRuns.Glue(seaside, seaside.Words);
-        // Mac (Apple's segmentation, 窓辺|に|座っ|て|…): 窓辺に|座って海を見ていた. ICU gives 窓辺|に|座|って|海|を|見|てい|た,
-        // where every word after 窓辺 is light (one character, or hiragana only), so a constellation keeps the line whole.
+        // REPLACED Mac assertion (word-break difference, affects every Windows user): the Mac expects
+        // ["窓辺に", "座って海を見ていた"]. ICU gives 窓辺|に|座|って|海|を|見|てい|た, where every word after 窓辺 is light
+        // (one character, or hiragana only), so a constellation keeps the line whole. (Apple's split, inferred from the
+        // Mac's expectations rather than observed, starts a phrase at 座っ.)
         Assert.Equal(["窓辺に座って海を見ていた"], LyricRuns.Labels(seaside.Words, LyricRuns.SplittingWords(seaside.Words, glue, breaker)));
         var rolling = LyricRuns.RollingGlue(seaside, seaside.Words, breaker);
-        // Mac (Apple's word segmentation): 窓辺に|座って|海を|見ていた. ICU parts 見ていた as 見|てい|た, and てい is not a
-        // word that goes on from 見 (JapaneseReading.ContinuesPhrase), so Windows sets 見 and ていた apart.
+        // REPLACED Mac assertion (word-break difference): the Mac expects ["窓辺に", "座って", "海を", "見ていた"]. ICU parts
+        // 見ていた as 見|てい|た, and てい is not a word that goes on from 見 (JapaneseReading.ContinuesPhrase), so Windows
+        // sets 見 and ていた apart.
         Assert.Equal(["窓辺に", "座って", "海を", "見", "ていた"], LyricRuns.Labels(seaside.Words, rolling));
         // What goes on the word before it, and what begins one.
         Assert.True(JapaneseReading.ContinuesPhrase("を", "海"));

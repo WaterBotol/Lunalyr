@@ -21,7 +21,8 @@ Code: pure logic in `src/Lunalyr.Core/Lyrics/Readings/`, Windows services in
 `icu.dll` exports `utrans_openU`, `utrans_transUChars`, `ubrk_open` and the rest used here (Windows 10 1903+). All
 P/Invoke is `LibraryImport` with blittable signatures. A Native AOT publish of a console that builds the services,
 romanises Mandarin, Cyrillic and kana, detects a language and round-trips the translation cache ran correctly with no
-trim/AOT warnings.
+trim/AOT warnings. That proves ICU, ELS and the cache under AOT; the Japanese analyzer's WinRT call ran only as the
+availability probe (which returned nothing here), so it has never returned data under AOT.
 
 `Windows.Data.Text.WordsSegmenter` and `TextReverseConversionGenerator` were also tried: both resolve to "und" (no
 word breaker) for ja/zh/ko here and return nothing useful, so they are not used.
@@ -65,7 +66,9 @@ What an ordinary English Windows PC gives without the analyzer (pinned in `Japan
 | 過ぎてゆく… + saved "sugite yukutokinonaka" (stage runs) | sugite yuku / toki no / naka | su gite yuku / toki no / naka |
 
 The kana splits come from ICU's dictionary not knowing the words; the spaced saved readings come from unread kanji
-being phrases of their own. With the analyzer installed these should match the Mac, but that is unverified.
+being phrases of their own. With the analyzer installed, generated readings would come from its own word split and
+readings, which may well differ from Apple's; and word breaks (estimated words, constellation and rolling parting)
+stay ICU's either way. Whether the Mac's Japanese expectations then hold is unknown: they are kept, and skipped here.
 
 **Owner's call:** to read kanji on PCs without Japanese installed, the app would need its own dictionary and
 analyser. Candidates with acceptable licences: UniDic (BSD-3 option; very large), IPAdic/mecab-ipadic (its own
@@ -75,17 +78,20 @@ per-character only and reads compounds wrongly (今日 as kon·nichi), so it is 
 
 ## Word breaks (ICU vs Apple)
 
-ICU splits 窓辺に座って海を見ていた as 窓辺|に|座|って|海|を|見|てい|た; Apple as 窓辺|に|座っ|て|海|を|見|て|い|た. Effects,
-recorded in `WindowsLyricRunReadingTests`:
+ICU splits 窓辺に座って海を見ていた as 窓辺|に|座|って|海|を|見|てい|た. Apple's split was not observed (no Mac here); the
+Mac's expectations imply it starts words at 座っ and keeps 見て|い|た apart. Effects, which apply to **every** Windows
+user (Japanese installed or not), recorded in `WindowsLyricRunReadingTests`:
 
 - Rolling stages: Mac 窓辺に / 座って / 海を / 見ていた; Windows 窓辺に / 座って / 海を / 見 / ていた (てい is not a word
   that `ContinuesPhrase` lets go on from 見).
 - Constellations (phrase parting): Mac 窓辺に / 座って海を見ていた; Windows keeps the whole line as one fragment (every
-  ICU word after 窓辺 is "light": one character or hiragana only).
+  ICU word after 窓辺 is "light": one character or hiragana only). This is the case `SplittingWords` exists to
+  prevent, so it is a regression for the owner to judge (a fix would be a Windows-specific parting rule, or the
+  analyzer's split where it is installed).
 - Chinese and Thai part as on the Mac (我们 / 一起 / 走过 / 春天的 / 小路; แมว / นอน / บน / โต๊ะ).
-- `EstimatedWords` (line-timed lyrics) cut at ICU word starts: ５時に会おう becomes ５ / 時に / 会 / おう where Apple has
-  ５ / 時 / に / 会おう.
-
+- `EstimatedWords` (line-timed lyrics) cut at ICU word starts: ５時に会おう becomes ５ / 時に / 会 / おう where the Mac's
+  tests expect ５ / 時 / に / 会おう. `FullWidthDigitsCountPeopleAsHalfWidthOnesDo` asserts the Mac's words, so it will fail
+  on Windows even with Japanese installed: a word-break difference, not an analyzer one.
 ## Language detection
 
 ELS returns a ranked list of tags, no confidence: "I will always love you…" → en, "Je t'aime…" → fr, 我爱你… →
@@ -122,6 +128,8 @@ so a translator can be plugged in later. Nothing calls the cloud.
 - `RomanizationOptions` and the outer `readings` loop and `romanize` dispatch of `LyricRomanization.swift`.
 - `makeLine` / `distributeWords` (`EstimatedWords`). The parsing workstream may port the same behaviour; the two should
   be merged.
+- The two Verso-attributed lines of `JapaneseReading.swift` are the CFStringTokenizer loop (advance, token range); not
+  translated, replaced by `IJapaneseTokenizer`.
 - `TimedWordKey` / `presentationID` were not ported: `LyricWord` is a value-equal record and is its own key.
 - Tests: `testPinyinKeepsOriginalWordTimes`, `testSavedJyutpingIsUsedInsteadOfGeneratingPinyin`,
   `testJapaneseKanaDoesNotFallBackToMandarin` (ReadingAndTTMLTests).

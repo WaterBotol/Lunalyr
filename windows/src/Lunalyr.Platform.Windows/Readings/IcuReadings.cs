@@ -109,8 +109,8 @@ public sealed unsafe class IcuTransliterator : IScriptTransliterator, IDisposabl
 
 /// <summary>
 /// <see cref="IWordBreaker"/> on ICU's word break iterator, which splits Chinese and Japanese with its dictionary
-/// (我们|一起|走过, 窓辺|に|座|って) and Thai by its dictionary too. It parts Japanese differently from Apple's
-/// tokenizer in places (見|てい|た where Apple has 見|て|い|た); see docs/READINGS-WINDOWS.md.
+/// (我们|一起|走过, 窓辺|に|座|って) and Thai by its dictionary too. It parts some Japanese differently from what the
+/// Mac's tests expect of Apple's segmentation (見|てい|た); see docs/READINGS-WINDOWS.md.
 /// </summary>
 public sealed unsafe class IcuWordBreaker : IWordBreaker
 {

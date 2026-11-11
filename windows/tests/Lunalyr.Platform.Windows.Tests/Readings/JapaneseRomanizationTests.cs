@@ -161,6 +161,8 @@ public class JapaneseRomanizationTests
         // Other numbers are read as their half-width forms are, and keep their digits as written, so "Below lyrics"
         // sets no reading under a digit that only repeats it.
         Assert.Equal("３ kai", Romaji("３回"));
+        // Note: this line's words come from the word breaker. ICU gives ５|時に|会|おう, where Apple's gave ５|時|に|会おう,
+        // so this assertion will not hold on Windows even with the analyzer installed (a word-break difference).
         var time = _t.LineTimed("５時に会おう");
         Assert.Equal(["５", "ji", "ni", "aou"], _t.Texts(time));
         Assert.False(LyricReadingPairs.Match(_t.Readings(time), time.Words).ContainsKey(time.Words[0]));
@@ -248,10 +250,11 @@ public class JapaneseRomanizationTests
     [Fact]
     public void SpacesBetweenTimedJapaneseWords()
     {
-        RequireJapaneseTokenizer();
+        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
         // A space at only some word breaks is a pause: っ before it is not doubled.
         var pause = Joined(_t.Texts(Line(["あっ", "君だ"], spaced: true)));
         Assert.DoesNotContain("akk", pause, StringComparison.Ordinal);
+        RequireJapaneseTokenizer();
         Assert.Contains("kimi", pause, StringComparison.Ordinal);
         // Spaces at every break are the markup's, so 今日 is still read whole.
         Assert.Equal(["kyo", "u", "mo"], _t.Texts(Line(["今", "日", "も"], spaced: true)));
@@ -261,8 +264,9 @@ public class JapaneseRomanizationTests
     [Fact]
     public void SpacesBetweenTimedJapanesePhrasesAreKept()
     {
-        RequireJapaneseTokenizer();
+        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
         Assert.Equal(["kyo", "u", "mo"], _t.Texts(Line(["きょ", "う", "も"], spaced: true)));
+        RequireJapaneseTokenizer();
         Assert.Equal(["ima", "hizashi ga", "mabushii"], _t.Texts(Line(["今", "日差しが", "眩しい"], spaced: true)));
         Assert.Equal(["ima", "hi ga", "shizumu"], _t.Texts(Line(["今", "日が", "沈む"], spaced: true)));
         Assert.Equal(["kyo", "u", "mo", "kimi ni", "aitai"], _t.Texts(Line(["今", "日", "も", "君に", "会いたい"], spaced: true)));
@@ -274,10 +278,11 @@ public class JapaneseRomanizationTests
     [Fact]
     public void MarkupSpacesInsideAPhraseAreDropped()
     {
-        RequireJapaneseTokenizer();
+        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
         Assert.Equal(["koko", "wa", "doko"], _t.Texts(Line(["ここ", "は", "どこ"], spaced: true)));
         Assert.Equal(["ai", "shite", "ru"], _t.Texts(Line(["アイ", "して", "る"], spaced: true)));
         Assert.Equal(["sa", "kki", "made"], _t.Texts(Line(["さっ", "き", "まで"], spaced: true)));
+        RequireJapaneseTokenizer();
         Assert.Equal(["sekai", "wa", "utsukushii"], _t.Texts(Line(["世界", "は", "美しい"], spaced: true)));
         Assert.Equal(["mirai", "e", "ikou"], _t.Texts(Line(["未来", "へ", "行こう"], spaced: true)));
         Assert.Equal(["wa", "waratta", "ne"], _t.Texts(Line(["は", "笑った", "ね"], spaced: true)));
@@ -343,8 +348,9 @@ public class JapaneseRomanizationTests
     [Fact]
     public void MarkupSpacesSpacingCannotSettleReadAsSpaced()
     {
-        RequireJapaneseTokenizer();
+        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
         Assert.Equal(["ga", "kou", "e"], _t.Texts(Line(["がっ", "こう", "へ"], spaced: true)));
+        RequireJapaneseTokenizer();
         Assert.Equal(["daki", "shime", "te"], _t.Texts(Line(["だき", "しめ", "て"], spaced: true)));
         var tomorrow = _t.Texts(Line(["明", "日が", "来る"], spaced: true));
         Assert.Equal(["hi ga", "kuru"], tomorrow.Skip(1));

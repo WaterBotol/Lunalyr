@@ -104,9 +104,12 @@ public sealed class ScriptLanguageGuesser : ILanguageGuesser
 {
     public static ScriptLanguageGuesser Instance { get; } = new();
 
-    private const string ChineseOnly = "你妳她们們这這吗嗎呢吧啊么麼说說没沒个個着咱喔哦啦嘛给給让讓吃喝跟很";
-    private const string JapaneseOnly = "々〆気歩戦駅広図売読渋円帰楽薬恋変様桜浜県実黒発単数対関闘辺込働畑峠枠沢涙込払伝鉄径応弁拝";
-    private const string SimplifiedOnly = "们这吗么说没个爱见时间问门风飞东车长开关书语话认让还过进远选运钟里鸟马龙梦泪恋声听觉灯";
+    // Characters Japanese does not write (Japanese has 個, 給, 着, 没, 喝 too, so they are left out).
+    private const string ChineseOnly = "你妳她们們这這吗嗎呢吧啊么麼说說沒个咱喔哦啦嘛给让讓跟很";
+    // Japanese forms Chinese does not write (shinjitai and kokuji).
+    private const string JapaneseOnly = "々〆気歩戦駅広図売読渋円帰楽薬変様桜県実黒発単対関闘辺込働畑峠枠沢涙払伝鉄応拝";
+    // Simplified forms neither Traditional Chinese nor Japanese writes.
+    private const string SimplifiedOnly = "们这吗么说个爱见时间问门风飞东车长开关书语话认让还过进远选运钟鸟马龙梦听觉";
     private const string TraditionalOnly = "們這嗎麼說沒個愛見時間問門風飛東車長開關書語話認讓還過進遠選運鐘裡鳥馬龍夢淚戀聲聽覺燈";
 
     public string? DominantLanguage(string text)

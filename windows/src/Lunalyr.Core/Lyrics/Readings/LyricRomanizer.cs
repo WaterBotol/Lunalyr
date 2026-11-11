@@ -49,8 +49,9 @@ public sealed record RomanizationOptions(
 }
 
 /// <summary>
-/// Readings (romanisation) of lyric lines, made on the device with no online calls. Saved readings (from the
-/// lyric source or a .roma.lrc file) can supply Jyutping too.
+/// Makes the romanised readings of a song's lines from the system's own language services, never over the network.
+/// A reading that came with the lyrics, or from a .roma.lrc file, is used as well; it is the only source of
+/// Cantonese (Jyutping) readings.
 ///
 /// Readings are worked out per line, never per frame: Japanese and Korean need the whole line (readings and sound
 /// changes cross word boundaries), so the line is read once and the result is laid back onto its words by range.
