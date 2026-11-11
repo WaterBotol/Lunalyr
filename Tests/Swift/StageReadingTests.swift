@@ -203,12 +203,16 @@ final class StageReadingTests: XCTestCase {
         XCTAssertEqual(StageLyricView.reading(of: run, in: line.readings), "kimi no")
     }
 
-    /// A reading of a stage run is its parts' readings in order.
+    /// A reading of a stage run is its parts' shares written together: each
+    /// share carries the space before it where a new phrase starts
+    /// (`LyricReadingPairs.parts`), so syllables of one word join.
     func testARunsReadingJoinsItsParts() {
         let words = Self.words(["ka", "ze"], step: 0.3)
         let run = StageRun.make(words, glue: [false, true])
         XCTAssertEqual(run.count, 1)
         XCTAssertEqual(StageLyricView.reading(of: run[0], in: [words[0].presentationID: "ka", words[1].presentationID: "ze "]),
+                       "kaze")
+        XCTAssertEqual(StageLyricView.reading(of: run[0], in: [words[0].presentationID: "ka", words[1].presentationID: " ze"]),
                        "ka ze")
     }
 
