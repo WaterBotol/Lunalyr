@@ -44,6 +44,17 @@ public class AmllAndKrcTests
         Assert.Equal(1.5, lines[0].Words[0].End, 0.1);
     }
 
+    [Fact]
+    public void AKrcFileWithAFullZlibStreamDecodes()
+    {
+        // Real files carry zlib's checksum after the deflate data; the Mac test's fixture does not.
+        using var raw = new MemoryStream();
+        using (var zlib = new ZLibStream(raw, CompressionLevel.Optimal, leaveOpen: true)) zlib.Write(Encoding.UTF8.GetBytes(Sample));
+        var bytes = raw.ToArray();
+        for (var index = 0; index < bytes.Length; index++) bytes[index] ^= Key[index % Key.Length];
+        Assert.Equal(Sample, KugouKrc.Decode([.. "krc1"u8, .. bytes]));
+    }
+
     // Ported from AMLLAndKRCTests.swift: testAnythingThatIsNotKRCIsRefused
     [Fact]
     public void AnythingThatIsNotKrcIsRefused()

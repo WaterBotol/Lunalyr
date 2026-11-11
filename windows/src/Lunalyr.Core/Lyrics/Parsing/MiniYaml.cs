@@ -49,7 +49,7 @@ internal sealed class MiniYaml
     /// <summary>The document's root node, or null when it is not in the supported subset.</summary>
     public static YamlNode? Parse(string text)
     {
-        if (text.Length > 0 && text[0] == '﻿') text = text[1..];
+        if (text.Length > 0 && text[0] == (char)0xFEFF) text = text[1..];
         var reader = new MiniYaml(text);
         try
         {
@@ -284,19 +284,53 @@ internal sealed class MiniYaml
 
     private YamlScalar ParseQuoted(string value, int parentIndent)
     {
-        var text = value;
-        var close = QuoteEnd(text, 0);
+        // Each continuation line is scanned once, so a long unclosed quote stays linear.
+        var quote = value[0];
+        var pieces = new List<string> { value };
+        var close = ScanQuote(value, 1, quote);
+        var offset = 0;
         while (close < 0)
         {
             if (_index >= _lines.Count || (_lines[_index].Indent <= parentIndent && _lines[_index].Content.Length > 0)) throw Fail();
-            text += "\n" + _lines[_index].Raw;
+            offset += pieces[^1].Length + 1;
+            var raw = _lines[_index].Raw;
+            pieces.Add(raw);
             _index++;
-            close = QuoteEnd(text, 0);
+            // A backslash ending a double-quoted line escapes the line break itself, so the next line scans from its start.
+            close = ScanQuote(raw, 0, quote);
+            if (close >= 0) close += offset;
         }
+        var text = string.Join('\n', pieces);
         var after = text[(close + 1)..].TrimStart(' ', '\t');
         if (after.Length > 0 && after[0] != '#') throw Fail();
         var body = Fold(text[1..close], text[0] == '"');
         return new YamlScalar(text[0] == '"' ? Unescape(body) : body.Replace("''", "'", StringComparison.Ordinal), false);
+    }
+
+    /// <summary>
+    /// The index of the closing <paramref name="quote"/> in one line of a quoted scalar, scanning from
+    /// <paramref name="from"/>, or -1. A backslash escapes the character after it (or, at the end, the line break).
+    /// </summary>
+    private static int ScanQuote(string line, int from, char quote)
+    {
+        for (var i = from; i < line.Length; i++)
+        {
+            if (quote == '\'' && line[i] == '\'')
+            {
+                if (i + 1 < line.Length && line[i + 1] == '\'') { i++; continue; }
+                return i;
+            }
+            if (quote == '"')
+            {
+                if (line[i] == '\\')
+                {
+                    i++;
+                    continue;
+                }
+                if (line[i] == '"') return i;
+            }
+        }
+        return -1;
     }
 
     /// <summary>Line breaks inside a quoted scalar: a single break becomes a space, each blank line a line break.</summary>

@@ -154,7 +154,7 @@ public static partial class LyricTextDecoder
     /// <summary>Unicode text with no byte-order mark, and an XML declaration that no longer names the file's original encoding.</summary>
     private static string Prepared(string text)
     {
-        var value = text.StartsWith('﻿') ? text[1..] : text;
+        var value = text.StartsWith((char)0xFEFF) ? text[1..] : text;
         if (value.StartsWith("<?xml", StringComparison.Ordinal)) value = XmlEncoding().Replace(value, "${1}${2}UTF-8${3}", 1);
         return value;
     }

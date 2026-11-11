@@ -342,8 +342,9 @@ public class TtmlParsingTests
         Assert.Null(TtmlParser.Seconds("nan"));
         Assert.Null(TtmlParser.Seconds("-1s"));
         Assert.Equal(1.25, TtmlParser.Seconds("1250ms"));
-        // An undeclared entity without a DOCTYPE is malformed, not expanded.
-        Assert.Empty(Parse("<tt><p begin='1s' end='2s'>&secret;</p></tt>", 10));
+        // An undeclared entity without a DOCTYPE makes the document malformed: nothing is read, not even the text around it.
+        Assert.Empty(Parse("<tt><p begin='1s' end='2s'>Hold &secret; on</p></tt>", 10));
+        Assert.Equal("Hold & on", Parse("<tt><p begin='1s' end='2s'>Hold &amp; on</p></tt>", 10)[0].Text);
     }
 
     // Ported from CreditsLayerTests.swift: testAppleTTMLCreditsAndTitleHeadingAreCredits

@@ -105,8 +105,9 @@ internal static class TextRules
     }
 
     /// <summary>
-    /// Case and diacritic folded, then cut into its alphanumeric runs joined by single spaces: the Mac's
-    /// <c>LyricQuery.normalize</c>. A private copy for the credit heading rules; the ranking code owns the shared one.
+    /// Case and diacritic folded, then cut into its runs of letters, digits and marks, joined by single spaces. This
+    /// is the behaviour of the Mac's <c>LyricQuery.normalize</c>, whose lines trace to the Verso import, re-implemented
+    /// from that description. A private copy for the credit heading rules; the ranking code owns the shared one.
     /// </summary>
     public static string Normalize(string text)
     {

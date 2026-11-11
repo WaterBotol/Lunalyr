@@ -253,7 +253,7 @@ public static partial class LyricCredits
     ];
 
     /// <summary>Separators between two terms: "作词/作曲", "录音作品及MV版权".</summary>
-    private static readonly string[] Joins = ["和", "及", "与", "與", "/", "／", "&", "＆", "、", ",", "，", "·", "・", "+", "＋", " ", "　"];
+    private static readonly string[] Joins = ["和", "及", "与", "與", "/", "／", "&", "＆", "、", ",", "，", "·", "・", "+", "＋", " ", "\u3000"];
 
     /// <summary>Whole labels a lyric could also begin with: instruments, "music", and the vocal parts duets mark in the lyric itself.</summary>
     private static readonly HashSet<string> Everyday =

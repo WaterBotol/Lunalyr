@@ -108,6 +108,34 @@ public class LyricsfileTests
     }
 
     [Fact]
+    public void AnUnclosedQuoteOverManyLinesIsRefusedQuickly()
+    {
+        // Lyricsfiles are listener uploads: an open quote followed by ~1 MB of continuation lines must not stall.
+        var crafted = "lines:\n- text: \"open\n" + string.Concat(Enumerable.Repeat("    " + new string('a', 60) + "\n", 15_000));
+        Assert.True(crafted.Length < 1_000_000);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        Assert.Empty(LyricsfileParser.Parse(crafted));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), watch.Elapsed.ToString());
+    }
+
+    /// <summary>
+    /// Set LUNALYR_LYRICSFILE_SAMPLE to a recorded LRCLIB lyricsfile (not stored in the repo, as its lyrics are
+    /// copyrighted) to check that a real one reads in full.
+    /// </summary>
+    [Fact]
+    public void ARealLyricsfileReadsInFull()
+    {
+        var path = Environment.GetEnvironmentVariable("LUNALYR_LYRICSFILE_SAMPLE");
+        Assert.SkipWhen(string.IsNullOrEmpty(path), "no sample");
+        var text = File.ReadAllText(path!);
+        var rows = text.Split('\n').Count(line => line.StartsWith("- text:", StringComparison.Ordinal));
+        var lines = LyricsfileParser.Parse(text);
+        Assert.Equal(rows, lines.Count);
+        var vocal = lines.Where(line => !line.IsInstrumental).ToList();
+        Assert.True(vocal.Count(line => line.WordTimed) >= vocal.Count * 0.9, $"{vocal.Count(line => line.WordTimed)} of {vocal.Count} word-timed");
+    }
+
+    [Fact]
     public void TheYamlSubsetReadsQuotingBlocksAndFlows()
     {
         var yaml = """

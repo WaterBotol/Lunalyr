@@ -176,6 +176,9 @@ public static class TtmlParser
                     case XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.Whitespace or XmlNodeType.SignificantWhitespace:
                         Characters(xml.Value);
                         break;
+                    case XmlNodeType.EntityReference:
+                        // An entity no DTD declares: the document is malformed, as the Mac's parser finds it.
+                        return false;
                 }
             }
             return true;
