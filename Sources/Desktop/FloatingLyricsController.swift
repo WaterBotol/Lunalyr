@@ -2,11 +2,11 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// A borderless, see-through panel that never activates Lunalyr. It takes
-/// the keyboard and the pointer only in edit mode.
+/// A borderless, see-through panel that never activates Lunalyr and never
+/// takes the keyboard, so typing always stays with the app in front. It
+/// takes the pointer only in edit mode.
 final class FloatingLyricsPanel: NSPanel {
-    var allowsKey = false
-    override var canBecomeKey: Bool { allowsKey }
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 
@@ -143,7 +143,6 @@ final class FloatingLyricsController {
         let panel = self.panel ?? makePanel()
         let editing = state.editing
         panel.ignoresMouseEvents = !editing
-        panel.allowsKey = editing
         if drag == nil { place(panel) }
         if !state.active { state.active = true }
         if !shown {
