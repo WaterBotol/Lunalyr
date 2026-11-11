@@ -51,3 +51,28 @@ analyzer, which returns nothing without the Japanese language pack; 1 is an opt-
 | Japanese kanji readings | **blocked, owner's call**: needs the Japanese language pack or a bundled dictionary | `docs/READINGS-WINDOWS.md` |
 | On-device translation | not available on Windows (no offline API); nothing goes to the cloud | `docs/READINGS-WINDOWS.md` |
 | Native AOT of the whole lyric core | PC (LyricProbe AOT build runs live lookups) | Test Build 2 |
+
+## Milestone 3: wallpaper with Editorial, Spoken and the gradient
+
+1078 tests (1077 pass, 1 skipped: the opt-in real-Lyricsfile test). Report: [docs/milestones/M3.md](docs/milestones/M3.md).
+
+| Item | Status | Evidence |
+|---|---|---|
+| Render engine: devices per adapter, one swap chain per monitor, pacing, frame caps, pause when covered / full screen / battery saver, Explorer restart | unit + PC | `tests/Lunalyr.Render.Tests`, `docs/measurements/engine-*` |
+| Editorial and Spoken compositions (word reveal, held notes, backing vocals, duets, breaks, wrapping, readings, RTL, emoji, plain lyrics, status) | unit (offscreen render tests) + PC | `tests/Lunalyr.Render.Compositions.Tests`, `docs/previews/compositions/`, `docs/previews/m3/` |
+| "gradient" (colour field) and "colour" (album gradient) backgrounds, palette fades, scrim, grain, text backing | unit (WARP render tests) + PC | `tests/Lunalyr.Render.Tests/Backgrounds/`, `docs/previews/gradient/`, `docs/previews/m3/` |
+| Feathered text backing: no visible rectangle over bright covers | unit (shape + drawn) + PC | `FeatheredBackingTests`, `docs/previews/gradient/gradient-contrast-*.png` (re-rendered) |
+| `backgroundMode` picks the layer (`gradient`, `colourOnly`/`colour`, `auto`) | unit | `DemoTests.TheBackgroundSettingPicksALayer` |
+| Album colours: thumbnail → decode → palette in the scene, off the caller's thread, cached per track, cancelled on track change, late covers, fallback | unit (fakes, a held palette step, the real decoder on a painted cover) + PC (demo covers) | `AppControllerArtworkTests` |
+| Lyric colours follow the album (the Mac's Album drift, baked per line) | unit + PC | `CompositionRenderTests.TheLyricColoursFollowTheAlbum`, `docs/previews/m3/` |
+| Scenes reach the renderer in order (lyrics, readings and colours from different threads) | unit (existing controller tests over the new publish path) | `AppControllerTests` |
+| `--demo`: silent player, real-time looping clock, covers, invented lyrics, every command refused, no GSMTC, no network | unit + PC (four 50–60 s runs, AOT) | `DemoTests`, `docs/previews/m3/` |
+| Japanese readings from the bundled dictionary, live in the app | PC (demo) | `docs/previews/m3/editorial-gradient-japanese-readings.png` |
+| Wallpaper behind the icons with the real layers, AOT | PC (peeks; one 2560×1440 60 Hz desktop, clone mode) | `docs/previews/m3/` |
+| CPU / memory / GPU with gradient + Editorial / Spoken, 60 and 30 fps | PC | `docs/measurements/m3/` (table in M3.md) |
+| Clean shutdown, no crash files, no warnings in the log, nothing in Event Viewer / WER from Lunalyr.exe | PC (after every run) | logs in the temp data folders |
+| Real players (Spotify, Apple Music, browsers): track changes, thumbnails that arrive late or stale, lyrics and colours | **live** | GSMTC path tested with fakes only; nothing was playing here |
+| Every monitor / mixed DPI / Extend mode | **live** | displays are in Duplicate mode |
+| 120 Hz+ (the panel's 280 Hz mode) with the default 60 fps cap and with "follow the display" | **live** | clone mode runs at 60 Hz |
+| Battery / energy saver behaviour and numbers | **live** | measured on AC only |
+| Peeks were taken with `pauseWhenCovered` off in the temp settings | note | the owner's windows cover the desktop, so the engine would otherwise (correctly) pause |
