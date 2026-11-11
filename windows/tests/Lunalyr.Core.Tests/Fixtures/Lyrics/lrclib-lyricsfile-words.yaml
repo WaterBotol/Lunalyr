@@ -1,0 +1,63 @@
+version: '1.0'
+metadata:
+  title: Paper Lanterns
+  artist: The Invented Band
+  instrumental: false
+  album: Test Pressings
+  duration_ms: 200000
+  language: en
+lines:
+- text: Hey
+  start_ms: 13120
+  end_ms: 14551
+  words:
+  - text: Hey
+    start_ms: 13159
+- text: I've been waiting here
+  start_ms: 27170
+  end_ms: 28268
+  words:
+  - text: 'I''ve '
+    start_ms: 27209
+  - text: 'been '
+    start_ms: 27598
+  - text: 'waiting '
+    start_ms: 27889
+  - text: here
+    start_ms: 28200
+- text: I said, "Light the lanterns
+  start_ms: 29960
+  end_ms: 31779
+  words:
+  - text: 'I '
+    start_ms: 29999
+  - text: 'said, '
+    start_ms: 30160
+  - text: '"Light '
+    start_ms: 30380
+  - text: 'the '
+    start_ms: 30578
+  - text: lanterns
+    start_ms: 30759
+- text: 'Time: it''s late'
+  start_ms: 32740
+  end_ms: 36301
+  words:
+  - text: 'Time: '
+    start_ms: 32779
+  - text: 'it''s '
+    start_ms: 33410
+  - text: late
+    start_ms: 35470
+- text: ''
+  start_ms: 38000
+  end_ms: 40000
+- text: Goin' home
+  start_ms: 40260
+plain: |
+  Hey
+  I've been waiting here
+  I said, "Light the lanterns
+  Time: it's late
+
+  Goin' home
