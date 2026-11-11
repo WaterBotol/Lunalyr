@@ -18,6 +18,11 @@ public interface ILyricConnectivity
 /// Asks one source for its best match. The lookup calls it once per source (twice for Apple Music's second look) and
 /// cancels <paramref name="cancellationToken"/> when the source is stopped or times out.
 /// </summary>
+/// <remarks>
+/// The lookup calls this on its own flow, so it must return promptly (do any blocking work after the first await, or
+/// on the thread pool); otherwise it holds up the other sources, the grace period and its own time limit.
+/// <see cref="LyricSourceSet.Fetch"/> meets this by running each provider on the thread pool.
+/// </remarks>
 /// <returns>The source's best match (it may still fail the recording check), or null when it has nothing.</returns>
 /// <exception cref="Exception">
 /// Any failure means the source could not answer, so the miss is not remembered. Throw
@@ -34,7 +39,10 @@ public interface ILyricSource
     ValueTask<LyricCandidate?> FetchAsync(LyricQuery query, string localFolder, CancellationToken cancellationToken);
 }
 
-/// <summary>Dispatches a lookup's fetches to the registered sources; a source without a provider has nothing.</summary>
+/// <summary>
+/// Dispatches a lookup's fetches to the registered sources, each on the thread pool so a provider that blocks (a file
+/// read, a platform call) holds up nothing else; a source without a provider has nothing.
+/// </summary>
 public sealed class LyricSourceSet
 {
     private readonly Dictionary<LyricSourceId, ILyricSource> _sources = [];
@@ -48,7 +56,9 @@ public sealed class LyricSourceSet
     }
 
     public LyricSourceFetch Fetch => (id, query, folder, ct) =>
-        _sources.TryGetValue(id, out var source) ? source.FetchAsync(query, folder, ct) : ValueTask.FromResult<LyricCandidate?>(null);
+        _sources.TryGetValue(id, out var source)
+            ? new ValueTask<LyricCandidate?>(Task.Run(() => source.FetchAsync(query, folder, ct).AsTask(), ct))
+            : ValueTask.FromResult<LyricCandidate?>(null);
 }
 
 /// <summary>A source could not answer. <see cref="IsOffline"/> marks a missing connection rather than one service failing.</summary>
@@ -98,13 +108,11 @@ public sealed class LyricSourceException : Exception
     }
 }
 
-/// <summary>Builds candidates from what a provider fetched, so every provider labels and checks names the same way.</summary>
+/// <summary>Builds candidates from what a provider fetched, so providers label and check names consistently.</summary>
 public static class LyricCandidates
 {
     /// <summary>
-    /// A candidate for parsed lyrics. The names the service reported are used when they can be checked
-    /// (<see cref="LyricQuery.Checkable"/>); otherwise the search's names stand in and
-    /// <see cref="LyricCandidate.MetadataReported"/> is false, so only the length is checked. The provenance's
+    /// A candidate for parsed lyrics, ranked and labelled by the recording the service reported. The provenance's
     /// precision is recomputed from the lines.
     /// </summary>
     /// <param name="raw">What the provider fetched, with the names the service reported.</param>
@@ -112,10 +120,29 @@ public static class LyricCandidates
     /// <param name="query">The lookup.</param>
     /// <param name="score">The provider's own score, used only to pick among its hits.</param>
     /// <param name="sourceLabel">The provenance's source label; the source's title when null.</param>
-    public static LyricCandidate FromRaw(RawLyrics raw, LyricResult parsed, LyricQuery query, double score, string? sourceLabel = null)
+    /// <param name="namesMayBeTransliterated">
+    /// The Mac's rule for Lyrics+ only: its search used the library's names, so a reported name that cannot be checked
+    /// (<see cref="LyricQuery.Checkable"/>, e.g. in another script) is replaced by the search's and only the length is
+    /// checked. Off (every other source), reported names are used as given and a missing one falls back to the
+    /// search's; <see cref="LyricCandidate.MetadataReported"/> is then false only when the service named nothing.
+    /// </param>
+    public static LyricCandidate FromRaw(RawLyrics raw, LyricResult parsed, LyricQuery query, double score, string? sourceLabel = null,
+        bool namesMayBeTransliterated = false)
     {
-        var title = LyricQuery.Checkable(raw.ReportedTitle, query.Title);
-        var artist = LyricQuery.Checkable(raw.ReportedArtist, query.Artist);
+        string? title, artist;
+        bool reported;
+        if (namesMayBeTransliterated)
+        {
+            title = LyricQuery.Checkable(raw.ReportedTitle, query.Title);
+            artist = LyricQuery.Checkable(raw.ReportedArtist, query.Artist);
+            reported = title is not null && artist is not null;
+        }
+        else
+        {
+            title = raw.ReportedTitle;
+            artist = raw.ReportedArtist;
+            reported = title is not null || artist is not null;
+        }
         var label = sourceLabel ?? raw.Source.Title();
         LyricResult result = parsed switch
         {
@@ -125,7 +152,7 @@ public static class LyricCandidates
         };
         return new LyricCandidate(raw.Source, result, title ?? query.Title, artist ?? query.Artist, raw.ReportedDuration, score)
         {
-            MetadataReported = title is not null && artist is not null,
+            MetadataReported = reported,
         };
     }
 }
