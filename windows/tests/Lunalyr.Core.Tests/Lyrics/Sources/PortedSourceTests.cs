@@ -145,19 +145,19 @@ public class PortedSourceTests
     [Fact]
     public void KrcDecodesToTheLinesAndWords()
     {
-        var text = KugouKrc.Decode(MacStyleKrc(KrcSample));
+        var text = KugouKrcCipher.Decode(MacStyleKrc(KrcSample));
         Assert.NotNull(text);
         Assert.Contains("<0,500,0>Hello", text, StringComparison.Ordinal);
-        Assert.Equal(KrcSample, KugouKrc.Decode(KugouKrc.Encode(KrcSample)));
+        Assert.Equal(KrcSample, KugouKrcCipher.Decode(KugouKrcCipher.Encode(KrcSample)));
     }
 
     // Ported from AMLLAndKRCTests.swift: testAnythingThatIsNotKRCIsRefused
     [Fact]
     public void AnythingThatIsNotKrcIsRefused()
     {
-        Assert.Null(KugouKrc.Decode("[00:01.00]plain"u8));
-        Assert.Null(KugouKrc.Decode(Enumerable.Repeat((byte)1, 40).ToArray()));
-        Assert.Null(KugouKrc.Decode([.. "krc1"u8, .. Enumerable.Repeat((byte)1, 40)]));
+        Assert.Null(KugouKrcCipher.Decode("[00:01.00]plain"u8));
+        Assert.Null(KugouKrcCipher.Decode(Enumerable.Repeat((byte)1, 40).ToArray()));
+        Assert.Null(KugouKrcCipher.Decode([.. "krc1"u8, .. Enumerable.Repeat((byte)1, 40)]));
     }
 
     // Ported from AMLLAndKRCTests.swift: testAMLLAddressesTheFileByNetEaseID
@@ -213,9 +213,10 @@ public class PortedSourceTests
         Assert.NotEqual(edited, LocalLyricsSource.Fingerprint(query, folder.Path));
     }
 
-    // Ported from LyricRankingTests.swift: the LocalLyricBridge.length assertions
+    // Ported from LyricRankingTests.swift: testLocalFilesWithTheArtistAreNotRejectedOnTheirLength (its LocalLyricBridge.length
+    // assertions; the rejection half belongs to the ranking code)
     [Fact]
-    public void LocalLengthTagsAreReadAsSeconds()
+    public void LocalFilesWithTheArtistAreNotRejectedOnTheirLength()
     {
         Assert.Equal(221, LocalLyricsSource.Length("03:41"));
         Assert.Equal(221, LocalLyricsSource.Length("221"));

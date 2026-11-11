@@ -7,7 +7,7 @@ namespace Lunalyr.Core.Lyrics.Sources;
 /// Kugou's KRC lyric file: a four-byte "krc1" header, then zlib data XOR-ed with a fixed 16-byte key. Decoded, its lines
 /// read <c>[startMs,durationMs]</c> followed by <c>&lt;offsetMs,durationMs,0&gt;word</c> pieces.
 /// </summary>
-public static class KugouKrc
+public static class KugouKrcCipher
 {
     private static ReadOnlySpan<byte> Key => [0x40, 0x47, 0x61, 0x77, 0x5E, 0x32, 0x74, 0x47, 0x51, 0x36, 0x31, 0x2D, 0xCE, 0xD2, 0x6E, 0x69];
 

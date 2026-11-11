@@ -7,7 +7,7 @@ namespace Lunalyr.Core.Lyrics.Sources;
 /// <summary>Settings for <see cref="LyricsPlusSource"/>.</summary>
 public sealed record LyricsPlusOptions
 {
-    /// <summary>Community mirrors of the Lyrics+ (KPoe) service, tried in order. Nodes come and go.</summary>
+    /// <summary>Base addresses of the Lyrics+ (KPoe) servers; the first healthy one is asked first.</summary>
     public IReadOnlyList<string> Hosts { get; init; } =
     [
         "https://lyricsplus.prjktla.workers.dev",
@@ -28,8 +28,8 @@ public sealed record LyricsPlusOptions
 }
 
 /// <summary>
-/// Lyrics+ / KPoe community nodes, which serve syllable-timed lyrics as JSON (often Apple Music's own). The payload is
-/// the node's JSON as received (inflated when a node sends gzip without saying so).
+/// Lyrics+ / KPoe servers, which answer with syllable-timed lyrics as JSON. The payload is the reply body as JSON
+/// text (see <see cref="Inflate"/>).
 /// </summary>
 /// <remarks>
 /// A node's "not found" is checked with one other healthy mirror while time allows; if that one has the lyrics, the
@@ -151,7 +151,7 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
             }
             var metadata = root.Get("metadata");
             var extras = new Dictionary<string, string>();
-            // The node names its upstream, e.g. "Apple" or "Lyrics+ (via Apple with QQ)"; the leading name is kept.
+            // metadata.source can carry a bracketed note after the provider's name; only the name is kept.
             if (Name(metadata, "source") is { } source)
             {
                 var cut = source.IndexOf(" (", StringComparison.Ordinal);
@@ -202,7 +202,10 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
         }
     }
 
-    /// <summary>Some nodes send a gzip body labelled plain JSON with no Content-Encoding; it is inflated here.</summary>
+    /// <summary>
+    /// The body decompressed when it starts with the gzip magic bytes; HttpClient only does that itself when the
+    /// reply declares its encoding.
+    /// </summary>
     internal static byte[] Inflate(byte[] body)
     {
         if (body.Length <= 18 || body[0] != 0x1F || body[1] != 0x8B)

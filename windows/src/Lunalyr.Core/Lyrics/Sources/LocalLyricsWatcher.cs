@@ -15,6 +15,7 @@ public sealed class LocalLyricsWatcher : IDisposable
     private readonly CategoryLogger _log;
     private FileSystemWatcher? _watcher;
     private ITimer? _pending;
+    private long _generation;
     private Action? _onChange;
     private string _path = "";
     private bool _disposed;
@@ -97,7 +98,9 @@ public sealed class LocalLyricsWatcher : IDisposable
                 return;
             }
             _pending?.Dispose();
-            _pending = _time.CreateTimer(_ => Fire(), null, _debounce, Timeout.InfiniteTimeSpan);
+            // A timer that already fired may still be on its way into Fire; the generation tells it it is stale.
+            var generation = ++_generation;
+            _pending = _time.CreateTimer(_ => Fire(generation), null, _debounce, Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -123,12 +126,12 @@ public sealed class LocalLyricsWatcher : IDisposable
         Signal();
     }
 
-    private void Fire()
+    private void Fire(long generation)
     {
         Action? callback;
         lock (_gate)
         {
-            if (_disposed)
+            if (_disposed || generation != _generation)
             {
                 return;
             }
@@ -150,6 +153,7 @@ public sealed class LocalLyricsWatcher : IDisposable
     {
         _pending?.Dispose();
         _pending = null;
+        _generation++;
         if (_watcher is { } watcher)
         {
             watcher.EnableRaisingEvents = false;

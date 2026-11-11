@@ -74,7 +74,7 @@ public sealed class KugouSource(LyricHttpClient http, KugouOptions? options = nu
                 try
                 {
                     if (await DownloadAsync(id, key, "krc", ct).ConfigureAwait(false) is { } encrypted
-                        && KugouKrc.Decode(encrypted) is { } krc && LrcText.DecodeEntities(krc) is var text
+                        && KugouKrcCipher.Decode(encrypted) is { } krc && LrcText.DecodeEntities(krc) is var text
                         && _probe.IsUsable(LyricFormat.Krc, text))
                     {
                         return Lyrics(LyricFormat.Krc, text, hit);

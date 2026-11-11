@@ -43,7 +43,7 @@ public class SourceMatchingTests
         Assert.True(SourceMatching.NamesRecording(LyricSourceId.Lyrimuse, "Our Song", "Our Artist", 200, query));
         // Without an artist, a length is required.
         var untagged = new LyricQuery("Our Song", "", null, 180);
-        Assert.Equal(RecordingCheck.MissingIdentity,
+        Assert.Equal(HitCheck.MissingIdentity,
             SourceMatching.Check(1, 0.5, compareArtist: false, lengthRequired: true, compareLength: true, 180, 0));
         Assert.False(SourceMatching.NamesRecording(LyricSourceId.Lyrimuse, "Our Song", "", 200, untagged));
     }

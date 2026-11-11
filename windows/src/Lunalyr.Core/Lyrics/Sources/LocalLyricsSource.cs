@@ -7,7 +7,7 @@ namespace Lunalyr.Core.Lyrics.Sources;
 /// <summary>
 /// Lyrics exported by Lyrimuse into a folder the user chose, read only: <c>Artist - Title.lrc</c> files with optional
 /// sidecars beside them (<c>.ttml</c> or <c>.yrc</c> word timing, <c>.roma.lrc</c> readings, <c>.tr.lrc</c>
-/// translations). No Lyrimuse code is used and nothing in the folder is changed.
+/// translations). Only the exported files are opened, for reading; the folder is never written to.
 /// </summary>
 /// <remarks>
 /// The LRC is the payload; sidecars travel in <see cref="RawLyrics.Extras"/> under

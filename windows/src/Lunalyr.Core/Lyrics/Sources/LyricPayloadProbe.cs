@@ -46,7 +46,7 @@ public sealed class BasicLyricPayloadProbe : ILyricPayloadProbe
 }
 
 /// <summary>Small text helpers for lyric payloads that sources need without parsing them into lines.</summary>
-public static partial class LrcText
+internal static partial class LrcText
 {
     /// <summary>Whether LRC text has a line that starts with a time stamp and carries text after it.</summary>
     public static bool HasTimedLine(string lrc)

@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Lunalyr.Core.Lyrics.Sources;
 
 /// <summary>How a search hit compares with the playing recording (the Mac's <c>ll_recording_match</c> results).</summary>
-public enum RecordingCheck
+internal enum HitCheck
 {
     Match = 0,
     TitleMismatch = 1,
@@ -24,7 +24,7 @@ public enum RecordingCheck
 /// Mac's behaviour (its code for them is Verso-derived); <see cref="Core"/>, <see cref="Check"/> and the containment
 /// and symbol rules are ported from Lunalyr's own code.
 /// </remarks>
-public static partial class SourceMatching
+internal static partial class SourceMatching
 {
     /// <summary>True when the query names an artist (a local file without one still matches on title and length).</summary>
     public static bool HasArtist(LyricQuery query) => !string.IsNullOrWhiteSpace(query.Artist);
@@ -124,27 +124,27 @@ public static partial class SourceMatching
     /// How sure a hit is to name the playing recording (the Mac's <c>ll_recording_match</c>): the title must be close,
     /// the artist too when compared, and when both lengths are known they must agree within 3 s or 2%.
     /// </summary>
-    public static RecordingCheck Check(double titleConfidence, double artistConfidence, bool compareArtist,
+    public static HitCheck Check(double titleConfidence, double artistConfidence, bool compareArtist,
         bool lengthRequired, bool compareLength, double trackDuration, double candidateDuration)
     {
         if (!double.IsFinite(titleConfidence) || titleConfidence < 0.75)
         {
-            return RecordingCheck.TitleMismatch;
+            return HitCheck.TitleMismatch;
         }
         if (compareArtist && (!double.IsFinite(artistConfidence) || artistConfidence < 0.65))
         {
-            return RecordingCheck.ArtistMismatch;
+            return HitCheck.ArtistMismatch;
         }
         var hasLength = double.IsFinite(trackDuration) && double.IsFinite(candidateDuration) && trackDuration > 0 && candidateDuration > 0;
         if (lengthRequired && !hasLength)
         {
-            return RecordingCheck.MissingIdentity;
+            return HitCheck.MissingIdentity;
         }
         if (compareLength && hasLength && Math.Abs(trackDuration - candidateDuration) > Math.Max(3, trackDuration * 0.02))
         {
-            return RecordingCheck.DurationMismatch;
+            return HitCheck.DurationMismatch;
         }
-        return RecordingCheck.Match;
+        return HitCheck.Match;
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ public static partial class SourceMatching
         var hasArtist = HasArtist(query);
         var lengthDecides = !(source == LyricSourceId.Lyrimuse && hasArtist);
         return Check(Similarity(query.Title, title), ArtistScore(query, artist), hasArtist, !hasArtist, lengthDecides,
-            query.Duration, duration ?? 0) == RecordingCheck.Match;
+            query.Duration, duration ?? 0) == HitCheck.Match;
     }
 
     /// <summary>

@@ -72,7 +72,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
             return null;
         }
         // An exact match whose timing is unsound (listener-made) is not the last word: other uploads are searched too.
-        var exactTimed = rows.Any(row => row.TimedPayload() is { } timed && _probe.HasSoundTiming(timed.Format, timed.Payload));
+        var exactTimed = rows.Any(row => row.TimedPayload(_probe) is { } timed && _probe.HasSoundTiming(timed.Format, timed.Payload));
         if (!exactTimed)
         {
             var search = new Dictionary<string, string> { ["track_name"] = query.Title };
@@ -165,10 +165,10 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
             e.Num("id") is double id ? (long)id : null, e.Str("trackName"), e.Str("artistName"), e.Str("albumName"),
             e.Num("duration"), e.Str("syncedLyrics"), e.Str("lyricsfile"), e.Str("plainLyrics"), e.Bool("instrumental") == true);
 
-        /// <summary>The richest timed payload: the Lyricsfile, else synced LRC.</summary>
-        public (LyricFormat Format, string Payload)? TimedPayload() =>
-            !string.IsNullOrEmpty(Lyricsfile) ? (LyricFormat.Lyricsfile, Lyricsfile)
-            : !string.IsNullOrEmpty(SyncedLyrics) ? (LyricFormat.Lrc, SyncedLyrics)
+        /// <summary>The Lyricsfile when it holds lines, else synced LRC when it does; null for untimed rows.</summary>
+        public (LyricFormat Format, string Payload)? TimedPayload(ILyricPayloadProbe probe) =>
+            !string.IsNullOrEmpty(Lyricsfile) && probe.IsUsable(LyricFormat.Lyricsfile, Lyricsfile) ? (LyricFormat.Lyricsfile, Lyricsfile)
+            : !string.IsNullOrEmpty(SyncedLyrics) && probe.IsUsable(LyricFormat.Lrc, SyncedLyrics) ? (LyricFormat.Lrc, SyncedLyrics)
             : null;
     }
 
@@ -197,7 +197,7 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
             }
             LyricFormat format;
             string payload;
-            if (TimedRow(row, probe) is { } timed)
+            if (row.TimedPayload(probe) is { } timed)
             {
                 (format, payload) = timed;
                 if (format == LyricFormat.Lyricsfile && !string.IsNullOrEmpty(row.SyncedLyrics))
@@ -226,20 +226,6 @@ public sealed class LrclibSource(LyricHttpClient http, LrclibOptions? options = 
             var passes = SourceMatching.NamesRecording(LyricSourceId.Lrclib, title, artist, row.Duration, query);
             var lyrics = new RawLyrics(LyricSourceId.Lrclib, format, payload, title, artist, row.Duration, extras);
             return new Offer(lyrics, score, passes);
-        }
-
-        /// <summary>The Lyricsfile when it holds lines, else synced LRC when it does; null for untimed rows.</summary>
-        private static (LyricFormat, string)? TimedRow(Row row, ILyricPayloadProbe probe)
-        {
-            if (!string.IsNullOrEmpty(row.Lyricsfile) && probe.IsUsable(LyricFormat.Lyricsfile, row.Lyricsfile))
-            {
-                return (LyricFormat.Lyricsfile, row.Lyricsfile);
-            }
-            if (!string.IsNullOrEmpty(row.SyncedLyrics) && probe.IsUsable(LyricFormat.Lrc, row.SyncedLyrics))
-            {
-                return (LyricFormat.Lrc, row.SyncedLyrics);
-            }
-            return null;
         }
     }
 }

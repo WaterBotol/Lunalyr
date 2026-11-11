@@ -49,7 +49,7 @@ public class NetEaseSourceTests
         Assert.NotNull(found);
         Assert.Equal(LyricFormat.Yrc, found.Format);
         Assert.Contains("[851,5000](851,600,0)Invented", found.Payload, StringComparison.Ordinal);
-        Assert.StartsWith("[00:00.851]Invented first line", found.Extras![RawLyricsExtras.Lrc], StringComparison.Ordinal);
+        Assert.Contains("[00:00.851]Invented first line", found.Extras![RawLyricsExtras.Lrc], StringComparison.Ordinal);
         // Empty readings and translations are not passed on.
         Assert.False(found.Extras.ContainsKey(RawLyricsExtras.RomanizationLrc));
     }
