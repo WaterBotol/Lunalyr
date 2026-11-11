@@ -41,7 +41,8 @@ public static class DemoSongs
         Sung[] second =
         [
             new("Hold", 5.1, 5.5), new("me", 5.5, 5.8),
-            new("(oh", 5.8, 6.2, Backing: true), new("oh)", 6.2, 6.6, Backing: true),
+            // In parentheses: the compositions lift them out as backing vocals, as they do for real lyrics.
+            new("(oh", 5.8, 6.2), new("oh)", 6.2, 6.6),
             new("through", 6.6, 7.0), new("the", 7.0, 7.2), new("night", 7.2, 8.1),
         ];
         Sung[] duet = [.. Even(8.5, 0.8, 0.8, "I", "will", "wait", "for"), new("you", 11.7, 12.9)];
