@@ -237,14 +237,11 @@ struct AudioCaptureGate {
         var outputIdleFor: Double?
         /// Seconds since the user last started or reconnected capture.
         var sinceUserStart: Double?
-        /// A brief listen for the music video's alignment is under way: it
-        /// stands in for a chosen visualiser, under every other rule.
-        var briefListen = false
     }
 
     static func decide(_ inputs: Inputs) -> Decision {
         guard inputs.enabled else { return .off }
-        guard inputs.visualiserChosen || inputs.briefListen else { return .paused(.wallpaper) }
+        guard inputs.visualiserChosen else { return .paused(.wallpaper) }
         if let reason = inputs.powerPause { return .paused(.power(reason)) }
         guard inputs.displaysAwake else { return .paused(.displaysAsleep) }
         // The user's own pause, with nothing left to show what capture hears

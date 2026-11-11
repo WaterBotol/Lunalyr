@@ -1,45 +1,13 @@
 import AppKit
 import Foundation
 
-// Two sync aids for the music video:
-// - Brief listening: a library video with no offset yet runs System audio's
-//   capture for a few seconds, so its soundtrack can be lined up with the
-//   song (`MusicVideoAudioAlign`). Only when capture's permission is known
-//   to be granted, never with a prompt; the audio is analysed on this Mac
-//   and nothing is kept.
-// - Tap to sync: the user taps when the singing starts in the (muted)
-//   video, and the offset is worked out from the song's timed lyrics.
+// Tap to sync: the user taps when the singing starts in the (muted)
+// video, and the offset is worked out from the song's timed lyrics.
 
-// MARK: - Brief listening
-
-/// Runs the audio capture briefly for the audio alignment. A seam: the live
-/// one drives `AudioReactiveController`; tests pass a fake.
-@MainActor
-protocol MusicVideoBriefListening: AnyObject {
-    /// Whether a brief listen may start now: music is playing, power
-    /// settings are not sparing the Mac, and capture's permission is already
-    /// granted (nothing will ask for it).
-    var mayListen: Bool { get }
-    /// Starts capture for at most `seconds`; false when it could not.
-    func start(for seconds: TimeInterval) -> Bool
-    /// Stops it again (capture returns to what the visualisers need).
-    func stop()
-}
-
-@MainActor
-final class LiveMusicVideoListener: MusicVideoBriefListening {
-    var mayListen: Bool {
-        guard NowPlayingMonitor.shared.isPlaying, Settings.shared.powerConstraint == nil else { return false }
-        return AudioReactiveController.shared.mayListenBriefly
-    }
-
-    func start(for seconds: TimeInterval) -> Bool {
-        AudioReactiveController.shared.listenBriefly(for: seconds)
-    }
-
-    func stop() {
-        AudioReactiveController.shared.endBriefListen()
-    }
+/// A timed lyric line in the song's own time.
+struct MusicVideoLyricLine: Equatable, Sendable {
+    var start: Double
+    var text: String
 }
 
 // MARK: - Tap to sync
@@ -165,5 +133,20 @@ enum MusicVideoTapSync {
         case .failed(.notPlaying):
             return "Play the song first: the tap is timed against it."
         }
+    }
+}
+
+extension MusicVideoTapSync {
+    /// The song's timed lyric lines in song time (the lyric offsets taken
+    /// back off), or nil while they are not loaded for it.
+    @MainActor
+    static func currentLyrics(for song: MusicVideoSong) -> [MusicVideoLyricLine]? {
+        let model = LyricsViewModel.shared
+        guard let query = model.currentQuery, query.recordingKey == song.key, !model.lines.isEmpty else { return nil }
+        let shift = Settings.shared.lyricOffset + SongOffsets.shared.offset(for: query)
+        let lines = model.lines.filter { !$0.isInstrumental && $0.credit != true }
+            .map { MusicVideoLyricLine(start: $0.start - shift, text: $0.text) }
+            .filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        return lines.isEmpty ? nil : lines
     }
 }

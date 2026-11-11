@@ -533,79 +533,29 @@ final class AudioCaptureControllerTests: XCTestCase {
     }
 }
 
-// MARK: - Brief listening for the music video
+// MARK: - The music video never runs capture
 
 extension AudioCaptureControllerTests {
-    /// The Music video wallpaper: no visualiser chosen, System audio on.
+    /// The Music video wallpaper (no visualiser chosen) with System audio
+    /// on, its permission known to be granted and music playing: capture
+    /// stays paused. Nothing in the music video can start it.
     @MainActor
-    private func musicVideoWorld() -> CaptureWorld {
+    func testTheMusicVideoWallpaperNeverRunsCapture() async throws {
         let world = CaptureWorld()
         world.preferences.visualiserChosen = false
-        return world
-    }
-
-    @MainActor
-    func testABriefListenNeedsAPermissionAlreadyGranted() async throws {
-        let world = musicVideoWorld()
-        let controller = try makeController(world)
-        defer { controller.stop() }
-        controller.resumeIfEnabled()
-        XCTAssertFalse(controller.running, "paused behind the Music video wallpaper")
-        XCTAssertFalse(controller.mayListenBriefly, "never worked here: it could ask for permission")
-        XCTAssertFalse(controller.listenBriefly(for: 25))
-        await world.settle()
-        XCTAssertTrue(world.requests.isEmpty, "no capture without the permission")
-
-        world.preferences.enabled = false
         world.captureConfirmed = true
-        XCTAssertFalse(controller.mayListenBriefly, "System audio switched off")
-        world.preferences.enabled = true
-        world.preferences.method = .screenRecording
-        XCTAssertFalse(controller.mayListenBriefly, "compatibility capture needs Screen Recording allowed")
         world.screenRecordingAllowed = true
-        XCTAssertTrue(controller.mayListenBriefly)
-    }
-
-    @MainActor
-    func testABriefListenCapturesThenStopsAtItsLimitOrWhenEnded() async throws {
-        let world = musicVideoWorld()
-        world.captureConfirmed = true
         let controller = try makeController(world)
         defer { controller.stop() }
         controller.resumeIfEnabled()
-        XCTAssertTrue(controller.listenBriefly(for: 25))
-        XCTAssertTrue(controller.listeningBriefly)
         await controller.pendingStart?.value
-        XCTAssertTrue(controller.running)
-        XCTAssertFalse(world.requests.first?.userInitiated ?? true, "never a prompting start")
-        let session = try XCTUnwrap(world.sessions.first)
-        world.advance(24)
-        XCTAssertTrue(controller.running)
-        world.advance(1.5)
-        XCTAssertFalse(controller.listeningBriefly)
-        XCTAssertFalse(controller.running, "stopped at the limit")
-        XCTAssertEqual(controller.state, .paused)
-        XCTAssertFalse(session.ioRunning)
-
-        XCTAssertTrue(controller.listenBriefly(for: 25))
-        await controller.pendingStart?.value
-        XCTAssertTrue(controller.running)
-        controller.endBriefListen()
-        XCTAssertFalse(controller.running, "stopped as soon as the alignment is done")
-    }
-
-    @MainActor
-    func testABriefListenStillWaitsForAudioToPlay() async throws {
-        let world = musicVideoWorld()
-        world.captureConfirmed = true
-        world.musicPlaying = false
-        let controller = try makeController(world)
-        defer { controller.stop() }
-        controller.resumeIfEnabled()
-        XCTAssertTrue(controller.listenBriefly(for: 25))
-        await controller.pendingStart?.value
-        XCTAssertFalse(controller.running, "nothing playing: standing by")
-        XCTAssertEqual(controller.state, .standby)
+        world.advance(60)
+        await world.settle()
+        XCTAssertFalse(controller.running)
+        XCTAssertTrue(world.requests.isEmpty, "no capture was asked for")
+        var inputs = AudioCaptureGate.Inputs()
+        inputs.enabled = true
+        XCTAssertEqual(AudioCaptureGate.decide(inputs), .paused(.wallpaper), "only a chosen visualiser runs it")
     }
 }
 

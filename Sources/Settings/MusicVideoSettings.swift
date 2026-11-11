@@ -31,11 +31,7 @@ struct MusicVideoSection: View {
                 VideoTimingNudge(offset: controller.currentOffset, enabled: controller.hasSong,
                                  manual: controller.offsetOrigin == .manual,
                                  nudge: { controller.nudgeOffset(by: $0) }, reset: { controller.resetOffset() })
-                VideoTimingOrigin(label: MusicVideoController.timingLabel(origin: controller.offsetOrigin,
-                                                                          syncing: controller.syncing,
-                                                                          listening: controller.listening,
-                                                                          watchingCuts: controller.cutSyncing),
-                                  canResync: controller.canResync, resync: { controller.resync() },
+                VideoTimingOrigin(label: MusicVideoController.timingLabel(origin: controller.offsetOrigin),
                                   tapTitle: MusicVideoTapSync.buttonTitle(controller.tapState),
                                   canTap: controller.canTapSync, tap: { controller.tapSyncButton() })
             }
@@ -43,7 +39,7 @@ struct MusicVideoSection: View {
         if let note = MusicVideoTapSync.note(controller.tapState) {
             InspectorCaption(note)
         }
-        InspectorCaption("For this song: how far into the video the song begins. Lunalyr sets it by itself when it can; a nudge of yours always wins.",
+        InspectorCaption("For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.",
                          more: Self.timingDetail)
         displayChoice
         ValueSlider("Video dimming", value: $s.musicVideoDim, in: Settings.musicVideoDimRange, step: 0.01,
@@ -68,7 +64,7 @@ struct MusicVideoSection: View {
         }
     }
 
-    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. For YouTube videos Lunalyr reads the video’s captions (with Search YouTube on) and matches them to the song’s timed lyrics; for videos in your Music library it compares the video’s soundtrack with the song as it plays. If the visualisers’ System audio is switched on and has worked on this Mac before, Lunalyr turns its capture on for up to 25 seconds to do this, once per song and video, then off again; the audio is analysed on this Mac and nothing is recorded or sent. For YouTube videos, while that capture runs, Lunalyr also lines the video’s cuts up with the beat: it looks at a few tiny frames a second from the muted video for up to 50 seconds, once per video, and keeps the result only when one timing clearly fits. Otherwise a video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap or nudge is kept for the video it was made on. Re-sync forgets your nudge and looks again."
+    static let timingDetail = "Official videos often open with a scene, or are a different edit from the album track. A video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap, nudge or Align is kept for the video it was made on. Reset goes back to the estimate."
     static let privacyCaption = "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube."
     static let privacyDetail = "Videos in your Music library are always tried first and need nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this Mac so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… works with this off too: it sends only what is in its search box, when you search, and loads the results’ thumbnails."
 }
@@ -143,7 +139,7 @@ struct VideoTimingNudge: View {
             Button("+5") { nudge(5) }.help("Skip five seconds more of the video’s intro")
                 .accessibilityLabel("Video 5 seconds later")
             Button(action: reset) { Image(systemName: "arrow.counterclockwise") }
-                .help("Drop your nudge: back to the automatic timing")
+                .help("Drop your nudge: back to the estimate")
                 .accessibilityLabel("Reset video timing")
                 .disabled(!manual)
         }
@@ -155,12 +151,10 @@ struct VideoTimingNudge: View {
     }
 }
 
-/// Where the video timing came from, Tap to sync and Re-sync.
+/// Where the video timing came from, and Tap to sync.
 @MainActor
 struct VideoTimingOrigin: View {
     let label: String?
-    let canResync: Bool
-    let resync: () -> Void
     var tapTitle = "Tap to sync"
     var canTap = false
     var tap: () -> Void = {}
@@ -174,10 +168,6 @@ struct VideoTimingOrigin: View {
                 .controlSize(.small)
                 .disabled(!canTap)
                 .help("Click, then press any key the moment the singing starts in the video")
-            Button("Re-sync", action: resync)
-                .controlSize(.small)
-                .disabled(!canResync)
-                .help("Forget your nudge and find this video’s timing again")
         }
     }
 }

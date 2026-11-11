@@ -357,6 +357,22 @@ enum MusicVideoDrift {
     }
 }
 
+// MARK: - Duration estimate
+
+enum MusicVideoDurationEstimate {
+    /// A video this much longer than the song (seconds) probably opens with
+    /// that much intro. Outside the range the edits differ some other way.
+    static let range: ClosedRange<Double> = 2...40
+
+    /// The guessed intro, or nil when the lengths say nothing useful.
+    static func intro(videoDuration: Double?, songDuration: Double) -> Double? {
+        guard let videoDuration, videoDuration.isFinite, songDuration.isFinite, songDuration > 0 else { return nil }
+        let difference = videoDuration - songDuration
+        guard range.contains(difference) else { return nil }
+        return (difference * 10).rounded() / 10
+    }
+}
+
 // MARK: - Rate limiting
 
 /// Spaces the online lookups so YouTube's search page is never hammered:

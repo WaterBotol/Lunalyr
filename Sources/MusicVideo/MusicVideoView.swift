@@ -941,13 +941,6 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var blur: Double = -1
     /// Why the video is moving or not, as of the sync loop's last check.
     private var hold: MusicVideoHold = .other
-    /// Frames for lining the video's cuts up with the beat, while the
-    /// controller wants that for this video.
-    private var cuts = MusicVideoCutCollector()
-    /// The video whose cuts this player is collecting, if any.
-    private var cutVideoID: String?
-    private var cutActive: Bool { cutVideoID != nil }
-    private var snapshotInFlight = false
     /// The web view is shown (or fading in), as last asked.
     private var playerVisible = false
     /// A buffering player's hide, waiting out `YouTubeEmbed.bufferingGrace`.
@@ -966,19 +959,15 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     func attach(videoID: String) {
-        if videoID != self.videoID {
-            freeze.reset()
-            stopCutSync()
-        }
+        if videoID != self.videoID { freeze.reset() }
         self.videoID = videoID
         if view == nil { openWebView() }
         loop.isCurrent = { MusicVideoController.shared.isShowing(.youTube(videoID)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .youTube(videoID)) }
-        loop.onSample = { [weak self] sample, drift, at in
+        loop.onSample = { sample, _, at in
             MusicVideoController.shared.noteVideoSample(time: sample.videoTime,
                                                         playing: sample.videoPlaying && !sample.buffering,
                                                         of: .youTube(videoID), at: at)
-            self?.collectCutFrame(sample, drift: drift)
         }
         perform(session.attach(videoID))
     }
@@ -1096,7 +1085,6 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     func tearDown() {
         loop.stop()
-        stopCutSync()
         session.stop()
         freeze.reset()
         run("window.lunalyrPause && window.lunalyrPause()")
@@ -1105,67 +1093,6 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
 
     private func run(_ script: String) {
         view?.evaluateJavaScript(script, completionHandler: nil)
-    }
-
-    // MARK: Cut-to-beat alignment
-
-    /// From each sync sample: while the controller wants the cuts lined up
-    /// and the video plays steadily on a visible wallpaper, a tiny frame of
-    /// the picture's centre is taken (the loop's four checks a second);
-    /// now and then the controller is asked for a verdict. Bounded by
-    /// `MusicVideoCutCollector.limit`, once per video.
-    fileprivate func collectCutFrame(_ sample: MusicVideoDrift.Sample, drift: Double?) {
-        guard let videoID else { return }
-        let source = MusicVideoSource.youTube(videoID)
-        let controller = MusicVideoController.shared
-        let steady = hold == .live && session.ready && YouTubeEmbed.showsVideo(sample: sample) && drift != nil
-        if !cutActive {
-            guard steady, controller.cutSyncWanted(source), controller.beginCutSync(source) else { return }
-            cutVideoID = videoID
-            cuts = MusicVideoCutCollector()
-        }
-        guard controller.cutSyncContinues(source) else { return stopCutSync() }
-        let now = ProcessInfo.processInfo.systemUptime
-        if cuts.expired(now: now) {
-            if let offset = cuts.offsetUsed {
-                controller.checkCutSync(source, frames: cuts.frames, offsetUsed: offset, drift: cuts.meanDrift, final: true)
-            }
-            return stopCutSync()
-        }
-        guard cuts.shouldCapture(now: now, offset: controller.currentOffset, steady: steady, lastSeek: loop.lastSeek)
-        else { return }
-        if cuts.checkDue(now: now), let offset = cuts.offsetUsed,
-           controller.checkCutSync(source, frames: cuts.frames, offsetUsed: offset, drift: cuts.meanDrift, final: false) {
-            return stopCutSync()
-        }
-        guard !snapshotInFlight, let view, view.bounds.width > 0, view.bounds.height > 0 else { return }
-        snapshotInFlight = true
-        let configuration = WKSnapshotConfiguration()
-        // The middle of the picture, away from anything YouTube draws at
-        // the edges, as a few dozen pixels.
-        let bounds = view.bounds
-        configuration.rect = bounds.insetBy(dx: bounds.width / 4, dy: bounds.height / 4)
-        configuration.snapshotWidth = 48
-        configuration.afterScreenUpdates = false
-        let askedAt = now
-        view.takeSnapshot(with: configuration) { [weak self] image, _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.snapshotInFlight = false
-                let answeredAt = ProcessInfo.processInfo.systemUptime
-                guard self.cutVideoID == videoID, let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                      let signature = MusicVideoCutAlign.signature(of: picture) else { return }
-                self.cuts.add(MusicVideoCutAlign.Frame(time: askedAt + max(0, answeredAt - askedAt) / 2,
-                                                       signature: signature), drift: drift)
-            }
-        }
-    }
-
-    private func stopCutSync() {
-        guard let cutVideoID else { return }
-        self.cutVideoID = nil
-        cuts = MusicVideoCutCollector()
-        MusicVideoController.shared.endCutSync(of: .youTube(cutVideoID))
     }
 
     // MARK: MusicVideoFreezeHost

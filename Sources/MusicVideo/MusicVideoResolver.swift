@@ -115,75 +115,35 @@ final class MusicVideoCache {
 enum MusicVideoOffsetOrigin: Equatable, Sendable {
     /// No offset: the video plays from where the song is.
     case none
-    /// The user's own nudge; always wins.
+    /// The user's own nudge, tap or drag; always wins.
     case manual
-    /// Found from the video's captions against the timed lyrics.
-    case captions
-    /// Found from the video's soundtrack against the song as it plays.
-    case audio
     /// Guessed from how much longer the video is than the song.
     case estimated
-    /// Found from the video's cuts against the beat of the song as it
-    /// plays (`MusicVideoCutAlign`).
-    case cuts
-
-    var isAutomatic: Bool { self == .captions || self == .audio || self == .cuts }
-
-    /// How it is written in the automatic offsets' store.
-    var storedKind: String {
-        switch self {
-        case .audio: return "audio"
-        case .cuts: return "cuts"
-        default: return "captions"
-        }
-    }
-
-    static func stored(_ kind: String?) -> MusicVideoOffsetOrigin {
-        switch kind {
-        case "audio": return .audio
-        case "cuts": return .cuts
-        default: return .captions
-        }
-    }
 }
 
 /// How far into each song's video the song starts, per recording.
 ///
-/// Three layers, the first present wins: the user's nudge or tap (`values`,
-/// kept even at 0 once set, for the video it was set on), the automatic
-/// offset found for this song and THIS video (captions, audio or cuts,
-/// cached on this Mac), then a guess from the video's length (kept in
-/// memory only).
+/// Two layers, the first present wins: the user's nudge, tap or drag
+/// (`values`, kept even at 0 once set, for the video it was set on), then a
+/// guess from the video's length (kept in memory only).
+///
+/// Offsets Lunalyr once found by itself (captions, soundtrack, cuts) are no
+/// longer used: they are dropped from the store when it loads.
 @MainActor
 final class MusicVideoOffsets: ObservableObject {
     static let key = "custom.musicVideoOffsets"
-    static let automaticKey = "custom.musicVideoAutoOffsets"
+    /// Where automatic offsets used to be kept; cleared on load.
+    static let retiredAutomaticKey = "custom.musicVideoAutoOffsets"
     /// The video each of the user's offsets was set on.
     static let manualVideoKey = "custom.musicVideoOffsetVideos"
-    /// Found offsets are kept this long…
-    static let automaticLifetime: TimeInterval = 180 * 86_400
-    /// …and "checked, nothing usable" this long, so a video without
-    /// captions is not asked about on every play.
-    static let unusableLifetime: TimeInterval = 7 * 86_400
-    static let capacity = 500
 
     /// The user's offsets.
     @Published private(set) var values: [String: Double]
     /// The video (`videoKey`) each of `values` was set on. A song without
     /// one was set before videos were told apart: it applies to any video.
     @Published private(set) var manualVideos: [String: String]
-    @Published private(set) var automatic: [String: Automatic]
     @Published private(set) var estimates: [String: Double] = [:]
     private let defaults: UserDefaults
-
-    struct Automatic: Equatable, Sendable {
-        /// The video it was found for (`videoKey`).
-        var video: String
-        /// Nil: checked, and nothing usable was found.
-        var offset: Double?
-        var origin: MusicVideoOffsetOrigin
-        var at: Double
-    }
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
@@ -191,15 +151,10 @@ final class MusicVideoOffsets: ObservableObject {
         values = manual
         manualVideos = (defaults.dictionary(forKey: Self.manualVideoKey) as? [String: String] ?? [:])
             .filter { manual[$0.key] != nil }
-        let stored = defaults.dictionary(forKey: Self.automaticKey) as? [String: [String: Any]] ?? [:]
-        automatic = stored.compactMapValues { entry in
-            guard let video = entry["video"] as? String, let at = entry["at"] as? Double else { return nil }
-            let origin = MusicVideoOffsetOrigin.stored(entry["kind"] as? String)
-            var offset = entry["offset"] as? Double
-            // Audio offsets found before the video's clock dropped the
-            // lyrics' lead were measured against that lead: add it back.
-            if origin == .audio, entry["clock"] == nil, let found = offset { offset = found + NowPlayingMonitor.syncLead }
-            return Automatic(video: video, offset: offset, origin: origin, at: at)
+        // The real preferences are left alone inside the test host.
+        if defaults.object(forKey: Self.retiredAutomaticKey) != nil,
+           defaults !== UserDefaults.standard || !AppRuntime.isUnitTesting {
+            defaults.removeObject(forKey: Self.retiredAutomaticKey)
         }
     }
 
@@ -215,23 +170,20 @@ final class MusicVideoOffsets: ObservableObject {
     // MARK: Reading
 
     /// The offset in force for the song and video.
-    func offset(for songKey: String?, video: String? = nil, now: Date = Date()) -> Double {
-        resolved(songKey, video: video, now: now).offset
+    func offset(for songKey: String?, video: String? = nil) -> Double {
+        resolved(songKey, video: video).offset
     }
 
-    func origin(for songKey: String?, video: String? = nil, now: Date = Date()) -> MusicVideoOffsetOrigin {
-        resolved(songKey, video: video, now: now).origin
+    func origin(for songKey: String?, video: String? = nil) -> MusicVideoOffsetOrigin {
+        resolved(songKey, video: video).origin
     }
 
-    private func resolved(_ songKey: String?, video: String?, now: Date) -> (offset: Double, origin: MusicVideoOffsetOrigin) {
+    private func resolved(_ songKey: String?, video: String?) -> (offset: Double, origin: MusicVideoOffsetOrigin) {
         guard let songKey else { return (0, .none) }
         if let manual = values[songKey], manualApplies(songKey, video: video) {
             return (MusicVideoTiming.clampedOffset(manual), .manual)
         }
         guard let video else { return (0, .none) }
-        if let found = automaticEntry(for: songKey, video: video, now: now), let offset = found.offset {
-            return (MusicVideoTiming.clampedOffset(offset), found.origin)
-        }
         if let estimate = estimates[Self.estimateKey(songKey, video)] { return (estimate, .estimated) }
         return (0, .none)
     }
@@ -249,13 +201,6 @@ final class MusicVideoOffsets: ObservableObject {
         return owner == video
     }
 
-    /// What was found for the song and this video, unless it has expired.
-    func automaticEntry(for songKey: String, video: String, now: Date) -> Automatic? {
-        guard let entry = automatic[songKey], entry.video == video else { return nil }
-        let lifetime = entry.offset == nil ? Self.unusableLifetime : Self.automaticLifetime
-        return now.timeIntervalSince1970 - entry.at < lifetime ? entry : nil
-    }
-
     // MARK: The user's offset
 
     /// The user's offset for the song, kept even at 0, for `video` (the
@@ -269,10 +214,10 @@ final class MusicVideoOffsets: ObservableObject {
         defaults.set(manualVideos, forKey: Self.manualVideoKey)
     }
 
-    /// Moves the offset in force (automatic or not) by `delta`; from then
+    /// Moves the offset in force (estimated or not) by `delta`; from then
     /// on it is the user's, for this video.
-    func nudge(by delta: Double, for songKey: String, video: String? = nil, now: Date = Date()) {
-        set(offset(for: songKey, video: video, now: now) + delta, for: songKey, video: video)
+    func nudge(by delta: Double, for songKey: String, video: String? = nil) {
+        set(offset(for: songKey, video: video) + delta, for: songKey, video: video)
     }
 
     /// The user's own offset for a song, as stored: its value and the video
@@ -291,7 +236,7 @@ final class MusicVideoOffsets: ObservableObject {
         if let entry { set(entry.value, for: songKey, video: entry.video) } else { clearManual(songKey) }
     }
 
-    /// Back to the automatic offset (or none).
+    /// Back to the estimate (or none).
     func clearManual(_ songKey: String) {
         guard values.removeValue(forKey: songKey) != nil else { return }
         manualVideos.removeValue(forKey: songKey)
@@ -299,34 +244,7 @@ final class MusicVideoOffsets: ObservableObject {
         defaults.set(manualVideos, forKey: Self.manualVideoKey)
     }
 
-    // MARK: Automatic offsets
-
-    /// Stores what an alignment found (`offset` nil: nothing usable).
-    func storeAutomatic(_ offset: Double?, origin: MusicVideoOffsetOrigin, for songKey: String, video: String, now: Date) {
-        let bounded = offset.flatMap { $0.isFinite ? (MusicVideoTiming.clampedOffset($0) * 100).rounded() / 100 : nil }
-        automatic[songKey] = Automatic(video: video, offset: bounded, origin: origin, at: now.timeIntervalSince1970)
-        if automatic.count > Self.capacity {
-            let oldest = automatic.sorted { $0.value.at < $1.value.at }
-            for (key, _) in oldest.prefix(automatic.count - Self.capacity) { automatic.removeValue(forKey: key) }
-        }
-        saveAutomatic()
-    }
-
-    func forgetAutomatic(_ songKey: String) {
-        guard automatic.removeValue(forKey: songKey) != nil else { return }
-        saveAutomatic()
-    }
-
-    private func saveAutomatic() {
-        let plist = automatic.mapValues { entry -> [String: Any] in
-            // "clock": measured against the song's position without the
-            // lyrics' lead (see `init`).
-            var row: [String: Any] = ["video": entry.video, "at": entry.at, "kind": entry.origin.storedKind, "clock": 2]
-            if let offset = entry.offset { row["offset"] = offset }
-            return row
-        }
-        defaults.set(plist, forKey: Self.automaticKey)
-    }
+    // MARK: Estimates
 
     /// A starting guess from the video's length, for this session only.
     func setEstimate(_ value: Double?, for songKey: String, video: String) {
@@ -339,15 +257,6 @@ final class MusicVideoOffsets: ObservableObject {
 }
 
 // MARK: - Resolver
-
-/// What a video's captions gave.
-enum MusicVideoCaptionFetch: Equatable, Sendable {
-    /// Each usable track's cues, best first; empty when the video has
-    /// none that could be read.
-    case tracks([[MusicVideoCaptionCue]], duration: Double?)
-    /// Offline, rate limited, or the page could not be read: try later.
-    case unavailable
-}
 
 /// A YouTube link the user pasted for a song, per recording. Played even
 /// with online search off: the user chose that video.
@@ -556,35 +465,6 @@ final class MusicVideoResolver {
             return .rateLimited
         } catch {
             return Task.isCancelled ? .cancelled : .failed
-        }
-    }
-
-    // MARK: Captions
-
-    /// The caption tracks worth trying for a video, each as cues, and the
-    /// video's length from its watch page. Every request (the page, then
-    /// at most two tracks) goes through the same rate limit and ephemeral
-    /// session as the search; only the video ID is sent, to YouTube.
-    /// `.unavailable` for a passing failure (offline, rate limited, a page
-    /// that could not be read), not to be remembered.
-    func captionCues(videoID: String, lyricsLanguage: String?) async -> MusicVideoCaptionFetch {
-        guard let url = YouTubeCaptions.watchURL(videoID: videoID) else { return .unavailable }
-        do {
-            let data = try await fetch(url)
-            let page = await Task.detached(priority: .utility) {
-                YouTubeCaptions.page(fromHTML: String(decoding: data, as: UTF8.self))
-            }.value
-            guard let page else { return .unavailable }
-            var tracks: [[MusicVideoCaptionCue]] = []
-            for track in YouTubeCaptions.preferred(page.tracks, lyricsLanguage: lyricsLanguage) {
-                guard let textURL = YouTubeCaptions.textURL(for: track) else { continue }
-                // An empty body (no proof-of-origin token) gives no cues.
-                let cues = YouTubeCaptions.cues(from: try await fetch(textURL))
-                if !cues.isEmpty { tracks.append(cues) }
-            }
-            return .tracks(tracks, duration: page.duration)
-        } catch {
-            return .unavailable
         }
     }
 
