@@ -18,6 +18,9 @@
     <Project Path="tests/Lunalyr.Render.Compositions.Tests/Lunalyr.Render.Compositions.Tests.csproj">
       <Platform Project="x64" />
     </Project>
+    <Project Path="tests/Lunalyr.Render.Tests/Lunalyr.Render.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
     <Project Path="tests/Lunalyr.Shell.Tests/Lunalyr.Shell.Tests.csproj">
       <Platform Project="x64" />
     </Project>

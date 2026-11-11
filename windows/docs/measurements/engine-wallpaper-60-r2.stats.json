@@ -1,0 +1,46 @@
+{
+  "stack": "lunalyr-render-engine-aot",
+  "adapter": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "monitors": [
+    {
+      "w": 2560,
+      "h": 1440,
+      "dpi": 120,
+      "hz": 60,
+      "mode": "Progman24H2",
+      "state": "Drawing",
+      "reason": "None",
+      "syncInterval": 1,
+      "hdr": false,
+      "adapterDrivesMonitor": true
+    }
+  ],
+  "seconds": 34.99,
+  "frames": 2066,
+  "fps": 59,
+  "cpuMsPerFrame": {
+    "avg": 0.524,
+    "p50": 0.512,
+    "p95": 0.696,
+    "p99": 0.782
+  },
+  "frameIntervalMs": {
+    "avg": 16.939,
+    "p50": 16.664,
+    "p95": 17.161,
+    "p99": 33.397
+  },
+  "slowFrames": 35,
+  "startupMs": 231,
+  "workingSetMB": 38.2,
+  "privateMB": 43.6,
+  "processCpuPercent": 0.38,
+  "gcGen0": 0,
+  "gcGen2": 0,
+  "allocatedMB": 1.9,
+  "rebuilds": 1,
+  "deviceRecoveries": 0,
+  "notes": [
+    "tree after attach: Progman 10294 ex=200080; SHELLDLL_DefView 1029E vis=True (0,0 2560x1440); LunalyrWallpaper_6F90_43c36aff F09DC vis=True (0,0 2560x1440); WorkerW 102CC vis=True (0,0 2560x1440)"
+  ]
+}
