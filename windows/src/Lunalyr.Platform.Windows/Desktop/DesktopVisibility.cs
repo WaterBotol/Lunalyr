@@ -7,8 +7,10 @@ namespace Lunalyr.Platform.Desktop;
 /// <param name="Alpha">Constant layered alpha 0..1; 1 for a non-layered window; NaN when layered per pixel (unknown).</param>
 /// <param name="ClickThrough"><c>WS_EX_TRANSPARENT</c>: an overlay the user can't interact with.</param>
 /// <param name="Own">One of Lunalyr's windows.</param>
+/// <param name="Maximized">Maximised (<c>WS_MAXIMIZE</c>): an ordinary window, never a full-screen app, even when an
+/// auto-hiding taskbar lets it span the whole monitor.</param>
 public readonly record struct WindowRecord(nint Handle, Box Bounds, string ClassName, bool Visible, bool Minimized,
-    bool Cloaked, double Alpha, bool ClickThrough, bool Own);
+    bool Cloaked, double Alpha, bool ClickThrough, bool Own, bool Maximized = false);
 
 /// <summary>Whether each monitor's wallpaper can be seen, decided from a window list alone.</summary>
 public static class DesktopVisibility
@@ -42,8 +44,8 @@ public static class DesktopVisibility
     /// <summary>
     /// The visibility of every monitor's wallpaper.
     /// <list type="bullet">
-    /// <item>Full-screen app: an opaque app window covers the monitor's whole bounds (taskbar included), as a
-    /// full-screen video, borderless game or presentation does; or Windows reports an exclusive-mode Direct3D app
+    /// <item>Full-screen app: an opaque app window that isn't maximised covers the monitor's whole bounds (taskbar
+    /// included), as a full-screen video, borderless game or presentation does; or Windows reports an exclusive-mode Direct3D app
     /// (<paramref name="d3dFullScreenOnForegroundMonitor"/>) and the foreground window is on this monitor.</item>
     /// <item>Covered by windows: opaque app windows leave nothing noticeable of the work area showing
     /// (<see cref="DesktopCoverage.RegionCovered"/>, the gap scaled by the monitor's DPI).</item>
@@ -64,7 +66,7 @@ public static class DesktopVisibility
             foreach (var w in windows)
             {
                 if (!CanCover(w)) continue;
-                if (w.Bounds.Covers(monitor.Bounds)) fullScreen = true;
+                if (!w.Maximized && w.Bounds.Covers(monitor.Bounds)) fullScreen = true;
                 if (monitor.WorkArea.Intersect(w.Bounds) is { } overlap && overlap.Width >= 1 && overlap.Height >= 1)
                     covers.Add((w.Bounds, overlap.Width * overlap.Height));
             }
@@ -77,6 +79,14 @@ public static class DesktopVisibility
             result[m] = new MonitorVisibility(fullScreen, covered || fullScreen);
         }
         return result;
+    }
+
+    /// <summary>The window that makes <paramref name="monitor"/> full-screen, if one does (for logs).</summary>
+    public static WindowRecord? FullScreenWindow(MonitorInfo monitor, IReadOnlyList<WindowRecord> windows)
+    {
+        foreach (var w in windows)
+            if (CanCover(w) && !w.Maximized && w.Bounds.Covers(monitor.Bounds)) return w;
+        return null;
     }
 }
 

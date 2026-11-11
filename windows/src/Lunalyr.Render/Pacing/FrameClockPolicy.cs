@@ -22,5 +22,9 @@ public static class FrameClockPolicy
         return latest;
     }
 
+    /// <summary>The same rule for one surface with at most one fade running, without allocating.</summary>
+    public static double? QuietAfter(bool backgroundAnimates, bool lyricsAdvance, double? transitionEnd) =>
+        backgroundAnimates || lyricsAdvance ? null : transitionEnd ?? double.NegativeInfinity;
+
     public static bool IsIdle(double? quietAfter, double now) => quietAfter is { } quiet && now >= quiet;
 }

@@ -89,6 +89,14 @@ public sealed class LayerCrossfade<TLayer> where TLayer : notnull
     public List<Drawn> Layers(double at, double duration, Func<TLayer, bool>? isOpaque = null)
     {
         var drawn = new List<Drawn>(_entries.Count);
+        Layers(at, duration, drawn, isOpaque);
+        return drawn;
+    }
+
+    /// <summary>As <see cref="Layers(double, double, Func{TLayer, bool}?)"/>, into a list the caller reuses (no allocation per frame).</summary>
+    public void Layers(double at, double duration, List<Drawn> drawn, Func<TLayer, bool>? isOpaque = null)
+    {
+        drawn.Clear();
         double through = 1; // How much of what lies beneath shows through the transparent layers above.
         for (int index = _entries.Count - 1; index >= 0; index--)
         {
@@ -107,8 +115,13 @@ public sealed class LayerCrossfade<TLayer> where TLayer : notnull
             }
         }
         drawn.Reverse();
-        return drawn;
     }
+
+    /// <summary>
+    /// Lets go of the layers a fully shown layer covers, without waiting for the next change (Windows addition: the
+    /// engine releases their GPU resources once a fade has finished).
+    /// </summary>
+    public void Settle(double at, double duration) => Prune(at, duration);
 
     /// <summary>How much of each entry reaches the screen, treating every layer as opaque.</summary>
     private double[] VisibleWeights(double at, double duration)

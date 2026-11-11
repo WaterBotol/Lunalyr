@@ -174,6 +174,24 @@ public sealed class DesktopCoverageTests
         Assert.Empty(Hidden([Laptop], Window(500, Laptop.WorkArea, cls: "CASCADIA_HOSTING_WINDOW_CLASS")));
 
     [Fact]
+    public void AMaximisedWindowOverAnAutoHiddenTaskbarCoversButIsNoFullScreenApp()
+    {
+        // With the taskbar auto-hidden the work area is the whole monitor, and so is a maximised window.
+        var autoHide = Laptop with { WorkArea = Laptop.Bounds };
+        var result = DesktopVisibility.Evaluate([autoHide], [Window(500, autoHide.Bounds) with { Maximized = true }]);
+        Assert.Equal(new MonitorVisibility(FullScreenApp: false, CoveredByWindows: true), result[0]);
+    }
+
+    [Fact]
+    public void AFullMonitorOverlayDrawnPerPixelIsNoFullScreenApp()
+    {
+        // Seen live: an Electron app's full-monitor DirectComposition overlay (layered, no layered attributes) was the
+        // foreground window. The reader marks such windows' alpha unknown (NaN), so they cover nothing.
+        var result = DesktopVisibility.Evaluate([Laptop], [Window(500, Laptop.Bounds, alpha: double.NaN)]);
+        Assert.Equal(new MonitorVisibility(false, false), result[0]);
+    }
+
+    [Fact]
     public void ClickingTheDesktopOrTaskbarIsNeverAFullScreenApp()
     {
         // Progman spans every monitor and is the foreground window after a click on the desktop.

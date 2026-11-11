@@ -35,19 +35,6 @@ public enum PauseReason
     WindowHidden,
 }
 
-/// <summary>What the whole session looks like: when any of these is set, no wallpaper can be seen anywhere.</summary>
-public readonly record struct SystemVisibility(bool DisplayOff, bool Locked, bool ScreenSaver, bool SessionInactive)
-{
-    public bool ScreensHidden => DisplayOff || Locked || ScreenSaver || SessionInactive;
-
-    public PauseReason Reason =>
-        DisplayOff ? PauseReason.DisplayOff
-        : Locked ? PauseReason.Locked
-        : ScreenSaver ? PauseReason.ScreenSaver
-        : SessionInactive ? PauseReason.SessionInactive
-        : PauseReason.None;
-}
-
 /// <summary>The rule every surface's frame clock follows.</summary>
 public static class SurfaceActivity
 {
@@ -75,7 +62,7 @@ public static class SurfaceActivity
     {
         var state = State(!monitor.CoveredByWindows, system.ScreensHidden, followsWindow: false, pauseWhenCovered, wallpaperPaused);
         if (state == SurfaceState.Frozen) return (state, PauseReason.PausedByUser);
-        if (state == SurfaceState.Hidden) return (state, system.ScreensHidden ? system.Reason : PauseReason.Covered);
+        if (state == SurfaceState.Hidden) return (state, system.ScreensHidden ? ReasonFor(system) : PauseReason.Covered);
         if (monitor.FullScreenApp) return (SurfaceState.Hidden, PauseReason.FullScreenApp);
         return (SurfaceState.Drawing, PauseReason.None);
     }
@@ -85,6 +72,14 @@ public static class SurfaceActivity
     {
         var state = State(windowVisible, system.ScreensHidden, followsWindow: true, pauseWhenCovered: false, wallpaperPaused: false);
         return state == SurfaceState.Drawing ? (state, PauseReason.None)
-            : (state, system.ScreensHidden ? system.Reason : PauseReason.WindowHidden);
+            : (state, system.ScreensHidden ? ReasonFor(system) : PauseReason.WindowHidden);
     }
+
+    /// <summary>The reason to give while the screens are hidden, most fundamental first.</summary>
+    public static PauseReason ReasonFor(SystemVisibility system) =>
+        system.DisplayOff ? PauseReason.DisplayOff
+        : system.Locked ? PauseReason.Locked
+        : system.ScreenSaver ? PauseReason.ScreenSaver
+        : system.SessionInactive ? PauseReason.SessionInactive
+        : PauseReason.None;
 }
