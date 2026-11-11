@@ -22,7 +22,16 @@ public static class LyricTimingRules
             return false;
         }
         var covered = LyricTextFolding.LettersAndNumbers(string.Concat(line.Words.Select(w => w.Text)));
-        if (!string.Equals(covered, LyricTextFolding.LettersAndNumbers(line.Text), StringComparison.Ordinal))
+        var lineLetters = LyricTextFolding.LettersAndNumbers(line.Text);
+        if (!string.Equals(covered, lineLetters, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        // Windows-only rule (12 Nov 2026), not yet on the Mac: tokens that each span a whole line or phrase are line
+        // timing dressed as word timing. LRCLIB's Lyricsfile does this for line-synced uploads (one token per line,
+        // or per space-separated phrase in Japanese), which otherwise ranked as word or mixed timing and stopped
+        // sources with real word timing. A genuine one-word line still counts.
+        if (IsPhraseTimed(line.Text, lineLetters, line.Words.Count))
         {
             return false;
         }
@@ -36,6 +45,51 @@ public static class LyricTimingRules
             }
         }
         return true;
+    }
+
+    /// <summary>
+    /// True when a line's tokens are phrases rather than words. In scripts written without spaces (Chinese,
+    /// Japanese, Thai…): one token over more than two letters, or more than four letters per token on average
+    /// (real word or syllable timing there runs one to three characters a token). In spaced scripts: one token over
+    /// several words, or fewer than half as many tokens as words.
+    /// </summary>
+    static bool IsPhraseTimed(string text, string letters, int tokens)
+    {
+        if (tokens <= 0)
+        {
+            return false;
+        }
+        if (LyricScript.KeepsSyllables(text))
+        {
+            var count = System.Globalization.StringInfo.ParseCombiningCharacters(letters).Length;
+            return (tokens == 1 && count > 2) || (double)count / tokens > 4;
+        }
+        var words = 0;
+        foreach (var part in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (LyricTextFolding.LettersAndNumbers(part).Length > 0)
+            {
+                words++;
+            }
+        }
+        return (tokens == 1 && words > 1) || tokens * 2 <= words && words > 2;
+    }
+
+    /// <summary>
+    /// Windows-only rule (12 Nov 2026): lyrics count as word-timed only if at least one sung line has two or more
+    /// validly timed words. Lyrics where every timed line is a single token (LRCLIB Lyricsfile rows for line-synced
+    /// uploads, plus a few genuinely one-word lines) carry no word timing at all and rank as line timing.
+    /// </summary>
+    static bool HasRealWordEvidence(IEnumerable<LyricLine> lines)
+    {
+        foreach (var line in lines)
+        {
+            if (!line.IsInstrumental && line.Words.Count >= 2 && ValidWordTiming(line))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>Every sung line has valid word timing.</summary>
@@ -58,7 +112,7 @@ public static class LyricTimingRules
                 return false;
             }
         }
-        return any;
+        return any && HasRealWordEvidence(synced.Lines);
     }
 
     /// <summary>3 for word timing throughout, 2 for mixed timing, 1 for line timing, 0 for plain text or no sung line.</summary>
@@ -71,7 +125,7 @@ public static class LyricTimingRules
         if (result is LyricResult.Synced synced)
         {
             var vocal = synced.Lines.Where(line => !line.IsInstrumental).ToList();
-            if (vocal.Any(ValidWordTiming))
+            if (vocal.Any(ValidWordTiming) && HasRealWordEvidence(vocal))
             {
                 return 2;
             }
@@ -87,11 +141,11 @@ public static class LyricTimingRules
     public static string Precision(IReadOnlyList<LyricLine> lines)
     {
         var vocal = lines.Where(line => !line.IsInstrumental).ToList();
-        if (vocal.Count > 0 && vocal.All(ValidWordTiming))
+        if (vocal.Count > 0 && vocal.All(ValidWordTiming) && HasRealWordEvidence(vocal))
         {
             return LyricLines.WordByWord;
         }
-        return vocal.Any(ValidWordTiming) ? LyricLines.MixedTiming : LyricLines.LineSynced;
+        return vocal.Any(ValidWordTiming) && HasRealWordEvidence(vocal) ? LyricLines.MixedTiming : LyricLines.LineSynced;
     }
 
     /// <summary>

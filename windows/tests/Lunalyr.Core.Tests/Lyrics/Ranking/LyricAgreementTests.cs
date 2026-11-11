@@ -16,7 +16,12 @@ public sealed class LyricAgreementTests
         {
             var start = index * 5 + 2 + shift;
             var line = L.Line(text, start, start + 4);
-            return words ? L.Timed(line, L.Word(text, start, start + 4)) : line;
+            if (!words) return line;
+            // The Mac fixture times each line as one whole-line token. Windows doesn't count that as word timing
+            // (LyricTimingRules: one token over several words is line timing), so give each word its own slot.
+            var parts = text.Split(' ');
+            var slot = 4.0 / parts.Length;
+            return L.Timed(line, [.. parts.Select((p, i) => L.Word(p, start + i * slot, start + (i + 1) * slot))]);
         }).ToList();
         return new LyricCandidate(source, L.Synced(lines, "fixture", source.Title()), "Our Song", "Our Artist", 180, 0);
     }
