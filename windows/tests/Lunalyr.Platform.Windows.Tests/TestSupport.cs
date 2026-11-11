@@ -31,6 +31,22 @@ internal sealed class TempFolder : IDisposable
     }
 }
 
+/// <summary>
+/// The Windows reading services for tests, built once per test process, with the Japanese dictionary expanded into a
+/// folder under the temp directory (never %LOCALAPPDATA%\Lunalyr). The folder is shared between runs, so the
+/// dictionary is expanded once and then mapped, as in the app.
+/// </summary>
+internal static class TestReadingServices
+{
+    public static string DictionaryFolder { get; } =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "lunalyr-tests", "dictionaries");
+
+    private static readonly Lazy<Lunalyr.Core.Lyrics.Readings.ReadingServices> Shared =
+        new(() => Lunalyr.Platform.Readings.WindowsReadingServices.Create(DictionaryFolder));
+
+    public static Lunalyr.Core.Lyrics.Readings.ReadingServices Windows => Shared.Value;
+}
+
 /// <summary>A clock tests advance by hand. Timers fire synchronously inside <see cref="Advance"/>.</summary>
 /// <summary>Fake time with fake timers, for the settings and logging tests. The song-clock tests use
 /// <c>Lunalyr.Tests.Shared.ManualTimeProvider</c>, which also fakes the monotonic timestamp. TODO: merge the two.</summary>

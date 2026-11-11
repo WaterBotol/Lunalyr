@@ -1,6 +1,7 @@
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Readings;
+using Lunalyr.Core.Lyrics.Readings.Japanese;
 using Lunalyr.Platform.Readings;
 using Lunalyr.Tests.Shared;
 using static Lunalyr.Tests.Shared.ReadingTestLines;
@@ -12,14 +13,15 @@ namespace Lunalyr.Platform.Windows.Tests.Readings;
 public class WindowsReadingServicesTests
 {
     [Fact]
-    public void IcuAndElsAreThereWithoutExtraInstalls()
+    public void IcuElsAndTheBundledJapaneseDictionaryAreThereWithoutExtraInstalls()
     {
-        var services = WindowsReadingServices.Create();
-        TestContext.Current.SendDiagnosticMessage(WindowsReadingServices.Describe());
+        var services = TestReadingServices.Windows;
+        TestContext.Current.SendDiagnosticMessage(WindowsReadingServices.Describe(services));
         Assert.IsType<IcuTransliterator>(services.Transliterator);
-        Assert.IsType<IcuWordBreaker>(services.WordBreaker);
+        var breaker = Assert.IsType<JapaneseWordBreaker>(services.WordBreaker);
+        Assert.IsType<IcuWordBreaker>(breaker.Other);
         Assert.IsType<ElsLanguageDetector>(services.LanguageGuesser);
-        Assert.Equal(WindowsJapaneseTokenizer.IsAvailable, services.JapaneseTokenizer is WindowsJapaneseTokenizer);
+        Assert.IsType<DictionaryJapaneseTokenizer>(services.JapaneseTokenizer);
     }
 
     // The readings services plug into the parsers' reading seam: LyricTextRulesTests.swift's
@@ -27,7 +29,7 @@ public class WindowsReadingServicesTests
     [Fact]
     public void TheParsersTellReadingsFromTranslationsWithTheWindowsReaders()
     {
-        var options = WindowsReadingServices.Create().ParseOptions();
+        var options = TestReadingServices.Windows.ParseOptions();
         Assert.NotNull(options.Distribute); // ICU's word breaks spread estimated words
         (string Candidate, string Lyric)[] readings =
         [
@@ -54,7 +56,7 @@ public class WindowsReadingServicesTests
     [Fact]
     public async Task TheParserServicesAreSafeFromManyThreadsAtOnce()
     {
-        var options = WindowsReadingServices.Create().ParseOptions();
+        var options = TestReadingServices.Windows.ParseOptions();
         var expectedWords = options.Distribute!("我们一起走过的路", 0, 4).Select(word => word.Text).ToList();
         var expectedReading = LyricScript.IsReading("kimi no na wa", "君の名は", options.ReadingCache());
         var runs = Enumerable.Range(0, 64).Select(i => Task.Run(() =>
@@ -92,7 +94,22 @@ public class WindowsReadingServicesTests
         Assert.Equal("แมว|นอน|บน|โต๊ะ", Words("แมวนอนบนโต๊ะ"));
         Assert.Equal("Okay|you're|mine", Words("Okay, you're mine!"));
         // ICU's split of a line the Mac tests use; Apple's differs (inferred from the Mac's expectations, not observed).
+        // Japanese lines therefore go to the bundled analyser instead (JapaneseWordBreaksComeFromTheBundledAnalyser).
         Assert.Equal("窓辺|に|座|って|海|を|見|てい|た", Words("窓辺に座って海を見ていた"));
+    }
+
+    [Fact]
+    public void JapaneseWordBreaksComeFromTheBundledAnalyser()
+    {
+        var breaker = TestReadingServices.Windows.WordBreaker;
+        string Words(string text) => string.Join("|", breaker.Words(text).Select(word => text.Substring(word.Start, word.Length)));
+        // An auxiliary verb stays on what it inflects (会おう, いた); particles and te stand apart.
+        Assert.Equal("窓辺|に|座っ|て|海|を|見|て|いた", Words("窓辺に座って海を見ていた"));
+        Assert.Equal("５|時|に|会おう", Words("５時に会おう"));
+        // Latin words, punctuation and spaces around Japanese go to ICU; text without kana is ICU's alone.
+        Assert.Equal("Hey|君|が|好き", Words("Hey, 君が好き!"));
+        Assert.Equal("Okay|you're|mine", Words("Okay, you're mine!"));
+        Assert.Equal("我们|一起|走过|春天|的|小路", Words("我们一起走过春天的小路"));
     }
 
     [Fact]
@@ -115,7 +132,7 @@ public class WindowsReadingServicesTests
 /// RomanizationScriptCoverageTests, which need ICU.</summary>
 public class MandarinAndScriptRomanizationTests
 {
-    private readonly ReadingTestLines _t = new(WindowsReadingServices.Create());
+    private readonly ReadingTestLines _t = new(TestReadingServices.Windows);
 
     // Ported from RomanizationScriptCoverageTests.swift: testEveryNonLatinScriptIsRomanised
     [Fact]
@@ -232,7 +249,7 @@ public class MandarinAndScriptRomanizationTests
 /// <summary>The parts of the Mac's LyricRunReadingTests that need ICU or the Japanese tokenizer.</summary>
 public class WindowsLyricRunReadingTests
 {
-    private readonly ReadingTestLines _t = new(WindowsReadingServices.Create());
+    private readonly ReadingTestLines _t = new(TestReadingServices.Windows);
 
     private string[] RunReadings(LyricLine line, RomanizationOptions? options = null)
     {
@@ -247,7 +264,6 @@ public class WindowsLyricRunReadingTests
     {
         var today = CharacterTimed("今日も");
         Assert.Equal([false, true, true], LyricRuns.Glue(today, today.Words));
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         Assert.Equal(["kyou mo"], RunReadings(today));
         LyricLine[] lines =
         [
@@ -269,7 +285,6 @@ public class WindowsLyricRunReadingTests
     public void ALineTimedJapaneseRunKeepsTheReadingsWordsApart()
     {
         // Without kanji readings Windows gives "kyou mo mata kimi wo omo u" (JapaneseWithoutAnalyzerTests).
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         var line = Line(["今日", "も", "また", "君", "を", "想う"], wordTimed: false, reading: "kyou mo mata kimi wo omou");
         Assert.Equal(["kyou mo mata kimi wo omou"], RunReadings(line));
         var name = Line(["君の", "名は"], wordTimed: false, reading: "kimi no na wa");
@@ -306,7 +321,6 @@ public class WindowsLyricRunReadingTests
     [Fact]
     public void LatinReadingsOfChineseAndJapaneseCharactersStandApart()
     {
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         var name = CharacterTimed("君の名は");
         var replaced = _t.Readings(name, Options(RomanizationDisplay.Replace))!;
         Assert.Equal(name.Words.Count, replaced.Count);
@@ -344,7 +358,6 @@ public class WindowsLyricRunReadingTests
         };
         var latin = LyricRuns.Glue(beautiful, beautiful.Words);
         Assert.Equal(latin, LyricRuns.SplittingWords(beautiful.Words, latin, _t.Services.WordBreaker));
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         Assert.Equal(words.Count, LyricReadingPairs.Match(_t.Readings(line), line.Words, split).Count);
     }
 
@@ -355,16 +368,12 @@ public class WindowsLyricRunReadingTests
         var breaker = _t.Services.WordBreaker;
         var seaside = CharacterTimed("窓辺に座って海を見ていた");
         var glue = LyricRuns.Glue(seaside, seaside.Words);
-        // REPLACED Mac assertion (word-break difference, affects every Windows user): the Mac expects
-        // ["窓辺に", "座って海を見ていた"]. ICU gives 窓辺|に|座|って|海|を|見|てい|た, where every word after 窓辺 is light
-        // (one character, or hiragana only), so a constellation keeps the line whole. (Apple's split, inferred from the
-        // Mac's expectations rather than observed, starts a phrase at 座っ.)
-        Assert.Equal(["窓辺に座って海を見ていた"], LyricRuns.Labels(seaside.Words, LyricRuns.SplittingWords(seaside.Words, glue, breaker)));
+        // The Mac's expectations, restored: the bundled analyser's split (窓辺|に|座っ|て|海|を|見|て|いた) parts the
+        // line as Apple's does. (ICU alone gave 窓辺|に|座|って|海|を|見|てい|た, which kept the constellation whole and
+        // set 見 apart from ていた.)
+        Assert.Equal(["窓辺に", "座って海を見ていた"], LyricRuns.Labels(seaside.Words, LyricRuns.SplittingWords(seaside.Words, glue, breaker)));
         var rolling = LyricRuns.RollingGlue(seaside, seaside.Words, breaker);
-        // REPLACED Mac assertion (word-break difference): the Mac expects ["窓辺に", "座って", "海を", "見ていた"]. ICU parts
-        // 見ていた as 見|てい|た, and てい is not a word that goes on from 見 (JapaneseReading.ContinuesPhrase), so Windows
-        // sets 見 and ていた apart.
-        Assert.Equal(["窓辺に", "座って", "海を", "見", "ていた"], LyricRuns.Labels(seaside.Words, rolling));
+        Assert.Equal(["窓辺に", "座って", "海を", "見ていた"], LyricRuns.Labels(seaside.Words, rolling));
         // What goes on the word before it, and what begins one.
         Assert.True(JapaneseReading.ContinuesPhrase("を", "海"));
         Assert.True(JapaneseReading.ContinuesPhrase("た", "歩い"));
@@ -380,7 +389,6 @@ public class WindowsLyricRunReadingTests
         var spring = CharacterTimed("我们一起走过春天的小路");
         Assert.Equal(["我们", "一起", "走过", "春天的", "小路"], LyricRuns.Labels(spring.Words, LyricRuns.RollingGlue(spring, spring.Words, breaker)));
         // Readings follow those words (generated readings need the Japanese tokenizer).
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         var pairs = LyricReadingPairs.Match(_t.Readings(seaside), seaside.Words, rolling);
         Assert.Equal(LyricRuns.Labels(seaside.Words, rolling).Count, pairs.Count);
         Assert.True(pairs.Values.All(value => value.Length > 0));
@@ -391,7 +399,7 @@ public class WindowsLyricRunReadingTests
 /// romanisation for each line, paired run by run as the stage layouts draw it.</summary>
 public class StageReadingRevealTests
 {
-    private readonly ReadingTestLines _t = new(WindowsReadingServices.Create());
+    private readonly ReadingTestLines _t = new(TestReadingServices.Windows);
 
     private static LyricLine Line(string romanization, (string Text, double Start, double End)[] words)
     {
@@ -427,7 +435,6 @@ public class StageReadingRevealTests
     [Fact]
     public void EachRunCarriesOnlyItsOwnReading()
     {
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         Assert.Equal(["sugite yuku", "toki no", "naka"], StageReadings(0));
         Assert.Equal(["anata o", "omoida", "su"], StageReadings(1));
         Assert.Equal(["monou ge ni", "nagameru", "gamen ni", "utsutta", "futari"], StageReadings(2));
@@ -438,7 +445,6 @@ public class StageReadingRevealTests
     [Fact]
     public void APhraseIsSharedOverTheWordsItIsSungAcross()
     {
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         var readings = _t.Song(Lines, Options);
         Assert.Equal(["wara", "tte", "ta"], readings[3].Select(word => word.Text));
         Assert.Equal(["anata o", "omo", "i", "da", "su"], readings[1].Select(word => word.Text));
@@ -451,7 +457,6 @@ public class StageReadingRevealTests
     [Fact]
     public void LinePairingWouldPutTheWholeReadingOnTheFirstRun()
     {
-        JapaneseRomanizationTests.RequireJapaneseTokenizer();
         var line = Lines[0];
         var readings = _t.Song(Lines, Options).GetValueOrDefault(0);
         var glue = LyricRuns.Glue(line, line.Words);

@@ -7,20 +7,16 @@ using static Lunalyr.Tests.Shared.ReadingTestLines;
 namespace Lunalyr.Platform.Windows.Tests.Readings;
 
 /// <summary>
-/// The Japanese parts of the Mac's RomanizationTests, run with the Windows reading services. Expectations are the
-/// Mac's. Kanji readings come from JapanesePhoneticAnalyzer, which reads nothing unless the Japanese language (its IME
-/// dictionary) is installed; tests that need kanji readings are skipped where it is missing, with the reason. Without
-/// it, kana and saved readings still work; the kana and saved-reading assertions run before the skip.
+/// The Japanese parts of the Mac's RomanizationTests, run with the Windows reading services (the bundled IPAdic
+/// analyser). Expectations are the Mac's; where the dictionary gives a different but defensible reading, the Mac's
+/// expectation is kept in a comment marked "Mac:" and the Windows value is asserted (listed in
+/// docs/READINGS-WINDOWS.md).
 /// </summary>
 public class JapaneseRomanizationTests
 {
-    private readonly ReadingTestLines _t = new(WindowsReadingServices.Create());
+    private readonly ReadingTestLines _t = new(TestReadingServices.Windows);
 
     private string Romaji(string text) => new JapaneseReading(_t.Services).Romanize(text);
-
-    internal static void RequireJapaneseTokenizer() =>
-        Assert.SkipUnless(WindowsJapaneseTokenizer.IsAvailable,
-            "JapanesePhoneticAnalyzer reads nothing on this PC (the Japanese IME dictionary is not installed): Japanese is split by ICU word breaks and kanji have no readings, while these Mac expectations assume a Japanese tokenizer. What Windows gives instead is pinned in JapaneseWithoutAnalyzerTests.");
 
     /// <summary>A Japanese song around <paramref name="line"/>, so its kanji are read as Japanese.</summary>
     private LyricLine[] JapaneseSong(LyricLine line) => [line, _t.LineTimed("ありがとう", start: 100)];
@@ -29,7 +25,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void JapaneseReadsWholeLinesWithParticlesAndSokuon()
     {
-        RequireJapaneseTokenizer();
         var cases = new Dictionary<string, string>
         {
             ["君の名は"] = "kimi no na wa", ["未来へ"] = "mirai e", ["思った"] = "omotta", ["良かった"] = "yokatta",
@@ -47,7 +42,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void JapaneseLongVowelsSmallKanaAndPunctuation()
     {
-        RequireJapaneseTokenizer();
         Assert.Equal("raamen", Romaji("ラーメン"));
         Assert.Equal("koohii", Romaji("コーヒー"));
         Assert.Equal("sugooi", Romaji("すごーい"));
@@ -61,7 +55,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void JapanesePhrasesAreReadOnTheirOwn()
     {
-        RequireJapaneseTokenizer();
         // Read across a space or a Latin word, 君 came out as the suffix kun and 行 as kou.
         foreach (var text in new[] { "ねえ 君は", "今 君に会いたい", "Hey 君が好き", "Ah 君の名は", "もう一度 君に" })
         {
@@ -79,7 +72,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void StandaloneHaIsAParticleUnlessItBeginsAWord()
     {
-        RequireJapaneseTokenizer();
         // At the start of a phrase は also begins a word the tokenizer split it from, or is an interjection.
         foreach (var text in new[] { "はなれないで", "ねえ はなれないで" })
         {
@@ -110,14 +102,17 @@ public class JapaneseRomanizationTests
     [Fact]
     public void WordsTheTokenizerSplitsAfterHaStayWhole()
     {
-        RequireJapaneseTokenizer();
         var words = new Dictionary<string, string>
         {
             ["はしれ"] = "hashire", ["はしれ！"] = "hashire!", ["はしれメロス"] = "hashire merosu", ["はしれはしれ"] = "hashire hashire",
             ["ねえ はしれ"] = "nee hashire", ["はくしゅ"] = "hakushu", ["はくしゅして"] = "hakushu shite", ["はね"] = "hane",
-            ["はよ"] = "hayo", ["はよ来て"] = "hayo kite", ["はで"] = "hade", ["はぐして"] = "hagushite", ["はぐしよう"] = "hagushiyou",
-            ["はぐしたい"] = "hagushitai", ["へ理屈"] = "herikutsu", ["へ理屈を"] = "herikutsu wo", ["へりくつ"] = "herikutsu",
-            ["へりくつを"] = "herikutsu wo",
+            ["はよ"] = "hayo", ["はよ来て"] = "hayo kite", ["はで"] = "hade", ["はぐしよう"] = "hagushiyou",
+            ["はぐしたい"] = "hagushitai", ["へ理屈"] = "herikutsu", ["へ理屈を"] = "herikutsu wo",
+            // Mac: hagushite. The dictionary parts はぐ|し|て (the verb 剥ぐ, then する), spaced as はくしゅして is.
+            ["はぐして"] = "hagu shite",
+            // Mac: herikutsu, herikutsu wo. The dictionary does not know 屁理屈 in kana and parts へり|くつ (the same
+            // letters, spaced).
+            ["へりくつ"] = "heri kutsu", ["へりくつを"] = "heri kutsu wo",
         };
         foreach (var (text, expected) in words) Assert.Equal(expected, Romaji(text));
         var particles = new Dictionary<string, string>
@@ -138,7 +133,6 @@ public class JapaneseRomanizationTests
         var dream = Line(["君", "の", "梦", "を", "见", "た"], wordTimed: false);
         var replaced = _t.Texts(dream, Options(RomanizationDisplay.Replace));
         foreach (var text in new[] { "2人で歩いた", "1人きり", "僕ら2人" }) Assert.DoesNotContain(Romaji(text), pinyin.Contains);
-        RequireJapaneseTokenizer();
         foreach (var (text, expected) in new Dictionary<string, string> { ["2人で歩いた"] = "futari", ["1人きり"] = "hitori", ["僕ら2人"] = "futari" })
         {
             Assert.Contains(expected, Romaji(text), StringComparison.Ordinal);
@@ -151,18 +145,19 @@ public class JapaneseRomanizationTests
     [Fact]
     public void FullWidthDigitsCountPeopleAsHalfWidthOnesDo()
     {
-        RequireJapaneseTokenizer();
         var counted = new Dictionary<string, string>
         {
-            ["２人で"] = "futari de", ["１人きり"] = "hitori kiri", ["２人の未来"] = "futari no mirai", ["僕ら２人"] = "boku ra futari",
+            ["２人で"] = "futari de", ["１人きり"] = "hitori kiri", ["２人の未来"] = "futari no mirai",
+            // Mac: boku ra futari. The dictionary has 僕ら as one word (bokura).
+            ["僕ら２人"] = "bokura futari",
             ["は２人で"] = "wa futari de", ["２人で歩いた"] = "futari de aruita",
         };
         foreach (var (text, expected) in counted) Assert.Equal(expected, Romaji(text));
         // Other numbers are read as their half-width forms are, and keep their digits as written, so "Below lyrics"
         // sets no reading under a digit that only repeats it.
         Assert.Equal("３ kai", Romaji("３回"));
-        // Note: this line's words come from the word breaker. ICU gives ５|時に|会|おう, where Apple's gave ５|時|に|会おう,
-        // so this assertion will not hold on Windows even with the analyzer installed (a word-break difference).
+        // This line's words come from the word breaker: the bundled analyser gives ５|時|に|会おう, as Apple's does (ICU
+        // alone gave ５|時に|会|おう).
         var time = _t.LineTimed("５時に会おう");
         Assert.Equal(["５", "ji", "ni", "aou"], _t.Texts(time));
         Assert.False(LyricReadingPairs.Match(_t.Readings(time), time.Words).ContainsKey(time.Words[0]));
@@ -178,7 +173,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void MonthsAndDaysAfterDigitsReadAsDates()
     {
-        RequireJapaneseTokenizer();
         string[] fullWidth = ["１", "２", "３", "４", "５", "６", "７", "８", "９", "１０", "１１", "１２"];
         for (var index = 0; index < fullWidth.Length; index++)
         {
@@ -207,7 +201,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void CharacterTimedJapaneseIsSharedOutByCharacter()
     {
-        RequireJapaneseTokenizer();
         var today = CharacterTimed("今日も");
         Assert.Equal(["kyo", "u", "mo"], _t.Texts(today));
         Assert.Equal("kyou mo", LyricRomanizer.LineReading(_t.Readings(today), today));
@@ -225,7 +218,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void CharacterTimedReadingsCarryTheirPhrasesTime()
     {
-        RequireJapaneseTokenizer();
         var today = CharacterTimed("今日も");
         var below = _t.Readings(today)!;
         Assert.Equal([today.Words[0].Start, today.Words[0].Start, today.Words[2].Start], below.Select(word => word.Start));
@@ -240,7 +232,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void LineTimedJapaneseMapsPhrasesOntoWords()
     {
-        RequireJapaneseTokenizer();
         var line = Line(["思っ", "た", "より"], wordTimed: false);
         Assert.Equal(["omo", "tta", "yori"], _t.Texts(line));
         Assert.Null(LyricRomanizer.LineReading(_t.Readings(line), line));
@@ -250,11 +241,10 @@ public class JapaneseRomanizationTests
     [Fact]
     public void SpacesBetweenTimedJapaneseWords()
     {
-        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
+        // (Mac order changed: the assertions that need no generated kanji reading come first.)
         // A space at only some word breaks is a pause: っ before it is not doubled.
         var pause = Joined(_t.Texts(Line(["あっ", "君だ"], spaced: true)));
         Assert.DoesNotContain("akk", pause, StringComparison.Ordinal);
-        RequireJapaneseTokenizer();
         Assert.Contains("kimi", pause, StringComparison.Ordinal);
         // Spaces at every break are the markup's, so 今日 is still read whole.
         Assert.Equal(["kyo", "u", "mo"], _t.Texts(Line(["今", "日", "も"], spaced: true)));
@@ -264,9 +254,8 @@ public class JapaneseRomanizationTests
     [Fact]
     public void SpacesBetweenTimedJapanesePhrasesAreKept()
     {
-        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
+        // (Mac order changed: the assertions that need no generated kanji reading come first.)
         Assert.Equal(["kyo", "u", "mo"], _t.Texts(Line(["きょ", "う", "も"], spaced: true)));
-        RequireJapaneseTokenizer();
         Assert.Equal(["ima", "hizashi ga", "mabushii"], _t.Texts(Line(["今", "日差しが", "眩しい"], spaced: true)));
         Assert.Equal(["ima", "hi ga", "shizumu"], _t.Texts(Line(["今", "日が", "沈む"], spaced: true)));
         Assert.Equal(["kyo", "u", "mo", "kimi ni", "aitai"], _t.Texts(Line(["今", "日", "も", "君に", "会いたい"], spaced: true)));
@@ -278,11 +267,10 @@ public class JapaneseRomanizationTests
     [Fact]
     public void MarkupSpacesInsideAPhraseAreDropped()
     {
-        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
+        // (Mac order changed: the assertions that need no generated kanji reading come first.)
         Assert.Equal(["koko", "wa", "doko"], _t.Texts(Line(["ここ", "は", "どこ"], spaced: true)));
         Assert.Equal(["ai", "shite", "ru"], _t.Texts(Line(["アイ", "して", "る"], spaced: true)));
         Assert.Equal(["sa", "kki", "made"], _t.Texts(Line(["さっ", "き", "まで"], spaced: true)));
-        RequireJapaneseTokenizer();
         Assert.Equal(["sekai", "wa", "utsukushii"], _t.Texts(Line(["世界", "は", "美しい"], spaced: true)));
         Assert.Equal(["mirai", "e", "ikou"], _t.Texts(Line(["未来", "へ", "行こう"], spaced: true)));
         Assert.Equal(["wa", "waratta", "ne"], _t.Texts(Line(["は", "笑った", "ね"], spaced: true)));
@@ -301,7 +289,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void PhraseSpacesOfWordTimedLinesAreKept()
     {
-        RequireJapaneseTokenizer();
         string[][] lines =
         [
             ["あいたい", "あいたい", "いますぐ"], ["まって", "まって", "いかないで"], ["そらを", "みあげて", "ないた"],
@@ -332,7 +319,8 @@ public class JapaneseRomanizationTests
             (["あいたい", "あいたい", "いますぐ"], "aitai aitai imasugu", ["aitai", "aitai", "ima sugu"]),
             (["まって", "まって", "いかないで"], "matte matte ikanaide", ["matte", "matte", "ikanaide"]),
             (["そらを", "みあげて", "ないた"], "sora wo miagete naita", ["sora wo", "miagete", "naita"]),
-            (["えっ", "どうして", "なの"], "e doushite nano", ["e", "dou shite", "na no"]),
+            // Mac: ["e", "dou shite", "na no"]. The dictionary has どうして as one adverb (doushite).
+            (["えっ", "どうして", "なの"], "e doushite nano", ["e", "doushite", "na no"]),
             (["あっ", "きみだ", "よ"], "a kimi da yo", ["a", "kimi da", "yo"]),
         ];
         foreach (var (parts, source, expected) in sourced) Assert.Equal(expected, _t.Texts(Line(parts, spaced: true, reading: source)));
@@ -348,9 +336,8 @@ public class JapaneseRomanizationTests
     [Fact]
     public void MarkupSpacesSpacingCannotSettleReadAsSpaced()
     {
-        // (Mac order changed: assertions that need no generated kanji reading run before the skip.)
+        // (Mac order changed: the assertions that need no generated kanji reading come first.)
         Assert.Equal(["ga", "kou", "e"], _t.Texts(Line(["がっ", "こう", "へ"], spaced: true)));
-        RequireJapaneseTokenizer();
         Assert.Equal(["daki", "shime", "te"], _t.Texts(Line(["だき", "しめ", "て"], spaced: true)));
         var tomorrow = _t.Texts(Line(["明", "日が", "来る"], spaced: true));
         Assert.Equal(["hi ga", "kuru"], tomorrow.Skip(1));
@@ -423,7 +410,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void JapaneseReadingOfOtherWordsGivesWayToTheGeneratedOne()
     {
-        RequireJapaneseTokenizer();
         var generated = _t.TextsOrNull(Line(["今日", "も", "明日", "も"], wordTimed: false));
         Assert.NotNull(generated);
         // An extra word, or a reading in kana, does not read this line.
@@ -437,7 +423,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void ReadingsSharedOutByCharacterAreNotDrawnAgainUnderTheLine()
     {
-        RequireJapaneseTokenizer();
         var today = CharacterTimed("今日も");
         Assert.Equal(3, LyricReadingPairs.Match(_t.Readings(today), today.Words).Count);
         Assert.Null(LyricReadingPairs.Line(_t.Readings(today), today, RomanizationDisplay.Below));
@@ -453,7 +438,6 @@ public class JapaneseRomanizationTests
         var spelled = CharacterTimed("君の名は", reading: "kimi no na ha");
         Assert.Equal("ha", _t.Texts(spelled).LastOrDefault());
         // ...unless saved readings are turned off.
-        RequireJapaneseTokenizer();
         Assert.Equal("wa", _t.Texts(spelled, Options(preferSaved: false)).LastOrDefault());
     }
 
@@ -461,7 +445,7 @@ public class JapaneseRomanizationTests
     [Fact]
     public void SourceReadingsAreShownInHepburn()
     {
-        // (Mac order changed: the checks that need no generated reading run first, so they also run here.)
+        // (Mac order changed: the checks that need no generated reading come first.)
         // Loanwords keep their spelling (ディ di).
         Assert.Equal(["me", "di", "", "a"], _t.Texts(CharacterTimed("メディア", reading: "me di a")));
         Assert.False(JapaneseAlignment.WritesNonHepburn("di", "di"));
@@ -470,12 +454,13 @@ public class JapaneseRomanizationTests
         // NetEase writes some of Lemon's syllables in Kunrei-shiki. Where they spell the same sounds as the app's own
         // reading, they are shown as it writes them: deshou, ijou and furi, not desyou, ijyou and huri. That needs the
         // app's reading of the kanji (以上 ijou).
-        RequireJapaneseTokenizer();
         (string Text, string Source, string Hepburn)[] lemon =
         [
             ("夢ならばどれほどよかったでしょう", "yu me na ra ba do re ho do yo ka tta de syo u", "yumenarabadorehodoyokattadeshou"),
             ("きっともうこれ以上傷つくことなど", "ki tto mo u ko re i jyo u ki zu tsu ku ko to na do", "kittomoukoreijoukizutsukukotonado"),
-            ("雨が降り止むまでは帰れない", "a me ga hu ri ya mu ma de wa ka e re na i", "amegafuriyamumadewakaerenai"),
+            // Mac: amegafuriyamumadewakaerenai. The dictionary reads 降り here as ori (降りる, get off) rather than furi
+            // (降る, fall), so the app's reading does not spell the source's hu, which stays as the source wrote it.
+            ("雨が降り止むまでは帰れない", "a me ga hu ri ya mu ma de wa ka e re na i", "amegahuriyamumadewakaerenai"),
         ];
         foreach (var (text, source, hepburn) in lemon)
         {
@@ -509,7 +494,6 @@ public class JapaneseRomanizationTests
     [Fact]
     public void KanaKeepsItsLanguageWhenHanIsForced()
     {
-        RequireJapaneseTokenizer();
         Assert.Equal("kimi no na wa", Joined(_t.Texts(_t.LineTimed("君の名は"), Options(language: RomanizationLanguage.Mandarin))));
     }
 
