@@ -269,7 +269,7 @@ struct VideoAlignRow: View {
 }
 
 /// The row under the video's bar in align mode, in place of the
-/// transport: back to automatic, Cancel and Done (the keys are under the bar).
+/// transport: Reset, Cancel and Done (the keys are under the bar).
 struct VideoAlignControls: View {
     let canReset: Bool
     let tint: Color
@@ -287,14 +287,14 @@ struct VideoAlignControls: View {
         } else {
             HStack(spacing: 14) {
                 Button(action: onReset) {
-                    Label("Automatic", systemImage: "arrow.counterclockwise")
+                    Label("Reset", systemImage: "arrow.counterclockwise")
                         .font(.system(size: 12, weight: .medium))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .opacity(canReset ? 0.85 : 0.4)
                 .disabled(!canReset)
-                .help("Forget your timing for this video and line it up automatically again")
+                .help("Forget your timing for this video and go back to the estimate")
                 Spacer(minLength: 0)
                 Button(action: onCancel) {
                     Text("Cancel").font(.system(size: 13, weight: .medium))
