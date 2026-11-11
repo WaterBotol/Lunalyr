@@ -37,10 +37,12 @@ final class ScrubMathTests: XCTestCase {
     }
 
     func testPositionAndTimeRoundTripAndClamp() {
-        XCTAssertEqual(ScrubMath.time(x: 228, duration: 200), 100, accuracy: 1e-9)
+        let width = ScrubMath.barWidth
+        XCTAssertEqual(ScrubMath.time(x: width / 2, duration: 200), 100, accuracy: 1e-9)
         XCTAssertEqual(ScrubMath.time(x: -5, duration: 200), 0)
         XCTAssertEqual(ScrubMath.time(x: 9999, duration: 200), 200)
-        XCTAssertEqual(ScrubMath.x(time: 50, duration: 200), 114, accuracy: 1e-9)
+        XCTAssertEqual(ScrubMath.x(time: 50, duration: 200), width / 4, accuracy: 1e-9)
+        XCTAssertEqual(ScrubMath.x(time: 50, width: 456, duration: 200), 114, accuracy: 1e-9)
         XCTAssertEqual(ScrubMath.time(x: 10, duration: 0), 0)
     }
 
@@ -237,7 +239,7 @@ final class ScrubSessionTests: XCTestCase {
         XCTAssertEqual(drag.commit(at: t) ?? 0, 49.8, accuracy: 1e-9, "Lands just before the line")
         drag.modifiersChanged(option: false, command: true, now: t + 0.1)
         XCTAssertNil(drag.snapped, "⌘ disables snapping")
-        XCTAssertEqual(drag.commit(at: t + 0.1) ?? 0, ScrubMath.time(x: x, duration: 200), accuracy: 1e-9)
+        XCTAssertEqual(drag.commit(at: t + 0.1) ?? 0, ScrubMath.time(x: x, width: 456, duration: 200), accuracy: 1e-9)
     }
 
     func testFastSweepDoesNotSnap() {
@@ -264,7 +266,7 @@ final class ScrubSessionTests: XCTestCase {
         let onBar = session(x: 200, knob: 100)
         XCTAssertTrue(onBar.isClick(at: 0.1))
         XCTAssertNil(onBar.snapped)
-        XCTAssertEqual(onBar.commit(at: 0.1) ?? 0, ScrubMath.time(x: 200, duration: 200), accuracy: 1e-9)
+        XCTAssertEqual(onBar.commit(at: 0.1) ?? 0, ScrubMath.time(x: 200, width: 456, duration: 200), accuracy: 1e-9)
         let snappy = session(x: 116, knob: 300)
         XCTAssertEqual(snappy.snappedTime, 50, "A click near a line lands on it")
         XCTAssertEqual(snappy.commit(at: 0.1) ?? 0, 49.8, accuracy: 1e-9)
@@ -490,7 +492,7 @@ final class ScrubControllerTests: XCTestCase {
         }
         XCTAssertEqual(seeks, [], "No Apple events while the hand moves")
         clock += 0.016
-        scrub.mouseUp(x: 228, y: 0)
+        scrub.mouseUp(x: ScrubMath.barWidth / 2, y: 0)
         XCTAssertEqual(seeks.count, 1)
         XCTAssertEqual(seeks[0], 100, accuracy: 1e-9)
         XCTAssertFalse(PlayerInteraction.shared.dragging)
@@ -521,12 +523,13 @@ final class ScrubControllerTests: XCTestCase {
     func testHapticsOnlyForEndsAndSnaps() {
         let lines = [ScrubLine(start: 50, end: 55, text: "a", romanized: nil, isInstrumental: false)]
         let scrub = controller(lines: lines)
-        scrub.mouseDown(x: 200, y: 0)
+        let fifty = ScrubMath.x(time: 50, duration: 200)
+        scrub.mouseDown(x: fifty + 86, y: 0)
         clock += 0.1
-        scrub.mouseDragged(x: 150, y: 0) // fast: no snap
+        scrub.mouseDragged(x: fifty + 36, y: 0) // fast: no snap
         for step in 1...20 {
             clock += 0.1
-            scrub.mouseDragged(x: 150 - Double(step) * 2, y: 0)
+            scrub.mouseDragged(x: fifty + 36 - Double(step) * 2, y: 0)
         }
         XCTAssertEqual(haptics, 1, "Snapped onto the line once")
         clock += 0.1
@@ -557,10 +560,11 @@ final class ScrubControllerTests: XCTestCase {
     }
 
     func testTitlesMakeWayForTheCapsules() {
-        // The time and lyric capsules rise over the titles under the covers:
-        // the titles go while they are up (hover, drag, or a key's capsule).
-        XCTAssertEqual(CoverStrip.labelOpacity(dimmed: true), 0)
-        XCTAssertEqual(CoverStrip.labelOpacity(dimmed: false), 1)
+        // The time and lyric capsules rise over the song's titles on the
+        // card: the titles all but go while they are up (hover, drag, or a
+        // key's capsule).
+        XCTAssertLessThan(DesktopPlayerView.titleOpacity(dimmed: true), 0.1)
+        XCTAssertEqual(DesktopPlayerView.titleOpacity(dimmed: false), 1)
         let scrub = controller()
         XCTAssertFalse(scrub.activity.capsulesUp)
         scrub.seek(by: 5)
@@ -584,7 +588,7 @@ final class ScrubControllerTests: XCTestCase {
     func testHoverSnapsAsAClickWould() {
         let lines = [ScrubLine(start: 50, end: 55, text: "a", romanized: nil, isInstrumental: false)]
         let scrub = controller(lines: lines)
-        scrub.pointerMoved(x: 116, y: 0)
+        scrub.pointerMoved(x: ScrubMath.x(time: 50.9, duration: 200), y: 0)
         XCTAssertEqual(scrub.hover?.time, 50)
         XCTAssertTrue(scrub.activity.hovering)
         scrub.pointerExited()

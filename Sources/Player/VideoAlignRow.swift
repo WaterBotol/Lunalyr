@@ -7,8 +7,7 @@ import SwiftUI
 // picture matches the music; the release keeps that offset for the video.
 // The rules are `MusicVideoAlign*`; these views only draw and forward.
 
-/// The seek row, or the video's bar in align mode, with the film button
-/// beside it while the wallpaper is a music video.
+/// The seek row, or the video's bar in align mode.
 struct SeekOrAlignRow: View {
     @ObservedObject var musicVideo: MusicVideoController
     let scrub: ScrubController
@@ -17,38 +16,31 @@ struct SeekOrAlignRow: View {
     let isPlaying: Bool
     let shown: Bool
     @Binding var showsRemaining: Bool
-    @Environment(\.playerMaskRender) private var maskRender
 
     var body: some View {
-        Group {
-            if musicVideo.isAligning {
-                VideoAlignLiveRow(musicVideo: musicVideo, tint: tint, shown: shown)
-            } else {
-                ScrubRow(controller: scrub, kind: kind, tint: tint, isPlaying: isPlaying, shown: shown,
-                         showsRemaining: $showsRemaining)
-            }
-        }
-        .overlay(alignment: .trailing) {
-            if offersAlign {
-                VideoAlignButton(on: musicVideo.isAligning,
-                                 reason: { musicVideo.isAligning ? nil : musicVideo.alignAvailability.reason },
-                                 tint: tint) {
-                    PlayerInteraction.shared.noteClick()
-                    musicVideo.toggleAlign()
-                }
-                .offset(x: VideoAlignButton.outset)
-            }
+        if musicVideo.isAligning {
+            VideoAlignLiveRow(musicVideo: musicVideo, tint: tint, shown: shown)
+        } else {
+            ScrubRow(controller: scrub, kind: kind, tint: tint, isPlaying: isPlaying, shown: shown,
+                     showsRemaining: $showsRemaining)
         }
     }
+}
 
-    /// Only while the wallpaper is a music video and a song plays that
-    /// could have one.
-    private var offersAlign: Bool {
-        guard musicVideo.status != .off else { return false }
-        if musicVideo.isAligning { return true }
-        switch kind {
-        case .seekable, .readOnly, .elapsedOnly: return true
-        case .live, .advert, .hidden: return false
+/// The film button in the player's row, while the wallpaper is a music video.
+struct LiveAlignButton: View {
+    @ObservedObject var musicVideo: MusicVideoController
+    let kind: ScrubRowKind
+    let tint: Color
+
+    var body: some View {
+        if VideoAlignButton.offered(off: musicVideo.status == .off, aligning: musicVideo.isAligning, kind: kind) {
+            VideoAlignButton(on: musicVideo.isAligning,
+                             reason: { musicVideo.isAligning ? nil : musicVideo.alignAvailability.reason },
+                             tint: tint) {
+                PlayerInteraction.shared.noteClick()
+                musicVideo.toggleAlign()
+            }
         }
     }
 }
@@ -58,8 +50,17 @@ struct SeekOrAlignRow: View {
 /// dimmed, and a click says why for a moment (a disabled button's help
 /// would not show).
 struct VideoAlignButton: View {
-    /// How far right of the seek row's trailing edge it sits.
-    static let outset: CGFloat = 34
+    /// Only while the wallpaper is a music video and a song plays that
+    /// could have one.
+    static func offered(off: Bool, aligning: Bool, kind: ScrubRowKind) -> Bool {
+        guard !off else { return false }
+        if aligning { return true }
+        switch kind {
+        case .seekable, .readOnly, .elapsedOnly: return true
+        case .live, .advert, .hidden: return false
+        }
+    }
+
     let on: Bool
     /// Why the video can't be lined up now, nil when it can. Asked again on
     /// the click: the song may have started since this was drawn.
@@ -74,15 +75,15 @@ struct VideoAlignButton: View {
     var body: some View {
         let reason = self.reason()
         if maskRender {
-            Color.black.opacity(0.3).frame(width: 28, height: 28)
+            Color.black.opacity(0.3).frame(width: 30, height: 30)
         } else {
             Button {
                 if let now = self.reason() { say(now) } else { action() }
             } label: {
                 Image(systemName: on ? "film.fill" : "film")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(on ? tint : .white.opacity(reason == nil ? (look.increaseContrast ? 0.9 : 0.6) : 0.25))
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(on ? tint : .white.opacity(reason == nil ? (look.increaseContrast ? 1 : 0.75) : 0.3))
+                    .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
             .buttonStyle(TransportButtonStyle())
@@ -126,7 +127,7 @@ private struct VideoAlignLiveRow: View {
 
     var body: some View {
         if maskRender {
-            Color.black.opacity(0.3).frame(width: ScrubRow.rowWidth, height: ScrubRow.height + 16)
+            Color.black.opacity(0.3).frame(width: ScrubRow.rowWidth + 16, height: ScrubRow.height + 16)
         } else {
             let dragging = musicVideo.alignDrag != nil
             TimelineView(.animation(minimumInterval: dragging ? 1.0 / 30 : 0.1, paused: !shown)) { _ in
@@ -164,10 +165,10 @@ struct VideoAlignEvents {
     func nudge(_ delta: Double) { musicVideo.alignNudge(by: delta) }
 }
 
-/// The video's bar, 560 × 28 pt like the seek row: the video's time and
-/// length at the sides; the whole video as the track, the song's span over
-/// it in the player's colour, the knob where the video is now, and above it
-/// the offset ("Video +3.4 s").
+/// The video's bar, 364 × 34 pt like the seek row: the whole video as the
+/// track, the song's span over it in the album's colour, the knob where the
+/// video is now, and above it the offset ("Video +3.4 s"); under it the
+/// video's time and length, and the keys.
 struct VideoAlignRow: View {
     let display: MusicVideoAlignDisplay
     let tint: Color
@@ -175,18 +176,20 @@ struct VideoAlignRow: View {
     var events: VideoAlignEvents?
     @Environment(\.playerLook) private var look
 
-    static let thickness: CGFloat = 6
+    static let thickness: CGFloat = 7
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(ScrubMath.timestamp(display.videoTime))
-                .frame(width: ScrubRow.labelWidth, alignment: .trailing)
-                .accessibilityHidden(true)
+        VStack(spacing: 0) {
             bar
-                .frame(width: ScrubRow.barWidth, height: ScrubRow.height)
-            Text(ScrubMath.timestamp(display.videoLength))
-                .frame(width: ScrubRow.labelWidth, alignment: .leading)
-                .accessibilityHidden(true)
+                .frame(width: ScrubRow.barWidth, height: ScrubRow.barHeight)
+            HStack(spacing: 6) {
+                Text(ScrubMath.timestamp(display.videoTime)).accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Text(VideoAlignControls.hint).font(.system(size: 10)).opacity(0.7).lineLimit(1).accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Text(ScrubMath.timestamp(display.videoLength)).accessibilityHidden(true)
+            }
+            .frame(width: ScrubRow.barWidth, height: ScrubRow.timesHeight)
         }
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(.white.opacity(look.increaseContrast ? 0.95 : 0.8))
@@ -198,7 +201,7 @@ struct VideoAlignRow: View {
         let knob = CGFloat(layout.knob)
         let spanStart = CGFloat(layout.spanStart), spanEnd = CGFloat(layout.spanEnd)
         let thickness = display.dragging ? Self.thickness + 2 : Self.thickness
-        let knobSize: CGFloat = display.dragging ? 14 : 12
+        let knobSize: CGFloat = display.dragging ? 15 : 13
         return ZStack(alignment: .leading) {
             // The whole video.
             Capsule().fill(.white.opacity(look.increaseContrast ? 0.4 : 0.22))
@@ -212,8 +215,8 @@ struct VideoAlignRow: View {
                 .frame(width: max(2, spanEnd - spanStart), height: thickness)
                 .offset(x: spanStart)
             // Where the song starts and ends in the video.
-            Rectangle().fill(.white.opacity(0.7)).frame(width: 1, height: 14).offset(x: spanStart - 0.5)
-            Rectangle().fill(.white.opacity(0.7)).frame(width: 1, height: 14).offset(x: spanEnd - 0.5)
+            Rectangle().fill(.white.opacity(0.7)).frame(width: 1, height: 16).offset(x: spanStart - 0.5)
+            Rectangle().fill(.white.opacity(0.7)).frame(width: 1, height: 16).offset(x: spanEnd - 0.5)
             Circle().fill(.white)
                 .frame(width: knobSize, height: knobSize)
                 .overlay(Circle().strokeBorder(tint, lineWidth: display.dragging ? 2 : 0))
@@ -222,11 +225,11 @@ struct VideoAlignRow: View {
                 .allowsHitTesting(false)
             if let events {
                 VideoAlignEventSurface(events: events)
-                    .frame(width: ScrubRow.barWidth + 16, height: ScrubRow.height)
+                    .frame(width: ScrubRow.barWidth + 16, height: ScrubRow.barHeight)
                     .offset(x: -8)
             }
         }
-        .frame(width: ScrubRow.barWidth, height: ScrubRow.height, alignment: .leading)
+        .frame(width: ScrubRow.barWidth, height: ScrubRow.barHeight, alignment: .leading)
         .opacity(display.available ? 1 : 0.6)
         .animation(look.reduceMotion ? nil : .spring(duration: 0.18, bounce: 0), value: display.dragging)
         .overlay(alignment: .top) { capsule(knob: knob) }
@@ -246,16 +249,16 @@ struct VideoAlignRow: View {
     /// The offset over the knob: what the release keeps.
     private func capsule(knob: CGFloat) -> some View {
         ClampedCenter(x: knob) {
-            VStack(spacing: 0) {
+            VStack(spacing: 1) {
                 Text(display.title)
-                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .font(.system(size: 14, weight: .bold).monospacedDigit())
                     .contentTransition(.numericText())
                 Text(display.detail)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: 10, weight: .medium))
                     .opacity(0.75)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 10).padding(.vertical, 3)
+            .padding(.horizontal, 14).padding(.vertical, 6)
             .playerCapsule(look)
             .fixedSize()
         }
@@ -265,8 +268,8 @@ struct VideoAlignRow: View {
     }
 }
 
-/// The line under the video's bar in align mode, in place of the
-/// transport: back to automatic, the keys, Cancel and Done.
+/// The row under the video's bar in align mode, in place of the
+/// transport: back to automatic, Cancel and Done (the keys are under the bar).
 struct VideoAlignControls: View {
     let canReset: Bool
     let tint: Color
@@ -280,42 +283,44 @@ struct VideoAlignControls: View {
 
     var body: some View {
         if maskRender {
-            Color.black.opacity(0.3).frame(width: PlayerControlsRow.width, height: PlayerControlsRow.height)
+            Color.black.opacity(0.3).frame(width: DesktopPlayerView.column, height: PlayerTransportRowHeight.value)
         } else {
-            ZStack {
-                HStack(spacing: 14) {
-                    Button(action: onReset) {
-                        Label("Automatic", systemImage: "arrow.counterclockwise")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(canReset ? 0.85 : 0.35)
-                    .disabled(!canReset)
-                    .help("Forget your timing for this video and line it up automatically again")
-                    Spacer(minLength: 0)
-                    Button("Cancel", action: onCancel)
-                        .buttonStyle(.plain)
+            HStack(spacing: 14) {
+                Button(action: onReset) {
+                    Label("Automatic", systemImage: "arrow.counterclockwise")
                         .font(.system(size: 12, weight: .medium))
-                        .opacity(0.8)
-                        .help("Put the video\u{2019}s timing back as it was (Esc)")
-                    Button(action: onDone) {
-                        Text("Done").font(.system(size: 12, weight: .semibold))
-                            .padding(.horizontal, 12).padding(.vertical, 4)
-                            .background(tint.opacity(0.9), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Keep this timing for the video (Return)")
+                        .contentShape(Rectangle())
                 }
-                Text(Self.hint)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.6))
-                    .accessibilityHidden(true)
+                .buttonStyle(.plain)
+                .opacity(canReset ? 0.85 : 0.4)
+                .disabled(!canReset)
+                .help("Forget your timing for this video and line it up automatically again")
+                Spacer(minLength: 0)
+                Button(action: onCancel) {
+                    Text("Cancel").font(.system(size: 13, weight: .medium))
+                        .padding(.horizontal, 6).padding(.vertical, 8).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .opacity(look.increaseContrast ? 1 : 0.85)
+                .help("Put the video\u{2019}s timing back as it was (Esc)")
+                Button(action: onDone) {
+                    Text("Done").font(.system(size: 13, weight: .bold)).foregroundStyle(.black)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(Capsule().fill(.white))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Keep this timing for the video (Return)")
             }
             .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.5), radius: 4)
-            .frame(width: PlayerControlsRow.width, height: PlayerControlsRow.height)
+            .frame(width: DesktopPlayerView.column, height: PlayerTransportRowHeight.value)
         }
     }
+}
+
+/// The transport row's height, shared with the align controls that replace it.
+enum PlayerTransportRowHeight {
+    static let value: CGFloat = 44
 }
 
 /// The transport, or the align controls while the video is being lined up.

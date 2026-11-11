@@ -304,8 +304,8 @@ final class QueueContinuationTests: XCTestCase {
         }
         XCTAssertNil(QueueOutcome.queued(songs: 150, wanted: 150, fromAlbum: false).note)
         XCTAssertNil(QueueOutcome.superseded.note)
-        XCTAssertGreaterThan(CoverStrip.noteSeconds(QueueSolo.notInLibrary.note), 2.5)
-        XCTAssertEqual(CoverStrip.noteSeconds(nil), 2.5)
+        XCTAssertGreaterThan(PlayerNoteToast.noteSeconds(QueueSolo.notInLibrary.note), 2.5)
+        XCTAssertEqual(PlayerNoteToast.noteSeconds(nil), 2.5)
     }
 
     func testFailuresKeepTheirAppleScriptErrorNumber() {

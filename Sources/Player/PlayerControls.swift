@@ -1,138 +1,130 @@
 import AppKit
 import SwiftUI
 
-/// The line under the seek bar: the player switch on the left, transport in
-/// the middle, the search on the right. 680 × 32 pt.
-struct PlayerControlsRow: View {
-    static let width: CGFloat = 680
-    static let height: CGFloat = 32
+/// The row under the seek bar: the transport on the left; search, the
+/// queue and the film button (lining up the music video) on the right.
+/// The player switch is not here: it only steers search, so it sits by
+/// the search box.
+struct PlayerControlsRow<Transport: View, Film: View>: View {
+    let searchOpen: Bool
+    let queueOpen: Bool
+    let onSearch: () -> Void
+    let onQueue: () -> Void
+    @ViewBuilder let transport: () -> Transport
+    @ViewBuilder let film: () -> Film
 
-    let kinds: [PlayerKind]
-    let selected: PlayerKind
-    let onSelect: (PlayerKind) -> Void
+    var body: some View {
+        HStack(spacing: 4) {
+            transport()
+            Spacer(minLength: 0)
+            PlayerIconButton(symbol: "magnifyingglass", on: searchOpen, label: "Search",
+                             help: "Search and play a song (\u{2318}F)", action: onSearch)
+            PlayerIconButton(symbol: "list.bullet", on: queueOpen, label: "Queue",
+                             help: "What played and what plays next", action: onQueue)
+            film()
+        }
+        .frame(height: PlayerTransportRowHeight.value)
+    }
+}
+
+/// Previous, a round white play button, next. Large in the song's column,
+/// small under the cover while search or the queue is open.
+struct PlayerTransport: View {
+    enum Size {
+        case large, small
+
+        var cell: CGFloat { self == .large ? 34 : 30 }
+        var disc: CGFloat { self == .large ? 44 : 34 }
+        var glyph: CGFloat { self == .large ? 17 : 13 }
+    }
+
+    let size: Size
     let canControl: Bool
     let hasSong: Bool
     let isPlaying: Bool
     let onPrevious: () -> Void
     let onPlayPause: () -> Void
     let onNext: () -> Void
-    @Binding var query: String
-    var searchFocused: FocusState<Bool>.Binding
-    let onSubmit: () -> Void
     @Environment(\.playerLook) private var look
-    @Environment(\.playerPreview) private var preview
 
     var body: some View {
-        ZStack {
-            HStack(spacing: 16) {
-                playerSwitch
-                Spacer(minLength: 0)
-                searchField
-            }
-            transport
-        }
-        .shadow(color: .black.opacity(0.5), radius: 4)
-        .frame(width: Self.width, height: Self.height)
-    }
-
-    // MARK: Transport
-
-    /// Previous 36, play 44, next 36 pt wide, touching: the hover highlight
-    /// never flickers between buttons and there is no dead gap to miss.
-    private var transport: some View {
-        HStack(spacing: 0) {
-            Button(action: onPrevious) { glyph("backward.fill", 13).frame(width: 36, height: Self.height) }
+        HStack(spacing: size == .large ? 6 : 4) {
+            Button(action: onPrevious) { glyph("backward.fill") }
                 .buttonStyle(TransportButtonStyle())
-                .opacity(hasSong ? 1 : 0.3)
+                .opacity(hasSong ? 1 : 0.35)
                 .disabled(!hasSong)
                 .help("Previous").accessibilityLabel("Previous track")
             Button(action: onPlayPause) {
-                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .contentTransition(look.reduceMotion ? .opacity : .symbolEffect(.replace))
-                    .frame(width: 44, height: Self.height)
-                    .contentShape(Rectangle())
+                ZStack {
+                    Circle().fill(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: size.disc * 0.4, weight: .bold))
+                        .foregroundStyle(.black)
+                        .offset(x: isPlaying ? 0 : size.disc * 0.03)
+                        .contentTransition(look.reduceMotion ? .opacity : .symbolEffect(.replace))
+                }
+                .frame(width: size.disc, height: size.disc)
+                .contentShape(Circle())
             }
-            .buttonStyle(TransportButtonStyle())
+            .buttonStyle(TransportButtonStyle(halo: false))
             .help(isPlaying ? "Pause" : "Play").accessibilityLabel(isPlaying ? "Pause" : "Play")
-            Button(action: onNext) { glyph("forward.fill", 13).frame(width: 36, height: Self.height) }
+            Button(action: onNext) { glyph("forward.fill") }
                 .buttonStyle(TransportButtonStyle())
-                .opacity(hasSong ? 1 : 0.3)
+                .opacity(hasSong ? 1 : 0.35)
                 .disabled(!hasSong)
                 .help("Next").accessibilityLabel("Next track")
         }
         .disabled(!canControl)
+        .opacity(canControl ? 1 : 0.6)
     }
 
-    private func glyph(_ symbol: String, _ size: CGFloat) -> some View {
-        Image(systemName: symbol).font(.system(size: size, weight: .semibold)).contentShape(Rectangle())
+    private func glyph(_ symbol: String) -> some View {
+        Image(systemName: symbol).font(.system(size: size.glyph, weight: .semibold))
+            .frame(width: size.cell, height: size.cell)
+            .contentShape(Rectangle())
     }
+}
 
-    // MARK: Switch
+/// One of the row's round icon buttons: lit while what it opens is open.
+struct PlayerIconButton: View {
+    let symbol: String
+    let on: Bool
+    let label: String
+    let help: String
+    let action: () -> Void
+    @Environment(\.playerLook) private var look
 
-    /// Both players side by side; the one in use is lit in its own colour.
-    private var playerSwitch: some View {
-        HStack(spacing: 14) {
-            ForEach(kinds) { kind in
-                let on = kind == selected
-                Button { onSelect(kind) } label: {
-                    VStack(spacing: 3) {
-                        Text(kind.shortName).font(.system(size: 11, weight: on ? .bold : .medium))
-                            .foregroundStyle(on ? kind.tint : .white.opacity(look.increaseContrast ? 0.85 : 0.55))
-                        Capsule().fill(on ? kind.tint : .clear).frame(height: 2)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(kind.isBrowser ? "\(kind.shortName) in \(kind.shortBrowserName)" : "Search and play in \(kind.shortName)")
-            }
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(on || look.increaseContrast ? 1 : 0.75))
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(.white.opacity(on ? 0.2 : 0)))
+                .contentShape(Circle())
         }
-        .fixedSize()
-        .animation(.easeOut(duration: 0.2), value: selected)
-    }
-
-    // MARK: Search
-
-    /// A small field with a hairline under it, not a pill.
-    private var searchField: some View {
-        VStack(spacing: 3) {
-            HStack(spacing: 5) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
-                if preview != nil {
-                    Text(query.isEmpty ? "Search" : query).font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(query.isEmpty ? 0.45 : 1))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    TextField("Search", text: $query)
-                        .textFieldStyle(.plain).font(.system(size: 12))
-                        .focused(searchFocused)
-                        .onSubmit(onSubmit)
-                }
-                if !query.isEmpty {
-                    Button { query = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.5))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-                }
-            }
-            Rectangle().fill(searchFocused.wrappedValue || (preview != nil && !query.isEmpty) ? selected.tint : .white.opacity(0.3))
-                .frame(height: 1)
-        }
-        .frame(width: 170)
+        .buttonStyle(TransportButtonStyle())
+        .help(help)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
 /// Highlight on mouse-down, a quick press-in, and a release with a little
 /// momentum (the one bounce in the player). A faint circle on hover.
 struct TransportButtonStyle: ButtonStyle {
+    /// The faint circle behind on hover (not for the play disc, which is its own circle).
+    var halo = true
+
     func makeBody(configuration: Configuration) -> some View {
-        TransportButtonBody(configuration: configuration)
+        TransportButtonBody(configuration: configuration, halo: halo)
     }
 }
 
 private struct TransportButtonBody: View {
     let configuration: ButtonStyleConfiguration
+    let halo: Bool
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.playerLook) private var look
@@ -143,10 +135,11 @@ private struct TransportButtonBody: View {
         let pressed = configuration.isPressed
         configuration.label
             .background {
-                Circle().fill(.white.opacity(pressed ? 0.14 : hovering && enabled ? 0.08 : 0))
-                    .frame(width: 30, height: 30)
+                Circle().fill(.white.opacity(!halo ? 0 : pressed ? 0.14 : hovering && enabled ? 0.1 : 0))
+                    .frame(width: 32, height: 32)
                     .animation(.easeOut(duration: 0.10), value: hovering)
             }
+            .brightness(!halo && hovering && enabled ? -0.06 : 0)
             .scaleEffect(pressed && !look.reduceMotion ? 0.88 : 1)
             .animation(look.reduceMotion ? nil
                        : pressed ? .spring(duration: 0.10, bounce: 0) : .spring(duration: 0.30, bounce: 0.15),
