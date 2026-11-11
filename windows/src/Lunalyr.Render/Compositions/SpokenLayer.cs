@@ -160,7 +160,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             if (token.Parts.Count > 1)
             {
                 if (_reveal.Length < token.Parts.Count) _reveal = new double[token.Parts.Count * 2];
-                if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, 0, false, Options, _reveal))
+                if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, intensity, false, Options, _reveal))
                     reveal = _reveal.AsSpan(0, token.Parts.Count);
             }
             unit.Label.Draw(dc, Matrix3x2.CreateTranslation(unit.LabelOffset) * world, scale, (float)opacity, blur,

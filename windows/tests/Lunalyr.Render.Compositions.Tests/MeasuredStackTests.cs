@@ -208,6 +208,54 @@ public sealed class MeasuredStackTests : IDisposable
         }
         Assert.True(overlapped, "the regression tests must be able to see this bug");
     }
+
+    // Ported from RollingStackTests.swift: testRoomForAnEntranceShrinksSmoothly (in Spoken rather than Cascade)
+    [Fact]
+    public void RoomForAnEntranceShrinksSmoothly()
+    {
+        LyricWord[] words = [new("hold", 9, 9.6), new("me", 9.6, 10), new("forever", 10, 11.8), new("now", 11.8, 12.2)];
+        var prepared = RollingWords.Prepare(words, 60);
+        var sizes = Measure(prepared, 1200);
+        PointD[]? previous = null;
+        for (var step = 0; step <= 1200; step++)
+        {
+            var time = 10 + step / 1000.0;
+            var position = RollingWords.Cursor(prepared, time, 0, false);
+            int? next = null;
+            for (var i = 0; i < words.Length; i++) if (words[i].Start > time) { next = i; break; }
+            var slots = prepared.Select(token => RollingTokenState.Make(token, next, position - 1 - token.Index, time, 60, 1200, 0,
+                false, WordArrival.Lift, Options).Slot).ToArray();
+            var centres = RollingStack.Centres(sizes, slots, new PointD(600, 380), 9.6);
+            if (previous is not null)
+                for (var k = 0; k < centres.Length; k++)
+                    Assert.True(Math.Abs(previous[k].Y - centres[k].Y) < 1.2, $"jump at {time}");
+            previous = centres;
+        }
+    }
+
+    // Ported from LyricLayerFlowTests.swift: testAWholeLineReadingWrapsUnderItsRollingWord
+    [Fact]
+    public void AWholeLineReadingWrapsUnderItsRollingWord()
+    {
+        const string text = "Ya tebya ochen' lyublyu i ya budu zhdat' tebya vsegda";
+        using var natural = _kit.Layout(text, Face.Quiet, 30, "en-us", false);
+        Assert.True(natural.Metrics.Width > 400);
+        using var wrapped = _kit.Layout(text, Face.Quiet, 30, "en-us", false, 300);
+        Assert.True(wrapped.Metrics.Width <= 301);
+        Assert.True(wrapped.Metrics.Height > natural.Metrics.Height * 1.5, "set on more than one line");
+        // A reading that fits is left exactly as it was.
+        using var shortReading = _kit.Layout("Ya", Face.Quiet, 30, "en-us", false);
+        using var shortWrapped = _kit.Layout("Ya", Face.Quiet, 30, "en-us", false, 300);
+        Assert.Equal(shortReading.Metrics.Width, shortWrapped.Metrics.Width);
+        Assert.Equal(shortReading.Metrics.Height, shortWrapped.Metrics.Height);
+        // On the stage: the unit's width stays within the reading's width (80% of a 625-wide stage).
+        var word = new LyricWord("Я", 1, 1.4);
+        var token = RollingWords.Prepare([word], 60, new Dictionary<LyricWord, string> { [word] = text })[0];
+        var (label, reading, width, _) = SpokenLayer.Layout(_kit, token, 625, 1);
+        label.Dispose();
+        reading?.Dispose();
+        Assert.True(width <= 500 + 4 + 1, $"{width}");
+    }
 }
 
 /// <summary>Tests that use a Direct3D device run one at a time.</summary>

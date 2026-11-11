@@ -108,6 +108,26 @@ static void Bench(Offscreen stage, IRenderLayerFactory factory, SceneSnapshot sc
     using var layer = factory.Create();
     layer.CreateResources(stage.Dc, stage.DWrite, new System.Numerics.Vector2(stage.Width, stage.Height), scale);
     var background = Fixtures.Night.Base;
+    // Cold: a fresh layer played through once, so lines are set (text laid out and baked) as they arrive.
+    {
+        using var cold = factory.Create();
+        cold.CreateResources(stage.Dc, stage.DWrite, new System.Numerics.Vector2(stage.Width, stage.Height), scale);
+        var coldWatch = new Stopwatch();
+        double coldWorst = 0, coldTotal = 0;
+        int coldFrames = 0, building = 0;
+        for (var t = from; t < to; t += 1.0 / 60)
+        {
+            coldWatch.Restart();
+            stage.Render(cold, scene, t, t, scale, background);
+            coldWatch.Stop();
+            var ms = coldWatch.Elapsed.TotalMilliseconds;
+            coldWorst = Math.Max(coldWorst, ms);
+            coldTotal += ms;
+            coldFrames++;
+            if (ms > 2) { building++; Console.Write($"[{t:0.00}s {ms:0.0} ms] "); }
+        }
+        Console.WriteLine($"{factory.Id} {scene.Title} (cold): {coldTotal / coldFrames:0.000} ms/frame avg, worst {coldWorst:0.00} ms, {building} frames over 2 ms");
+    }
     // Warm up: every line's plan is built once.
     for (var t = from; t < to; t += 1.0 / 15) stage.Render(layer, scene, t, t, scale, background);
     var frames = 0;

@@ -45,6 +45,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     protected SceneSnapshot? SceneShown { get; private set; }
     protected WordArrival Arrival { get; private set; } = WordArrival.Fade;
     protected Vector4 TextColour { get; private set; } = Vector4.One;
+    /// <summary>The glow of a held word: the palette's highlight (the Mac's ink glow).</summary>
+    protected Vector4 GlowColour => SceneShown?.Palette.Highlight ?? TextColour;
     protected Vector4 ReadingColour => new(TextColour.X, TextColour.Y, TextColour.Z, TextColour.W * 0.72f);
     protected long Frame { get; private set; }
 
@@ -131,6 +133,11 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             else if (!string.IsNullOrWhiteSpace(frame.Scene.Status))
             {
                 DrawStatus(dc, frame.Scene.Status!, frame.WallSeconds);
+            }
+            else
+            {
+                // Nothing to say: a status shown again later eases in again.
+                _statusText = null;
             }
             Trim();
         }
@@ -256,6 +263,13 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             DrawLine(dc, line, time, _offsets[k]);
         }
         if (gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue);
+        // The next line is set (laid out and baked) a little ahead of time, not on the frame it first appears.
+        var upcoming = index + 1;
+        if (upcoming < lines.Count && lines[upcoming].Words.Count > 0 && !Rolls(upcoming)
+            && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming))
+        {
+            _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
+        }
     }
 
     private StackedLine Stacked(in DrawnLine line, double time)
@@ -365,6 +379,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     private (string?[]? Runs, string? Line) Readings(int row, IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue)
     {
         if (ReadingOf(row) is not { } reading) return (null, null);
+        // A reading that reads just like the lyric is not drawn twice.
+        if (!LyricReadingPairs.IsDistinct(reading, string.Concat(words.Select(word => word.Text)))) return (null, null);
         var (visible, visibleGlue) = LyricRuns.Visible(words, glue);
         var ranges = LyricRuns.Ranges(visibleGlue, visible.Count);
         _readingParts = reading.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -494,7 +510,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             var scale = contentScale * swell * swellCap * held * transform.Scale * floatScale;
             var blur = Combine(Points(Arrival.Blur(presentation.Progress)), Points(2.4 * leave)) * (float)scale;
             var glow = frame.Glow > 0.002
-                ? new GlowSpec(new Vector4(TextColour.X, TextColour.Y, TextColour.Z, (float)(0.6 * frame.Glow * frame.Fill)),
+                ? new GlowSpec(new Vector4(GlowColour.X, GlowColour.Y, GlowColour.Z, (float)(0.6 * frame.Glow * frame.Fill)),
                                Points(10 + 22 * frame.Glow) * (float)scale)
                 : GlowSpec.None;
             var shadow = (float)((0.28 + 0.24 * heat) / 0.52);
