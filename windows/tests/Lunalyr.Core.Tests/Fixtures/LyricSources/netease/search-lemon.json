@@ -1,0 +1,10 @@
+{"result":{"songs":[
+{"id":536622304,"name":"Lemon","artists":[{"name":"米津玄師","id":159300}],"album":{"name":"Lemon","id":37638217},"duration":256000,"fee":8,"status":0},
+{"id":569037886,"name":"Lemon（Cover 米津玄师）","artists":[{"name":"KBShinya","id":0}],"album":{"name":"Lemon","id":0},"duration":254458,"fee":8,"status":0},
+{"id":2710627288,"name":"lemon中文版(cover时代少年团)","artists":[{"name":"Jury","id":0}],"album":{"name":"","id":0},"duration":91789,"fee":8,"status":0},
+{"id":3401323513,"name":"Lemon","artists":[{"name":"安亚尔Anyar","id":0}],"album":{"name":"","id":0},"duration":124612,"fee":8,"status":0},
+{"id":2710916873,"name":"lemon(一半柠檬)_洛天依","artists":[{"name":"洛天依","id":0},{"name":"鬼面P","id":0},{"name":"墨流离","id":0}],"album":{"name":"","id":0},"duration":248917,"fee":8,"status":0},
+{"id":2685501832,"name":"Lemon (feat. 重音テト)","artists":[{"name":"SATOP","id":0},{"name":"重音テト","id":0}],"album":{"name":"","id":0},"duration":252272,"fee":8,"status":0},
+{"id":2719626145,"name":"Lemon（粤语版）","artists":[{"name":"常颖杰","id":0}],"album":{"name":"","id":0},"duration":256500,"fee":8,"status":0},
+{"id":1478965168,"name":"Lemon (钢琴版)","artists":[{"name":"Piano Nov","id":0}],"album":{"name":"","id":0},"duration":100806,"fee":8,"status":0}
+],"songCount":300},"code":200}
