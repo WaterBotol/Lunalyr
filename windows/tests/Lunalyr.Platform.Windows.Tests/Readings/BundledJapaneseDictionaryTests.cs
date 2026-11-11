@@ -11,28 +11,26 @@ public class BundledJapaneseDictionaryTests
     [Fact]
     public void ItIsExpandedOnceThenMappedAndADamagedCopyIsReplaced()
     {
+        // (One expansion only: the other test assembly's timing-sensitive pipeline tests run alongside.)
         using var folder = new TempFolder();
-        string file;
+        Assert.Matches(@"^ipadic-[0-9a-f]{16}\.lunadic$", BundledJapaneseDictionary.FileName);
+        var file = folder.File(BundledJapaneseDictionary.FileName);
+        // A damaged copy under the current name and an older version are not used: the dictionary is expanded
+        // again and the older version deleted.
+        File.WriteAllBytes(file, new byte[1000]);
+        File.WriteAllText(folder.File("ipadic-0000000000000000.lunadic"), "an older version");
         using (var first = BundledJapaneseDictionary.Open(folder.Path, out var source))
         {
             Assert.Equal("expanded and mapped", source);
-            file = Assert.Single(Directory.GetFiles(folder.Path));
-            Assert.Matches(@"ipadic-[0-9a-f]{16}\.lunadic$", file);
             Assert.True(first.EntryCount > 390_000, first.EntryCount.ToString());
+            Assert.True(new FileInfo(file).Length > 10_000_000);
         }
+        Assert.Equal([BundledJapaneseDictionary.FileName], folder.FileNames());
+        // Then it is only mapped.
         using (var again = BundledJapaneseDictionary.Open(folder.Path, out var source))
         {
             Assert.Equal("mapped", source);
         }
-        // A damaged or stale file under the same name is not used: it is expanded again.
-        File.WriteAllBytes(file, new byte[1000]);
-        File.WriteAllText(folder.File("ipadic-0000000000000000.lunadic"), "an older version");
-        using (var repaired = BundledJapaneseDictionary.Open(folder.Path, out var source))
-        {
-            Assert.Equal("expanded and mapped", source);
-            Assert.True(new FileInfo(file).Length > 10_000_000);
-        }
-        Assert.Equal([Path.GetFileName(file)], folder.FileNames());
     }
 
     [Fact]

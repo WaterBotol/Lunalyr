@@ -36,13 +36,22 @@ public static class BundledJapaneseDictionary
         return dictionary;
     }
 
+    /// <summary>The expanded dictionary's file name: named after the bundled data's hash, so a new version never
+    /// uses an old file.</summary>
+    public static string FileName => Bundled.Value.FileName;
+
+    private static readonly Lazy<(byte[] Compressed, string FileName)> Bundled = new(() =>
+    {
+        var compressed = ReadResource();
+        return (compressed, FilePrefix + Convert.ToHexStringLower(SHA256.HashData(compressed))[..16] + FileExtension);
+    });
+
     /// <summary><see cref="Open(string)"/>, saying how the dictionary was got: "mapped" (already expanded),
     /// "expanded and mapped", or "in memory" with the reason.</summary>
     public static JapaneseDictionary Open(string folder, out string source)
     {
-        var compressed = ReadResource();
-        var hash = Convert.ToHexStringLower(SHA256.HashData(compressed))[..16];
-        var path = Path.Combine(folder, FilePrefix + hash + FileExtension);
+        var (compressed, name) = Bundled.Value;
+        var path = Path.Combine(folder, name);
         try
         {
             Directory.CreateDirectory(folder);
@@ -51,7 +60,7 @@ public static class BundledJapaneseDictionary
                 source = "mapped";
                 return existing;
             }
-            var temporary = Path.Combine(folder, $"{FilePrefix}{hash}.{Guid.NewGuid():N}.tmp");
+            var temporary = Path.Combine(folder, $"{name}.{Guid.NewGuid():N}.tmp");
             try
             {
                 using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
