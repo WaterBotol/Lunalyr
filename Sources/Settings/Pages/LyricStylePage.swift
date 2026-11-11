@@ -7,6 +7,7 @@ struct LyricStylePage: View {
     @Model(\.settings) private var s
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var familyDraft = ""
+    @ObservedObject private var floating = FloatingLyricsOptions.shared
 
     /// The layout the word controls read from. Match the music saves them
     /// for every layout it picks; Scattered, its general-purpose pick, stands
@@ -16,6 +17,12 @@ struct LyricStylePage: View {
 
     var body: some View {
         ThemedForm {
+            // Desktop or Floating, and which one's style the rest edits.
+            LyricSurfaceSection()
+            if floating.isFloating {
+                FloatingLyricsSection()
+                    .revealRow()
+            }
             layout
             typeface
             LyricColourSection()
@@ -34,6 +41,7 @@ struct LyricStylePage: View {
         }
         // Sub-options glide in and out with the choice that shows them.
         .lunalyrReveal(s.lyricComposition)
+        .lunalyrReveal(floating.surface)
         .lunalyrReveal(rotateLayouts)
         .lunalyrReveal(backingLayer)
         .lunalyrReveal(s.editorialTypography)
@@ -135,7 +143,10 @@ struct LyricStylePage: View {
                             format: SettingsFormat.percent)
                     .revealRow()
             }
-            ValueSlider("Lyric size", value: $s.lyricScale, in: 0.7...1.5, step: 0.01, format: SettingsFormat.percent)
+            // Floating has its own size (Floating lyrics, above).
+            if !floating.isFloating {
+                ValueSlider("Lyric size", value: $s.lyricScale, in: 0.7...1.5, step: 0.01, format: SettingsFormat.percent)
+            }
         }
     }
 
