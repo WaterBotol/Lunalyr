@@ -19,6 +19,9 @@ using Lunalyr.Shell;
 using Lunalyr.Shell.Lyrics;
 using Lunalyr.Shell.Rendering;
 using Lunalyr.Shell.Settings;
+using Lunalyr.Render;
+using Lunalyr.Render.Compositions;
+using Lunalyr.Render.Pacing;
 
 namespace Lunalyr.App.Hosting;
 
@@ -119,6 +122,35 @@ internal sealed class AppHost
         return Shutdown();
     }
 
+    // ---- Wallpaper ----
+
+    private EngineWallpaperRenderer? _wallpaper;
+
+    /// <summary>The desktop renderer with the layers this build has. Pause and power rules follow the settings.</summary>
+    private EngineWallpaperRenderer CreateWallpaper(ReadingServices readings)
+    {
+        var engine = new RenderEngine(new RenderEngineOptions { Performance = PerformanceFrom(_settings.Current) }, Log);
+        engine.RegisterLayer(new EditorialFactory(readings.WordBreaker, Log));
+        engine.RegisterLayer(new SpokenFactory(readings.WordBreaker, Log));
+        _settings.Changed += (_, e) => engine.SetPerformance(PerformanceFrom(e.NewValue));
+        _log.Info($"Wallpaper layers: {string.Join(", ", engine.LayerIds.Order())}.");
+        return new EngineWallpaperRenderer(engine, Log);
+    }
+
+    private static PerformanceOptions PerformanceFrom(AppSettings s) => PerformanceOptions.Default with
+    {
+        FrameRate = s.AnimationRate switch
+        {
+            15 => FrameRateCap.Fps15,
+            30 => FrameRateCap.Fps30,
+            60 => FrameRateCap.Fps60,
+            _ => FrameRateCap.Display,
+        },
+        PauseWhenCovered = s.PauseWhenCovered,
+        FollowEnergySaver = s.PauseOnBatterySaver,
+        PauseWallpaper = s.WallpaperPaused,
+    };
+
     // ---- Start-up ----
 
     private async Task InitializeAsync()
@@ -146,7 +178,8 @@ internal sealed class AppHost
             _sessions = await GsmtcMediaSessionSource.CreateAsync(PlaybackGuard.Process, message => Log.Player.Debug(message)).ConfigureAwait(false);
             var offsets = new SongOffsets(_settings.Current.SongOffsets,
                 saved => _settings.Update(s => s with { SongOffsets = new Dictionary<string, double>(saved) }));
-            var controller = new AppController(_sessions, lookup, new NullWallpaperRenderer(Log), _settings.Current, offsets, readings,
+            _wallpaper = CreateWallpaper(readings);
+            var controller = new AppController(_sessions, lookup, _wallpaper, _settings.Current, offsets, readings,
                 PlaybackGuard.Process, Log, _connectivity);
             controller.StatusChanged += (_, _) => QueueStatusUpdate();
             _settings.Changed += (_, e) => controller.ApplySettings(e.NewValue);
@@ -290,6 +323,7 @@ internal sealed class AppHost
             }
 
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);
+            _wallpaper?.Dispose(); // detaches from the desktop, leaving the system wallpaper
             _sessions?.Dispose();
             _connectivity?.Dispose();
             await _settings.DisposeAsync().ConfigureAwait(false); // flushes pending changes
