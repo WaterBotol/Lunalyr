@@ -269,12 +269,31 @@ public sealed class SongClock
     /// Starts a new track: the position goes back to 0 (and runs from there if playing) until the new track's
     /// timeline arrives. The learned timeline quality is kept: it belongs to the player, not the track.
     /// </summary>
+    /// <remarks>
+    /// Players send the new track's timeline and its metadata in either order. If a start-of-track snapshot (position
+    /// within <see cref="SongClockOptions.SeekThreshold"/>) arrived within <see cref="SongClockOptions.StatusSettleTime"/>
+    /// before this call, it is taken to be the new track's and kept. Otherwise the old track's last snapshot is
+    /// remembered, and an identical re-read of it is ignored.
+    /// </remarks>
     public void ResetTrack()
     {
         var now = _time.GetTimestamp();
         lock (_gate)
         {
             PersistQuality(now);
+            if (_hasTimeline && _lastSnapshot is { } last
+                && last.RelativePosition <= _options.SeekThreshold
+                && _time.GetElapsedTime(_lastTimelineTimestamp, now) <= _options.StatusSettleTime)
+            {
+                // A start-of-track snapshot that arrived just before the metadata change belongs to the new track
+                // (players send the two in either order): keep it rather than restart from 0.
+                _log?.Invoke("Song clock: track changed right after a start-of-track timeline; keeping that timeline.");
+                _previousTrackSnapshot = null;
+                _lastResetTimestamp = now;
+                _liveEvidence = 0;
+                return;
+            }
+
             ResetTrackCore(now);
         }
     }

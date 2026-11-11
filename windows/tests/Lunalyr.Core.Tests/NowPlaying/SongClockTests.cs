@@ -688,6 +688,41 @@ public class SongClockTests
         Assert.Contains(_log, l => l.Contains("duration changed"));
     }
 
+    [Theory]
+    [InlineData(180)] // New duration: re-synced without a seek.
+    [InlineData(240)] // Same duration: looks like a backward seek on the old track until the metadata arrives.
+    public void TimelineThenMetadataKeepsTheNewTracksTimeline(double newDuration)
+    {
+        var clock = PlayingAt(200, duration: 240);
+        _time.AdvanceSeconds(1);
+        var first = Snap(0.05, duration: newDuration);
+        clock.UpdateTimeline(first);
+        _time.AdvanceMilliseconds(300);
+        clock.ResetTrack(); // The metadata change lands after the timeline.
+        var r = clock.Read();
+        Assert.True(r.HasTimeline);
+        Assert.Equal(0.35, r.Position.TotalSeconds, Tol);
+        Assert.False(clock.UpdateTimeline(first)); // The monitor's re-read is a duplicate.
+        _time.AdvanceSeconds(1);
+        Assert.Equal(1.35, Sec(clock), Tol);
+        Assert.Equal(newDuration == 240 ? 1 : 0, _seeks.Count);
+    }
+
+    [Fact]
+    public void MetadataThenTimelineSeedsFromTheNewTimeline()
+    {
+        var clock = PlayingAt(200, duration: 240);
+        _time.AdvanceSeconds(1);
+        var old = Snap(201, duration: 240);
+        clock.UpdateTimeline(old);
+        clock.ResetTrack();
+        clock.UpdateTimeline(old); // Monitor re-reads: still the old track's.
+        _time.AdvanceMilliseconds(200);
+        clock.UpdateTimeline(Snap(0.1, duration: 180));
+        Assert.Equal(0.1, Sec(clock), Tol);
+        Assert.Empty(_seeks);
+    }
+
     [Fact]
     public void NewTracksTimelineNeverLeavesThePositionPastTheNewDuration()
     {
