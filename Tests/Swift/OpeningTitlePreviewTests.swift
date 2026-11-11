@@ -22,9 +22,23 @@ final class OpeningTitlePreviewTests: XCTestCase {
         let artist: String
         let album: String
         let lines: [LyricsFetcher.Line]
-        /// The moments drawn, with a short label each.
+        /// The moments the old heading was drawn at (the "before" set).
         let moments: [(String, Double)]
         var reduceMotion = false
+
+        /// The moments drawn: through the card's entrance, held, half-way
+        /// out, and once the first line has begun.
+        @MainActor var cardMoments: [(String, Double)] {
+            let first = OpeningTitle.firstSung(lines)
+            guard let card = OpeningTitle.schedule(words: .timed(firstLine: first),
+                                                   previewLead: VersoCustom.Settings.shared.nextWordPreviewLead) else {
+                return [("0-no-card", 1.2)] + (first.map { [("5-first-line", $0 + 0.6)] } ?? [])
+            }
+            let entrance = card.settled - card.start
+            return [("1-entering", card.start + entrance * 0.2), ("2-entering", card.start + entrance * 0.5),
+                    ("3-holding", (card.settled + card.leave) / 2), ("4-leaving", (card.leave + card.end) / 2)]
+                + (first.map { [("5-first-line", $0 + 0.6)] } ?? [])
+        }
     }
 
     static func spaced(_ text: String, start: Double, step: Double = 0.42) -> LyricsFetcher.Line {
@@ -101,12 +115,14 @@ final class OpeningTitlePreviewTests: XCTestCase {
                 RunLoop.main.run(until: Date().addingTimeInterval(0.05))
             }
             for scene in [Backdrop.dark, .bright] {
-                for (moment, time) in song.moments {
+                for (moment, time) in label == "before" ? song.moments : song.cardMoments {
                     var wall = Date().timeIntervalSinceReferenceDate + 60
                     let start = max(0, time - 1.6)
-                    let renderer = ImageRenderer(content: Frame(scene: scene, song: song, time: start, wall: wall,
+                    // Seen from the song's start, then sought to the moment.
+                    let renderer = ImageRenderer(content: Frame(scene: scene, song: song, time: 0.1, wall: wall,
                                                                 monitor: harness.monitor))
                     renderer.scale = 1
+                    renderer.render { _, _ in }
                     // The clock runs up to the moment, as on screen.
                     var now = start
                     while now < time {
@@ -120,6 +136,56 @@ final class OpeningTitlePreviewTests: XCTestCase {
                         "\(song.name)-\(scene.rawValue)-\(moment).png"))
                 }
             }
+            // The floating lyrics draw a compact card, centred in the window.
+            if label != "before", song.name == "a-standard" || song.name == "c-japanese" {
+                let textSize = CGFloat(FloatingLyricsOptions.SizePreset.medium.rawValue)
+                let window = FloatingFrame.defaultSize(textSize: textSize,
+                    in: CGRect(origin: .zero, size: Self.screen).insetBy(dx: 0, dy: 60))
+                for (moment, time) in song.cardMoments where moment.hasPrefix("2") || moment.hasPrefix("3") {
+                    var wall = Date().timeIntervalSinceReferenceDate + 60
+                    let renderer = ImageRenderer(content: FloatingFrameShot(size: window, textSize: textSize, time: 0.1,
+                                                                            wall: wall, monitor: harness.monitor))
+                    renderer.scale = 2
+                    renderer.render { _, _ in }
+                    var now = max(0, time - 1.6)
+                    while now < time {
+                        now = min(time, now + 1.0 / 30)
+                        wall += 1.0 / 30
+                        renderer.content = FloatingFrameShot(size: window, textSize: textSize, time: now, wall: wall,
+                                                             monitor: harness.monitor)
+                        renderer.render { _, _ in }
+                    }
+                    let image = try XCTUnwrap(renderer.cgImage)
+                    try DesktopPlayerPreviewTests.write(image, to: folder.appendingPathComponent(
+                        "f-floating-\(song.name)-\(moment).png"))
+                }
+            }
+        }
+    }
+
+    /// The floating lyrics window over a dark app, at its default size.
+    struct FloatingFrameShot: View {
+        let size: CGSize
+        let textSize: CGFloat
+        let time: Double
+        let wall: Double
+        let monitor: NowPlayingMonitor
+
+        var body: some View {
+            let metrics = LyricViewportMetrics(size: size, textSize: textSize)
+            ZStack {
+                Color(white: 0.16)
+                FloatingLyricsFrame(backdrop: FloatingLyricsOptions.defaultBackdrop, reduceTransparency: false,
+                                    albumAccent: SIMD3(0.05, 0.6, 0.9)) {
+                    LyricLayer(time: time, baseSize: metrics.baseSize, maxWidth: metrics.stageSize.width,
+                               maxHeight: metrics.stageSize.height, mood: .neutral,
+                               accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42), trackSeed: 4242, wall: wall)
+                        .frame(width: size.width, height: size.height)
+                        .environmentObject(monitor)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .clipped()
         }
     }
 
