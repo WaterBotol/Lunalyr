@@ -125,7 +125,8 @@ internal sealed class AppHost
     {
         try
         {
-            var readings = WindowsReadingServices.Create();
+            // The Japanese dictionary expands under the data folder, so --data test runs never touch the real one.
+            var readings = WindowsReadingServices.Create(Path.Combine(DataRoot, "Dictionaries"));
             _connectivity = new NetworkConnectivity(message => Log.Lyrics.Info(message));
             // Built the same way with --no-network; only the lookups themselves are refused, so nothing is sent.
             var service = LyricService.CreateDefault(Path.Combine(DataRoot, "Lyrics"), options: new LyricServiceOptions
@@ -154,7 +155,7 @@ internal sealed class AppHost
             _controller = controller;
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
-                + $"Readings: {WindowsReadingServices.Describe()}.");
+                + $"Readings: {WindowsReadingServices.Describe(readings)}.");
         }
         catch (Exception ex)
         {

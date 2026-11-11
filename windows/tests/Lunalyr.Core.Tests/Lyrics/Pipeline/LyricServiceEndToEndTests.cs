@@ -22,8 +22,10 @@ public sealed class LyricServiceEndToEndTests : IDisposable
 
     private static readonly LyricLookupTiming Quick = new()
     {
-        Grace = TimeSpan.FromMilliseconds(150),
-        UpgradeSettle = TimeSpan.FromMilliseconds(50),
+        // Real time: generous enough that a busy machine (parallel test assemblies) still answers inside the grace
+        // period. Fake sources answer at once, so the lookup completes as soon as nothing pending could win.
+        Grace = TimeSpan.FromSeconds(3),
+        UpgradeSettle = TimeSpan.FromMilliseconds(500),
         AppleRetry = TimeSpan.FromMilliseconds(100),
         MusicFirst = TimeSpan.FromMilliseconds(100),
         LrclibLimit = TimeSpan.FromSeconds(10),

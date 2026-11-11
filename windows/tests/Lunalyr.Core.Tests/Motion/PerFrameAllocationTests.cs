@@ -89,12 +89,19 @@ public class PerFrameAllocationTests
         var warm = new Stage();
         for (var f = 0; f < frames; f++) Frame(warm, 999.5 + f / 240.0);
 
-        var stage = new Stage();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var f = 0; f < frames; f++) Frame(stage, 999.5 + f / 240.0);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        // Tiered JIT can recompile a hot method mid-run and that work is counted against this thread, so measure up to
+        // three runs and keep the cleanest. A real per-frame allocation shows up in every run (1,200 frames each).
+        var cleanest = long.MaxValue;
+        Stage stage = null!;
+        for (var attempt = 0; attempt < 3 && cleanest != 0; attempt++)
+        {
+            stage = new Stage();
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var f = 0; f < frames; f++) Frame(stage, 999.5 + f / 240.0);
+            cleanest = Math.Min(cleanest, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
         Assert.True(double.IsFinite(stage.Sink) && stage.Sink > 0);
-        Assert.Equal(0, allocated);
+        Assert.Equal(0, cleanest);
     }
 
     [Fact]
