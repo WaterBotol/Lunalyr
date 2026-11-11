@@ -73,6 +73,16 @@ public class WholeLineTokenTests
         Assert.True(LyricTimingRules.ValidWordTiming(Line("夢ならば", ("夢", 10, 11), ("な", 11, 12), ("ら", 12, 13), ("ば", 13, 14))));
 
     [Fact]
+    public void AFewSpaceSplitLinesDontMakeLineTimingMixed()
+    {
+        // "晴天" on LRCLIB: whole-line tokens plus one space-split bopomofo line among many.
+        var lines = Enumerable.Range(0, 9).Select(_ => Line("故事的小黃花從出生那年就飄著", ("故事的小黃花從出生那年就飄著", 10, 14)))
+            .Append(Line("ㄙㄡ ㄌㄚ ㄒ一", ("ㄙㄡ", 10, 11), ("ㄌㄚ", 11, 12), ("ㄒ一", 12, 13)))
+            .ToArray();
+        Assert.Equal(1, LyricTimingRules.TimingTier(new LyricResult.Synced(lines, new LyricProvenance("", "LRCLIB"))));
+    }
+
+    [Fact]
     public void OneRealWordTimedLineMakesItMixed()
     {
         var lines = new[]

@@ -82,14 +82,22 @@ public static class LyricTimingRules
     /// </summary>
     static bool HasRealWordEvidence(IEnumerable<LyricLine> lines)
     {
+        // At least a quarter of the sung lines (and at least one) must carry two or more real word tokens: a couple
+        // of space-split decorative lines in otherwise line-timed lyrics (晴天's bopomofo solfège) aren't word timing.
+        int sung = 0, real = 0;
         foreach (var line in lines)
         {
-            if (!line.IsInstrumental && line.Words.Count >= 2 && ValidWordTiming(line))
+            if (line.IsInstrumental)
             {
-                return true;
+                continue;
+            }
+            sung++;
+            if (line.Words.Count >= 2 && ValidWordTiming(line))
+            {
+                real++;
             }
         }
-        return false;
+        return real > 0 && real * 4 >= sung;
     }
 
     /// <summary>Every sung line has valid word timing.</summary>
