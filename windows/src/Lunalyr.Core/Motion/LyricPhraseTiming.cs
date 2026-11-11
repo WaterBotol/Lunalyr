@@ -149,10 +149,11 @@ public readonly record struct LyricPhraseTiming
         if (line.Words.Count > 0)
         {
             (sung, lastOnset) = (double.NegativeInfinity, double.NegativeInfinity);
-            foreach (var word in line.Words)
+            // Indexed, not foreach: the stage asks this every frame, and an interface enumerator allocates.
+            for (var i = 0; i < line.Words.Count; i++)
             {
-                sung = Math.Max(sung, word.End);
-                lastOnset = Math.Max(lastOnset, word.Start);
+                sung = Math.Max(sung, line.Words[i].End);
+                lastOnset = Math.Max(lastOnset, line.Words[i].Start);
             }
         }
         var sungEnd = Math.Min(sung, lastOnset + 8);
