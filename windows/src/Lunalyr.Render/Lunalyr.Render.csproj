@@ -15,4 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lunalyr.Render.Compositions.Tests" />
+  </ItemGroup>
 </Project>

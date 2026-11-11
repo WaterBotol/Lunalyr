@@ -104,7 +104,6 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         _plainLines = null;
         _status?.Dispose();
         _status = null;
-        _statusText = null;
         SceneShown = null;
         Sheet = null;
     }
@@ -150,7 +149,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     private void Sync(SceneSnapshot scene)
     {
         var old = SceneShown;
-        if (old is not null && ReferenceEquals(old.Lyrics, scene.Lyrics) && ReferenceEquals(old.Readings, scene.Readings)
+        if (old is not null && ReferenceEquals(old.Lyrics, scene.Lyrics) && SameReadings(old.Readings, scene.Readings)
             && old.Style == scene.Style && old.Palette.Text == scene.Palette.Text)
         {
             SceneShown = scene;
@@ -167,6 +166,15 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             Sheet = LyricSheet.Build(synced.Lines, !LyricPauseTiming.IsQQ(synced.Provenance.Source));
             OnLyrics(synced.Lines, scene);
         }
+    }
+
+    private static bool SameReadings(IReadOnlyDictionary<int, string> a, IReadOnlyDictionary<int, string> b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Count != b.Count) return false;
+        foreach (var (row, reading) in a)
+            if (!b.TryGetValue(row, out var other) || other != reading) return false;
+        return true;
     }
 
     /// <summary>New synced lyrics (or readings, size, style): a composition prepares what it sets per song.</summary>
@@ -682,11 +690,12 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     /// <summary>The calm status text ("No lyrics found"), easing in when it changes.</summary>
     private void DrawStatus(ID2D1DeviceContext dc, string status, double wall)
     {
-        if (status != _statusText)
+        if (status != _statusText || _status is null)
         {
             _status?.Dispose();
+            // A new snapshot (new colours, a new size) sets the same words again without easing them in again.
+            if (status != _statusText || !double.IsFinite(_statusSince)) _statusSince = wall;
             _statusText = status;
-            _statusSince = wall;
             using var layout = Kit!.Layout(status, Face.Quiet, (float)(BaseSize * 0.34), TextKit.LocaleFor(status),
                                            ScriptDirection.IsRightToLeft(status), (float)Stage.Width);
             _status = Kit.Bake(layout, new Vector4(TextColour.X, TextColour.Y, TextColour.Z, TextColour.W * 0.5f), 1, ShadowSpec.None);

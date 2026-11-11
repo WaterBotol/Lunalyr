@@ -11,6 +11,7 @@ using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Core.Motion;
 using Lunalyr.Render.Scene;
 using Vortice.Direct2D1;
+using Vortice.DirectWrite;
 
 namespace Lunalyr.Render.Compositions;
 
@@ -107,7 +108,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             var rank = position - 1 - k;
             if (rank < -2 || rank > 5.2) continue;
             var token = prepared[k];
-            var unit = _preparedUnits[k] ??= Unit(token, lineBase);
+            var unit = _preparedUnits[k] ??= Unit(token);
             unit.LastUsed = Frame;
             var eligible = k > 0 ? prepared[k - 1].Source.Start : double.NegativeInfinity;
             var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, Arrival,
@@ -207,25 +208,14 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
     }
 
     /// <summary>A rolling word and its reading, set in the heavy cut at the word's size and baked once.</summary>
-    private SpokenUnit Unit(RollingWord token, double lineBase)
+    private SpokenUnit Unit(RollingWord token)
     {
         if (_units.TryGetValue(token.Source, out var found)) return found;
         var kit = Kit!;
-        var size = (float)token.PointSize;
-        var locale = TextKit.LocaleFor(token.Source.Text);
-        using var label = kit.Layout(token.Source.Text, Face.Heavy, size, locale, token.RightToLeft);
-        using var reading = token.Reading is { } text
-            ? kit.Layout(text, Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false, (float)(Stage.Width * 0.8))
-            : null;
+        var (label, reading, width, height) = Layout(kit, token, Stage.Width, Scale);
+        using var _ = label;
+        using var __ = reading;
         var labelBox = label.Metrics;
-        var width = (double)labelBox.Width;
-        var height = (double)labelBox.Height;
-        if (reading is not null)
-        {
-            width = Math.Max(width, reading.Metrics.Width);
-            height += token.PointSize * 0.02 + reading.Metrics.Height;
-        }
-        width += 2 * Points(2);
         var shadow = new ShadowSpec(0.25f, Points(7) * 0.5f, Points(2));
         // Rasterised at the focus size (and its breath), and scaled down for the words around it.
         const float raster = 1.16f;
@@ -242,6 +232,27 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
         };
         _units[token.Source] = unit;
         return unit;
+    }
+
+    /// <summary>
+    /// A rolling word and its reading laid out as the stage measures them: the word in the heavy cut, its reading
+    /// under it (wrapping at 80% of the stage), 2 points of padding at each side. The caller disposes the layouts.
+    /// </summary>
+    internal static (IDWriteTextLayout Label, IDWriteTextLayout? Reading, double Width, double Height) Layout(
+        TextKit kit, RollingWord token, double stageWidth, float scale)
+    {
+        var size = (float)token.PointSize;
+        var label = kit.Layout(token.Source.Text, Face.Heavy, size, TextKit.LocaleFor(token.Source.Text), token.RightToLeft);
+        var reading = token.Reading is { } text
+            ? kit.Layout(text, Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false, (float)(stageWidth * 0.8))
+            : null;
+        double width = label.Metrics.Width, height = label.Metrics.Height;
+        if (reading is not null)
+        {
+            width = Math.Max(width, reading.Metrics.Width);
+            height += token.PointSize * 0.02 + reading.Metrics.Height;
+        }
+        return (label, reading, width + 2 * 2 * scale, height);
     }
 
     /// <summary>Backing vocals of the lines on the rolling stage, set in Editorial's typography (Spoken itself would take over the stage).</summary>

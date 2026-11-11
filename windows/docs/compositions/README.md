@@ -33,9 +33,11 @@ written from them in its own structure; no Verso line was translated.
 
 ## Contract notes
 
-- **Reveal ids.** `LyricStyle.Reveal` accepts the Mac's raw values (`fade`, `lift`, `pop`, `orbit`, `glide`, `unfold`,
-  `automatic`) and the spelled-out ones (`softFocus`, `floatUp`, `matchStyle`). The contract's default is `softFocus`
-  for both compositions. On the Mac, Spoken's automatic entrance is Glide; choose `automatic` to get that.
+- **Reveal ids.** `LyricStyle.Reveal` holds the Mac's `WordArrival` raw values: `fade` (Soft focus, the default),
+  `lift` (Float up), `pop`, `orbit`, `glide`, `unfold` and `automatic` are built. `cutoutFold`, `cutoutSlide`,
+  `cutoutHighlight`, `satinRibbon`, `splitInk` and `mix` are not yet and draw as Soft focus. (The spelled-out
+  `softFocus`, `floatUp` and `matchStyle` are accepted too.) On the Mac, Spoken's automatic entrance is Glide; choose
+  `automatic` to get that.
 - **Size.** The Mac's base size is `clamp(min(w, h·16/9) · 0.046, 24, 124)` points and the stage is 80% × 72% of the
   screen. Its size slider (0.7–1.5) is `LyricStyle.SizeFraction / 0.075`, so the contract's 0.075 is the Mac's 1.0.
   Points are physical pixels divided by `FrameContext.Scale`.
