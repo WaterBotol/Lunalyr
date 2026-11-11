@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Lunalyr.Core.Lyrics.Readings;
 
 /// <summary>
@@ -137,20 +135,5 @@ public sealed class ScriptLanguageGuesser : ILanguageGuesser
         }
         // Spaced scripts need a real detector to name a language; Latin and Cyrillic stay unknown here.
         return null;
-    }
-}
-
-/// <summary>Helpers shared by the fallbacks and the platform implementations.</summary>
-internal static class ReadingStrings
-{
-    public static string Join(IEnumerable<string> parts, string separator)
-    {
-        var builder = new StringBuilder();
-        foreach (var part in parts)
-        {
-            if (builder.Length > 0) builder.Append(separator);
-            builder.Append(part);
-        }
-        return builder.ToString();
     }
 }
