@@ -8,6 +8,8 @@
     <RootNamespace>Lunalyr.App</RootNamespace>
     <AssemblyName>Lunalyr</AssemblyName>
     <Version>0.1.0</Version>
+    <!-- The shared props still carry the old "Derived from Verso" line; the app's version resource must not. -->
+    <Copyright>© Lunalyr. All rights reserved.</Copyright>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>

@@ -126,17 +126,20 @@ internal sealed class AppHost
         try
         {
             var readings = WindowsReadingServices.Create();
-            _connectivity = _options.NoNetwork ? null : new NetworkConnectivity(message => Log.Lyrics.Info(message));
-            ILyricLookup lookup = _options.NoNetwork
-                ? new DisabledLyricLookup("--no-network")
-                : new LyricServiceLookup(LyricService.CreateDefault(Path.Combine(DataRoot, "Lyrics"), options: new LyricServiceOptions
-                {
-                    PlatformSources = [new AppleMusicWindowsSource()],
-                    Readings = readings,
-                    Connectivity = _connectivity,
-                    Http = new LyricHttpOptions { UserAgent = UserAgent },
-                    Logger = Log,
-                }));
+            _connectivity = new NetworkConnectivity(message => Log.Lyrics.Info(message));
+            // Built the same way with --no-network; only the lookups themselves are refused, so nothing is sent.
+            var service = LyricService.CreateDefault(Path.Combine(DataRoot, "Lyrics"), options: new LyricServiceOptions
+            {
+                PlatformSources = [new AppleMusicWindowsSource()],
+                Readings = readings,
+                Connectivity = _connectivity,
+                Http = new LyricHttpOptions { UserAgent = UserAgent },
+                Logger = Log,
+            });
+            ILyricLookup lookup = new LyricServiceLookup(service, _options.NoNetwork ? "--no-network" : null);
+            _log.Info($"Lyric sources: {string.Join(", ", service.SourceList(_settings.Current.SourceSnapshot())
+                .Where(s => s.Enabled).Select(s => s.IsAvailable ? s.Title : $"{s.Title} (unavailable)"))}; "
+                + $"network {(_connectivity.IsOnline ? "online" : "offline")}.");
 
             // Read-only: the guard refuses every command while --no-playback is set, and nothing here sends any.
             _sessions = await GsmtcMediaSessionSource.CreateAsync(PlaybackGuard.Process, message => Log.Player.Debug(message)).ConfigureAwait(false);

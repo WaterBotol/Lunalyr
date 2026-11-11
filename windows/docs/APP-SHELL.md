@@ -23,7 +23,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--seconds <N>` | Quit cleanly after N seconds. |
 | `--log-level <debug\|info\|warn\|error>` | Minimum log level (default `info`). |
 | `--settings` | Open the settings window (a second launch does this anyway). |
-| `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). For checks, so a launch doesn't send the song playing to lyric services. |
+| `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
 ## Process
@@ -54,7 +54,8 @@ sound).
 ## Controller
 
 `AppController`: `GsmtcMediaSessionSource` → `NowPlayingMonitor` → on each track change: wait up to 2 s for the
-player's timeline, then `LyricService.LookupAsync` with progress → `LyricPresentation.Prepare` (the Mac's
+player's timeline (after that, show "no position" or "stream" but keep checking once a second, so a timeline that
+arrives late still gets the lyrics), then `LyricService.LookupAsync` with progress → `LyricPresentation.Prepare` (the Mac's
 presentation steps: credits, QQ gap repair, estimated words, mixed-timing copies) → `SceneSnapshot`, then readings
 (`LyricRomanizer`, off the lookup's flow) added when ready. Each track change cancels the previous lookup and starts
 a new generation; late answers are dropped. The renderer's clock is `SongClock.Read()` + the global offset + the
@@ -109,5 +110,9 @@ Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
 | Published folder | 74.3 MB (237 files) + `Lunalyr.pdb` 65 MB; `Lunalyr.exe` 16.3 MB. The metapackage spike was 124.6 MB. |
 | Tray ready | 55–109 ms after launch |
 | Following now playing (GSMTC, lyric service, readings loaded) | 157–209 ms after launch |
-| Idle (tray only, no window opened yet) | 39.7 MB working set, 13.6 MB private |
-| Settings window open | 135 MB working set, 103 MB private; WinUI started in 176 ms |
+| Idle (tray only, no window opened yet) | 39.7–41.7 MB working set, 13.6–14.0 MB private |
+| Settings window open | 135 MB working set, 103 MB private; WinUI up 18–176 ms after the request |
+| Settings window closed again | 130 MB working set, 104 MB private (WinUI stays loaded) |
+
+Live checks so far saw no media session (nothing was playing), so the GSMTC session path has run only in the unit
+tests and the read-only `NowPlayingProbe`, not yet in the AOT app.
