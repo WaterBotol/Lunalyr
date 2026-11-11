@@ -393,6 +393,8 @@ final class LyricsFetcher {
             if let reason = rejection(candidate, query: query) { rejected.append(.init(candidate: candidate, reason: reason)) }
             else { accepted.append(candidate) }
         }
+        // Lyrics in another language than the song's rank as another version (`LyricLanguage`).
+        accepted = LyricLanguage.weigh(accepted, query: query)
         // Only matches for the playing version are compared: a live take has the same words but its own timing.
         let fitting = accepted.indices.filter { fitsVersion(accepted[$0], query) }
         for (index, weighed) in zip(fitting, weighAgreement(fitting.map { accepted[$0] })) { accepted[index] = weighed }
@@ -455,8 +457,11 @@ final class LyricsFetcher {
     }
     /// Whether the match names the same version as the playing song. A
     /// service that reported no checkable name repeats the search, so it fits.
+    /// Lyrics in another language than the song's (`languageMismatch`, set
+    /// by `screen`) are another version's: a language version's, whatever
+    /// its name says.
     static func fitsVersion(_ candidate: LyricCandidate, _ query: LyricQuery) -> Bool {
-        VersionTags.mismatch(query, title: candidate.title).isEmpty
+        !candidate.languageMismatch && VersionTags.mismatch(query, title: candidate.title).isEmpty
     }
     /// The timing matches are ranked by: 2 for word-by-word or mixed timing,
     /// which rank together, 1 for line timing and 0 for plain text.
@@ -548,6 +553,8 @@ final class LyricsFetcher {
             var found = base[candidate.source]?.hasPrefix("Saved match") == true ? "Saved match" : "Match found"
             let other = VersionTags.mismatch(query, title: candidate.title)
             if !other.isEmpty { found += " · other version (\(VersionTags.describe(other)))" }
+            else if candidate.languageMismatch { found += " · lyrics in another language" }
+            if candidate.viaOriginalTitle { found += " · found under the original title" }
             if let fault = LyricsFetcher.timingFault(candidate.result) { found += " · \(fault)" }
             if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
             else if candidate.agreement.peers > 0 {
@@ -639,27 +646,33 @@ final class LyricsFetcher {
         try Task.checkCancellation()
         switch id {
         case .appleMusicCache: return await AppleMusicCachedLyrics.lookup(query)
-        case .lyricsPlus:
-            guard let hit = try await KPoeLyricsProvider.lookup(title:query.title,artist:query.artist,album:query.album,duration:query.duration) else {return nil}
-            let provenance = Provenance(precision:precision(hit.lines),source:hit.source+" via Lyrics+")
-            // Rank and label by the recording the node matched, when its names
-            // can be checked. One in another script may be the same name
-            // transliterated: the search used the library's names, so those
-            // stand in and only the song's length is checked.
-            let title = LyricQuery.checkable(hit.title, against: query.title)
-            let artist = LyricQuery.checkable(hit.artist, against: query.artist)
-            return LyricCandidate(source:id,result:.synced(hit.lines,provenance),title:title ?? query.title,artist:artist ?? query.artist,
-                                  duration:nil,score:113,metadataReported:title != nil && artist != nil)
-        // The Chinese catalogues often index only an artist's native name (`ArtistAliases`).
-        case .netEase: return try await withAliases(id, query: query) { try await netEase($0) }
-        case .qqMusic: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.qqMusic($0) }
-        case .kugou: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.kugou($0) }
-        case .kuwo: return try await withAliases(id, query: query) { try await AdditionalLyricsProviders.kuwo($0) }
+        case .lyricsPlus: return try await withOriginalTitle(id, query: query) { try await lyricsPlus($0) }
+        // The Chinese catalogues often index only an artist's native name (`ArtistAliases`),
+        // and a Japanese song's original title (`OriginalTitles`).
+        case .netEase: return try await withOriginalTitle(id, query: query) { q in try await withAliases(id, query: q) { try await netEase($0) } }
+        case .qqMusic:
+            return try await withOriginalTitle(id, query: query) { q in try await withAliases(id, query: q) { try await AdditionalLyricsProviders.qqMusic($0) } }
+        case .kugou:
+            return try await withOriginalTitle(id, query: query) { q in try await withAliases(id, query: q) { try await AdditionalLyricsProviders.kugou($0) } }
+        case .kuwo:
+            return try await withOriginalTitle(id, query: query) { q in try await withAliases(id, query: q) { try await AdditionalLyricsProviders.kuwo($0) } }
         case .lyricsOVH: return try await AdditionalLyricsProviders.lyricsOVH(query)
-        case .lrclib: return try await lrclib(query)
+        case .lrclib: return try await withOriginalTitle(id, query: query) { try await lrclib($0) }
         case .lyrimuse: return try LocalLyricBridge.candidate(query, folder: localFolder)
-        case .amll: return try await AMLLLyricsProvider.lookup(query)
+        case .amll: return try await withOriginalTitle(id, query: query) { try await AMLLLyricsProvider.lookup($0) }
         }
+    }
+    private static func lyricsPlus(_ query: LyricQuery) async throws -> LyricCandidate? {
+        guard let hit = try await KPoeLyricsProvider.lookup(title:query.title,artist:query.artist,album:query.album,duration:query.duration) else {return nil}
+        let provenance = Provenance(precision:precision(hit.lines),source:hit.source+" via Lyrics+")
+        // Rank and label by the recording the node matched, when its names
+        // can be checked. One in another script may be the same name
+        // transliterated: the search used the library's names, so those
+        // stand in and only the song's length is checked.
+        let title = LyricQuery.checkable(hit.title, against: query.title)
+        let artist = LyricQuery.checkable(hit.artist, against: query.artist)
+        return LyricCandidate(source:.lyricsPlus,result:.synced(hit.lines,provenance),title:title ?? query.title,artist:artist ?? query.artist,
+                              duration:nil,score:113,metadataReported:title != nil && artist != nil)
     }
     /// NetEase's lyrics for the edition its search matched, ranked and
     /// labelled by that edition. Throws when NetEase could not be reached or

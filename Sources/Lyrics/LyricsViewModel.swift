@@ -77,7 +77,9 @@ final class LyricsViewModel: ObservableObject {
 
     var currentQuery: LyricQuery? {
         guard let track = NowPlayingMonitor.shared.current else { return nil }
-        return LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
+        var query=LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
+        query.genre=track.genre
+        return query
     }
     private init() {
         LyricSourceOptions.shared.$repairQQGaps.dropFirst().sink { [weak self] enabled in
@@ -146,7 +148,8 @@ final class LyricsViewModel: ObservableObject {
         candidates=[];nearMisses=[];sourceStates=[:];pinnedMatch=false;cacheMessage=nil;isLoading=false;isRefining=false
         report=nil;lastLookup=nil;appliedRevision=0;retryWhenOnline=false;onlineRetries=0;localChangedDuringLookup=false;rerun=false
         if let track {
-            let query=LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
+            var query=LyricQuery(title:track.title,artist:track.artist,album:track.album,duration:track.duration)
+            query.genre=track.genre
             startLookup(query,recording:query.recordingKey,force:false)
         }
     }
