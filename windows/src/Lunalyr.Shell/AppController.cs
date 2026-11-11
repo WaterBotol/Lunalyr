@@ -48,6 +48,12 @@ public sealed record AppControllerOptions
     /// </summary>
     public IReadOnlyList<TimeSpan> ArtworkRetries { get; init; } =
         [TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
+
+    /// <summary>
+    /// When a new track's cover is the one already showing (the same album, or a player still sharing the previous
+    /// song's cover), how long to wait before each further look for a different one.
+    /// </summary>
+    public IReadOnlyList<TimeSpan> ArtworkRechecks { get; init; } = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
 }
 
 /// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>

@@ -231,6 +231,80 @@ public sealed class AppControllerArtworkTests : IAsyncDisposable
         Assert.Same(PaletteMapper.Fallback, _renderer.Last!.Palette);
     }
 
+    [Fact]
+    public async Task APlayerStillSharingThePreviousCoverIsLookedAtAgain()
+    {
+        var palettes = new HeldPalettes();
+        var session = Playing("Song A", RedCover);
+        _source.Add(session);
+        var controller = Controller(palettes.Read);
+        controller.Start();
+        await WaitUntil(() => palettes.Count == 1);
+        var a = Named(0.8f);
+        palettes[0].Answer.SetResult(a);
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, a));
+
+        // Song B starts while the player still hands over Song A's cover; B's own arrives a moment later.
+        NextTrack(session, "Song B");
+        await WaitUntil(() => palettes.Count == 2);
+        var stale = Named(0.81f);
+        palettes[1].Answer.SetResult(stale);
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, stale));
+        session.Thumbnail = BlueCover;
+        await WaitUntil(() =>
+        {
+            _time.AdvanceMilliseconds(250); // until a further look's wait is over
+            return palettes.Count == 3;
+        });
+        var b = Named(0.1f);
+        palettes[2].Answer.SetResult(b);
+        await WaitUntil(() => ReferenceEquals(_renderer.Last?.Palette, b));
+
+        // B's own colours were cached, the stale ones weren't: going back to A and on to B decodes nothing more.
+        NextTrack(session, "Song A");
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, a));
+        NextTrack(session, "Song B");
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, b));
+        await controller.WhenIdleAsync();
+        Assert.Equal(3, palettes.Count);
+    }
+
+    [Fact]
+    public async Task TheSameAlbumsCoverOnTheNextTrackKeepsItsColoursAndIsCached()
+    {
+        var palettes = new HeldPalettes();
+        var session = Playing("Track 1", RedCover);
+        _source.Add(session);
+        var controller = Controller(palettes.Read);
+        controller.Start();
+        await WaitUntil(() => palettes.Count == 1);
+        var red = Named(0.8f);
+        palettes[0].Answer.SetResult(red);
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, red));
+
+        NextTrack(session, "Track 2");
+        await WaitUntil(() => palettes.Count == 2);
+        var again = Named(0.8f);
+        palettes[1].Answer.SetResult(again);
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, again));
+        for (var i = 0; i < 20; i++) // both further looks find the same cover: nothing more is decoded
+        {
+            _time.AdvanceMilliseconds(250);
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        await controller.WhenIdleAsync();
+        Assert.Equal(2, palettes.Count);
+        Assert.Same(again, controller.Scene.Palette);
+        NextTrack(session, "Track 1");
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, red));
+        NextTrack(session, "Track 2");
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, again));
+        Assert.Equal(2, palettes.Count);
+    }
+
+    /// <summary>A blue cover (BMP bytes).</summary>
+    private static readonly byte[] BlueCover = DemoCover.Paint(new(30, 40, 210), new(20, 50, 190), new(40, 30, 220), new(30, 60, 200), new(50, 50, 230), 64);
 
     private static async Task WaitUntil(Func<bool> condition)
     {

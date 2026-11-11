@@ -12,9 +12,11 @@ public sealed partial class AppController
     private const int PaletteCacheSize = 32;
 
     private readonly Lock _publishGate = new();
-    private readonly Dictionary<string, Palette> _palettes = [];
+    private readonly Dictionary<string, (Palette Palette, byte[] Cover)> _palettes = [];
     private readonly Queue<string> _paletteOrder = new();
     private Palette _palette = PaletteMapper.Fallback;
+    // A hash of the cover whose colours are showing (null for the default colours).
+    private byte[]? _shownCover;
     private string? _artworkKey;
     private CancellationTokenSource? _artworkCts;
 
@@ -43,14 +45,14 @@ public sealed partial class AppController
             if (_disposed || key == _artworkKey) return;
             CancelArtworkLocked();
             _artworkKey = key;
-            if (_palettes.TryGetValue(key, out var palette))
+            if (_palettes.TryGetValue(key, out var known))
             {
-                SetPaletteLocked(palette);
+                SetPaletteLocked(known.Palette, known.Cover);
                 cached = true;
             }
             else if (session is null)
             {
-                SetPaletteLocked(PaletteMapper.Fallback);
+                SetPaletteLocked(PaletteMapper.Fallback, null);
                 cached = true;
             }
             else
@@ -75,10 +77,31 @@ public sealed partial class AppController
     }
 
     // Must hold _gate.
-    private void SetPaletteLocked(Palette palette)
+    private void SetPaletteLocked(Palette palette, byte[]? cover)
     {
         _palette = palette;
+        _shownCover = cover;
         _scene = _scene with { Palette = palette };
+    }
+
+    /// <summary>The player's cover for the playing track, read whole and hashed; null when it shares none.</summary>
+    private static async Task<(byte[] Bytes, byte[] Hash)?> ReadCoverAsync(IMediaSession session, CancellationToken ct)
+    {
+        // WaitAsync: a player that ignores cancellation must not hold this task once the track moves on.
+        var stream = await session.OpenThumbnailAsync(cancellationToken: ct).WaitAsync(ct).ConfigureAwait(false);
+        if (stream is null) return null;
+        await using (stream.ConfigureAwait(false))
+        {
+            using var copy = new MemoryStream();
+            await stream.CopyToAsync(copy, ct).WaitAsync(ct).ConfigureAwait(false);
+            var bytes = copy.ToArray();
+            return (bytes, System.Security.Cryptography.SHA256.HashData(bytes));
+        }
+    }
+
+    private bool IsShownCover(byte[] hash)
+    {
+        lock (_gate) return _shownCover is { } shown && shown.AsSpan().SequenceEqual(hash);
     }
 
     private async Task LoadArtworkAsync(string key, IMediaSession session, CancellationTokenSource cts)
@@ -88,17 +111,15 @@ public sealed partial class AppController
         {
             await Task.Yield(); // Off the player's event thread.
             Palette? palette = null;
+            (byte[] Bytes, byte[] Hash)? cover = null;
             for (var attempt = 0; ; attempt++)
             {
-                // WaitAsync: a player or decoder that ignores cancellation must not hold this task once the track moves on.
-                var stream = await session.OpenThumbnailAsync(cancellationToken: ct).WaitAsync(ct).ConfigureAwait(false);
-                if (stream is not null)
+                cover = await ReadCoverAsync(session, ct).ConfigureAwait(false);
+                if (cover is { } found)
                 {
-                    await using (stream.ConfigureAwait(false))
-                    {
-                        palette = await _options.ArtworkPalette(stream, ct).WaitAsync(ct).ConfigureAwait(false);
-                    }
-
+                    using var bytes = new MemoryStream(found.Bytes, writable: false);
+                    // WaitAsync: a decoder that ignores cancellation must not hold this task once the track moves on.
+                    palette = await _options.ArtworkPalette(bytes, ct).WaitAsync(ct).ConfigureAwait(false);
                     if (palette is null) _player.Info("The cover couldn't be read; using the default colours.");
                     break;
                 }
@@ -112,7 +133,24 @@ public sealed partial class AppController
                 await Task.Delay(_options.ArtworkRetries[attempt], _options.TimeProvider, ct).ConfigureAwait(false);
             }
 
-            ApplyPalette(key, palette);
+            // The previous track's cover again: the same album, or a player that hasn't sent the new cover yet. Its
+            // colours stay, uncached, and the cover is read again in a moment; a different one replaces them.
+            if (palette is not null && cover is { } same && IsShownCover(same.Hash))
+            {
+                ApplyPalette(key, palette, same.Hash, cache: false);
+                foreach (var wait in _options.ArtworkRechecks)
+                {
+                    await Task.Delay(wait, _options.TimeProvider, ct).ConfigureAwait(false);
+                    if (await ReadCoverAsync(session, ct).ConfigureAwait(false) is not { } again || IsShownCover(again.Hash)) continue;
+                    using var bytes = new MemoryStream(again.Bytes, writable: false);
+                    if (await _options.ArtworkPalette(bytes, ct).WaitAsync(ct).ConfigureAwait(false) is not { } changed) continue;
+                    _player.Debug("The player sent this track's own cover a moment late.");
+                    (palette, cover) = (changed, again);
+                    break;
+                }
+            }
+
+            ApplyPalette(key, palette, palette is null ? null : cover?.Hash);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -121,7 +159,7 @@ public sealed partial class AppController
         catch (Exception ex)
         {
             _player.Warn("Couldn't read the cover; using the default colours.", ex);
-            ApplyPalette(key, null);
+            ApplyPalette(key, null, null);
         }
         finally
         {
@@ -135,21 +173,21 @@ public sealed partial class AppController
     }
 
     /// <summary>Shows a cover's colours (or the default ones) if the track is still the one playing; caches real ones.</summary>
-    private void ApplyPalette(string key, Palette? palette)
+    private void ApplyPalette(string key, Palette? palette, byte[]? cover, bool cache = true)
     {
         lock (_gate)
         {
             if (_disposed || key != _artworkKey) return;
-            if (palette is not null && !_palettes.ContainsKey(key))
+            if (cache && palette is not null && cover is not null && !_palettes.ContainsKey(key))
             {
-                _palettes[key] = palette;
+                _palettes[key] = (palette, cover);
                 _paletteOrder.Enqueue(key);
                 while (_paletteOrder.Count > PaletteCacheSize) _palettes.Remove(_paletteOrder.Dequeue());
             }
 
             var shown = palette ?? PaletteMapper.Fallback;
             if (ReferenceEquals(shown, _palette)) return;
-            SetPaletteLocked(shown);
+            SetPaletteLocked(shown, palette is null ? null : cover);
         }
 
         _player.Debug(palette is null ? "Album colours: the default ones." : "Album colours: from the cover.");
