@@ -11,8 +11,8 @@ built yet; it describes what milestone 2 onwards would build on.
 | CPU | Intel Core Ultra 7 356H, 16 cores / 16 threads |
 | RAM | 32 GB |
 | GPUs | Intel Graphics (integrated, driver 32.0.101.8509) + NVIDIA GeForce RTX 5060 Laptop GPU (driver 32.0.16.1692) |
-| Display | One built-in panel (Samsung SDC4232). During the measurements it was driven by the **NVIDIA** GPU at **2560×1440, 60 Hz, 120 DPI (125%)**. Earlier the same day it reported 3200×2000 @ 60 Hz on the Intel GPU and 2560×1440 @ 280 Hz on the NVIDIA GPU; the mode was being changed in Settings while I worked. |
-| External monitors | None connected |
+| Displays | Built-in panel (Samsung SDC4232, "ATNA60KA04") **and an external Lenovo Pro 27Q-10 over DisplayPort**, both on the NVIDIA GPU in **Duplicate (clone) mode** during every measurement, so Windows saw one 2560×1440, 60 Hz, 120 DPI (125%) desktop. Earlier the same day the panel reported 3200×2000 @ 60 Hz on the Intel GPU and 2560×1440 @ 280 Hz on the NVIDIA GPU. |
+| Caveat | Clone mode explains the 60 Hz, and it may have inflated the Intel-GPU (`--gpu low-power`) run below. Every-monitor and mixed-DPI numbers need **Extend** mode. |
 | Power | On AC for every measurement (battery 96%) |
 
 **Not covered on this PC yet** (needs the user's help, see "Open checks"): a second monitor (mixed DPI, every-monitor
