@@ -1,4 +1,5 @@
 using Lunalyr.Core.NowPlaying;
+using Lunalyr.Core.Playback;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 using CoreRepeatMode = Lunalyr.Core.NowPlaying.MediaRepeatMode;
@@ -15,20 +16,24 @@ namespace Lunalyr.Platform.NowPlaying;
 /// </summary>
 /// <remarks>
 /// Reading is harmless, but the sessions' <c>Try…Async</c> commands control the user's real player. Only UI code may
-/// call them, in direct response to an explicit user action. Tests and checks use a fake source instead.
+/// call them, in direct response to an explicit user action. Tests and checks use a fake source instead. Every
+/// command also asks the <see cref="PlaybackGuard"/> given to <see cref="CreateAsync"/>, which refuses them all while
+/// <c>--no-playback</c> is set.
 /// </remarks>
 public sealed class GsmtcMediaSessionSource : IMediaSessionSource
 {
     private readonly GsmtcManager _manager;
+    private readonly PlaybackGuard _guard;
     private readonly Action<string>? _log;
     private readonly Lock _gate = new();
     private readonly List<GsmtcMediaSession> _sessions = [];
     private GsmtcMediaSession? _current;
     private bool _disposed;
 
-    private GsmtcMediaSessionSource(GsmtcManager manager, Action<string>? log)
+    private GsmtcMediaSessionSource(GsmtcManager manager, PlaybackGuard guard, Action<string>? log)
     {
         _manager = manager;
+        _guard = guard;
         _log = log;
     }
 
@@ -47,10 +52,18 @@ public sealed class GsmtcMediaSessionSource : IMediaSessionSource
     }
 
     /// <summary>Connects to GSMTC (read-only) and starts tracking its sessions.</summary>
-    public static async Task<GsmtcMediaSessionSource> CreateAsync(Action<string>? log = null, CancellationToken cancellationToken = default)
+    /// <param name="guard">
+    /// Consulted by every session's <c>Try…Async</c> command right before it would reach the player; while it is
+    /// blocked (<c>--no-playback</c>) every command is refused. The app passes <see cref="PlaybackGuard.Process"/>.
+    /// </param>
+    /// <param name="log">Where read failures and refused commands are reported.</param>
+    /// <param name="cancellationToken">Cancels connecting.</param>
+    public static async Task<GsmtcMediaSessionSource> CreateAsync(PlaybackGuard guard, Action<string>? log = null,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(guard);
         var manager = await GsmtcManager.RequestAsync().AsTask(cancellationToken).ConfigureAwait(false);
-        var source = new GsmtcMediaSessionSource(manager, log);
+        var source = new GsmtcMediaSessionSource(manager, guard, log);
         // Subscribe first so a change during the initial listing isn't missed.
         manager.SessionsChanged += source.OnSessionsChanged;
         manager.CurrentSessionChanged += source.OnCurrentSessionChanged;
@@ -158,26 +171,48 @@ public sealed class GsmtcMediaSessionSource : IMediaSessionSource
             }
         }
 
-        return new GsmtcMediaSession(raw, _log);
+        return new GsmtcMediaSession(raw, _guard, _log);
     }
 }
 
-/// <summary>One real GSMTC session. Reads are wrapped so a session that has gone away reads as empty.</summary>
+/// <summary>
+/// One real GSMTC session. Reads are wrapped so a session that has gone away reads as empty. Every command goes through
+/// <see cref="Command"/>, which asks the <see cref="PlaybackGuard"/> before the session is touched.
+/// </summary>
 internal sealed class GsmtcMediaSession : IMediaSession
 {
     private readonly Action<string>? _log;
+    private readonly PlaybackGuard _guard;
     private readonly Lock _gate = new();
     private GsmtcSession _raw;
     private bool _attached;
+    private int _commandsSent;
 
-    public GsmtcMediaSession(GsmtcSession raw, Action<string>? log)
+    public GsmtcMediaSession(GsmtcSession raw, PlaybackGuard guard, Action<string>? log)
     {
         _raw = raw;
+        _guard = guard;
         _log = log;
         SourceAppUserModelId = SafeAppId(raw);
         SourceApp = MediaSourceApp.FromAppId(SourceAppUserModelId);
         Attach(raw);
     }
+
+    /// <summary>
+    /// Test hook: a session with no GSMTC session behind it (nothing to reach, nothing subscribed), so the command
+    /// path can be checked without any real player. A command that got past the guard fails.
+    /// </summary>
+    internal GsmtcMediaSession(string appId, PlaybackGuard guard, Action<string>? log = null)
+    {
+        _raw = null!;
+        _guard = guard;
+        _log = log;
+        SourceAppUserModelId = appId;
+        SourceApp = MediaSourceApp.FromAppId(appId);
+    }
+
+    /// <summary>How many commands got past the guard and were handed to the session (for tests).</summary>
+    internal int CommandsSent => Volatile.Read(ref _commandsSent);
 
     public event EventHandler? MediaPropertiesChanged;
 
@@ -360,10 +395,13 @@ internal sealed class GsmtcMediaSession : IMediaSession
     public Task<bool> TryChangeRepeatModeAsync(CoreRepeatMode mode) =>
         Command(s => s.TryChangeAutoRepeatModeAsync((WinRepeatMode)(int)mode).AsTask(), "repeat");
 
+    // The one way a command reaches the player. The guard is asked first, before the session is even read.
     private async Task<bool> Command(Func<GsmtcSession, Task<bool>> send, string name)
     {
+        if (!_guard.TryAllow(name, SourceAppUserModelId, _log)) return false;
         try
         {
+            Interlocked.Increment(ref _commandsSent);
             return await send(Raw).ConfigureAwait(false);
         }
         catch (Exception ex)
