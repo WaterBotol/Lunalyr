@@ -66,9 +66,12 @@ public sealed record LyricSourceSnapshot(
     /// again. Saved explicit choices are keyed separately and are unaffected. Kept in step with the Mac:
     /// v11 ranks lyrics for another version (Live, Remix…) below the playing one's; v12 ranks timing faults below
     /// sound timing; v14 (the Mac's number for the same change) ranks Apple Music's lyrics relayed by Lyrics+ as
-    /// Apple Music's own, lets a later agreement demote LRCLIB and applies the phrase-token rule (12 Nov 2026).
+    /// Apple Music's own, lets a later agreement demote LRCLIB and applies the phrase-token rule (12 Nov 2026); v15
+    /// (the Mac's v13, whose numbers Windows had already passed) ranks a language version (English Version…), or lyrics
+    /// in another language than the song's, below the playing one's, and searches songs listed under an English title
+    /// under their original title too.
     /// </summary>
-    public const string CachePolicy = "v14";
+    public const string CachePolicy = "v15";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =
@@ -114,7 +117,7 @@ public sealed record LyricSourceSnapshot(
             var lrclib = LyricSourceId.Lrclib.Title();
             return $"Word-by-word and Mixed timing lyrics come first: {music}, then {lrclib}, then your other sources. "
                 + $"Line-synced lyrics come next, again with {music} first."
-                + " Timed lyrics for another version of the song (Live, Remix, Acoustic…) come after timed lyrics for the version playing.";
+                + " Timed lyrics for another version of the song (Live, Remix, Acoustic, English Version…), or in another language than the song’s, come after timed lyrics for the version playing.";
         }
     }
 

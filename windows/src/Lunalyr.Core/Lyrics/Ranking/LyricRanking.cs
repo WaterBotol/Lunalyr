@@ -9,7 +9,8 @@ public sealed record LyricScreening(IReadOnlyList<LyricCandidate> Accepted, IRea
 /// </summary>
 /// <remarks>
 /// Timed lyrics rank above plain text. Among timed lyrics, sound timing ranks above timing with a fault (bunched
-/// lines, crammed words), and a match for the playing version ranks above one for another version (Live, Remix…).
+/// lines, crammed words), and a match for the playing version ranks above one for another version (Live, Remix,
+/// English Version…, or lyrics in another language than the song's: <see cref="LyricLanguage"/>).
 /// Then word-by-word and mixed timing rank together, first: Apple Music's own lyrics, then LRCLIB's, then the other
 /// sources'. Line timing is next, Apple Music first. Beyond those leads, sources follow the configured order, which
 /// in Accuracy first comes after agreement and a closer title and artist match. Apple Music's lyrics relayed by
@@ -23,6 +24,12 @@ public static class LyricRanking
 
     /// <summary>Added to the source-list line of Lyrics+ relaying Apple Music's lyrics (which rank as Apple Music's).</summary>
     public const string AppleRelayNote = " · Apple Music’s lyrics";
+
+    /// <summary>Added to the source-list line of a match in another language than the song's (another version's).</summary>
+    public const string LanguageNote = " · lyrics in another language";
+
+    /// <summary>Added to the source-list line of a match found under the song's original title (<see cref="OriginalTitles"/>).</summary>
+    public const string OriginalTitleNote = " · found under the original title";
 
     /// <summary>
     /// Accepted candidates in ranking order (<see cref="Outranks"/>), and recording mismatches with the reason. Every
@@ -47,6 +54,8 @@ public static class LyricRanking
                 accepted.Add(candidate);
             }
         }
+        // Lyrics in another language than the song's rank as another version (LyricLanguage).
+        accepted = LyricLanguage.Weigh(accepted, query);
         // Only matches for the playing version are compared: a live take has the same words but its own timing.
         var fitting = Enumerable.Range(0, accepted.Count).Where(i => FitsVersion(accepted[i], query)).ToList();
         var weighed = LyricAgreementRules.Weigh([.. fitting.Select(i => accepted[i])]);
@@ -131,10 +140,12 @@ public static class LyricRanking
 
     /// <summary>
     /// Whether the match names the same version as the playing song. A service that reported no checkable name
-    /// repeats the search, so it fits.
+    /// repeats the search, so it fits. Lyrics in another language than the song's
+    /// (<see cref="LyricCandidate.LanguageMismatch"/>, set by <see cref="Screen"/>) are another version's: a language
+    /// version's, whatever its name says.
     /// </summary>
     public static bool FitsVersion(LyricCandidate candidate, LyricQuery query) =>
-        VersionTags.Mismatch(query, candidate.Title).Count == 0;
+        !candidate.LanguageMismatch && VersionTags.Mismatch(query, candidate.Title).Count == 0;
 
     /// <summary>
     /// Where a source stands ahead of the configured order within a timing tier (ranking decisions of 12 Nov 2026,
@@ -363,12 +374,19 @@ public static class LyricRanking
             var found = states.TryGetValue(candidate.Source, out var before) && before.StartsWith("Saved match", StringComparison.Ordinal)
                 ? "Saved match"
                 : "Match found";
-            // The Mac's order: version (then language and original-title notes, once ported), Apple relay, timing
-            // fault, agreement, showing.
+            // The Mac's order: version or language, original title, Apple relay, timing fault, agreement, showing.
             var other = VersionTags.Mismatch(query, candidate.Title);
             if (other.Count > 0)
             {
                 found += $" · other version ({VersionTags.Describe(other)})";
+            }
+            else if (candidate.LanguageMismatch)
+            {
+                found += LanguageNote;
+            }
+            if (candidate.ViaOriginalTitle)
+            {
+                found += OriginalTitleNote;
             }
             // Lyrics+ relaying Apple Music's lyrics: it ranks as Apple Music, so the list says so.
             if (candidate.RankingSource == LyricSourceId.AppleMusicCache && candidate.Source != LyricSourceId.AppleMusicCache)
