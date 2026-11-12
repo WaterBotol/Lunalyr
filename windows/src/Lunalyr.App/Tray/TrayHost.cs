@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Lunalyr.App.Interop;
 using Lunalyr.Core.Logging;
+using Lunalyr.Shell.Flyout;
 
 namespace Lunalyr.App.Tray;
 
@@ -46,6 +47,12 @@ internal sealed unsafe class TrayHost : IDisposable
     public string ClassName => _className;
 
     public Action? OpenSettings { get; set; }
+
+    /// <summary>
+    /// A left click (or Enter/Space on the focused icon): opens or closes the flyout beside the icon. Given the icon's
+    /// rectangle (or the click point, as an empty one) and whether the keyboard did it. Without it, the click opens settings.
+    /// </summary>
+    public Action<PixelRect, bool>? ToggleFlyout { get; set; }
 
     public Action? TogglePause { get; set; }
 
@@ -109,6 +116,16 @@ internal sealed unsafe class TrayHost : IDisposable
         }
 
         return _iconAdded;
+    }
+
+    /// <summary>The icon's rectangle on screen in physical pixels, or null when the shell doesn't say.</summary>
+    public PixelRect? IconRect()
+    {
+        if (!_iconAdded) return null;
+        var id = new Win32.NOTIFYICONIDENTIFIER { cbSize = (uint)sizeof(Win32.NOTIFYICONIDENTIFIER), hWnd = _hwnd, uID = IconId };
+        if (Win32.Shell_NotifyIconGetRect(id, out var rect) != 0) return null;
+        var r = new PixelRect(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        return r.IsEmpty ? null : r;
     }
 
     /// <summary>Sets the hover text (up to 127 characters; longer text is cut).</summary>
@@ -216,7 +233,18 @@ internal sealed unsafe class TrayHost : IDisposable
                         break;
                     case Win32.NIN_SELECT:
                     case Win32.NIN_KEYSELECT:
-                        OpenSettings?.Invoke();
+                        if (ToggleFlyout is { } toggle)
+                        {
+                            // Version 4 puts the click's (or the icon's) point in wParam; the icon's own rectangle is better.
+                            var x = (short)Win32.LoWord((nint)wParam);
+                            var y = (short)Win32.HiWord((nint)wParam);
+                            toggle(IconRect() ?? new PixelRect(x, y, x, y), (uint)Win32.LoWord(lParam) == Win32.NIN_KEYSELECT);
+                        }
+                        else
+                        {
+                            OpenSettings?.Invoke();
+                        }
+
                         break;
                 }
 

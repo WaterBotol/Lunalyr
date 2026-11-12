@@ -18,6 +18,7 @@ using Lunalyr.Platform.Readings;
 using Lunalyr.Platform.Settings;
 using Lunalyr.Shell;
 using Lunalyr.Shell.Demo;
+using Lunalyr.Shell.Flyout;
 using Lunalyr.Shell.Lyrics;
 using Lunalyr.Shell.Rendering;
 using Lunalyr.Shell.Settings;
@@ -59,6 +60,11 @@ internal sealed class AppHost
     private bool _uiRequested;
     private bool _quitting;
     private App? _app;
+
+    // What the first window request asked for while WinUI was still starting (the tray loop can't show either).
+    private bool _pendingSettings;
+    private (PixelRect Anchor, bool Keyboard)? _pendingFlyout;
+    private PlaybackCommands? _transport;
 
     public AppHost(ShellOptions options, string dataRoot, SingleInstance instance)
     {
@@ -103,6 +109,7 @@ internal sealed class AppHost
     public int Run()
     {
         _tray.OpenSettings = OpenSettings;
+        _tray.ToggleFlyout = ToggleFlyout;
         _tray.TogglePause = TogglePause;
         _tray.Quit = Quit;
         _tray.Activated = OnActivated;
@@ -291,12 +298,70 @@ internal sealed class AppHost
             return;
         }
 
+        _pendingSettings = true;
+        StartUi();
+    }
+
+    /// <summary>A left click on the tray icon: the flyout opens beside it (starting WinUI the first time), or closes.</summary>
+    public void ToggleFlyout(PixelRect anchor, bool keyboard)
+    {
+        if (_quitting) return;
+        if (_app is not null)
+        {
+            _app.ToggleFlyout(anchor, keyboard);
+            return;
+        }
+
+        _pendingFlyout = (anchor, keyboard);
+        StartUi();
+    }
+
+    private void StartUi()
+    {
         if (_uiRequested) return;
         _uiRequested = true;
         Win32.PostQuitMessage(0); // leave the plain loop; Run() starts WinUI
     }
 
-    private void TogglePause()
+    /// <summary>WinUI is up: show what was asked for while it started (settings when nothing was).</summary>
+    internal void ShowPendingUi(App app)
+    {
+        var flyout = _pendingFlyout;
+        _pendingFlyout = null;
+        if (_pendingSettings || flyout is null) app.ShowSettings();
+        _pendingSettings = false;
+        if (flyout is { } f) app.ToggleFlyout(f.Anchor, f.Keyboard);
+    }
+
+    /// <summary>Forces light or dark for Lunalyr's windows (<c>--theme</c>), or null to follow Windows.</summary>
+    internal string? Theme => _options.Theme;
+
+    /// <summary>Quit has started: windows may close for real.</summary>
+    internal bool IsQuitting => _quitting;
+
+    /// <summary>
+    /// A press on the flyout's transport, for the followed player. The guard is asked first (refused with
+    /// <c>--no-playback</c> and <c>--demo</c>); the GSMTC layer asks it again before anything reaches a player.
+    /// </summary>
+    internal Task<TransportOutcome> SendTransportAsync(TransportCommand command, bool playing)
+    {
+        _transport ??= new PlaybackCommands(PlaybackGuard.Process, message => Log.Player.Info(message));
+        var monitor = _controller?.Monitor;
+        return _transport.SendAsync(monitor?.Session, monitor?.Capabilities ?? Lunalyr.Core.NowPlaying.PlayerCapabilities.None, command, playing);
+    }
+
+    /// <summary>
+    /// "Search YouTube" in the flyout: the song's search in the default browser, from that click only. Nothing opens
+    /// while playback and sound are off for the run (<c>--no-playback</c>, <c>--demo</c>).
+    /// </summary>
+    internal bool SearchYouTube()
+    {
+        var status = _controller?.Status;
+        IUrlLauncher launcher = PlaybackGuard.Process.IsBlocked ? RefusingUrlLauncher.Instance : ShellUrlLauncher.Instance;
+        return YouTubeSearch.Open(launcher, PlaybackGuard.Process, status?.Title, status?.Artist, message => _log.Info(message));
+    }
+
+    internal void TogglePause()
     {
         // The controller hears about it through the settings store, which also remembers it for next time.
         if (!_settings.Update(s => s with { WallpaperPaused = !s.WallpaperPaused })) return;

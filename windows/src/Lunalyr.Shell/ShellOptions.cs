@@ -18,6 +18,8 @@ namespace Lunalyr.Shell;
 /// of the system's players; implies <c>--no-network</c> and <c>--no-playback</c>, and keeps its own data folder.</description></item>
 /// <item><term><c>--stats &lt;file&gt;</c></term><description>On quitting, write the renderer's frame statistics to this JSON
 /// file (for measurements).</description></item>
+/// <item><term><c>--theme &lt;light|dark&gt;</c></term><description>Light or dark for Lunalyr's windows (the tray panel,
+/// settings) whatever Windows uses, for screenshots; Windows' own setting is never changed.</description></item>
 /// <item><term><c>lunalyr://…</c></term><description>A link to act on (forwarded to the running instance).</description></item>
 /// </list>
 /// </summary>
@@ -40,6 +42,9 @@ public sealed record ShellOptions
 
     /// <summary>Where to write the renderer's frame statistics on quitting, or null.</summary>
     public string? StatsPath { get; init; }
+
+    /// <summary>"light" or "dark" to force Lunalyr's windows into that theme; null follows Windows.</summary>
+    public string? Theme { get; init; }
 
     public IReadOnlyList<string> Links { get; init; } = [];
 
@@ -99,6 +104,14 @@ public sealed record ShellOptions
                         if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) && seconds > 0 && double.IsFinite(seconds))
                             options = options with { QuitAfterSeconds = seconds };
                         else problems.Add($"--seconds {text}: expected a positive number of seconds.");
+                    }
+                    break;
+                case "--theme":
+                    if (Value() is { } theme)
+                    {
+                        var parsedTheme = theme.Trim().ToLowerInvariant();
+                        if (parsedTheme is "light" or "dark") options = options with { Theme = parsedTheme };
+                        else problems.Add($"--theme {theme}: expected light or dark.");
                     }
                     break;
                 case "--log-level":
