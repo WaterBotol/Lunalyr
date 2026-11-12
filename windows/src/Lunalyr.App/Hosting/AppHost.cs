@@ -275,6 +275,7 @@ internal sealed partial class AppHost
             controller.Start();
             controller.ApplySettings(_settings.Current); // anything changed while starting
             StartVisualisers(controller);
+            StartMusicVideo(controller);
             _controller = controller;
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
@@ -338,6 +339,7 @@ internal sealed partial class AppHost
         Microsoft.UI.Xaml.Application.Start(_ =>
         {
             var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            _uiDispatcher = dispatcher;
             SynchronizationContext.SetSynchronizationContext(new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(dispatcher));
             _app = new App(this);
             _log.Info($"WinUI started in {started.ElapsedMilliseconds} ms ({SinceLaunch():0} ms after launch).");
@@ -507,6 +509,7 @@ internal sealed partial class AppHost
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             StopVisualisers();
+            StopMusicVideo();
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);
             _wallpaper?.Dispose(); // detaches from the desktop, leaving the system wallpaper
             _sessions?.Dispose();
