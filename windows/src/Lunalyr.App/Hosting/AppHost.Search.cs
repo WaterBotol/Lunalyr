@@ -4,6 +4,7 @@ using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.NowPlaying;
 using Lunalyr.Core.Playback;
 using Lunalyr.Core.Player;
+using Lunalyr.Core.Player.Spotify;
 using Lunalyr.Platform.Imaging;
 using Lunalyr.Shell.Demo;
 using Lunalyr.Shell.Player;
@@ -21,11 +22,25 @@ internal sealed partial class AppHost
     /// Why Spotify isn't there for the settings page and the card: "--demo", "--no-network", or null when it is (or
     /// is still starting: <see cref="Spotify"/> is null then too).
     /// </summary>
-    public string? SpotifyOffReason => _options.Demo ? "--demo" : _options.NoNetwork ? "--no-network" : null;
+    public string? SpotifyOffReason => _demoSpotify is not null ? null : _options.Demo ? "--demo" : _options.NoNetwork ? "--no-network" : null;
+
+    /// <summary>
+    /// <c>--player-debug fake-spotify</c> (with playback off): a Spotify account for checks of the settings section,
+    /// whose HTTP client refuses every request and whose browser opens nothing. It keeps no sign-in.
+    /// </summary>
+    private SpotifyAccount? _demoSpotify;
 
     private PlayerSearchSource CreatePlayerSearchSource()
     {
         var debug = _options.PlayerDebug;
+        if (debug.Contains("fake-spotify") && PlaybackGuard.Process.IsBlocked)
+        {
+            var http = new LyricHttpClient(new HttpClient(new RefusingHandler()), new LyricHttpOptions { UserAgent = UserAgent, IsNetworkAvailable = () => false }, Log);
+            var account = new SpotifyAccount(http, new NoTokenStore(), new NoBrowser(_log), _settings.Current.SpotifyClientId, new SpotifyOptions { Logger = Log });
+            _settings.Changed += (_, e) => account.SetClientId(e.NewValue.SpotifyClientId);
+            _demoSpotify = account;
+            _log.Info("Settings: a Spotify account that sends nothing stands in for checks (--player-debug fake-spotify).");
+        }
         PlayerPane? pane = null;
         string? query = null;
         PlayerSearchAvailability? forced = null;
@@ -82,6 +97,35 @@ internal sealed partial class AppHost
             DebugPane = pane,
             DebugQuery = query,
         };
+    }
+
+    /// <summary>Refuses every request before anything is sent (the fake-spotify account's network).</summary>
+    private sealed class RefusingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException("Nothing is sent to Spotify in this run."));
+    }
+
+    private sealed class NoTokenStore : ISpotifyTokenStore
+    {
+        public SpotifyStoredToken? Load() => null;
+
+        public void Save(SpotifyStoredToken token)
+        {
+        }
+
+        public void Clear()
+        {
+        }
+    }
+
+    private sealed class NoBrowser(Lunalyr.Core.Logging.CategoryLogger log) : IBrowserLauncher
+    {
+        public bool Open(Uri address)
+        {
+            log.Info("Spotify sign-in: no browser is opened in this run (--player-debug fake-spotify).");
+            return false;
+        }
     }
 
     /// <summary>A demo row's cover, painted in code from its id (never fetched).</summary>
