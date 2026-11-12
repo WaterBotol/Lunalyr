@@ -126,6 +126,24 @@ public sealed class AppControllerTests : IAsyncDisposable
         Assert.Equal(60, _renderer.FrameRate);
     }
 
+    /// <summary>The player's genre goes into the lookup as a hint at the language sung (LyricLanguage), as on the Mac.</summary>
+    [Fact]
+    public async Task TheLookupCarriesThePlayersGenre()
+    {
+        _lyrics.Answer("Idol", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "First line", "Second line")));
+        var session = new FakeMediaSession("AppleInc.AppleMusicWin_nzyj5cx40ttqa!App", _time);
+        _sessions.Add(session);
+        session.SetTrack("Idol", "YOASOBI", "Idol - Single", "J-Pop").SetPlayback(PlaybackStatus.Playing).SetTimeline(30, 213);
+        _source.Add(session);
+        var controller = Controller();
+
+        controller.Start();
+        await controller.WhenIdleAsync();
+
+        var query = Assert.Single(_lyrics.Queries);
+        Assert.Equal(("Idol", "J-Pop"), (query.Title, query.Genre));
+    }
+
     [Fact]
     public async Task ProgressUpdatesShowLyricsBeforeTheLookupEnds()
     {

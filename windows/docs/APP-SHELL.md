@@ -136,6 +136,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricSources` | all but `lyrimuse` and `appleMusicCache` | source raw values | `custom.lyricSources` |
 | `lyricMatchMode` | `"smart"` | `smart` (Accuracy first), `priority` (Source order) | `custom.lyricMatchMode` |
 | `lyrimuseFolder` | `""` | the local lyric folder | `custom.lyrimuseFolder` |
+| `artistAliases` | `true` | "Search under other names": artists' native names (MusicBrainz) and songs' original titles (Apple's catalogue) when the listed names find nothing usable; no settings window yet | `custom.artistAliases` |
 | `creditsLayer` | `true` | the song's title and credits on the wallpaper | `custom.creditsLayer` |
 | `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
 | `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |

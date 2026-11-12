@@ -134,6 +134,14 @@ public sealed record AppSettings
     /// <summary>The local lyric folder (Mac <c>custom.lyrimuseFolder</c>), or empty.</summary>
     public string LyrimuseFolder { get; init; } = "";
 
+    /// <summary>
+    /// "Search under other names" (Mac <c>custom.artistAliases</c>): when a service finds nothing under the listed
+    /// names, NetEase, QQ, Kugou and Kuwo search again under the artist's native name (from MusicBrainz), and a song
+    /// listed under an English title is searched again under its original one (from Apple's catalogue). On by default.
+    /// No settings window yet (milestone 5).
+    /// </summary>
+    public bool ArtistAliases { get; init; } = true;
+
     // ---- Derived values ----
 
     public static IReadOnlyList<string> Compositions { get; } =

@@ -96,9 +96,9 @@ internal sealed class FakeMediaSession(string appId, ManualTimeProvider time) : 
 
     // ---- Scripting ----
 
-    public FakeMediaSession SetTrack(string title, string artist = "Artist", string album = "Album")
+    public FakeMediaSession SetTrack(string title, string artist = "Artist", string album = "Album", string genre = "")
     {
-        _track = new MediaTrackInfo(title, artist, album, artist, HasThumbnail: Thumbnail is not null);
+        _track = new MediaTrackInfo(title, artist, album, artist, HasThumbnail: Thumbnail is not null, Genre: genre);
         MediaPropertiesChanged?.Invoke(this, EventArgs.Empty);
         return this;
     }
