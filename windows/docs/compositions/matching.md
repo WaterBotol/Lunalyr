@@ -73,3 +73,37 @@ Language is not used: it says little about energy, and it already shapes line le
   between them.
 - The Mac remembers a choice per song or per artist from its extras menu ("Layout for this song/artist"). That menu
   isn't ported; Windows remembers per track for the session.
+
+## The wallpaper
+
+"Match the music" is also a wallpaper type (`backgroundMode: "auto"`, the Mac's default), and GPU effects (`shader`)
+and Line patterns (`pattern`) match a style per song unless one is pinned. Code: `Lunalyr.Core.Compositions.WallpaperMatch`,
+`AppController.Wallpaper.cs`; the effects and patterns themselves come from their layers through
+`Lunalyr.Shell.Wallpaper.WallpaperCatalog` (docs/APP-SHELL.md, "Hooks for other layers").
+
+**Provenance.** The Mac's choice lives in `NowPlayingView.layer(for:)`, `Settings.resolvedShader/resolvedPattern`,
+`ShaderStyle.matching` and `TrackMood` (all on lines from the squashed Verso import: 213 of `ShaderBackgroundView.swift`'s
+first 215 lines, and `TrackMood.swift` is on the never-port list). Nothing is translated: the behaviour below is written
+from a description, and the effect and pattern tables (names, characters, costs) are the other layers' own.
+
+**When.** As for the layout: once per song, when its lyrics are shown or its lookup ends without any. The song's
+`TrackCharacter` is read then and kept for the session (the last 512 songs), so a late cover or a second lookup never
+changes the wallpaper mid-song; with nothing playing the last song's look stays. The pick itself is worked out from
+the kept character and the current settings, so pinning an effect or changing the type applies at once.
+
+**Which kind.** Match the music gives a song whose energy is above **0.72** a GPU effect, any other a line pattern (the
+Mac's rule). If this build has none of that kind it takes the other; with neither it draws the album colours
+(`gradient`). GPU effects and Line patterns always draw their own kind.
+
+**Which style.** A pinned `shaderStyle` / `patternStyle` that is in the catalogue is drawn as it is (a heavy effect only
+while power isn't being saved). Otherwise every style sits on three axes, energy, density and organic (0 to 1), and the
+song is placed on the same axes: its energy, its energy again for density (Windows knows no separate density for a song),
+and its organic. Styles are ranked by squared distance, energy weighing 1, organic 0.75, density 0.45. The song takes
+one of the **4 nearest**, chosen by a stable hash of its seed (SplitMix64 of the FNV-1a seed `TrackCharacter` already
+uses), so alike songs don't all look alike and the same song always looks the same. While power is being saved, styles
+marked heavy are left out of the match when any others exist (the app doesn't ask for that yet: on energy saver the
+wallpaper pauses instead).
+
+**Differences from the Mac.** No genre (as for the layout). The Mac's patterns follow its mood's own pattern choice; Windows
+matches them like the effects. Motion artwork, which the Mac's Match the music shows when Apple Music has an animated
+cover, isn't fetched on Windows yet (Settings › Covers says so).

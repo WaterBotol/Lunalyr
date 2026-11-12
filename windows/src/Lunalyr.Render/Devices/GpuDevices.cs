@@ -33,18 +33,28 @@ internal sealed class GpuDevice : IDisposable
     /// <summary>Set when a call reported device removal or reset; every surface on it is recreated.</summary>
     public bool Lost { get; set; }
 
+    /// <summary>The device was made with video support (hardware video decoding).</summary>
+    public bool HasVideoSupport { get; private init; }
+
     public static GpuDevice Create(IDXGIAdapter1 adapter, long luid, string name, ID2D1Factory1 d2dFactory)
     {
-        D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport,
-            [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0, FeatureLevel.Level_10_1, FeatureLevel.Level_10_0],
-            out ID3D11Device? d3d, out ID3D11DeviceContext? context).CheckError();
+        FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0, FeatureLevel.Level_10_1, FeatureLevel.Level_10_0];
+        // Video support lets an imported video decode on this GPU (DXVA through Media Foundation); a device that can't
+        // offer it is made without, and such videos decode in memory instead.
+        var video = D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport,
+            levels, out ID3D11Device? d3d, out ID3D11DeviceContext? context).Success;
+        if (!video)
+            D3D11.D3D11CreateDevice(adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, levels, out d3d, out context).CheckError();
+        // Media Foundation's decoder uses the device from its own threads; the device's lock keeps that and the render
+        // thread's drawing apart.
+        using (var multithread = d3d!.QueryInterfaceOrNull<ID3D11Multithread>()) multithread?.SetMultithreadProtected(true);
         // Only the swap chains get a frame latency of 1. Setting it on the device too made Present block for up to
         // 4.5 ms (p95) in the spike and raised CPU by ~50%.
         using var dxgi = d3d!.QueryInterface<IDXGIDevice1>();
         var d2d = d2dFactory.CreateDevice(dxgi);
         var dc = d2d.CreateDeviceContext(DeviceContextOptions.None);
         dc.TextAntialiasMode = TextAntialiasMode.Grayscale;
-        return new GpuDevice(luid, name, d3d, context!, d2d, dc);
+        return new GpuDevice(luid, name, d3d, context!, d2d, dc) { HasVideoSupport = video };
     }
 
     public void Dispose()

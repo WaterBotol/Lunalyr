@@ -57,6 +57,13 @@ public sealed record ShellOptions
     public string? Theme { get; init; }
 
     /// <summary>
+    /// <c>--quiet-windows</c>: for checks while someone works at the PC. The settings window opens without being
+    /// activated and at the bottom of the z-order, so it never takes the foreground or the keyboard; capture it with
+    /// PrintWindow (tools/capture-window.ps1). Not forwarded to a running instance.
+    /// </summary>
+    public bool QuietWindows { get; init; }
+
+    /// <summary>
     /// <c>--player-debug show,top,light,dark,reduce-motion,opaque,contrast,scrub=0.6</c>: checks of the desktop player
     /// without moving the pointer or changing Windows' settings. <c>show</c> keeps it up on the main display;
     /// the looks force one accessibility look; <c>scrub=x</c> holds a drag at that share of the seek bar (the
@@ -97,6 +104,9 @@ public sealed record ShellOptions
                     break;
                 case "--settings":
                     options = options with { OpenSettings = true };
+                    break;
+                case "--quiet-windows":
+                    options = options with { QuietWindows = true };
                     break;
                 case "--demo":
                     // Silent and offline by definition: no real player is followed and nothing is looked up.

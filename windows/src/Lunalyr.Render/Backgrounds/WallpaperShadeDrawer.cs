@@ -21,6 +21,10 @@ internal sealed class WallpaperShadeDrawer : IDisposable
     private const int GrainSide = 128;
 
     private readonly BackgroundOptions _options;
+    private ID2D1DeviceContext? _dc;
+    /// <summary>The darkening the scrim's brush was made for, and whether the backing image is the hand-set shape.</summary>
+    private double _scrimBuiltFor = double.NaN;
+    private bool? _backingManual;
     private ID2D1GradientStopCollection? _scrimStops;
     private ID2D1LinearGradientBrush? _scrim;
     private ID2D1Bitmap1? _backing;
@@ -38,23 +42,18 @@ internal sealed class WallpaperShadeDrawer : IDisposable
 
     public WallpaperShadeDrawer(BackgroundOptions options) => _options = options;
 
+    /// <summary>The darkening the scrim is drawn at: the options' times the scene's "Darkening".</summary>
+    public double Darkening(SceneSnapshot scene) => Math.Max(0, _options.ScrimStrength * scene.Adjustments.Darkening);
+
+    /// <summary>The hand-set text backing (the scene's, else the options'), or null for the automatic amount.</summary>
+    public double? ManualBacking(SceneSnapshot scene) => scene.Adjustments.ManualBacking ?? _options.ManualBacking;
+
     public void CreateResources(ID2D1DeviceContext dc, Vector2 size, float scale)
     {
         ReleaseResources();
-        var strength = Math.Max(0, _options.ScrimStrength);
-        var scrim = WallpaperShade.Scrim;
-        var stops = new GradientStop[scrim.Count];
-        for (var i = 0; i < scrim.Count; i++)
-            stops[i] = new GradientStop(i / (float)(scrim.Count - 1), new Color4(0, 0, 0, (float)Math.Min(1, scrim[i] * strength)));
-        _scrimStops = dc.CreateGradientStopCollection(stops, Gamma.StandardRgb, ExtendMode.Clamp);
-        _scrim = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(Vector2.Zero, new Vector2(0, 1)), _scrimStops);
-
-        // The automatic amount covers where the lyrics are set, feathered out widely (Windows' own shape, see
-        // FeatheredBacking); a hand-set amount keeps the Mac's soft ellipse.
-        var shade = _options.ManualBacking is null
-            ? FeatheredBacking.Image(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!
-            : LyricLegibility.ManualShadeImage(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!;
-        _backing = CreateBitmap(dc, LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows, shade);
+        _dc = dc;
+        BuildScrim(dc, Math.Max(0, _options.ScrimStrength));
+        BuildBacking(dc, _options.ManualBacking is not null);
 
         // Grain: each pixel faintly white or faintly black (premultiplied), so it lifts and lowers about evenly.
         var grain = new byte[GrainSide * GrainSide * 4];
@@ -80,6 +79,34 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         }
     }
 
+    /// <summary>The scrim's brush for a darkening of <paramref name="strength"/> (each stop's alpha is capped at 1).</summary>
+    private void BuildScrim(ID2D1DeviceContext dc, double strength)
+    {
+        _scrim?.Dispose(); _scrim = null;
+        _scrimStops?.Dispose(); _scrimStops = null;
+        var scrim = WallpaperShade.Scrim;
+        var stops = new GradientStop[scrim.Count];
+        for (var i = 0; i < scrim.Count; i++)
+            stops[i] = new GradientStop(i / (float)(scrim.Count - 1), new Color4(0, 0, 0, (float)Math.Min(1, scrim[i] * strength)));
+        _scrimStops = dc.CreateGradientStopCollection(stops, Gamma.StandardRgb, ExtendMode.Clamp);
+        _scrim = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(Vector2.Zero, new Vector2(0, Math.Max(1, _size.Y))), _scrimStops);
+        _scrimBuiltFor = strength;
+    }
+
+    /// <summary>
+    /// The backing's shape. The automatic amount covers where the lyrics are set, feathered out widely (Windows' own
+    /// shape, see FeatheredBacking); a hand-set amount keeps the Mac's soft ellipse.
+    /// </summary>
+    private void BuildBacking(ID2D1DeviceContext dc, bool manual)
+    {
+        _backing?.Dispose(); _backing = null;
+        var shade = manual
+            ? LyricLegibility.ManualShadeImage(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!
+            : FeatheredBacking.Image(LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows)!;
+        _backing = CreateBitmap(dc, LyricLegibility.ShadeColumns, LyricLegibility.ShadeRows, shade);
+        _backingManual = manual;
+    }
+
     public void Resize(Vector2 size, float scale)
     {
         _size = size;
@@ -95,21 +122,28 @@ internal sealed class WallpaperShadeDrawer : IDisposable
 
     /// <summary>
     /// Eases the stage presence and draws the scrim, the text backing for a backdrop of
-    /// <paramref name="fieldLuminance"/> (the wallpaper before any shade) and the grain.
+    /// <paramref name="fieldLuminance"/> (the wallpaper before any shade) and the grain. The scene's adjustments
+    /// ("Darkening", a hand-set "Text backing") apply at once: the scrim's brush and the backing's shape are made again
+    /// only when they change. <paramref name="scrim"/> and <paramref name="grain"/> off draw the backing alone (over
+    /// the user's own wallpaper).
     /// </summary>
-    public void Draw(in FrameContext frame, double fieldLuminance)
+    public void Draw(in FrameContext frame, double fieldLuminance, bool scrim = true, bool grain = true)
     {
-        if (_scrim is null || _backing is null) return;
+        if (_scrim is null || _backing is null || _dc is null) return;
         var dc = frame.Dc;
         var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);
-        dc.FillRectangle(whole, _scrim);
+        var strength = Darkening(frame.Scene);
+        if (strength != _scrimBuiltFor) BuildScrim(_dc, strength);
+        var manual = ManualBacking(frame.Scene);
+        if ((manual is not null) != _backingManual) BuildBacking(_dc, manual is not null);
+        if (scrim && strength > 0) dc.FillRectangle(whole, _scrim!);
 
         var presence = Presence(StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
-        var amount = BackingAmount(frame, fieldLuminance) * presence;
+        var amount = BackingAmount(frame, fieldLuminance, scrim ? strength : 0, manual) * presence;
         if (amount > WallpaperShade.MinimumBacking)
-            dc.DrawBitmap(_backing, whole, (float)Math.Min(1, amount), InterpolationMode.Linear, null, null);
+            dc.DrawBitmap(_backing!, whole, (float)Math.Min(1, amount), InterpolationMode.Linear, null, null);
 
-        if (_options.Grain && _grain is not null) dc.FillRectangle(whole, _grain);
+        if (grain && _options.Grain && _grain is not null) dc.FillRectangle(whole, _grain);
     }
 
     private string? _noneFoundStatus;
@@ -155,20 +189,23 @@ internal sealed class WallpaperShadeDrawer : IDisposable
     }
 
     /// <summary>The backing the stage needs over a backdrop of <paramref name="luminance"/> (the Mac's textBackingAmount).</summary>
-    private double BackingAmount(in FrameContext frame, double luminance)
+    private double BackingAmount(in FrameContext frame, double luminance, double darkening, double? manual)
     {
-        if (_options.ManualBacking is { } manual) return Math.Clamp(manual, 0, 1);
+        if (manual is { } amount) return Math.Clamp(amount, 0, 1);
         var playing = frame.Scene.Title is not null || frame.Scene.Lyrics is not null;
         // The lyric size in points follows the screen: the Mac's LyricViewportMetrics.baseSize.
         var points = frame.Size / _scale;
         var baseSize = Math.Min(124, Math.Max(24, Math.Min(points.X, points.Y * 16 / 9) * 0.046));
         var target = playing ? LyricLegibility.PastelBackingTarget(_options.IncreaseContrast) : LyricLegibility.TargetContrast(baseSize);
-        var scrim = WallpaperShade.ScrimAtStage(Math.Max(0, _options.ScrimStrength));
+        var scrim = WallpaperShade.ScrimAtStage(darkening);
         return LyricLegibility.StageBacking(luminance, scrim, target);
     }
 
     public void ReleaseResources()
     {
+        _dc = null;
+        _scrimBuiltFor = double.NaN;
+        _backingManual = null;
         _grain?.Dispose(); _grain = null;
         _grainBitmap?.Dispose(); _grainBitmap = null;
         _backing?.Dispose(); _backing = null;

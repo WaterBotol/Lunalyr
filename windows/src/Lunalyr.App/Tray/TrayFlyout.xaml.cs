@@ -197,7 +197,7 @@ public sealed partial class TrayFlyout : Window
 
     private void Focus(FocusState how)
     {
-        Control[] order = [PlayButton, PreviousButton, NextButton, EarlierButton, GradientTile, SettingsButton];
+        Control[] order = [PlayButton, PreviousButton, NextButton, EarlierButton, _modeTiles[0], SettingsButton];
         foreach (var control in order)
         {
             if (control.IsEnabled && control.Visibility == Visibility.Visible && control.Focus(how)) return;
@@ -244,17 +244,7 @@ public sealed partial class TrayFlyout : Window
         AutomationProperties.SetName(OptionsButton, FlyoutText.WallpaperOptions);
         ToolTipService.SetToolTip(OptionsButton, FlyoutText.OptionsHelp);
         AutomationProperties.SetName(ModeTiles, FlyoutText.WallpaperType);
-        var tiles = TrayFlyoutState.Backgrounds;
-        GradientTileText.Text = tiles[0].Title;
-        GradientTile.Tag = tiles[0].Value;
-        AutomationProperties.SetName(GradientTile, tiles[0].Title);
-        AutomationProperties.SetHelpText(GradientTile, tiles[0].Summary);
-        ToolTipService.SetToolTip(GradientTile, $"{tiles[0].Title}: {tiles[0].Summary}");
-        ColourTileText.Text = tiles[1].Title;
-        ColourTile.Tag = tiles[1].Value;
-        AutomationProperties.SetName(ColourTile, tiles[1].Title);
-        AutomationProperties.SetHelpText(ColourTile, tiles[1].Summary);
-        ToolTipService.SetToolTip(ColourTile, $"{tiles[1].Title}: {tiles[1].Summary}");
+        BuildModeTiles();
 
         foreach (var layout in TrayFlyoutState.Layouts) LayoutBox.Items.Add(layout.Title);
         AutomationProperties.SetName(LayoutBox, FlyoutText.Layout);
@@ -322,8 +312,7 @@ public sealed partial class TrayFlyout : Window
             SearchButton.IsEnabled = state.SearchEnabled;
             SearchNote.Text = state.SearchNote ?? "";
 
-            GradientTile.IsChecked = state.Background == (string)GradientTile.Tag;
-            ColourTile.IsChecked = state.Background == (string)ColourTile.Tag;
+            foreach (var tile in _modeTiles) tile.IsChecked = state.Background == (string)tile.Tag;
             if (LayoutBox.SelectedIndex != state.LayoutIndex) LayoutBox.SelectedIndex = state.LayoutIndex;
 
             PauseToggle.IsChecked = state.WallpaperPaused;
@@ -504,9 +493,60 @@ public sealed partial class TrayFlyout : Window
         _host.OpenSettings();
     }
 
+    private readonly List<ToggleButton> _modeTiles = [];
+
+    private Style ModeTileStyle() => (Style)Root.Resources["ModeTile"];
+
+    /// <summary>
+    /// Every wallpaper type as a tile (the Mac's menu-bar grid): five small ones for what Lunalyr draws, three wide ones
+    /// for what starts from something of yours. Built here rather than in XAML, from <see cref="TrayFlyoutState.Backgrounds"/>.
+    /// </summary>
+    private void BuildModeTiles()
+    {
+        ModeTiles.Children.Clear();
+        ModeTiles.ColumnDefinitions.Clear();
+        var rows = new StackPanel { Spacing = 6 };
+        var types = TrayFlyoutState.Backgrounds;
+        foreach (var row in new[] { types.Take(5).ToArray(), types.Skip(5).ToArray() })
+        {
+            var wide = row.Length < 5;
+            var line = new Grid { ColumnSpacing = 6 };
+            for (var i = 0; i < row.Length; i++)
+            {
+                var type = row[i];
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                var content = new StackPanel { Orientation = wide ? Orientation.Horizontal : Orientation.Vertical, Spacing = wide ? 6 : 2 };
+                content.Children.Add(new FontIcon { Glyph = type.Glyph, FontSize = wide ? 13 : 15, HorizontalAlignment = HorizontalAlignment.Center });
+                content.Children.Add(new TextBlock { Text = type.ShortTitle, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+                var tile = new ToggleButton
+                {
+                    Style = ModeTileStyle(), Content = content, Tag = type.Value,
+                    Height = wide ? 34 : 50, Padding = new Thickness(2), IsEnabled = type.Available,
+                };
+                AutomationProperties.SetName(tile, type.Title);
+                AutomationProperties.SetHelpText(tile, type.Summary);
+                ToolTipService.SetToolTip(tile, $"{type.Title}: {type.Summary}");
+                tile.Click += ModeTile_Click;
+                Grid.SetColumn(tile, i);
+                line.Children.Add(tile);
+                _modeTiles.Add(tile);
+            }
+            rows.Children.Add(line);
+        }
+        ModeTiles.Children.Add(rows);
+    }
+
     private void ModeTile_Click(object sender, RoutedEventArgs e)
     {
         if (_updating || sender is not ToggleButton { Tag: string value }) return;
+        // Imported image or video with nothing imported: the panel opens no pickers of its own, it sends you to Settings.
+        if (value == "custom" && !Lunalyr.Platform.Wallpaper.CustomWallpaperStore.IsAvailable(_host.Settings.Current.WallpaperPath))
+        {
+            Hide();
+            _host.OpenSettingsPage("wallpaper");
+            return;
+        }
         _host.Settings.Update(s => s with { BackgroundMode = value });
         Refresh();
     }

@@ -15,7 +15,7 @@ public sealed class AppSettingsTests
     {
         var settings = new AppSettings();
         Assert.Equal("editorial", settings.LyricComposition);
-        Assert.Equal("gradient", settings.BackgroundMode);
+        Assert.Equal("auto", settings.BackgroundMode);
         Assert.Equal(60, settings.AnimationRate);
         Assert.Equal(0, settings.LyricOffset);
         Assert.True(settings.PauseWhenCovered && settings.PauseOnBatterySaver && settings.PauseWhenFullScreen);
@@ -63,6 +63,9 @@ public sealed class AppSettingsTests
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode",
             "noLyrics",
+            "albumGradientWallpaper", "shaderStyle", "patternStyle", "wallpaperPath", "wallpaperName", "wallpaperPlacement",
+            "effectSpeed", "vividness", "scrimStrength", "patternOpacity", "motionBlur", "textBackingAutomatic", "textBacking",
+            "useMotionArtwork", "motionPlacement",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
