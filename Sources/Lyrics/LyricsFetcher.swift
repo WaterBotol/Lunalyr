@@ -283,7 +283,8 @@ final class LyricsFetcher {
                 let screened = Self.screen(Array(found.values), query: query, options: options)
                 let best = Self.choose(screened.accepted, query: query, options: options)
                 let settled = Self.isSettled(best, pending: pending, query: query, options: options)
-                switch publication.step(best: best, settled: settled, graceOver: graceOver, settleOver: settleOver) {
+                switch publication.step(best: best, settled: settled, graceOver: graceOver, settleOver: settleOver,
+                                        latest: screened.accepted) {
                 case .publish:
                     settleArmed = false; settleOver = false; settleToken += 1
                 case .holdForUpgrade where !settleArmed:
@@ -300,7 +301,7 @@ final class LyricsFetcher {
                 if automatic, publication.shown != nil, let best {
                     let onlineBest = Self.choose(screened.accepted.filter { !$0.source.isLocal }, query: query, options: options)
                     let idle = pending.filter {
-                        !Self.matters($0, best: best, onlineBest: onlineBest, query: query, options: options)
+                        !Self.matters($0, best: best, onlineBest: onlineBest, query: query, options: options, among: screened.accepted)
                     }
                     if !idle.isEmpty {
                         stop(idle, because: Self.notNeeded + (best.source == .appleMusicCache
@@ -318,7 +319,7 @@ final class LyricsFetcher {
         let screened = Self.screen(Array(found.values), query: query, options: options)
         // Every source has answered or been stopped, so whatever is best now is settled.
         _ = publication.step(best: Self.choose(screened.accepted, query: query, options: options), settled: true,
-                             graceOver: true, settleOver: true)
+                             graceOver: true, settleOver: true, latest: screened.accepted)
         offline = offline || !isOnline()
         return Collected(report: report(screened, complete: true), answered: answered, stopped: stopped, asked: Set(running.keys),
                          shown: publication.shown)
@@ -330,13 +331,35 @@ final class LyricsFetcher {
     /// the online choice that replays use. `best` is what shows once any
     /// upgrade waiting for a better match has been made.
     static func matters(_ source: LyricSourceID, best: LyricCandidate, onlineBest: LyricCandidate?,
-                        query: LyricQuery, options: LyricSourceOptions.Snapshot) -> Bool {
+                        query: LyricQuery, options: LyricSourceOptions.Snapshot, among found: [LyricCandidate] = []) -> Bool {
         // Nothing outranks Music's own word-by-word or mixed timing, and a
         // replay reads Music's cache again, so no service is needed at all.
         if best.source == .appleMusicCache, rankedTiming(best.result) == 2 { return false }
         if couldBeat(best, from: source, query: query, options: options) { return true }
+        if couldDemote(best, from: source, among: found, query: query) { return true }
         guard !source.isLocal else { return false }
         return onlineBest.map { couldBeat($0, from: source, query: query, options: options) } ?? true
+    }
+    /// Whether `source`'s answer could still be the second of two that agree
+    /// against LRCLIB's word timing on screen (`LyricAgreement.timingOutlier`),
+    /// taking away its lead so a match in hand or from `source` replaces it.
+    /// Not while LRCLIB's timing agrees with any timed match in hand for the
+    /// same words, which keeps its lead whatever arrives; and only when a
+    /// sound, word-timed match for the playing version from another source
+    /// is in hand, or `source` could give one.
+    static func couldDemote(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
+                            query: LyricQuery) -> Bool {
+        guard best.source == .lrclib, source != .lrclib, source.timingCeiling >= 1, rankedTiming(best.result) == 2,
+              !best.agreement.timingOutlier, fitsVersion(best, query) else { return false }
+        let others = found.filter { $0.source != .lrclib && fitsVersion($0, query) }
+        let text = agreementText(best), timing = agreementTiming(best)
+        let backed = others.contains { other in
+            let theirs = agreementTiming(other)
+            return !theirs.isEmpty && sameWords(text, agreementText(other)) && timingAgrees(timing, theirs)
+        }
+        guard !backed else { return false }
+        let rival = others.contains { rankedTiming($0.result) == 2 && !hasTimingFault($0.result) }
+        return rival || source.timingCeiling >= 2
     }
     private static func nanoseconds(_ seconds: Double) -> UInt64 { UInt64(max(0, seconds) * 1_000_000_000) }
 
@@ -361,9 +384,16 @@ final class LyricsFetcher {
             self.locked = locked
             revision = locked ? 1 : 0
         }
-        /// `settled`: no pending source could change the choice.
-        mutating func step(best: LyricCandidate?, settled: Bool, graceOver: Bool, settleOver: Bool) -> Step {
+        /// `settled`: no pending source could change the choice. `latest`:
+        /// every match in hand, weighed against one another now, so the one
+        /// on screen is compared with what later answers say about it (two
+        /// agreeing against LRCLIB's timing take away its lead).
+        mutating func step(best: LyricCandidate?, settled: Bool, graceOver: Bool, settleOver: Bool,
+                           latest: [LyricCandidate] = []) -> Step {
             guard !locked, let best else { return .wait }
+            if let current = shown, let fresh = latest.first(where: {
+                $0.source == current.source && LyricsFetcher.sameResult($0.result, current.result)
+            }) { shown = fresh }
             guard let current = shown else {
                 guard settled || graceOver else { return .wait }
                 show(best)
@@ -480,11 +510,12 @@ final class LyricsFetcher {
         }
     }
     /// `lead` for a match. Lyrics+ leads only when it relays Apple Music's
-    /// lyrics. LRCLIB's word timing loses its lead when two other
-    /// services agree on the timing and LRCLIB's disagrees with both
+    /// lyrics. LRCLIB's word timing loses its lead, and ranks after the
+    /// other sources at its timing, when two other services agree on the
+    /// timing and LRCLIB's disagrees with both
     /// (`LyricAgreement.timingOutlier`): its timing is made by listeners.
     private static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
-        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 3 }
+        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 4 }
         if candidate.source == .lyricsPlus, !isAppleRelay(candidate) { return 3 }
         return lead(candidate.source, timing: timing)
     }

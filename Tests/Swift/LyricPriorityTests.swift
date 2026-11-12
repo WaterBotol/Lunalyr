@@ -205,7 +205,9 @@ final class LyricPriorityTests: XCTestCase {
             }
             // Only Music's own lyrics can rank above LRCLIB's.
             XCTAssertFalse(LyricsFetcher.isSettled(candidate(.lrclib, .word), pending: [.appleMusicCache], query: query, options: options))
-            XCTAssertTrue(LyricsFetcher.isSettled(candidate(.lrclib, .mixed), pending: services.subtracting([.lrclib]), query: query, options: options))
+            XCTAssertTrue(LyricsFetcher.isSettled(candidate(.lrclib, .mixed), pending: services.subtracting([.lrclib, .lyricsPlus]), query: query, options: options))
+            // Lyrics+ may relay Apple Music's lyrics, which rank as Apple Music's.
+            XCTAssertTrue(LyricsFetcher.couldBeat(candidate(.lrclib, .mixed), from: .lyricsPlus, query: query, options: options))
             // Music's line timing waits for every source that can have word timing.
             let ownLines = candidate(.appleMusicCache, .line)
             for source in [LyricSourceID.lrclib, .lyricsPlus, .netEase, .qqMusic, .kugou] {
@@ -229,7 +231,9 @@ final class LyricPriorityTests: XCTestCase {
                 XCTAssertTrue(LyricsFetcher.matters(source, best: ownLines, onlineBest: nil, query: query, options: options), "\(source)")
             }
             let words = candidate(.lrclib, .word)
-            XCTAssertFalse(LyricsFetcher.matters(.netEase, best: words, onlineBest: words, query: query, options: options))
+            // A service that could still be the second of two agreeing against LRCLIB's timing keeps answering.
+            XCTAssertTrue(LyricsFetcher.matters(.netEase, best: words, onlineBest: words, query: query, options: options))
+            XCTAssertFalse(LyricsFetcher.matters(.kuwo, best: words, onlineBest: words, query: query, options: options))
             XCTAssertTrue(LyricsFetcher.matters(.appleMusicCache, best: words, onlineBest: words, query: query, options: options))
             // Another source's word timing never makes LRCLIB unnecessary.
             let other = candidate(.netEase, .word)
@@ -374,7 +378,10 @@ final class LyricPriorityTests: XCTestCase {
     }
 
     func testLRCLIBsWordTimingStopsTheOtherServicesOnceMusicHasNone() async {
-        let others: [LyricSourceID] = [.lyricsPlus, .netEase, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+        // Services with word timing keep answering: two of them agreeing against LRCLIB's timing
+        // would take its lead (`LyricsFetcher.couldDemote`), and Lyrics+ may relay Apple Music's.
+        // Those that cannot (line timing only, plain text) are stopped.
+        let others: [LyricSourceID] = [.kuwo, .lyricsOVH]
         for options in modes(userOrder) {
             // Music has line timing, or nothing even on its second look.
             for own in [candidate(.appleMusicCache, .line), nil] {
@@ -395,7 +402,7 @@ final class LyricPriorityTests: XCTestCase {
     }
 
     func testMusicsSecondLookStillRunsAfterLRCLIBStopsTheOthers() async {
-        let others: [LyricSourceID] = [.lyricsPlus, .netEase, .qqMusic, .kugou, .kuwo, .lyricsOVH]
+        let others: [LyricSourceID] = [.kuwo, .lyricsOVH]
         for options in modes(userOrder) {
             let log = Log(), never = Gate()
             let stub = stub([.lrclib: candidate(.lrclib, .word)], gates: Dictionary(uniqueKeysWithValues: others.map { ($0, never) }),
@@ -403,7 +410,7 @@ final class LyricPriorityTests: XCTestCase {
             let report = await stub.fetcher.lookup(query, options: options) { await log.update($0) }
             let first = await log.shown(1)
             XCTAssertEqual(source(of: first?.result), lrclib, "\(options.mode)")
-            XCTAssertEqual(first?.states[.netEase], couldNotBeat, "\(options.mode)")
+            XCTAssertEqual(first?.states[.kuwo], couldNotBeat, "\(options.mode)")
             XCTAssertEqual(report.revision, 2, "\(options.mode)")
             XCTAssertEqual(source(of: report.result), music, "\(options.mode)")
             XCTAssertEqual(report.states[.appleMusicCache], "Match found · showing", "\(options.mode)")
