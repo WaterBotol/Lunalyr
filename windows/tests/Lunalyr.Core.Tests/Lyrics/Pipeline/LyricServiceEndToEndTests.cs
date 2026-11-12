@@ -79,6 +79,8 @@ public sealed class LyricServiceEndToEndTests : IDisposable
             Http = new LyricHttpOptions { MinimumHostInterval = TimeSpan.Zero, IsNetworkAvailable = () => online },
             Timing = timing ?? Quick,
             ArtistSearch = aliases ?? new NoAliases(),
+            // Not this PC's region, so the tests ask the same whatever Windows is set to.
+            Storefront = "us",
         });
 
     private sealed class NoAliases : IArtistAliasSearch
