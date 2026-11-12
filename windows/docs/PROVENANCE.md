@@ -97,5 +97,15 @@ whose lines are Lunalyr's own, is ported.
 | `AudioCaptureEnvironment.swift`, `SystemAudioCapture.swift`, `ScreenAudioCapture.swift`, `AudioOutputActivity.swift` | 2, 91, 41, 0 | `Platform/Audio/WasapiLoopback.cs`, `OutputActivityMeter.cs` | Not ported (Core Audio taps, ScreenCaptureKit and process lists have no Windows counterpart); Windows' own WASAPI loopback and the endpoint peak meter, written from Microsoft's documentation |
 | `WebVisualizer*.swift` | 0 | — | Out of scope (the web scenes; stored Wavefield Original, Wavecore and Light 3D read as their native stand-ins) |
 
+Consulted for facts or behaviour only (nothing translated):
+
+| Mac file | `a99fd65` lines | What was taken |
+|---|---|---|
+| `Settings.swift` (do-not-translate list) | 372 | Facts: the keys `custom.visualizerStyle`, `custom.audioReactiveEnabled`, `custom.audioSensitivity`, their defaults (Silk Ribbons, off, 1.0) and the sensitivity range; the effective-background rule under power (line patterns or colour only replace a visualiser), as behaviour |
+| `VisualClock.swift` (do-not-translate list) | 93 | Behaviour: the scenes' flow clock integrates wall time × rate. `VisualClock.advance` is a Verso line, so `VisualiserHost.Flow` is written in its own structure; the rate 0.70 (`visualizerRate`) is a Lunalyr line |
+| `NowPlayingView.swift` (do-not-translate list) | 159 | Behaviour: a visualiser is drawn with the scrim and text backing over it, its clock is the flow phase × Motion speed, and scene changes crossfade. The `scrim` line in the visualiser case is Verso; Windows draws the shared `WallpaperShadeDrawer` |
+| `LunalyrWorkspace.swift` | 2 | The sentence "Available once Visualisers return; power saving is showing … for now." (a Lunalyr line, `aa22c91`) |
+| `LyricLegibility.swift` | — | `visualizerLuminance`, already ported in `Lunalyr.Core.Colour.LyricLegibility`; reused |
+
 Third-party code reached through these files is MIT (Synesthia, Fosfora, Wavefield); its notices are in
 `THIRD-PARTY-NOTICES.md`.

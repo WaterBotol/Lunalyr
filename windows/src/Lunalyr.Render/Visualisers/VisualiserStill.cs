@@ -72,6 +72,31 @@ public sealed unsafe class VisualiserStill : IDisposable
         return Read();
     }
 
+    /// <summary>
+    /// Star Trails drawn from a given simulation state (<see cref="StarTrailsLayout.Float4Count"/> float4s), as the
+    /// Mac's Star Trails render tests bind it: silence, scene time 1.
+    /// </summary>
+    public byte[] RenderStarTrails(ReadOnlySpan<Vector4> state, int width, int height)
+    {
+        Ensure(width, height);
+        var silence = new AudioSnapshot();
+        var u = VisualizerUniforms.Build(VisualizerStyle.StarTrails, width, height, 1, silence, 1, 1, false);
+        Array.Clear(_colours);
+        Array.Clear(_audio);
+        _scene.AsSpan().Clear();
+        state.CopyTo(_scene);
+        _gpu.Write(_gpu.Uniforms, u);
+        _gpu.Write<float>(_gpu.Audio, _audio);
+        _gpu.Write<Vector4>(_gpu.Album, _colours);
+        _gpu.Write<Vector4>(_gpu.Scene, _scene);
+        _gpu.BindStage();
+        _gpu.SetTarget(_view!, width, height);
+        _gpu.SetResources(_gpu.UnityView);
+        _gpu.Draw(_gpu.Shader(VisualizerStyle.StarTrails.Shader()));
+        _gpu.Unbind();
+        return Read();
+    }
+
     /// <summary>Changes a frame's uniforms before it is drawn.</summary>
     public delegate void VizUniformsAdjust(ref VizUniforms uniforms);
 

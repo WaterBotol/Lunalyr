@@ -41,14 +41,11 @@ public sealed class VisualiserLayer : IRenderLayer
     /// <summary>A scene change's crossfade (the Mac's surface fade).</summary>
     public const double SceneFade = 0.8;
 
-    private static int _surfaces;
-
     private readonly VisualiserHost _host;
     private readonly BackgroundOptions _options;
     private readonly Logger _log;
     private readonly WallpaperShadeDrawer _shade;
     private readonly ColourLayer _powerFallback;
-    private readonly string _display;
     private VisualiserGpu? _gpu;
     private nint _device, _context;
     private VisualiserScene? _scene, _outgoing;
@@ -69,7 +66,6 @@ public sealed class VisualiserLayer : IRenderLayer
         _log = log;
         _shade = new WallpaperShadeDrawer(options);
         _powerFallback = new ColourLayer(options, log);
-        _display = "surface " + Interlocked.Increment(ref _surfaces);
     }
 
     /// <summary>Visualisers always move (an idle scene drifts too).</summary>
@@ -77,6 +73,9 @@ public sealed class VisualiserLayer : IRenderLayer
 
     /// <summary>The scene drawn last (tests and diagnostics).</summary>
     internal VisualiserScene? Current => _scene;
+
+    /// <summary>The current scene's limiter state, waiting for the GPU (tests).</summary>
+    internal (float Gain, float Shown)? ReadExposure() => _scene is { } scene && _gpu is { } gpu ? scene.ReadExposure(gpu) : null;
 
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
@@ -140,7 +139,9 @@ public sealed class VisualiserLayer : IRenderLayer
             {
                 _scene?.Dispose();
             }
-            _scene = new VisualiserScene(_host, settings.Style, _display);
+            // The exposure memory is keyed by scene alone: every layer of one host (the desktop's monitors and a layer rebuilt
+            // for a scene on screen) shows it at about the same brightness, so a new one carries on from it.
+            _scene = new VisualiserScene(_host, settings.Style, null);
         }
 
         var economical = _options.PixelBudget is { } budget && double.IsFinite(budget)

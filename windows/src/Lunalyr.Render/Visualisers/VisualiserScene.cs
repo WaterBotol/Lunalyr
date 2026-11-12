@@ -42,7 +42,7 @@ internal sealed unsafe class VisualiserScene : IDisposable
     private readonly WavefieldModeUniforms[] _modes = new WavefieldModeUniforms[WavefieldFrame.MaximumModes];
     private readonly Vector4[] _sceneData = new Vector4[VisualiserGpu.SceneFloat4s];
     private readonly float[] _audio = new float[VisualiserGpu.AudioFloats];
-    private readonly string _display;
+    private readonly string? _display;
 
     private VisualiserGpu? _gpu;
     private ID3D11Texture2D? _target;
@@ -55,6 +55,7 @@ internal sealed unsafe class VisualiserScene : IDisposable
     private readonly ID3D11RenderTargetView?[] _exposureTargets = new ID3D11RenderTargetView?[2];
     private readonly ID3D11ShaderResourceView?[] _exposureViews = new ID3D11ShaderResourceView?[2];
     private readonly ID3D11Texture2D?[] _readback = new ID3D11Texture2D?[3];
+    private readonly ID3D11Query?[] _copied = new ID3D11Query?[3];
     private readonly ID3D11Query?[] _disjoint = new ID3D11Query?[TimerFrames];
     private readonly ID3D11Query?[] _begin = new ID3D11Query?[TimerFrames];
     private readonly ID3D11Query?[] _end = new ID3D11Query?[TimerFrames];
@@ -65,7 +66,7 @@ internal sealed unsafe class VisualiserScene : IDisposable
     private double? _lastLimited;
     private float _frameCount;
 
-    public VisualiserScene(VisualiserHost host, VisualizerStyle style, string display)
+    public VisualiserScene(VisualiserHost host, VisualizerStyle style, string? display)
     {
         _host = host;
         Style = style;
@@ -219,12 +220,17 @@ internal sealed unsafe class VisualiserScene : IDisposable
     {
         var slot = _readbackNext;
         gpu.Context.CopyResource(_readback[slot]!, _exposure[_exposureCurrent]!);
+        _copied[slot] ??= gpu.Device.CreateQuery(new QueryDescription(QueryType.Event));
+        gpu.Context.End(_copied[slot]!);
         _readbackNext = (slot + 1) % _readback.Length;
         _readbackPending = Math.Min(_readback.Length, _readbackPending + 1);
         if (_readbackPending < _readback.Length) return;
+        // The oldest copy, once the GPU says it is done: reading it then never waits.
         var oldest = _readbackNext;
+        int done;
+        if (gpu.Context.GetData(_copied[oldest]!, (nint)(&done), 4, 0).Code != 0) return;
         var mapped = new MappedSubresource();
-        if (gpu.Context.Map(_readback[oldest]!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.DoNotWait, out mapped).Failure) return;
+        if (gpu.Context.Map(_readback[oldest]!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None, out mapped).Failure) return;
         LastShown = ((float*)mapped.DataPointer)[1];
         gpu.Context.Unmap(_readback[oldest]!, 0);
         _host.Exposure.Record(LastShown, Key, clock);
@@ -343,7 +349,11 @@ internal sealed unsafe class VisualiserScene : IDisposable
             _exposureTargets[i]?.Dispose(); _exposureTargets[i] = null;
             _exposure[i]?.Dispose(); _exposure[i] = null;
         }
-        for (var i = 0; i < _readback.Length; i++) { _readback[i]?.Dispose(); _readback[i] = null; }
+        for (var i = 0; i < _readback.Length; i++)
+        {
+            _readback[i]?.Dispose(); _readback[i] = null;
+            _copied[i]?.Dispose(); _copied[i] = null;
+        }
         for (var i = 0; i < TimerFrames; i++)
         {
             _disjoint[i]?.Dispose(); _disjoint[i] = null;

@@ -140,10 +140,16 @@ public sealed class SystemAudioService : IDisposable
                 or RenderPause.ScreenSaver or RenderPause.SessionInactive));
         }
 
+        private double _outputLastActive = double.NegativeInfinity;
+
         public AudioPlayback Playback()
         {
             var (playing, name) = player();
-            return new AudioPlayback(playing, name, null, demo ? playing : _meter?.IsActive());
+            if (demo) return new AudioPlayback(playing, name, playing, playing);
+            var now = Now();
+            var active = _meter?.IsActive();
+            if (active != false) _outputLastActive = now;
+            return AudioPlayback.Observed(playing, name, active, now - _outputLastActive);
         }
 
         public ICaptureSession Open(CaptureFeed feed, ICaptureSessionEvents events)

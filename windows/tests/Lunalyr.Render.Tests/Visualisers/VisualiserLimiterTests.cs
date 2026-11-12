@@ -173,6 +173,64 @@ public sealed class VisualiserLimiterTests : IDisposable
         Assert.True(limited > 0, "Brightness still arrives");
     }
 
+    // Ported from VisualizerSafetyTests.swift: testANewSurfaceForAVisibleSceneKeepsItsBrightness, at the layer: a second
+    // layer from the same factory (a rebuild while the scene is on screen) starts at the brightness shown, not black.
+    [Fact]
+    public void ANewLayerForAVisibleSceneKeepsItsBrightness()
+    {
+        var sound = new SteppedSound { Time = 1_002 };
+        var host = new VisualiserHost(() => VisualiserSettings.Default with { Style = Scene, Sensitivity = 3 }, sound);
+        var factory = new VisualiserLayerFactory(host, new Lunalyr.Render.Backgrounds.BackgroundOptions { Grain = false });
+        var calm = new SceneSnapshot { ReduceMotion = true };
+        using var surface = new OffscreenSurface(Width, Height);
+        float settled;
+        using (var first = factory.Create())
+        {
+            surface.Prepare(first);
+            for (var frame = 0; frame < 600; frame++)
+            {
+                sound.Time += 1 / 60.0;
+                surface.Draw(first, calm, frame / 60.0);
+            }
+            settled = ((VisualiserLayer)first).Current!.LastShown;
+            Assert.True(settled > 0.01, $"read back {settled}, state {((VisualiserLayer)first).ReadExposure()}");
+        }
+        Assert.True(settled > 0.01, $"The scene is on screen at {settled:0.000}");
+        using var second = factory.Create();
+        surface.Prepare(second);
+        sound.Time += 1 / 60.0;
+        surface.Draw(second, calm, 10);
+        // The new layer's limiter starts at the level shown (read back a few frames late, so this is its seed).
+        var seeded = ((VisualiserLayer)second).Current!.LastShown;
+        Assert.True(Math.Abs(seeded - settled) <= 0.01, $"The new layer carries on at the brightness shown ({seeded:0.000} vs {settled:0.000})");
+        // Another host (the settings preview's) has no memory of it: its scene fades in from black.
+        using var other = new VisualiserLayerFactory(new VisualiserHost(() => VisualiserSettings.Default with { Style = Scene }, sound),
+            new Lunalyr.Render.Backgrounds.BackgroundOptions { Grain = false }).Create();
+        surface.Prepare(other);
+        surface.Draw(other, calm, 10);
+        Assert.Equal(0, ((VisualiserLayer)other).Current!.LastShown);
+    }
+    // Windows' own: while power saving replaces the visualiser, the layer draws the album colours (Colour only).
+    [Fact]
+    public void PowerSavingDrawsTheAlbumColoursInstead()
+    {
+        var options = new Lunalyr.Render.Backgrounds.BackgroundOptions { Grain = false };
+        var replaced = true;
+        var host = new VisualiserHost(() => VisualiserSettings.Default with { Style = Scene }) { ReplacedForPower = () => replaced };
+        using var layer = new VisualiserLayerFactory(host, options).Create();
+        using var colour = new Lunalyr.Render.Backgrounds.ColourLayerFactory(options).Create();
+        _surface.Prepare(layer);
+        _surface.Prepare(colour);
+        var scene = new SceneSnapshot();
+        _surface.Draw(colour, scene, 1);
+        var expected = _surface.ReadPixels();
+        _surface.Draw(layer, scene, 1);
+        Assert.Equal(expected, _surface.ReadPixels());
+        replaced = false;
+        _surface.Draw(layer, scene, 1.1);
+        Assert.NotEqual(expected, _surface.ReadPixels());
+    }
+
     // Windows' own: Direct3D's scene pass and Direct2D's batch share one device context. A layer drawn before the
     // visualiser is covered by it, and one drawn after it lands on top, in the same frame and the next.
     [Fact]

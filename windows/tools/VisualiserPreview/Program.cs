@@ -90,7 +90,9 @@ if (args.Contains("--loopback-check"))
 
 var signals = new (string Name, AudioSnapshot Sound, double Time)[]
 {
-    ("silence", Synth.Silence(), 12),
+    // Silence as the wallpaper draws it: once the music has rested, scenes show a quiet ambient spectrum (Wavefield
+    // shows its own idle field from an empty one).
+    ("silence", AmbientSpectrum.At(12), 12),
     ("beat", Synth.Beat(), 14),
     ("sweep", Synth.Sweep(), 16),
     ("noise", Synth.Noise(), 18),

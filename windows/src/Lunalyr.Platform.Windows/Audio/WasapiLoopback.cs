@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 using Lunalyr.Core.Logging;
+using Lunalyr.Core.Visualisers;
 using Lunalyr.Core.Visualisers.Capture;
 
 namespace Lunalyr.Platform.Audio;
@@ -148,9 +149,11 @@ internal sealed unsafe partial class WasapiLoopbackSession : ICaptureSession
                 WasapiNative.Check(capture.GetBuffer(out var data, out var frames, out var flags, out _, out var qpc), "reading a packet");
                 try
                 {
-                    var now = Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
-                    // The packet's capture time is in 100 ns units of the performance counter; its last frame follows.
+                    var now = AudioAnalyzer.Now();
+                    // The packet's capture time is the performance counter in 100 ns units (the analyser's clock, the
+                    // same counter in seconds); its last frame follows. A time far from now is not trusted.
                     var last = qpc > 0 ? qpc / 1e7 + (frames - 1) / rate : now;
+                    if (Math.Abs(last - now) > 1) last = now;
                     var bytes = format is { } f ? (int)frames * f.BlockAlign : 0;
                     var span = data == 0 || bytes == 0 ? ReadOnlySpan<byte>.Empty : new ReadOnlySpan<byte>((void*)data, bytes);
                     _feed.Write(span, (int)frames, format, last, now,

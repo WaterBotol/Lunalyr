@@ -72,6 +72,24 @@ public readonly record struct AudioPlayback(bool PlayerPlaying = false, string? 
 
     /// <summary>While the player plays somewhere else.</summary>
     public string ElsewhereMessage => $"Nothing from {PlayerTitle} is playing on this PC. The visualiser responds once it plays here.";
+
+    /// <summary>How long the output meter must read silence before a playing player counts as playing elsewhere.</summary>
+    public const double ElsewhereAfter = 2.0;
+
+    /// <summary>
+    /// Playback as Windows can observe it: the followed player's state, and the default output's peak meter
+    /// (<paramref name="outputActive"/>; null when it can't be read), silent for <paramref name="outputIdleFor"/>
+    /// seconds. Windows can't say which app a sound comes from, so a player that reports playing while the output has
+    /// been silent for <see cref="ElsewhereAfter"/> seconds plays somewhere else (Spotify Connect, another output
+    /// device, an exclusive-mode app): never a fault. A silent bar shorter than that changes nothing.
+    /// </summary>
+    public static AudioPlayback Observed(bool playerPlaying, string? playerName, bool? outputActive, double outputIdleFor) =>
+        outputActive switch
+        {
+            null => new AudioPlayback(playerPlaying, playerName),
+            true => new AudioPlayback(playerPlaying, playerName, playerPlaying ? true : null, true),
+            false => new AudioPlayback(playerPlaying, playerName, outputIdleFor >= ElsewhereAfter ? false : null, false),
+        };
 }
 
 /// <summary>What delivered samples say about a running capture.</summary>

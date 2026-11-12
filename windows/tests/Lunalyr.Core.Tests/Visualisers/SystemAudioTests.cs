@@ -388,6 +388,43 @@ public class SystemAudioTests
         controller.Dispose();
     }
 
+    // Windows' own: Windows can't say which app a sound comes from, so a playing player whose output has been silent for
+    // a moment plays somewhere else; a short silent bar changes nothing.
+    [Fact]
+    public void PlaybackAsWindowsObservesIt()
+    {
+        var elsewhere = AudioPlayback.Observed(true, "Spotify", false, 5);
+        Assert.True(elsewhere.PlayingElsewhere);
+        Assert.False(elsewhere.OutputActive);
+        var rest = AudioPlayback.Observed(true, "Spotify", false, 1);
+        Assert.True(rest.PlayingHere);
+        Assert.True(rest.OutputActive);
+        var here = AudioPlayback.Observed(true, "Spotify", true, 0);
+        Assert.True(here.PlayingHere);
+        Assert.True(AudioPlayback.Observed(false, null, true, 0).OutputActive);
+        Assert.False(AudioPlayback.Observed(false, null, false, 9).OutputActive);
+        Assert.True(AudioPlayback.Observed(true, "Music", null, 0).OutputActive); // an unreadable meter counts as playing
+    }
+
+    // Windows' own: a player playing somewhere else (Spotify Connect, another output device) gets no packets through
+    // loopback; that is never "needs attention", and capture stands by after the hang time.
+    [Fact]
+    public void APlayerPlayingElsewhereNeverNeedsAttention()
+    {
+        var (env, controller) = Make();
+        env.Playing = AudioPlayback.Observed(true, "Spotify", false, 30);
+        controller.Reconcile();
+        // Nothing has played here since capture was armed: it stands by at once, saying why.
+        Assert.Equal(AudioCaptureState.Standby, controller.State);
+        Assert.Contains("nothing from Spotify is playing on this PC", controller.Status);
+        Assert.Equal(0, env.Opened);
+        // Switched on by the user, it connects for the start's grace and still never needs attention.
+        controller.UserStarted();
+        env.Advance(5);
+        Assert.False(controller.State.NeedsAttention, controller.Status);
+        Assert.Contains("Nothing from Spotify is playing on this PC", controller.Status);
+    }
+
     // Windows' own: switching off stops capture and says so.
     [Fact]
     public void SwitchingOffStopsCapture()
