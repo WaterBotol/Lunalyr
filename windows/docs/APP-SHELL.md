@@ -28,7 +28,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--settings-page <page>` | Open settings at a page: `general`, `lyric-style`, `readings`, `timing`, `wallpaper`, `covers`, `players`, `performance` or `about` (any part of the page's name). Implies `--settings`; a second launch forwards it, so checks (and other surfaces) can open a page. |
 | `--theme <light\|dark\|system>` | How Lunalyr's own windows look for this run only (for screenshots). Nothing is saved and Windows' setting is never touched; a second launch can change it in the running instance. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
-| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). |
+| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
 ## Demo mode (`--demo`)
@@ -199,9 +199,9 @@ poll costs nothing while the pointer rests, since a resting pointer can't start 
 | Alt+← / Alt+→ | ⌥← / ⌥→ | previous / next lyric line (10 s without synced lyrics) |
 | Ctrl+← / Ctrl+→ | ⌘← / ⌘→ | previous / next song |
 | 0–9 (and the keypad's) | 0–9 | 0 %–90 % of the song |
-| Ctrl+F, / | ⌘F, / | search (a later round; mapped, does nothing yet) |
-| ↑ ↓ Enter | ↑ ↓ Return | pick a search result (later round) |
-| Esc | Esc | cancel a drag, else give the keyboard back to the window that had it |
+| Ctrl+F, / | ⌘F, / | open the search with the keyboard in its box (Ctrl+F in the box selects what is typed) |
+| ↑ ↓ Enter | ↑ ↓ Return | move through the results and play the one selected |
+| Esc | Esc | cancel a drag, else clear and close the search (or close the queue), else give the keyboard back to the window that had it |
 | Ctrl while dragging | ⌘ while dragging | no snapping |
 | Alt while dragging | ⌥ while dragging | fine scrub (0.1×) |
 | Tab / Shift+Tab, Enter | — | Windows only: walk the card's controls (with a focus ring) and press one |
@@ -222,11 +222,75 @@ The Windows key (the Mac's Control) is left to the system. Alt never opens a win
 They are re-read on `WM_SETTINGCHANGE`, `WM_THEMECHANGED` and `WM_DWMCOLORIZATIONCOLORCHANGED`. `--player-debug`
 forces one for checks.
 
+### Search and queue in the player
+
+The Mac's search and queue columns (`DesktopPlayerView`, `SleeveParts`, `PlayerControls`) over its
+`DesktopPlayerModel`, ported to `Core/Player/DesktopPlayerModel.cs` (tested) and drawn by the card
+(`App/Player/DesktopPlayer.Search.cs`, `CardPainter.Panes.cs`). Previews: `docs/previews/player-search/`.
+
+- **Opening them:** the search and queue buttons at the transport row's right end (the film button keeps its place
+  for milestone 6), the player's name over the song (it opens the search, where the picker is), Ctrl+F or /. While
+  either is open the card grows (`PlayerCard.CardHeight`, centred as before) and the cover keeps the song and a small
+  transport under it. The queue closes with the card; a typed search stays, and keeps the card up on the display it
+  was typed on (`HoverPolicy.ShowsPlayer`) while the pointer is away.
+- **Search:** the picker (a capsule of the players Windows has sessions for; it only steers the search, the transport
+  and the queue follow what is playing) beside the box and the close button; then "Searching…", up to 8 songs and 4
+  albums with covers, or a calm line (nothing found, offline, signed out… in `PlayerSearchText.Words`). Typing settles
+  for 0.3 s, and fewer than two characters asks nobody. ↑ ↓ move the selection (kept in view), Enter or a click plays
+  it, and the column goes back to the song with the play's note ("Then the rest of its album.", "Playback commands
+  are off for this run."). Covers come only from Spotify's image hosts over HTTPS (`*.scdn.co`, `*.spotifycdn.com`),
+  for results the user searched for, never under `--demo` or `--no-network`.
+- **When search can't be used** the pane says what to do instead of showing a box (`PlayerSearchPrompt`): "Set up
+  Spotify in Settings" and "Sign in in Settings" open Settings › Music players; with no Spotify session, "… has no
+  search Lunalyr can use. Search needs the Spotify app: play something in Spotify, then search here."; with Spotify
+  off for the run, why.
+- **Queue:** the song playing (lit, with a playing or paused mark) and "Up next", read from the playing player when the
+  card comes up, when the queue opens, 0.5 s after the song changes while the card is up, and at 0.9, 2.5 and 5 s after a
+  click on a row. A player between two songs that answers with nothing keeps the strip. A click on the song playing
+  plays or pauses it (the transport's command); on another, it plays with what was listed after it. A player that shares
+  no queue shows the song alone with "… doesn't share what plays next."; a failure shows its words there. "Playlist
+  order, shuffle is on" when it is.
+- **Plays** go only through the player's `IPlayerSearch` (Spotify's asks the `PlaybackGuard` first), and only for a
+  click, Enter or Narrator's Invoke. Under `--demo` they are refused, and the card says so.
+- **History and the optimistic Next** are the Mac's rules kept as they are (`BelongsInHistory`, `OptimisticNext`:
+  Apple Music only). Apple Music for Windows shares no queue, so they never fire on Windows today.
+- **Narrator:** the card's UI Automation tree follows the pane, in Tab order: the picker's players ("Search Spotify",
+  status Selected), Close search, the search box (an Edit whose Value sets the real box), Clear search, each result as a
+  list item ("Evening Tide by The Lunalyr Demo Band, song", status and help "Selected. Enter plays it"), Close queue, and each queue
+  row ("…, Now playing" / "Up next"). Rows coming and going raise a structure change. Tab walks the same order with the
+  focus ring and scrolls a row into view.
+
+#### Text entry: a real EDIT in an owned pop-up
+
+The card draws itself, so its search box needs a text engine. It is a **Win32 EDIT control** (`SearchField`), in a
+layered `WS_POPUP` owned by the card and placed exactly over the field the card draws (its background is the field's
+flat colour, so the two read as one). Windows does the text: typing, **IME** composition (the EDIT's own, through the
+system's text services), the caret and selection, the **clipboard** with its context menu, and **Narrator** (UI
+Automation's own Edit proxy; the box is named "Search Spotify" with a dynamic annotation, `IAccPropServices`, read back
+through MSAA as name "Search Spotify", role editable text, value what is typed). The subclass adds what a single-line
+EDIT lacks: **Ctrl+Backspace** deletes the word before the caret (`SearchText.WordStartBefore`, tested; it never splits
+an emoji or a combining sequence), Ctrl+A selects all, the placeholder is painted while it is empty (also for
+PrintWindow), and Esc, ↑ ↓, Enter, Tab and Ctrl+F go to the card through `PlayerKeyMap` with `editingText: true`.
+
+Why not the others:
+- **A child window of the card** would be simplest, but the card has no redirection bitmap (it is a DirectComposition
+  window), and a child of such a window never reached the screen here: plain or layered, and even with its
+  rasterization added as a composition visual (`CreateSurfaceFromHwnd`). An owned pop-up is always above its owner, so it
+  is placed just above the card and moved with it (and, being layered, fades with it). The card treats it as itself: a
+  click in it keeps the card "having the keyboard", the hover poll counts it as the card, and Esc gives the keyboard back
+  to the window that had it before.
+- **TSF in the card** would mean writing a text store, composition display, caret, selection, clipboard, undo and a
+  TextPattern by hand: a text editor's worth of code for one box.
+- **A XAML Island or WinUI pop-up** needs WinUI, which isn't running while Lunalyr idles, starts only once per process
+  and keeps ~95 MB (see "How it is drawn" above).
+- **A windowless RichEdit** (`ITextServices`) draws into Direct2D, but needs a full `ITextHost` (40-odd methods) through
+  source-generated COM and its own UI Automation wiring.
+
+Not seen: a real IME composition (switching the keyboard layout is a Windows setting) and Narrator's speech (it makes
+sound). Both rest on the stock EDIT; its MSAA name and value were read with a silent client.
+
 ### Left for the next rounds
 
-- **Search, the player picker and the queue** (`PlayerSearch`): `PlayerPane` and `PlayerCard.CardHeight` already size
-  the card for them. The transport row's right end (`CardLayout.ReservedRect`) is kept clear for their buttons. Their
-  keys are already mapped.
 - **The music video row** (`VideoAlignRow`): milestone 6.
 - Double-clicking the cover brings an `.exe` player's window forward (`PlayerWindows`). Packaged players (Apple Music,
   Media Player) and browsers aren't found that way yet.
@@ -286,8 +350,9 @@ Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
 ## Spotify search and queue
 
 The desktop player's search, play and queue go through **Spotify's Web API, signed in with the owner's own Spotify
-account and their own developer app**. Lunalyr ships no client ID and no secret (PKCE needs none). Milestone 5;
-service layer only (`src/Lunalyr.Core/Player/`), for the player card and the settings page to call.
+account and their own developer app**. Lunalyr ships no client ID and no secret (PKCE needs none). Milestone 5: the
+service layer (`src/Lunalyr.Core/Player/`), called by the player card ("Search and queue in the player") and by
+Settings › Music players › Spotify.
 
 ### Setting up the developer app (once)
 
@@ -295,11 +360,19 @@ service layer only (`src/Lunalyr.Core/Player/`), for the player card and the set
 2. **Redirect URI:** add exactly `http://127.0.0.1:47823/callback`. It must be the IPv4 loopback literal (Spotify
    refuses `localhost`), `http` (allowed for loopback only), port `47823`, path `/callback`, and no trailing slash.
 3. **Which API/SDKs:** tick **Web API**. Save.
-4. Copy the app's **Client ID** (32 hexadecimal characters) and paste it into Lunalyr's settings. It is stored as
-   `spotifyClientId` in `{data}\settings.json`; until the settings page has a field, edit that file while Lunalyr isn't
-   running. Don't copy the client secret: Lunalyr never uses one.
-5. Press **Sign in** (settings page). The system browser opens Spotify's sign-in page; once it is accepted, the page
-   says "Signed in to Spotify" and can be closed.
+4. Copy the app's **Client ID** (32 hexadecimal characters) and paste it into **Settings › Music players › Spotify ›
+   Client ID**. It is saved as `spotifyClientId` in `{data}\settings.json` as soon as it is a whole client ID (part of
+   one is never saved; emptying the box turns Spotify off). Don't copy the client secret: Lunalyr never uses one.
+5. Press **Sign in** there. The system browser opens Spotify's sign-in page; once it is accepted, the page says
+   "Signed in to Spotify" and can be closed, and the settings row says "Signed in to Spotify".
+
+The settings section (`App/Settings/SpotifySection.cs`, words in `Shell/Settings/SpotifyCopy.cs`, tested) shows these
+steps with the exact redirect address (selectable, with a Copy button) and a link to the dashboard, open by default
+until a client ID is set; the account's state ("Not set up", "Not signed in", "Signing in…" with Cancel, "Signed in to
+Spotify"); Sign in, which is the only thing that opens the browser, and only when pressed; Sign out, which forgets the
+sign-in and points to spotify.com/account/apps for revoking. It follows `SpotifyAccount.StateChanged`, and closing the
+window cancels a sign-in still waiting for the browser. Under `--demo` or `--no-network` (no `host.Spotify`) the section
+says "Spotify is off for this run" and why, with its controls disabled.
 
 Spotify's rules for apps in **Development Mode** (since February 2026): the app's owner needs **Spotify Premium**,
 and only accounts on the app's **User Management** list (up to 5) may sign in. The owner's own account is on it
@@ -405,6 +478,9 @@ theme. The window opens at Lyric style (or `--settings-page`).
   milestone 6" (visualisers, music video), "…milestone 7" (floating lyrics, tray lyric, shortcuts, Discord, lyric
   cards), "…milestone 8" (launch at login, updates), "Arrives in a later build" for the rest. Launch
   at login writes nothing anywhere.
+- **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
+  two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
+  (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.
 - **Live preview** (`SettingsPreview`, `Lunalyr.Shell.Rendering.SettingsPreviewRenderer`): at the top of Lyric style,
   the scene on the wallpaper (the controller's scene, clock, background and the composition Match the music chose)
   drawn by the wallpaper's own layers into a 640×360 offscreen surface on its own thread at 15 fps, laid out as a
