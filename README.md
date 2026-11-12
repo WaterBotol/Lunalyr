@@ -65,26 +65,26 @@ Each layout sets the words in its own way, from calm and spacious to bold and pl
 
 <table>
   <tr>
-    <td width="25%" align="center"><img src="docs/media/layout-scattered.jpg" alt="Scattered layout"><br><b>Scattered</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-constellation.jpg" alt="Constellation layout"><br><b>Constellation</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-constellationEditorial.jpg" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-editorial.jpg" alt="Editorial layout"><br><b>Editorial</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-scattered.gif" alt="Scattered layout"><br><b>Scattered</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-constellation.gif" alt="Constellation layout"><br><b>Constellation</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-constellationEditorial.gif" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-editorial.gif" alt="Editorial layout"><br><b>Editorial</b> · Calm</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-spoken.jpg" alt="Spoken layout"><br><b>Spoken</b> · Calm</td>
-    <td align="center"><img src="docs/media/layout-echo.jpg" alt="Echo layout"><br><b>Echo</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-cascade.jpg" alt="Cascade layout"><br><b>Cascade</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-hinge.jpg" alt="Hinge layout"><br><b>Hinge</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-spoken.gif" alt="Spoken layout"><br><b>Spoken</b> · Calm</td>
+    <td align="center"><img src="docs/media/layout-echo.gif" alt="Echo layout"><br><b>Echo</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-cascade.gif" alt="Cascade layout"><br><b>Cascade</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-hinge.gif" alt="Hinge layout"><br><b>Hinge</b> · Bold</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-broadside.jpg" alt="Broadside layout"><br><b>Broadside</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-torque.jpg" alt="Torque layout"><br><b>Torque</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-cutout.jpg" alt="Cutout layout"><br><b>Cutout</b> · Playful</td>
-    <td align="center"><img src="docs/media/layout-portal.jpg" alt="Portal layout"><br><b>Portal</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-broadside.gif" alt="Broadside layout"><br><b>Broadside</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-torque.gif" alt="Torque layout"><br><b>Torque</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-cutout.gif" alt="Cutout layout"><br><b>Cutout</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-portal.gif" alt="Portal layout"><br><b>Portal</b> · Playful</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-mosaic.jpg" alt="Mosaic layout"><br><b>Mosaic</b> · Playful</td>
-    <td align="center"><img src="docs/media/layout-fable.jpg" alt="Fable layout"><br><b>Fable</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-mosaic.gif" alt="Mosaic layout"><br><b>Mosaic</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-fable.gif" alt="Fable layout"><br><b>Fable</b> · Playful</td>
     <td></td>
     <td></td>
   </tr>
