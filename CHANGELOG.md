@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Fixed
+- Readings below Japanese lyrics: a word with a doubled consonant that the reading spells across two characters (一回 ikkai, 学校 gakkou) is written as one word, not "ik kai", under floating and desktop lyrics and in Hinge and the other stage layouts.
+
 ## [2.0.0] - 2026-11-13
 
 ### Added
