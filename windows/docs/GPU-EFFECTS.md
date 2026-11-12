@@ -3,9 +3,10 @@
 The Mac's GPU effects (`ShaderStyle`, drawn by `Shaders.metal`) and line patterns (`BackgroundStyle`, drawn by
 `FractalBackgroundView.swift`) are almost entirely Verso-derived code (blame against `a99fd65`, see
 [PROVENANCE.md](PROVENANCE.md)). None of it is translated. Each effect and pattern below was first written down as
-what it looks like and how it moves, with no formulas or constants, and the Windows shaders and painters were then
-written from these descriptions alone, with their own structure, hashing, noise and numbers, tuned by looking at
-Windows previews (`docs/previews/gpu-effects/`).
+what it looks like and how it moves, with no formulas or constants (some counts are given). The Windows shaders and
+painters were then written in a clean room from these descriptions, with their own structure, hashing, noise and
+numbers, tuned by looking at Windows previews (`docs/previews/gpu-effects/`). PROVENANCE.md lists the few general
+parameters the clean room was also given.
 
 What *is* ported faithfully, because Lunalyr wrote it: the pixel budget, the time base and epoch policy, the uniforms
 (first and third album stops as the two tints, the five stops in OKLab), the grade that tints each effect with the
