@@ -35,15 +35,13 @@ public sealed class LinePatternLayerFactory : IRenderLayerFactory
 {
     private readonly LinePattern _pattern;
     private readonly BackgroundOptions _options;
-    private readonly double _opacity;
     private readonly Logger _log;
 
-    public LinePatternLayerFactory(string patternId, BackgroundOptions? options = null, double opacity = LinePatternLayer.DefaultOpacity,
-                                   Logger? log = null)
+    /// <remarks>How strongly the lines show ("Pattern visibility") comes with each frame's scene (<c>Scene.Adjustments</c>).</remarks>
+    public LinePatternLayerFactory(string patternId, BackgroundOptions? options = null, Logger? log = null)
     {
         _pattern = LinePatternCatalog.Find(patternId) ?? throw new ArgumentException($"There is no line pattern \"{patternId}\".", nameof(patternId));
         _options = options ?? BackgroundOptions.Default;
-        _opacity = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : LinePatternLayer.DefaultOpacity;
         _log = log ?? Logger.Null;
     }
 
@@ -51,11 +49,10 @@ public sealed class LinePatternLayerFactory : IRenderLayerFactory
 
     public LinePattern Pattern => _pattern;
 
-    public IRenderLayer Create() => new GradientLayer(_options, _log, new LinePatternOverlay(_pattern, _options, _opacity, _log));
+    public IRenderLayer Create() => new GradientLayer(_options, _log, new LinePatternOverlay(_pattern, _options, _log));
 
-    public static IReadOnlyList<LinePatternLayerFactory> All(BackgroundOptions? options = null, double opacity = LinePatternLayer.DefaultOpacity,
-                                                            Logger? log = null) =>
-        [.. LinePatternCatalog.All.Select(p => new LinePatternLayerFactory(p.Id, options, opacity, log))];
+    public static IReadOnlyList<LinePatternLayerFactory> All(BackgroundOptions? options = null, Logger? log = null) =>
+        [.. LinePatternCatalog.All.Select(p => new LinePatternLayerFactory(p.Id, options, log))];
 }
 
 /// <summary>What a line painter needs each frame. Valid only during <see cref="ILinePainter.Draw"/>.</summary>
@@ -108,7 +105,6 @@ internal sealed class LinePatternOverlay : IFieldOverlay
 {
     private readonly LinePattern _pattern;
     private readonly BackgroundOptions _options;
-    private readonly double _opacity;
     private readonly Logger _log;
     private readonly ILinePainter? _painter;
     private readonly GpuCanvas _canvas = new();
@@ -125,17 +121,26 @@ internal sealed class LinePatternOverlay : IFieldOverlay
     private EffectClock _clock;
     private ShaderTimeBase _timeBase;
 
-    public LinePatternOverlay(LinePattern pattern, BackgroundOptions options, double opacity, Logger log)
+    public LinePatternOverlay(LinePattern pattern, BackgroundOptions options, Logger log)
     {
         _pattern = pattern;
         _options = options;
-        _opacity = opacity;
         _log = log;
         _painter = LinePainters.For(pattern.Id);
-        _drawnOpacity = opacity;
+        _resolution = ShaderResolution(pattern.Id);
+        _drawnOpacity = LinePatternLayer.DefaultOpacity;
     }
 
-    /// <summary>The pattern opacity last drawn with (the factory's until the first frame).</summary>
+    /// <summary>
+    /// The share of native resolution a shader-drawn pattern is drawn at. Low Poly searches several triangles per pixel
+    /// (5.5 ms a frame on the Intel GPU at 3200×2000 at native resolution), so it draws at half resolution and is
+    /// stretched: its faint hairlines come out a little softer.
+    /// </summary>
+    internal static float ShaderResolution(string patternId) => patternId == "lowPoly" ? 0.5f : 1f;
+
+    private readonly float _resolution;
+
+    /// <summary>The pattern opacity last drawn with (the default until the first frame).</summary>
     public double? PatternOpacity => _drawnOpacity;
 
     private double _drawnOpacity;
@@ -161,7 +166,7 @@ internal sealed class LinePatternOverlay : IFieldOverlay
                 _canvas.Create(dc, GpuFrameConstants.Bytes, premultiplied: true);
                 _shader = _canvas.PixelShader("Patterns." + _pattern.Id);
                 if (_shader is null) _log.Render.Warn($"Line pattern \"{_pattern.Id}\" has no painter or shader in this build; drawing none.");
-                _canvas.Resize(dc, (int)MathF.Ceiling(size.X), (int)MathF.Ceiling(size.Y));
+                _canvas.Resize(dc, (int)MathF.Ceiling(size.X * _resolution), (int)MathF.Ceiling(size.Y * _resolution));
             }
             _failed = false;
         }
@@ -180,7 +185,7 @@ internal sealed class LinePatternOverlay : IFieldOverlay
         try
         {
             if (_painter is not null && _factory is not null) _painter.Prepare(_dc, _factory, _size, _scale, _seed);
-            else _canvas.Resize(_dc, (int)MathF.Ceiling(size.X), (int)MathF.Ceiling(size.Y));
+            else _canvas.Resize(_dc, (int)MathF.Ceiling(size.X * _resolution), (int)MathF.Ceiling(size.Y * _resolution));
         }
         catch (SharpGenException ex)
         {
@@ -196,7 +201,7 @@ internal sealed class LinePatternOverlay : IFieldOverlay
         try
         {
             Reseed(frame.Scene);
-            _drawnOpacity = SceneAdjust.PatternOpacity(_opacity, frame.Scene);
+            _drawnOpacity = SceneAdjust.PatternOpacity(frame.Scene);
             var (time, flow) = _clock.At(frame.WallSeconds, SceneAdjust.Speed(_options, frame.Scene), _options.ReduceMotion || frame.Scene.ReduceMotion);
             var phase = flow * LinePatternLayer.PhaseRate;
             var blend = dc.PrimitiveBlend;
@@ -216,15 +221,16 @@ internal sealed class LinePatternOverlay : IFieldOverlay
                 var constants = new GpuFrameConstants
                 {
                     Size = new Vector2(_size.X / _scale, _size.Y / _scale),
-                    PixelScale = new Vector2(_scale, _scale),
+                    PixelScale = new Vector2(_scale * _resolution, _scale * _resolution),
                     Time = shaderTime,
                     Flow = shaderPhase,
                     Vividness = 1,
                     Strength = Strength,
-                    Extra = new Vector4(SeedFraction(_seed, 0), SeedFraction(_seed, 1), _scale, 0),
+                    Extra = new Vector4(SeedFraction(_seed, 0), SeedFraction(_seed, 1), _scale * _resolution, 0),
                 };
                 _canvas.Draw(_shader, constants);
-                dc.DrawBitmap(_canvas.Bitmap, new Vortice.RawRectF(0, 0, _canvas.Width, _canvas.Height), 1, InterpolationMode.NearestNeighbor, null, null);
+                dc.DrawBitmap(_canvas.Bitmap, new Vortice.RawRectF(0, 0, _canvas.Width / _resolution, _canvas.Height / _resolution), 1,
+                    _resolution < 1 ? InterpolationMode.Linear : InterpolationMode.NearestNeighbor, null, null);
             }
             dc.Transform = transform;
             dc.PrimitiveBlend = blend;

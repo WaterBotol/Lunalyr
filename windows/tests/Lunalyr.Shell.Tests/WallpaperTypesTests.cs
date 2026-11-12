@@ -118,15 +118,17 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         var picture = Path.Combine(_folder, "picture.png");
         await File.WriteAllBytesAsync(picture, await Png(), TestContext.Current.CancellationToken);
         var controller = Start(new AppSettings());
-        // Match the music, GPU effects, Line patterns and Visualisers: their layers come later; the album colours meanwhile.
-        Assert.Equal(AppController.FallbackBackground, _renderer.Layers.Background);
+        // Match the music, GPU effects and Line patterns draw one of the effects or patterns; Visualisers comes later.
+        Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
         string Draws(AppSettings settings)
         {
             controller.ApplySettings(settings);
             return _renderer.Layers.Background;
         }
-        Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "shader" }));
-        Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "pattern" }));
+        Assert.StartsWith("shader.", Draws(new AppSettings { BackgroundMode = "shader" }), StringComparison.Ordinal);
+        Assert.Equal("shader.aurora", Draws(new AppSettings { BackgroundMode = "shader", ShaderStyle = "aurora" }));
+        Assert.StartsWith("pattern.", Draws(new AppSettings { BackgroundMode = "pattern" }), StringComparison.Ordinal);
+        Assert.Equal("pattern.bubbles", Draws(new AppSettings { BackgroundMode = "pattern", PatternStyle = "3" }));
         Assert.Equal("visualizer", Draws(new AppSettings { BackgroundMode = "visualizer" })); // the engine falls back while it lacks one
         Assert.Equal("colour", Draws(new AppSettings { BackgroundMode = "colourOnly" }));
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "colourOnly", AlbumGradientWallpaper = false }));
@@ -134,7 +136,7 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "custom" })); // nothing imported
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "custom", WallpaperPath = Path.Combine(_folder, "gone.png") }));
         Assert.Equal("custom", Draws(new AppSettings { BackgroundMode = "custom", WallpaperPath = picture }));
-        Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "musicVideo" })); // not in this build
+        Assert.True(TestBackgrounds.IsGpu(Draws(new AppSettings { BackgroundMode = "musicVideo" }))); // not in this build: read as Match the music
     }
 
     [Fact]
@@ -160,7 +162,7 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         controller.ApplySettings(controller.Settings with { ScrimStrength = 1.6, Vividness = 0.5 });
         var scene = _renderer.Last!;
         Assert.Equal((1.6, 0.5), (scene.Adjustments.Darkening, scene.Adjustments.Vividness));
-        Assert.Equal("gradient", _renderer.Layers.Background);
+        Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
     }
 
     private readonly List<FakeMediaSession> _sessions = [];

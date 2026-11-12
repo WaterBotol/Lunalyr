@@ -123,7 +123,9 @@ public sealed class AppControllerTests : IAsyncDisposable
         Assert.Equal(StatusText.Showing, controller.Status.Status);
         Assert.Equal("Spotify", controller.Status.Player);
         Assert.True(_renderer.IsRunning);
-        Assert.Equal(("gradient", "editorial"), _renderer.Layers);
+        Assert.Equal("editorial", _renderer.Layers.Composition);
+        // Match the music (the default type) gives the song one of the effects or patterns.
+        Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
         Assert.Equal(60, _renderer.FrameRate);
     }
 
@@ -704,7 +706,8 @@ public sealed class AppControllerTests : IAsyncDisposable
         await controller.WhenIdleAsync();
         Assert.Equal(2, _lyrics.Queries.Count);
         Assert.Equal(0.075f * 1.5f, _renderer.Last!.Style.SizeFraction, 4);
-        Assert.Equal(("gradient", "spoken"), _renderer.Layers);
+        Assert.Equal("spoken", _renderer.Layers.Composition);
+        Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
         Assert.Equal(30, _renderer.FrameRate);
     }
 

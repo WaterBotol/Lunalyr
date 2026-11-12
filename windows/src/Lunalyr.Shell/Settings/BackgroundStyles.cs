@@ -1,5 +1,6 @@
-// What a saved shaderStyle / patternStyle means (Windows' own): an effect or pattern this build draws, or "" for
-// "Match the music". The Mac saves the pattern as an integer raw value; that reads as the pattern's id.
+// What a saved shaderStyle / patternStyle means (Windows' own). The Mac saves the pattern as an integer raw value; that
+// reads as the pattern's id. Anything else is kept as it is: a style this build doesn't draw already reads as "Match
+// the music" in the menus and in WallpaperMatch.
 
 using Lunalyr.Core.Backgrounds;
 
@@ -7,9 +8,13 @@ namespace Lunalyr.Shell.Settings;
 
 public static class BackgroundStyles
 {
-    /// <summary>The effect id <paramref name="value"/> pins, or "" when it pins none this build draws.</summary>
-    public static string Effect(string? value) => GpuEffectCatalog.Find(value?.Trim())?.Id ?? "";
+    /// <summary>A saved effect, trimmed.</summary>
+    public static string Effect(string? value) => value?.Trim() ?? "";
 
-    /// <summary>The pattern id <paramref name="value"/> pins (an id, or the Mac's raw value 0...17), or "".</summary>
-    public static string Pattern(string? value) => LinePatternCatalog.Find(value?.Trim())?.Id ?? "";
+    /// <summary>A saved pattern: the Mac's raw value 0...17 as its id ("3" is "bubbles"), anything else as it is.</summary>
+    public static string Pattern(string? value)
+    {
+        var trimmed = value?.Trim() ?? "";
+        return trimmed.Length > 0 && char.IsAsciiDigit(trimmed[0]) && LinePatternCatalog.Find(trimmed) is { } pattern ? pattern.Id : trimmed;
+    }
 }

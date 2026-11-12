@@ -1,8 +1,6 @@
-// The GPU effects' and line patterns' part of the settings: a pinned shaderStyle / patternStyle this build doesn't
-// draw reads as "" (Match the music), and a pattern saved as the Mac's integer raw value ("3") as its id ("bubbles").
-// Implements the m6/wallpaper-types hook; compiled once that branch is merged and LUNALYR_WALLPAPER_TYPES is defined
-// (docs/milestones/M6.md, "Merging").
-#if LUNALYR_WALLPAPER_TYPES
+// The GPU effects' and line patterns' part of the settings: a pattern saved as the Mac's integer raw value ("3") reads
+// as its id ("bubbles").
+// Implements the wallpaper-types hook (docs/APP-SHELL.md, "Hooks for other layers").
 using Lunalyr.Core.Backgrounds;
 
 namespace Lunalyr.Shell.Settings;
@@ -16,4 +14,3 @@ public sealed partial record AppSettings
             PatternStyle = BackgroundStyles.Pattern(settings.PatternStyle),
         };
 }
-#endif

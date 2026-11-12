@@ -22,13 +22,8 @@ public sealed class LinePatternLayerTests : IDisposable
     // No title: the stage is empty, so no text backing (whose strength follows the pattern) darkens the comparison.
     private static SceneSnapshot Quiet => new() { Palette = GpuEffectLayerTests.TwoColour };
 
-    // Pattern visibility at 0: the factory's opacity, or the scene's once the wallpaper-types adjustments are merged.
-    private static SceneSnapshot Hidden =>
-#if LUNALYR_WALLPAPER_TYPES
-        Quiet with { Adjustments = new WallpaperAdjustments { PatternOpacity = 0 } };
-#else
-        Quiet;
-#endif
+    // Pattern visibility at 0.
+    private static SceneSnapshot Hidden => Quiet with { Adjustments = new WallpaperAdjustments { PatternOpacity = 0 } };
 
     private byte[] Frame(IRenderLayer layer, double wall, SceneSnapshot? scene = null)
     {
@@ -66,7 +61,7 @@ public sealed class LinePatternLayerTests : IDisposable
     {
         // The colour field stands still (Speed 0 stops it) but the pattern clock does too, so compare with no pattern
         // and between two moments at normal speed.
-        using var none = new LinePatternLayerFactory(id, Plain, opacity: 0).Create();
+        using var none = new LinePatternLayerFactory(id, Plain).Create();
         using var layer = new LinePatternLayerFactory(id, Plain).Create();
         _surface.Prepare(none);
         _surface.Prepare(layer);
