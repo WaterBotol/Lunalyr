@@ -18,7 +18,8 @@ namespace Lunalyr.Shell;
 /// of the system's players; implies <c>--no-network</c> and <c>--no-playback</c>, and keeps its own data folder.</description></item>
 /// <item><term><c>--stats &lt;file&gt;</c></term><description>On quitting, write the renderer's frame statistics to this JSON
 /// file (for measurements).</description></item>
-/// <item><term><c>--settings-page &lt;page&gt;</c>, <c>--theme &lt;light|dark|system&gt;</c></term><description>Open a settings page; the windows' look for this run.</description></item>
+/// <item><term><c>--settings-page &lt;page&gt;</c>, <c>--theme &lt;light|dark|system&gt;</c></term><description>Open a settings page; the look of
+/// Lunalyr's windows (settings, the tray panel) for this run. Windows' own setting is never changed.</description></item>
 /// <item><term><c>lunalyr://…</c></term><description>A link to act on (forwarded to the running instance).</description></item>
 /// </list>
 /// </summary>

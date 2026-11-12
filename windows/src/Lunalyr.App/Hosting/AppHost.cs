@@ -21,6 +21,7 @@ using Lunalyr.Platform.Readings;
 using Lunalyr.Platform.Settings;
 using Lunalyr.Shell;
 using Lunalyr.Shell.Demo;
+using Lunalyr.Shell.Flyout;
 using Lunalyr.Shell.Lyrics;
 using Lunalyr.Shell.Rendering;
 using Lunalyr.Shell.Settings;
@@ -32,9 +33,10 @@ using Lunalyr.Render.Pacing;
 namespace Lunalyr.App.Hosting;
 
 /// <summary>
-/// The running app: logging, crash files, settings, the tray icon, the controller, and the two message loops. The
-/// main thread runs a plain Win32 loop while idle; the first "Open settings" ends it and starts WinUI on the same
-/// thread, which from then on pumps the tray window as well (Windows App SDK can only start once per process).
+/// The running app: logging, crash files, settings, the tray icon, the controller, and the message loop. The main
+/// thread starts WinUI right after the tray icon (no window until one is asked for), and WinUI's loop pumps the tray
+/// window too; start-up begins inside WinUI's first callback. Starting WinUI later, after a cover had been decoded,
+/// failed most times (see docs/APP-SHELL.md, "Process").
 /// </summary>
 internal sealed partial class AppHost
 {
@@ -59,9 +61,14 @@ internal sealed partial class AppHost
     private volatile SystemMotion? _motion;
     private Timer? _statsReset;
 
-    private bool _uiRequested;
+
     private bool _quitting;
     private App? _app;
+
+    // What the first window request asked for while WinUI was still starting (the tray loop can't show either).
+    private bool _pendingSettings;
+    private (PixelRect Anchor, bool Keyboard)? _pendingFlyout;
+    private PlaybackCommands? _transport;
 
     public AppHost(ShellOptions options, string dataRoot, SingleInstance instance)
     {
@@ -130,6 +137,7 @@ internal sealed partial class AppHost
     public int Run()
     {
         _tray.OpenSettings = OpenSettings;
+        _tray.ToggleFlyout = ToggleFlyout;
         _tray.TogglePause = TogglePause;
         _tray.Quit = Quit;
         _tray.Activated = OnActivated;
@@ -149,12 +157,17 @@ internal sealed partial class AppHost
         }
 
         _log.Info($"Start-up: tray ready {SinceLaunch():0} ms after launch.");
-        _init = Task.Run(InitializeAsync);
         ThemeOverride = _options.Theme;
-        if (_options.OpenSettings) OpenSettingsPage(_options.SettingsPage);
+        if (_options.OpenSettings)
+        {
+            _requestedPage = _options.SettingsPage;
+            _pendingSettings = true;
+        }
 
-        RunWin32Loop();
-        if (_uiRequested && !_quitting) RunWinUi();
+        // WinUI starts now, before anything else, and pumps the tray window from here on; start-up (players, lyrics,
+        // wallpaper) begins inside its first callback. Starting WinUI later, once a cover had been decoded (WIC), failed
+        // most times with 0x8007029C, and a retry ended in a fail-fast (docs/APP-SHELL.md, "Process").
+        RunWinUi();
         return Shutdown();
     }
 
@@ -320,28 +333,21 @@ internal sealed partial class AppHost
         }}.");
     }
 
-    // ---- Message loops ----
+    // ---- Message loop ----
 
-    private static void RunWin32Loop()
-    {
-        while (Win32.GetMessage(out var msg, 0, 0, 0) > 0)
-        {
-            Win32.TranslateMessage(msg);
-            Win32.DispatchMessage(msg);
-        }
-    }
-
+    /// <summary>WinUI's loop on the main thread, which also pumps the tray window, until Quit.</summary>
     private void RunWinUi()
     {
         var started = Stopwatch.StartNew();
-        _log.Info("Starting the settings UI (WinUI).");
+        _log.Info("Starting WinUI.");
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Microsoft.UI.Xaml.Application.Start(_ =>
         {
             var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             SynchronizationContext.SetSynchronizationContext(new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(dispatcher));
             _app = new App(this);
-            _log.Info($"WinUI started in {started.ElapsedMilliseconds} ms.");
+            _log.Info($"WinUI started in {started.ElapsedMilliseconds} ms ({SinceLaunch():0} ms after launch).");
+            _init = Task.Run(InitializeAsync);
         });
         _app = null;
     }
@@ -357,12 +363,61 @@ internal sealed partial class AppHost
             return;
         }
 
-        if (_uiRequested) return;
-        _uiRequested = true;
-        Win32.PostQuitMessage(0); // leave the plain loop; Run() starts WinUI
+        _pendingSettings = true; // WinUI is still starting: shown as soon as it is up
     }
 
-    private void TogglePause()
+    /// <summary>A left click on the tray icon: the flyout opens beside it, or closes.</summary>
+    public void ToggleFlyout(PixelRect anchor, bool keyboard)
+    {
+        if (_quitting) return;
+        if (_app is not null)
+        {
+            _app.ToggleFlyout(anchor, keyboard);
+            return;
+        }
+
+        _pendingFlyout = (anchor, keyboard); // WinUI is still starting: opened as soon as it is up
+    }
+
+    /// <summary>WinUI is up: show what was asked for while it started (<c>--settings</c>, an early click), else nothing.</summary>
+    internal void ShowPendingUi(App app)
+    {
+        var flyout = _pendingFlyout;
+        _pendingFlyout = null;
+        if (_pendingSettings) app.ShowSettings(TakeRequestedPage());
+        _pendingSettings = false;
+        if (flyout is { } f) app.ToggleFlyout(f.Anchor, f.Keyboard);
+    }
+
+    /// <summary>Forces light or dark for Lunalyr's windows (<c>--theme</c>), or null to follow Windows.</summary>
+    internal string? Theme => ThemeOverride is "light" or "dark" ? ThemeOverride : null;
+
+    /// <summary>Quit has started: windows may close for real.</summary>
+    internal bool IsQuitting => _quitting;
+
+    /// <summary>
+    /// A press on the flyout's transport, for the followed player. The guard is asked first (refused with
+    /// <c>--no-playback</c> and <c>--demo</c>); the GSMTC layer asks it again before anything reaches a player.
+    /// </summary>
+    internal Task<TransportOutcome> SendTransportAsync(TransportCommand command, bool playing)
+    {
+        _transport ??= new PlaybackCommands(PlaybackGuard.Process, message => Log.Player.Info(message));
+        var monitor = _controller?.Monitor;
+        return _transport.SendAsync(monitor?.Session, monitor?.Capabilities ?? Lunalyr.Core.NowPlaying.PlayerCapabilities.None, command, playing);
+    }
+
+    /// <summary>
+    /// "Search YouTube" in the flyout: the song's search in the default browser, from that click only. Nothing opens
+    /// while playback and sound are off for the run (<c>--no-playback</c>, <c>--demo</c>).
+    /// </summary>
+    internal bool SearchYouTube()
+    {
+        var status = _controller?.Status;
+        IUrlLauncher launcher = PlaybackGuard.Process.IsBlocked ? RefusingUrlLauncher.Instance : ShellUrlLauncher.Instance;
+        return YouTubeSearch.Open(launcher, PlaybackGuard.Process, status?.Title, status?.Artist, message => _log.Info(message));
+    }
+
+    internal void TogglePause()
     {
         // The controller hears about it through the settings store, which also remembers it for next time.
         if (!_settings.Update(s => s with { WallpaperPaused = !s.WallpaperPaused })) return;
