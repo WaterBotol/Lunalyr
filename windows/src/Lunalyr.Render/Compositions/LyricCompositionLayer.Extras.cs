@@ -92,6 +92,39 @@ internal abstract partial class LyricCompositionLayer
                          new InkClip((float)(pressed.X - width / 2), (float)(pressed.X + pressed.Width - width / 2)));
     }
 
+    /// <summary>
+    /// A highlight tile filling <paramref name="rect"/> (in <paramref name="world"/>'s units, which place a whole unit
+    /// about its centre): pressed in from the leading edge by the pose's width, given the cutout tilt, at the pose's
+    /// opacity. The way the rolling stages tile a word with its reading (the Mac's <c>CutoutTile</c> behind a
+    /// <c>RollingUnit</c>).
+    /// </summary>
+    protected void DrawTileRect(ID2D1DeviceContext dc, in Matrix3x2 world, RectD rect, HighlightPose pose, bool rightToLeft,
+                                double visibility)
+    {
+        if (_paint is null || !pose.IsVisible || !(visibility > 0.002) || !(rect.Width > 0) || !(rect.Height > 0)) return;
+        var tile = _ink.TileColour;
+        _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * pose.Opacity * visibility));
+        float w = (float)rect.Width, h = (float)rect.Height;
+        dc.Transform = Matrix3x2.CreateScale((float)pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
+            * Matrix3x2.CreateRotation(Radians(CutoutTile.Tilt), new Vector2(w / 2, h / 2))
+            * Matrix3x2.CreateTranslation((float)rect.X, (float)rect.Y)
+            * world;
+        var radius = Points(CutoutTile.CornerRadius);
+        dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, w, h), radius, radius), _paint);
+    }
+
+    /// <summary>
+    /// The colour a word takes on a highlight tile at <paramref name="pose"/> (straight alpha): the ink's tile text, as
+    /// strong as the tile is to carry it, times <paramref name="visibility"/> and <paramref name="share"/> (a reading
+    /// takes <c>LyricHighlight.ReadingOpacity</c>).
+    /// </summary>
+    protected Vector4 TileTextColour(HighlightPose pose, double visibility, double share = 1)
+    {
+        var shown = LyricHighlightTiming.TextOpacity(pose.Opacity, _ink.TileTextSwitch) * visibility * share;
+        var colour = _ink.TileText;
+        return new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown));
+    }
+
     // ---- Credits ---------------------------------------------------------------------------------------------------
 
     /// <summary>
