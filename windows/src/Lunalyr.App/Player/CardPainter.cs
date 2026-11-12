@@ -16,7 +16,7 @@ namespace Lunalyr.App.Player;
 /// (brushes, the cover bitmap, gradients) are made once and kept until the device or the theme changes; text layouts
 /// are kept per string. A frame allocates only when a string it shows changes (the times, once a second).
 /// </summary>
-internal sealed class CardPainter : IDisposable
+internal sealed partial class CardPainter : IDisposable
 {
     private const string Display = "Segoe UI Variable Display", Text = "Segoe UI Variable Text";
 
@@ -39,7 +39,11 @@ internal sealed class CardPainter : IDisposable
     private ID2D1PathGeometry? _playGlyph, _skipGlyph;
     private CardTheme? _themeMade;
 
-    private enum TextStyle { Label, Title, TitleSmall, Artist, Album, Time, CapsuleLyric, CapsuleReading, CapsuleTime, Rate, Note, Live }
+    private enum TextStyle
+    {
+        Label, Title, TitleSmall, Artist, Album, Time, CapsuleLyric, CapsuleReading, CapsuleTime, Rate, Note, Live,
+        CompactTitle, CompactArtist, Picker, Field, RowTitle, RowTitleBold, RowDetail, RowTag, Status, Section, Glyph, Button,
+    }
 
     /// <summary>Lets go of everything made on the old device (after a device loss or a new card surface).</summary>
     public void ReleaseDevice()
@@ -52,6 +56,7 @@ internal sealed class CardPainter : IDisposable
         _coverClip?.Dispose(); _coverClip = null;
         _playGlyph?.Dispose(); _playGlyph = null;
         _skipGlyph?.Dispose(); _skipGlyph = null;
+        ReleaseRowCovers();
         _dc = null;
     }
 
@@ -74,8 +79,11 @@ internal sealed class CardPainter : IDisposable
         _dwrite.Dispose();
     }
 
-    /// <summary>The card's height in DIPs for the model (the Song pane; search and queue come later).</summary>
+    /// <summary>The card's height in DIPs at rest (the Song pane).</summary>
     public static float Height => (float)PlayerCard.CardHeight(PlayerPane.Song);
+
+    /// <summary>The card's height in DIPs for a pane (search and the queue make it taller, centred as before).</summary>
+    public static float HeightFor(PlayerPane pane, int queueRows) => (float)PlayerCard.CardHeight(pane, queueRows);
 
     // ---- Frame ----
 
@@ -97,9 +105,13 @@ internal sealed class CardPainter : IDisposable
         var layered = reveal < 0.999f;
         if (layered) dc.PushLayer(new LayerParameters1 { ContentBounds = whole, MaskTransform = Matrix3x2.Identity, Opacity = reveal }, null!);
 
+        Hits.Clear();
         DrawBackground(dc, m, width, height);
         DrawArt(dc, m);
-        DrawColumn(dc, m);
+        if (m.Pane == PlayerPane.Song) DrawColumn(dc, m);
+        else DrawCompact(dc, m);
+        if (m.Pane == PlayerPane.Search) DrawSearch(dc, m);
+        else if (m.Pane == PlayerPane.Queue) DrawQueue(dc, m);
         if (m.FocusVisible) DrawFocus(dc, m);
         if (t.HighContrast) Stroke(dc, new RawRectF(1, 1, width - 1, height - 1), 6, t.Ink, 2);
 
@@ -288,10 +300,15 @@ internal sealed class CardPainter : IDisposable
         // The player, small, over the song (or the note about a command, while it shows).
         if (m.PlayerName.Length > 0 && m.NoteAlpha < 0.999f)
         {
-            var label = Layout(Upper(m.PlayerName), TextStyle.Label, (int)width - 14);
+            var label = Layout(Upper(m.PlayerName), TextStyle.Label, (int)width - 34);
             var alpha = secondary * (1 - m.NoteAlpha);
+            if (m.HoverPart == CardPart.PlayerLabel) alpha = Math.Min(1, alpha + 0.25f);
             Fill(dc, new Ellipse(new Vector2(left + 3, CardLayout.ColumnTop + 8), 3, 3), WithAlpha(t.HighContrast ? t.Ink : t.Accent, alpha));
             DrawText(dc, label, left + 11, CardLayout.ColumnTop + 1, WithAlpha(t.Ink, alpha));
+            // A click opens the search, where the picker is (the Mac's chevron).
+            var chevronX = left + 11 + label.Metrics.Width + 6;
+            Chevron(dc, new Vector2(chevronX, CardLayout.ColumnTop + 8), WithAlpha(t.Ink, alpha));
+            Hits.Add((CardPart.PlayerLabel, new RectF(left - 2, CardLayout.ColumnTop - 2, chevronX + 10 - left, 20)));
         }
 
         if (m.Note is { } note && m.NoteAlpha > 0.001f)
@@ -551,18 +568,9 @@ internal sealed class CardPainter : IDisposable
     /// <summary>The keyboard's focus, ringed after Tab (Windows' focus visual: two strokes, so it shows on any colour).</summary>
     private void DrawFocus(ID2D1DeviceContext dc, CardModel m)
     {
-        var r = m.FocusPart switch
-        {
-            CardPart.Cover => CardLayout.CoverRect,
-            CardPart.Previous => CardLayout.PreviousRect,
-            CardPart.PlayPause => CardLayout.PlayRect,
-            CardPart.Next => CardLayout.NextRect,
-            CardPart.SeekBar => new RectF(CardLayout.ColumnLeft, CardLayout.SeekRowTop, CardLayout.ColumnWidth, CardLayout.BarBand),
-            CardPart.TimeLabel => new RectF(CardLayout.TimesRect.Right - 64, CardLayout.TimesRect.Y, 64, CardLayout.TimesHeight),
-            _ => new RectF(0, 0, 0, 0),
-        };
+        var r = PartRect(m.Pane, m.FocusPart);
         if (r.Width <= 0) return;
-        var round = m.FocusPart is CardPart.PlayPause or CardPart.Previous or CardPart.Next ? r.Width / 2 + 4 : 10;
+        var round = CardParts.IsRound(m.FocusPart) ? r.Width / 2 + 4 : 10;
         var outer = m.Theme.HighContrast ? m.Theme.Highlight : m.Theme.Ink;
         Stroke(dc, Rect(r.Inflate(4)), round, outer, 2);
         Stroke(dc, Rect(r.Inflate(2)), round - 2, m.Theme.InkInverse, 1);
@@ -576,10 +584,17 @@ internal sealed class CardPainter : IDisposable
         // Commands off for this run (--no-playback, --demo): still there to press (the card says why), but quieter.
         var enabled = m.CommandsOff ? 0.6f : 1f;
         var skipAlpha = (m.HasSong ? 1f : 0.35f) * enabled;
-        DrawSkip(dc, m, CardLayout.PreviousRect, forward: false, skipAlpha, CardPart.Previous);
-        DrawSkip(dc, m, CardLayout.NextRect, forward: true, skipAlpha, CardPart.Next);
+        var small = m.Pane != PlayerPane.Song;
+        DrawSkip(dc, m, CardLayout.PreviousFor(m.Pane), forward: false, skipAlpha, CardPart.Previous, small);
+        DrawSkip(dc, m, CardLayout.NextFor(m.Pane), forward: true, skipAlpha, CardPart.Next, small);
+        if (!small)
+        {
+            // Search and the queue, at the row's right-hand end, lit while open.
+            IconButton(dc, m, CardLayout.SearchButtonRect, CardPart.SearchButton, on: false);
+            IconButton(dc, m, CardLayout.QueueButtonRect, CardPart.QueueButton, on: false);
+        }
 
-        var disc = CardLayout.PlayRect;
+        var disc = CardLayout.PlayFor(m.Pane);
         var pressed = m.PressedPart == CardPart.PlayPause && !m.Look.ReduceMotion ? 0.88f : 1f;
         var radius = disc.Width / 2 * pressed;
         var centre = new Vector2(disc.CentreX, disc.CentreY);
@@ -602,14 +617,14 @@ internal sealed class CardPainter : IDisposable
         }
     }
 
-    private void DrawSkip(ID2D1DeviceContext dc, CardModel m, RectF cell, bool forward, float alpha, CardPart part)
+    private void DrawSkip(ID2D1DeviceContext dc, CardModel m, RectF cell, bool forward, float alpha, CardPart part, bool small = false)
     {
         var t = m.Theme;
         var centre = new Vector2(cell.CentreX, cell.CentreY);
         var halo = m.PressedPart == part ? 0.14f : m.HoverPart == part ? 0.1f : 0;
-        if (halo > 0 && m.HasSong) Fill(dc, new Ellipse(centre, 16, 16), WithAlpha(t.Ink, halo));
+        if (halo > 0 && m.HasSong) Fill(dc, new Ellipse(centre, small ? 14 : 16, small ? 14 : 16), WithAlpha(t.Ink, halo));
         var scale = m.PressedPart == part && !m.Look.ReduceMotion ? 0.88f : 1f;
-        DrawGlyph(dc, _skipGlyph!, centre, 17 * scale, WithAlpha(t.Ink, alpha), mirror: !forward);
+        DrawGlyph(dc, _skipGlyph!, centre, (small ? 13 : 17) * scale, WithAlpha(t.Ink, alpha), mirror: !forward);
     }
 
     private void DrawGlyph(ID2D1DeviceContext dc, ID2D1PathGeometry glyph, Vector2 centre, float size, Color4 colour, bool mirror)
@@ -696,14 +711,14 @@ internal sealed class CardPainter : IDisposable
     private IDWriteTextLayout Layout(string text, TextStyle style, int maxWidth)
     {
         if (_layouts.TryGetValue((text, style, maxWidth), out var cached)) return cached;
-        if (_layouts.Count > 96)
+        if (_layouts.Count > 320)
         {
             foreach (var old in _layouts.Values) old.Dispose();
             _layouts.Clear();
         }
 
         var layout = _dwrite.CreateTextLayout(text, Format(style), maxWidth, 200);
-        if (style == TextStyle.Note)
+        if (style is TextStyle.Note or TextStyle.Status)
         {
             // A note wraps (two lines at most for the card's own sentences), so it is read whole.
             layout.WordWrapping = WordWrapping.Wrap;
@@ -755,6 +770,18 @@ internal sealed class CardPainter : IDisposable
             TextStyle.CapsuleTime => (Text, FontWeight.Bold, 11f),
             TextStyle.Rate => (Text, FontWeight.Medium, 10f),
             TextStyle.Note => (Text, FontWeight.Medium, 11f),
+            TextStyle.CompactTitle => (Text, FontWeight.Bold, 13f),
+            TextStyle.CompactArtist => (Text, FontWeight.Normal, 11f),
+            TextStyle.Picker => (Text, FontWeight.SemiBold, 11f),
+            TextStyle.Field => (Text, FontWeight.Medium, 15f),
+            TextStyle.RowTitle => (Text, FontWeight.SemiBold, 13f),
+            TextStyle.RowTitleBold => (Text, FontWeight.Bold, 12f),
+            TextStyle.RowDetail => (Text, FontWeight.Normal, 11f),
+            TextStyle.RowTag => (Text, FontWeight.Bold, 9f),
+            TextStyle.Status => (Text, FontWeight.Normal, 12f),
+            TextStyle.Section => (Text, FontWeight.SemiBold, 10f),
+            TextStyle.Glyph => ("Segoe Fluent Icons", FontWeight.Normal, 13f),
+            TextStyle.Button => (Text, FontWeight.SemiBold, 12f),
             _ => (Text, FontWeight.Bold, 11f),
         };
         format = _dwrite.CreateTextFormat(family, null, weight, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, size, "");

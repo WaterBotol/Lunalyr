@@ -149,7 +149,7 @@ public sealed partial class SettingsWindow : Window
             "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync),
             "Wallpaper" => WallpaperPage.Build(_ctx),
             "Covers" => CoversPage.Build(),
-            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller),
+            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.Spotify, () => _host.SpotifyOffReason),
             "Performance" => PerformancePage.Build(_ctx),
             _ => new TextBlock { Text = page },
         };

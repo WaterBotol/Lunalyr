@@ -310,7 +310,7 @@ internal sealed partial class AppHost
     public PlayerSearches PlayerSearch => _playerSearches;
 
     /// <summary>The Spotify sign-in for the settings page (sign in, sign out, state), or null when Spotify is off this run.</summary>
-    public SpotifyAccount? Spotify => _playerSearches.Spotify?.Account;
+    public SpotifyAccount? Spotify => _playerSearches.Spotify?.Account ?? _demoSpotify;
 
     /// <summary>
     /// Builds the Spotify service. Nothing is sent until the user signs in or searches: no token refresh at start-up.

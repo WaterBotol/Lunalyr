@@ -39,7 +39,12 @@ internal sealed class SettingsContext
     {
         Store.Changed -= OnChanged;
         _refreshers.Clear();
+        Detached?.Invoke();
+        Detached = null;
     }
+
+    /// <summary>Raised once when the window closes, for pages that follow something else (a sign-in, an account).</summary>
+    public event Action? Detached;
 
     private void OnChanged(object? sender, SettingsChangedEventArgs<AppSettings> e) => QueueRefresh();
 
