@@ -199,7 +199,17 @@ internal sealed class AppHost
                     Connectivity = connectivity,
                     Http = new LyricHttpOptions { UserAgent = UserAgent },
                     Logger = Log,
+                    // "Search under other names" (the Mac's one setting for both): artists' native names and songs'
+                    // original titles.
+                    UseArtistAliases = _settings.Current.ArtistAliases,
+                    UseOriginalTitles = _settings.Current.ArtistAliases,
                 });
+                var lyricSources = service.Sources;
+                _settings.Changed += (_, e) =>
+                {
+                    lyricSources.UsesArtistAliases = e.NewValue.ArtistAliases;
+                    lyricSources.UsesOriginalTitles = e.NewValue.ArtistAliases;
+                };
                 lookup = new LyricServiceLookup(service, _options.NoNetwork ? "--no-network" : null);
                 _log.Info($"Lyric sources: {string.Join(", ", service.SourceList(_settings.Current.SourceSnapshot())
                     .Where(s => s.Enabled).Select(s => s.IsAvailable ? s.Title : $"{s.Title} (unavailable)"))}; "

@@ -51,7 +51,10 @@ public enum MediaControls
     Seek = 1 << 14,
 }
 
-/// <summary>Track metadata (GSMTC's media properties). Strings are never null; missing values are empty.</summary>
+/// <summary>
+/// Track metadata (GSMTC's media properties). Strings are never null; missing values are empty. <see cref="Genre"/> is
+/// the first genre the player reports ("J-Pop"), a hint at the language sung; not part of <see cref="TrackKey"/>.
+/// </summary>
 public sealed record MediaTrackInfo(
     string Title,
     string Artist,
@@ -61,7 +64,8 @@ public sealed record MediaTrackInfo(
     int TrackNumber = 0,
     int AlbumTrackCount = 0,
     bool HasThumbnail = false,
-    MediaPlaybackType PlaybackType = MediaPlaybackType.Unknown)
+    MediaPlaybackType PlaybackType = MediaPlaybackType.Unknown,
+    string Genre = "")
 {
     public static MediaTrackInfo Empty { get; } = new("", "", "", "");
 

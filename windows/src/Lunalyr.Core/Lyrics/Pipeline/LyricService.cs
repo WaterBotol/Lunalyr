@@ -37,6 +37,18 @@ public sealed record LyricServiceOptions
     /// <summary>Search the Chinese catalogues again under an artist's other names.</summary>
     public bool UseArtistAliases { get; init; } = true;
 
+    /// <summary>
+    /// Search again under a song's original title, from Apple's catalogue, when the listed (English) title finds nothing
+    /// usable. The Mac shares one setting with <see cref="UseArtistAliases"/> ("Search under other names").
+    /// </summary>
+    public bool UseOriginalTitles { get; init; } = true;
+
+    /// <summary>Where songs' original titles are looked up; Apple's catalogue (iTunes Search) over the shared client when null.</summary>
+    public IOriginalTitleCatalogue? TitleCatalogue { get; init; }
+
+    /// <summary>This PC's Apple storefront ("au"); the Windows region when null.</summary>
+    public string? Storefront { get; init; }
+
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     public Logger? Logger { get; init; }
@@ -83,7 +95,7 @@ public sealed class LyricService
 
     /// <summary>
     /// The service with every built-in source over one shared HTTP client, plus <see cref="LyricServiceOptions.PlatformSources"/>.
-    /// Saved choices, the automatic cache and artists' other names are kept in <paramref name="cacheFolder"/>.
+    /// Saved choices, the automatic cache, artists' other names and songs' original titles are kept in <paramref name="cacheFolder"/>.
     /// </summary>
     /// <param name="cacheFolder">The app's lyric data folder.</param>
     /// <param name="httpClient">The HTTP client to send through; one suited to the sources is made when null.</param>
@@ -95,10 +107,13 @@ public sealed class LyricService
         var http = new LyricHttpClient(httpClient ?? LyricHttpClient.CreateDefaultHttpClient(),
             (options.Http ?? new LyricHttpOptions()) with { TimeProvider = options.TimeProvider }, options.Logger);
         var aliases = new ArtistAliases(cacheFolder, options.ArtistSearch ?? new MusicBrainzArtistSearch(http), options.TimeProvider);
+        var titles = new OriginalTitles(cacheFolder, options.TitleCatalogue ?? new ItunesCatalogue(http), options.Storefront,
+            timeProvider: options.TimeProvider);
         var parse = options.Parse ?? options.Readings?.ParseOptions();
-        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http), .. options.PlatformSources], aliases, parse)
+        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http), .. options.PlatformSources], aliases, parse, titles)
         {
             UsesArtistAliases = options.UseArtistAliases,
+            UsesOriginalTitles = options.UseOriginalTitles,
         };
         return new LyricService(sources, new SavedLyrics(cacheFolder, options.TimeProvider), options.Connectivity, options.Timing,
             options.TimeProvider, options.Logger);

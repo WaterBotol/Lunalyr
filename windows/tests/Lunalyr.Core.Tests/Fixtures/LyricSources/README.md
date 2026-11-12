@@ -13,6 +13,11 @@ holds an invented KRC, encrypted the way Kugou serves it.
 - Kugou: 米津玄師, "Lemon"
 - MusicBrainz: artist searches for "Kenshi Yonezu" and "Jay Chou" (`/ws/2/artist?query="…"&limit=5&fmt=json`), recorded
   12 Nov 2026 with the same generic agent and kept whole (no lyrics in them).
+- Apple's catalogue (iTunes Search API), recorded 12 Nov 2026 with the same generic agent and trimmed to the song fields
+  (no lyrics, no account): `search-au-yoasobi-idol.json` (`/search?country=au&entity=song&limit=15&term=YOASOBI Idol`)
+  and the Japanese storefront's entries for its two "Idol" singles (`lookup-jp-<id>.json`, `/lookup?country=jp&id=…&lang=ja_jp`).
+  The `mac-*.json` files are the Mac test's invented catalogue replies (ids 1001–1003, "Racing into the Night"), kept
+  as the Mac wrote them so the ported tests use its inputs.
 
 The end-to-end tests (`Lyrics/Pipeline`) also build replies in code (`ServiceReplies`) in these same envelopes, filled with
 invented lines, so each test can choose the timing and names it needs.

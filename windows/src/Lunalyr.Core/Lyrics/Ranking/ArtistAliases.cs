@@ -216,7 +216,7 @@ public sealed class ArtistAliases
         foreach (var name in await aliases.NamesAsync(query.Artist, cancellationToken).ConfigureAwait(false))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var other = new LyricQuery(query.Title, name, query.Album, query.Duration);
+            var other = new LyricQuery(query.Title, name, query.Album, query.Duration) { Genre = query.Genre };
             if (await search(other, cancellationToken).ConfigureAwait(false) is not { } found
                 || LyricQuery.Similarity(found.Artist, name) < 0.65)
             {

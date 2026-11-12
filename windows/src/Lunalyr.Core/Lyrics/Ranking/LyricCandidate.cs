@@ -36,6 +36,18 @@ public sealed record LyricCandidate(
     public LyricAgreement Agreement { get; init; }
 
     /// <summary>
+    /// Its lyrics are in another language than the song's (<see cref="LyricLanguage"/>), set when candidates are
+    /// screened: it ranks as another version.
+    /// </summary>
+    public bool LanguageMismatch { get; init; }
+
+    /// <summary>
+    /// Found by searching under the song's original title (<see cref="OriginalTitles"/>), which shows the song is sung
+    /// in that language.
+    /// </summary>
+    public bool ViaOriginalTitle { get; init; }
+
+    /// <summary>
     /// The source this match ranks as (ranking decision of 12 Nov 2026): Apple Music's own lyrics relayed by Lyrics+
     /// (provenance "Apple via Lyrics+") rank as Apple Music, just after its own (lead 1); every other match ranks as its
     /// <see cref="Source"/>. Only ranking and the source-list note use it: the match is still labelled, enabled and

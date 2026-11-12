@@ -573,7 +573,11 @@ public sealed partial class AppController : IAsyncDisposable
                 ShowStatus(generation, StatusText.LookingUp);
             }
 
-            var query = new LyricQuery(track.Title, track.Artist, track.AlbumTitle.Length > 0 ? track.AlbumTitle : null, duration.TotalSeconds);
+            // The genre hints at the language sung (LyricLanguage), as on the Mac.
+            var query = new LyricQuery(track.Title, track.Artist, track.AlbumTitle.Length > 0 ? track.AlbumTitle : null, duration.TotalSeconds)
+            {
+                Genre = track.Genre.Length > 0 ? track.Genre : null,
+            };
             LyricSourceSnapshot options;
             bool repair;
             lock (_gate)

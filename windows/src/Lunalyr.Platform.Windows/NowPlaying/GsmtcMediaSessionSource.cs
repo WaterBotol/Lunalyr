@@ -272,7 +272,8 @@ internal sealed class GsmtcMediaSession : IMediaSession
                 p.TrackNumber,
                 p.AlbumTrackCount,
                 p.Thumbnail is not null,
-                p.PlaybackType is { } type ? (CorePlaybackType)(int)type : CorePlaybackType.Unknown);
+                p.PlaybackType is { } type ? (CorePlaybackType)(int)type : CorePlaybackType.Unknown,
+                p.Genres?.FirstOrDefault(genre => !string.IsNullOrWhiteSpace(genre))?.Trim() ?? "");
         }
         catch (OperationCanceledException)
         {
