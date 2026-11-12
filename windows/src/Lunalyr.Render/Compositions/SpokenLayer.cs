@@ -224,6 +224,22 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             }, null!);
             opacity = 1;
         }
+        try
+        {
+            DrawLabelParts(dc, token, unit, state, world, labelWorld, readingWorld, reading, scale, opacity, blur, boundaries, reveal);
+        }
+        finally
+        {
+            if (layered) dc.PopLayer();
+        }
+    }
+
+    private static void DrawLabelParts(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
+                                       in Matrix3x2 world, in Matrix3x2 labelWorld, in Matrix3x2 readingWorld, Ink? reading,
+                                       float scale, float opacity, float blur, ReadOnlySpan<double> boundaries,
+                                       ReadOnlySpan<double> reveal)
+    {
+        var rightToLeft = token.RightToLeft;
         unit.Label.DrawShadow(dc, labelWorld, opacity, 1, boundaries, reveal, rightToLeft);
         reading?.DrawShadow(dc, readingWorld, opacity, 1);
 
@@ -248,7 +264,6 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo);
             unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo);
         }
-        if (layered) dc.PopLayer();
     }
 
     /// <summary>A fold about the bottom edge of a unit <paramref name="height"/> tall, drawn as a foreshortening.</summary>

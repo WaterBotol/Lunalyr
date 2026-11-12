@@ -160,6 +160,43 @@ public sealed class ArrivalStackTests : IDisposable
         Assert.True(crowded > 1000, "three or more words were on stage together");
     }
 
+    // Ported from RollingStackTests.swift: testEveryEntranceStyleStaysClearAsDrawn, with the Mac's own sampling
+    // (Cascade and Cutout; the entrances built on Windows)
+    [Fact]
+    public void EveryEntranceStyleStaysClearAsDrawn()
+    {
+        var stage = new SizeD(1210, 707);
+        var crowded = 0;
+        WordArrival[] styles = [WordArrival.Fade, WordArrival.Lift, WordArrival.Pop, WordArrival.Orbit, WordArrival.Glide, WordArrival.Unfold];
+        foreach (var style in styles)
+        foreach (var composition in Compositions)
+        foreach (var userScale in new[] { 0.7, 1.5 })
+        foreach (var lyric in new[] { Phrases, Runs, Lyrics[0] })
+        {
+            var (words, readings) = Timed(lyric);
+            var baseSize = 70 * 0.75 * userScale;
+            var prepared = RollingWords.Prepare(words, baseSize, readings, composition: composition);
+            var sizes = Measure(prepared, stage.Width);
+            for (var step = 0; step <= 50; step++)
+            {
+                var time = 9.4 + step * 0.07;
+                var placed = Stage(prepared, sizes, time, baseSize, stage, style, false, composition);
+                var context = $"{style} {composition} {lyric.Name} x{userScale} at {time}";
+                if (placed.Count(unit => unit.Slot.Shown > 0.05) >= 3) crowded++;
+                AssertSeparated(placed, context);
+                foreach (var unit in placed)
+                {
+                    var share = Legibility(unit.Size, unit.Slot, unit.Centre, stage, baseSize * 0.22);
+                    if (unit.Slot.Shown > 0.5 && Math.Abs(unit.Slot.Rank) <= 0.25)
+                        Assert.True(share >= 0.95, $"{context}: the word in focus shrunk");
+                    if (userScale <= 1 && unit.Slot.Shown > 0.02 && unit.Slot.Rank > -1.3 && unit.Slot.Rank < -0.25)
+                        Assert.True(share >= 0.95, $"{context}: the next word shrunk at rank {unit.Slot.Rank}");
+                }
+            }
+        }
+        Assert.True(crowded > 400, "three or more words were on stage together");
+    }
+
     // Ported from RollingStackTests.swift: testStackingHoldsInEveryFaceAndAtEverySliderValue (Windows faces)
     [Fact]
     public void StackingHoldsInEveryFaceAndAtEverySliderValue()

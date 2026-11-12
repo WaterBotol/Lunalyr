@@ -49,7 +49,7 @@ Checked with `git blame -w -M -C` at `d63068a`:
   the ink's text-on-tile colour and its reading the same at 85%; beyond, they keep their own colours. The label, its
   word and their shadow fade and blur as one piece, inside the word's entrance.
 - **Cascade's held words**: a hero takes the ink's accent (the highlight's held colour) unless the ink sweeps.
-- **Automatic entrance**: Cutout's is Cutout · Fold.
+- **Automatic entrance**: on the Mac, Cutout's is Cutout · Fold (not built on Windows yet; see below).
 
 ## Differences from the Mac
 
@@ -72,5 +72,7 @@ rendered with `-reveal automatic` (Float up in Cascade, the Unfold stand-in in C
 palette, which has no cover colours, so the labels take the ink's own pastels and highlight.
 
 On the RTX 5060 at 2560×1440 a warm frame costs about 0.08–0.15 ms (Cascade) and 0.1–0.2 ms (Cutout) of render-thread
-time, against 0.07–0.14 ms for Spoken; a label not fully shown is drawn in a D2D layer at its opacity. Allocation is
+time, against 0.07–0.14 ms for Spoken; a label not fully shown is drawn in a D2D layer at its opacity. Setting a
+line costs a little more than in Spoken (up to about 11 ms on a cold first pass for a line of labels: each label bakes
+its tile and its word a second time in the colour set on it). Allocation is
 exactly Spoken's: nothing while the rolling window holds, and only on the frames where a word joins or leaves it.
