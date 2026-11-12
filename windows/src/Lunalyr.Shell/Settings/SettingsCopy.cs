@@ -195,7 +195,7 @@ public static class SettingsCopy
     public static IReadOnlyList<WallpaperType> WallpaperTypes { get; } =
     [
         new("auto", "Match the music", "Match", "",
-            "Each song picks a look to suit its energy and feel, with animated covers where Apple Music has them."),
+            "Each song picks a look to suit its energy and feel."),
         new("visualizer", "Visualisers", "Visualiser", "", "Scenes that move with the music itself, with System audio on."),
         new("shader", "GPU effects", "Effects", "", "Plasma, aurora, nebulae and more, drawn on the GPU in the album’s colours."),
         new("pattern", "Line patterns", "Patterns", "", "Line patterns in the album’s colours, the gentlest on power after Colour only."),

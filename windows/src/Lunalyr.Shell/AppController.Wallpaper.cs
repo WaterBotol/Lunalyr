@@ -59,10 +59,13 @@ public sealed partial class AppController
         return Pick(settings, song ?? TrackCharacter.Neutral).LayerId ?? FallbackBackground;
     }
 
-    private static WallpaperPick Pick(AppSettings settings, TrackCharacter song) =>
-        WallpaperMatch.Pick(settings.BackgroundMode is "shader" or "pattern" ? settings.BackgroundMode : "auto", song,
-            settings.ShaderStyle, settings.PatternStyle,
-            [.. WallpaperCatalog.Effects.Select(s => s.Candidate)], [.. WallpaperCatalog.Patterns.Select(s => s.Candidate)]);
+    private WallpaperPick Pick(AppSettings settings, TrackCharacter song)
+    {
+        var (effects, patterns) = _options.WallpaperStyles?.Invoke()
+            ?? ([.. WallpaperCatalog.Effects.Select(s => s.Candidate)], [.. WallpaperCatalog.Patterns.Select(s => s.Candidate)]);
+        return WallpaperMatch.Pick(settings.BackgroundMode is "shader" or "pattern" ? settings.BackgroundMode : "auto", song,
+            settings.ShaderStyle, settings.PatternStyle, effects, patterns);
+    }
 
     /// <summary>
     /// Reads the song on screen's character once (when its lyrics are shown or its lookup has ended) and draws its
@@ -88,7 +91,7 @@ public sealed partial class AppController
             }
             if (_wallpaperCharacter == character) return;
             settings = _settings;
-            before = _wallpaperCharacter is { } old ? Pick(settings, old).LayerId ?? FallbackBackground : "";
+            before = _wallpaperCharacter is { } old ? Pick(settings, old).LayerId ?? FallbackBackground : FallbackBackground;
             _wallpaperCharacter = character;
             after = Pick(settings, character).LayerId ?? FallbackBackground;
             title = track.Title;

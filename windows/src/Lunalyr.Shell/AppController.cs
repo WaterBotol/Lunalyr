@@ -67,6 +67,12 @@ public sealed record AppControllerOptions
     /// </summary>
     public Action<int>? LayoutCursorChanged { get; init; }
 
+    /// <summary>
+    /// The GPU effects and line patterns "Match the music" chooses among; null takes <c>WallpaperCatalog</c>'s (tests pass
+    /// their own, as the catalogue is filled by the effect layers' own files).
+    /// </summary>
+    public Func<(IReadOnlyList<Lunalyr.Core.Compositions.WallpaperCandidate> Effects, IReadOnlyList<Lunalyr.Core.Compositions.WallpaperCandidate> Patterns)>? WallpaperStyles { get; init; }
+
     /// <summary>How often a better match waiting to replace the lyrics looks whether the line being sung has ended.</summary>
     public TimeSpan SwapPoll { get; init; } = LyricSwap.Poll;
 

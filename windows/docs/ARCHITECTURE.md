@@ -146,7 +146,9 @@ user's wallpaper.**
 - **Checked on this PC (Windows 11 25H2, 24H2 desktop).** With `backgroundMode: "desktop"` the demo drew only its lyrics
   and text backing, and `tools/peek-desktop.ps1` (both its PrintWindow mode and the DWM thumbnail) showed Windows'
   own wallpaper behind them on the uncovered display (`docs/previews/wallpaper/`). DWM composes what lies beneath the
-  window under `Progman`: the system wallpaper (`WorkerW`), or a wallpaper app's window there (Wallpaper Engine, Lively).
+  window under `Progman`: here the system wallpaper (`WorkerW`). A wallpaper app's window there (Wallpaper Engine,
+  Lively) should show through the same way, but that was not seen: the display Wallpaper Engine drew on was covered,
+  so the demo's surface there was paused.
 - **Why always, not only for Your wallpaper.** Switching one window between a window swap chain and a composition one
   means releasing the first and making the second on a window that already had one, at the moment of a crossfade.
   One kind of swap chain is one code path; opaque content composes the same. The old window swap chain is still there

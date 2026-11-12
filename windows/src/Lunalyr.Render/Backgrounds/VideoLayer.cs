@@ -48,7 +48,7 @@ public sealed class VideoLayer : PlacedLayer
     public override bool HasFirstFrame => _first || _failed || _error is not null;
 
     /// <summary>Moving, so drawn every frame, unless held still by Reduce Motion or broken.</summary>
-    public override bool IsAnimating => base.IsAnimating || (!_reduceMotion && !_failed && _error is null) || !_first;
+    public override bool IsAnimating => base.IsAnimating || (!_failed && _error is null && (!_reduceMotion || !_first));
 
     /// <summary>Where the decoder runs, for the log and the measurements: "GPU" or "memory".</summary>
     public string? DecodedOn { get; private set; }
@@ -209,6 +209,8 @@ public sealed class VideoLayer : PlacedLayer
             {
                 if (_stopping)
                 {
+                    // The slot goes back: a later start on this instance (after device loss) gets its whole queue.
+                    _space.Release();
                     frame.Dispose();
                     return false;
                 }

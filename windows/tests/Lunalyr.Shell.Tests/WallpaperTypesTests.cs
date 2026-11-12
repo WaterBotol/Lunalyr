@@ -6,6 +6,7 @@ using Lunalyr.Platform.Windows.Tests.NowPlaying;
 using Lunalyr.Render.Backgrounds;
 using Lunalyr.Shell.Settings;
 using Lunalyr.Shell.Tests.Fakes;
+using Lunalyr.Core.Compositions;
 using Lunalyr.Shell.Wallpaper;
 using Lunalyr.Tests.Shared;
 
@@ -30,10 +31,19 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         catch (IOException) { }
     }
 
-    private AppController Start(AppSettings settings)
+    /// <summary>Invented effects and patterns: a grid over energy and organic (the real ones come from their layers).</summary>
+    private static WallpaperCandidate[] Styles(string prefix) =>
+        [.. Enumerable.Range(0, 12).Select(i => new WallpaperCandidate($"{prefix}{i:00}", new WallpaperCharacter((i % 4) / 3.0, (i % 4) / 3.0, (i / 4) / 2.0)))];
+
+    private AppController Start(AppSettings settings, bool styles = false)
     {
         _controller = new AppController(_source, _lyrics, _renderer, settings, new SongOffsets(), ReadingServices.Basic, new PlaybackGuard(),
-            Logger.Null, options: new AppControllerOptions { TimeProvider = _time, ArtworkRetries = [] });
+            Logger.Null, options: new AppControllerOptions
+            {
+                TimeProvider = _time, ArtworkRetries = [], TimelineWait = TimeSpan.FromMilliseconds(60),
+                TimelinePoll = TimeSpan.FromMilliseconds(10), LateTimelinePoll = TimeSpan.FromMilliseconds(20),
+                WallpaperStyles = styles ? () => (Styles("e"), Styles("p")) : null,
+            });
         _controller.Start();
         return _controller;
     }
@@ -151,6 +161,55 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         var scene = _renderer.Last!;
         Assert.Equal((1.6, 0.5), (scene.Adjustments.Darkening, scene.Adjustments.Vividness));
         Assert.Equal("gradient", _renderer.Layers.Background);
+    }
+
+    private readonly List<FakeMediaSession> _sessions = [];
+
+    private FakeMediaSession Playing(string title, string artist = "Artist")
+    {
+        var session = new FakeMediaSession("Spotify.exe", _time);
+        _sessions.Add(session);
+        session.SetTrack(title, artist).SetPlayback(Lunalyr.Core.NowPlaying.PlaybackStatus.Playing).SetTimeline(30, 200);
+        return session;
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        for (var i = 0; i < 500 && !condition(); i++) await Task.Delay(10);
+        Assert.True(condition(), "Timed out waiting for the controller.");
+    }
+
+    [Fact]
+    public async Task MatchTheMusicGivesEachSongItsWallpaperAndKeepsIt()
+    {
+        _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "A line sung slowly")));
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Quick words tumbling out faster and faster here", "and more of them right away", "and more")));
+        var a = _source.Add(Playing("Song A"));
+        var controller = Start(new AppSettings(), styles: true);
+        await WaitUntil(() => controller.MatchedWallpaper is not null);
+        var first = controller.MatchedWallpaper!.Value;
+        Assert.NotNull(first.LayerId);
+        Assert.Equal(first.LayerId, _renderer.Layers.Background);
+
+        // Another song, then the first again: it looks as it did (the choice is deterministic and its character kept).
+        var b = _source.Add(Playing("Song B"));
+        await WaitUntil(() => _renderer.Last?.Lyrics is Core.Lyrics.LyricResult.Synced { Lines.Count: 3 });
+        await controller.WhenIdleAsync();
+        _source.SetCurrent(a);
+        await WaitUntil(() => _renderer.Last?.Lyrics is Core.Lyrics.LyricResult.Synced { Lines.Count: 1 });
+        await controller.WhenIdleAsync();
+        Assert.Equal(first, controller.MatchedWallpaper);
+        Assert.Equal(first.LayerId, _renderer.Layers.Background);
+
+        // A pinned effect applies at once, and GPU effects always draws an effect.
+        controller.ApplySettings(controller.Settings with { BackgroundMode = "shader", ShaderStyle = "e05" });
+        Assert.Equal("shader.e05", _renderer.Layers.Background);
+        controller.ApplySettings(controller.Settings with { ShaderStyle = "" });
+        Assert.StartsWith("shader.", _renderer.Layers.Background, StringComparison.Ordinal);
+        controller.ApplySettings(controller.Settings with { BackgroundMode = "pattern", PatternStyle = "p02" });
+        Assert.Equal("pattern.p02", _renderer.Layers.Background);
+        _ = b;
+        foreach (var session in _sessions) Assert.Empty(session.Commands);
     }
 
     // ---- Importing ----

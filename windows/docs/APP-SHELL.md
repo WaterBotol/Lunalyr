@@ -676,7 +676,8 @@ Adjustments.
 - `--demo --data <folder>` with `backgroundMode` (and `wallpaperPath` for Image or video) in that folder's
   `settings.json`; `tools/peek-desktop.ps1` captures the desktop with PrintWindow, never showing or activating a window
   (`-Thumbnail` for the DWM thumbnail, shown unactivated).
-- `--settings-page wallpaper --theme dark --quiet-windows` and `tools/capture-window.ps1` for the pages.
+- `--settings-page wallpaper --theme dark --quiet-windows` and `tools/capture-window.ps1` for the pages (not yet seen
+  to give a rendered capture: the displays were off; UI Automation read the pages' rows).
 - `tools/LayerPreview -wallpaper <file> -placements fill,fillTop,fillBottom,fit` draws the imported layer offscreen (a
   video plays in real time to each `-times` mark); `-layer desktop` draws Your wallpaper (keeping alpha);
   `-adjust speed=…,vividness=…,darkening=…,backing=…` draws the adjustments; `-bench <seconds>` measures a picture or
