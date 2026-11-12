@@ -57,3 +57,41 @@ The remaining files of the 36 are listed in the full report.
 
 Third-party libraries and services stay under their own licences and are listed in `docs/ARCHITECTURE.md`
 ("Licence"). Microsoft's Windows App SDK licence allows closed-source apps.
+
+## GPU effects and line patterns (milestone 6)
+
+Checked at `next/integration` `79b84db` with `git blame -w -M -C` (13 Nov 2026):
+
+| Mac file | Lines | `a99fd65` (Verso import) | Lunalyr's own |
+|---|---|---|---|
+| `Sources/UI/Shaders.metal` | 1,006 | 782: every effect body (`wlPlasma` … `wlLightTrails`), the hash, noise, rotation and 3D helpers | 224: `ambientLight`, the direct-rendering vertex shader, uniforms, OKLab decode, album gradient and grade (`aa22c91`, `4765504`), the music arguments (`c8859b7`) and small edits inside Verso bodies |
+| `Sources/UI/ShaderBackgroundView.swift` | 819 | 222: the `ShaderStyle` enum, titles, cost tiers, `character` table, `fit`/`matching`/`stableNoise`, `calm`/`intense` | 597: `ShaderRenderBudget`, `ShaderTimeBase`, the renderer, uniforms, OKLab conversion, pipeline cache (`aa22c91`, `4765504`) |
+| `Sources/UI/FractalBackgroundView.swift` | 507 | 507 (all of it: `BackgroundStyle`, every pattern, its titles) | none |
+
+**What went which way:**
+- **Ported faithfully (Lunalyr's lines):**
+  - `ShaderTimeBase` and `ShaderRenderBudget`, plus `ShaderEpochPolicy` (`FrameClockPolicy.swift`, `aa22c91`) →
+    `src/Lunalyr.Core/Backgrounds/ShaderTiming.cs`.
+  - The uniforms (first and third stops as tints, five OKLab stops, vividness clamp) and `oklab` → `GpuEffectLayer`.
+  - `ambientLight`, the album gradient in OKLab, the colour blend and the richness grade → `Shaders/Common.hlsli`.
+  - The 0.15 Reduce Motion rate and the 0.70 flow rate (`NowPlayingView.swift`, `aa22c91`) → `EffectClock`.
+  - The four Mac tests on these are ported.
+- **Re-implemented from behaviour, in a clean room (all 27 effects and all 18 patterns):**
+  - First, each effect's behaviour was written down in [GPU-EFFECTS.md](GPU-EFFECTS.md): what it looks like, how it
+    moves, how it uses the palette, how Reduce Motion affects it.
+  - Then the HLSL and the Direct2D painters were written by an agent that was never shown the Mac sources, the
+    reference checkout or the blame output. It worked only from those descriptions and the Windows contracts.
+  - The result has its own hashing (integer, PCG-style, no sine hash), noise, structure and constants.
+  - A grep for the source's distinctive literals found one textbook Julia-set constant, which was changed.
+  - An earlier attempt, written with the Metal source in view, followed its structure too closely. It was discarded
+    before any commit.
+- **Not carried over (Verso data):**
+  - The Mac's effect and pattern titles, cost tiers and character table.
+  - Its matching (`fit`, `matching`, `stableNoise`, the candidate pool) and its calm/intense/mid/energetic lists.
+  - Windows has its own titles and characters (`BackgroundCatalog.cs`, judged from Windows' previews) and cost tiers
+    measured on Windows ([measurements](measurements/gpu-effects/)). Match the music is the wallpaper-types branch's
+    own.
+- **Kept although on Verso lines:** the ids (the `ShaderStyle` raw values and `BackgroundStyle`'s 0…17 order) and the key
+  names `shaderStyle` / `patternStyle`. They let a pinned choice mean the same on both apps. They are identifiers, not
+  code; this is an open question for the owner.
+- **No effect or pattern was left out.** Each could be described by its look alone.
