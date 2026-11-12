@@ -99,6 +99,8 @@ public static class LyricSweep
     public static double Alpha(double along, double progress, double feather)
     {
         var (solid, clear) = Edges(progress, feather);
+        if (solid >= 1) return 1;
+        if (clear <= 0) return 0;
         if (along <= solid) return 1;
         if (along >= clear) return 0;
         return clear > solid ? (clear - along) / (clear - solid) : 0;

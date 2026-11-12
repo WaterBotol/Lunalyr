@@ -325,14 +325,14 @@ public readonly record struct LyricSwipePalette(Double3 Ribbon, Double3 Ink, Dou
 
     /// <summary>
     /// The palette for a cover's nine colours (gamma-encoded sRGB, row by row): its most vivid sampled colour's hue and
-    /// saturation (<see cref="AlbumColourGrid.Accent"/>), the fallback cover's when there are none.
+    /// saturation (<see cref="AlbumColourGrid.Accent"/>; the fallback accent when there are none).
     /// </summary>
     public static LyricSwipePalette ForCover(IReadOnlyList<Double3> rgbStops)
     {
         ArgumentNullException.ThrowIfNull(rgbStops);
         var hsb = new Double3[rgbStops.Count];
         for (var i = 0; i < hsb.Length; i++) hsb[i] = AlbumColourGrid.Hsb(rgbStops[i]);
-        var accent = AlbumColourGrid.Accent(hsb.Length > 0 ? hsb : AlbumColourGrid.FallbackHsb);
+        var accent = AlbumColourGrid.Accent(hsb);
         return From(accent.X, accent.Y);
     }
 }

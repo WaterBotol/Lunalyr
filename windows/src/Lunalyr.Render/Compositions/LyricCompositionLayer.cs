@@ -869,7 +869,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         dc.Transform = toBox;
         var layer = new LayerParameters1
         {
-            ContentBounds = new Vortice.RawRectF(-1e6f, -1e6f, 1e6f, 1e6f),
+            ContentBounds = new Vortice.RawRectF(0, 0, w, h),
             GeometricMask = _unitSquare,
             MaskAntialiasMode = AntialiasMode.PerPrimitive,
             MaskTransform = Matrix3x2.CreateScale(w, h),
