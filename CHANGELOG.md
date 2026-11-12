@@ -12,9 +12,6 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
-### Fixed
-- Readings below Japanese lyrics: a word with a doubled consonant that the reading spells across two characters (一回 ikkai, 学校 gakkou) is written as one word, not "ik kai", under floating and desktop lyrics and in Hinge and the other stage layouts.
-
 ## [2.0.0] - 2026-11-13
 
 ### Added
@@ -121,6 +118,7 @@ When merging, keep every entry and combine duplicate headings.
 - Music video: Lunalyr no longer sets a video's timing by itself (from YouTube captions, the library video's soundtrack, or its cuts against the beat), and never turns System audio's capture on for it. Timings it found before are no longer used: the video goes back to the length estimate until you tap, nudge or align it. Re-sync is gone; Align video's Automatic button is now Reset.
 
 ### Fixed
+- Readings below Japanese lyrics: a word with a doubled consonant that the reading spells across two characters (一回 ikkai, 学校 gakkou) is written as one word, not "ik kai", under floating and desktop lyrics and in Hinge and the other stage layouts.
 - Readings below Japanese lyrics: where a word ends inside a timed part that goes on into the next word (Apple Music times 始まりに as 始 | まりに), each part now reads its own characters (haji under 始, mari ni under まりに) instead of the whole word's reading under the first part and only the rest after it.
 
 - Portal, Torque, Hinge, Broadside, Mosaic and Fable: with readings "Below lyrics", each word's romanisation now arrives with that word. On an unspaced line (Japanese, Chinese) the whole line's reading used to sit under the first word from the moment the line began. And a word sung over several parts (笑っ てい た) now shares its reading out over them (wara · tte · ta) instead of putting it all under the first part, in every layout; where the parts are drawn as one word it still reads whole. The reading also fills in syllable by syllable with the word above it (思い出: omo, omoi, omoida), in every layout: the stage layouts, Scattered, Editorial, Constellation, Echo, Spoken, Cascade, Cutout and lyric cards. Fable no longer spaces a word's reading out by syllable ("omo i da").
