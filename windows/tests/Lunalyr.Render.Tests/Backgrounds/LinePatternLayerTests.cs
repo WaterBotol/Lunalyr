@@ -47,8 +47,8 @@ public sealed class LinePatternLayerTests : IDisposable
     {
         var factories = LinePatternLayerFactory.All(Plain);
         Assert.Equal(18, factories.Count);
-        Assert.Equal("pattern:ripples", factories[0].Id);
-        Assert.Equal("pattern:crosshatch", factories[17].Id);
+        Assert.Equal("pattern.ripples", factories[0].Id);
+        Assert.Equal("pattern.crosshatch", factories[17].Id);
         Assert.Equal(17, LinePatternCatalog.Find("crosshatch")!.RawValue);
     }
 

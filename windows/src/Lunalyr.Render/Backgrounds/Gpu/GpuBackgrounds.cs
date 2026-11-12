@@ -8,7 +8,7 @@ namespace Lunalyr.Render.Backgrounds.Gpu;
 public static class GpuBackgrounds
 {
     /// <summary>
-    /// A factory for every GPU effect (<c>shader:&lt;id&gt;</c>) and every line pattern (<c>pattern:&lt;id&gt;</c>), drawn
+    /// A factory for every GPU effect (<c>shader.&lt;id&gt;</c>) and every line pattern (<c>pattern.&lt;id&gt;</c>), drawn
     /// with <paramref name="options"/>; the patterns at <paramref name="patternOpacity"/> (the Mac's "Pattern opacity",
     /// 0...1, default 0.85).
     /// </summary>

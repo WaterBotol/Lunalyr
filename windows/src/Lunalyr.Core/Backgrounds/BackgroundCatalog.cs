@@ -1,8 +1,9 @@
-// The GPU effects (the Mac's ShaderStyle) and line patterns (the Mac's BackgroundStyle) this build draws, with the
-// Mac's raw values as ids so a setting or a per-song choice means the same thing on both. The ids and titles sit on
-// Verso-attributed lines on the Mac; they are kept because the settings and Match the music must agree across the two
-// apps (docs/PROVENANCE.md, open question). Everything else here is Windows' own: the cost tiers come from Windows
-// measurements (docs/milestones/M6.md), not the Mac's table, and nothing of the Mac's matching data is carried over.
+// The GPU effects (the Mac's ShaderStyle) and line patterns (the Mac's BackgroundStyle) this build draws. Their ids are
+// the Mac's raw values, so a pinned choice means the same effect on both apps; everything else is Windows' own. The
+// Mac's titles, cost tiers and "character" table sit on Verso-attributed lines (ShaderBackgroundView.swift,
+// FractalBackgroundView.swift), so none of them is carried over: the titles below name what Windows' own renders show,
+// the cost tiers are Windows measurements (docs/measurements/gpu-effects) and each character was judged from Windows'
+// previews (docs/previews/gpu-effects).
 
 namespace Lunalyr.Core.Backgrounds;
 
@@ -17,61 +18,72 @@ public enum GpuEffectCost
     Light,
     Medium,
 
-    /// <summary>Drawn at the smaller pixel budget; swapped for a lighter effect while power is being saved.</summary>
+    /// <summary>Drawn at the smaller pixel budget; left out of "Match the music" while power is being saved.</summary>
     Heavy,
 }
 
-/// <summary>One GPU effect: its Mac raw value, its title and its measured cost.</summary>
-public sealed record GpuEffect(string Id, string Title, GpuEffectCost Cost)
+/// <summary>
+/// Where an effect or pattern sits for "Match the music", each 0...1: <paramref name="Energy"/> (still to lively),
+/// <paramref name="Density"/> (open to busy) and <paramref name="Organic"/> (geometric to flowing).
+/// </summary>
+public readonly record struct BackgroundCharacter(double Energy, double Density, double Organic);
+
+/// <summary>One GPU effect: its Mac raw value, Windows' name for it, its measured cost and its character.</summary>
+public sealed record GpuEffect(string Id, string Title, GpuEffectCost Cost, BackgroundCharacter Character)
 {
-    /// <summary>The render layer that draws it (registered by the app; see <see cref="GpuEffectCatalog.LayerId"/>).</summary>
+    /// <summary>The render layer that draws it, <c>shader.&lt;id&gt;</c>.</summary>
     public string LayerId => GpuEffectCatalog.LayerPrefix + Id;
+
+    public bool Heavy => Cost == GpuEffectCost.Heavy;
 }
 
-/// <summary>One line pattern: its Mac raw value (an integer on the Mac), a name for it and its title.</summary>
-public sealed record LinePattern(int RawValue, string Id, string Title)
+/// <summary>One line pattern: its Mac raw value (an integer on the Mac), its id (the Mac's case name), Windows' name for it and its character.</summary>
+public sealed record LinePattern(int RawValue, string Id, string Title, BackgroundCharacter Character)
 {
+    /// <summary>The render layer that draws it, <c>pattern.&lt;id&gt;</c>.</summary>
     public string LayerId => LinePatternCatalog.LayerPrefix + Id;
 }
 
 /// <summary>The GPU effects, in the Mac's order.</summary>
 public static class GpuEffectCatalog
 {
-    /// <summary>Layer ids are this prefix and the effect's id, e.g. <c>shader:plasma</c>.</summary>
-    public const string LayerPrefix = "shader:";
+    /// <summary>Layer ids are this prefix and the effect's id, e.g. <c>shader.plasma</c> (docs/APP-SHELL.md, "Wallpaper types").</summary>
+    public const string LayerPrefix = "shader.";
 
     /// <summary>Drawn when an effect is missing or broken: the plainest and lightest.</summary>
     public const string Fallback = "plasma";
 
+    private static BackgroundCharacter C(double energy, double density, double organic) => new(energy, density, organic);
+
     public static IReadOnlyList<GpuEffect> All { get; } =
     [
-        new("plasma", "Plasma", GpuEffectCost.Light),
-        new("kaleido", "Kaleidoscope", GpuEffectCost.Light),
-        new("aurora", "Aurora", GpuEffectCost.Medium),
-        new("fractal", "Fractal", GpuEffectCost.Light),
-        new("liquid", "Liquid", GpuEffectCost.Light),
-        new("warp", "Marble", GpuEffectCost.Heavy),
-        new("nebula", "Nebula", GpuEffectCost.Heavy),
-        new("voronoi", "Voronoi", GpuEffectCost.Heavy),
-        new("orbs", "Orbs", GpuEffectCost.Light),
-        new("silk", "Silk", GpuEffectCost.Medium),
-        new("waves", "Waves", GpuEffectCost.Heavy),
-        new("helix", "Helix", GpuEffectCost.Medium),
-        new("ripple", "Ripple", GpuEffectCost.Light),
-        new("mirror", "Mirror", GpuEffectCost.Light),
-        new("wormhole", "Wormhole", GpuEffectCost.Light),
-        new("rings", "Rings", GpuEffectCost.Light),
-        new("vortex", "Vortex", GpuEffectCost.Light),
-        new("orbit", "Orbit", GpuEffectCost.Light),
-        new("bubbles", "Bubbles", GpuEffectCost.Medium),
-        new("galaxy", "Galaxy", GpuEffectCost.Light),
-        new("strata", "Strata", GpuEffectCost.Medium),
-        new("clouds", "Clouds", GpuEffectCost.Heavy),
-        new("curtains", "Curtains", GpuEffectCost.Light),
-        new("ribbons", "Ribbons", GpuEffectCost.Light),
-        new("prism", "Prism", GpuEffectCost.Light),
-        new("tidal", "Tidal", GpuEffectCost.Medium),
-        new("lightTrails", "Light Trails", GpuEffectCost.Medium),
+        new("plasma", "Soft Waves", GpuEffectCost.Light, C(0.25, 0.30, 0.85)),
+        new("kaleido", "Mirror Bloom", GpuEffectCost.Light, C(0.60, 0.75, 0.35)),
+        new("aurora", "Northern Lights", GpuEffectCost.Medium, C(0.30, 0.45, 0.85)),
+        new("fractal", "Julia Set", GpuEffectCost.Light, C(0.55, 0.60, 0.40)),
+        new("liquid", "Lava Lamp", GpuEffectCost.Light, C(0.40, 0.35, 0.90)),
+        new("warp", "Marbling", GpuEffectCost.Heavy, C(0.35, 0.70, 0.80)),
+        new("nebula", "Star Cloud", GpuEffectCost.Heavy, C(0.45, 0.65, 0.85)),
+        new("voronoi", "Cells", GpuEffectCost.Heavy, C(0.55, 0.80, 0.20)),
+        new("orbs", "Lanterns", GpuEffectCost.Light, C(0.30, 0.25, 0.70)),
+        new("silk", "Folds", GpuEffectCost.Medium, C(0.25, 0.35, 0.80)),
+        new("waves", "Open Sea", GpuEffectCost.Heavy, C(0.50, 0.45, 0.75)),
+        new("helix", "Double Helix", GpuEffectCost.Medium, C(0.65, 0.40, 0.30)),
+        new("ripple", "Still Water", GpuEffectCost.Light, C(0.30, 0.35, 0.80)),
+        new("mirror", "Polished Floor", GpuEffectCost.Light, C(0.20, 0.30, 0.55)),
+        new("wormhole", "Tunnel", GpuEffectCost.Light, C(0.85, 0.60, 0.35)),
+        new("rings", "Halos", GpuEffectCost.Light, C(0.60, 0.35, 0.25)),
+        new("vortex", "Whirlpool", GpuEffectCost.Light, C(0.75, 0.50, 0.55)),
+        new("orbit", "Planets", GpuEffectCost.Light, C(0.45, 0.25, 0.35)),
+        new("bubbles", "Glass Bubbles", GpuEffectCost.Medium, C(0.40, 0.45, 0.60)),
+        new("galaxy", "Spiral Galaxy", GpuEffectCost.Light, C(0.35, 0.50, 0.70)),
+        new("strata", "Ridgelines", GpuEffectCost.Medium, C(0.20, 0.50, 0.60)),
+        new("clouds", "Cloud Layers", GpuEffectCost.Heavy, C(0.20, 0.55, 0.90)),
+        new("curtains", "Light Curtains", GpuEffectCost.Light, C(0.45, 0.55, 0.75)),
+        new("ribbons", "Tubes", GpuEffectCost.Light, C(0.50, 0.50, 0.60)),
+        new("prism", "Spectrum", GpuEffectCost.Light, C(0.65, 0.40, 0.30)),
+        new("tidal", "Tide Lines", GpuEffectCost.Medium, C(0.35, 0.60, 0.90)),
+        new("lightTrails", "Streaks", GpuEffectCost.Medium, C(0.75, 0.30, 0.45)),
     ];
 
     public static GpuEffect? Find(string? id)
@@ -89,44 +101,47 @@ public static class GpuEffectCatalog
         layerId is not null && layerId.StartsWith(LayerPrefix, StringComparison.Ordinal) ? Find(layerId[LayerPrefix.Length..]) : null;
 
     /// <summary>The effects cheap enough to leave running while power is being saved.</summary>
-    public static IEnumerable<GpuEffect> Affordable(bool sparing) => sparing ? All.Where(e => e.Cost != GpuEffectCost.Heavy) : All;
+    public static IEnumerable<GpuEffect> Affordable(bool sparing) => sparing ? All.Where(e => !e.Heavy) : All;
 }
 
 /// <summary>The line patterns, in the Mac's order (their raw values are 0...17).</summary>
 public static class LinePatternCatalog
 {
-    /// <summary>Layer ids are this prefix and the pattern's id, e.g. <c>pattern:ripples</c>.</summary>
-    public const string LayerPrefix = "pattern:";
+    /// <summary>Layer ids are this prefix and the pattern's id, e.g. <c>pattern.ripples</c>.</summary>
+    public const string LayerPrefix = "pattern.";
+
+    private static BackgroundCharacter C(double energy, double density, double organic) => new(energy, density, organic);
 
     public static IReadOnlyList<LinePattern> All { get; } =
     [
-        new(0, "ripples", "Ripples"),
-        new(1, "contours", "Contours"),
-        new(2, "waveBands", "Wave Bands"),
-        new(3, "bubbles", "Bubbles"),
-        new(4, "orbits", "Orbits"),
-        new(5, "starfield", "Starfield"),
-        new(6, "petals", "Petals"),
-        new(7, "flowField", "Flow Field"),
-        new(8, "constellation", "Constellation"),
-        new(9, "hexGrid", "Hex Grid"),
-        new(10, "moire", "Moiré"),
-        new(11, "perspectiveGrid", "Perspective Grid"),
-        new(12, "fractalTree", "Fractal Tree"),
-        new(13, "lowPoly", "Low Poly"),
-        new(14, "spiralArms", "Spiral Arms"),
-        new(15, "diagonalRain", "Rain"),
-        new(16, "circuitry", "Circuitry"),
-        new(17, "crosshatch", "Crosshatch"),
+        new(0, "ripples", "Rings on Water", C(0.25, 0.30, 0.70)),
+        new(1, "contours", "Topography", C(0.20, 0.60, 0.75)),
+        new(2, "waveBands", "Wave Lines", C(0.30, 0.35, 0.70)),
+        new(3, "bubbles", "Rising Circles", C(0.30, 0.35, 0.65)),
+        new(4, "orbits", "Ellipses", C(0.35, 0.40, 0.45)),
+        new(5, "starfield", "Stars", C(0.25, 0.30, 0.50)),
+        new(6, "petals", "Flower", C(0.25, 0.35, 0.85)),
+        new(7, "flowField", "Currents", C(0.45, 0.55, 0.85)),
+        new(8, "constellation", "Star Map", C(0.40, 0.35, 0.30)),
+        new(9, "hexGrid", "Honeycomb", C(0.45, 0.70, 0.10)),
+        new(10, "moire", "Interference", C(0.50, 0.75, 0.20)),
+        new(11, "perspectiveGrid", "Floor Grid", C(0.60, 0.45, 0.10)),
+        new(12, "fractalTree", "Branches", C(0.35, 0.50, 0.90)),
+        new(13, "lowPoly", "Facets", C(0.60, 0.60, 0.20)),
+        new(14, "spiralArms", "Spirals", C(0.65, 0.40, 0.50)),
+        new(15, "diagonalRain", "Rainfall", C(0.80, 0.45, 0.40)),
+        new(16, "circuitry", "Circuit Board", C(0.70, 0.55, 0.05)),
+        new(17, "crosshatch", "Hatching", C(0.60, 0.65, 0.30)),
     ];
 
     public static LinePattern? Find(int rawValue) => rawValue >= 0 && rawValue < All.Count ? All[rawValue] : null;
 
+    /// <summary>The pattern with id <paramref name="id"/>; a number is read as the Mac's raw value ("3" is bubbles).</summary>
     public static LinePattern? Find(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
         foreach (var pattern in All) if (pattern.Id == id) return pattern;
-        return null;
+        return int.TryParse(id, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var raw) ? Find(raw) : null;
     }
 
     public static string LayerId(int rawValue) => Find(rawValue)?.LayerId ?? throw new ArgumentOutOfRangeException(nameof(rawValue));

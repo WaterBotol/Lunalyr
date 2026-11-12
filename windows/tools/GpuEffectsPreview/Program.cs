@@ -3,7 +3,7 @@
 //   GpuEffectsPreview sheet -out <folder> [-kind effects|patterns|all] [-only id,id] [-times 8,40] [-tile 400x225]
 //                     [-palettes dark,bright,two] [-hardware]
 //       One contact sheet per palette and time: every layer as a labelled tile.
-//   GpuEffectsPreview one -layer shader:plasma -out <file.png> [-size 1280x720] [-time 8] [-palette dark] [-hardware]
+//   GpuEffectsPreview one -layer shader.plasma -out <file.png> [-size 1280x720] [-time 8] [-palette dark] [-hardware]
 //       One frame of one layer.
 //   GpuEffectsPreview bench -adapter <name part> [-size 2560x1440] [-frames 240] [-kind all] [-only id,id] [-out file.md]
 //                     [-budget pixels]  (every effect at this pixel budget instead of its own)
@@ -91,9 +91,9 @@ internal sealed record Args(string Command, string? Out, string Kind, string[]? 
     {
         var options = new BackgroundOptions { PixelBudget = Budget };
         return [.. GpuBackgrounds.Factories(options).Where(f =>
-            (Kind == "all" || (Kind == "effects" && f.Id.StartsWith("shader:", StringComparison.Ordinal))
-                           || (Kind == "patterns" && f.Id.StartsWith("pattern:", StringComparison.Ordinal)))
-            && (Only is null || Only.Any(o => f.Id == o || f.Id.EndsWith(":" + o, StringComparison.Ordinal))))];
+            (Kind == "all" || (Kind == "effects" && f.Id.StartsWith("shader.", StringComparison.Ordinal))
+                           || (Kind == "patterns" && f.Id.StartsWith("pattern.", StringComparison.Ordinal)))
+            && (Only is null || Only.Any(o => f.Id == o || f.Id.EndsWith("." + o, StringComparison.Ordinal))))];
     }
 }
 

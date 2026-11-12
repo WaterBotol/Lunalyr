@@ -16,7 +16,7 @@ using Vortice.DirectWrite;
 
 namespace Lunalyr.Render.Backgrounds.Gpu;
 
-/// <summary>Creates <see cref="GpuEffectLayer"/>s for one effect; the id is <c>shader:&lt;effect id&gt;</c>.</summary>
+/// <summary>Creates <see cref="GpuEffectLayer"/>s for one effect; the id is <c>shader.&lt;effect id&gt;</c>.</summary>
 public sealed class GpuEffectLayerFactory : IRenderLayerFactory
 {
     private readonly GpuEffect _effect;
@@ -162,9 +162,9 @@ public sealed class GpuEffectLayer : IRenderLayer
         {
             Observe(frame.Scene.Palette, now);
             _fade.Current(now, _current);
-            var (time, flow) = _clock.At(now, _options.Speed, _options.ReduceMotion || frame.Scene.ReduceMotion);
+            var (time, flow) = _clock.At(now, SceneAdjust.Speed(_options, frame.Scene), _options.ReduceMotion || frame.Scene.ReduceMotion);
             var (shaderTime, shaderFlow) = _timeBase.Uniforms(time, flow);
-            var constants = Constants(_current, shaderTime, shaderFlow);
+            var constants = Constants(_current, shaderTime, shaderFlow, SceneAdjust.Vividness(_options, frame.Scene));
             _canvas.Draw(_shader, constants);
             frame.Dc.DrawBitmap(_canvas.Bitmap, new Vortice.RawRectF(0, 0, _size.X, _size.Y), 1, InterpolationMode.Linear, null, null);
             _shade.Draw(frame, Luminance(_current));
@@ -177,7 +177,7 @@ public sealed class GpuEffectLayer : IRenderLayer
         }
     }
 
-    private GpuFrameConstants Constants(ReadOnlySpan<Vector4> stops, float time, float flow)
+    private GpuFrameConstants Constants(ReadOnlySpan<Vector4> stops, float time, float flow, double vividness)
     {
         var dip = new Vector2(_size.X / _scale, _size.Y / _scale);
         return new GpuFrameConstants
@@ -186,7 +186,7 @@ public sealed class GpuEffectLayer : IRenderLayer
             PixelScale = new Vector2(_canvas.Width / Math.Max(1e-3f, dip.X), _canvas.Height / Math.Max(1e-3f, dip.Y)),
             Time = time,
             Flow = flow,
-            Vividness = (float)Math.Clamp(_options.Vividness, 0, 1.8),
+            Vividness = (float)Math.Clamp(vividness, 0, 1.8),
             TintA = Opaque(stops[0]),
             TintB = Opaque(stops[2]),
             Stop0 = OkLab(stops[0]), Stop1 = OkLab(stops[1]), Stop2 = OkLab(stops[2]), Stop3 = OkLab(stops[3]), Stop4 = OkLab(stops[4]),

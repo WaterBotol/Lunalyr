@@ -30,7 +30,7 @@ public static class LinePatternLayer
     public const double PhaseRate = 0.5;
 }
 
-/// <summary>Creates line-pattern layers for one pattern; the id is <c>pattern:&lt;pattern id&gt;</c>.</summary>
+/// <summary>Creates line-pattern layers for one pattern; the id is <c>pattern.&lt;pattern id&gt;</c>.</summary>
 public sealed class LinePatternLayerFactory : IRenderLayerFactory
 {
     private readonly LinePattern _pattern;
@@ -132,11 +132,15 @@ internal sealed class LinePatternOverlay : IFieldOverlay
         _opacity = opacity;
         _log = log;
         _painter = LinePainters.For(pattern.Id);
+        _drawnOpacity = opacity;
     }
 
-    public double? PatternOpacity => _opacity;
+    /// <summary>The pattern opacity last drawn with (the factory's until the first frame).</summary>
+    public double? PatternOpacity => _drawnOpacity;
 
-    private float Strength => (float)(LinePatternLayer.InkOpacity * _opacity);
+    private double _drawnOpacity;
+
+    private float Strength => (float)(LinePatternLayer.InkOpacity * _drawnOpacity);
 
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
@@ -192,7 +196,8 @@ internal sealed class LinePatternOverlay : IFieldOverlay
         try
         {
             Reseed(frame.Scene);
-            var (time, flow) = _clock.At(frame.WallSeconds, _options.Speed, _options.ReduceMotion || frame.Scene.ReduceMotion);
+            _drawnOpacity = SceneAdjust.PatternOpacity(_opacity, frame.Scene);
+            var (time, flow) = _clock.At(frame.WallSeconds, SceneAdjust.Speed(_options, frame.Scene), _options.ReduceMotion || frame.Scene.ReduceMotion);
             var phase = flow * LinePatternLayer.PhaseRate;
             var blend = dc.PrimitiveBlend;
             var transform = dc.Transform;

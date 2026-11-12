@@ -51,7 +51,7 @@ public sealed class GpuEffectLayerTests : IDisposable
     {
         var factories = GpuEffectLayerFactory.All(Plain);
         Assert.Equal(GpuEffectCatalog.All.Count, factories.Count);
-        Assert.Contains(factories, f => f.Id == "shader:lightTrails");
+        Assert.Contains(factories, f => f.Id == "shader.lightTrails");
         Assert.Equal(factories.Count, factories.Select(f => f.Id).Distinct().Count());
     }
 

@@ -115,15 +115,18 @@ public sealed class ShaderTimingTests
     {
         Assert.Equal(27, GpuEffectCatalog.All.Count);
         Assert.Equal(27, GpuEffectCatalog.All.Select(e => e.Id).Distinct().Count());
-        Assert.Equal("Marble", GpuEffectCatalog.Find("warp")!.Title);
-        Assert.Equal("shader:lightTrails", GpuEffectCatalog.LayerId("lightTrails"));
-        Assert.Equal("lightTrails", GpuEffectCatalog.FromLayerId("shader:lightTrails")!.Id);
-        Assert.Null(GpuEffectCatalog.FromLayerId("pattern:ripples"));
+        Assert.Equal("Marbling", GpuEffectCatalog.Find("warp")!.Title);
+        Assert.Equal("shader.lightTrails", GpuEffectCatalog.LayerId("lightTrails"));
+        Assert.Equal("lightTrails", GpuEffectCatalog.FromLayerId("shader.lightTrails")!.Id);
+        Assert.Null(GpuEffectCatalog.FromLayerId("pattern.ripples"));
+        Assert.Equal(GpuEffectCatalog.All.Count, GpuEffectCatalog.All.Select(e => e.Title).Distinct().Count());
+        Assert.Equal(LinePatternCatalog.All.Count, LinePatternCatalog.All.Select(p => p.Title).Distinct().Count());
         Assert.Equal(18, LinePatternCatalog.All.Count);
         for (var i = 0; i < LinePatternCatalog.All.Count; i++) Assert.Equal(i, LinePatternCatalog.All[i].RawValue);
         Assert.Equal("diagonalRain", LinePatternCatalog.Find(15)!.Id);
-        Assert.Equal("Rain", LinePatternCatalog.Find(15)!.Title);
-        Assert.Equal("pattern:moire", LinePatternCatalog.LayerId(10));
+        Assert.Equal("Rainfall", LinePatternCatalog.Find(15)!.Title);
+        Assert.Equal("bubbles", LinePatternCatalog.Find("3")!.Id);
+        Assert.Equal("pattern.moire", LinePatternCatalog.LayerId(10));
         Assert.Null(LinePatternCatalog.Find(18));
         Assert.DoesNotContain(GpuEffectCatalog.Affordable(sparing: true), e => e.Cost == GpuEffectCost.Heavy);
     }
