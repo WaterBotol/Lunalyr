@@ -255,7 +255,10 @@ internal sealed class Ink : IDisposable
     /// The text's shape in one flat <paramref name="colour"/> (straight alpha), within <paramref name="clip"/>: a word
     /// set on a highlight tile. Made through an effect created when first needed.
     /// </summary>
-    public void DrawTinted(ID2D1DeviceContext dc, in Matrix3x2 world, Vector4 colour, InkClip clip)
+    /// <param name="boundaries">With <paramref name="opacities"/>, each share of the text (by fraction across it, left to
+    /// right) is drawn at its own opacity, as in <see cref="Draw"/>: a reading filling in as its word is sung.</param>
+    public void DrawTinted(ID2D1DeviceContext dc, in Matrix3x2 world, Vector4 colour, InkClip clip,
+                           ReadOnlySpan<double> boundaries = default, ReadOnlySpan<double> opacities = default)
     {
         if (!(colour.W > 0.004f) || (clip.IsSet && !(clip.Right > clip.Left))) return;
         if (_tint is null)
@@ -264,10 +267,24 @@ internal sealed class Ink : IDisposable
             _tint.SetInput(0, Text, true);
             _tintOut = _tint.Output;
         }
-        _tint.Color = new Vector4(colour.X, colour.Y, colour.Z, Math.Clamp(colour.W, 0, 1));
         dc.Transform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
-        var rect = Clipped(new RawRectF(0, 0, PixelWidth, PixelHeight), clip, Centre, Raster);
-        if (rect.Right > rect.Left) dc.DrawImage(_tintOut!, null, rect, InterpolationMode.Linear, CompositeMode.SourceOver);
+        if (!(opacities.Length > 1 && boundaries.Length == opacities.Length + 1))
+        {
+            _tint.Color = new Vector4(colour.X, colour.Y, colour.Z, Math.Clamp(colour.W, 0, 1));
+            var rect = Clipped(new RawRectF(0, 0, PixelWidth, PixelHeight), clip, Centre, Raster);
+            if (rect.Right > rect.Left) dc.DrawImage(_tintOut!, null, rect, InterpolationMode.Linear, CompositeMode.SourceOver);
+            return;
+        }
+        for (var k = 0; k < opacities.Length; k++)
+        {
+            var alpha = Math.Clamp(colour.W * (float)opacities[k], 0, 1);
+            if (alpha <= 0.004f) continue;
+            var slice = Clipped(SliceRect(k, boundaries, opacities.Length, false, Centre, Raster, PixelWidth, PixelHeight),
+                                clip, Centre, Raster);
+            if (!(slice.Right > slice.Left)) continue;
+            _tint.Color = new Vector4(colour.X, colour.Y, colour.Z, alpha);
+            dc.DrawImage(_tintOut!, null, slice, InterpolationMode.Linear, CompositeMode.SourceOver);
+        }
     }
 
     /// <summary><paramref name="rect"/> (bitmap pixels) cut to the clip's stretch across the text.</summary>

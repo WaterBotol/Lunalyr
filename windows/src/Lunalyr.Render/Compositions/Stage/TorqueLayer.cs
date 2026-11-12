@@ -126,8 +126,8 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
             if (live < 0.999) DrawLabel(dc, line, word, run, 0, time, unit, opacity, wordBlur, shadow);
             if (live > 0.001) DrawLabel(dc, line, word, run, 1, time, unit, live * opacity, wordBlur, live < 0.999 ? 0 : shadow);
             // The reading takes the sung colour while its word is being sung, then settles back to the reading colour.
-            if (live < 0.999) DrawReading(dc, word, 0, unit, opacity, wordBlur, shadow);
-            if (live > 0.001) DrawReading(dc, word, 1, unit, live * opacity, wordBlur, live < 0.999 ? 0 : shadow);
+            if (live < 0.999) DrawReading(dc, line, word, run, 0, time, unit, opacity, wordBlur, shadow);
+            if (live > 0.001) DrawReading(dc, line, word, run, 1, time, unit, live * opacity, wordBlur, live < 0.999 ? 0 : shadow);
         }
     }
 }

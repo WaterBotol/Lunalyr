@@ -35,6 +35,10 @@ internal sealed class StageWord : IDisposable
     public SizeD Label { get; init; }
     /// <summary>Where each glued syllable begins and ends along the label (0…1), or null for a run of one part.</summary>
     public double[]? Boundaries { get; init; }
+    /// <summary>Where each part's share of the reading falls along it, so the reading fills in as the run is sung (the
+    /// Mac's <c>revealedReading</c>); for a word baked from its reading (Mosaic's letter-by-letter kind), along the
+    /// label. Null when the reading shows whole.</summary>
+    public ReadingSlices? ReadingSlices { get; init; }
     public bool RightToLeft { get; init; }
     public bool HasReading => Readings.Length > 0;
 
@@ -65,11 +69,14 @@ internal sealed record WordSpec(double Size, Vector4[] Colours)
     public double? ReadingRow { get; init; }
     /// <summary>−1 leading, 0 centred, 1 trailing.</summary>
     public int Alignment { get; init; }
+    /// <summary>The text baked is the run's reading itself (Mosaic's letter-by-letter kind sets it on its own): its
+    /// shares are measured along the label.</summary>
+    public bool LabelIsReading { get; init; }
 }
 
 /// <summary>What a stage line is built from.</summary>
 internal sealed record StageSource(int Row, LyricLine Line, IReadOnlyList<StageRun> Runs, string?[] Readings, double Speed,
-                                   double InkTime);
+                                   double InkTime, ReadingShares?[]? Shares = null);
 
 /// <summary>A line set for a stage layout, with the scratch its frames use (so a frame allocates nothing).</summary>
 internal class StageLine : IDisposable
@@ -127,6 +134,13 @@ internal class StageLine : IDisposable
         return Parts.AsSpan(0, run.Parts.Count);
     }
 
+    /// <summary>
+    /// How far each part's share of <paramref name="word"/>'s reading shows at <paramref name="time"/>: with its part,
+    /// as the word's own syllables do (the Mac's <c>revealedReading</c>). Empty while the reading shows whole.
+    /// </summary>
+    public ReadOnlySpan<double> ReadingOpacities(StageWord word, StageRun run, double time) =>
+        word.ReadingSlices is { } slices ? slices.FromParts(PartOpacities(run, time)) : default;
+
     public virtual void Dispose()
     {
         foreach (var word in Words) word.Dispose();
@@ -141,6 +155,9 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
 {
     private const int MaxLines = 6;
     private readonly Dictionary<int, StageLine> _lines = [];
+    /// <summary>The reading shares of the line being built, by run id: a run's reading is measured share by share as it
+    /// is baked.</summary>
+    private ReadingShares?[]? _baking;
     private ID2D1SolidColorBrush? _brush;
     private ID2D1StrokeStyle? _round;
     private ID2D1PathGeometry? _star;
@@ -196,13 +213,17 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var source = sheet.Lines[row];
         IReadOnlyList<LyricWord> words = source.Words;
         IReadOnlyList<bool> glue = sheet.Glue[row];
+        // Word-by-word readings where the scene has them (the Mac's romanized): "Instead" sets them in the words' place,
+        // grouped as the line's words were.
+        var set = WordReadingsOf(row);
+        if (set is { Replaced: true }) { words = set.Words; glue = set.Glue; }
         IReadOnlyList<BackingGroup> groups = [];
         if (source.WordTimed)
         {
             var split = BackingVocals.Split(words, glue);
             if (split.Backing.Count > 0) { words = split.Main; glue = split.MainGlue; groups = split.Backing; }
         }
-        if (Replaced(row, words) is { } romanised)
+        if (set is null && Replaced(row, words) is { } romanised)
         {
             // "Instead", with one part per sung word: the Mac's replace hands the layouts the romanised words, each a
             // word of its own (a Latin reading of a Japanese character stands apart), at the words' own times.
@@ -210,10 +231,19 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             glue = new bool[romanised.Count];
         }
         var runs = StageRun.Make(words, glue);
-        var (readings, lineReading) = PairReadings(row, words, runs);
+        var (readings, lineReading, shares) = set is not null ? PairWordReadings(row, set, runs) : PairReadings(row, words, runs);
         var starts = new double[words.Count];
         for (var i = 0; i < words.Count; i++) starts[i] = words[i].Start;
-        var line = Build(new StageSource(row, source, runs, readings, StageShared.LineSpeed(starts), source.Start));
+        StageLine line;
+        _baking = shares;
+        try
+        {
+            line = Build(new StageSource(row, source, runs, readings, StageShared.LineSpeed(starts), source.Start, shares));
+        }
+        finally
+        {
+            _baking = null;
+        }
         if (lineReading is not null)
         {
             using var layout = Kit!.Layout(lineReading, Face.Quiet, (float)(BaseSize * 0.38), TextKit.LocaleFor(lineReading),
@@ -260,16 +290,17 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     /// of one run) goes under its own run; otherwise the reading goes once under the whole stage. "Instead" sets a
     /// reading that pairs this way in place of the runs' words.
     /// </summary>
-    private (string?[] Runs, string? Line) PairReadings(int row, IReadOnlyList<LyricWord> words, List<StageRun> runs)
+    private (string?[] Runs, string? Line, ReadingShares?[]? Shares) PairReadings(int row, IReadOnlyList<LyricWord> words,
+                                                                                List<StageRun> runs)
     {
         var none = new string?[runs.Count];
-        if (ReadingOf(row) is not { } reading) return (none, null);
-        if (!LyricReadingPairs.IsDistinct(reading, string.Concat(words.Select(word => word.Text)))) return (none, null);
+        if (ReadingOf(row) is not { } reading) return (none, null, null);
+        if (!LyricReadingPairs.IsDistinct(reading, string.Concat(words.Select(word => word.Text)))) return (none, null, null);
         var parts = reading.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         string?[]? paired = null;
         if (runs.Count == 1) paired = [reading];
         else if (runs.Count > 1 && parts.Length == runs.Count) paired = parts;
-        if (paired is null) return (none, reading);
+        if (paired is null) return (none, reading, null);
         if (SceneShown?.Style.Readings == ReadingPlacement.Instead)
         {
             for (var i = 0; i < runs.Count; i++)
@@ -277,11 +308,36 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 var run = runs[i];
                 runs[i] = run with { Text = paired[i]!, Parts = [new StageRun.Part(paired[i]!, run.Start, run.Parts[0].Source)] };
             }
-            return (none, null);
+            return (none, null, null);
         }
         for (var i = 0; i < runs.Count; i++)
             if (!LyricReadingPairs.IsDistinct(paired[i]!, runs[i].Text)) paired[i] = null;
-        return (paired, null);
+        return (paired, null, null);
+    }
+
+    /// <summary>
+    /// The line's word-by-word readings paired with its stage runs (the Mac's <c>readingPairs(byPart:)</c>): with "Below
+    /// lyrics" each token keeps its own share of its stage run's reading (<see cref="LyricReadingPairs.Parts"/>, by the
+    /// runs the stage draws, <see cref="StageRun.Glue"/>), so each run carries only its own reading and fills it in
+    /// part by part; a reading that cannot be split by word goes once under the whole stage. "Instead" has set the
+    /// readings in the words' place already.
+    /// </summary>
+    private (string?[] Runs, string? Line, ReadingShares?[]? Shares) PairWordReadings(int row, LineReadingSet set,
+                                                                                    List<StageRun> runs)
+    {
+        var none = new string?[runs.Count];
+        if (set.Replaced || ReadingDisplay != RomanizationDisplay.Below || WordReadingList(row) is not { } read)
+            return (none, null, null);
+        var line = Sheet!.Lines[row];
+        var pairs = LyricReadingPairs.Parts(read, line.Words, StageRun.Glue(line.Words, Sheet.Glue[row]));
+        var readings = new string?[runs.Count];
+        var shares = new ReadingShares?[runs.Count];
+        for (var i = 0; i < runs.Count; i++)
+        {
+            readings[i] = StageRun.Reading(runs[i], pairs);
+            if (readings[i] is not null) shares[i] = ReadingShares.Of(runs[i], pairs);
+        }
+        return (readings, set.LineReading, shares);
     }
 
     /// <summary>The line's words with the reading in their place, when it is set "Instead" and has one part per word.</summary>
@@ -425,6 +481,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             for (var i = 0; i < labels.Length; i++) labels[i] = kit.Bake(label, spec.Colours[i], spec.Raster, spec.Shadow);
             double w = label.Metrics.Width, h = label.Metrics.Height;
             var readings = Array.Empty<Ink>();
+            // A word baked from its run's reading fills in along its label; a reading under a word, along the reading.
+            var readingSlices = spec.LabelIsReading ? ReadingSlices.Measure(label, text, SharesOf(run)) : null;
             double readingWidth = 0, readingRow = 0;
             if (spec.Reading is { } reading && spec.ReadingColours.Length > 0)
             {
@@ -440,6 +498,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 using (layout)
                 {
                     readings = new Ink[spec.ReadingColours.Length];
+                    readingSlices = ReadingSlices.Measure(layout, reading, SharesOf(run));
                     for (var i = 0; i < readings.Length; i++) readings[i] = kit.Bake(layout, spec.ReadingColours[i], spec.Raster, spec.ReadingShadow);
                     readingWidth = layout.Metrics.Width;
                     readingRow = spec.ReadingRow ?? layout.Metrics.Height;
@@ -471,6 +530,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 Size = new SizeD(unitWidth, unitHeight),
                 Label = new SizeD(w, h),
                 Boundaries = boundaries,
+                ReadingSlices = readingSlices,
                 RightToLeft = rightToLeft,
             };
         }
@@ -479,6 +539,10 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             label.Dispose();
         }
     }
+
+    /// <summary>The shares of <paramref name="run"/>'s reading on the line being built, if it fills in by part.</summary>
+    private ReadingShares? SharesOf(StageRun? run) =>
+        run is not null && _baking is { } shares && run.Id >= 0 && run.Id < shares.Length ? shares[run.Id] : null;
 
     /// <summary>The reading spec of <paramref name="text"/> under a word set at <paramref name="size"/> (the Mac's <c>withReading</c>).</summary>
     protected WordSpec WithReading(WordSpec spec, string? text, double size, Vector4[] colours, double? gap = null,
@@ -571,11 +635,17 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                 word.RightToLeft);
     }
 
-    protected static void DrawReading(ID2D1DeviceContext dc, StageWord word, int colour, in Matrix4x4 unit, double opacity,
-                                      float blur = 0, float shadow = 1)
+    /// <summary>
+    /// Draws a stage word's reading (colour <paramref name="colour"/>), each part's share showing as that part is sung
+    /// (the Mac's <c>revealedReading</c>): a share not yet sung is not drawn but keeps its room.
+    /// </summary>
+    protected static void DrawReading(ID2D1DeviceContext dc, StageLine line, StageWord word, StageRun run, int colour, double time,
+                                      in Matrix4x4 unit, double opacity, float blur = 0, float shadow = 1)
     {
         if (word.Readings.Length == 0) return;
-        DrawInk(dc, word.Readings[Math.Min(colour, word.Readings.Length - 1)], unit, word.ReadingOffset, opacity, blur, shadow);
+        var shares = line.ReadingOpacities(word, run, time);
+        DrawInk(dc, word.Readings[Math.Min(colour, word.Readings.Length - 1)], unit, word.ReadingOffset, opacity, blur, shadow,
+                shares.IsEmpty ? default : word.ReadingSlices!.Boundaries, shares);
     }
 
     // ---- Shapes ----------------------------------------------------------------------------------------------------

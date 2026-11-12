@@ -138,7 +138,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             var onTile = style.Accent == FableAccent.Tile;
             DrawLabel(dc, line, word, run, 0, time, unit, onTile ? (1 - wear) * opacity : opacity, blur);
             if (onTile && wear > 0.001) DrawLabel(dc, line, word, run, 1, time, unit, wear * opacity, blur, 0);
-            DrawReading(dc, word, 0, unit, opacity, blur);
+            DrawReading(dc, line, word, run, 0, time, unit, opacity, blur);
             if (style.Accent == FableAccent.Star && wear > 0.001)
             {
                 var dir = line.RightToLeft ? -1 : 1;

@@ -51,6 +51,43 @@ public static class ExtrasFixtures
         return Scene("Evening Road", lyrics, style) with { WordReadings = words, Readings = lines };
     }
 
+    /// <summary>
+    /// The Mac's StageReadingRevealTests lines (a word-timed Japanese song from Apple Music, syllable-timed in places),
+    /// with word-by-word readings as the romanizer gives them: a phrase sung over several words is shared out over
+    /// them and keeps the phrase's time ("omo" "i" "da" "su" under 思い出す, "wara" "tte" "ta" under 笑っていた), so a
+    /// word's reading fills in syllable by syllable with it.
+    /// </summary>
+    public static SceneSnapshot JapaneseSyllables(LyricStyle? style = null)
+    {
+        style ??= LyricStyle.Default;
+        static Sung W(string text, double start, double end) => new(text, start, end, false);
+        Sung[][] sung =
+        [
+            [W("過ぎてゆく", 14.88, 16.11), W("時間", 16.33, 17.23), W("の", 17.23, 17.45), W("中", 17.45, 18.2)],
+            [W("あなたを", 18.61, 19.56), W("思", 19.56, 20.57), W("い", 20.57, 20.92), W("出", 20.92, 21.13), W("す", 21.13, 21.69)],
+            [W("物憂げに", 22.34, 23.56), W("眺める", 23.73, 24.86), W("画面", 24.86, 25.53), W("に", 25.53, 25.78), W("映った", 25.78, 26.67), W("二人", 26.67, 27.63)],
+            [W("笑っ", 27.64, 28.29), W("てい", 28.29, 28.57), W("た", 28.57, 28.87)],
+        ];
+        (string Text, double Start, double End)[][] read =
+        [
+            [("sugite yuku", 14.88, 16.11), ("toki", 16.33, 17.23), ("no", 17.23, 17.45), ("naka", 17.45, 18.2)],
+            [("anata o", 18.61, 19.56), ("omo", 19.56, 21.69), ("i", 19.56, 21.69), ("da", 19.56, 21.69), ("su", 19.56, 21.69)],
+            [("monou ge ni", 22.34, 23.56), ("nagameru", 23.73, 24.86), ("gamen", 24.86, 25.53), ("ni", 25.53, 25.78), ("utsutta", 25.78, 26.67), ("futari", 26.67, 27.63)],
+            [("wara", 27.64, 28.87), ("tte", 27.64, 28.87), ("ta", 27.64, 28.87)],
+        ];
+        var lyrics = Parse(LyricFormat.Ttml, Ttml("ja", sung), 40);
+        var words = new Dictionary<int, IReadOnlyList<LyricWord>>();
+        for (var row = 0; row < lyrics.Lines.Count; row++)
+        {
+            var line = lyrics.Lines[row];
+            var index = Array.FindIndex(sung, candidate => Math.Abs(candidate[0].Start - line.Start) < 0.01);
+            if (index < 0 || line.Words.Count != read[index].Length) continue;
+            words[row] = [.. read[index].Select(reading => new LyricWord(reading.Text, reading.Start, reading.End))];
+        }
+        var lines = words.ToDictionary(pair => pair.Key, pair => string.Join(" ", pair.Value.Select(word => word.Text)));
+        return Scene("Omoide", lyrics, style) with { WordReadings = words, Readings = lines };
+    }
+
     /// <summary>The English fixture with two production credits, credits on: the opening title, then the credits.</summary>
     public static SceneSnapshot Credits(LyricStyle? style = null)
     {

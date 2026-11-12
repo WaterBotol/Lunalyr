@@ -135,7 +135,7 @@ internal sealed class BroadsideLayer(IWordBreaker breaker, Logger? logger) : Sta
                     FillRounded(dc, local, sizes[id].Width, sizes[id].Height, Points(3), tile, alphaWord);
                     var unit = Homography.Of(local);
                     DrawLabel(dc, line, word, run, 0, time, unit, alphaWord, blur);
-                    DrawReading(dc, word, 0, unit, alphaWord, blur);
+                    DrawReading(dc, line, word, run, 0, time, unit, alphaWord, blur);
                 }
                 else
                 {
@@ -143,7 +143,7 @@ internal sealed class BroadsideLayer(IWordBreaker breaker, Logger? logger) : Sta
                     var unit = Homography.Of(local);
                     DrawLabel(dc, line, word, run, 1, time, unit, alphaWord, blur, 0, new Vector2((float)hard, (float)(hard * 1.15)));
                     DrawLabel(dc, line, word, run, 0, time, unit, alphaWord, blur, 0);
-                    DrawReading(dc, word, 0, unit, alphaWord, blur);
+                    DrawReading(dc, line, word, run, 0, time, unit, alphaWord, blur);
                 }
             }
         }

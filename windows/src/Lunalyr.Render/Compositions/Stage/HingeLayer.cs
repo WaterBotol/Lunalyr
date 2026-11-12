@@ -179,7 +179,7 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
             DrawLabel(dc, line, word, run, 0, time, unit, opacity, wordBlur);
             // The bar arrives huge and settles into place; its reading comes once it is nearly there.
             var readingShown = isBar ? Easing.Smoothstep((settle - 0.5) / 0.5) : 1;
-            DrawReading(dc, word, 0, unit, opacity * readingShown, wordBlur);
+            DrawReading(dc, line, word, run, 0, time, unit, opacity * readingShown, wordBlur);
         }
     }
 }
