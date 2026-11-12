@@ -59,11 +59,15 @@ public sealed class GradientLayer : IRenderLayer
     /// <summary>The colour richness the brushes are made with: the options' times the scene's.</summary>
     private double _vividness;
 
-    internal GradientLayer(BackgroundOptions options, Logger log)
+    /// <summary>Drawn over the field and under the shade: a line pattern (see <see cref="IFieldOverlay"/>), or null.</summary>
+    private readonly IFieldOverlay? _overlay;
+
+    internal GradientLayer(BackgroundOptions options, Logger log, IFieldOverlay? overlay = null)
     {
         _options = options;
         _log = log;
         _shade = new WallpaperShadeDrawer(options);
+        _overlay = overlay;
         _vividness = options.Vividness;
     }
 
@@ -78,6 +82,7 @@ public sealed class GradientLayer : IRenderLayer
         _shade.CreateResources(dc, size, scale);
         CreateCanvases();
         if (_hasPalette) RebuildBrushes();
+        _overlay?.CreateResources(dc, dwrite, size, scale);
         _failed = false;
     }
 
@@ -86,6 +91,7 @@ public sealed class GradientLayer : IRenderLayer
         _size = size;
         _scale = scale;
         _shade.Resize(size, scale);
+        _overlay?.Resize(size, scale);
         if (_fieldDc is not null && ColourField.CanvasSize(size.X, size.Y) != _canvas)
         {
             _from.ReleaseBitmap();
@@ -154,7 +160,8 @@ public sealed class GradientLayer : IRenderLayer
                 frame.Dc.DrawBitmap(_to.Bitmap, whole, 1, InterpolationMode.Linear, null, null);
             }
             _fade.Current(now, _scratch);
-            _shade.Draw(frame, ColourField.Luminance(_scratch.AsSpan(1)));
+            _overlay?.Draw(frame);
+            _shade.Draw(frame, ColourField.Luminance(_scratch.AsSpan(1), _overlay?.PatternOpacity));
         }
         catch (SharpGenException ex)
         {
@@ -248,6 +255,7 @@ public sealed class GradientLayer : IRenderLayer
         _from.Release();
         _to.Release();
         _shade.ReleaseResources();
+        _overlay?.ReleaseResources();
         _fieldDc?.Dispose();
         _fieldDc = null;
     }
@@ -256,6 +264,7 @@ public sealed class GradientLayer : IRenderLayer
     {
         ReleaseResources();
         _shade.Dispose();
+        _overlay?.Dispose();
     }
 
     /// <summary>One palette's field: its canvas and brushes.</summary>
@@ -287,6 +296,25 @@ public sealed class GradientLayer : IRenderLayer
             ReleaseBitmap();
         }
     }
+}
+
+/// <summary>
+/// Something a <see cref="GradientLayer"/> draws over its colour field and under its scrim and text backing: a line
+/// pattern (<see cref="Gpu.LinePatternOverlay"/>). Gets its resources and sizes with the layer.
+/// </summary>
+internal interface IFieldOverlay : IDisposable
+{
+    void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale);
+
+    void Resize(Vector2 size, float scale);
+
+    /// <summary>Draws over the field. Must not throw for bad data.</summary>
+    void Draw(in FrameContext frame);
+
+    /// <summary>How opaque the pattern's lines are (0...1) for the text backing's estimate, or null.</summary>
+    double? PatternOpacity { get; }
+
+    void ReleaseResources();
 }
 
 /// <summary>

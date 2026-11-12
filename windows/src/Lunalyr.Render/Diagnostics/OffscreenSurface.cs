@@ -28,13 +28,23 @@ public sealed class OffscreenSurface : IDisposable
     private readonly ID2D1Bitmap1 _readback;
 
     public OffscreenSurface(int width, int height, float scale = 1, bool hardware = false)
+        : this(width, height, scale, null, hardware ? DriverType.Hardware : DriverType.Warp)
+    {
+    }
+
+    /// <summary>A surface on one particular GPU (for measuring a layer on the integrated or the discrete GPU).</summary>
+    public OffscreenSurface(int width, int height, float scale, IDXGIAdapter adapter)
+        : this(width, height, scale, adapter ?? throw new ArgumentNullException(nameof(adapter)), DriverType.Unknown)
+    {
+    }
+
+    private OffscreenSurface(int width, int height, float scale, IDXGIAdapter? adapter, DriverType driver)
     {
         Width = width;
         Height = height;
         Scale = scale;
         FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0, FeatureLevel.Level_10_1, FeatureLevel.Level_10_0];
-        D3D11.D3D11CreateDevice(IntPtr.Zero, hardware ? DriverType.Hardware : DriverType.Warp, DeviceCreationFlags.BgraSupport,
-                                levels, out var d3d, out var context).CheckError();
+        D3D11.D3D11CreateDevice(adapter, driver, DeviceCreationFlags.BgraSupport, levels, out ID3D11Device? d3d, out ID3D11DeviceContext? context).CheckError();
         _d3d = d3d!;
         _d3dContext = context!;
         Factory = D2D1.D2D1CreateFactory<ID2D1Factory1>(FactoryType.SingleThreaded);
