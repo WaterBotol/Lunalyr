@@ -215,7 +215,7 @@ public sealed class LyricServiceEndToEndTests : IDisposable
     public async Task LrclibShowingFirstIsReplacedWhenTwoOtherSourcesLaterAgreeAgainstItsTiming()
     {
         // Ranking decision of 12 Nov 2026. The same disagreement as above, but LRCLIB answers first and is shown; Lyrics+
-        // and NetEase answer only once it shows. An automatic lookup keeps them running (the agreement window), and
+        // and NetEase answer only once it shows. An automatic lookup keeps them answering (couldDemote), and
         // their agreement then demotes LRCLIB: a new revision switches to Lyrics+.
         var sourceOrder = Everything with { Mode = LyricMatchMode.SourceOrder };
         var lrclibShown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

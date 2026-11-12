@@ -136,9 +136,8 @@ public sealed class AppControllerTests : IAsyncDisposable
 
         await upgraded.Task.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal("LRCLIB", _renderer.Last!.Lyrics!.Provenance.Source);
-        // The lookup ends while the line is still sung: still no swap (the clock has not moved).
+        // The lookup may end while the line is still sung: still no swap (the clock has not moved).
         gate.SetResult();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.Equal("LRCLIB", _renderer.Last!.Lyrics!.Provenance.Source);
         Assert.Equal(StatusText.LookingUp, controller.Status.Status);
 

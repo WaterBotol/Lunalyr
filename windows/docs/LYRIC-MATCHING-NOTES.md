@@ -122,6 +122,14 @@ These points are not confirmed against the Mac's code:
   peer, and their agreement with each other never makes LRCLIB an outlier.
 - **Version and rival checks in couldDemote.** "In hand" covers only matches for the playing version, and the
   "sound word-timed rival" must be a match for the playing version too.
+- **Line-only sources with a rival (open question).** Following condition 3, a line-only source such as Kuwo keeps
+  answering when a sound word-timed rival is in hand. The Mac's summary says Kuwo is "still stopped", which
+  presumably means when there is no rival.
+- **Mixed timing.** couldDemote treats LRCLIB's mixed timing like its word timing, since both rank in the same tier.
+- **Waiting for Lyrics+.** A pending Lyrics+ is waited for as a possible Apple relay.
+- **Saved choices.** "Never swap" applies to pinned choices, which lock the lookup. A cached automatic choice can
+  still be upgraded by a local source that outranks it, as before.
+- **Label position.** The note comes straight after "Match found", before other notes and "· showing".
 - **Apostrophe.** The label uses a typographic apostrophe ("Apple Music’s lyrics"), like the app's other source-list
   strings.
 
