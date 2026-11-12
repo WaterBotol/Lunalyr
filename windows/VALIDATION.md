@@ -78,3 +78,20 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | 120 Hz+ (the panel's 280 Hz mode) with the default 60 fps cap and with "follow the display" | **live** | clone mode runs at 60 Hz |
 | Battery / energy saver behaviour and numbers | **live** | measured on AC only |
 | Peeks were taken with `pauseWhenCovered` off in the temp settings | note | the owner's windows cover the desktop, so the engine would otherwise (correctly) pause |
+
+## Milestone 4: all compositions and readings
+
+1458 tests (1457 pass, 1 skipped opt-in). Report: [docs/milestones/M4.md](docs/milestones/M4.md).
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Scattered, Constellation, Constellation + Editorial, Echo | unit + offscreen renders | `ScatteredFamilyTests`, `ScatteredFamilyRenderTests`, previews |
+| Cascade, Cutout | unit (Mac rolling-stack tests) + offscreen | `ArrivalCompositionTests`, previews |
+| Hinge, Broadside, Portal, Mosaic, Torque, Fable | unit (29 Mac tests) + offscreen | `StageLayoutTests`, `FableLayoutTests`, `StageRenderTests` |
+| Every reveal style, "Match the style" per composition | unit + offscreen (every entrance × whole-line layouts, Spoken clearance) | `ScatteredFamilyRenderTests`, `RollingStackTests` |
+| Per-word readings (below / instead), Japanese, Mandarin, Korean, Cantonese | unit + offscreen | `LineReadingsTests`, `ExtrasRenderTests` |
+| Credits, interlude ring, highlight colours | unit (Mac CreditsLayer/Highlight tests) + offscreen | `CreditCuesTests`, `LyricHighlightTests` |
+| Match the music (automatic) | unit (10 Mac tests) + AOT smoke run picked a layout | `MatchTheMusicTests`, Test Build 4 log |
+| Previous song's cover not kept | unit | `AppControllerArtworkTests` |
+| Live desktop frames for the new layouts; slow-frame cause | not verified: display was off | owner's screen on, then `--demo --stats` |
+| Real players, Extend, 280 Hz, battery | needs the owner | Test Build 4 README |
