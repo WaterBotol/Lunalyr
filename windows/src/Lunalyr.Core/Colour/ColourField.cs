@@ -106,7 +106,13 @@ public static class ColourField
     }
 
     /// <summary>The colour field's luminance estimate from the stops alone (see <see cref="LyricLegibility.ColourFieldLuminance"/>).</summary>
-    public static double Luminance(ReadOnlySpan<Vector4> stops)
+    public static double Luminance(ReadOnlySpan<Vector4> stops) => Luminance(stops, null);
+
+    /// <summary>
+    /// The same with a line pattern's faint white lines over the field at <paramref name="patternOpacity"/> (null for
+    /// none), as <see cref="LyricLegibility.ColourFieldLuminance"/> estimates it.
+    /// </summary>
+    public static double Luminance(ReadOnlySpan<Vector4> stops, double? patternOpacity)
     {
         if (stops.IsEmpty) return LyricLegibility.UnknownBackdropLuminance;
         Double3 brightest = default, sum = default;
@@ -119,6 +125,7 @@ public static class ColourField
             if (best < value) { brightest = rgb; best = value; }
         }
         var colour = brightest * 0.85 + sum / stops.Length * BaseBrightness * 0.15;
+        if (patternOpacity is { } opacity) colour += Double3.Repeating(0.03 * Math.Min(1, Math.Max(0, opacity)));
         return LyricLegibility.Luminance(colour.Clamped(0, 1));
     }
 }

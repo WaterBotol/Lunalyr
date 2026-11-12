@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Draws the GPU effects and line patterns offscreen (WARP, or a chosen GPU) as contact sheets and single frames, and
+       measures their per-frame GPU and CPU cost on a chosen adapter. Not part of the app or the solution. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
+  </ItemGroup>
+</Project>
