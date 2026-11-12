@@ -17,15 +17,32 @@ internal static class LyricInks
     /// The ink a palette settles on: the director run to rest for its cover (as the Mac's settings preview does), so the
     /// first line is in the album's colours rather than part way through a fade from white.
     /// </summary>
-    public static LyricInk Settled(Palette palette)
+    public static LyricInk Settled(Palette palette) => Settled(palette, LyricStyle.Default);
+
+    /// <summary>The ink a palette settles on, with the style's highlight tiles (mode and custom colour).</summary>
+    public static LyricInk Settled(Palette palette, LyricStyle style)
     {
         ArgumentNullException.ThrowIfNull(palette);
+        ArgumentNullException.ThrowIfNull(style);
+        var mode = HighlightMode(style.HighlightMode);
         return new LyricInkPreview().Ink(new LyricInkInputs(LyricColourMode.AlbumDrift)
         {
             Album = palette.ArtworkStops,
             Backdrop = palette.TextBackdrop,
+            Highlight = mode,
+            HighlightCustom = mode == LyricHighlightMode.Custom
+                ? ColourHex.ToOkLab(style.HighlightCustom) ?? ColourHex.ToOkLab(LyricHighlight.DefaultCustomHex)
+                : null,
         }, 0);
     }
+
+    /// <summary>A highlight mode as the Mac stores it ("complement", "album", "custom"); unknown ones are "complement".</summary>
+    public static LyricHighlightMode HighlightMode(string? raw) => raw?.Trim().ToLowerInvariant() switch
+    {
+        "album" => LyricHighlightMode.Album,
+        "custom" => LyricHighlightMode.Custom,
+        _ => LyricHighlightMode.Complement,
+    };
 
     /// <summary>The drift's phase at a song time, quantised as the director quantises it (1/720 of a loop).</summary>
     public static double DriftPhase(double songSeconds)

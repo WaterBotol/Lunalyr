@@ -20,7 +20,7 @@ using Vortice.Mathematics;
 namespace Lunalyr.Render.Compositions;
 
 /// <summary>A lyric composition drawn on one surface. Pure in song time: the pixels depend only on the scene and the time.</summary>
-internal abstract class LyricCompositionLayer : IRenderLayer
+internal abstract partial class LyricCompositionLayer : IRenderLayer
 {
     private const int MaxPlans = 12;
     private readonly CategoryLogger _log;
@@ -52,6 +52,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
 
     // The lyric ink (the Mac's Album drift): settled once per palette, then drifted by song time.
     private Palette? _inkPalette;
+    private (string Mode, string Custom) _inkHighlight;
     private LyricInk _ink = LyricInk.White;
 
     /// <summary>
@@ -93,6 +94,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         ReleaseResources();
         Kit = new TextKit(dc, dwrite);
         _dotBrush = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
+        CreateExtras(dc);
         Resize(size, scale);
     }
 
@@ -108,6 +110,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         Invalidate();
         _dotBrush?.Dispose();
         _dotBrush = null;
+        ReleaseExtras();
         Kit?.Dispose();
         Kit = null;
     }
@@ -128,6 +131,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         _status = null;
         SceneShown = null;
         Sheet = null;
+        InvalidateExtras();
     }
 
     public void Render(in FrameContext frame)
@@ -186,10 +190,14 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         SceneShown = scene;
         Kit!.SetFamily(scene.Style.FontFamily);
         Metrics = ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
-        Arrival = WordArrivals.Parse(scene.Style.Reveal).Resolved(Kind);
-        if (!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
+        // "Cutout · Highlight" adds a tile; the words still enter as the layout has them enter.
+        Arrival = (HighlightTiming.HighlightsSungWords(scene.Style.Reveal) ? WordArrival.Automatic : WordArrivals.Parse(scene.Style.Reveal)).Resolved(Kind);
+        var highlight = (scene.Style.HighlightMode, scene.Style.HighlightCustom);
+        if ((!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
+            || highlight != _inkHighlight)
         {
-            _ink = LyricInks.Settled(scene.Palette);
+            _ink = LyricInks.Settled(scene.Palette, scene.Style);
+            _inkHighlight = highlight;
             _inkPalette = scene.Palette;
         }
         // Status text and plain lyrics keep the palette's still text colour; timed words take the drifting ink.
@@ -197,6 +205,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         if (scene.Lyrics is LyricResult.Synced synced)
         {
             Sheet = LyricSheet.Build(synced.Lines, !LyricPauseTiming.IsQQ(synced.Provenance.Source));
+            SyncExtras(scene, synced.Lines);
             OnLyrics(synced.Lines, scene);
         }
     }
@@ -276,7 +285,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var lines = sheet.Lines;
         var active = sheet.Index.LineAt(time);
         var index = Math.Clamp(active ?? 0, 0, lines.Count - 1);
-        var gap = VocalGaps.Find(sheet.VocalWindows, time, double.NaN);
+        var gap = VocalGaps.Find(sheet.VocalWindows, time, SceneShown?.Duration is double length && length > 0 ? length : double.NaN);
         var lyricOpacity = 1 - (gap?.Presence(time) ?? 0);
         var count = 0;
         // Three back: after two very short lines the one before them can still be leaving.
@@ -315,7 +324,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             ref var line = ref _drawn[k];
             DrawLine(dc, line, time, _offsets[k]);
         }
-        if (gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue);
+        DrawCredits(dc, time);
+        if (SceneShown?.Style.Interludes != false && gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue);
         // The next line is set (laid out and baked) a little ahead of time, not on the frame it first appears.
         var upcoming = index + 1;
         if (upcoming < lines.Count && lines[upcoming].Words.Count > 0 && !Rolls(upcoming)
@@ -425,6 +435,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, mainGlue), set.LineReading) : Readings(row, words, mainGlue);
         var plan = BuildPlan(words, mainGlue, BaseSize, row, line.Start, wordTimed: true, editorial: true, runReadings,
                              lineReading, FitFor(row), Stage.Width, groups, row);
+        // "Cutout · Highlight": each sung word gets a tile, held until the line ends.
+        if (HighlightsSungWords) MarkHighlights(plan, double.NegativeInfinity, LineFlow.HighlightLineEnd(line.End, line.Words));
         plan.LastUsed = Frame;
         _plans[row] = plan;
         return plan;
@@ -573,8 +585,10 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             var shadow = (float)((0.28 + 0.24 * heat) / 0.52);
             var tokenOpacities = frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default;
             var labelWorld = Matrix3x2.CreateTranslation(ink.LabelOffset) * local;
+            DrawRunTiles(dc, plan, r, ink.Label, labelWorld, (float)visibility, time, overlay: false);
             ink.Label.Draw(dc, labelWorld, (float)scale, (float)visibility, blur, glow, shadow,
                            run.Boundaries, tokenOpacities, run.RightToLeft);
+            DrawRunTiles(dc, plan, r, ink.Label, labelWorld, (float)visibility, time, overlay: true);
             if (ink.Reading is { } reading)
             {
                 var readingOpacity = frame.ReadingOpacity(plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount));
@@ -604,7 +618,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         if (!(level > 0.004)) return;
         var box = BackingVocalLayout.Box(Stage);
         var (sink, shrink) = BackingVocalLayout.Exit(BackingVocalLayout.ExitProgress(group, time), box.Height);
-        var position = BackingVocalLayout.Position(group, seed, Stage, BaseSize, time, false);
+        var position = BackingVocalLayout.Position(group, seed, Stage, BaseSize, time, false, CreditBands);
         var hold = BackingVocalLayout.Hold(group);
         var plan = backing.Plan;
         var scale = plan.Fit * shrink;
@@ -702,6 +716,13 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             var y = StageCentre.Y + (float)(cue.Opacity * cue.Bob(i)) * diameter * 0.42f;
             _dotBrush.Color = new Color4(accent.X, accent.Y, accent.Z, (float)(cue.Opacity * (0.32 + highlight * 0.62)));
             dc.FillEllipse(new Ellipse(new Vector2(x, y), radius, radius), _dotBrush);
+            // A lit dot carries a faint white ring (the Mac's strokeBorder, 1 point inside the edge).
+            if (highlight > 0.01)
+            {
+                var stroke = Points(1);
+                _dotBrush.Color = new Color4(1, 1, 1, (float)(cue.Opacity * highlight * 0.22));
+                dc.DrawEllipse(new Ellipse(new Vector2(x, y), radius - stroke / 2, radius - stroke / 2), _dotBrush, stroke);
+            }
         }
     }
 

@@ -43,6 +43,27 @@ public sealed record AppSettings
     /// <summary>An installed font family, used when <see cref="FontChoice"/> is "installed" (Mac <c>googleFontFamily</c>).</summary>
     public string FontFamily { get; init; } = "";
 
+    /// <summary>Show the song's title and credits on the wallpaper (Mac <c>custom.creditsLayer</c>).</summary>
+    public bool CreditsLayer { get; init; } = true;
+
+    /// <summary>Three dots during instrumental breaks (Mac <c>custom.showInterludes</c>).</summary>
+    public bool ShowInterludes { get; init; } = true;
+
+    /// <summary>Where highlight tiles take their colour from: "complement", "album" or "custom" (Mac <c>custom.lyricHighlightMode</c>).</summary>
+    public string LyricHighlightMode { get; init; } = "complement";
+
+    /// <summary>The custom highlight colour, <c>#RRGGBB</c> (Mac <c>custom.lyricHighlightCustom</c>).</summary>
+    public string LyricHighlightCustom { get; init; } = Core.Colour.LyricHighlight.DefaultCustomHex;
+
+    /// <summary>With the layout on "automatic" (Match the music), each new song takes the next layout in a rotation (Mac <c>custom.rotateLayouts</c>); off chooses by the song's character alone.</summary>
+    public bool RotateLayouts { get; init; } = true;
+
+    /// <summary>Songs in a row per layout in the rotation, 0–5 (0 leaves it out); a layout missing here gets 1 (Mac <c>custom.rotateLayoutCounts</c>).</summary>
+    public IReadOnlyDictionary<string, int> RotateLayoutCounts { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>Where the rotation has got to (Mac <c>custom.rotateLayoutsCursor</c>).</summary>
+    public int RotateLayoutsCursor { get; init; }
+
     // ---- Readings ----
 
     /// <summary>"off", "below" or "replace" (Mac <c>custom.romanizationDisplay</c>).</summary>
@@ -116,7 +137,7 @@ public sealed record AppSettings
     // ---- Derived values ----
 
     public static IReadOnlyList<string> Compositions { get; } =
-        ["scattered", "constellation", "constellationEditorial", "echo", "editorial", "spoken", "cascade", "cutout", "hinge",
+        ["automatic", "scattered", "constellation", "constellationEditorial", "echo", "editorial", "spoken", "cascade", "cutout", "hinge",
          "broadside", "portal", "mosaic", "torque", "fable"];
 
     public static IReadOnlyList<string> WordArrivals { get; } =
@@ -148,6 +169,10 @@ public sealed record AppSettings
             LyricSources = LyricSources ?? defaults.LyricSources,
             LyricMatchMode = LyricMatchModeInfo.TryParseRaw(LyricMatchMode, out _) ? LyricMatchMode : defaults.LyricMatchMode,
             LyrimuseFolder = LyrimuseFolder ?? "",
+            LyricHighlightMode = LyricHighlightMode is "complement" or "album" or "custom" ? LyricHighlightMode : defaults.LyricHighlightMode,
+            LyricHighlightCustom = Core.Colour.ColourHex.ToOkLab(LyricHighlightCustom) is null ? defaults.LyricHighlightCustom : LyricHighlightCustom.Trim().ToUpperInvariant(),
+            RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
+            RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
         };
     }
 
@@ -183,6 +208,10 @@ public sealed record AppSettings
         FontFamily = FontChoice == "installed" && !string.IsNullOrWhiteSpace(FontFamily) ? FontFamily.Trim() : LyricStyle.Default.FontFamily,
         SizeFraction = (float)(LyricStyle.Default.SizeFraction * (double.IsFinite(LyricScale) ? Math.Clamp(LyricScale, 0.5, 2) : 1)),
         Reveal = SceneReveal(WordArrival),
+        Credits = CreditsLayer,
+        Interludes = ShowInterludes,
+        HighlightMode = LyricHighlightMode,
+        HighlightCustom = LyricHighlightCustom,
         Readings = (RomanizationOptions.ParseDisplay(RomanizationDisplay) ?? Core.Lyrics.Readings.RomanizationDisplay.Below) switch
         {
             Core.Lyrics.Readings.RomanizationDisplay.Off => ReadingPlacement.Off,

@@ -52,6 +52,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
     private double[] _stack = [];
     private int[] _members = [];
     private RollingTokenState[] _states = [];
+    private HighlightPose[] _tiles = [];
     private double[] _reveal = new double[16];
 
     protected override void Invalidate()
@@ -111,8 +112,12 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             var unit = _preparedUnits[k] ??= Unit(token);
             unit.LastUsed = Frame;
             var eligible = k > 0 ? prepared[k - 1].Source.Start : double.NegativeInfinity;
+            // "Cutout · Highlight": the word's tile, held until its own line ends, keeps it on the stage meanwhile.
+            var tile = HighlightsSungWords && _window!.LineEnds.TryGetValue(token.Source, out var lineEnd)
+                ? HighlightTiming.Pose(time, token.Source.Start, lineEnd, false) : HighlightPose.Hidden;
+            _tiles[count] = tile;
             var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, Arrival,
-                                               Options, eligible);
+                                               Options, eligible, tile.Opacity);
             _members[count] = k;
             _sizes[count] = unit.Size;
             _slots[count] = state.Slot;
@@ -163,8 +168,12 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
                 if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, intensity, false, Options, _reveal))
                     reveal = _reveal.AsSpan(0, token.Parts.Count);
             }
-            unit.Label.Draw(dc, Matrix3x2.CreateTranslation(unit.LabelOffset) * world, scale, (float)opacity, blur,
+            var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
+            var mark = new HighlightMark(0, 1, _tiles[m]);
+            if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, (float)opacity, overlay: false);
+            unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
                             GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
+            if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, (float)opacity, overlay: true);
             if (unit.Reading is { } reading && !state.Presentation.Preview)
                 reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1);
         }
@@ -194,6 +203,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             _stack = new double[n * 2];
             _members = new int[n * 2];
             _states = new RollingTokenState[n * 2];
+            _tiles = new HighlightPose[n * 2];
         }
         // Units of words that have left the window go.
         if (_units.Count > _prepared.Length + 24)

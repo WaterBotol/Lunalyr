@@ -1,0 +1,104 @@
+using Lunalyr.Core.Compositions;
+using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.Lyrics.Readings;
+
+namespace Lunalyr.Core.Tests.Compositions;
+
+/// <summary>"Cutout · Highlight" tiles: their timing, where they fall on a label, and the segments of a run.</summary>
+public class HighlightTileTests
+{
+    // Ported from LyricHighlightTests.swift: testTheTilePressesInAtTheOnsetAndFadesAtTheLineEnd
+    [Fact]
+    public void TheTilePressesInAtTheOnsetAndFadesAtTheLineEnd()
+    {
+        const double onset = 10.0, release = 13.6;
+        static HighlightPose Pose(double time, bool reduce = false) => HighlightTiming.Pose(time, onset, release, reduce);
+        Assert.False(Pose(onset - 0.001).IsVisible); // nothing before the word is sung
+        Assert.False(Pose(onset).IsVisible);
+        // A quick ease-out from the leading edge, about 120 ms, with no pop: it never passes the word's width and
+        // never shrinks back.
+        var width = 0.0;
+        for (var step = 1; step <= 24; step++)
+        {
+            var current = Pose(onset + HighlightTiming.Press * step / 24);
+            Assert.True(current.IsVisible);
+            Assert.True(current.Width >= width);
+            Assert.True(current.Width <= 1);
+            width = current.Width;
+        }
+        Assert.True(Pose(onset + 0.02).Width < 0.6, "it presses in rather than appearing whole");
+        Assert.True(Pose(onset + 0.06).Width > 0.7, "most of the way in half way through");
+        Assert.Equal(1, Pose(onset + HighlightTiming.Press).Width, 9);
+        Assert.Equal(1, Pose(onset + HighlightTiming.Press).Opacity, 9);
+        // Held for the rest of the line.
+        for (var time = onset + 0.13; time < release; time += 0.05) Assert.Equal(new HighlightPose(1, 1), Pose(time));
+        // Fades over about 300 ms after the line ends.
+        var opacity = 1.0;
+        for (var step = 1; step <= 30; step++)
+        {
+            var current = Pose(release + HighlightTiming.Fade * step / 30);
+            Assert.True(current.Opacity < opacity);
+            if (current.IsVisible) Assert.Equal(1, current.Width); // it fades; it does not shrink
+            opacity = current.Opacity;
+        }
+        Assert.False(Pose(release + HighlightTiming.Fade).IsVisible);
+        Assert.Equal(0.3, HighlightTiming.Fade, 0.05);
+        Assert.Equal(0.12, HighlightTiming.Press, 0.03);
+    }
+
+    [Fact]
+    public void WithReduceMotionTheTileOnlyFades()
+    {
+        var pose = HighlightTiming.Pose(10.03, 10, 12, reduceMotion: true);
+        Assert.Equal(1, pose.Width);
+        Assert.InRange(pose.Opacity, 0.01, 0.99);
+    }
+
+    [Fact]
+    public void TheWordsInkSwitchesWithinAFrameOfTheFade()
+    {
+        Assert.Equal(1, HighlightTiming.TextOpacity(0.9, 0.4));
+        Assert.Equal(0, HighlightTiming.TextOpacity(0.1, 0.4));
+        Assert.Equal(0.5, HighlightTiming.TextOpacity(0.4, 0.4), 6);
+    }
+
+    [Fact]
+    public void ATileReachesPastItsWordAndJustMeetsItsNeighbour()
+    {
+        var pose = new HighlightPose(1, 1);
+        var whole = new HighlightMark(0, 1, pose).Rect(200, 40, 50, rightToLeft: false);
+        Assert.Equal(new RectD(-5, -2.5, 210, 45), whole);
+        var first = new HighlightMark(0, 0.5, pose).Rect(200, 40, 50, false);
+        var second = new HighlightMark(0.5, 1, pose).Rect(200, 40, 50, false);
+        Assert.True(first.X + first.Width > second.X, "where two words of one run meet, their tiles just overlap");
+        // Right to left: the first word's tile is at the right.
+        var rtl = new HighlightMark(0, 0.5, pose).Rect(200, 40, 50, true);
+        Assert.Equal(200 + 5 - rtl.Width, rtl.X, 9);
+        // Pressed in from the leading edge.
+        var half = new HighlightMark(0, 1, new HighlightPose(1, 0.5));
+        Assert.Equal(-5, half.Pressed(200, 40, 50, false).X);
+        Assert.Equal(105, half.Pressed(200, 40, 50, false).Width);
+        var rtlHalf = half.Pressed(200, 40, 50, true);
+        Assert.Equal(205, rtlHalf.X + rtlHalf.Width, 9);
+    }
+
+    [Fact]
+    public void TheSyllablesOfOneLatinWordAreOneTile()
+    {
+        LyricWord[] syllables = [new("beau", 5, 5.2), new("ti", 5.2, 5.4), new("ful", 5.4, 5.6)];
+        var segments = HighlightSegments.For(syllables, [0, 4.0 / 9, 6.0 / 9, 1], SimpleWordBreaker.Instance);
+        Assert.Equal([new HighlightSegment(0, 1, 5)], segments);
+        Span<HighlightMark> marks = stackalloc HighlightMark[4];
+        Assert.Equal(0, HighlightSegments.Marks(segments, 4.9, 6, false, marks));
+        Assert.Equal(1, HighlightSegments.Marks(segments, 5.5, 6, false, marks));
+        Assert.Equal(0, HighlightSegments.Marks(segments, 6.4, 6, false, marks));
+    }
+
+    [Fact]
+    public void OnlyTheEntranceNamedHighlightPressesTiles()
+    {
+        Assert.True(HighlightTiming.HighlightsSungWords("cutoutHighlight"));
+        Assert.False(HighlightTiming.HighlightsSungWords("fade"));
+        Assert.False(HighlightTiming.HighlightsSungWords(null));
+    }
+}

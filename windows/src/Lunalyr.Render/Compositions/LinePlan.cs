@@ -56,6 +56,13 @@ internal sealed class LinePlan : IDisposable
     public double Fit { get; init; }
     public BackingPlan[] Backing { get; init; } = [];
 
+    /// <summary>Per run, the highlight tiles it can carry (null: no tiles; see <c>LyricCompositionLayer.MarkHighlights</c>).</summary>
+    public HighlightSegment[][]? HighlightSegments { get; set; }
+    /// <summary>Runs sung from this time on carry tiles.</summary>
+    public double HighlightFrom { get; set; } = double.PositiveInfinity;
+    /// <summary>When the tiles are let go (the line's end).</summary>
+    public double HighlightRelease { get; set; }
+
     // Per-frame scratch, sized once.
     public EditorialTokenFrame[] TokenFrames { get; init; } = [];
     public EditorialRunFrame[] RunFrames { get; init; } = [];

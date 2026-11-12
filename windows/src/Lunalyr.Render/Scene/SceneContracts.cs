@@ -68,6 +68,12 @@ public sealed record SceneSnapshot
 
     /// <summary>Calm status text to show instead of lyrics ("No lyrics found", "Offline"…), or null.</summary>
     public string? Status { get; init; }
+
+    /// <summary>
+    /// The track's length in seconds, when the player gives one: an instrumental break after the last line then shows
+    /// how far it has to go, as other breaks do. Null when unknown (the break is open-ended).
+    /// </summary>
+    public double? Duration { get; init; }
 }
 
 /// <summary>Settings shared by the lyric compositions. Each composition reads what applies to it.</summary>
@@ -86,6 +92,28 @@ public sealed record LyricStyle
 
     /// <summary>Show readings below the lyric, instead of it, or not at all.</summary>
     public ReadingPlacement Readings { get; init; } = ReadingPlacement.Below;
+
+    /// <summary>
+    /// Show the song's credits on the wallpaper: its "Title - Artist" as it starts, then any production credits that
+    /// came with the lyrics, one after another in a band at the top or foot of the stage (the Mac's credits layer,
+    /// <c>custom.creditsLayer</c>). Off by default here so scenes made without it draw as before; the app's setting
+    /// defaults to on, as the Mac's does.
+    /// </summary>
+    public bool Credits { get; init; }
+
+    /// <summary>Three dots during instrumental breaks (the Mac's <c>custom.showInterludes</c>).</summary>
+    public bool Interludes { get; init; } = true;
+
+    /// <summary>
+    /// Where highlight tiles take their colour from, as the Mac's <c>LyricHighlightMode</c> raw values: "complement"
+    /// (opposite the lyric colour; the default), "album" (the cover's richest colour) or "custom"
+    /// (<see cref="HighlightCustom"/>). Tiles are drawn with the "cutoutHighlight" reveal and behind the artist's name in
+    /// the opening credit.
+    /// </summary>
+    public string HighlightMode { get; init; } = "complement";
+
+    /// <summary>The custom highlight colour as <c>#RRGGBB</c> (the Mac's <c>custom.lyricHighlightCustom</c>).</summary>
+    public string HighlightCustom { get; init; } = "#FF92A3";
 }
 
 public enum ReadingPlacement { Off, Below, Instead }
