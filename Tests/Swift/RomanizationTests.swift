@@ -297,7 +297,8 @@ final class RomanizationTests: XCTestCase {
         XCTAssertEqual(texts(line(["思っ", "た", "より"], spaced: true)), ["omo", "tta", "yori"])
         XCTAssertEqual(texts(line(["待っ", "て", "て"], spaced: true)), ["ma", "tte", "te"])
         XCTAssertEqual(texts(line(["ちょっ", "と", "待っ", "て"], spaced: true)), ["cho", "tto", "ma", "tte"])
-        XCTAssertEqual(texts(line(["はっ", "として", "グッと"], spaced: true)), ["hatto", "shite", "gutto"])
+        // はっと ends inside として, so each part reads its own characters.
+        XCTAssertEqual(texts(line(["はっ", "として", "グッと"], spaced: true)), ["ha", "tto shite", "gutto"])
         XCTAssertEqual(texts(line(["会い", "たい", "よ"], spaced: true)), ["ai", "tai", "yo"])
         XCTAssertEqual(texts(line(["知ら", "ない", "よ"], spaced: true)), ["shira", "nai", "yo"])
         // Hiragana goes on from kanji with its okurigana or from katakana, a
@@ -710,5 +711,25 @@ final class RomanizationTests: XCTestCase {
         XCTAssertEqual(RomanizationOptions.Language.allCases.map(\.rawValue),
                        ["automatic", "japanese", "mandarin", "cantonese", "korean", "other"])
         XCTAssertEqual(RomanizationOptions.Language(rawValue: "korean"), .korean)
+    }
+
+    /// A phrase can end inside a timed word that goes on into the next
+    /// phrase (Apple times 始 | まりに in YOASOBI's "Probably"): each word
+    /// reads its own characters, not the whole phrase on the first word
+    /// (hajimari under 始, only ni under まりに).
+    func testAPhraseEndingInsideAWordIsSharedByCharacter() {
+        XCTAssertEqual(texts(line(["始", "まりに"])), ["haji", "mari ni"])
+        XCTAssertEqual(texts(line(["始", "まりに"], reading: "hajimari ni")), ["haji", "mari ni"])
+        XCTAssertEqual(texts(line(["戻", "る"])), ["modo", "ru"])
+        XCTAssertEqual(texts(line(["戻", "るよ"])), ["modo", "ru yo"])
+        XCTAssertEqual(texts(line(["笑っ", "てい", "た"], reading: "waratteta")), ["wara", "tte", "ta"])
+        // The shares keep one time, so a run drawing them together reads
+        // the phrases as before.
+        let words = line(["始", "まりに"]).words
+        let shared = readings(line(["始", "まりに"]))
+        XCTAssertEqual(LyricReadingPairs.match(shared, to: words, glue: [false, true])[words[0].presentationID],
+                       "hajimari ni")
+        XCTAssertEqual(LyricReadingPairs.parts(shared, to: words, glue: [false, true]).mapValues { $0 },
+                       [words[0].presentationID: "haji", words[1].presentationID: "mari ni"])
     }
 }
