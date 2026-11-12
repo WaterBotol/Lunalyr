@@ -71,10 +71,10 @@ public sealed partial class SystemMotion : IDisposable
             settings.AnimationsEnabledChanged += OnAnimationsChanged;
             _settings = settings;
         }
-        catch (Exception exception) when (exception is COMException or InvalidCastException or TypeLoadException
-                                              or PlatformNotSupportedException or NotSupportedException)
+        catch (Exception exception)
         {
-            // Older Windows: setting changes still arrive through Refresh (WM_SETTINGCHANGE).
+            // Not available here (older Windows, odd SKUs): setting changes still arrive through Refresh
+            // (WM_SETTINGCHANGE), and nothing here may stop the app starting.
             _log.Debug($"Animation effects changes come only with WM_SETTINGCHANGE here ({exception.GetType().Name}).");
         }
     }
@@ -96,7 +96,7 @@ public sealed partial class SystemMotion : IDisposable
         {
             settings.AnimationsEnabledChanged -= OnAnimationsChanged;
         }
-        catch (COMException)
+        catch (Exception)
         {
             // Shutting down: nothing to undo.
         }

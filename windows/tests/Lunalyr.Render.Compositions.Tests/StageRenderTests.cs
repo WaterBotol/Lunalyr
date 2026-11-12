@@ -171,18 +171,25 @@ public sealed class StageRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Reduce Motion takes the motion out of every stage layout, but the words still come and go.
+    // Reduce Motion takes the motion out of every stage layout, but the words still come and go. The line starts at the
+    // top of the song, where the lyric colours' drift is at the same phase with and without Reduce Motion (a stage line
+    // takes the colours of its start), so what differs is only how the words are placed and posed.
     [Theory]
     [MemberData(nameof(Layouts))]
     public void ReduceMotionChangesHowTheWordsArriveNotWhichAreShown(string id)
     {
-        var line = Line("Rain over the city can fly away tonight".Split(' '), 0.6);
+        var line = Line("Rain over the city can fly away tonight".Split(' '), 0.6, start: 0.01);
+        Assert.Equal(LyricInks.DriftPhase(line.Start, reduceMotion: false), LyricInks.DriftPhase(line.Start, reduceMotion: true));
         using var moving = Layer(id);
         using var still = Layer(id);
-        // As the fourth word arrives the layouts differ; with nothing sung yet both are empty.
-        Assert.True(Difference(Frame(moving, Scene(line), 2.82), Frame(still, Scene(line) with { ReduceMotion = true }, 2.82)) > 50,
-            $"{id} ignored Reduce Motion");
-        Assert.Equal(0, Lit(Frame(still, Scene(line) with { ReduceMotion = true }, 0.5)));
+        var calm = Scene(line) with { ReduceMotion = true };
+        // As the fourth word arrives the layouts differ.
+        var arriving = line.Words[3].Start + 0.02;
+        Assert.True(Difference(Frame(moving, Scene(line), arriving), Frame(still, calm, arriving)) > 50, $"{id} ignored Reduce Motion");
+        // Before anything is sung both are empty, and once the line has gone both are again.
+        using var early = Layer(id);
+        Assert.Equal(0, Lit(Frame(early, Scene(Line(["Rain", "over"], 0.6)) with { ReduceMotion = true }, 0.5)));
+        Assert.Equal(0, Lit(Frame(still, calm, LyricPhraseTimingEnd(line) + 0.9)));
     }
 
     private static double LyricPhraseTimingEnd(LyricLine line) => Core.Motion.LyricPhraseTiming.StageHeldUntil(line);

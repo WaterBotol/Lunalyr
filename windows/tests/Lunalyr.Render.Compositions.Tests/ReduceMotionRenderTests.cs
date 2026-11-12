@@ -118,8 +118,9 @@ public sealed class ReduceMotionRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Turning Reduce Motion on while a song shows sets the line again (its colours drift ten times slower), so the
-    // layer draws exactly what one that started with it draws.
+    // Turning Reduce Motion on while a song shows sets the line again (its colours drift ten times slower, so a frame
+    // differs whether or not the layout itself moves), and the layer draws exactly what one that started with it draws:
+    // nothing baked for full motion is left over.
     [Theory]
     [MemberData(nameof(All))]
     public void TurningReduceMotionOnTakesEffectAtOnce(string id)
