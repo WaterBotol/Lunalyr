@@ -127,6 +127,28 @@ public sealed class AppControllerTests : IAsyncDisposable
         Assert.Equal(60, _renderer.FrameRate);
     }
 
+    /// <summary>
+    /// Synced lyrics that are only instrumental breaks (kept as untimed, as on the Mac: parity row 13) show as the song's
+    /// lyrics with nothing sung: the presentation steps and the scene take them without a sung line.
+    /// </summary>
+    [Fact]
+    public async Task SyncedLyricsOfInstrumentalBreaksAloneShow()
+    {
+        LyricLine Break(double start) => new() { Start = start, End = start + 60, Text = "", IsInstrumental = true };
+        var breaks = new LyricResult.Synced([Break(0), Break(60), Break(120)], new LyricProvenance("Line-synced", "LRCLIB"));
+        _lyrics.Answer("Interlude", TestLyrics.Found(breaks));
+        _source.Add(Playing("Interlude"));
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+
+        var shown = Assert.IsType<LyricResult.Synced>(_renderer.Last!.Lyrics);
+        Assert.Equal(3, shown.Lines.Count);
+        Assert.All(shown.Lines, line => Assert.True(line.IsInstrumental));
+        Assert.Null(_renderer.Last.Status);
+        Assert.Equal(StatusText.Showing, controller.Status.Status);
+    }
+
     /// <summary>The player's genre goes into the lookup as a hint at the language sung (LyricLanguage), as on the Mac.</summary>
     [Fact]
     public async Task TheLookupCarriesThePlayersGenre()

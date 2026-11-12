@@ -445,6 +445,29 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.Equal(LyricLookup.RecentMiss, again.States[Lrclib]);
     }
 
+    // Written from the spec (§4.5, §5.1; parity check of 13 Nov 2026, row 13): synced lyrics whose lines are all
+    // instrumental breaks are a candidate at timing tier 0, ranked with untimed text, and LRCLIB's exact match of that
+    // kind ends its search. Like the Mac, it can then outrank lyrics.ovh's plain text, which reports no length.
+    [Fact]
+    public async Task SyncedLyricsOfInstrumentalBreaksAloneAreKeptAsUntimedAndEndLrclibsSearch()
+    {
+        var query = new LyricQuery("Interlude", "Somebody", null, 200);
+        SungLine[] breaks = [new("♪", 0, 60), new("♪", 60, 120), new("", 120, 180)];
+        var handler = Quiet()
+            .Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(9, "Interlude", "Somebody", "", 200, breaks, wordTimed: false)))
+            .Set("api.lyrics.ovh/v1/Somebody/Interlude", Reply.Text(200, ServiceReplies.LyricsOvh(["An invented line", "And another"])));
+        var report = await Service(handler).LookupAsync(query, Everything, force: true, cancellationToken: Ct);
+        Assert.DoesNotContain(handler.Requests, r => r.RequestUri!.AbsolutePath == "/api/search");
+        var lrclib = Assert.Single(report.Candidates, c => c.Source == Lrclib);
+        var lines = Assert.IsType<LyricResult.Synced>(lrclib.Result).Lines;
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.True(line.IsInstrumental));
+        Assert.Equal(0, LyricTimingRules.TimingTier(lrclib.Result));
+        Assert.Contains(LyricsOvh, report.Candidates.Select(c => c.Source));
+        Assert.Same(lrclib, report.Candidates[0]);
+        Assert.Equal("LRCLIB", report.Result!.Provenance.Source);
+    }
+
     // ---- (e) Offline ---------------------------------------------------------------------------------------------
 
     [Fact]

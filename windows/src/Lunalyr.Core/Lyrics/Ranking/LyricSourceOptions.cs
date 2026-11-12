@@ -75,7 +75,8 @@ public sealed record LyricSourceSnapshot(
     /// plain Lyrics+ are looked up again; v18 compares traditional and simplified Chinese names as the same name and
     /// searches the Chinese catalogues again in simplified script (13 Nov 2026, a Windows addition): a song named in
     /// traditional script, such as "晴天 — 周杰倫", had its choice cached while the catalogues could not match it, and
-    /// would keep it for 14 days.
+    /// would keep it for 14 days. v18 also keeps synced lyrics that are only instrumental breaks or credits, ranked with
+    /// untimed text, as the Mac does (§4.5; until then such a song found nothing or a sung edition).
     /// </summary>
     public const string CachePolicy = "v18";
 

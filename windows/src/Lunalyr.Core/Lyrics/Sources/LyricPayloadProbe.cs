@@ -64,8 +64,9 @@ public sealed class ParsedLyricPayloadProbe : ILyricPayloadProbe
             LyricFormat.KPoeJson => KPoeJsonParser.Parse(payload)?.Lines ?? [],
             _ => [],
         };
-        // A file of instrumental breaks alone holds no lyrics.
-        return lines.Any(line => !line.IsInstrumental) ? lines : [];
+        // A file of instrumental breaks alone still parses to lines, as on the Mac: a synced result with no sung line,
+        // which ranks with untimed text. LRCLIB's exact match of that kind ends its search (spec §4.5).
+        return lines;
     }
 }
 
