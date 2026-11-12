@@ -12,6 +12,8 @@ public enum AttachMode
     Progman24H2,
     /// <summary>Older builds: a child of the WorkerW that follows the icons' host window.</summary>
     LegacyWorkerW,
+    /// <summary>The floating lyrics' see-through, click-through pop-up over every app (not attached to the desktop).</summary>
+    Floating,
 }
 
 /// <summary>Finds where a wallpaper window goes, behind the desktop icons (from the measured spike).</summary>

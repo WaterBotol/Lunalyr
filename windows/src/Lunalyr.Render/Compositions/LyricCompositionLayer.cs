@@ -239,7 +239,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Invalidate();
         SceneShown = scene;
         Kit!.SetFamily(scene.Style.FontFamily);
-        Metrics = ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
+        Metrics = scene.Style.FloatingTextSize is { } textSize
+            ? ViewportMetrics.ForText(SurfaceSize.X, SurfaceSize.Y, Scale, textSize, scene.Style.SizeFraction)
+            : ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.
         Choice = scene.Style.EntranceFor(Kind);

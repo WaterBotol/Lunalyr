@@ -256,8 +256,10 @@ public sealed partial class AppController : IAsyncDisposable
         _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         _renderer.SetFrameRate(settings.AnimationRate);
         PublishScene();
-        if (!settings.WallpaperPaused) _renderer.Start();
-        else _app.Info("Wallpaper starts paused (paused from the tray last time).");
+        if (RendererRuns(settings)) _renderer.Start();
+        if (settings.WallpaperPaused) _app.Info(settings.IsFloating
+            ? "Wallpaper starts paused (paused from the tray last time); the floating lyrics still run."
+            : "Wallpaper starts paused (paused from the tray last time).");
 
         Monitor.SessionChanged += OnSessionChanged;
         Monitor.TrackChanged += OnTrackChanged;
@@ -343,12 +345,15 @@ public sealed partial class AppController : IAsyncDisposable
             && (old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts))
             ChooseLayout(onlyWhenSettled: true);
         if (old.AnimationRate != settings.AnimationRate) _renderer.SetFrameRate(settings.AnimationRate);
-        if (old.WallpaperPaused != settings.WallpaperPaused)
+        if (RendererRuns(old) != RendererRuns(settings))
         {
-            if (settings.WallpaperPaused) _renderer.Stop();
-            else _renderer.Start();
-            _app.Info(settings.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
+            if (RendererRuns(settings)) _renderer.Start();
+            else _renderer.Stop();
         }
+        if (old.WallpaperPaused != settings.WallpaperPaused)
+            _app.Info(settings.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
+        if (old.LyricsSurface != settings.LyricsSurface)
+            _app.Info(settings.IsFloating ? "Lyrics float over the apps (their own style)." : "Lyrics are back on the desktop (its own style).");
 
         if (scene is not null) PublishScene();
         if (relook is not null)
@@ -364,6 +369,7 @@ public sealed partial class AppController : IAsyncDisposable
                 StartTitleReading(generation, title, settings.Readings());
         }
 
+        UpdateFloating();
         RaiseStatusChanged();
     }
 
@@ -419,6 +425,7 @@ public sealed partial class AppController : IAsyncDisposable
         Monitor.PlaybackChanged -= OnPlaybackChanged;
         if (_connectivity is not null) _connectivity.Restored -= OnConnectivityRestored;
         Monitor.Dispose();
+        DisposeFloating();
         try
         {
             await WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
@@ -493,6 +500,7 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         _player.Debug($"Playback: {playback}.");
+        UpdateFloating();
         RaiseStatusChanged();
     }
 

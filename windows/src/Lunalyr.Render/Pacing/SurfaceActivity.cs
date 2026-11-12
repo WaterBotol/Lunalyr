@@ -75,6 +75,16 @@ public static class SurfaceActivity
             : (state, system.ScreensHidden ? ReasonFor(system) : PauseReason.WindowHidden);
     }
 
+    /// <summary>
+    /// The floating lyrics: over every app (a covering window or a full-screen app is under it), and not a wallpaper
+    /// (Pause wallpaper leaves it running, as on the Mac). Hidden only while its window is or the screens are.
+    /// </summary>
+    public static (SurfaceState State, PauseReason Reason) ForFloating(SystemVisibility system, bool windowShown)
+    {
+        if (system.ScreensHidden) return (SurfaceState.Hidden, ReasonFor(system));
+        return windowShown ? (SurfaceState.Drawing, PauseReason.None) : (SurfaceState.Hidden, PauseReason.WindowHidden);
+    }
+
     /// <summary>The reason to give while the screens are hidden, most fundamental first.</summary>
     public static PauseReason ReasonFor(SystemVisibility system) =>
         system.DisplayOff ? PauseReason.DisplayOff
