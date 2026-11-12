@@ -94,8 +94,8 @@ foreach (var factory in factories)
     {
         Bench(stage, factory, new SceneSnapshot(), 9.5, 12, scale);
         Bench(stage, factory, Fixtures.NoLyrics(), 9.5, 12, scale);
-        Bench(stage, factory, Fixtures.English(), 9.5, 24, scale);
-        Bench(stage, factory, Fixtures.Japanese(), 9.5, 17, scale);
+        Bench(stage, factory, Fixtures.English(style), 9.5, 24, scale);
+        Bench(stage, factory, Fixtures.Japanese(style), 9.5, 17, scale);
         continue;
     }
     using var layer = factory.Create();
