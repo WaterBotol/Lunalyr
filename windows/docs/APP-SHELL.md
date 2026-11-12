@@ -53,7 +53,9 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
   has a cover painted in code (`DemoCover`), so the album colours and the opening title's cover run through the real
   decode path.
 - **Lyrics:** `DemoLyricLookup` answers only the demo songs; no lyric service is built and nothing touches the network
-  or the lyric cache.
+  or the lyric cache. Settings › Timing's search gets canned matches for a demo song, ranked and labelled by the real
+  ranking (its own lyrics as LRCLIB's, a line-timed copy as NetEase's, and a 3:58 Kugou recording the recording check
+  turns away); a title that isn't a demo song finds nothing. A choice saved for a demo song lasts until Lunalyr quits.
 - **Data folder:** its own (`…\Lunalyr\Demo`), so it never changes the real settings; that also makes it a separate
   instance, so quit the normal Lunalyr first or two wallpapers will compete for the desktop. Settings for the demo
   (composition, background…) go in that folder's `settings.json`.
@@ -119,7 +121,7 @@ Top to bottom (the Mac's order and wording):
 | Song | Cover (the controller's decoded cover), title, artist ("Live stream" without one), and the player's name. Nothing playing: "Nothing playing" / "Play a song in any music app". |
 | Transport | Previous, play/pause ("Play music" / "Pause music", shown at once on a press and confirmed by the player within 1.5 s), next: each enabled only where the player takes it from other apps (`PlayerCapabilities`), with a calm line saying which it doesn't. Every press goes through `PlaybackCommands`, which asks `PlaybackGuard` first, and the GSMTC layer asks it again; with `--no-playback` or `--demo` the buttons are off and the line says "Playback controls are off for this run (--demo)." |
 | Lyric line | The line being sung (two rows at most) with the next one under it, "♪" between lines, or "Looking for lyrics…", "No synced lyrics for this song.", "Lyrics appear here while a song plays."; the source and precision at its foot ("Apple Music · Word-by-word"), or the controller's status line when it says more ("Offline — …", "Lyric lookups are off for this run"). One height whatever it shows. On the wallpaper's own clock (both offsets), with readings shown in place of the lines when they replace them. |
-| Lyric timing | Earlier / Later (a tenth of a second for this song, saved per recording and lyric source in `songOffsets`, the Mac's keys), the offset ("+0.20 s"), and reset. "Tap to sync…" is shown disabled: "Tap to sync arrives in a later build." |
+| Lyric timing | Earlier / Later (a tenth of a second for this song, saved per recording and lyric source in `songOffsets`, the Mac's keys), the offset ("+0.20 s"), and reset. "Tap to sync…" (the flyout steps aside and the Tap to sync panel takes the keyboard; "Stop tap to sync" while it listens) and, while the last tap sync's offset is in force for the song playing, "Undo tap sync". Off with nothing playing. See "Lyric tools". |
 | Search YouTube | Opens a YouTube search for "artist title" in the default browser, only from that click (`YouTubeSearch` through an `IUrlLauncher`; the app's is the shell's https handler). Off, with a note, while playback is off for the run, so `--no-playback` and `--demo` never open it. |
 | Wallpaper | "Options…" opens settings. Tiles for the wallpaper types this build draws: Gradient (`gradient`) and Colour (`colourOnly`). Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
 | Footer | Settings… (Ctrl+,) and Quit Lunalyr (Ctrl+Q). |
@@ -321,6 +323,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `appTheme` | `"system"` | `system` (follow Windows), `light`, `dark`: how Lunalyr's own windows look. Windows only; never changes Windows' setting | Windows only (the Mac's "Look" is a different choice) |
 | `showControlsOnHover` | `true` | the desktop player comes up where the pointer rests on the desktop | `custom.showControlsOnHover` |
 | `desktopPlayerTimeMode` | `"remaining"` | the seek bar's right-hand time: `remaining` or `total` (anything else reads as `remaining`) | `custom.desktopPlayer.timeMode` |
+| `noLyrics` | `"notice"` | "When none are found" (Timing › Without synced lyrics): `notice` (a short note that fades after 4 s), `trackName` (the song's title and artist), `nothing`; unknown values reset to `notice` | `noLyrics` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
@@ -460,6 +463,71 @@ theme. The window opens at Lyric style (or `--settings-page`).
   every entrance plays as a simple fade, as the wallpaper and the preview do.
 - **App theme** (General): follow Windows, light or dark, for Lunalyr's windows only (`Root.RequestedTheme` and the
   title bar's caption buttons). `--theme` overrides it for one run.
+
+## Lyric tools
+
+What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5). Logic in `AppController.LyricTools.cs`
+(tested with fakes), wording in `Lunalyr.Shell.LyricTools.LyricToolsText`, the page's rows in
+`src/Lunalyr.App/Settings/LyricToolsRows.cs`, the panel in `src/Lunalyr.App/LyricTools/TapSyncPanel.cs`. Previews:
+`docs/previews/lyric-tools/` (light and dark).
+
+### Tap to sync
+
+- **Start:** Settings › Timing › This song ("Tap to Sync Lyrics…", "Stop Tap to Sync" while it listens) or the tray
+  flyout's "Tap to sync…" (the flyout closes first). Off with nothing playing.
+- **The panel:** a small Acrylic window, 440 wide, at the top of the display with the pointer, always on top, no title
+  bar, not in Alt+Tab; light/dark from the App theme or `--theme`. It shows the hand, "Tap to sync lyrics", the
+  session's line ("2 tapped, 2 more. Esc stops.") and the tap dots, with **Tap** (Windows only: for a touch screen or a
+  pointer) and **Stop**; the result with **Undo** and **Done**. It takes the keyboard (it is activated and brought to
+  the front) while it listens.
+- **Keys** (`TapSyncKeys`, the Mac's `keyResponse`): while listening every plain key taps (a held key taps once) and
+  Esc stops; Ctrl, Alt, the Windows key, Shift and Caps Lock never tap. While a result shows, plain keys are kept from
+  the app behind (Space there could pause the song); Esc or Enter close it, Ctrl+Z is Undo. The keys are taken before
+  any button sees them, so Space never presses a focused button.
+- **What a tap does:** reads the player's own position from the song clock (never the wallpaper's or the scrub
+  preview's), adds the global offset, takes off 0.15 s of reaction and hands it to `LyricTapSyncController` (Core,
+  ported from the Mac with its tests). Once four taps agree the song's offset is saved in `songOffsets` for the
+  recording and the lyric source on screen, like Earlier and Later. **Nothing is ever sent to a player.**
+- **Ending:** Esc, Stop or clicking elsewhere (the panel loses activation) stop it with the timing unchanged, as does
+  the next tap after a song change, a pause or other lyrics arriving; 30 s without a first tap or 15 s without the
+  next one end it too; a result stays 8 s (3 s for a failure), longer while the pointer is over
+  the panel. Stopping hands the keyboard back to the window that had it at once; a result keeps it until it closes.
+- **Undo:** the panel's Undo (Ctrl+Z), Settings' "Undo Tap to Sync" and the flyout's "Undo tap sync", offered while the
+  tap sync's offset is still the one in force for the song playing.
+- **Narrator:** the panel and every button are named (Stop is "Stop Tap to Sync", Undo "Undo Tap to Sync" with its
+  Ctrl+Z); each tap is announced ("Tap 2 of 4"), and so is the result.
+
+### Find lyrics, a saved choice, importing
+
+- **Search:** the song's title and artist fill the fields when a song starts (pausing never wipes what was typed);
+  "Use Playing Song" puts them back. Search (or Enter in a field) asks **every enabled source** (`ILyricLookup.SearchAsync`,
+  `LyricService.LookupAsync` with `force`: no cache, no miss cache) under those words, for the song playing: the
+  matches are listed, and the best one shows on the wallpaper as after any lookup (a search that finds nothing leaves
+  the song without lyrics, as on the Mac). Off with `--no-network`.
+- **The matches** (from every lookup, not only searches): title, artist and length, the source and its timing
+  ("LRCLIB · Word-by-word"), and the ranking's own source-list line ("Match found · 1 other source agrees · showing",
+  `LyricRanking.Annotate`); "The service didn’t confirm which recording it matched" and "Saved pronunciation readings"
+  where they apply. Close matches not used follow with the recording check's reason ("Rejected: duration 3:58 vs
+  0:45"). Each has "Use for This Song" (Narrator: "Use LRCLIB for this song").
+- **A choice** stops whatever the lookup was doing, shows at once and is saved for the **recording** (never for the
+  words typed) through `LyricService.Pin` (`pin-<sha256>.json` in `{data}\Lyrics`, the existing saved-lyrics store). This
+  song then shows "Using your saved choice" with "Return to Automatic", which forgets it and asks every source again.
+- **Import LRC or TTML…:** the Windows App SDK's file picker (`.lrc`, `.ttml`, `.xml`, `.txt`), up to 1 MB, decoded by
+  `LyricTextDecoder` (UTF-8/16, Shift_JIS, GB18030, Big5, EUC-KR), TTML when the text starts with "<", LRC otherwise;
+  shown as "Imported lyrics" and saved as the recording's choice. A file that can't be used says why and changes nothing.
+
+### When none are found
+
+`noLyrics`: what the wallpaper shows when the song playing has no lyrics to show: none found, offline, a stream, a
+player without a position, a failed lookup, or lookups off (`StatusText.IsNoneFound`; the scene's `NoneFound`).
+"Looking up lyrics…" always shows.
+- **Show a short note** (default): the status line eases in, holds 4 s and fades over 1 s (`LyricStagePresence.Notice`,
+  ported); the frame clock keeps running through the hold so the fade is drawn, then rests.
+- **Show title and artist:** the song's title in the lyric face with the artist smaller under it, centred and still;
+  the opening title stays away, since the stage already names the song.
+- **Show nothing:** an empty stage.
+The text backing (`WallpaperShadeDrawer`) follows the same rule, so an empty stage or a faded note leaves the picture
+undarkened.
 
 ## Measured (this PC, Release, Native AOT, `--no-playback --no-network`)
 
