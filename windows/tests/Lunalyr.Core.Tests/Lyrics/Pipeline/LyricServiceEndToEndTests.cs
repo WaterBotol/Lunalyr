@@ -136,9 +136,8 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.EndsWith("showing", report.States[Lrclib], StringComparison.Ordinal);
         // Apple Music cannot be read on Windows: listed with its reason, never asked.
         Assert.Equal(AppleUnavailable, report.States[AppleMusicCache]);
-        // No local folder chosen: the local source says so. (It reads on the thread pool; on a busy machine LRCLIB's
-        // match can settle before it has started, and it is then not needed.)
-        Assert.Contains(report.States[Lyrimuse], new[] { "Choose the Lyrimuse lyrics folder", LyricLookup.CouldNotBeat });
+        // No local folder chosen: the local source says so.
+        Assert.Equal("Choose the Lyrimuse lyrics folder", report.States[Lyrimuse]);
 
         // A search asks every source, so the whole ranking shows: word timing first (LRCLIB leads Lyrics+), then line
         // timing, then plain text.
@@ -147,6 +146,25 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.Equal(["Word-by-word · LRCLIB", "Word-by-word · Apple via Lyrics+", "Line-synced · NetEase", "Plain text · no timing · lyrics.ovh"],
             all.Candidates.Select(c => c.Provenance.Label));
         Assert.Equal(new LyricProvenance("Word-by-word", "LRCLIB"), all.Result!.Provenance);
+    }
+
+    [Fact]
+    public async Task LocalSourceWithNoFolderSaysSoWithoutBeingAsked()
+    {
+        // The local source alone, with no folder chosen: it can never answer, so the lookup ends at once with its
+        // reason, whatever the timing. A folder chosen later is read as usual.
+        var handler = Quiet();
+        var service = Service(handler, timing: Quick with { Grace = TimeSpan.FromMinutes(5), SourceLimit = TimeSpan.FromMinutes(5) });
+        var localOnly = LyricSourceSnapshot.From([Lyrimuse], new HashSet<LyricSourceId> { Lyrimuse }, LyricMatchMode.AccuracyFirst);
+        var report = await service.LookupAsync(ShapeOfYou, localOnly, cancellationToken: Ct).WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        Assert.Null(report.Result);
+        Assert.Equal(LocalLyricsSource.ChooseFolder, report.States[Lyrimuse]);
+        Assert.Empty(handler.Addresses);
+
+        using var folder = new TempFolder();
+        var withFolder = localOnly with { LocalFolder = folder.Path };
+        var read = await service.LookupAsync(ShapeOfYou, withFolder, cancellationToken: Ct);
+        Assert.NotEqual(LocalLyricsSource.ChooseFolder, read.States[Lyrimuse]);
     }
 
     [Fact]

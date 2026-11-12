@@ -113,4 +113,10 @@ public interface IFolderLyricSource : ILyricSource
 
     /// <summary>Identity of the files in <paramref name="folder"/> that could hold this track's lyrics, so a change can be noticed.</summary>
     string Fingerprint(LyricQuery query, string? folder);
+
+    /// <summary>
+    /// Why a lookup with <paramref name="folder"/> can never get an answer from this source (no folder chosen), or null
+    /// when it can be asked. The lookup then lists the source with this reason and does not run it.
+    /// </summary>
+    string? NotConfiguredReason(string? folder) => null;
 }
