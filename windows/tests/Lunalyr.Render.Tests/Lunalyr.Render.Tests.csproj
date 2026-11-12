@@ -18,5 +18,7 @@
   <ItemGroup>
     <!-- Helpers shared by every test project (fake time). -->
     <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The silent generated clip (no audio track) of the imported-video tests, for the animated cover's layer. -->
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\clip.mp4" Link="Fixtures\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
