@@ -363,15 +363,17 @@ public static class LyricRanking
             var found = states.TryGetValue(candidate.Source, out var before) && before.StartsWith("Saved match", StringComparison.Ordinal)
                 ? "Saved match"
                 : "Match found";
-            // Lyrics+ relaying Apple Music's lyrics: it ranks as Apple Music, so the list says so.
-            if (candidate.RankingSource == LyricSourceId.AppleMusicCache && candidate.Source != LyricSourceId.AppleMusicCache)
-            {
-                found += AppleRelayNote;
-            }
+            // The Mac's order: version (then language and original-title notes, once ported), Apple relay, timing
+            // fault, agreement, showing.
             var other = VersionTags.Mismatch(query, candidate.Title);
             if (other.Count > 0)
             {
                 found += $" · other version ({VersionTags.Describe(other)})";
+            }
+            // Lyrics+ relaying Apple Music's lyrics: it ranks as Apple Music, so the list says so.
+            if (candidate.RankingSource == LyricSourceId.AppleMusicCache && candidate.Source != LyricSourceId.AppleMusicCache)
+            {
+                found += AppleRelayNote;
             }
             if (LyricTimingRules.TimingFault(candidate.Result) is { } fault)
             {
