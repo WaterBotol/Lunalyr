@@ -239,7 +239,15 @@ internal abstract partial class LyricCompositionLayer
         _card?.Dispose();
         _card = null;
         SyncShade(dc, dark);
-        _card = BuildCard(key);
+        Meter.Enter();
+        try
+        {
+            _card = BuildCard(key);
+        }
+        finally
+        {
+            Meter.Exit();
+        }
         return _card;
     }
 

@@ -212,6 +212,24 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         if (_lines.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
         var sheet = Sheet!;
         if (row < 0 || row >= sheet.Lines.Count || sheet.Lines[row].Words.Count == 0) return null;
+        Meter.Enter();
+        try
+        {
+            var line = SetLine(row);
+            line.LastUsed = Frame;
+            _lines[row] = line;
+            Trim();
+            return line;
+        }
+        finally
+        {
+            Meter.Exit();
+        }
+    }
+
+    private StageLine SetLine(int row)
+    {
+        var sheet = Sheet!;
         var source = sheet.Lines[row];
         IReadOnlyList<LyricWord> words = source.Words;
         IReadOnlyList<bool> glue = sheet.Glue[row];
@@ -267,9 +285,6 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             }
             line.Backing = plans;
         }
-        line.LastUsed = Frame;
-        _lines[row] = line;
-        Trim();
         return line;
     }
 

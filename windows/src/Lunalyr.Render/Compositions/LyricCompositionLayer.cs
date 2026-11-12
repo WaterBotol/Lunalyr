@@ -117,6 +117,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     public bool IsAnimating { get; private set; }
 
+    /// <summary>The render-thread time spent setting lines up (for the line-setup benchmark).</summary>
+    internal Diagnostics.SetupMeter Meter { get; } = new();
+
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
         ReleaseResources();
@@ -531,6 +534,22 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     protected LinePlan? Plan(int row)
     {
         if (_plans.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
+        Meter.Enter();
+        try
+        {
+            var plan = SetPlan(row);
+            plan.LastUsed = Frame;
+            _plans[row] = plan;
+            return plan;
+        }
+        finally
+        {
+            Meter.Exit();
+        }
+    }
+
+    private LinePlan SetPlan(int row)
+    {
         var line = Sheet!.Lines[row];
         IReadOnlyList<bool> lineGlue = Sheet.Glue[row];
         var connections = Kind.HasConnections() && line.WordTimed;
@@ -561,12 +580,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Dense web layouts set long lines smaller.
         var lineBase = connections ? BaseSize * ConstellationLayout.DensityScale(line.Words) : BaseSize;
         // "Cutout · Highlight": each sung word gets a tile, held until the line ends (see Decorate).
-        var plan = BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
-                             runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
-                             runShares: runShares);
-        plan.LastUsed = Frame;
-        _plans[row] = plan;
-        return plan;
+        return BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
+                         runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
+                         runShares: runShares);
     }
 
     /// <summary>A line's reading, split over its runs when it has one part per run, otherwise for the whole line.</summary>
@@ -601,6 +617,23 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                                  LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
                                  bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN,
                                  IReadOnlyList<ReadingShares?>? runShares = null)
+    {
+        Meter.Enter();
+        try
+        {
+            return SetLine(words, glue, baseSize, lineIndex, inkTime, wordTimed, editorial, runReadings, lineReading, fit, maxWidth,
+                           groups, backingSeed, heavy, kind, lineEnd, runShares);
+        }
+        finally
+        {
+            Meter.Exit();
+        }
+    }
+
+    private LinePlan SetLine(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize, int lineIndex,
+                             double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
+                             LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups, int backingSeed,
+                             bool heavy, CompositionKind? kind, double lineEnd, IReadOnlyList<ReadingShares?>? runShares)
     {
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
@@ -1096,17 +1129,25 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     private LinePlan? Phrase(int row)
     {
         if (_phrases.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
-        var line = Sheet!.Lines[row];
-        var set = WordReadingsOf(row);
-        var glue = set?.Glue ?? Sheet.Glue[row];
-        var words = set?.Words ?? line.Words;
-        var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
-        var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
-        var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
-                             FitFor(row), Stage.Width);
-        plan.LastUsed = Frame;
-        _phrases[row] = plan;
-        return plan;
+        Meter.Enter();
+        try
+        {
+            var line = Sheet!.Lines[row];
+            var set = WordReadingsOf(row);
+            var glue = set?.Glue ?? Sheet.Glue[row];
+            var words = set?.Words ?? line.Words;
+            var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
+            var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
+            var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
+                                 FitFor(row), Stage.Width);
+            plan.LastUsed = Frame;
+            _phrases[row] = plan;
+            return plan;
+        }
+        finally
+        {
+            Meter.Exit();
+        }
     }
 
     private void DrawPhrase(ID2D1DeviceContext dc, LinePlan plan, LyricLine line, int row, double time, LyricPhraseTiming pose,

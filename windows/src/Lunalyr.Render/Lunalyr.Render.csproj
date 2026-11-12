@@ -20,6 +20,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Lunalyr.Render.Compositions.Tests" />
     <InternalsVisibleTo Include="Lunalyr.Render.Tests" />
+    <!-- The line-setup benchmark reads the lyric layers' setup meter (CompositionPreview -setup). -->
+    <InternalsVisibleTo Include="CompositionPreview" />
   </ItemGroup>
   <!-- The GPU effects' and line patterns' HLSL, compiled with fxc at build time and embedded (see the file). -->
   <Import Project="Backgrounds\Gpu\Shaders.targets" />

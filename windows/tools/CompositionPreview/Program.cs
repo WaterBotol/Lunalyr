@@ -3,6 +3,11 @@
 //   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken|scattered|...]
 //                      [-reveal automatic|fade|lift|pop|orbit|glide|unfold|cutoutFold|cutoutSlide|cutoutHighlight|satinRibbon|splitInk|mix]
 //                      [-shot fixture@seconds ...] [-reduce] [-bench] [-warp]
+//   CompositionPreview -setup [-runs 5] [-surfaces 1|2] [-only id] [-width 2560 -height 1440 -scale 1.25]
+//   CompositionPreview -hashes FILE [-only id] [-width 1280 -height 720 -scale 1]
+//
+// -setup and -hashes play the --demo songs through every composition (see SetupBench.cs): the line-setup benchmark,
+// and a hash of the frame every tenth of a second to compare two builds pixel for pixel.
 //
 // Compositions: editorial, spoken, cascade, cutout, scattered, constellation, constellationEditorial, echo, and the
 // stage layouts hinge, broadside, portal, mosaic, torque, fable. With -reveal, every fixture uses that word entrance
@@ -31,6 +36,10 @@ var bench = false;
 var reduce = false;
 var warp = false;
 var opening = false;
+var setup = false;
+var runs = 5;
+var surfaces = 1;
+string? hashes = null;
 var shots = new List<(string Fixture, double Time)>();
 for (var i = 0; i < args.Length; i++)
 {
@@ -44,6 +53,10 @@ for (var i = 0; i < args.Length; i++)
         case "only": only = Next(); break;
         case "reveal": reveal = Next(); break;
         case "bench": bench = true; break;
+        case "setup": setup = true; break;
+        case "runs": runs = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+        case "surfaces": surfaces = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+        case "hashes": hashes = Next(); break;
         case "reduce": reduce = true; break;
         case "dump":
             foreach (var line in ((Lunalyr.Core.Lyrics.LyricResult.Synced)Fixtures.English().Lyrics!).Lines)
@@ -106,6 +119,17 @@ if (shots.Count == 0)
 using var stage = new Offscreen(width, height, warp);
 Console.WriteLine($"Device: {stage.AdapterName}{(stage.IsWarp ? " (WARP)" : "")}, {width}x{height} at {scale}x");
 var background = Fixtures.Night.Base;
+
+if (setup)
+{
+    SetupBench.Run(stage, factories, only, scale, runs, surfaces);
+    return;
+}
+if (hashes is not null)
+{
+    SetupBench.Hashes(stage, factories, only, scale, hashes);
+    return;
+}
 
 if (opening)
 {
