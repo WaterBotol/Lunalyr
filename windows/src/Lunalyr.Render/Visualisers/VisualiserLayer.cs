@@ -109,7 +109,7 @@ public sealed class VisualiserLayer : IRenderLayer
         var dc = frame.Dc;
         var gpu = Gpu(dc);
         var settings = _host.Settings();
-        var (speed, vividness) = _host.Adjustments(frame.Scene);
+        var adjustments = frame.Scene.Adjustments;
         var sound = _host.Sound;
         var clock = sound?.Now ?? AudioAnalyzer.Now();
         _lastNow = frame.WallSeconds;
@@ -136,11 +136,11 @@ public sealed class VisualiserLayer : IRenderLayer
             : _options.Economical ? Math.Sqrt(0.6) : 1;
         var input = new SceneFrame
         {
-            Flow = _host.Flow(frame.WallSeconds, _options.Speed * speed),
+            Flow = _host.Flow(frame.WallSeconds, _options.Speed * adjustments.Speed),
             Clock = clock,
             Response = new VisualizerResponse(frame.Scene.ReduceMotion || _options.ReduceMotion, settings.DimFlashingLights, settings.Punch),
             Sensitivity = settings.Sensitivity,
-            Vividness = _options.Vividness * vividness,
+            Vividness = _options.Vividness * adjustments.Vividness,
             PaletteKey = _hasCover ? _palette : null,
             CoverStops = _coverStops,
             StarTrailsPalette = settings.StarTrailsAlbumColours && _hasCover ? _cover : null,

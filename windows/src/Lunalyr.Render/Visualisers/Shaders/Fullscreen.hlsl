@@ -5,7 +5,8 @@
 
 FSQuadOut main(uint id : SV_VertexID)
 {
-    float2 pos = float2(id == 1 ? 3.0 : -1.0, id == 2 ? 3.0 : -1.0);
+    // Clockwise on screen, so Direct3D's default culling (back faces, clockwise front) keeps it.
+    float2 pos = float2(id == 2 ? 3.0 : -1.0, id == 1 ? 3.0 : -1.0);
     FSQuadOut o;
     o.position = float4(pos, 0.0, 1.0);
     o.uv = pos * 0.5 + 0.5;

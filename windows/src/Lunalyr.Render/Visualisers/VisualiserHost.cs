@@ -2,7 +2,6 @@
 // factory (the desktop's, and the settings preview's own), so the desktop's monitors stay in phase.
 
 using Lunalyr.Core.Visualisers;
-using Lunalyr.Render.Scene;
 
 namespace Lunalyr.Render.Visualisers;
 
@@ -59,14 +58,14 @@ public sealed class VisualiserHost
 
     /// <param name="settings">The visualiser's settings now; read once per frame, so it must be cheap.</param>
     /// <param name="sound">The sound; null draws the quiet ambient spectrum (System audio off).</param>
-    /// <param name="adjustments">The Wallpaper page's Motion speed and Colour richness for a scene (1 and 1 when null).</param>
+
     /// <param name="targetFps">The frame rate the wallpaper aims for, the GPU budget the scale ladder works to.</param>
     public VisualiserHost(Func<VisualiserSettings>? settings = null, IVisualiserSound? sound = null,
-        Func<SceneSnapshot, (double Speed, double Vividness)>? adjustments = null, Func<double>? targetFps = null, bool preview = false)
+        Func<double>? targetFps = null, bool preview = false)
     {
         Settings = settings ?? (() => VisualiserSettings.Default);
         Sound = sound;
-        Adjustments = adjustments ?? (_ => (1, 1));
+
         TargetFps = targetFps ?? (() => 60);
         Preview = preview;
     }
@@ -76,7 +75,6 @@ public sealed class VisualiserHost
     /// <summary>The sound source; swapped by the app as System audio goes on and off.</summary>
     public IVisualiserSound? Sound { get; set; }
 
-    public Func<SceneSnapshot, (double Speed, double Vividness)> Adjustments { get; }
 
     public Func<double> TargetFps { get; }
 
