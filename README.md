@@ -59,7 +59,7 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 
 ### Fourteen layouts
 
-[![A tour of Lunalyr's layouts, switching through several of them on the same song](docs/media/layouts-tour.gif)](docs/media/layouts-tour.mp4)
+[![A tour of twelve of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.gif)](docs/media/layouts-tour.mp4)
 
 Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Match the music** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
 
