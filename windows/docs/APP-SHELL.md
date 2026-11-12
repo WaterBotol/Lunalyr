@@ -28,6 +28,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
 | `--settings-page <page>` | Open settings at a page: `general`, `lyric-style`, `readings`, `timing`, `wallpaper`, `covers`, `players`, `performance` or `about` (any part of the page's name). Implies `--settings`; a second launch forwards it, so checks (and other surfaces) can open a page. |
 | `--theme <light\|dark\|system>` | How Lunalyr's own windows look for this run only (for screenshots). Nothing is saved and Windows' setting is never touched; a second launch can change it in the running instance. |
+| `--quiet-windows` | For checks while someone works at the PC: the settings window opens without being activated and at the bottom of the z-order, so it never takes the foreground or the keyboard. Capture it with `tools/capture-window.ps1` (PrintWindow). Not forwarded to a running instance. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
@@ -123,7 +124,7 @@ Top to bottom (the Mac's order and wording):
 | Lyric line | The line being sung (two rows at most) with the next one under it, "♪" between lines, or "Looking for lyrics…", "No synced lyrics for this song.", "Lyrics appear here while a song plays."; the source and precision at its foot ("Apple Music · Word-by-word"), or the controller's status line when it says more ("Offline — …", "Lyric lookups are off for this run"). One height whatever it shows. On the wallpaper's own clock (both offsets), with readings shown in place of the lines when they replace them. |
 | Lyric timing | Earlier / Later (a tenth of a second for this song, saved per recording and lyric source in `songOffsets`, the Mac's keys), the offset ("+0.20 s"), and reset. "Tap to sync…" (the flyout steps aside and the Tap to sync panel takes the keyboard; "Stop tap to sync" while it listens) and, while the last tap sync's offset is in force for the song playing, "Undo tap sync". Off with nothing playing. See "Lyric tools". |
 | Search YouTube | Opens a YouTube search for "artist title" in the default browser, only from that click (`YouTubeSearch` through an `IUrlLauncher`; the app's is the shell's https handler). Off, with a note, while playback is off for the run, so `--no-playback` and `--demo` never open it. |
-| Wallpaper | "Options…" opens settings. Tiles for the wallpaper types this build draws: Gradient (`gradient`) and Colour (`colourOnly`). Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
+| Wallpaper | "Options…" opens settings. Every wallpaper type as a tile, the Mac's menu-bar grid: Match, Visualiser, Effects, Patterns, Colour, then Your wallpaper, Image or video and Music video (off in this build); Image or video with nothing imported opens Settings › Wallpaper instead. Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
 | Footer | Settings… (Ctrl+,) and Quit Lunalyr (Ctrl+Q). |
 
 ## Controller
@@ -154,9 +155,10 @@ and no player at all, get `PaletteMapper.Fallback`. Looking the lyrics up again 
 the renderer under one lock that always reads the latest snapshot, so lyrics, readings and colours arriving on
 different threads can't leave it on an older one.
 
-The renderer is behind `IWallpaperRenderer` (`Start`, `Stop`, `SetScene`, `SetLayers`, `SetClock`, `SetFrameRate`);
-the app uses `EngineWallpaperRenderer` over `RenderEngine` with the "gradient" and "colour" backgrounds and the
-"editorial" and "spoken" compositions registered (`AppHost.CreateWallpaper`).
+The renderer is behind `IWallpaperRenderer` (`Start`, `Stop`, `SetScene`, `SetLayers`, `SetClock`, `SetFrameRate`, `ReplaceLayer`);
+the app uses `EngineWallpaperRenderer` over `RenderEngine` with every background and composition of `WallpaperLayers`
+(`AppHost.CreateWallpaper`); the background is chosen by `AppController.Wallpaper.cs` (see "Wallpaper types").
+
 
 ## Desktop player
 
@@ -364,7 +366,21 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `romanizationLanguage` | `"automatic"` | `automatic`, `japanese`, `mandarin`, `cantonese`, `korean`, `other` | `custom.romanizationLanguage` |
 | `romanizationTones` | `true` | | `custom.romanizationTones` |
 | `romanizationSaved` | `true` | prefer readings that came with the lyrics | `custom.romanizationSaved` |
-| `backgroundMode` | `"gradient"` | `gradient` (the album colour field), `colourOnly` (the Mac's value; the straight album gradient, layer `colour`; `colour` is accepted too), `auto` (= `gradient`); the Mac's other values as they are ported (unknown ones show `gradient`) | `backgroundMode` |
+| `backgroundMode` | `"auto"` | the Mac's types: `auto` (Match the music), `pattern`, `shader`, `colourOnly`, `visualizer`, `desktop`, `custom`, `musicVideo`. Windows' old `gradient` reads as `colourOnly` with `albumGradientWallpaper: false`; `colour`/`colorOnly` as `colourOnly`; unknown as `auto` (see "Wallpaper types") | `backgroundMode` |
+| `albumGradientWallpaper` | `true` | Colour only › Album gradient (off: the album colour field) | `custom.albumGradientWallpaper` |
+| `shaderStyle` | `""` | a GPU effect's id, `""` = Match the music | `shaderStyle` |
+| `patternStyle` | `""` | a line pattern's id, `""` = Match the music | `patternStyle` (an Int on the Mac) |
+| `wallpaperPath`, `wallpaperName` | `""` | Lunalyr's copy of the imported picture or video (`{data}Wallpapers…`) and the original's name | `custom.wallpaperPath`, `custom.wallpaperName` |
+| `wallpaperPlacement` | `"fill"` | `fill`, `fillTop`, `fillBottom`, `fit` | `custom.wallpaperPlacement` |
+| `effectSpeed` | `1` | 0.2–2, "Motion speed" | `effectSpeed` |
+| `vividness` | `1` | 0.4–1.8, "Colour richness" | `vividness` |
+| `scrimStrength` | `1` | 0–2, "Darkening" | `scrimStrength` |
+| `patternOpacity` | `0.85` | 0–1, "Pattern visibility" | `patternOpacity` |
+| `textBackingAutomatic` | `true` | "Automatic text backing" | `custom.textBackingAutomatic` |
+| `textBacking` | `0.35` | 0–1, "Text backing" when not automatic | `custom.textBacking` |
+| `useMotionArtwork` | `true` | Covers › Use animated covers (kept; not drawn on Windows yet) | `useMotionArtwork` |
+| `motionPlacement` | `"fill"` | Covers › Placement (kept; waits with animated covers) | `motionPlacement` |
+| `motionBlur` | `5` | 0–25, Covers › Softening (kept; Reset Adjustments puts it back) | `motionBlur` |
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
 | `animationRate` | `60` | `15`, `30`, `60`, `0` = follow the display | `custom.animationRate` (Mac default 30) |
 | `pauseWhenCovered` | `true` | | `custom.pauseWhenCovered` |
@@ -576,7 +592,7 @@ implementation, so the effects/patterns agent and the visualiser agent each own 
 | Catalogue | `AddEffects(List<WallpaperStyle>)`, `AddPatterns(List<WallpaperStyle>)` (`Shell/Wallpaper/WallpaperCatalog.cs`) | `WallpaperCatalog.Effects.cs`, `WallpaperCatalog.Patterns.cs` | One `WallpaperStyle(Id, Title, Character, Heavy, Detail)` per effect / pattern, in menu order. The Wallpaper page's "GPU effect" and "Pattern" menus list them after "Match the music"; "Match the music" chooses among them by `Character` (`WallpaperCharacter(Energy, Density, Organic)`, 0…1 each, in `Lunalyr.Core.Compositions`). Ids are saved in `shaderStyle` / `patternStyle`, so keep them stable. Write your own names and characters: the Mac's tables (`ShaderBackgroundView.swift`, `FractalBackgroundView.swift`) are Verso. |
 | Catalogue | `ProvidesVisualisers(ref bool)`, `VisualiserLayer(AppSettings, ref string)` (`WallpaperCatalog.cs`) | `WallpaperCatalog.Visualisers.cs` | Say a visualiser exists (the page then drops its placeholder) and which layer id the Visualisers type draws for the settings (a scene's own id, say). |
 | Layers | `AddEffectLayers`, `AddPatternLayers`, `AddVisualiserLayers(List<IRenderLayerFactory>, BackgroundOptions, Logger?)` (`Shell/Rendering/WallpaperLayers.cs`) | `WallpaperLayers.Effects.cs`, `…Patterns.cs`, `…Visualisers.cs` | Add the factories: one per effect with id `shader.<id>`, one per pattern with id `pattern.<id>`, and the visualisers' (ids starting `visualizer`). The desktop (`AppHost.CreateWallpaper`) and the settings preview both register `WallpaperLayers.Factories`, so they never drift apart. |
-| Page | `AddEffectOptions(StackPanel, SettingsContext)`, `AddPatternOptions(…)` (`App/Settings/WallpaperPage.cs`) | `WallpaperPage.Effects.cs`, `WallpaperPage.Patterns.cs` | Optional rows of your own under the "GPU effect" / "Pattern" menus (which the page owns). The panel is shown with Match the music and with your type. |
+| Page | `AddEffectOptions(StackPanel, SettingsContext)`, `AddPatternOptions(…)` (`App/Settings/WallpaperPage.cs`) | `WallpaperPage.Effects.cs`, `WallpaperPage.Patterns.cs` | Optional rows of your own under the "GPU effect" / "Pattern" menus (which the page owns). Called once for the Match the music section and once for your type's, so make fresh controls each call. |
 | Page | `AddVisualiserSections(StackPanel, SettingsContext, ref bool added)` (`WallpaperPage.cs`) | `WallpaperPage.Visualiser.cs` | The whole "Visualiser" section (its scene menu and options) and any after it ("Music response"), built with `SettingsKit`; set `added = true`. The panel shows only while Visualisers is the type; until then it holds a placeholder ("Arrives in a later build of milestone 6."). |
 | Settings | `NormalizeEffects(ref AppSettings)`, `NormalizeVisualiser(ref AppSettings)` (`Shell/Settings/AppSettings.Wallpaper.cs`) | `AppSettings.Effects.cs`, `AppSettings.Visualiser.cs` | Your own keys go in your own `partial record AppSettings` file (camelCase JSON, the Mac's key without `custom.`); put them in range here. Called at the end of `Normalized()`. |
 
@@ -601,6 +617,72 @@ when its lyrics (or the verdict that there are none) arrive. An energetic song (
 other a line pattern. A pinned `shaderStyle` / `patternStyle` is honoured. A kind with nothing in the catalogue falls
 back to the other kind, then to the album colours. The choice is deterministic for a song (its seed) and remembered
 per track for the session. See [compositions/matching.md](compositions/matching.md), "The wallpaper".
+
+### The Wallpaper page
+
+`App/Settings/WallpaperPage.cs`, ported from the Mac's `WallpaperPage.swift` and `QuickControls.swift`'s
+`WallpaperModeGrid` (Lunalyr's own lines; the page's one Verso-attributed line is a declaration). Words in
+`SettingsCopy` (tested). Previews: `docs/previews/wallpaper/`.
+
+- **Wallpaper:** every type as a tile, five small ones for what Lunalyr draws (Match, Visualiser, Effects, Patterns,
+  Colour) and three wide ones for what starts from something of yours (Your wallpaper, Image or video, Music video,
+  off in this build). The chosen tile is lit; its summary shows under the grid. Image or video with nothing imported
+  asks for a file first. Narrator reads each tile's full name and summary.
+- **The type's own section:** Match the music (the "GPU effect" and "Pattern" menus, "Match the music picks one of
+  each per song; choose one to pin it."), GPU effects, Line patterns (their menu; disabled with the reason until the
+  catalogue has entries), Visualiser (the hook, or a placeholder), Your wallpaper (what it does, and that the preview
+  can't show it), Image or video (File with "Choose…", the file's name or "missing, choose it again", Placement with
+  the Mac's four placements and captions, the note on videos), Colour only (Album gradient).
+- **Legibility:** Automatic text backing (caption by type, as the Mac's), and "Text backing" 0–100% when it is off.
+  The Mac's "Shade under the menu bar" has no Windows counterpart (the taskbar draws its own material) and isn't offered.
+- **Adjustments** (hidden for Your wallpaper): Motion speed 0.2–2× and Colour richness 40–180% (not for Image or video),
+  Darkening 0–200%, Pattern visibility 0–100% (Line patterns), Reset Adjustments (also resets Covers › Softening, as on
+  the Mac; disabled while all are as Lunalyr comes). Everything applies at once on the wallpaper and the preview.
+  The Mac's Increase Contrast floor under Darkening and its power-saving banner have no Windows setting behind them yet.
+
+### Your wallpaper
+
+Only the text backing (no scrim, no grain) and the lyrics are drawn; the surface is see-through, so Windows' own
+wallpaper or a wallpaper app shows behind them (docs/ARCHITECTURE.md, "See-through wallpaper"). With nothing playing
+nothing is drawn. Lunalyr never reads or changes the wallpaper; the automatic backing assumes a light-middling desktop
+(`DesktopLayer.AssumedLuminance`, 0.35), since a wallpaper app's picture can't be read.
+
+### Imported image or video
+
+- **Importing** (`Shell/Wallpaper/WallpaperImporter.cs`, the Mac's `WallpaperImporter`; `Platform/Wallpaper/CustomWallpaperStore.cs`,
+  the Mac's `CustomWallpaperStore`): only on a click, through the Windows App SDK's file picker (pictures and videos
+  Windows can open). The file is checked (a picture must decode; a video must have a playable video track) and copied
+  to `{data}\Wallpapers\{guid}.ext`; the settings point at the copy, the type becomes Image or video, and the copy it
+  replaced is deleted (only ever a file in that folder). A file that can't be used changes nothing and says why
+  ("This image could not be opened.", "This file has no playable video track.", or how to get HEIC/AVIF support). A
+  copy deleted later falls back to the album colours and the page asks for the file again.
+- **Drawing:** the `custom` layer (`CustomLayerFactory`), see docs/ARCHITECTURE.md, "Imported pictures and videos".
+  The scrim (Darkening) and the text backing lie over it; the automatic backing reads the picture where the lyric stage
+  sits (`PictureLegibility.StageLuminance`, the Mac's `stageLuminance`); a video takes a dark-middling 0.2.
+- **Video:** muted always (no audio stream is ever read), looping, decoded on the GPU, frozen while the wallpaper is
+  paused, covered or hidden, and still on its first frame when Windows' Animation effects are off.
+
+### Covers
+
+Settings › Covers keeps the Mac's page: "Use animated covers" with Placement and Softening. **Animated covers are not
+drawn on Windows yet**, and the rows say so. The claim that they need Apple's API is wrong: the Mac finds them through
+the public iTunes search, the album's public music.apple.com page (its `serialized-server-data`) and Apple's HLS
+playlists, with no developer key, so Windows could do the same (Media Foundation plays the MP4 renditions). Not built
+this milestone. Placement and Softening keep their saved values (shown, not changeable); Softening is part of Reset
+Adjustments.
+
+### Checks
+
+- `--demo --data <folder>` with `backgroundMode` (and `wallpaperPath` for Image or video) in that folder's
+  `settings.json`; `tools/peek-desktop.ps1` captures the desktop with PrintWindow, never showing or activating a window
+  (`-Thumbnail` for the DWM thumbnail, shown unactivated).
+- `--settings-page wallpaper --theme dark --quiet-windows` and `tools/capture-window.ps1` for the pages.
+- `tools/LayerPreview -wallpaper <file> -placements fill,fillTop,fillBottom,fit` draws the imported layer offscreen (a
+  video plays in real time to each `-times` mark); `-layer desktop` draws Your wallpaper (keeping alpha);
+  `-adjust speed=…,vividness=…,darkening=…,backing=…` draws the adjustments; `-bench <seconds>` measures a picture or
+  video wallpaper at 60 fps.
+- `tools/WallpaperTestMedia <folder>` makes invented test media (a 6 s H.264 gradient clip with no audio track, and
+  pictures, one turned by its EXIF orientation); `… <folder> clip` makes the unit tests' fixture.
 
 ## Lyric tools
 

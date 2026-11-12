@@ -117,6 +117,9 @@ internal sealed partial class AppHost
     /// <summary>The look <c>--theme</c> asked for this run (light, dark or system), or null for the App theme setting.</summary>
     public string? ThemeOverride { get; private set; }
 
+    /// <summary><c>--quiet-windows</c>: windows open unactivated, at the bottom (checks while someone works at the PC).</summary>
+    public bool QuietWindows => _options.QuietWindows;
+
     /// <summary>Windows' "Animation effects" is off (read, never changed).</summary>
     public bool ReduceMotion => _motion?.ReduceMotion ?? false;
 

@@ -57,6 +57,13 @@ public partial class App : Application
             _window.ShowPage(page);
         }
 
+        if (_host.QuietWindows)
+        {
+            // Checks while someone works: shown, never activated, under every other window (PrintWindow still sees it).
+            _window.AppWindow.Show(activateWindow: false);
+            Interop.Win32.SendToBottom(Microsoft.UI.Win32Interop.GetWindowFromWindowId(_window.AppWindow.Id));
+            return;
+        }
         _window.Activate();
     }
 

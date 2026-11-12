@@ -44,6 +44,37 @@ Palette PaletteOf(string path)
 
 string Name(string path) => Path.GetFileNameWithoutExtension(path);
 
+if (options.Wallpaper is { } benched && options.Bench > 0)
+{
+    // The imported wallpaper drawn at 60 fps for -bench seconds, as the desktop would (each frame waits for the next
+    // 1/60 s): render-thread time per frame and the process's CPU, for the cost of a video wallpaper without a desktop.
+    var custom = new CustomLayerFactory(benched, WallpaperPlacements.Parse(options.Placements[0]));
+    using var layer = custom.Create();
+    surface.Prepare(layer);
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    while (layer is IFirstFrameLayer { HasFirstFrame: false } && clock.Elapsed.TotalSeconds < 10) { surface.Draw(layer, scene, clock.Elapsed.TotalSeconds, 1 / 60.0); Thread.Sleep(5); }
+    var process = System.Diagnostics.Process.GetCurrentProcess();
+    var cpuStart = process.TotalProcessorTime;
+    clock.Restart();
+    var frames = 0;
+    double drawMs = 0;
+    while (clock.Elapsed.TotalSeconds < options.Bench)
+    {
+        var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        surface.Draw(layer, scene, clock.Elapsed.TotalSeconds, 1 / 60.0);
+        drawMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+        frames++;
+        var next = frames / 60.0;
+        var wait = next - clock.Elapsed.TotalSeconds;
+        if (wait > 0) Thread.Sleep(TimeSpan.FromSeconds(wait));
+    }
+    process.Refresh();
+    var cpu = (process.TotalProcessorTime - cpuStart).TotalMilliseconds / clock.Elapsed.TotalMilliseconds / Environment.ProcessorCount * 100;
+    Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+        $"bench {Name(benched)} {options.Width}x{options.Height}: {frames / clock.Elapsed.TotalSeconds:0.0} fps, {drawMs / frames:0.00} ms per frame (draw + copy + readback-free), process CPU {cpu:0.00}% of all {Environment.ProcessorCount} cores, decoded in {(layer as VideoLayer)?.DecodedOn ?? "-"}"));
+    return 0;
+}
+
 if (options.Wallpaper is { } wallpaper)
 {
     // An imported picture or video in each placement, at each time (a video is played through in real time).
@@ -112,7 +143,7 @@ return 0;
 
 internal sealed record Arguments(string Covers, string Out, string Layer, double[] Times, int Width, int Height, float Scale,
                                  bool Hardware, bool Quiet, (string From, string To)? Fade, string? Wallpaper, string[] Placements,
-                                 WallpaperAdjustments Adjustments)
+                                 WallpaperAdjustments Adjustments, double Bench)
 {
     public static Arguments? Parse(string[] args)
     {
@@ -124,6 +155,7 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
         (string, string)? fade = null;
         string? wallpaper = null;
         string[] placements = ["fill"];
+        double bench = 0;
         var adjustments = WallpaperAdjustments.Default;
         for (var i = 0; i < args.Length; i++)
         {
@@ -148,6 +180,7 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
                     break;
                 case "-wallpaper": wallpaper = Next(); break;
                 case "-placements": placements = Next().Split(','); break;
+                case "-bench": bench = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "-adjust":
                     foreach (var pair2 in Next().Split(','))
                     {
@@ -167,6 +200,6 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
             }
         }
         if (output is null || (covers is null && fade is null && wallpaper is null)) return null;
-        return new Arguments(covers ?? ".", output, layer, times, width, height, scale, hardware, quiet, fade, wallpaper, placements, adjustments);
+        return new Arguments(covers ?? ".", output, layer, times, width, height, scale, hardware, quiet, fade, wallpaper, placements, adjustments, bench);
     }
 }
