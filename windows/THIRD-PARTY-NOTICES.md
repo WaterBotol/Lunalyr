@@ -22,7 +22,7 @@ are listed with their licences in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#li
   copy.
 
 ```text
-Copyright © 1991-2020 Unicode, Inc. All rights reserved.
+Copyright © 1991-2022 Unicode, Inc. All rights reserved.
 Distributed under the Terms of Use in https://www.unicode.org/copyright.html.
 
 Permission is hereby granted, free of charge, to any person obtaining
@@ -54,10 +54,6 @@ shall not be used in advertising or otherwise to promote the sale,
 use or other dealings in these Data Files or Software without prior
 written authorization of the copyright holder.
 ```
-
-**To confirm:** the notice above is the Unicode data licence as the .NET runtime's notices give it (copyright 1991-2020).
-It was not compared with ICU 72.1's own `LICENSE` file (which may give a later year), as that file could not
-be fetched under the development rules.
 
 ## IPAdic (mecab-ipadic) 2.7.0-20070801
 
