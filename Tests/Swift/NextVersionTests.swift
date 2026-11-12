@@ -58,7 +58,7 @@ final class NextVersionTests: XCTestCase {
     }
     func testLRCLIBWordTimingLeadsOtherServicesInEitherModeAndOrder() {
         func candidate(_ source: LyricSourceID, native: Bool, score: Double) -> LyricCandidate {
-            var line = LyricsFetcher.makeLine(text: "hello", start: 1, end: 2); line.wordTimed = native
+            var line = LyricsFetcher.makeLine(text: "hello there", start: 1, end: 2); line.wordTimed = native
             return .init(source: source, result: .synced([line], .init(precision: "test", source: source.title)), title: "Song", artist: "Artist", score: score)
         }
         let query = LyricQuery(title: "Song", artist: "Artist", album: nil, duration: 0)

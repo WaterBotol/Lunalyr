@@ -101,7 +101,9 @@ final class LyricLookupProgressTests: XCTestCase {
         XCTAssertFalse(LyricsFetcher.isSettled(words, pending: [.lrclib], query: query, options: options))
         // Kuwo only ever has line timing.
         XCTAssertTrue(LyricsFetcher.isSettled(words, pending: [.kuwo], query: query, options: options))
-        XCTAssertTrue(LyricsFetcher.isSettled(candidate(.lrclib, tier: 3), pending: [.lyricsPlus, .netEase, .kuwo], query: query, options: options))
+        XCTAssertTrue(LyricsFetcher.isSettled(candidate(.lrclib, tier: 3), pending: [.netEase, .kuwo], query: query, options: options))
+        // Lyrics+ may relay Apple Music's lyrics, which rank above LRCLIB's.
+        XCTAssertFalse(LyricsFetcher.isSettled(candidate(.lrclib, tier: 3), pending: [.lyricsPlus], query: query, options: options))
         XCTAssertFalse(LyricsFetcher.isSettled(candidate(.lrclib, tier: 1), pending: [.lyricsPlus], query: query, options: options))
     }
 

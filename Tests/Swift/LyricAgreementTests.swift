@@ -13,7 +13,10 @@ final class LyricAgreementTests: XCTestCase {
             var line = LyricsFetcher.makeLine(text: text, start: start, end: start + 4)
             if words {
                 line.wordTimed = true
-                line.words = [.init(text: text, start: start, end: start + 4)]
+                // A token a word: a whole line as one token is line timing (`LyricsFetcher.isPhraseTimed`).
+                line.words = text.split(separator: " ").enumerated().map { i, word in
+                    .init(text: String(word), start: start + Double(i), end: start + Double(i) + 1)
+                }
             }
             return line
         }

@@ -64,8 +64,8 @@ final class LyricSourceOptions: ObservableObject {
     /// timing on each match and the names in the source list.
     static var ranking: String {
         let music = LyricSourceID.appleMusicCache.title, lrclib = LyricSourceID.lrclib.title
-        return "Word-by-word and Mixed timing lyrics come first: \(music), then \(lrclib), then your other sources. "
-            + "Line-synced lyrics come next, again with \(music) first."
+        return "Word-by-word and Mixed timing lyrics come first: \(music), then Apple Music’s lyrics from Lyrics+, then \(lrclib), then your other sources. "
+            + "Line-synced lyrics come next, again with \(music) first, then Apple Music’s from Lyrics+."
             + " Timed lyrics for another version of the song (Live, Remix, Acoustic, English Version…), or in another language than the song’s, come after timed lyrics for the version playing."
     }
     /// What a lookup asks and ranks by. Timing, and the lead of Music's own
@@ -90,7 +90,10 @@ final class LyricSourceOptions: ObservableObject {
         /// v13: a language version (English Version…), or lyrics in another
         /// language than the song's, rank below the playing one's; songs listed
         /// under an English title are searched under their original title too.
-        static let cachePolicy = "v13"
+        /// v14: a whole line or a few long phrases timed as "words" is line
+        /// timing (`LyricsFetcher.isPhraseTimed`); Apple's lyrics relayed by
+        /// Lyrics+ rank as Apple Music's.
+        static let cachePolicy = "v14"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.
