@@ -57,6 +57,9 @@ internal sealed unsafe class TrayHost : IDisposable
     /// <summary>The disabled first line of the menu ("Song — Artist") and whether the wallpaper is paused.</summary>
     public Func<(string NowPlaying, bool Paused)>? DescribeMenu { get; set; }
 
+    /// <summary>A system setting changed (<c>WM_SETTINGCHANGE</c>, broadcast to top-level windows): read what matters again.</summary>
+    public Action? SettingChanged { get; set; }
+
     /// <summary>Called when something inside a window message throws (it can't propagate to Windows).</summary>
     public Action<Exception>? OnError { get; set; }
 
@@ -240,6 +243,7 @@ internal sealed unsafe class TrayHost : IDisposable
 
             case Win32.WM_SETTINGCHANGE:
                 if (lParam != 0 && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet") RedrawIcon();
+                SettingChanged?.Invoke();
                 break;
         }
 
