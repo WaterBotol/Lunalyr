@@ -1,0 +1,61 @@
+Query: "Blinding Lights (Live)" by "The Weeknd" (4:13, 253.365 s), album "Live At SoFi Stadium", genre "R&B/Soul", automatic lookup
+Storefront for original titles: au; cache policy v17
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.65s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.65s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.65s    Lyrics+ (KPoe): Searching…
+  0.65s    AMLL TTML DB: Searching…
+  0.65s    NetEase Cloud Music: Searching…
+  0.65s    LRCLIB: Match found
+  0.65s    QQ Music: Searching…
+  0.65s    Kugou Music: Searching…
+  0.65s    Kuwo Music: Searching…
+  0.65s    lyrics.ovh: Searching…
+  0.92s    Kugou Music: Match found
+  0.98s    LRCLIB: Match found · 1 other source agrees
+  0.98s    lyrics.ovh: Match found · 1 other source agrees
+  1.15s    NetEase Cloud Music: Match found · 2 other sources agree
+  1.15s    LRCLIB: Match found · 2 other sources agree
+  1.15s    lyrics.ovh: Match found · 2 other sources agree
+  1.45s    QQ Music: Match found · 1 other source agrees
+  1.45s    Kugou Music: Match found · 1 other source agrees
+  1.67s    AMLL TTML DB: Not needed: it couldn’t beat the match showing
+  1.67s    LRCLIB: Match found · 2 other sources agree · showing
+  1.67s    Kuwo Music: Not needed: it couldn’t beat the match showing
+  1.67s  showing (revision 1): Word-by-word · LRCLIB
+  2.41s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Match found · 2 other sources agree
+  LRCLIB                 Match found · 2 other sources agree · showing
+  QQ Music               Match found · 1 other source agrees
+  Kugou Music            Match found · 1 other source agrees
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Match found · 2 other sources agree
+
+Ranking:
+  1. Word-by-word · LRCLIB                         "Blinding Lights - Live" / "The Weeknd" 4:13, 38 lines, score 104.5, tier 3
+  2. Word-by-word · Kugou Music                    "Blinding Lights (Live)" / "The Weeknd" 4:13, 45 lines, score 104.5, tier 3
+  3. Line-synced · NetEase                         "Blinding Lights (Live)" / "The Weeknd" 4:13, 41 lines, score 93.0, tier 1
+  4. Line-synced · QQ Music                        "Blinding Lights (Live)" / "The Weeknd" 4:13, 45 lines, score 92.5, tier 1
+  5. Plain text · no timing · lyrics.ovh           "Blinding Lights (Live)" / "The Weeknd" ?:??, 44 lines, score 75.0, tier 0
+
+Chosen: Word-by-word · LRCLIB
+  1:19  I've been tryna call  [4 timed words]
+  1:21  I've been on my own for long enough  [8 timed words]
+  1:24  Maybe you can show me how to love, maybe  [9 timed words]
+  1:30  I'm going through withdrawals  [4 timed words]
