@@ -26,6 +26,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
 | `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
+| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
 ## Demo mode (`--demo`)
@@ -109,6 +110,125 @@ The renderer is behind `IWallpaperRenderer` (`Start`, `Stop`, `SetScene`, `SetLa
 the app uses `EngineWallpaperRenderer` over `RenderEngine` with the "gradient" and "colour" backgrounds and the
 "editorial" and "spoken" compositions registered (`AppHost.CreateWallpaper`).
 
+## Desktop player
+
+The Mac's "Sleeve" player: a card washed in the playing album's colours that comes up in the middle of the display
+where the pointer rests on the empty desktop. Code: `src/Lunalyr.App/Player/` (window, drawing, input, UI
+Automation), `src/Lunalyr.Core/Player/` (the portable rules, ported with the Mac's tests), `src/Lunalyr.Shell/Player/`
+(commands) and `AppController.Player.cs` (the scrub preview). Previews: `docs/previews/player/`.
+
+### How it is drawn: a DirectComposition window, not WinUI
+
+The card is a borderless `WS_POPUP` tool window with `WS_EX_NOREDIRECTIONBITMAP`. Its one DirectComposition visual is a
+premultiplied-alpha flip swap chain, drawn with Direct2D and DirectWrite on the UI thread, on a small D3D11 device of
+its own. Windows 11 rounds the window and gives it its shadow (`DWMWA_WINDOW_CORNER_PREFERENCE`). The three
+DirectComposition calls go through the COM vtables, so there is no new package. Why not a borderless WinUI window with
+Acrylic:
+- **WinUI is not running while Lunalyr idles.** It can only start by leaving the plain Win32 loop, once per process,
+  and keeps ~95 MB loaded from then on (see "Measured"). The card comes up many times a day. With WinUI, the first
+  reveal would wait 150–700 ms and every later minute would carry the WinUI cost. The Direct2D card needs no WinUI
+  and works under either message loop.
+- **The card is all custom drawing:** the record, the album wash, the seek bar with ticks, section gaps, capsules and
+  the rubber band. Fluent controls would add little, and an animated custom bar is cheaper drawn directly.
+- **Shape and hit testing.** A WinUI window is an opaque rectangle. The Mac's soft 28 pt card would need a
+  transparent margin for its shadow, and that margin would eat clicks meant for the desktop (`HTTRANSPARENT` only
+  passes clicks to windows on the same thread). The window is exactly the card, so clicks beside it reach the
+  desktop. DWM rounds it at Windows 11's own 8 px, not the Mac's 28.
+- **No Acrylic.** An inactive window's Acrylic falls back to a flat colour, and the card is almost always inactive.
+  The card's "glass" is the album wash at 93 % over the wallpaper instead (the Mac's preview look). With
+  transparency effects off it is solid.
+- **The price is accessibility, paid in code.** `PlayerAutomation.cs` is a UI Automation provider using
+  source-generated COM, so it is AOT safe. The card is a pane holding the cover, Previous, Play/Pause, Next and time
+  label buttons (Invoke), plus a "Playback position" slider. The slider has RangeValue (seconds; setting it seeks) and
+  Value: the Mac's VoiceOver text, "1:23 of 3:33, line: …". Focus moves with clicks and Tab and raises focus events.
+  Notes (a refused command) and the card coming up are announced with `UiaRaiseNotificationEvent`. The tree was
+  checked with a silent UIA client. Narrator itself was not started, because it speaks.
+
+### When it comes up: polling, not hooks
+
+A Win32 timer on the card's own window polls `GetCursorPos`, at the Mac's intervals: 90 ms while the pointer moves,
+250 ms once it has rested 1.5 s, 45 ms while the card is up or a reveal is pending. A low-level mouse hook
+(`WH_MOUSE_LL`) would sit in front of every mouse event on the system for a decision needed a few times a second; the
+poll costs nothing while the pointer rests, since a resting pointer can't start a reveal.
+- **Where:** each display (`EnumDisplayMonitors`, re-read every 2 s and on `WM_DISPLAYCHANGE`) has a hot zone. The
+  hot zone is the resting card's place in the middle of the work area, plus 56 × 40 DIP. Its keep zone is the card
+  plus 28 DIP. The card shows on the display under the pointer, centred in its work area at that display's DPI, and
+  stays centred if it grows. One display at a time: another display, or a window under the pointer, hides it at
+  once. Leaving the zone on the same display lingers 0.7 s.
+- **Exposed desktop:** `WindowFromPoint` → `GetAncestor(GA_ROOT)` must be `Progman` or `WorkerW` (the wallpaper and
+  the icons; Lunalyr's own wallpaper is a child of Progman) or the card itself. Hovering a desktop icon counts as the
+  desktop, as on the Mac. Lunalyr never sends messages into Explorer to hit-test icons. The answer is cached while the
+  pointer stays on the same window.
+- **Full-screen apps:** a full-screen window under the pointer is a window, so the card doesn't come up. When
+  `SHQueryUserNotificationState` says busy, Direct3D full-screen or presentation mode, no new reveal starts.
+- **Intent and guards** (`Core/Player/HoverIntent.cs`, ported): the pointer must slow down, or dwell 0.22 s, and a
+  fly-through never reveals. Speeds are in DIPs, so they mean the same at every scale. A held button never starts a
+  reveal and never carries one across displays. A drag holds the card up, even over a window. A click holds it
+  for 1.2 s.
+- **Z-order:** just above the desktop (`Progman`), under every app's window, so a window over the middle of the
+  screen covers the card. It is shown without activating; a click activates it so keys reach it.
+
+### The seek bar and the wallpaper
+
+- The Mac's bar, ported in `ScrubMath`, `ScrubSession` and `ScrubController`:
+  - hairline at rest; thicker with the knob, the line ticks, section gaps and repeated lines on hover;
+  - the time and lyric capsules at the pointer, with the titles stepping aside;
+  - snapping to line starts (Ctrl turns it off); fine scrub by moving away from the bar, or with Alt;
+  - the rubber band past the ends, and a 0.2 s pre-roll on snapped seeks;
+  - Esc cancels, and the right-hand time toggles between time left and length on a click.
+- **The wallpaper follows the drag:** `AppController.SetScrubPreview` makes the renderer's clock
+  (`ReadRendererClock`) show the dragged moment, held still. `ReadClock`, which times lyric swaps, keeps following the
+  player. The preview never outlives the button: the poll cancels a drag whose button is up. One clock drives every
+  display on Windows, so the preview shows on all of them (the Mac's is per display).
+- **The wallpaper's lyrics under the card:** `RenderEngine.SetLyricFocus` fades them to 15 % while the card is up and
+  to 80 % while dragging. This is the Mac's Reduce Motion look; the Windows wallpaper fades without blurring.
+- **One command, on release:** play/pause, next, previous and seek go through `PlayerCommands`. It asks the
+  `PlaybackGuard` first, before even looking at the session, then the player's capabilities, then the GSMTC session.
+  With `--no-playback` or `--demo` every command is refused. The card says "Controls are off for this run; scrubbing
+  only previews." for a few seconds, the play glyph and the bar go back at once, and the transport is drawn at 60 %.
+  The drag still previews on the wallpaper.
+
+### Keys (once a click has given the card the keyboard)
+
+| Windows | Mac | Does |
+|---|---|---|
+| Space | Space | play or pause |
+| ← / → | ← / → | 5 s back / on |
+| Alt+← / Alt+→ | ⌥← / ⌥→ | previous / next lyric line (10 s without synced lyrics) |
+| Ctrl+← / Ctrl+→ | ⌘← / ⌘→ | previous / next song |
+| 0–9 (and the keypad's) | 0–9 | 0 %–90 % of the song |
+| Ctrl+F, / | ⌘F, / | search (a later round; mapped, does nothing yet) |
+| ↑ ↓ Enter | ↑ ↓ Return | pick a search result (later round) |
+| Esc | Esc | cancel a drag, else give the keyboard back to the window that had it |
+| Ctrl while dragging | ⌘ while dragging | no snapping |
+| Alt while dragging | ⌥ while dragging | fine scrub (0.1×) |
+| Tab / Shift+Tab, Enter | — | Windows only: walk the card's controls (with a focus ring) and press one |
+
+The Windows key (the Mac's Control) is left to the system. Alt never opens a window menu or beeps on the card
+(`WM_SYSKEY*` and `SC_KEYMENU` are swallowed).
+
+### Accessibility settings (read, never changed)
+
+| Windows setting | The card |
+|---|---|
+| Animation effects off | no rise, no record slide (the record stays out), no press scale; short fades (0.15 s in, 0.12 s out) |
+| Transparency effects off | solid card and capsules (the Mac's Reduce Transparency colours) |
+| A contrast theme | the theme's own colours only (`COLOR_WINDOW`, `COLOR_WINDOWTEXT`, `COLOR_HIGHLIGHT`, `COLOR_GRAYTEXT`), a 2 px edge, no washes; the cover stays |
+| Light app mode | a light wash of the album's hue with near-black type, darkened only if 7:1 isn't met |
+| Narrator | the UI Automation tree above |
+
+They are re-read on `WM_SETTINGCHANGE`, `WM_THEMECHANGED` and `WM_DWMCOLORIZATIONCOLORCHANGED`. `--player-debug`
+forces one for checks.
+
+### Left for the next rounds
+
+- **Search, the player picker and the queue** (`PlayerSearch`): `PlayerPane` and `PlayerCard.CardHeight` already size
+  the card for them. The transport row's right end (`CardLayout.ReservedRect`) is kept clear for their buttons. Their
+  keys are already mapped.
+- **The music video row** (`VideoAlignRow`): milestone 6.
+- Double-clicking the cover brings an `.exe` player's window forward (`PlayerWindows`). Packaged players (Apple Music,
+  Media Player) and browsers aren't found that way yet.
+
 ## Settings v1 (`{data}\settings.json`)
 
 Keys follow the Mac's `UserDefaults` keys without `custom.` where the setting means the same; values are the Mac's
@@ -148,6 +268,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `rotateLayouts` | `true` | Match the music steps through a rotation (off: by the song's character) | `custom.rotateLayouts` |
 | `rotateLayoutCounts` | `{}` | composition → songs in a row, 0–5 (missing = 1) | `custom.rotateLayoutCounts` |
 | `rotateLayoutsCursor` | `0` | where the rotation got to (saved by the app) | `custom.rotateLayoutsCursor` |
+| `showControlsOnHover` | `true` | the desktop player comes up where the pointer rests on the desktop | `custom.showControlsOnHover` |
+| `desktopPlayerTimeMode` | `"remaining"` | the seek bar's right-hand time: `remaining` or `total` (anything else reads as `remaining`) | `custom.desktopPlayer.timeMode` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
