@@ -98,7 +98,7 @@ public class JapaneseWithoutAnalyzerTests
         };
         var readings = _t.Readings(stage);
         var stageGlue = LyricRuns.Glue(stage, stage.Words);
-        var stagePairs = LyricReadingPairs.Match(readings, stage.Words, StageRun.Glue(stage.Words, stageGlue));
+        var stagePairs = LyricReadingPairs.Parts(readings, stage.Words, StageRun.Glue(stage.Words, stageGlue));
         Assert.Equal(["su gite yuku", "toki no", "naka"], StageRun.Make(stage.Words, stageGlue).Select(run => StageRun.Reading(run, stagePairs)));
     }
 }

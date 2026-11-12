@@ -26,6 +26,9 @@ public sealed record RollingWord
     /// <summary>The word's type size, in the caller's units.</summary>
     public required double PointSize { get; init; }
     public string? Reading { get; init; }
+    /// <summary>A glued run's reading kept by its tokens' shares, so it fills in as they are sung; null when the
+    /// reading is of one token or its shares do not write the same text.</summary>
+    public ReadingShares? Shares { get; init; }
     /// <summary>Where along the ink's colours the word sits, 0…1, keyed by its place in the song.</summary>
     public double Slot { get; init; }
     /// <summary>The syllables or characters a glued run is made of; empty for a single token.</summary>
@@ -121,6 +124,11 @@ public static class RollingWords
             parts?.TryGetValue(word, out own);
             var ordinal = index;
             if (ordinals is not null && ordinals.TryGetValue(word, out var placed)) ordinal = placed;
+            // A glued run's reading, kept by its tokens' shares so it fills in as they are sung; the same text either way.
+            ReadingShares? shares = null;
+            if (reading is not null && own is { Count: > 1 } && readings is not null
+                && ReadingShares.Of(own, readings) is { Reveals: true } shared && shared.Text == reading)
+                shares = shared;
             result[index] = new RollingWord
             {
                 Index = index,
@@ -132,6 +140,7 @@ public static class RollingWords
                 Hero = hero,
                 PointSize = pointSize,
                 Reading = reading,
+                Shares = shares,
                 Slot = RollingWord.SlotOf(ordinal),
                 Parts = own ?? [],
                 Boundaries = own is null ? [] : LyricRunParts.Boundaries(own),

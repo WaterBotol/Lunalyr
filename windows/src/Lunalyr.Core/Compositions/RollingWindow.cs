@@ -11,6 +11,8 @@ namespace Lunalyr.Core.Compositions;
 public sealed record RollingWindow
 {
     public required IReadOnlyList<LyricWord> Words { get; init; }
+    /// <summary>The readings of the words, and, keyed by each token of a glued run, the token's share of its run's
+    /// reading (the Mac merges both into one table).</summary>
     public required IReadOnlyDictionary<LyricWord, string> Readings { get; init; }
     /// <summary>The window is exactly this set of words while <c>From &lt;= time &lt; Until</c>.</summary>
     public required double From { get; init; }
@@ -36,6 +38,9 @@ public sealed class RollingSong
     public const double RollingHandover = 3;
 
     private readonly MergedRuns[] _runs;
+    /// <summary>Per line, each token's share of its run's reading ("Below lyrics"), so a glued word's reading fills in
+    /// as its tokens are sung.</summary>
+    private readonly IReadOnlyDictionary<LyricWord, string>?[] _shares;
     private readonly bool[][] _visible;
     private readonly double[] _ends;
     private readonly IReadOnlyList<Lyrics.Parsing.BackingGroup>[] _backing;
@@ -65,6 +70,7 @@ public sealed class RollingSong
         ArgumentNullException.ThrowIfNull(breaker);
         Lines = lines;
         _runs = new MergedRuns[lines.Count];
+        _shares = new IReadOnlyDictionary<LyricWord, string>?[lines.Count];
         _visible = new bool[lines.Count][];
         _ends = new double[lines.Count];
         _backing = new IReadOnlyList<Lyrics.Parsing.BackingGroup>[lines.Count];
@@ -80,7 +86,9 @@ public sealed class RollingSong
             // stage parts them, and with "Below lyrics" each run's reading.
             var source = byWord && display == RomanizationDisplay.Replace ? read! : line.Words;
             var glue = LyricRuns.RollingGlue(line, source, breaker);
+            // Each token keeps its share of its run's reading; a run's shares written together are its reading.
             var pairs = byWord && display == RomanizationDisplay.Below ? LyricReadingPairs.Rolling(read, line, glue) : null;
+            _shares[row] = pairs;
             var merged = LyricRunParts.Merged(source, glue, pairs);
             // Bracketed backing vocals are lifted out of the rolling words and drawn apart.
             _backing[row] = [];
@@ -182,6 +190,10 @@ public sealed class RollingSong
         {
             var runs = _runs[row];
             foreach (var (key, value) in runs.Readings) readings.TryAdd(key, value);
+            // Each token's share too, by the token: a glued word's reading fills in as its tokens are sung
+            // (RollingWords.Prepare).
+            if (_shares[row] is { } shares)
+                foreach (var (key, value) in shares) readings.TryAdd(key, value);
             foreach (var (key, value) in runs.Tokens) parts.TryAdd(key, value);
             var place = WordOffsets[row];
             for (var i = 0; i < runs.Words.Count; i++)

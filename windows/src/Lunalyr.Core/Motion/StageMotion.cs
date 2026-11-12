@@ -78,16 +78,17 @@ public sealed record StageRun(int Id, string Text, double Start, double End, IRe
     }
 
     /// <summary>
-    /// The reading drawn under <paramref name="run"/>: its parts' readings in order, or null when it has none (or
-    /// "Below lyrics" is off, so there are none). <paramref name="readings"/> is keyed by the lyric words the run was cut
-    /// from (<c>LyricReadingPairs.Match</c>).
+    /// The reading drawn under <paramref name="run"/>: its parts' shares written together (each carries the space
+    /// before it where a new phrase starts, see <c>LyricReadingPairs.Parts</c>), so the syllables of one word join; or
+    /// null when it has none (or "Below lyrics" is off, so there are none). <paramref name="readings"/> is keyed by the
+    /// lyric words the run was cut from.
     /// </summary>
     public static string? Reading(StageRun run, IReadOnlyDictionary<LyricWord, string> readings)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(readings);
         if (readings.Count == 0) return null;
-        var text = string.Join(" ", run.Parts
+        var text = string.Concat(run.Parts
             .Select(part => part.Source is { } key && readings.TryGetValue(new LyricWord(key.Text, key.Start, key.End), out var reading) ? reading : null)
             .Where(reading => reading is not null)).Trim();
         return text.Length == 0 ? null : text;
