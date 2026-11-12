@@ -9,15 +9,70 @@ Reported by the user on 2026-11-12. Apple Music usually lists a Japanese song th
 under its **English title**, even when the track playing is sung in Japanese. The recording that is actually in
 English normally carries an "English version" (or similar) tag in its title.
 
-What the lyric core should do (to confirm against the Mac app's version-tag and artist-alias logic in milestone 2):
-- No "English ver." / "English version" tag on an Apple Music title → don't assume English lyrics. Also search
-  by the song's Japanese title (from aliases, the album, or the provider's own cross-references) and prefer
-  Japanese-language results whose duration matches.
-- An explicit "English version" tag → English lyrics are correct; treat the tag as a version tag so the Japanese
-  original ranks below it, just as Live and Remix rank below the playing version.
-- Needs a live check with real Apple Music for Windows playback (what GSMTC reports for title, artist and album).
-- The Mac app has an agent working on exactly this on branch `next/localized-titles` (per the 11 Nov context file).
-  Port that logic once it's in a refreshed bundle, rather than inventing a separate rule here.
+**Ported from the Mac** (`next/localized-titles`, merged as 335e41f: commits 7e84884, 3c32c3d, 8a22aaf) on branch
+`m4/localized-titles`. Automatic-cache policy **v15** (the Mac's v13; Windows' numbers were already past it).
+
+- **Language versions are version tags.** "English Version", "English ver.", "Eng Ver.", "(English)", "英語ver.",
+  "Japanese Ver.", "[Korean Version]", "(日本語ver.)"… give the tags `english`, `japanese`, `korean`, `chinese`
+  (`VersionTags.Languages`). Lyrics for "Song (English Version)" rank below the playing "Song"'s, as Live and Remix do,
+  and a title that says "English Version" prefers English lyrics.
+- **Lyrics in another language rank as another version** (`LyricLanguage`, run by `LyricRanking.Screen`). Only CJK
+  script is told apart from Latin (romaji is Latin; K-pop style mixes are never held against a song). The song's
+  script comes from, in order: a language tag on the title or album; Apple Music's own lyrics (the real cache only); a
+  native-script title or album; lyrics found under the original title; otherwise a majority of the other lyrics found
+  (lyrics whose title names a language version don't vote), with an East Asian genre ("J-Pop", "Anime", "K-Pop"…)
+  breaking a tie. A match in the other script gets `LanguageMismatch` and ranks with other versions; Apple Music's own
+  lyrics and local files are never marked. The mark is worked out afresh at every screening.
+- **Search under the original title** (`OriginalTitles`, `ItunesCatalogue`). When LRCLIB, NetEase, QQ, Kugou, Kuwo,
+  Lyrics+ or AMLL find nothing usable under an English title (no match, a language version the title doesn't name, or
+  Latin-only lyrics for an East Asian genre), the song is found in this PC's storefront on the iTunes Search API by
+  primary artist + title (same title, version tags and artist, length within 3 s, nearest first), and the same entry is
+  read from the `jp` storefront in Japanese. A different, native-script name there is searched under, around the
+  artist-name search. A Japanese-script match found that way is recorded under the listed title and marked
+  `ViaOriginalTitle`. Only the title, artist and storefront are sent; answers ("none" too) are kept 30 days in
+  `OriginalTitles.json` beside `ArtistAliases.json`; failures are asked again; requests are a second apart and shared
+  between sources.
+- **Source list.** "Match found · lyrics in another language" (only when no version note applies) and
+  "· found under the original title", after the version note and before " · Apple Music’s lyrics", the timing fault,
+  agreement and " · showing" (the Mac's wording and order).
+- **Setting.** The Mac shares "Search under other names" (`custom.artistAliases`, on) between artists' native names and
+  songs' original titles. Windows: `AppSettings.ArtistAliases`, key `artistAliases`, default `true`; no settings window
+  until milestone 5.
+- **Genre.** The Mac reads the track's genre; Windows reads GSMTC's first `Genres` entry into `MediaTrackInfo.Genre`
+  and `LyricQuery.Genre`.
+
+**What the iTunes Search API actually says** (replies recorded 12 Nov 2026, in `Fixtures/LyricSources/itunes`):
+
+- The US storefront lists YOASOBI's 夜に駆ける under its Japanese title, so the Mac test's "Racing into the Night"
+  example is invented; the fallback is only needed in storefronts that romanise or translate.
+- The Australian storefront does: "Yoru ni kakeru", "Haruka", "Idol"… Its "Idol" search returns **two singles of the
+  same length (213.234 s)** both named "Idol": 1688334537 is the English recording (Japan also calls it "Idol") and
+  1679278167 is アイドル. Neither carries an "English Version" tag. The Mac's rule takes the first of equally near
+  entries, here the English one, so no original title is found and "none" is remembered. That is the safe outcome
+  (guessing アイドル would mark English lyrics as wrong while the English recording plays), but it means the fallback
+  can't help this song; the language vote (and the J-Pop genre) still can. **Open question for the owner**, and for
+  the Mac, which behaves the same.
+- Still needs a live check with real Apple Music for Windows playback: what GSMTC reports for title, album and genre.
+
+Where Windows may differ from the Mac:
+
+- **The Apple relay and the language.** Only Apple Music's own cache decides the song's language and is never marked.
+  A Lyrics+ relay of Apple's lyrics, which ranks as Apple Music (decision 1 below), is judged like any service: it
+  votes, and is marked when it is in the other script. (Apple Music's cache can't be read on Windows, so in practice no
+  lyrics decide the language on their own here.)
+- **Storefront.** The Mac uses the Mac's region; Windows uses the Windows region (`RegionInfo.CurrentRegion`), "us"
+  when it names none. In Japan (`jp`) nothing is asked.
+- **Primary artist.** The Mac's step comes from the Verso import, so Windows re-implements it from its behaviour: the
+  credit up to the first "&" or comma, trimmed, or the whole credit when that leaves nothing.
+- **Ported tests' word timing.** The Mac's fixture times each line as one token, which Windows' phrase-token rule
+  (decision 3 below) ranks as line timing; the ported helper spreads the same 3 s over the line's words (per character
+  in Japanese), so "word-timed" stays word-timed. Texts, names, times and expected results are the Mac's.
+
+Where it lives (Windows): `VersionTags.Languages`, `LyricLanguage`, `LyricRanking.Screen`/`FitsVersion`/`Annotate`,
+`OriginalTitles` (with `WithOriginalTitleAsync`), `ItunesCatalogue`, `LyricSourceSet`, `LyricQuery.Genre`,
+`LyricCandidate.LanguageMismatch`/`ViaOriginalTitle`. Tests: `LanguageVersionTests`, `OriginalTitleTests`,
+`LyricServiceEndToEndTests.AnEnglishTitledJapaneseSongIsFoundUnderItsOriginalTitle`,
+`AppControllerTests.TheLookupCarriesThePlayersGenre`.
 
 ## Ranking decisions (12 Nov 2026)
 
@@ -129,7 +184,8 @@ These points are not confirmed against the Mac's code:
 - **Waiting for Lyrics+.** A pending Lyrics+ is waited for as a possible Apple relay.
 - **Saved choices.** "Never swap" applies to pinned choices, which lock the lookup. A cached automatic choice can
   still be upgraded by a local source that outranks it, as before.
-- **Label position.** The note comes straight after "Match found", before other notes and "· showing".
+- **Label position.** The note comes after the version, language and original-title notes, before the timing fault,
+  agreement and "· showing" (the Mac's order).
 - **Apostrophe.** The label uses a typographic apostrophe ("Apple Music’s lyrics"), like the app's other source-list
   strings.
 
