@@ -275,6 +275,7 @@ internal sealed partial class AppHost
             controller.Start();
             controller.ApplySettings(_settings.Current); // anything changed while starting
             StartVisualisers(controller);
+            StartMotionCovers(controller);
             _controller = controller;
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
