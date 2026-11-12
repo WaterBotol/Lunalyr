@@ -151,7 +151,7 @@ used here were blamed line by line (`git blame -w -M -C -L`):
 ## Constants not in the snapshot (gaps)
 
 The scene snapshot has no editorial typography (the alternate face for about a third of the words), per-layout
-entrances, track mood or per-word readings for the stage layouts. The layouts take:
+entrances or track mood for the stage layouts. The layouts take:
 
 - the lyric face only (heavy cut for words, the quiet cut for readings);
 - `LyricStyle.Reveal` as the chosen entrance, picked for each run as the Mac's `chosenEntrance` asks the settings for
@@ -161,7 +161,8 @@ entrances, track mood or per-word readings for the stage layouts. The layouts ta
   choice for its phrase;
 - no tiles (the Mac presses a tile behind a word whose entrance is Cutout · Highlight);
 - the neutral mood;
-- the line's reading split by run as above.
+- with word-by-word readings, each run's own reading, paired by the stage's runs and filling in part by part as the
+  run is sung; without them, the line's reading split by run as above.
 
 **Reduce Motion** (`SceneSnapshot.ReduceMotion`) is honoured as on the Mac: arrivals and hand-offs step at each onset,
 and each step is a short dissolve between the layout without the newest run and with it (`StageMotion.ReducedDissolve`,

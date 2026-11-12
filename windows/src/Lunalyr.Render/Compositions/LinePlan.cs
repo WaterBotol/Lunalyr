@@ -3,6 +3,7 @@ using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
+using Lunalyr.Core.Lyrics.Readings;
 using Vortice.DirectWrite;
 
 namespace Lunalyr.Render.Compositions;
@@ -12,6 +13,9 @@ internal sealed class RunInk : IDisposable
 {
     public required Ink Label { get; init; }
     public Ink? Reading { get; init; }
+    /// <summary>Where each token's share of the reading falls along it, so it fills in as the run is sung; null when
+    /// the reading shows whole.</summary>
+    public ReadingSlices? ReadingSlices { get; init; }
     /// <summary>Label and reading centres relative to the unit's centre, layout pixels.</summary>
     public Vector2 LabelOffset { get; init; }
     public Vector2 ReadingOffset { get; init; }
@@ -104,7 +108,8 @@ internal static class LinePlans
 {
     /// <summary>Sets a line: runs and metrics, laid-out labels and readings, rows, the line reading, the fit; then bakes.</summary>
     public static LinePlan Build(TextKit kit, IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, PlanSpec spec,
-                                 IReadOnlyList<string?>? runReadings, string? lineReading)
+                                 IReadOnlyList<string?>? runReadings, string? lineReading,
+                                 IReadOnlyList<ReadingShares?>? runShares = null)
     {
         var typography = EditorialSetting.Layout(words, glue, spec.BaseSize, spec.MinimumSize, spec.LineIndex, spec.WordTimed,
                                                  spec.Editorial, runReadings, 1, spec.Connections, spec.Spread,
@@ -113,6 +118,7 @@ internal static class LinePlans
         var count = typography.Runs.Count;
         var labels = new IDWriteTextLayout[count];
         var readings = new IDWriteTextLayout?[count];
+        var slices = new ReadingSlices?[count];
         var units = new SizeD[count];
         var slots = new SizeD[count];
         try
@@ -129,6 +135,7 @@ internal static class LinePlans
                 {
                     readings[r] = kit.Layout(run.Reading!, metrics.AlternateFace ? Face.Contrast : Face.Quiet,
                                              (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false);
+                    slices[r] = ReadingSlices.Measure(readings[r]!, run.Reading, runShares is not null && r < runShares.Count ? runShares[r] : null);
                     var reading = readings[r]!.Metrics;
                     width = Math.Max(width, reading.Width);
                     height += metrics.Size * 0.04 + reading.Height;
@@ -175,6 +182,7 @@ internal static class LinePlans
                 {
                     Label = label,
                     Reading = reading,
+                    ReadingSlices = reading is null ? null : slices[r],
                     LabelOffset = new Vector2(0, (float)(-unit.Height / 2 + labelHeight / 2)),
                     ReadingOffset = reading is null ? default : new Vector2(0, (float)(unit.Height / 2 - reading.Box.Y / 2)),
                     Unit = unit,

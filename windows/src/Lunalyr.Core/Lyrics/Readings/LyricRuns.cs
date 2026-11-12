@@ -315,6 +315,75 @@ public static class LyricReadingPairs
         return result;
     }
 
+    /// <summary>
+    /// For the stage layouts, which reveal a run part by part as it is sung: each token's own share of its run's
+    /// reading (runs by <paramref name="glue"/>), led by a space where a new phrase starts inside the run (the rule
+    /// <see cref="LyricRuns.Reading"/> uses). The parts of a run written together read as the run's reading, and each
+    /// part's share can show with that part. A run nothing in which reads differently gets no shares.
+    /// </summary>
+    public static Dictionary<LyricWord, string> Parts(IReadOnlyList<LyricWord>? readings, IReadOnlyList<LyricWord> words,
+        IReadOnlyList<bool> glue)
+    {
+        ArgumentNullException.ThrowIfNull(words);
+        ArgumentNullException.ThrowIfNull(glue);
+        var result = new Dictionary<LyricWord, string>();
+        if (readings is null || readings.Count != words.Count) return result;
+        var shares = new List<(LyricWord Key, string Text)>();
+        foreach (var (start, end) in LyricRuns.Ranges(glue, words.Count))
+        {
+            shares.Clear();
+            (double Start, double End)? phrase = null;
+            LyricWord? previous = null;
+            var reads = false;
+            for (var index = start; index < end; index++)
+            {
+                var token = words[index];
+                var reading = readings[index];
+                try
+                {
+                    var piece = reading.Text.Trim();
+                    var own = (reading.Start, reading.End);
+                    var continues = phrase is not { } last || (last.Start == own.Start && last.End == own.End);
+                    phrase = own;
+                    if (piece.Length == 0) continue;
+                    if (IsDistinct(piece, token.Text)) reads = true;
+                    var spaced = shares.Count > 0 && !continues
+                        && (LyricRuns.WrittenWithoutSpaces(token.Text)
+                            || (previous is not null && LyricRuns.WrittenWithoutSpaces(previous.Text)));
+                    shares.Add((token, (spaced ? " " : "") + piece));
+                }
+                finally
+                {
+                    previous = token;
+                }
+            }
+            if (!reads) continue;
+            foreach (var (key, text) in shares) result.TryAdd(key, text);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// <see cref="Parts"/> over the tokens a line actually draws (<see cref="LyricRuns.Visible"/>), for the layouts
+    /// that set a line by those runs (Editorial, the Scattered family, the rolling stages). A glued run's shares
+    /// written together read exactly as <see cref="Match(IReadOnlyList{LyricWord},IReadOnlyList{LyricWord},IReadOnlyList{bool})"/>
+    /// writes the run's reading on its first token, so the run reads as before; each share can now show as its own
+    /// token is sung (<see cref="ReadingShares"/>).
+    /// </summary>
+    public static Dictionary<LyricWord, string> Shares(IReadOnlyList<LyricWord>? readings, IReadOnlyList<LyricWord> words,
+        IReadOnlyList<bool> glue)
+    {
+        ArgumentNullException.ThrowIfNull(words);
+        ArgumentNullException.ThrowIfNull(glue);
+        if (readings is null || readings.Count != words.Count) return [];
+        if (!glue.Contains(true)) return Match(readings, words);
+        var kept = new List<LyricWord>(words.Count);
+        for (var index = 0; index < words.Count; index++)
+            if (LyricRuns.IsVisible(words[index].Text)) kept.Add(readings[index]);
+        var (visible, visibleGlue) = LyricRuns.Visible(words, glue);
+        return Parts(kept, visible, visibleGlue);
+    }
+
     /// <summary>A saved or source reading that could not be split by word, which <c>Match</c> places under no word:
     /// it is drawn once under the whole line. Null when the readings are drawn word by word, and when not "Below
     /// lyrics" ("Replace lyrics" already sets such a reading in the line's place).</summary>
@@ -325,10 +394,11 @@ public static class LyricReadingPairs
     }
 
     /// <summary>For a rolling stage, which sets words one at a time with no line of their own: the readings by word
-    /// (by run, given the line's glue), and a reading of the whole line under the line's first word.</summary>
+    /// (by run, given the line's glue, each token keeping its share, see <see cref="Shares"/>), and a reading of the
+    /// whole line under the line's first word.</summary>
     public static Dictionary<LyricWord, string> Rolling(IReadOnlyList<LyricWord>? readings, LyricLine line, IReadOnlyList<bool>? glue = null)
     {
-        if (Line(readings, line, RomanizationDisplay.Below) is not { } whole) return Match(readings, line.Words, glue ?? []);
+        if (Line(readings, line, RomanizationDisplay.Below) is not { } whole) return Shares(readings, line.Words, glue ?? []);
         var first = line.Words.FirstOrDefault(word => LyricRuns.IsVisible(word.Text));
         return first is null ? [] : new Dictionary<LyricWord, string> { [first] = whole };
     }

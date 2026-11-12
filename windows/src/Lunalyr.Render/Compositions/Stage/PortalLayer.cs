@@ -186,12 +186,12 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             if (live < 0.999)
             {
                 DrawLabel(dc, line, word, run, 0, time, unit, opacity, blur);
-                DrawReading(dc, word, 0, unit, opacity, blur);
+                DrawReading(dc, line, word, run, 0, time, unit, opacity, blur);
             }
             if (live > 0.001)
             {
                 DrawLabel(dc, line, word, run, 1, time, unit, live * opacity, blur);
-                DrawReading(dc, word, 1, unit, live * opacity, blur);
+                DrawReading(dc, line, word, run, 1, time, unit, live * opacity, blur);
             }
         }
     }

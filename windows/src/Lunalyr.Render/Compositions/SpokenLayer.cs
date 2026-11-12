@@ -23,6 +23,9 @@ internal sealed class SpokenUnit : IDisposable
 {
     public required Ink Label { get; init; }
     public Ink? Reading { get; init; }
+    /// <summary>Where each token's share of a glued word's reading falls along it, so it fills in as the word is
+    /// sung; null when the reading shows whole.</summary>
+    public ReadingSlices? ReadingSlices { get; init; }
     public Vector2 LabelOffset { get; init; }
     public Vector2 ReadingOffset { get; init; }
     public SizeD Size { get; init; }
@@ -200,10 +203,14 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, intensity, reduce, Options, _reveal))
                     reveal = _reveal.AsSpan(0, token.Parts.Count);
             }
+            // A glued word's reading fills in with it: each token's share from its onset, never ahead of the token
+            // itself (the Mac's LyricReadingInk.shareOpacities with RollingTokenState.partReveal).
+            var readingShares = unit.ReadingSlices is { } slices ? slices.Opacities(time, reveal, reduce) : default;
+            var readingBoundaries = readingShares.IsEmpty ? default : unit.ReadingSlices!.Boundaries.AsSpan();
             var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
             if (unit.Tile is not null)
             {
-                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip);
+                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip, readingBoundaries, readingShares);
             }
             else
             {
@@ -216,14 +223,15 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                                 GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
                 var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
                 var reading = state.Presentation.Preview ? null : unit.Reading;
-                reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, clip: clip);
+                reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, readingBoundaries, readingShares, clip: clip);
                 if (tile.IsVisible)
                 {
                     var pressed = RollingLabel.Pressed(tileRect, tile.Width, token.RightToLeft);
                     var on = new InkClip((float)pressed.X, (float)(pressed.X + pressed.Width));
                     if (clip.IsSet) on = new InkClip(MathF.Max(on.Left, clip.Left), MathF.Min(on.Right, clip.Right));
                     unit.Label.DrawTinted(dc, labelWorld, TileTextColour(tile, opacity), on);
-                    reading?.DrawTinted(dc, readingWorld, TileTextColour(tile, opacity, Core.Colour.LyricHighlight.ReadingOpacity), on);
+                    reading?.DrawTinted(dc, readingWorld, TileTextColour(tile, opacity, Core.Colour.LyricHighlight.ReadingOpacity), on,
+                                         readingBoundaries, readingShares);
                 }
             }
             if (LyricSwipe.Shows(motion, progress, reduce)) DrawSwipe(dc, world, unit.Size, progress, token.Direction, motion, alpha);
@@ -238,7 +246,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// </summary>
     private void DrawLabelled(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
                               in Matrix3x2 world, float scale, float opacity, float blur, ReadOnlySpan<double> reveal,
-                              InkClip clip)
+                              InkClip clip, ReadOnlySpan<double> readingBoundaries, ReadOnlySpan<double> readingShares)
     {
         var boundaries = reveal.IsEmpty ? default : AsSpan(token.Boundaries);
         var rightToLeft = token.RightToLeft;
@@ -260,7 +268,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         try
         {
             DrawLabelParts(dc, token, unit, state, world, labelWorld, readingWorld, reading, scale, opacity, blur, boundaries, reveal,
-                           ReduceMotion);
+                           readingBoundaries, readingShares, ReduceMotion);
         }
         finally
         {
@@ -271,12 +279,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private static void DrawLabelParts(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
                                        in Matrix3x2 world, in Matrix3x2 labelWorld, in Matrix3x2 readingWorld, Ink? reading,
                                        float scale, float opacity, float blur, ReadOnlySpan<double> boundaries,
-                                       ReadOnlySpan<double> reveal, bool reduce)
+                                       ReadOnlySpan<double> reveal, ReadOnlySpan<double> readingBoundaries,
+                                       ReadOnlySpan<double> readingShares, bool reduce)
     {
         // Under Reduce Motion the label is simply there (no press, no tilt) and fades in with its word.
         var rightToLeft = token.RightToLeft;
         unit.Label.DrawShadow(dc, labelWorld, opacity, 1, boundaries, reveal, rightToLeft);
-        reading?.DrawShadow(dc, readingWorld, opacity, 1);
+        reading?.DrawShadow(dc, readingWorld, opacity, 1, readingBoundaries, readingShares);
 
         var width = (float)unit.Size.Width;
         var pressed = (float)RollingLabel.TileWidth(state.Presentation.Arrival, reduce);
@@ -296,8 +305,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
         if (reading is not null)
         {
-            reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo);
-            unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo);
+            reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo, readingBoundaries, readingShares);
+            unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo, readingBoundaries, readingShares);
         }
     }
 
@@ -371,6 +380,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         if (Kind == CompositionKind.Cascade && token.Hero && !colours.Sweeps && ink.Accent is { } accent) rest = accent;
         var labelInk = kit.Bake(label, LyricInks.Vector(rest), raster, shadow);
         var readingInk = reading is null ? null : kit.Bake(reading, LyricInks.Vector(colours.Reading), raster, shadow);
+        var slices = reading is null ? null : ReadingSlices.Measure(reading, token.Reading, token.Shares);
         Ink? tile = null, labelOnTile = null, readingOnTile = null;
         if (token.Tile)
         {
@@ -387,6 +397,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         {
             Label = labelInk,
             Reading = readingInk,
+            ReadingSlices = slices,
             LabelOffset = new Vector2(0, (float)(-content / 2 + labelBox.Height / 2)),
             ReadingOffset = readingInk is null ? default : new Vector2(0, (float)(content / 2 - readingInk.Box.Y / 2)),
             Size = new SizeD(width, height),

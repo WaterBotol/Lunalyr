@@ -292,11 +292,19 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// sheet does (the constellations' fragments); the sheet's glue otherwise.</param>
     protected LineReadingSet? WordReadingsOf(int row, IReadOnlyList<bool>? glue = null)
     {
+        if (WordReadingList(row) is not { } readings) return null;
+        var sheet = Sheet!;
+        return LineReadings.For(sheet.Lines[row], readings, ReadingDisplay, glue ?? sheet.Glue[row]);
+    }
+
+    /// <summary>Line <paramref name="row"/>'s word-by-word readings as the scene has them (one per word with "Below",
+    /// or the words to show "Instead"), or null when readings are off or the scene has none for the line.</summary>
+    protected IReadOnlyList<LyricWord>? WordReadingList(int row)
+    {
         if (SceneShown is not { } scene || Sheet is not { } sheet || row < 0 || row >= sheet.Count) return null;
-        var display = ReadingDisplay;
-        if (display == RomanizationDisplay.Off || !scene.WordReadings.TryGetValue(row, out var readings) || readings.Count == 0)
+        if (ReadingDisplay == RomanizationDisplay.Off || !scene.WordReadings.TryGetValue(row, out var readings) || readings.Count == 0)
             return null;
-        return LineReadings.For(sheet.Lines[row], readings, display, glue ?? sheet.Glue[row]);
+        return readings;
     }
 
     /// <summary>New synced lyrics (or readings, size, style): a composition prepares what it sets per song.</summary>
@@ -539,11 +547,14 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             }
         }
         var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, mainGlue), set.LineReading) : Readings(row, words, mainGlue);
+        // Each run's reading share by share, so it fills in as the run is sung.
+        var runShares = set?.RunShares(words, mainGlue);
         // Dense web layouts set long lines smaller.
         var lineBase = connections ? BaseSize * ConstellationLayout.DensityScale(line.Words) : BaseSize;
         // "Cutout · Highlight": each sung word gets a tile, held until the line ends (see Decorate).
         var plan = BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
-                             runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End);
+                             runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
+                             runShares: runShares);
         plan.LastUsed = Frame;
         _plans[row] = plan;
         return plan;
@@ -582,7 +593,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                                  double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
                                  LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
                                  bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN,
-                                 double? highlightFrom = null)
+                                 double? highlightFrom = null, IReadOnlyList<ReadingShares?>? runShares = null)
     {
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
@@ -597,7 +608,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
             Connections: connections, Spread: ConstellationLayout.DefaultSpread,
             EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial);
-        var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading);
+        var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink, highlightFrom);
         if (groups is { Count: > 0 })
         {
@@ -816,9 +827,24 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: true);
             if (ink.Reading is { } reading)
             {
-                var readingOpacity = frame.ReadingOpacity(plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount));
+                var runTokens = plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount);
+                var readingOpacity = frame.ReadingOpacity(runTokens);
+                // A glued run's reading fills in with it: each token's share from its onset, never ahead of the
+                // token itself where the run reveals token by token (the Mac's ScatteredRunFrame.readingReveal).
+                var shares = default(ReadOnlySpan<double>);
+                if (ink.ReadingSlices is { } slices)
+                {
+                    var syllables = default(ReadOnlySpan<double>);
+                    if (frame.RevealsByToken && runTokens.Length == slices.Owners.Length)
+                    {
+                        ReadingShares.RelativeToFirst(runTokens, slices.Syllables);
+                        syllables = slices.Syllables;
+                    }
+                    shares = slices.Opacities(time, syllables, reduce);
+                }
                 reading.Draw(dc, Matrix3x2.CreateTranslation(ink.ReadingOffset) * local, (float)scale,
-                             (float)(visibility * readingOpacity), blur, GlowSpec.None, shadow, clip: clip);
+                             (float)(visibility * readingOpacity), blur, GlowSpec.None, shadow,
+                             ink.ReadingSlices?.Boundaries, shares, clip: clip);
             }
             if (LyricSwipe.Shows(motion, presentation.Progress, reduce))
                 DrawSwipe(dc, local, ink.Unit, presentation.Progress, direction, motion, opacity);

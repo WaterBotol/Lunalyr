@@ -172,7 +172,10 @@ public class StageReadingTests
         var words = Words(["ka", "ze"], 0.3);
         var run = StageRun.Make(words, [false, true]);
         Assert.Single(run);
-        Assert.Equal("ka ze", StageRun.Reading(run[0], new Dictionary<LyricWord, string> { [words[0]] = "ka", [words[1]] = "ze " }));
+        // A run's reading is its parts' shares written together: each share carries the space before it where a new
+        // phrase starts (LyricReadingPairs.Parts), so syllables of one word join.
+        Assert.Equal("kaze", StageRun.Reading(run[0], new Dictionary<LyricWord, string> { [words[0]] = "ka", [words[1]] = "ze " }));
+        Assert.Equal("ka ze", StageRun.Reading(run[0], new Dictionary<LyricWord, string> { [words[0]] = "ka", [words[1]] = " ze" }));
     }
 
     // Ported from StageReadingTests.swift: testReplaceSetsTheRomanisedWords (the runs; drawing is view code)

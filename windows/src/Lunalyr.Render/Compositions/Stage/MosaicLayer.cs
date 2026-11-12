@@ -127,9 +127,9 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
         {
             var spec = WithReading(new WordSpec(size, [colour]), reading, size, [readingColour]);
             var readingSize = spec.ReadingSize;
-            line.LetterReadings[i] = Bake(null, reading, new WordSpec(readingSize, [readingColour])
+            line.LetterReadings[i] = Bake(run, reading, new WordSpec(readingSize, [readingColour])
             {
-                Face = Face.Quiet, MaxWidth = Stage.Width * 0.8, MinimumScale = 0.5, Shadow = spec.ReadingShadow,
+                LabelIsReading = true, Face = Face.Quiet, MaxWidth = Stage.Width * 0.8, MinimumScale = 0.5, Shadow = spec.ReadingShadow,
             });
             line.LetterReadingY[i] = size * 0.6 + spec.ReadingGap + readingSize * 1.25 / 2;
         }
@@ -179,7 +179,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 {
                     var unit = Matrix3x2.CreateTranslation(reduce ? 0 : (float)((1 - Math.Min(a, 1)) * Stage.Width * 0.35 * side), 0) * big;
                     DrawLabel(dc, line, word, run, 0, time, Homography.Of(unit), bigOpacity, blur);
-                    DrawReading(dc, word, 0, Homography.Of(unit), bigOpacity, blur);
+                    DrawReading(dc, line, word, run, 0, time, Homography.Of(unit), bigOpacity, blur);
                     var star = Matrix3x2.CreateRotation(Radians(reduce ? 0 : time * 40))
                         * Matrix3x2.CreateTranslation((float)(word.Size.Width / 2 - size * 0.16 + size * 0.1),
                                                       (float)(-word.Size.Height / 2 + size * 0.16 - size * 0.12)) * unit;
@@ -207,7 +207,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                     var unit = Homography.Of(Matrix3x2.CreateRotation(Radians(tilt))
                         * Matrix3x2.CreateTranslation((float)((1 - wipe) * size * 0.5 * side), 0) * big);
                     DrawLabel(dc, line, word, run, 0, time, unit, landed, blur);
-                    DrawReading(dc, word, 0, unit, landed, blur);
+                    DrawReading(dc, line, word, run, 0, time, unit, landed, blur);
                     // A star above the word, which a reading under it lifts.
                     var lift = word.HasReading ? StageShared.ReadingSlot(size, point: Pt) / 2 : 0;
                     var star = Matrix3x2.CreateScale((float)wipe) * Matrix3x2.CreateRotation(Radians(reduce ? 0 : time * 50))
@@ -232,7 +232,10 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                     if (line.LetterReadings[id] is { } under)
                     {
                         var below = Matrix3x2.CreateTranslation(0, (float)(line.LetterReadingY[id] - readingRow / 2)) * fitted;
-                        DrawInk(dc, under.Labels[0], Homography.Of(below), Vector2.Zero, bigOpacity, blur);
+                        // Set on its own, the reading still fills in part by part as the run is sung.
+                        var shares = line.ReadingOpacities(under, run, time);
+                        DrawInk(dc, under.Labels[0], Homography.Of(below), Vector2.Zero, bigOpacity, blur, 1,
+                                shares.IsEmpty ? default : under.ReadingSlices!.Boundaries, shares);
                     }
                 }
             }
@@ -241,7 +244,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 var fade = Math.Max(0, 1 - (rank - 1.5) * 0.6);
                 var o = morph.SmallOpacity * fade * whole;
                 DrawLabel(dc, line, small, run, 0, time, Homography.Of(at), o, blur);
-                DrawReading(dc, small, 0, Homography.Of(at), o, blur);
+                DrawReading(dc, line, small, run, 0, time, Homography.Of(at), o, blur);
             }
         }
     }

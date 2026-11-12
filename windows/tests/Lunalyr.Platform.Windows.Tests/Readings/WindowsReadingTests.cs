@@ -460,7 +460,7 @@ public class StageReadingRevealTests
         };
     }
 
-    private static readonly LyricLine[] Lines =
+    internal static readonly LyricLine[] Lines =
     [
         Line("sugite yukutokinonaka", [("過ぎてゆく", 14.88, 16.11), ("時間", 16.33, 17.23), ("の", 17.23, 17.45), ("中", 17.45, 18.2)]),
         Line("anata o omoidasu", [("あなたを", 18.61, 19.56), ("思", 19.56, 20.57), ("い", 20.57, 20.92), ("出", 20.92, 21.13), ("す", 21.13, 21.69)]),
@@ -469,15 +469,44 @@ public class StageReadingRevealTests
         Line("waratteta", [("笑っ", 27.64, 28.29), ("てい", 28.29, 28.57), ("た", 28.57, 28.87)]),
     ];
 
-    private static readonly RomanizationOptions Options = new(RomanizationDisplay.Below, RomanizationLanguage.Automatic, true, true);
+    internal static readonly RomanizationOptions Options = new(RomanizationDisplay.Below, RomanizationLanguage.Automatic, true, true);
 
+    /// <summary>Each run's reading, as the stage layouts pair them: each token's share of its stage run's reading.</summary>
     private string?[] StageReadings(int index)
     {
         var line = Lines[index];
         var readings = _t.Song(Lines, Options).GetValueOrDefault(index);
         var glue = LyricRuns.Glue(line, line.Words);
-        var pairs = LyricReadingPairs.Match(readings, line.Words, StageRun.Glue(line.Words, glue));
+        var pairs = LyricReadingPairs.Parts(readings, line.Words, StageRun.Glue(line.Words, glue));
         return StageRun.Make(line.Words, glue).Select(run => StageRun.Reading(run, pairs)).ToArray();
+    }
+
+    /// <summary>The part of run <paramref name="runIndex"/>'s reading that shows at <paramref name="time"/>: each part's
+    /// share as that part is (the Mac's StageLyricView.revealedReading, a share clear while its part's opacity is 0).</summary>
+    private string VisibleReading(int index, int runIndex, double time)
+    {
+        var line = Lines[index];
+        var readings = _t.Song(Lines, Options).GetValueOrDefault(index);
+        var glue = LyricRuns.Glue(line, line.Words);
+        var pairs = LyricReadingPairs.Parts(readings, line.Words, StageRun.Glue(line.Words, glue));
+        var run = StageRun.Make(line.Words, glue)[runIndex];
+        if (ReadingShares.Of(run, pairs) is not { } shares) return "";
+        if (!shares.Reveals) return StageRun.PartOpacity(0, run.Parts, time) > 0 ? shares.Text : "";
+        return string.Concat(shares.Shares.Where((_, i) => StageRun.PartOpacity(i, run.Parts, time) > 0).Select(share => share.Text));
+    }
+
+    // Ported from StageReadingRevealTests.swift: testReadingFillsInSyllableBySyllable
+    [Fact]
+    public void ReadingFillsInSyllableBySyllable()
+    {
+        // 思い出 is sung 思 19.56, い 20.57, 出 20.92.
+        Assert.Equal("", VisibleReading(1, 1, 19.0));
+        Assert.Equal("omo", VisibleReading(1, 1, 19.8));
+        Assert.Equal("omoi", VisibleReading(1, 1, 20.7));
+        Assert.Equal("omoida", VisibleReading(1, 1, 21.0));
+        // 時間の: toki, then no.
+        Assert.Equal("toki", VisibleReading(0, 1, 16.5));
+        Assert.Equal("toki no", VisibleReading(0, 1, 17.4));
     }
 
     // Ported from StageReadingRevealTests.swift: testEachRunCarriesOnlyItsOwnReading

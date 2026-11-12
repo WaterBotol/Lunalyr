@@ -11,7 +11,7 @@
 // after the composition and reveal; the tool never reads the system's own setting.
 //
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics; extras: japanesewords, japaneseinstead,
-// credits, highlight.
+// japanesesyllables, credits, highlight.
 
 using System.Diagnostics;
 using System.Globalization;
@@ -80,6 +80,8 @@ var fixtures = new Dictionary<string, Func<SceneSnapshot>>
     // The wallpaper extras: word-by-word readings below and instead, credits, highlight tiles.
     ["japanesewords"] = () => ExtrasFixtures.JapaneseWords(),
     ["japaneseinstead"] = () => ExtrasFixtures.JapaneseWords(LyricStyle.Default with { Readings = ReadingPlacement.Instead }),
+    // Readings that fill in syllable by syllable with their words (the Mac's StageReadingRevealTests lines).
+    ["japanesesyllables"] = () => ExtrasFixtures.JapaneseSyllables(),
     ["credits"] = () => ExtrasFixtures.Credits(),
     ["highlight"] = () => ExtrasFixtures.Highlight(),
 };
