@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Fixed
+- Readings below Japanese lyrics: where a word ends inside a timed part that goes on into the next word (Apple Music times 始まりに as 始 | まりに), each part now reads its own characters (haji under 始, mari ni under まりに) instead of the whole word's reading under the first part and only the rest after it.
+
 ## [2.0.0] - 2026-11-13
 
 ### Added
