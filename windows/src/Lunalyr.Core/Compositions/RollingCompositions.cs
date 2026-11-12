@@ -27,11 +27,12 @@ public static class RollingLabel
     /// <summary>The room a label's own tilt takes on the stack, degrees.</summary>
     public const double Tilt = 1.2;
 
-    /// <summary>The tile's tilt as drawn, degrees (it leans the other way from the room kept for it).</summary>
-    public const double DrawnTilt = -1.2;
+    /// <summary>The tile's tilt as drawn, degrees (it leans the other way from the room kept for it): the cutout
+    /// tile's, which the Mac shares between labels and highlight tiles.</summary>
+    public const double DrawnTilt = CutoutTile.Tilt;
 
-    /// <summary>The tile's corner radius, points.</summary>
-    public const double CornerRadius = 3;
+    /// <summary>The tile's corner radius, points (the cutout tile's).</summary>
+    public const double CornerRadius = CutoutTile.CornerRadius;
 
     /// <summary>Padding round a labelled word (and its reading), points.</summary>
     public const double PaddingX = 11, PaddingY = 3;
