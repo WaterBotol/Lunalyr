@@ -485,4 +485,46 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.True(lines[0].Credit);
         Assert.True(lines[2].WordTimed);
     }
+
+    // ---- A Japanese song listed under its English title ----------------------------------------------------------
+
+    /// <summary>
+    /// Apple Music lists 夜に駆ける as "Racing into the Night". Nothing answers under that name, so the sources ask Apple's
+    /// catalogue (the Mac test's replies) once between them, and LRCLIB's Japanese lyrics, found under 夜に駆ける, show
+    /// under the listed title, marked in the source list.
+    /// </summary>
+    [Fact]
+    public async Task AnEnglishTitledJapaneseSongIsFoundUnderItsOriginalTitle()
+    {
+        SungLine[] japanese = [.. Ranking.LanguageVersionTests.Japanese.Select((text, i) => new SungLine(text, 11 + (i * 4), 14 + (i * 4)))];
+        var handler = Quiet()
+            .Set("itunes.apple.com/search", Reply.Fixture("itunes/mac-listed.json"))
+            .Set("itunes.apple.com/lookup", Reply.Fixture("itunes/mac-original.json"));
+        handler.Responder = request =>
+        {
+            var uri = request.RequestUri!;
+            if (uri.Host.StartsWith("lyricsplus.", StringComparison.Ordinal))
+            {
+                return Reply.Text(404, ServiceReplies.LyricsPlusNotFound);
+            }
+            return uri.AbsolutePath == "/api/get" && FixtureHandler.QueryOf(uri, "track_name") == "夜に駆ける"
+                ? Reply.Text(200, ServiceReplies.LrclibRow(1, "夜に駆ける", "YOASOBI", "夜に駆ける - Single", 258, japanese, wordTimed: false))
+                : null;
+        };
+        var http = handler.Client();
+        var sources = new LyricSourceSet([.. LyricSourceCatalog.CreateDefault(http), new AppleMusic(null)],
+            titles: new OriginalTitles(_cache.Path, new ItunesCatalogue(http), "us", TimeSpan.Zero));
+        var service = new LyricService(sources, new Core.Lyrics.Storage.SavedLyrics(_cache.Path), timing: Quick);
+        var playing = new LyricQuery("Racing into the Night", "YOASOBI", "Racing into the Night - Single", 258) { Genre = "J-Pop" };
+
+        var report = await service.LookupAsync(playing, Everything, cancellationToken: Ct);
+        Assert.Equal(new LyricProvenance("Line-synced", "LRCLIB"), report.Result!.Provenance);
+        Assert.Equal(japanese.Select(l => l.Text), Synced(report.Result).Lines.Select(l => l.Text));
+        var found = Assert.Single(report.Candidates);
+        Assert.Equal(("Racing into the Night", true), (found.Title, found.ViaOriginalTitle));
+        Assert.Equal("Match found" + LyricRanking.OriginalTitleNote + " · showing", report.States[Lrclib]);
+        // Asked once between all the sources.
+        Assert.Equal(1, handler.Addresses.Count(a => a == "itunes.apple.com/search"));
+        Assert.Equal(1, handler.Addresses.Count(a => a == "itunes.apple.com/lookup"));
+    }
 }

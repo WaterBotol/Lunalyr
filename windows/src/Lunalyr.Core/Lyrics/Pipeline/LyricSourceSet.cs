@@ -8,18 +8,23 @@ namespace Lunalyr.Core.Lyrics.Pipeline;
 /// The sources a lookup can ask, as one <see cref="LyricSourceFetch"/>: each fetch runs on the thread pool (so a
 /// provider that blocks holds up nothing else), its <see cref="RawLyrics"/> goes through
 /// <see cref="LyricCandidateBuilder"/>, and the Chinese catalogues are asked again under the artist's other names
-/// when the library's name found nothing (<see cref="ArtistAliases"/>). A source without a provider has nothing.
+/// when the library's name found nothing (<see cref="ArtistAliases"/>). A song listed under an English title is
+/// searched again under its original one when the listed title found nothing usable (<see cref="OriginalTitles"/>,
+/// around the artist-name search, as on the Mac). A source without a provider has nothing.
 /// </summary>
 public sealed class LyricSourceSet
 {
     private readonly Dictionary<LyricSourceId, ILyricSource> _sources = [];
     private readonly ArtistAliases? _aliases;
+    private readonly OriginalTitles? _titles;
     private readonly LyricParseOptions? _parse;
 
     /// <param name="sources">One provider per source; a later one replaces an earlier one for the same source.</param>
     /// <param name="aliases">Other names for artists, or null to search under the library's names only.</param>
     /// <param name="parse">Languages and reading detection for the parsers.</param>
-    public LyricSourceSet(IEnumerable<ILyricSource> sources, ArtistAliases? aliases = null, LyricParseOptions? parse = null)
+    /// <param name="titles">Songs' original titles, or null to search under the listed titles only.</param>
+    public LyricSourceSet(IEnumerable<ILyricSource> sources, ArtistAliases? aliases = null, LyricParseOptions? parse = null,
+        OriginalTitles? titles = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         foreach (var source in sources)
@@ -27,6 +32,7 @@ public sealed class LyricSourceSet
             _sources[source.Id] = source;
         }
         _aliases = aliases;
+        _titles = titles;
         _parse = parse;
     }
 
@@ -38,6 +44,12 @@ public sealed class LyricSourceSet
 
     /// <summary>Whether to search the catalogues again under the artist's other names (the Mac's setting, on by default).</summary>
     public bool UsesArtistAliases { get; set; } = true;
+
+    /// <summary>
+    /// Whether to search again under a song's original title (on by default). The Mac shares the artist-name setting
+    /// ("Search under other names"), so the app sets both from it.
+    /// </summary>
+    public bool UsesOriginalTitles { get; set; } = true;
 
     /// <summary>Why <paramref name="id"/> cannot be asked on this PC, or null when it can (or has no provider).</summary>
     public string? UnavailableReason(LyricSourceId id) =>
@@ -62,7 +74,9 @@ public sealed class LyricSourceSet
             : ValueTask.FromResult<LyricCandidate?>(null);
 
     private ValueTask<LyricCandidate?> FetchAsync(ILyricSource source, LyricQuery query, string folder, CancellationToken ct) =>
-        ArtistAliases.WithAliasesAsync(source.Id, query, _aliases, UsesArtistAliases, (asked, token) => AskAsync(source, asked, folder, token), ct);
+        OriginalTitles.WithOriginalTitleAsync(source.Id, query, _titles, UsesOriginalTitles,
+            (titled, outer) => ArtistAliases.WithAliasesAsync(source.Id, titled, _aliases, UsesArtistAliases,
+                (asked, token) => AskAsync(source, asked, folder, token), outer), ct);
 
     private async ValueTask<LyricCandidate?> AskAsync(ILyricSource source, LyricQuery query, string folder, CancellationToken ct)
     {
