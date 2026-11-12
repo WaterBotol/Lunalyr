@@ -30,7 +30,7 @@ public class LyricsPlusSourceTests
         Assert.NotNull(found);
         Assert.Equal(LyricFormat.KPoeJson, found.Format);
         Assert.Equal(("Shape of You", "Ed Sheeran", null), (found.ReportedTitle, found.ReportedArtist, found.ReportedDuration));
-        Assert.Equal("qApple", found.Extras![RawLyricsExtras.Upstream]);
+        Assert.Equal("Apple", found.Extras![RawLyricsExtras.Upstream]); // the node says "qApple" for Apple Music's lyrics
         Assert.Contains("\"syllabus\"", found.Payload, StringComparison.Ordinal);
         // Title, artist, whole seconds and album, in that order.
         Assert.Equal("?title=Shape%20of%20You&artist=Ed%20Sheeran&duration=233&album=%C3%B7", handler.Requests[0].RequestUri!.Query);

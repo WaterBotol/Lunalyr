@@ -77,6 +77,18 @@ public sealed class RankingDecisionsTests : IDisposable
     }
 
     [Fact]
+    public void ANodeNamingAppleQAppleStillRanksAsAppleMusic()
+    {
+        // lyricsplus.binimum.org names Apple Music's lyrics "qApple" where lyricsplus.prjktla.my.id says "Apple" for the
+        // very same lyrics (same lines and song parts; seen live on 13 Nov 2026 for "As It Was").
+        Assert.True(LyricSourceRanking.IsAppleUpstream("qApple"));
+        Assert.True(LyricSourceRanking.IsAppleUpstream("Apple"));
+        Assert.False(LyricSourceRanking.IsAppleUpstream("QQ Music"));
+        Assert.False(LyricSourceRanking.IsAppleUpstream(null));
+        Assert.Equal(AppleMusicCache, Song(LyricsPlus, "qApple via Lyrics+").RankingSource);
+    }
+
+    [Fact]
     public void ARelayOfAnotherServiceRanksAsLyricsPlus()
     {
         var musixmatch = Song(LyricsPlus, "Musixmatch via Lyrics+");

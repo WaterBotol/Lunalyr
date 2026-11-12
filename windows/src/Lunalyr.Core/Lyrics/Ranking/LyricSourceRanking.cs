@@ -14,6 +14,14 @@ public static class LyricSourceRanking
     public const string AppleUpstream = "Apple";
 
     /// <summary>
+    /// Whether a Lyrics+ node's upstream name means Apple Music's lyrics. Nodes differ: one names them "Apple", another
+    /// "qApple" for the very same lyrics (same lines, same song parts; checked live 13 Nov 2026).
+    /// </summary>
+    public static bool IsAppleUpstream(string? upstream) =>
+        string.Equals(upstream, AppleUpstream, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(upstream, "qApple", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// The upstream a Lyrics+ match was relayed from, from its provenance label ("Apple via Lyrics+" → "Apple"), or
     /// null when the label names none. The label is kept with saved lyrics, so a cached match ranks the same.
     /// </summary>
@@ -30,7 +38,7 @@ public static class LyricSourceRanking
     /// Apple Music for Apple's lyrics relayed by Lyrics+, otherwise the source itself.
     /// </summary>
     public static LyricSourceId RankingSource(LyricSourceId source, string provenanceSource) =>
-        string.Equals(RelayUpstream(source, provenanceSource), AppleUpstream, StringComparison.OrdinalIgnoreCase)
+        IsAppleUpstream(RelayUpstream(source, provenanceSource))
             ? LyricSourceId.AppleMusicCache
             : source;
 

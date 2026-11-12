@@ -69,9 +69,10 @@ public sealed record LyricSourceSnapshot(
     /// Apple Music's own, lets a later agreement demote LRCLIB and applies the phrase-token rule (12 Nov 2026); v15
     /// (the Mac's v13, whose numbers Windows had already passed) ranks a language version (English Version…), or lyrics
     /// in another language than the song's, below the playing one's, and searches songs listed under an English title
-    /// under their original title too.
+    /// under their original title too; v16 ranks Apple Music's lyrics as Apple's when a Lyrics+ node names them
+    /// "qApple" (13 Nov 2026).
     /// </summary>
-    public const string CachePolicy = "v15";
+    public const string CachePolicy = "v16";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =

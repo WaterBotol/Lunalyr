@@ -49,7 +49,10 @@ public static class KPoeJsonParser
             // The node reports which upstream it pulled from, e.g. "Apple" or "Lyrics+ (via Apple with QQ)"; keep the leading name.
             var raw = source ?? "Lyrics+";
             var cut = raw.IndexOf(" (", StringComparison.Ordinal);
-            return new KPoeHit(lines, cut < 0 ? raw : raw[..cut], title, artist);
+            var name = cut < 0 ? raw : raw[..cut];
+            // One node says "qApple" for Apple Music's lyrics: name them "Apple" whichever node answered.
+            if (Ranking.LyricSourceRanking.IsAppleUpstream(name)) name = Ranking.LyricSourceRanking.AppleUpstream;
+            return new KPoeHit(lines, name, title, artist);
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
         {
