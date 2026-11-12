@@ -12,6 +12,7 @@ using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Core.Lyrics.Timing;
 using Lunalyr.Core.Motion;
+using Lunalyr.Render.Pacing;
 using Lunalyr.Render.Scene;
 using Vortice.Direct2D1;
 using Vortice.DirectWrite;
@@ -27,6 +28,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 {
     private const int MaxPlans = 12;
     private readonly CategoryLogger _log;
+    private AheadWork? _aheadWork;
     private bool _logged;
 
     protected LyricCompositionLayer(CompositionKind kind, IWordBreaker breaker, Logger? logger)
@@ -175,6 +177,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         if (Kit is null) return;
         Frame++;
+        _aheadWork = frame.AheadWork;
         var dc = frame.Dc;
         var saved = dc.Transform;
         try
@@ -393,7 +396,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // The next line is set (laid out and baked) a little ahead of time, not on the frame it first appears.
         var upcoming = index + 1;
         if (upcoming < lines.Count && lines[upcoming].Words.Count > 0 && !Rolls(upcoming)
-            && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming))
+            && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming)
+            && !StagePrepared(upcoming) && _aheadWork?.TryTake() != false)
         {
             if (Rules.FillsStage) { PrepareStage(upcoming); return; }
             _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
@@ -491,6 +495,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     /// <summary>Sets a stage layout's line ahead of time (laid out and baked), not on the frame it first appears.</summary>
     protected virtual void PrepareStage(int row) { }
+
+    /// <summary>True when a stage layout has already set <paramref name="row"/> (its own cache, not the plans).</summary>
+    protected virtual bool StagePrepared(int row) => false;
 
     /// <summary>How long a line takes to leave once its exit has begun (Hinge folds for longer).</summary>
     protected virtual double LeavingSpan => LyricPhraseTiming.ExitSpan;
