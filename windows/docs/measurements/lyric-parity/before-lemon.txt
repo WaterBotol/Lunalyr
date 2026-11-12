@@ -1,0 +1,65 @@
+Query: "Lemon" by "Kenshi Yonezu" (4:16, 256.116 s), album "Lemon - Single", genre "J-Pop", automatic lookup
+Storefront for original titles: au; cache policy v16
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.72s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.72s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.72s    Lyrics+ (KPoe): Searching…
+  0.72s    AMLL TTML DB: Searching…
+  0.72s    NetEase Cloud Music: Searching…
+  0.72s    LRCLIB: Match found
+  0.72s    QQ Music: Searching…
+  0.72s    Kugou Music: Searching…
+  0.72s    Kuwo Music: Searching…
+  0.72s    lyrics.ovh: Searching…
+  1.65s    LRCLIB: Match found · showing
+  1.65s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  1.65s  showing (revision 1): Line-synced · LRCLIB
+  2.23s    NetEase Cloud Music: Match found · 1 other source agrees
+  2.23s    LRCLIB: Match found · 1 other source agrees · showing
+  2.34s    AMLL TTML DB: No usable match / unavailable
+  2.96s    QQ Music: Match found
+  2.99s    NetEase Cloud Music: Match found · 1 other source agrees · showing
+  2.99s    LRCLIB: Match found · 1 other source agrees
+  2.99s  showing (revision 2): Line-synced · NetEase
+  4.09s    Kuwo Music: Match found
+  4.25s    QQ Music: Match found · 1 other source agrees
+  4.25s    Kugou Music: Match found · 1 other source agrees
+  5.01s    NetEase Cloud Music: Match found · 1 other source agrees
+  5.01s    Kugou Music: Match found · 1 other source agrees · showing
+  5.01s  showing (revision 3): Word-by-word · Kugou Music
+  5.58s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    Match found · 1 other source agrees
+  LRCLIB                 Match found · 1 other source agrees
+  QQ Music               Match found · 1 other source agrees
+  Kugou Music            Match found · 1 other source agrees · showing
+  Kuwo Music             Match found
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Word-by-word · Kugou Music                    "Lemon" / "Kenshi Yonezu" 4:15, 57 lines, score 103.3, tier 3
+  2. Line-synced · NetEase                         "Lemon" / "Kenshi Yonezu" 4:16, 46 lines, score 92.8, tier 1
+  3. Line-synced · LRCLIB                          "Lemon" / "Kenshi Yonezu" 4:16, 37 lines, score 92.8, tier 1
+  4. Line-synced · QQ Music                        "Lemon" / "Kenshi Yonezu" 4:16, 57 lines, score 89.1, tier 1
+  5. Line-synced · Kuwo Music                      "Lemon" / "Kenshi Yonezu" 4:15, 58 lines, score 91.3, tier 1
+
+Chosen: Word-by-word · Kugou Music
+  0:01  夢ならば  [4 timed words]
+  0:02  どれほどよかったでしょう  [12 timed words]
+  0:06  未だにあなたのことを夢にみる  [14 timed words]
+  0:12  忘れた物を取りに帰るように  [13 timed words]

@@ -1,5 +1,7 @@
 // Manual live lyric lookup. Usage:
-//   LyricProbe --title "Shape of You" --artist "Ed Sheeran" [--album "Divide"] --duration 233.7 [--search] [--lines 6]
+//   LyricProbe --title "Shape of You" --artist "Ed Sheeran" [--album "Divide"] --duration 233.7 [--genre Pop]
+//              [--storefront au] [--search] [--lines 6] [--out result.txt]
+// --out also writes everything printed to a UTF-8 file (PowerShell redirection can mangle CJK names).
 // It asks the real lyric services (with the app's generic User-Agent), prints each source's state, the ranking and the
 // chosen result's provenance and first lines. Saved choices and the cache go to a fresh temp folder, never the app's.
 // It plays nothing and reads no media session.
@@ -22,10 +24,16 @@ var title = Arg("--title");
 var artist = Arg("--artist") ?? "";
 if (title is null || !double.TryParse(Arg("--duration") ?? "", NumberStyles.Float, CultureInfo.InvariantCulture, out var duration))
 {
-    Console.WriteLine("Usage: LyricProbe --title <title> --artist <artist> [--album <album>] --duration <seconds> [--search] [--lines N]");
+    Console.WriteLine("Usage: LyricProbe --title <title> --artist <artist> [--album <album>] --duration <seconds> [--genre <genre>]"
+        + " [--storefront <cc>] [--search] [--lines N] [--out <file>]");
     return 2;
 }
-var query = new LyricQuery(title, artist, Arg("--album"), duration);
+var query = new LyricQuery(title, artist, Arg("--album"), duration) { Genre = Arg("--genre") };
+var storefront = Arg("--storefront");
+if (Arg("--out") is { } outPath)
+{
+    Console.SetOut(new TeeWriter(Console.Out, new StreamWriter(outPath, append: false, new UTF8Encoding(false)) { AutoFlush = true }));
+}
 var search = args.Contains("--search");
 var shownLines = int.TryParse(Arg("--lines"), out var n) ? n : 6;
 
@@ -41,18 +49,32 @@ try
         Readings = WindowsReadingServices.Create(),
         // The agent the development rules ask for: generic, nothing personal.
         Http = new LyricHttpOptions { UserAgent = "Lunalyr/0.1 (Windows port; dev)" },
+        Storefront = storefront,
     });
     var options = LyricSourceSnapshot.From(LyricSourceSnapshot.RecommendedOrder, LyricSourceSnapshot.RecommendedOrder.ToHashSet(),
         LyricMatchMode.AccuracyFirst);
-    Console.WriteLine($"Query: \"{query.Title}\" by \"{query.Artist}\" ({LyricQuery.Clock(query.Duration)}){(search ? ", search (every source asked)" : "")}");
+    Console.WriteLine($"Query: \"{query.Title}\" by \"{query.Artist}\" ({LyricQuery.Clock(query.Duration)}, {query.Duration.ToString(CultureInfo.InvariantCulture)} s)"
+        + $"{(query.Album is { } album ? $", album \"{album}\"" : "")}{(query.Genre is { } genre ? $", genre \"{genre}\"" : "")}"
+        + $"{(search ? ", search (every source asked)" : ", automatic lookup")}");
+    Console.WriteLine($"Storefront for original titles: {storefront ?? OriginalTitles.DefaultStorefront()}; cache policy {LyricSourceSnapshot.CachePolicy}");
     Console.WriteLine("Sources:");
     foreach (var source in service.SourceList(options))
     {
         Console.WriteLine($"  {source.Title,-22} {(source.IsAvailable ? "available" : "unavailable: " + source.UnavailableReason)}");
     }
     var lastRevision = 0;
+    var lastStates = new Dictionary<LyricSourceId, string>();
     var report = await service.LookupAsync(query, options, force: search, onUpdate: update =>
     {
+        // Each source's state as it changes, so when sources answer, are stopped and the match shows can be read.
+        foreach (var (id, state) in update.States)
+        {
+            if (!lastStates.TryGetValue(id, out var before) || before != state)
+            {
+                lastStates[id] = state;
+                Log($"  {id.Title()}: {state}");
+            }
+        }
         if (update.Revision != lastRevision)
         {
             lastRevision = update.Revision;
@@ -73,7 +95,8 @@ try
     foreach (var candidate in report.Candidates)
     {
         Console.WriteLine($"  {++rank}. {candidate.Provenance.Label,-45} \"{candidate.Title}\" / \"{candidate.Artist}\""
-            + $" {(candidate.Duration is double d ? LyricQuery.Clock(d) : "?:??")}, {candidate.LineCount} lines, score {candidate.Score:F1}");
+            + $" {(candidate.Duration is double d ? LyricQuery.Clock(d) : "?:??")}, {candidate.LineCount} lines, score {candidate.Score:F1},"
+            + $" tier {LyricTimingRules.TimingTier(candidate.Result)}");
     }
     foreach (var rejected in report.Rejected)
     {
@@ -110,5 +133,38 @@ finally
     }
     catch (IOException)
     {
+    }
+}
+
+/// <summary>Writes everything to the console and to a file.</summary>
+internal sealed class TeeWriter(TextWriter first, TextWriter second) : TextWriter
+{
+    public override Encoding Encoding => Encoding.UTF8;
+
+    public override void Write(char value)
+    {
+        first.Write(value);
+        second.Write(value);
+    }
+
+    public override void Write(string? value)
+    {
+        first.Write(value);
+        second.Write(value);
+    }
+
+    public override void WriteLine(string? value)
+    {
+        first.WriteLine(value);
+        second.WriteLine(value);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            second.Dispose();
+        }
+        base.Dispose(disposing);
     }
 }

@@ -70,9 +70,11 @@ public sealed record LyricSourceSnapshot(
     /// (the Mac's v13, whose numbers Windows had already passed) ranks a language version (English Version…), or lyrics
     /// in another language than the song's, below the playing one's, and searches songs listed under an English title
     /// under their original title too; v16 ranks Apple Music's lyrics as Apple's when a Lyrics+ node names them
-    /// "qApple" (13 Nov 2026).
+    /// "qApple" (13 Nov 2026); v17 also ranks them as Apple's when a node names them "Apple Music", as the Mac does
+    /// (parity check of 13 Nov 2026 against the Mac's lookup spec, §2.3): choices cached while such a relay ranked as
+    /// plain Lyrics+ are looked up again.
     /// </summary>
-    public const string CachePolicy = "v16";
+    public const string CachePolicy = "v17";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =

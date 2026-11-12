@@ -157,9 +157,7 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
                 var cut = source.IndexOf(" (", StringComparison.Ordinal);
                 var upstream = cut >= 0 ? source[..cut] : source;
                 // One node says "qApple" for Apple Music's lyrics: label them "Apple" whichever node answered.
-                extras[RawLyricsExtras.Upstream] = Ranking.LyricSourceRanking.IsAppleUpstream(upstream)
-                    ? Ranking.LyricSourceRanking.AppleUpstream
-                    : upstream;
+                extras[RawLyricsExtras.Upstream] = Ranking.LyricSourceRanking.RelayLabel(upstream);
             }
             // Only `source` is documented; the matched song's names are read under the spellings nodes have used.
             var title = Name(metadata, "title") ?? Name(metadata, "name");

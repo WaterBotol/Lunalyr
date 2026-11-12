@@ -1,0 +1,59 @@
+Query: "Idol (English Version)" by "YOASOBI" (3:33, 213.234 s), genre "J-Pop", automatic lookup
+Storefront for original titles: au; cache policy v16
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.71s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.71s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.71s    Lyrics+ (KPoe): Searching…
+  0.71s    AMLL TTML DB: Searching…
+  0.71s    NetEase Cloud Music: Searching…
+  0.71s    LRCLIB: Match found
+  0.71s    QQ Music: Searching…
+  0.71s    Kugou Music: Searching…
+  0.71s    Kuwo Music: Searching…
+  0.71s    lyrics.ovh: Searching…
+  1.08s    LRCLIB: Match found · 1 other source agrees
+  1.08s    lyrics.ovh: Match found · 1 other source agrees
+  1.35s    NetEase Cloud Music: Match found · other version (English)
+  1.37s    AMLL TTML DB: Match found · other version (English)
+  1.67s    Kugou Music: No usable match / unavailable
+  1.69s    QQ Music: No usable match / unavailable
+  1.73s    LRCLIB: Match found · 1 other source agrees · showing
+  1.73s  showing (revision 1): Line-synced · LRCLIB
+  3.23s    Kuwo Music: Match found · other version (English)
+  5.23s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · Apple Music’s lyrics · 2 other sources agree · showing
+  AMLL TTML DB           Match found · other version (English)
+  NetEase Cloud Music    Match found · other version (English)
+  LRCLIB                 Match found · 2 other sources agree
+  QQ Music               No usable match / unavailable
+  Kugou Music            No usable match / unavailable
+  Kuwo Music             Match found · other version (English)
+  lyrics.ovh             Match found · 2 other sources agree
+
+Ranking:
+  1. Mixed timing · Apple via Lyrics+              "Idol (English Version)" / "YOASOBI" ?:??, 87 lines, score 95.0, tier 2
+  2. Line-synced · LRCLIB                          "Idol (English Version)" / "Yoasobi" 3:33, 88 lines, score 92.6, tier 1
+  3. Word-by-word · AMLL TTML DB                   "Idol" / "YOASOBI" 3:33, 91 lines, score 102.5, tier 3
+  4. Word-by-word · NetEase                        "Idol" / "YOASOBI" 3:33, 90 lines, score 102.5, tier 3
+  5. Line-synced · Kuwo Music                      "Idol" / "YOASOBI" 3:33, 91 lines, score 90.1, tier 1
+  6. Plain text · no timing · lyrics.ovh           "Idol (English Version)" / "YOASOBI" ?:??, 87 lines, score 75.0, tier 0
+
+Chosen: Mixed timing · Apple via Lyrics+
+  0:01  Couldn't beat her smile, it stirred up all the media  [7 timed words]
+  0:04  Secret side, I wanna know it  [4 timed words]
+  0:05  So mysterious  [2 timed words]
+  0:06  Even that elusive side, part of her controlled area  [7 timed words]

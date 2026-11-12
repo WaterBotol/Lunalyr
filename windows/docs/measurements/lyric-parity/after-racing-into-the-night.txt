@@ -1,0 +1,53 @@
+Query: "Racing into the Night" by "YOASOBI" (4:21, 261.013 s), genre "J-Pop", automatic lookup
+Storefront for original titles: au; cache policy v17
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.82s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.82s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.82s    Lyrics+ (KPoe): Searching…
+  0.82s    AMLL TTML DB: Searching…
+  0.82s    NetEase Cloud Music: Searching…
+  0.82s    LRCLIB: Match found
+  0.82s    QQ Music: Searching…
+  0.82s    Kugou Music: Searching…
+  0.82s    Kuwo Music: Searching…
+  0.82s    lyrics.ovh: Searching…
+  1.04s    AMLL TTML DB: No usable match / unavailable
+  1.59s    Kugou Music: No usable match / unavailable
+  1.60s    NetEase Cloud Music: No usable match / unavailable
+  1.65s    LRCLIB: Match found · showing
+  1.65s    Kuwo Music: Not needed: it couldn’t beat the match showing
+  1.65s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  1.65s  showing (revision 1): Mixed timing · LRCLIB
+  1.81s    Lyrics+ (KPoe): No usable match / unavailable
+  3.41s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    No usable match / unavailable
+  LRCLIB                 Match found · showing
+  QQ Music               No usable match / unavailable
+  Kugou Music            No usable match / unavailable
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Mixed timing · LRCLIB                         "Racing Into The Night" / "YOASOBI" 4:20, 62 lines, score 103.5, tier 2
+
+Chosen: Mixed timing · LRCLIB
+  0:01  Seize a move, you're on me, falling and we were dissolving  [11 timed words]
+  0:08  You and me, skies above and wide, it brings on the true night on me
+  0:31  All I could feel was a goodbye  [7 timed words]
+  0:33  Those only words you wrote, it's plenty to understand ya

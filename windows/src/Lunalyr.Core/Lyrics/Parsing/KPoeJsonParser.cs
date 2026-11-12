@@ -51,7 +51,7 @@ public static class KPoeJsonParser
             var cut = raw.IndexOf(" (", StringComparison.Ordinal);
             var name = cut < 0 ? raw : raw[..cut];
             // One node says "qApple" for Apple Music's lyrics: name them "Apple" whichever node answered.
-            if (Ranking.LyricSourceRanking.IsAppleUpstream(name)) name = Ranking.LyricSourceRanking.AppleUpstream;
+            name = Ranking.LyricSourceRanking.RelayLabel(name);
             return new KPoeHit(lines, name, title, artist);
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)

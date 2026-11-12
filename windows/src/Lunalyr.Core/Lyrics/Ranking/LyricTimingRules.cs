@@ -90,7 +90,8 @@ public static class LyricTimingRules
     }
 
     /// <summary>
-    /// Windows-only rule (12 Nov 2026): lyrics count as word-timed only if at least one sung line has two or more
+    /// The Mac's <c>hasWordTimingEvidence</c> (phrase-token rule of 12 Nov 2026, on both apps; spec §5.1): lyrics
+    /// count as word or mixed timing only if at least one sung line, and at least a quarter of them, has two or more
     /// validly timed words. Lyrics where every timed line is a single token (LRCLIB Lyricsfile rows for line-synced
     /// uploads, plus a few genuinely one-word lines) carry no word timing at all and rank as line timing.
     /// </summary>

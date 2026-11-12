@@ -306,17 +306,20 @@ public static class LyricRanking
     /// <summary>
     /// Whether a pending source must keep answering because, with another, it could still agree against the timing of
     /// LRCLIB showing and demote it (the Mac's <c>couldDemote</c>; ranking decisions of 12 Nov 2026). All of these hold:
-    /// LRCLIB's word or mixed timing is the best match; it agrees with no timed match for the same words already in
-    /// hand; and the pending source can give word timing, or has some timing while a sound word-timed rival (one that
-    /// would replace LRCLIB) is already in hand. Line-only and plain-text sources are otherwise stopped as before.
+    /// LRCLIB's word or mixed timing for the playing version is the best match, and not already an outlier; it agrees
+    /// with no timed match for the same words already in hand; and the pending source can give word timing, or has
+    /// some timing while a sound word-timed rival (one that would replace LRCLIB) is already in hand. Line-only and
+    /// plain-text sources are otherwise stopped as before.
     /// </summary>
     /// <param name="best">What shows, or is about to.</param>
     /// <param name="source">The pending source.</param>
     /// <param name="accepted">The accepted matches in hand.</param>
     public static bool CouldDemote(LyricCandidate best, LyricSourceId source, IEnumerable<LyricCandidate> accepted, LyricQuery query)
     {
+        // LRCLIB for another version is not weighed for agreement (Screen), so nothing can make it an outlier; any timed
+        // source could still find the playing version anyway (CouldBeat). The Mac's couldDemote asks the same (spec §3.4).
         if (best.Source != LyricSourceId.Lrclib || source == best.Source || best.Agreement.TimingOutlier
-            || LyricTimingRules.RankedTiming(best.Result) != 2 || source.TimingCeiling() < 1)
+            || LyricTimingRules.RankedTiming(best.Result) != 2 || !FitsVersion(best, query) || source.TimingCeiling() < 1)
         {
             return false;
         }
