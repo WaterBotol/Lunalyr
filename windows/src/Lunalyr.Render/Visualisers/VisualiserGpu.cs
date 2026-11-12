@@ -55,6 +55,15 @@ internal sealed unsafe class VisualiserGpu : IDisposable
     public ID3D11Texture2D UnityState { get; }
     public ID3D11ShaderResourceView UnityView { get; }
 
+    /// <summary>GPU objects for the Direct3D device behind a Direct2D context (the layer keeps one per device).</summary>
+    public static VisualiserGpu For(Vortice.Direct2D1.ID2D1DeviceContext dc)
+    {
+        using var d2d = dc.Device;
+        using var d2d2 = d2d.QueryInterface<Vortice.Direct2D1.ID2D1Device2>();
+        using var dxgi = d2d2.DxgiDevice;
+        return new VisualiserGpu(dxgi.QueryInterface<ID3D11Device>());
+    }
+
     /// <summary>The scene's pixel shader (created on first use).</summary>
     public ID3D11PixelShader Shader(string name)
     {

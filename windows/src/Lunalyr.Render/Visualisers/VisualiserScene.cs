@@ -123,14 +123,25 @@ internal sealed unsafe class VisualiserScene : IDisposable
             gpu.Write<WavefieldModeUniforms>(gpu.Scene, _modes);
         }
 
+        return Encode(gpu, dc, width, height, frame.Response.Calm, frame.Clock);
+    }
+
+    /// <summary>
+    /// Draws the frame whose buffers are written into the scene's texture: through the limiter when
+    /// <paramref name="calm"/>. The Mac's encodeFrame; tests call it with their own uniforms.
+    /// </summary>
+    internal bool Encode(VisualiserGpu gpu, ID2D1DeviceContext dc, int width, int height, bool calm, double clock)
+    {
+        if (!ReferenceEquals(gpu, _gpu)) Attach(gpu, clock);
+        if (width != Width || height != Height || _bitmap is null) CreateTarget(gpu, dc, width, height);
         var shader = gpu.Shader(Style.Shader());
         BeginTimer(gpu);
         gpu.BindStage();
         ID3D11ShaderResourceView exposure = gpu.UnityView;
-        if (frame.Response.Calm)
+        if (calm)
         {
             if (!_limiting && _hasDrawn) _adoptNext = true;
-            Limit(gpu, shader, frame.Clock);
+            Limit(gpu, shader, clock);
             exposure = _exposureViews[_exposureCurrent]!;
             _limiting = true;
         }
@@ -146,8 +157,38 @@ internal sealed unsafe class VisualiserScene : IDisposable
         gpu.Unbind();
         EndTimer(gpu);
         _hasDrawn = true;
-        if (_limiting) RememberShown(gpu, frame.Clock);
+        if (_limiting) RememberShown(gpu, clock);
         return true;
+    }
+
+    /// <summary>The limiter just turned on: keep what is already on screen (the Mac's adoptCurrentBrightness).</summary>
+    internal void AdoptCurrentBrightness() => _adoptNext = true;
+
+    /// <summary>The scene texture's pixels, BGRA top row first (tests).</summary>
+    internal byte[] ReadPixels(VisualiserGpu gpu)
+    {
+        using var staging = gpu.Device.CreateTexture2D(new Texture2DDescription(Format.B8G8R8A8_UNorm, (uint)Width, (uint)Height, 1, 1,
+            BindFlags.None, ResourceUsage.Staging, CpuAccessFlags.Read));
+        gpu.Context.CopyResource(staging, _target!);
+        var pixels = new byte[Width * Height * 4];
+        var mapped = gpu.Context.Map(staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+        for (var y = 0; y < Height; y++)
+            new ReadOnlySpan<byte>((byte*)mapped.DataPointer + y * mapped.RowPitch, Width * 4).CopyTo(pixels.AsSpan(y * Width * 4));
+        gpu.Context.Unmap(staging, 0);
+        return pixels;
+    }
+
+    /// <summary>The limiter's state now, waiting for the GPU (tests): the gain and the displayed mean.</summary>
+    internal (float Gain, float Shown) ReadExposure(VisualiserGpu gpu)
+    {
+        using var staging = gpu.Device.CreateTexture2D(new Texture2DDescription(Format.R32G32_Float, 1, 1, 1, 1, BindFlags.None,
+            ResourceUsage.Staging, CpuAccessFlags.Read));
+        gpu.Context.CopyResource(staging, _exposure[_exposureCurrent]!);
+        var mapped = gpu.Context.Map(staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+        var state = ((float*)mapped.DataPointer)[0];
+        var shown = ((float*)mapped.DataPointer)[1];
+        gpu.Context.Unmap(staging, 0);
+        return (state, shown);
     }
 
     /// <summary>The probe pass and the measuring pass: afterwards the current exposure state holds this frame's gain.</summary>
