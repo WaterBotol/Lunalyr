@@ -1,6 +1,9 @@
-// Spoken: each sung word takes focus; recent words settle around it. The rolling stage (window, measured stack, cursor,
-// word states, fit) is Lunalyr's own and ported (Lunalyr.Core.Compositions.RollingStage/RollingWindow); the
-// Verso-derived parts of SpokenTypography and SpokenTypographyView are re-implemented from docs/compositions/spoken.md.
+// The rolling stages, drawn on the Mac by SpokenTypographyView: Spoken (each sung word takes focus; recent words
+// settle around it), Cascade (a moving column of words, arriving with the voice) and Cutout (uneven type and
+// album-colour labels, built word by word). The rolling stage (window, measured stack, cursor, word states, fit),
+// Cascade's held-word colour and Cutout's labels are Lunalyr's own and ported (Lunalyr.Core.Compositions.RollingStage,
+// RollingWindow, RollingLabel); the Verso-derived parts of SpokenTypography and SpokenTypographyView are re-implemented
+// from docs/compositions/spoken.md and cascade-cutout.md.
 
 using System.Numerics;
 using Lunalyr.Core.Compositions;
@@ -24,16 +27,24 @@ internal sealed class SpokenUnit : IDisposable
     public Vector2 ReadingOffset { get; init; }
     public SizeD Size { get; init; }
     public long LastUsed { get; set; }
+    /// <summary>Cutout's label: its tile, and the word and reading in the colour set on it.</summary>
+    public Ink? Tile { get; init; }
+    public Ink? LabelOnTile { get; init; }
+    public Ink? ReadingOnTile { get; init; }
 
     public void Dispose()
     {
         Label.Dispose();
         Reading?.Dispose();
+        Tile?.Dispose();
+        LabelOnTile?.Dispose();
+        ReadingOnTile?.Dispose();
     }
 }
 
-internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
-    : LyricCompositionLayer(CompositionKind.Spoken, breaker, logger)
+/// <param name="kind">Spoken, Cascade or Cutout.</param>
+internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, CompositionKind kind = CompositionKind.Spoken)
+    : LyricCompositionLayer(kind, breaker, logger)
 {
     private RollingSong? _song;
     private RollingWindow? _window;
@@ -112,7 +123,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             unit.LastUsed = Frame;
             var eligible = k > 0 ? prepared[k - 1].Source.Start : double.NegativeInfinity;
             var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, Arrival,
-                                               Options, eligible);
+                                               Options, eligible, composition: Kind);
             _members[count] = k;
             _sizes[count] = unit.Size;
             _slots[count] = state.Slot;
@@ -121,7 +132,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
         }
         if (count == 0) return;
         // Rank 0, the word in focus, sits here; every other word is stacked above or below it by its measured size.
-        var anchor = new PointD(stage.Width * 0.5, stage.Height * 0.54 + RollingMotion.Baseline(RollingTokenState.Style, 0) * lineBase);
+        var anchor = new PointD(stage.Width * 0.5, stage.Height * 0.54 + RollingMotion.Baseline(Kind.RollingStyle(), 0) * lineBase);
         RollingStack.Centres(_sizes.AsSpan(0, count), _slots.AsSpan(0, count), anchor, lineBase * 0.16,
                              _centres.AsSpan(0, count), _order.AsSpan(0, count), _stack.AsSpan(0, count));
         // The word in focus is drawn last (on top).
@@ -147,9 +158,16 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             if (!(fit > 0)) continue;
             var token = prepared[_members[m]];
             var unit = _preparedUnits[_members[m]]!;
+            var entrance = Matrix3x2.CreateScale((float)slot.EntranceScale) * Matrix3x2.CreateRotation(Radians(slot.Turn));
+            if (Kind != CompositionKind.Spoken && Arrival == WordArrival.Unfold)
+            {
+                // Cascade and Cutout fold an Unfold entrance in about the unit's bottom edge (foreshortened).
+                var fold = EntranceTransform.Make(state.Presentation.Progress, state.Presentation.Arrival, Arrival, token.PointSize,
+                                                  token.Direction, false, token.TurnLimit).Fold;
+                if (fold != 0) entrance *= Fold(fold, unit.Size.Height);
+            }
             var world =
-                Matrix3x2.CreateScale((float)slot.EntranceScale)
-                * Matrix3x2.CreateRotation(Radians(slot.Turn))
+                entrance
                 * Matrix3x2.CreateTranslation((float)slot.EntranceX, (float)slot.EntranceY)
                 * Matrix3x2.CreateScale((float)(fit * state.Scale))
                 * Matrix3x2.CreateRotation(Radians(state.Angle))
@@ -163,11 +181,82 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
                 if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, intensity, false, Options, _reveal))
                     reveal = _reveal.AsSpan(0, token.Parts.Count);
             }
+            if (unit.Tile is not null)
+            {
+                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal);
+                continue;
+            }
             unit.Label.Draw(dc, Matrix3x2.CreateTranslation(unit.LabelOffset) * world, scale, (float)opacity, blur,
                             GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
             if (unit.Reading is { } reading && !state.Presentation.Preview)
                 reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1);
         }
+    }
+
+    /// <summary>
+    /// A word on Cutout's label. The tile is pressed on from the word's leading edge by its spring (a sliver under the
+    /// faint preview), tilted a little; where it has pressed in, the word and its reading take the colour set on it.
+    /// The unit's shadow lies under the tile, as the Mac shadows the label and its word as one.
+    /// </summary>
+    private void DrawLabelled(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
+                              in Matrix3x2 world, float scale, float opacity, float blur, ReadOnlySpan<double> reveal)
+    {
+        var boundaries = reveal.IsEmpty ? default : AsSpan(token.Boundaries);
+        var rightToLeft = token.RightToLeft;
+        var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
+        var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
+        var reading = state.Presentation.Preview ? null : unit.Reading;
+        // The label fades as one piece (its word stays dark on a fading tile, as on the Mac), so a label that is not
+        // fully there is drawn in a layer at its opacity.
+        var layered = opacity < 0.995f;
+        if (layered)
+        {
+            var margin = (float)(unit.Size.Height + unit.Size.Width * 0.1);
+            dc.Transform = world;
+            dc.PushLayer(new LayerParameters1
+            {
+                ContentBounds = new Vortice.RawRectF(-(float)unit.Size.Width / 2 - margin, -(float)unit.Size.Height / 2 - margin,
+                                                     (float)unit.Size.Width / 2 + margin, (float)unit.Size.Height / 2 + margin),
+                MaskAntialiasMode = AntialiasMode.PerPrimitive,
+                MaskTransform = Matrix3x2.Identity,
+                Opacity = opacity,
+                LayerOptions = LayerOptions1.None,
+            }, null!);
+            opacity = 1;
+        }
+        unit.Label.DrawShadow(dc, labelWorld, opacity, 1, boundaries, reveal, rightToLeft);
+        reading?.DrawShadow(dc, readingWorld, opacity, 1);
+
+        var width = (float)unit.Size.Width;
+        var pressed = (float)RollingLabel.TileWidth(state.Presentation.Arrival, false);
+        var edge = rightToLeft ? width / 2 : -width / 2;
+        var tileWorld =
+            Matrix3x2.CreateTranslation(-edge, 0) * Matrix3x2.CreateScale(pressed, 1) * Matrix3x2.CreateTranslation(edge, 0)
+            * Matrix3x2.CreateRotation(Radians(RollingLabel.DrawnTilt)) * world;
+        unit.Tile!.Draw(dc, tileWorld, scale, opacity, blur, GlowSpec.None, 1);
+
+        // Where the tile has pressed in (from the leading edge; the word and reading are centred on the unit) they take
+        // the colour set on it, and their own colour beyond. Each colour is drawn only on its side of the edge, so no
+        // glyph is drawn twice and the tile's text has no fringe of the other colour.
+        var seam = rightToLeft ? width / 2 - width * pressed : -width / 2 + width * pressed;
+        float onFrom = rightToLeft ? seam : float.NegativeInfinity, onTo = rightToLeft ? float.PositiveInfinity : seam;
+        float offFrom = rightToLeft ? float.NegativeInfinity : seam, offTo = rightToLeft ? seam : float.PositiveInfinity;
+        unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, offFrom, offTo, boundaries, reveal, rightToLeft);
+        unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+        if (reading is not null)
+        {
+            reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo);
+            unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo);
+        }
+        if (layered) dc.PopLayer();
+    }
+
+    /// <summary>A fold about the bottom edge of a unit <paramref name="height"/> tall, drawn as a foreshortening.</summary>
+    private static Matrix3x2 Fold(double degrees, double height)
+    {
+        var bottom = (float)(height / 2);
+        return Matrix3x2.CreateTranslation(0, -bottom) * Matrix3x2.CreateScale(1, (float)Math.Cos(degrees * Math.PI / 180))
+            * Matrix3x2.CreateTranslation(0, bottom);
     }
 
     private static ReadOnlySpan<double> AsSpan(IReadOnlyList<double> values) =>
@@ -180,7 +269,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
         var lead = Math.Max(1.2, Options.PreviewLead);
         _window = _song!.Window(index, time, lead);
         _windowIndex = index;
-        _prepared = RollingWords.Prepare(_window.Words, LineBase, _window.Readings, _window.Following, _window.Ordinals, _window.Parts);
+        _prepared = RollingWords.Prepare(_window.Words, LineBase, _window.Readings, _window.Following, _window.Ordinals, _window.Parts,
+                                         Kind);
         _preparedUnits = new SpokenUnit?[_prepared.Length];
         for (var k = 0; k < _prepared.Length; k++)
             if (_units.TryGetValue(_prepared[k].Source, out var unit) && unit.Size.Width > 0) _preparedUnits[k] = unit;
@@ -207,7 +297,10 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
         }
     }
 
-    /// <summary>A rolling word and its reading, set in the heavy cut at the word's size and baked once.</summary>
+    /// <summary>
+    /// A rolling word and its reading, set at the word's size (in the heavy cut in Spoken, for heroes otherwise) and
+    /// baked once; on Cutout's label, also the tile and the word and reading in the colour set on it.
+    /// </summary>
     private SpokenUnit Unit(RollingWord token)
     {
         if (_units.TryGetValue(token.Source, out var found)) return found;
@@ -221,30 +314,51 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
         const float raster = 1.16f;
         // The word's own colour from the ink: its slot along the song's colours, at the drift of its onset.
         var colours = InkSample(token.Source.Start, token.Slot, token.Seed);
-        var labelInk = kit.Bake(label, LyricInks.Vector(colours.Rest), raster, shadow);
+        var rest = colours.Rest;
+        var ink = InkAt(token.Source.Start);
+        // Cascade's held words take the highlight's hue as type of their own.
+        if (Kind == CompositionKind.Cascade && token.Hero && !colours.Sweeps && ink.Accent is { } accent) rest = accent;
+        var labelInk = kit.Bake(label, LyricInks.Vector(rest), raster, shadow);
         var readingInk = reading is null ? null : kit.Bake(reading, LyricInks.Vector(colours.Reading), raster, shadow);
+        Ink? tile = null, labelOnTile = null, readingOnTile = null;
+        if (token.Tile)
+        {
+            var onTile = LyricInks.Vector(ink.TileText);
+            tile = kit.BakeTile(new Vector2((float)width, (float)height), Points(RollingLabel.CornerRadius),
+                                LyricInks.Vector(ink.TileColour), raster, shadow);
+            labelOnTile = kit.Bake(label, onTile, raster, ShadowSpec.None);
+            readingOnTile = reading is null ? null
+                : kit.Bake(reading, onTile with { W = onTile.W * (float)Core.Colour.LyricHighlight.ReadingOpacity }, raster, ShadowSpec.None);
+        }
+        // The word and its reading sit in the middle of the unit's padding.
+        var content = height - 2 * Padding(token, Scale).Y;
         var unit = new SpokenUnit
         {
             Label = labelInk,
             Reading = readingInk,
-            LabelOffset = new Vector2(0, (float)(-height / 2 + labelBox.Height / 2)),
-            ReadingOffset = readingInk is null ? default : new Vector2(0, (float)(height / 2 - readingInk.Box.Y / 2)),
+            LabelOffset = new Vector2(0, (float)(-content / 2 + labelBox.Height / 2)),
+            ReadingOffset = readingInk is null ? default : new Vector2(0, (float)(content / 2 - readingInk.Box.Y / 2)),
             Size = new SizeD(width, height),
             LastUsed = Frame,
+            Tile = tile,
+            LabelOnTile = labelOnTile,
+            ReadingOnTile = readingOnTile,
         };
         _units[token.Source] = unit;
         return unit;
     }
 
     /// <summary>
-    /// A rolling word and its reading laid out as the stage measures them: the word in the heavy cut, its reading
-    /// under it (wrapping at 80% of the stage), 2 points of padding at each side. The caller disposes the layouts.
+    /// A rolling word and its reading laid out as the stage measures them: the word in the heavy cut (or, for a
+    /// Cascade or Cutout word that is not a hero, the regular one), its reading under it (wrapping at 80% of the
+    /// stage), 2 points of padding at each side, or 11 by 3 round a Cutout label. The caller disposes the layouts.
     /// </summary>
     internal static (IDWriteTextLayout Label, IDWriteTextLayout? Reading, double Width, double Height) Layout(
         TextKit kit, RollingWord token, double stageWidth, float scale)
     {
         var size = (float)token.PointSize;
-        var label = kit.Layout(token.Source.Text, Face.Heavy, size, TextKit.LocaleFor(token.Source.Text), token.RightToLeft);
+        var label = kit.Layout(token.Source.Text, token.Heavy ? Face.Heavy : Face.Regular, size,
+                               TextKit.LocaleFor(token.Source.Text), token.RightToLeft);
         var reading = token.Reading is { } text
             ? kit.Layout(text, Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false, (float)(stageWidth * 0.8))
             : null;
@@ -254,8 +368,15 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             width = Math.Max(width, reading.Metrics.Width);
             height += token.PointSize * 0.02 + reading.Metrics.Height;
         }
-        return (label, reading, width + 2 * 2 * scale, height);
+        if (!token.Tile) return (label, reading, width + 2 * 2 * scale, height);
+        var padding = Padding(token, scale);
+        return (label, reading, width + 2 * padding.X, height + 2 * padding.Y);
     }
+
+    /// <summary>The padding round a unit, in pixels: 2 points at each side, or 11 by 3 round a Cutout label.</summary>
+    internal static (double X, double Y) Padding(RollingWord token, float scale) => token.Tile
+        ? (RollingLabel.PaddingX * scale, RollingLabel.PaddingY * scale)
+        : (RollingLabel.PlainPaddingX * scale, 0);
 
     /// <summary>Backing vocals of the lines on the rolling stage, set in Editorial's typography (Spoken itself would take over the stage).</summary>
     private void DrawRollingBacking(ID2D1DeviceContext dc, int index, double time, double presence)

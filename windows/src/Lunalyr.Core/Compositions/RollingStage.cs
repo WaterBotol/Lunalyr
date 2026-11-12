@@ -34,6 +34,10 @@ public sealed record RollingWord
     public IReadOnlyList<double> Boundaries { get; init; } = [];
     /// <summary>The largest entrance turn this word may make, degrees.</summary>
     public double TurnLimit { get; init; } = 12;
+    /// <summary>Set in the heavy cut: every word in Spoken, only heroes in Cascade and Cutout.</summary>
+    public bool Heavy { get; init; } = true;
+    /// <summary>Set on an album-colour label (Cutout's heroes and about a quarter of its other words).</summary>
+    public bool Tile { get; init; }
 
     /// <summary>A colour slot from the word's place in the whole song: consecutive words take well-separated places.</summary>
     public static double SlotOf(int ordinal) => (ordinal * 0.618_034) % 1.0;
@@ -83,24 +87,33 @@ public static class RollingWords
         !IsFiller(word.Text) && (TextElements.Count(word.Text) >= 5 || word.End - word.Start > 0.65);
 
     /// <summary>
-    /// Spoken's words: every word at 1.10 × <paramref name="baseSize"/> (0.88 of that with a reading under it), timed
-    /// at the pace of the next onset (<paramref name="following"/> for the window's last word, so its pace never
-    /// changes when the next word joins), coloured by its place in the song.
+    /// A rolling stage's words, timed at the pace of the next onset (<paramref name="following"/> for the window's last
+    /// word, so its pace never changes when the next word joins) and coloured by their place in the song. Spoken sets
+    /// every word at 1.10 × <paramref name="baseSize"/>; Cascade and Cutout set heroes at 0.88, fillers at 0.62 and
+    /// the rest at 0.74 of it, and only heroes in the heavy cut. A word with a reading under it is set at 0.88 of its
+    /// size. Cutout puts its heroes and about a quarter of its other words on labels.
     /// </summary>
     public static RollingWord[] Prepare(IReadOnlyList<LyricWord> words, double baseSize,
                                         IReadOnlyDictionary<LyricWord, string>? readings = null, double? following = null,
                                         IReadOnlyDictionary<LyricWord, int>? ordinals = null,
-                                        IReadOnlyDictionary<LyricWord, IReadOnlyList<LyricWord>>? parts = null)
+                                        IReadOnlyDictionary<LyricWord, IReadOnlyList<LyricWord>>? parts = null,
+                                        CompositionKind composition = CompositionKind.Spoken)
     {
         ArgumentNullException.ThrowIfNull(words);
         var result = new RollingWord[words.Count];
+        var spoken = composition == CompositionKind.Spoken;
         for (var index = 0; index < words.Count; index++)
         {
             var word = words[index];
             string? reading = null;
             readings?.TryGetValue(word, out reading);
+            var hash = Fnv1a(word.Text);
+            var hero = IsHero(word);
+            var columnSize = baseSize * (hero ? 0.88 : IsFiller(word.Text) ? 0.62 : 0.74);
+            // A word with its reading under it is set a little smaller, so the pair reads as one unit.
             var compact = reading is null ? 1 : 0.88;
-            var pointSize = baseSize * 1.10 * compact;
+            var pointSize = (spoken ? baseSize * 1.10 : columnSize) * compact;
+            var tile = composition == CompositionKind.Cutout && (hero || hash % 4 == 1);
             var isLast = index == words.Count - 1;
             var cadence = isLast && (following ?? double.NegativeInfinity) > word.Start
                 ? following!.Value - word.Start : OrganicMotion.Cadence(words, index);
@@ -112,17 +125,19 @@ public static class RollingWords
             {
                 Index = index,
                 Source = word,
-                Hash = Fnv1a(word.Text),
+                Hash = hash,
                 Seed = TimedWordKey.SeedOf(word.Text, word.Start),
                 Cadence = cadence,
                 RightToLeft = ScriptDirection.IsRightToLeft(word.Text),
-                Hero = IsHero(word),
+                Hero = hero,
                 PointSize = pointSize,
                 Reading = reading,
                 Slot = RollingWord.SlotOf(ordinal),
                 Parts = own ?? [],
                 Boundaries = own is null ? [] : LyricRunParts.Boundaries(own),
-                TurnLimit = RollingStack.TurnLimit(word.Text, reading, pointSize, tile: false),
+                TurnLimit = RollingStack.TurnLimit(word.Text, reading, pointSize, tile),
+                Heavy = hero || spoken,
+                Tile = tile,
             };
         }
         return result;
@@ -174,22 +189,26 @@ public readonly record struct RollingTokenState(
     /// <summary>Spoken's curves (the fan).</summary>
     public const RollingStyle Style = RollingStyle.Fan;
 
+    /// <param name="composition">Spoken (the fan), Cascade (the column) or Cutout (the collage).</param>
     public static RollingTokenState Make(RollingWord token, int? next, double rank, double time, double baseSize,
                                          double stageWidth, double intensity, bool reduceMotion, WordArrival arrival,
                                          WordRevealOptions options, double eligibleSince = double.NegativeInfinity,
-                                         double highlightOpacity = 0)
+                                         double highlightOpacity = 0, CompositionKind composition = CompositionKind.Spoken)
     {
         var word = token.Source;
         var motion = LyricMotion.ForWord(time, word.Start, word.End, token.Cadence, double.PositiveInfinity, 0, token.Seed,
                                          intensity, reduceMotion);
         var presentation = WordPresentation.Make(word, token.Index, next, time, options, motion, eligibleSince);
-        var pose = RollingMotion.Pose(Style, rank, time - word.Start, word.End - word.Start, token.Seed, intensity, reduceMotion);
+        var style = composition.RollingStyle();
+        var pose = RollingMotion.Pose(style, rank, time - word.Start, word.End - word.Start, token.Seed, intensity, reduceMotion);
         var focus = Math.Exp(-rank * rank * 2.4);
         // Held against the time-based fade while a highlight tile is lit; the stage still fades words off the top.
         var visible = Math.Max(pose.Opacity, highlightOpacity * RollingMotion.RankOpacity(rank));
         var shown = presentation.Opacity * (presentation.Preview ? 1 : visible);
         // Settled words keep a slow float; the word in focus breathes instead.
         var drift = LyricMotion.IdleDrift(token.Seed, time, reduceMotion ? 0 : 0.55 * (1 - focus));
+        // Cascade's and Cutout's column runs left of the stage's centre.
+        var columnShift = composition == CompositionKind.Spoken ? 0 : -stageWidth * 0.13;
         var scale = pose.Scale * drift.Scale;
         var angle = pose.Angle + drift.Angle;
         var travel = EntranceTransform.Make(presentation.Progress, presentation.Arrival, arrival, token.PointSize,
@@ -199,12 +218,13 @@ public readonly record struct RollingTokenState(
             Rank = rank,
             Scale = scale,
             Angle = angle,
-            Dx = (pose.X + drift.X) * baseSize,
-            Lift = (pose.Y - RollingMotion.Baseline(Style, rank) + drift.Y) * baseSize,
+            Dx = columnShift + (pose.X + drift.X) * baseSize,
+            Lift = (pose.Y - RollingMotion.Baseline(style, rank) + drift.Y) * baseSize,
             EntranceX = travel.OffsetX,
             EntranceY = travel.OffsetY,
             Turn = travel.Turn,
             EntranceScale = travel.Scale,
+            Tilt = token.Tile && !reduceMotion ? RollingLabel.Tilt : 0,
             Shown = shown,
         };
         return new RollingTokenState(presentation, pose, shown, focus, scale, angle, token.TurnLimit, slot);

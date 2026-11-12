@@ -167,6 +167,62 @@ internal sealed class TextKit : IDisposable
                        new Vector2(softPad + box.X / 2, softPad + box.Y / 2) * softRaster);
     }
 
+    /// <summary>
+    /// Bakes a label's tile into an <see cref="Ink"/>: a rounded rectangle of <paramref name="size"/> layout pixels
+    /// (corners of <paramref name="radius"/>) in <paramref name="colour"/>, and its soft shadow at half resolution.
+    /// </summary>
+    public Ink BakeTile(Vector2 size, float radius, Vector4 colour, float raster, ShadowSpec shadow)
+    {
+        var box = new Vector2(MathF.Max(1, size.X), MathF.Max(1, size.Y));
+        const float pad = 2;
+        raster = Math.Clamp(raster, 0.1f, 4f);
+        var properties = new BitmapProperties1(new PixelFormat(Vortice.DXGI.Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied), 96, 96, BitmapOptions.Target);
+        var width = (int)MathF.Ceiling((box.X + 2 * pad) * raster);
+        var height = (int)MathF.Ceiling((box.Y + 2 * pad) * raster);
+        var tile = _bake.CreateBitmap(new SizeI(Math.Max(1, width), Math.Max(1, height)), IntPtr.Zero, 0, properties);
+        _brush.Color = new Color4(colour.X, colour.Y, colour.Z, colour.W);
+        FillRounded(tile, raster, new Vector2(pad, pad), box, radius);
+
+        ID2D1Bitmap1? soft = null;
+        float softRaster = raster / 2, softPad = 0;
+        if (shadow.Alpha > 0)
+        {
+            var sigma = shadow.Sigma;
+            softPad = MathF.Ceiling(pad + 3 * sigma + MathF.Abs(shadow.OffsetY) + 2);
+            var sw = (int)MathF.Ceiling((box.X + 2 * softPad) * softRaster);
+            var sh = (int)MathF.Ceiling((box.Y + 2 * softPad) * softRaster);
+            using var source = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
+            _brush.Color = new Color4(0, 0, 0, 1);
+            FillRounded(source, softRaster, new Vector2(softPad, softPad + shadow.OffsetY), box, radius);
+            soft = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
+            _shadow.SetInput(0, source, true);
+            _shadow.BlurStandardDeviation = MathF.Max(0.01f, sigma * softRaster);
+            _shadow.Color = new Vector4(0, 0, 0, shadow.Alpha);
+            _bake.Target = soft;
+            _bake.BeginDraw();
+            _bake.Clear(new Color4(0, 0, 0, 0));
+            _bake.Transform = Matrix3x2.Identity;
+            _bake.DrawImage(_shadowOut, InterpolationMode.Linear, CompositeMode.SourceOver);
+            _bake.EndDraw();
+            _bake.Target = null;
+            _shadow.SetInput(0, null!, true);
+        }
+        return new Ink(_draw, tile, raster, new Vector2(pad + box.X / 2, pad + box.Y / 2) * raster, box, soft, softRaster,
+                       new Vector2(softPad + box.X / 2, softPad + box.Y / 2) * softRaster);
+    }
+
+    private void FillRounded(ID2D1Bitmap1 target, float raster, Vector2 origin, Vector2 box, float radius)
+    {
+        _bake.Target = target;
+        _bake.BeginDraw();
+        _bake.Clear(new Color4(0, 0, 0, 0));
+        _bake.Transform = Matrix3x2.CreateScale(raster);
+        _bake.FillRoundedRectangle(new RoundedRectangle(new System.Drawing.RectangleF(origin.X, origin.Y, box.X, box.Y), radius, radius), _brush);
+        _bake.Transform = Matrix3x2.Identity;
+        _bake.EndDraw();
+        _bake.Target = null;
+    }
+
     private void Render(ID2D1Bitmap1 target, Matrix3x2 transform, IDWriteTextLayout layout, Vector2 origin)
     {
         _bake.Target = target;

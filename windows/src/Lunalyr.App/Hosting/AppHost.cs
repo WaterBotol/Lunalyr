@@ -139,6 +139,8 @@ internal sealed class AppHost
         engine.RegisterLayer(new ColourLayerFactory(BackgroundOptions.Default, Log));
         engine.RegisterLayer(new EditorialFactory(readings.WordBreaker, Log));
         engine.RegisterLayer(new SpokenFactory(readings.WordBreaker, Log));
+        engine.RegisterLayer(new CascadeFactory(readings.WordBreaker, Log));
+        engine.RegisterLayer(new CutoutFactory(readings.WordBreaker, Log));
         _settings.Changed += (_, e) => engine.SetPerformance(PerformanceFrom(e.NewValue));
         _log.Info($"Wallpaper layers: {string.Join(", ", engine.LayerIds.Order())}.");
         return new EngineWallpaperRenderer(engine, Log);
