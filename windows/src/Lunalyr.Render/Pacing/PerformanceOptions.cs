@@ -37,8 +37,8 @@ public sealed record PerformanceOptions
 {
     public static PerformanceOptions Default { get; } = new();
 
-    /// <summary>Chosen frame rate. The Mac's default is 30 fps.</summary>
-    public FrameRateCap FrameRate { get; init; } = FrameRateCap.Fps30;
+    /// <summary>Chosen frame rate. 60 fps by default (the owner's choice, 12 Nov 2026; the Mac's was 30).</summary>
+    public FrameRateCap FrameRate { get; init; } = FrameRateCap.Fps60;
 
     /// <summary>"Low power visuals": ease off all the time, whatever the power source (the low-power tier).</summary>
     public bool LowPowerVisuals { get; init; }

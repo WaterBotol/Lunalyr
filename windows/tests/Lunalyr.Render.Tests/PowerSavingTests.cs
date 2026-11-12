@@ -51,7 +51,7 @@ public sealed class PowerSavingTests
     public void DefaultsMatchTheMac()
     {
         var d = PerformanceOptions.Default;
-        Assert.Equal(FrameRateCap.Fps30, d.FrameRate);
+        Assert.Equal(FrameRateCap.Fps60, d.FrameRate); // the owner chose 60 fps for both apps (12 Nov 2026)
         Assert.True(d.FollowEnergySaver);
         Assert.Equal(PowerFallback.LightEffects, d.OnBattery);
         Assert.True(d.PauseWhenCovered);
