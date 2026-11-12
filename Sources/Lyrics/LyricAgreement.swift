@@ -19,15 +19,25 @@ struct LyricAgreement: Equatable {
 }
 
 extension LyricsFetcher {
+    /// Which upstream a candidate's lyrics come from, for agreement: Music's
+    /// own cache and Lyrics+ relaying Apple Music's lyrics are one source
+    /// (the relay is a copy), so neither is the other's peer and the two
+    /// never make up the pair that agrees against LRCLIB.
+    static func agreementFamily(_ candidate: LyricCandidate) -> String {
+        if candidate.source == .appleMusicCache || isAppleRelay(candidate) { return "apple" }
+        return candidate.source.rawValue
+    }
+
     /// Fills in `agreement` on each candidate from the others in `candidates`.
     static func weighAgreement(_ candidates: [LyricCandidate]) -> [LyricCandidate] {
         let texts = candidates.map(agreementText)
         let timings = candidates.map(agreementTiming)
+        let families = candidates.map(agreementFamily)
         var result = candidates
         for i in candidates.indices {
             var agreement = LyricAgreement()
             var sameWordsTimed: [Int] = []
-            for j in candidates.indices where j != i && candidates[j].source != candidates[i].source {
+            for j in candidates.indices where j != i && families[j] != families[i] {
                 guard sameWords(texts[i], texts[j]) else { continue }
                 agreement.peers += 1
                 if !timings[i].isEmpty, !timings[j].isEmpty { sameWordsTimed.append(j) }
@@ -36,7 +46,7 @@ extension LyricsFetcher {
             if sameWordsTimed.count >= 2,
                !sameWordsTimed.contains(where: { timingAgrees(timings[i], timings[$0]) }) {
                 agreement.timingOutlier = sameWordsTimed.enumerated().contains { index, a in
-                    sameWordsTimed.dropFirst(index + 1).contains { timingAgrees(timings[a], timings[$0]) }
+                    sameWordsTimed.dropFirst(index + 1).contains { families[a] != families[$0] && timingAgrees(timings[a], timings[$0]) }
                 }
             }
             result[i].agreement = agreement

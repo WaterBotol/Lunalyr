@@ -52,6 +52,25 @@ final class LyricLateAgreementTests: XCTestCase {
         }
     }
 
+    /// Music's own cache and Lyrics+ relaying Apple Music's lyrics are one
+    /// source for agreement: the relay is a copy, so the two never make up
+    /// the pair that takes LRCLIB's lead, and neither is the other's peer.
+    func testAppleAndItsLyricsPlusRelayCountAsOneSource() {
+        var relay = candidate(.lyricsPlus)
+        if case .synced(let lines, _) = relay.result {
+            relay.result = .synced(lines, .init(precision: "fixture", source: "Apple via Lyrics+"))
+        }
+        XCTAssertTrue(LyricsFetcher.isAppleRelay(relay))
+        let weighed = LyricsFetcher.weighAgreement([candidate(.lrclib, shift: 3), candidate(.appleMusicCache), relay])
+        XCTAssertFalse(weighed[0].agreement.timingOutlier, "Apple and its relay are not two agreeing sources")
+        XCTAssertEqual(weighed[1].agreement.peers, 1, "the relay is not Apple's peer; only LRCLIB is")
+        XCTAssertEqual(weighed[2].agreement.peers, 1)
+        // A third, separate source agreeing with Apple makes the pair.
+        let withNetEase = LyricsFetcher.weighAgreement([candidate(.lrclib, shift: 3), candidate(.appleMusicCache), relay,
+                                                        candidate(.netEase)])
+        XCTAssertTrue(withNetEase[0].agreement.timingOutlier)
+    }
+
     // MARK: - Publication
 
     func testTheMatchOnScreenIsWeighedAgainstLaterAnswers() {
