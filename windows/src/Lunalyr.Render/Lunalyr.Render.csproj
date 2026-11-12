@@ -19,7 +19,11 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Lunalyr.Render.Compositions.Tests" />
+    <InternalsVisibleTo Include="Lunalyr.Render.Tests" />
   </ItemGroup>
   <!-- The GPU effects' and line patterns' HLSL, compiled with fxc at build time and embedded (see the file). -->
   <Import Project="Backgrounds\Gpu\Shaders.targets" />
+
+  <!-- The visualiser scenes' shaders: compiled with fxc at build time and embedded. -->
+  <Import Project="Visualisers\Shaders\Shaders.targets" />
 </Project>

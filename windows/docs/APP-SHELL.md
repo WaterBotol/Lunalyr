@@ -381,6 +381,11 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `useMotionArtwork` | `true` | Covers › Use animated covers (kept; not drawn on Windows yet) | `useMotionArtwork` |
 | `motionPlacement` | `"fill"` | Covers › Placement (kept; waits with animated covers) | `motionPlacement` |
 | `motionBlur` | `5` | 0–25, Covers › Softening (kept; Reset Adjustments puts it back) | `motionBlur` |
+| `visualizerStyle` | `"silk"` | Wallpaper › Visualiser › Scene: `silk`, `aurora`, `tunnel`, `curtainAurora`, `fosforaAurora`, `wavefield`, `wavefieldSphere`, `starTrails`, `colourStrata`, `overprint`; the Mac's web scenes read as their native stand-ins (`wavefieldOriginal` → `wavefield`, `wavecore` → `fosforaAurora`, `light3D` → `starTrails`), anything else as `silk` | `custom.visualizerStyle` |
+| `audioReactiveEnabled` | `false` | Wallpaper › Music response › System audio: WASAPI loopback of the default output, analysed in memory only (`--demo` uses a built-in signal and never captures) | `custom.audioReactiveEnabled` |
+| `audioSensitivity` | `1` | 0.3–3, Music response › Sensitivity | `custom.audioSensitivity` |
+| `visualizerPunch` | `1` | 0–2, Visualiser › Beat punch (off while Animation effects are off) | `custom.visualizerPunch` |
+| `starTrailsColours` | `"album"` | `album` or `original`, Visualiser › Colours (Star Trails) | `custom.starTrailsColours` |
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
 | `animationRate` | `60` | `15`, `30`, `60`, `0` = follow the display | `custom.animationRate` (Mac default 30) |
 | `pauseWhenCovered` | `true` | | `custom.pauseWhenCovered` |
