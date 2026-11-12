@@ -7,7 +7,7 @@
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
-    <Grid>
+    <Grid x:Name="Root">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
@@ -19,31 +19,30 @@
             </StackPanel>
         </Grid>
         <NavigationView Grid.Row="1" x:Name="Nav" IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
-                        PaneDisplayMode="Left" OpenPaneLength="220" SelectionChanged="Nav_SelectionChanged">
+                        PaneDisplayMode="Left" OpenPaneLength="240" SelectionChanged="Nav_SelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="General" Tag="General" Icon="Home" />
-                <NavigationViewItem Content="Lyric style" Tag="Lyric style"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D2;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Readings" Tag="Readings"><NavigationViewItem.Icon><FontIcon Glyph="&#xF2B7;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Timing" Tag="Timing"><NavigationViewItem.Icon><FontIcon Glyph="&#xE916;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Wallpaper" Tag="Wallpaper"><NavigationViewItem.Icon><FontIcon Glyph="&#xE771;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Covers" Tag="Covers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE93C;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Music players" Tag="Music players"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D6;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="Performance" Tag="Performance"><NavigationViewItem.Icon><FontIcon Glyph="&#xEC4A;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItemHeader Content="Look" />
+                <NavigationViewItem Content="Lyric style" Tag="Lyric style" AutomationProperties.AutomationId="LyricStyle"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D2;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Wallpaper" Tag="Wallpaper" AutomationProperties.AutomationId="Wallpaper"><NavigationViewItem.Icon><FontIcon Glyph="&#xE771;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Covers" Tag="Covers" AutomationProperties.AutomationId="Covers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE93C;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItemHeader Content="Words" />
+                <NavigationViewItem Content="Timing" Tag="Timing" AutomationProperties.AutomationId="Timing"><NavigationViewItem.Icon><FontIcon Glyph="&#xE916;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Readings" Tag="Readings" AutomationProperties.AutomationId="Readings"><NavigationViewItem.Icon><FontIcon Glyph="&#xF2B7;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItemHeader Content="App" />
+                <NavigationViewItem Content="Music players" Tag="Music players" AutomationProperties.AutomationId="MusicPlayers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D6;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="General" Tag="General" AutomationProperties.AutomationId="General"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="Performance" Tag="Performance" AutomationProperties.AutomationId="Performance"><NavigationViewItem.Icon><FontIcon Glyph="&#xEC4A;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="AboutItem" Content="About" Tag="About"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem x:Name="AboutItem" Content="About" Tag="About" AutomationProperties.AutomationId="About"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.FooterMenuItems>
-            <ScrollViewer Padding="32,8,32,32">
-                <StackPanel Spacing="4" MaxWidth="900" HorizontalAlignment="Stretch">
-                    <TextBlock x:Name="PageTitle" Text="About" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,16" />
+            <ScrollViewer x:Name="Scroller" Padding="36,8,36,36">
+                <StackPanel Spacing="4" MaxWidth="1000" HorizontalAlignment="Stretch">
+                    <TextBlock x:Name="PageTitle" Text="About" Style="{StaticResource TitleTextBlockStyle}" Margin="0,4,0,20"
+                               AutomationProperties.HeadingLevel="Level1" />
 
-                    <!-- Every page but About: a placeholder until milestone 5. -->
-                    <StackPanel x:Name="PlaceholderPanel" Spacing="4" Visibility="Collapsed">
-                        <InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Title="Coming soon"
-                                 x:Name="PlaceholderInfo" Message="These settings arrive in a later build." />
-                        <TextBlock x:Name="PlaceholderDetail" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,8,0,0" />
-                    </StackPanel>
+                    <!-- Every page but About, built in code (Settings\*.cs). -->
+                    <ContentControl x:Name="PageHost" HorizontalContentAlignment="Stretch" IsTabStop="False" />
 
                     <!-- About -->
                     <StackPanel x:Name="AboutPanel" Spacing="4">
@@ -53,13 +52,21 @@
                                 <FontIcon Glyph="&#xE708;" FontSize="28" VerticalAlignment="Center" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Lunalyr for Windows" Style="{StaticResource SubtitleTextBlockStyle}" />
+                                    <TextBlock Text="Desktop lyrics, in motion." Style="{StaticResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     <TextBlock x:Name="VersionText" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsTextSelectionEnabled="True" />
                                 </StackPanel>
                             </Grid>
                         </Border>
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Licence" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Privacy" Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
+                                <TextBlock Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap"
+                                           Text="Readings are worked out on this PC. The lyric services you switch on receive the song’s title, artist and length. Lunalyr only reads what your players share with Windows and never asks for a music account." />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Licence" Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.HeadingLevel="Level2" />
                                 <TextBlock Text="© Lunalyr. All rights reserved." Style="{StaticResource BodyTextBlockStyle}" />
                                 <Expander Header="Third-party notices" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,8,0,0">
                                     <TextBlock x:Name="NoticesText" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
@@ -67,7 +74,7 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="Diagnostics" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,4" />
+                        <TextBlock Text="Diagnostics" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,4" AutomationProperties.HeadingLevel="Level2" />
                         <Border Style="{StaticResource Card}">
                             <Grid ColumnSpacing="16" RowSpacing="8">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>

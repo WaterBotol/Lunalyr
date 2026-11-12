@@ -73,17 +73,49 @@ public sealed class OffscreenSurface : IDisposable
         Context.EndDraw().CheckError();
     }
 
+    /// <summary>
+    /// Draws one frame of <paramref name="layers"/>, bottom first, at song time <paramref name="songSeconds"/> (NaN when
+    /// nothing plays), as the wallpaper would: the settings window's live preview.
+    /// </summary>
+    public void Draw(IReadOnlyList<IRenderLayer> layers, SceneSnapshot scene, double songSeconds, bool playing, double wallSeconds,
+                     double deltaSeconds, double songJoined = 0)
+    {
+        ArgumentNullException.ThrowIfNull(layers);
+        Context.BeginDraw();
+        Context.Transform = Matrix3x2.Identity;
+        Context.Clear(new Color4(0, 0, 0, 1));
+        var frame = new FrameContext
+        {
+            Dc = Context, DWrite = DWrite, D2DFactory = Factory, Size = Size, Scale = Scale, WallSeconds = wallSeconds,
+            SongSeconds = songSeconds, IsPlaying = playing, Scene = scene, DeltaSeconds = deltaSeconds, SongJoined = songJoined,
+        };
+        foreach (var layer in layers)
+        {
+            Context.Transform = Matrix3x2.Identity;
+            layer.Render(frame);
+        }
+        Context.EndDraw().CheckError();
+    }
+
     /// <summary>The surface's pixels: premultiplied BGRA, top row first, <see cref="Width"/> × 4 bytes a row.</summary>
     public byte[] ReadPixels()
     {
+        var pixels = new byte[Width * Height * 4];
+        ReadPixels(pixels);
+        return pixels;
+    }
+
+    /// <summary>Reads the surface's pixels into <paramref name="pixels"/> (at least <see cref="Width"/> × <see cref="Height"/> × 4 bytes).</summary>
+    public void ReadPixels(byte[] pixels)
+    {
+        ArgumentNullException.ThrowIfNull(pixels);
+        if (pixels.Length < Width * Height * 4) throw new ArgumentException("The buffer is too small for the surface.", nameof(pixels));
         _readback.CopyFromBitmap(_target);
         var map = _readback.Map(MapOptions.Read);
         try
         {
-            var pixels = new byte[Width * Height * 4];
             for (var y = 0; y < Height; y++)
                 System.Runtime.InteropServices.Marshal.Copy(map.Bits + (int)(y * map.Pitch), pixels, y * Width * 4, Width * 4);
-            return pixels;
         }
         finally
         {

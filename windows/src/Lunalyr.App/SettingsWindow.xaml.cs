@@ -1,47 +1,83 @@
 using Lunalyr.App.Hosting;
+using Lunalyr.App.Settings;
 using Lunalyr.Core.NowPlaying;
+using Lunalyr.Shell.Settings;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Lunalyr.App;
 
 /// <summary>
-/// The settings window: the Fluent shell (Mica, NavigationView with the Mac's pages) and, for now, only the About page
-/// with a live diagnostics panel. The real settings pages are milestone 5. Values are set from code-behind on the UI
-/// thread (no runtime data binding, which Native AOT would trim).
+/// The settings window: Mica, a NavigationView with the Mac's pages (grouped Look, Words and App as the Mac's sidebar
+/// is), each built in code on first visit from <see cref="SettingsKit"/> rows that write to the settings store, which the
+/// running wallpaper follows at once. Values are set from code (no runtime data binding, which Native AOT would trim).
 /// </summary>
 public sealed partial class SettingsWindow : Window
 {
-    private static readonly Dictionary<string, string> PagePlans = new()
-    {
-        ["General"] = "Launch at login, the menu-bar style lyric, global shortcuts and what to show when a song has no lyrics.",
-        ["Lyric style"] = "Layout (Editorial by default), how words appear, lyric size and font, colours and the next-word preview.",
-        ["Readings"] = "Romanised readings under the lyrics or instead of them, the reading language, tone marks and translations.",
-        ["Timing"] = "The global lyric offset, per-song offsets, tap-to-sync and treating long pauses as instrumental.",
-        ["Wallpaper"] = "The background (album colours first), which displays show it, and the image or video options.",
-        ["Covers"] = "Motion artwork and how covers are placed on the screen.",
-        ["Music players"] = "Which players Lunalyr follows and what each one can share.",
-        ["Performance"] = "The frame-rate cap and when to pause: covered desktop, battery saver, full-screen apps.",
-    };
-
     private readonly AppHost _host;
+    private readonly SettingsContext _ctx;
+    private readonly Dictionary<string, UIElement> _pages = [];
+    private SettingsPreview? _preview;
 
-    internal SettingsWindow(AppHost host)
+    internal SettingsWindow(AppHost host, string? page = null)
     {
         _host = host;
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 760));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(1400, 1040));
 
+        _ctx = new SettingsContext(host.Settings, DispatcherQueue);
+        _ctx.OnRefresh(_ => ApplyTheme());
         VersionText.Text = $"Version {host.Version}";
         NoticesText.Text = ReadNotices();
         DataText.Text = host.DataRoot;
-        Nav.SelectedItem = AboutItem;
+        Closed += (_, _) =>
+        {
+            _preview?.Dispose();
+            _ctx.Detach();
+        };
+        ShowPage(page ?? "Lyric style");
         RefreshStatus();
     }
 
-    /// <summary>Shows the controller's latest status in the diagnostics panel.</summary>
+    /// <summary>Shows a page by its title or a short name ("lyric-style", "players"…).</summary>
+    internal void ShowPage(string page)
+    {
+        var wanted = Normalise(page);
+        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems).OfType<NavigationViewItem>())
+        {
+            if (item.Tag is string tag && (Normalise(tag) == wanted || Normalise(tag).StartsWith(wanted, StringComparison.Ordinal)))
+            {
+                Nav.SelectedItem = item;
+                return;
+            }
+        }
+
+        static string Normalise(string text) => new([.. text.ToLowerInvariant().Where(char.IsLetter)]);
+    }
+
+    /// <summary>Lunalyr's own look: the run's <c>--theme</c>, else the App theme setting, else Windows'. Windows' setting is never changed.</summary>
+    internal void ApplyTheme()
+    {
+        var theme = _host.ThemeOverride ?? _ctx.Current.AppTheme;
+        Root.RequestedTheme = theme switch
+        {
+            "light" => ElementTheme.Light,
+            "dark" => ElementTheme.Dark,
+            _ => ElementTheme.Default,
+        };
+        // The caption buttons follow the same look.
+        AppWindow.TitleBar.PreferredTheme = theme switch
+        {
+            "light" => TitleBarTheme.Light,
+            "dark" => TitleBarTheme.Dark,
+            _ => TitleBarTheme.UseDefaultAppMode,
+        };
+    }
+
+    /// <summary>Shows the controller's latest status in the pages that show it.</summary>
     internal void RefreshStatus()
     {
         var status = _host.Controller?.Status;
@@ -61,12 +97,11 @@ public sealed partial class SettingsWindow : Window
             LookupsText.Text = $"{status.Lookups} this session";
         }
 
-        WallpaperText.Text = _host.Settings.Current.WallpaperPaused
-            ? "Paused from the tray (placeholder renderer)"
-            : "Running (placeholder renderer until the real one is wired in)";
+        WallpaperText.Text = _host.Settings.Current.WallpaperPaused ? "Paused from the tray" : "Running";
         CommandsText.Text = _host.Guard.Reason is { } reason
             ? $"Off for this run ({reason}); {_host.Guard.RefusedCount} refused"
             : "Allowed only for your own clicks on Lunalyr's player controls";
+        _ctx.QueueRefresh();
     }
 
     private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -76,16 +111,73 @@ public sealed partial class SettingsWindow : Window
         PageTitle.Text = page;
         var about = page == "About";
         AboutPanel.Visibility = about ? Visibility.Visible : Visibility.Collapsed;
-        PlaceholderPanel.Visibility = about ? Visibility.Collapsed : Visibility.Visible;
-        if (!about)
+        PageHost.Visibility = about ? Visibility.Collapsed : Visibility.Visible;
+        PageHost.Content = about ? null : PageFor(page);
+        _preview?.SetActive(page == "Lyric style");
+        Scroller.ChangeView(null, 0, null, disableAnimation: true);
+        if (about) RefreshStatus();
+        _host.Log.App.Debug($"Settings page: {page}.");
+    }
+
+    private UIElement PageFor(string page)
+    {
+        if (_pages.TryGetValue(page, out var built)) return built;
+        try
         {
-            PlaceholderInfo.Message = $"The {page} settings arrive in a later build.";
-            PlaceholderDetail.Text = PagePlans.TryGetValue(page, out var plan) ? plan : "";
+            built = BuildPage(page);
         }
-        else
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            RefreshStatus();
+            // A page that can't be built says so calmly; the rest of the window keeps working.
+            _host.ReportCrash(ex, $"settings page {page}", fatal: false);
+            return new InfoBar
+            {
+                IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Error, Title = "This page couldn’t be shown",
+                Message = "The details are in Lunalyr’s log. The other pages still work.",
+            };
         }
+        _pages[page] = built;
+        return built;
+    }
+
+    private UIElement BuildPage(string page) =>
+        page switch
+        {
+            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride),
+            "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview()),
+            "Readings" => ReadingsPage.Build(_ctx),
+            "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync),
+            "Wallpaper" => WallpaperPage.Build(_ctx),
+            "Covers" => CoversPage.Build(),
+            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller),
+            "Performance" => PerformancePage.Build(_ctx),
+            _ => new TextBlock { Text = page },
+        };
+
+    private UIElement? Preview()
+    {
+        if (_preview is null)
+        {
+            _preview = SettingsPreview.TryCreate(_host, DispatcherQueue, WindowVisible);
+            AppWindow.Changed += (_, e) =>
+            {
+                if (e.DidPresenterChange || e.DidVisibilityChange || e.DidSizeChange) _preview?.UpdateVisibility();
+            };
+        }
+        return _preview?.View;
+    }
+
+    /// <summary>Shown and not minimised (the preview draws only then).</summary>
+    private bool WindowVisible() =>
+        AppWindow.IsVisible && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
+    private async Task<string?> ChooseFolderAsync()
+    {
+        var picker = new Windows.Storage.Pickers.FolderPicker();
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var folder = await picker.PickSingleFolderAsync();
+        return folder?.Path;
     }
 
     private static string Describe(PlaybackStatus status) => status switch

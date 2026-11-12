@@ -20,19 +20,26 @@ public partial class App : Application
         UnhandledException += (_, e) => _host.ReportCrash(e.Exception, "Microsoft.UI.Xaml.Application.UnhandledException", fatal: true);
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args) => ShowSettings();
+    protected override void OnLaunched(LaunchActivatedEventArgs args) => ShowSettings(_host.TakeRequestedPage());
 
-    /// <summary>Opens the settings window, or brings it to the front.</summary>
-    internal void ShowSettings()
+    /// <summary>Opens the settings window (at <paramref name="page"/> when given), or brings it to the front.</summary>
+    internal void ShowSettings(string? page = null)
     {
         if (_window is null)
         {
-            _window = new SettingsWindow(_host);
+            _window = new SettingsWindow(_host, page);
             _window.Closed += (_, _) => _window = null;
+        }
+        else if (page is not null)
+        {
+            _window.ShowPage(page);
         }
 
         _window.Activate();
     }
+
+    /// <summary>The run's look changed (<c>--theme</c> from a second launch).</summary>
+    internal void ApplyTheme() => _window?.ApplyTheme();
 
     /// <summary>The controller's status changed: refresh what the window shows.</summary>
     internal void RefreshStatus() => _window?.RefreshStatus();
