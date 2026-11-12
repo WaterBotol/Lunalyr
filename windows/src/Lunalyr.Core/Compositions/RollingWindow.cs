@@ -46,6 +46,20 @@ public sealed class RollingSong
     /// <param name="replace">Readings replace the words they read, where they can be split by word.</param>
     public RollingSong(IReadOnlyList<LyricLine> lines, IWordBreaker breaker, IReadOnlyDictionary<int, string>? readings = null,
                        bool replace = false)
+        : this(lines, breaker, null, replace ? RomanizationDisplay.Replace : RomanizationDisplay.Below, readings)
+    {
+    }
+
+    /// <summary>
+    /// A song with its readings as <see cref="LyricRomanizer.Readings"/> works them out, one reading per word (the
+    /// Mac's <c>romanized</c>): with "Below lyrics" each rolling word carries the reading of its run, and a reading
+    /// that cannot be split by word hangs under the line's first word; with "Replace lyrics" the readings roll in the
+    /// words' place. A line with no entry in <paramref name="wordReadings"/> falls back to its reading in
+    /// <paramref name="lineReadings"/>, given as one string.
+    /// </summary>
+    public RollingSong(IReadOnlyList<LyricLine> lines, IWordBreaker breaker,
+                       IReadOnlyDictionary<int, IReadOnlyList<LyricWord>>? wordReadings, RomanizationDisplay display,
+                       IReadOnlyDictionary<int, string>? lineReadings = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(breaker);
@@ -59,8 +73,15 @@ public sealed class RollingSong
         for (var row = 0; row < lines.Count; row++)
         {
             var line = lines[row];
-            var glue = LyricRuns.RollingGlue(line, line.Words, breaker);
-            var merged = LyricRunParts.Merged(line.Words, glue);
+            IReadOnlyList<LyricWord>? read = null;
+            var byWord = display != RomanizationDisplay.Off && wordReadings is not null
+                && wordReadings.TryGetValue(row, out read) && read is { Count: > 0 };
+            // The Mac's rollingWindow: the words shown (the readings, when they replace them), parted as a rolling
+            // stage parts them, and with "Below lyrics" each run's reading.
+            var source = byWord && display == RomanizationDisplay.Replace ? read! : line.Words;
+            var glue = LyricRuns.RollingGlue(line, source, breaker);
+            var pairs = byWord && display == RomanizationDisplay.Below ? LyricReadingPairs.Rolling(read, line, glue) : null;
+            var merged = LyricRunParts.Merged(source, glue, pairs);
             // Bracketed backing vocals are lifted out of the rolling words and drawn apart.
             _backing[row] = [];
             if (line.WordTimed)
@@ -69,9 +90,12 @@ public sealed class RollingSong
                 _backing[row] = split.Backing;
                 if (split.Backing.Count > 0) merged = merged with { Words = split.Main };
             }
-            string? reading = null;
-            readings?.TryGetValue(row, out reading);
-            merged = WithReading(merged, reading, replace);
+            if (!byWord && display != RomanizationDisplay.Off)
+            {
+                string? reading = null;
+                lineReadings?.TryGetValue(row, out reading);
+                merged = WithReading(merged, reading, display == RomanizationDisplay.Replace);
+            }
             _runs[row] = merged;
             var shown = new bool[merged.Words.Count];
             for (var i = 0; i < shown.Length; i++) shown[i] = LyricRuns.IsVisible(merged.Words[i].Text);

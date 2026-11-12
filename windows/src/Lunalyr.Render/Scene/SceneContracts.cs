@@ -45,8 +45,21 @@ public sealed record SceneSnapshot
     /// <summary>The chosen lyrics, or null while looking up / when none were found.</summary>
     public LyricResult? Lyrics { get; init; }
 
-    /// <summary>Readings per line index (romanisation), when shown; empty when off.</summary>
+    /// <summary>
+    /// Readings per line index (romanisation), one string per line, when shown; empty when off. Kept for layers that
+    /// draw a reading per line; <see cref="WordReadings"/> has the same readings word by word.
+    /// </summary>
     public IReadOnlyDictionary<int, string> Readings { get; init; } = new Dictionary<int, string>();
+
+    /// <summary>
+    /// Readings per line index as <c>LyricRomanizer.Readings</c> works them out (the Mac's <c>romanized</c>), made for
+    /// <see cref="LyricStyle.Readings"/>: with <see cref="ReadingPlacement.Below"/> one reading per word of
+    /// <c>line.Words</c> (or a single word spanning the line, for a reading that cannot be split by word); with
+    /// <see cref="ReadingPlacement.Instead"/> the words to show in the line's place. Empty when off or not worked out
+    /// yet; a line missing here falls back to <see cref="Readings"/>. <c>Lunalyr.Core.Compositions.LineReadings</c>
+    /// and <c>RollingSong</c> turn an entry into what a stage draws.
+    /// </summary>
+    public IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> WordReadings { get; init; } = new Dictionary<int, IReadOnlyList<LyricWord>>();
 
     public Palette Palette { get; init; } = Palette.Default;
 

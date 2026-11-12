@@ -126,6 +126,10 @@ public sealed partial class AppController : IAsyncDisposable
     private bool _disposed;
     private readonly List<Task> _work = [];
 
+    private static readonly IReadOnlyDictionary<int, string> NoReadings = new Dictionary<int, string>();
+    private static readonly IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> NoWordReadings = new Dictionary<int, IReadOnlyList<LyricWord>>();
+    private long _readingsRequest;
+
     // Read every frame without the lock.
     private string? _recordingKey;
     private double _globalOffset;
@@ -257,6 +261,13 @@ public sealed partial class AppController : IAsyncDisposable
             else if (old.Readings() != settings.Readings() && _shown is not null)
             {
                 rereadings = _shown;
+                // The readings shown were made for the old settings ("Replace lyrics" gives them another shape): they
+                // go with the new style, and the new ones follow when worked out.
+                if (_scene.Readings.Count > 0 || _scene.WordReadings.Count > 0)
+                {
+                    _scene = _scene with { Readings = NoReadings, WordReadings = NoWordReadings };
+                    scene = _scene;
+                }
             }
 
             if (old.WallpaperPaused != settings.WallpaperPaused) _status = _status with { WallpaperPaused = settings.WallpaperPaused };
@@ -607,7 +618,7 @@ public sealed partial class AppController : IAsyncDisposable
             if (generation != _generation) return;
             _shown = presented;
             _offsets.ActiveSource = result.Provenance.Source;
-            _scene = _scene with { Lyrics = presented, Readings = new Dictionary<int, string>(), Status = null };
+            _scene = _scene with { Lyrics = presented, Readings = NoReadings, WordReadings = NoWordReadings, Status = null };
             _status = _status with { LyricSource = presented.Provenance.Label, Status = complete ? StatusText.Showing : StatusText.LookingUp };
             readings = _settings.Readings();
         }
@@ -632,14 +643,18 @@ public sealed partial class AppController : IAsyncDisposable
     // worked out off the lookup's flow and added to the scene when ready.
     private void StartReadings(long generation, LyricResult shown, RomanizationOptions options)
     {
+        // Only the latest request's readings are shown: readings worked out for other settings (a different display
+        // gives them a different shape) are dropped when they arrive.
+        long request;
+        lock (_gate) request = ++_readingsRequest;
         if (shown is not LyricResult.Synced || options.Display == RomanizationDisplay.Off)
         {
             var cleared = false;
             lock (_gate)
             {
-                if (generation == _generation && ReferenceEquals(_shown, shown) && _scene.Readings.Count > 0)
+                if (generation == _generation && ReferenceEquals(_shown, shown) && (_scene.Readings.Count > 0 || _scene.WordReadings.Count > 0))
                 {
-                    _scene = _scene with { Readings = new Dictionary<int, string>() };
+                    _scene = _scene with { Readings = NoReadings, WordReadings = NoWordReadings };
                     cleared = true;
                 }
             }
@@ -652,11 +667,11 @@ public sealed partial class AppController : IAsyncDisposable
         {
             try
             {
-                var readings = LyricPresentation.Readings(shown, _romanizer, options);
+                var (readings, words) = LyricPresentation.SceneReadings(shown, _romanizer, options);
                 lock (_gate)
                 {
-                    if (generation != _generation || !ReferenceEquals(_shown, shown)) return;
-                    _scene = _scene with { Readings = readings };
+                    if (generation != _generation || !ReferenceEquals(_shown, shown) || request != _readingsRequest) return;
+                    _scene = _scene with { Readings = readings, WordReadings = words };
                 }
 
                 PublishScene();
@@ -674,7 +689,7 @@ public sealed partial class AppController : IAsyncDisposable
         lock (_gate)
         {
             if (generation != _generation) return;
-            _scene = _scene with { Lyrics = null, Readings = new Dictionary<int, string>(), Status = status };
+            _scene = _scene with { Lyrics = null, Readings = NoReadings, WordReadings = NoWordReadings, Status = status };
             _status = _status with { Status = status, LyricSource = null };
         }
 

@@ -71,8 +71,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
 
     protected override void OnLyrics(IReadOnlyList<LyricLine> lines, SceneSnapshot scene)
     {
-        var readings = scene.Style.Readings == ReadingPlacement.Off ? null : scene.Readings;
-        _song = new RollingSong(lines, Breaker, readings, scene.Style.Readings == ReadingPlacement.Instead);
+        // Word-by-word readings where the scene has them, each line's reading string otherwise.
+        _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings);
         _trackSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x7FFF_FFFF);
     }
 

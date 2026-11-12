@@ -398,6 +398,33 @@ public sealed class AppControllerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ReadingsAreAddedWordByWordForTheDisplayChosen()
+    {
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "안녕하세요 친구", "Hello")));
+        _source.Add(Playing("Song"));
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+
+        var scene = _renderer.Last!;
+        var lines = ((LyricResult.Synced)scene.Lyrics!).Lines;
+        var words = scene.WordReadings[0];
+        Assert.Equal(lines[0].Words.Count, words.Count);
+        Assert.Contains("annyeong", words[0].Text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(scene.WordReadings.ContainsKey(1)); // already Latin
+
+        // "Replace lyrics": the old readings go with the old style at once; the words to show follow.
+        controller.ApplySettings(controller.Settings with { RomanizationDisplay = "replace" });
+        Assert.Equal(Render.Scene.ReadingPlacement.Instead, _renderer.Last!.Style.Readings);
+        await controller.WhenIdleAsync();
+        Assert.Contains("annyeong", _renderer.Last!.WordReadings[0][0].Text, StringComparison.OrdinalIgnoreCase);
+
+        controller.ApplySettings(controller.Settings with { RomanizationDisplay = "off" });
+        await controller.WhenIdleAsync();
+        Assert.Empty(_renderer.Last!.WordReadings);
+    }
+
+    [Fact]
     public async Task ChangingTheLyricSourcesLooksTheSongUpAgain()
     {
         _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));

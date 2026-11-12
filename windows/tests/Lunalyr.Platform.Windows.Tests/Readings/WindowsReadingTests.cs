@@ -280,6 +280,29 @@ public class WindowsLyricRunReadingTests
         Assert.Contains(" ", RunReadings(lines[3])[0], StringComparison.Ordinal);
     }
 
+    // Ported from LyricRunReadingTests.swift: testEveryLayoutDrawsTheRunsReadingSpacedByPhrase (Editorial's runs and
+    // Spoken's rolling stage: the layouts Windows has)
+    [Fact]
+    public void EveryLayoutDrawsTheRunsReadingSpacedByPhrase()
+    {
+        var today = CharacterTimed("今日も");
+        var below = _t.Readings(today);
+        Assert.NotNull(below);
+        var set = Core.Compositions.LineReadings.For(today, below, RomanizationDisplay.Below);
+        // Editorial: one run, one reading.
+        var layout = Core.Compositions.EditorialSetting.Layout(today.Words, set.Glue, 60, 11, 0, wordTimed: true,
+                                                               editorial: true, set.RunReadings(today.Words, set.Glue));
+        Assert.Single(layout.Runs);
+        Assert.Equal("kyou mo", layout.Runs[0].Reading);
+        // Spoken: the run rolls as one word with it.
+        var song = new Core.Compositions.RollingSong([today], _t.Services.WordBreaker,
+            new Dictionary<int, IReadOnlyList<LyricWord>> { [0] = below! }, RomanizationDisplay.Below);
+        var window = song.Window(0, 10.5, 1.2);
+        var word = Assert.Single(window.Words);
+        Assert.Equal("今日も", word.Text);
+        Assert.Equal("kyou mo", window.Readings[word]);
+    }
+
     // Ported from LyricRunReadingTests.swift: testALineTimedJapaneseRunKeepsTheReadingsWordsApart
     [Fact]
     public void ALineTimedJapaneseRunKeepsTheReadingsWordsApart()

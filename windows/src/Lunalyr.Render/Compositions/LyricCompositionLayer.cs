@@ -177,7 +177,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     {
         var old = SceneShown;
         if (old is not null && ReferenceEquals(old.Lyrics, scene.Lyrics) && SameReadings(old.Readings, scene.Readings)
-            && old.Style == scene.Style && LyricInks.SameInk(old.Palette, scene.Palette))
+            && SameWordReadings(old.WordReadings, scene.WordReadings) && old.Style == scene.Style && LyricInks.SameInk(old.Palette, scene.Palette))
         {
             SceneShown = scene;
             return;
@@ -208,6 +208,33 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         foreach (var (row, reading) in a)
             if (!b.TryGetValue(row, out var other) || other != reading) return false;
         return true;
+    }
+
+    // A new readings table comes in a new snapshot; one carried over by `with` is the same object.
+    private static bool SameWordReadings(IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> a,
+                                         IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> b) =>
+        ReferenceEquals(a, b) || (a.Count == 0 && b.Count == 0);
+
+    /// <summary>The scene's reading placement as the romanizer names it.</summary>
+    protected RomanizationDisplay ReadingDisplay => SceneShown?.Style.Readings switch
+    {
+        ReadingPlacement.Below => RomanizationDisplay.Below,
+        ReadingPlacement.Instead => RomanizationDisplay.Replace,
+        _ => RomanizationDisplay.Off,
+    };
+
+    /// <summary>
+    /// How line <paramref name="row"/> is set with its word-by-word readings (<see cref="SceneSnapshot.WordReadings"/>):
+    /// the words shown (the readings, with "Instead"), their glue, each run's reading and a reading of the whole line.
+    /// Null when the scene has none for the line (then <see cref="ReadingOf"/>'s per-line string is used).
+    /// </summary>
+    protected LineReadingSet? WordReadingsOf(int row)
+    {
+        if (SceneShown is not { } scene || Sheet is not { } sheet || row < 0 || row >= sheet.Count) return null;
+        var display = ReadingDisplay;
+        if (display == RomanizationDisplay.Off || !scene.WordReadings.TryGetValue(row, out var readings) || readings.Count == 0)
+            return null;
+        return LineReadings.For(sheet.Lines[row], readings, display, sheet.Glue[row]);
     }
 
     /// <summary>New synced lyrics (or readings, size, style): a composition prepares what it sets per song.</summary>
@@ -379,8 +406,10 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     {
         if (_plans.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
         var line = Sheet!.Lines[row];
-        var glue = Sheet.Glue[row];
-        IReadOnlyList<LyricWord> words = line.Words;
+        // With word-by-word readings "Instead", the readings are set in the words' place.
+        var set = WordReadingsOf(row);
+        var glue = set?.Glue ?? Sheet.Glue[row];
+        IReadOnlyList<LyricWord> words = set?.Words ?? line.Words;
         IReadOnlyList<bool> mainGlue = glue;
         var groups = Array.Empty<BackingGroup>() as IReadOnlyList<BackingGroup>;
         if (line.WordTimed)
@@ -393,7 +422,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
                 groups = split.Backing;
             }
         }
-        var (runReadings, lineReading) = Readings(row, words, mainGlue);
+        var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, mainGlue), set.LineReading) : Readings(row, words, mainGlue);
         var plan = BuildPlan(words, mainGlue, BaseSize, row, line.Start, wordTimed: true, editorial: true, runReadings,
                              lineReading, FitFor(row), Stage.Width, groups, row);
         plan.LastUsed = Frame;
@@ -592,10 +621,12 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     {
         if (_phrases.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
         var line = Sheet!.Lines[row];
-        var glue = Sheet.Glue[row];
-        var (runReadings, lineReading) = Readings(row, line.Words, glue);
+        var set = WordReadingsOf(row);
+        var glue = set?.Glue ?? Sheet.Glue[row];
+        var words = set?.Words ?? line.Words;
+        var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
         var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
-        var plan = BuildPlan(line.Words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
+        var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
                              new LineFit(Stage, Metrics.UserScale, 0.75), Stage.Width);
         plan.LastUsed = Frame;
         _phrases[row] = plan;
