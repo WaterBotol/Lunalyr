@@ -456,27 +456,54 @@ enum LyricRomanizer {
                 let shares = fragments.flatMap { $0.count == words.count ? $0 : nil }?
                     .map { LyricRomanizer.normalized($0, toneMarks: toneMarks) }
                 var shown = texts
+                // The words each word's time is taken from: its phrase's, or
+                // the run of phrases it was shared out over.
+                var timing = words.indices.map { (owner[$0], end(of: owner[$0])) }
                 if let shares, LyricRomanizer.isCharacterTimed(line) {
                     shown = shares
                 } else if let shares {
                     // A phrase sung across several words (笑っ てい た) is
-                    // shared out over them (warat, tei, ta), so each word reads
+                    // shared out over them (wara, tte, ta), so each word reads
                     // itself as it is sung, rather than the first carrying the
-                    // whole phrase and the rest nothing. Only where the shares
-                    // spell the phrase exactly; otherwise the first keeps it.
-                    for start in words.indices where owner[start] == start && !texts[start].isEmpty {
-                        let last = end(of: start)
-                        guard last > start else { continue }
-                        let span = shares[start...last]
-                        func letters(_ text: String) -> String { text.filter { !$0.isWhitespace } }
+                    // whole phrase and the rest nothing. A phrase can end
+                    // inside a word that starts the next (始 | まりに, timed
+                    // so by Apple): those phrases are shared out together, by
+                    // character (haji, mari ni), not hajimari under 始 and only
+                    // ni under まりに. Only where the shares spell the phrases
+                    // exactly; otherwise each phrase is tried alone, and the
+                    // first word of one that still does not spell keeps it.
+                    func letters(_ text: String) -> String { text.filter { !$0.isWhitespace } }
+                    func share(_ first: Int, _ last: Int) -> Bool {
+                        guard last > first else { return false }
+                        let span = shares[first...last]
                         guard span.allSatisfy({ !$0.isEmpty }),
-                              letters(span.joined()) == letters(texts[start]) else { continue }
-                        for index in start...last { shown[index] = span[index] }
+                              letters(span.joined()) == letters(texts[first...last].joined()) else { return false }
+                        for index in first...last {
+                            shown[index] = span[index]
+                            timing[index] = (first, last)
+                        }
+                        return true
+                    }
+                    var start = 0
+                    while start < words.count {
+                        guard owner[start] == start, !texts[start].isEmpty else { start += 1; continue }
+                        var last = end(of: start)
+                        var index = start + 1
+                        while index <= last {
+                            if owner[index] == index, !texts[index].isEmpty { last = max(last, end(of: index)) }
+                            index += 1
+                        }
+                        if !share(start, last) {
+                            for phrase in start...last where owner[phrase] == phrase && !texts[phrase].isEmpty {
+                                _ = share(phrase, end(of: phrase))
+                            }
+                        }
+                        start = last + 1
                     }
                 }
                 return words.indices.map { index in
-                    let start = owner[index]
-                    return LyricsFetcher.Word(text: shown[index], start: words[start].start, end: words[end(of: start)].end)
+                    let (first, last) = timing[index]
+                    return LyricsFetcher.Word(text: shown[index], start: words[first].start, end: words[last].end)
                 }
             case .line(let raw):
                 let text = LyricRomanizer.normalized(raw, toneMarks: toneMarks)
