@@ -176,7 +176,7 @@ theme. The window opens at Lyric style (or `--settings-page`).
 
 - **Built in code, no runtime binding.** Each page (`LyricStylePage`, `TimingPage`, `SettingsPages.cs`) is built on
   first visit from `SettingsKit` rows: cards, toggles, menus, sliders with their value beside them, number boxes,
-  check boxes, expanders, a colour picker and the folder picker. A row's control reads the current settings through a
+  check boxes, expanders, a colour picker and the Windows App SDK's folder picker. A row's control reads the current settings through a
   refresh list (`SettingsContext`) and writes with `store.Update`. Putting values into controls is guarded so it never
   writes back; the store's `Changed` (from any thread: the tray's pause, the rotation cursor, song offsets) is
   marshalled to the UI thread. Choices, wording and captions live in `Lunalyr.Shell.Settings.SettingsCopy` and
@@ -186,7 +186,7 @@ theme. The window opens at Lyric style (or `--settings-page`).
   ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
 - **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
   milestone 6" (visualisers, music video), "…milestone 7" (floating lyrics, tray lyric, shortcuts, Discord, lyric
-  cards), "…milestone 8" (launch at login, updates, the welcome again), "Arrives in a later build" for the rest. Launch
+  cards), "…milestone 8" (launch at login, updates), "Arrives in a later build" for the rest. Launch
   at login writes nothing anywhere.
 - **Live preview** (`SettingsPreview`, `Lunalyr.Shell.Rendering.SettingsPreviewRenderer`): at the top of Lyric style,
   the scene on the wallpaper (the controller's scene, clock, background and the composition Match the music chose)

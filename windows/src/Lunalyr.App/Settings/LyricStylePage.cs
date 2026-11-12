@@ -262,7 +262,8 @@ internal static class LyricStylePage
             IsHexInputVisible = true, ColorSpectrumShape = ColorSpectrumShape.Ring,
         };
         AutomationProperties.SetName(picker, "Your highlight colour");
-        var flyout = new Flyout { Content = picker };
+        // Opens leftwards from the swatch at the row's right edge, so the picker stays inside the window.
+        var flyout = new Flyout { Content = picker, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
         button.Flyout = flyout;
         ctx.OnRefresh(s =>
         {

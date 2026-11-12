@@ -171,13 +171,23 @@ public sealed partial class SettingsWindow : Window
     private bool WindowVisible() =>
         AppWindow.IsVisible && AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
 
+    /// <summary>Windows' folder picker, over this window; null when cancelled or when it can't be shown (logged).</summary>
     private async Task<string?> ChooseFolderAsync()
     {
-        var picker = new Windows.Storage.Pickers.FolderPicker();
-        picker.FileTypeFilter.Add("*");
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
-        var folder = await picker.PickSingleFolderAsync();
-        return folder?.Path;
+        try
+        {
+            _host.Log.App.Info("Choosing the Lyrimuse lyrics folder.");
+            // The Windows App SDK's picker, made for desktop apps (the older Windows.Storage one never opened here).
+            var picker = new Microsoft.Windows.Storage.Pickers.FolderPicker(AppWindow.Id);
+            var folder = await picker.PickSingleFolderAsync();
+            _host.Log.App.Info(folder is null ? "No folder chosen." : "A Lyrimuse lyrics folder was chosen.");
+            return folder?.Path;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _host.Log.App.Warn("Windows' folder picker couldn't be shown.", ex);
+            return null;
+        }
     }
 
     private static string Describe(PlaybackStatus status) => status switch

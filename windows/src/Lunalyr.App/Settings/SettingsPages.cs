@@ -33,7 +33,7 @@ internal static class GeneralPage
 
         Section(page, "Welcome");
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",
-            Button("Show Welcome…", () => { }), notYet: SettingsCopy.Milestone8));
+            Button("Show Welcome…", () => { }), notYet: SettingsCopy.LaterBuild));
 
         Section(page, "Tray & shortcuts");
         page.Children.Add(Card("Lyric in the tray", "The current line beside the tray icon.", "", FixedToggle(false),

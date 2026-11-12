@@ -1,7 +1,8 @@
 // What the settings window says: its choices, titles, captions and the notes on rows Windows can't do yet. Wording is
 // ported from the Mac's settings pages (Sources/Settings/Pages/*.swift, LunalyrWorkspace.swift's WorkspaceCopy,
-// QuickControls.swift's TimingNudge, LyricRomanization.swift, LyricHighlightColour.swift; all Lunalyr's own) and
-// adapted where Windows differs. Kept out of the window so tests can hold it to what the app does.
+// QuickControls.swift's TimingNudge, LyricHighlightColour.swift; Lunalyr's own lines, checked with git blame) and
+// adapted where Windows differs. The readings menus are worded afresh: their Mac titles sit on lines that trace back to
+// the squashed Verso import (LyricRomanization.swift). Kept out of the window so tests can hold it to what the app does.
 
 using System.Globalization;
 using Lunalyr.Core.Compositions;
@@ -87,16 +88,16 @@ public static class SettingsCopy
     // ---- Readings ----
 
     public static IReadOnlyList<SettingsChoice> ReadingDisplays { get; } =
-        [new("off", "Off"), new("below", "Below lyrics"), new("replace", "Replace lyrics")];
+        [new("off", "Off"), new("below", "Under the lyrics"), new("replace", "Instead of the lyrics")];
 
     public static IReadOnlyList<SettingsChoice> ReadingLanguages { get; } =
     [
-        new("automatic", "Detect language"),
-        new("japanese", "Japanese · Romaji"),
-        new("mandarin", "Mandarin · Pinyin"),
-        new("cantonese", "Cantonese · Saved readings only"),
-        new("korean", "Korean · Revised Romanization"),
-        new("other", "Other scripts · Latin"),
+        new("automatic", "Detect automatically"),
+        new("japanese", "Japanese (rōmaji)"),
+        new("mandarin", "Mandarin (pinyin)"),
+        new("cantonese", "Cantonese (saved readings only)"),
+        new("korean", "Korean (Revised Romanization)"),
+        new("other", "Other scripts (Latin letters)"),
     ];
 
     // ---- Timing ----
