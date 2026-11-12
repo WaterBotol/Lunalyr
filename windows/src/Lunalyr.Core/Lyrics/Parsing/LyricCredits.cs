@@ -133,12 +133,12 @@ public static partial class LyricCredits
 
         public TrackNames(string title, string artist)
         {
-            _title = LyricQuery.Normalize(title);
-            _artist = LyricQuery.Normalize(artist);
+            _title = Name(title);
+            _artist = Name(artist);
             // "Yot Club & Someone", "A, B", "A feat. B": the first name.
             var first = artist.Split([',', '&', ';', '/', '、'])[0];
             var lead = first.Split(" feat", StringSplitOptions.None)[0].Split(" ft", StringSplitOptions.None)[0];
-            _primaryArtist = LyricQuery.Normalize(lead);
+            _primaryArtist = Name(lead);
         }
 
         private bool Usable => _title.Length > 0;
@@ -147,7 +147,7 @@ public static partial class LyricCredits
         public bool IsHeading(string text)
         {
             if (!Usable || _primaryArtist.Length == 0) return false;
-            var line = LyricQuery.Normalize(text);
+            var line = Name(text);
             return TextElements.Count(line) <= TextElements.Count(_title) + TextElements.Count(_artist) + 14
                 && Contains(line, _title) && Contains(line, _primaryArtist);
         }
@@ -156,11 +156,17 @@ public static partial class LyricCredits
         public bool IsLoneName(string text)
         {
             if (!Usable) return false;
-            var line = LyricQuery.Normalize(text);
+            var line = Name(text);
             return line.Length > 0 && (line == _title || line == _artist || line == _primaryArtist);
         }
 
         public bool IsEither(string text) => IsHeading(text) || IsLoneName(text);
+
+        /// <summary>
+        /// Normalised, with traditional Chinese folded to simplified, so "周杰伦" in a lyric file names the "周杰倫" the
+        /// player reports (a Windows addition, as in <see cref="LyricQuery.Similarity"/>).
+        /// </summary>
+        private static string Name(string text) => Ranking.ChineseScripts.ToSimplified(LyricQuery.Normalize(text));
 
         /// <summary>Whole-word containment on normalised text.</summary>
         private static bool Contains(string line, string phrase) =>

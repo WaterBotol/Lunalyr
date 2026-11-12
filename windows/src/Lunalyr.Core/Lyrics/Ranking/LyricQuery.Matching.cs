@@ -87,11 +87,13 @@ public sealed partial record LyricQuery
     /// <summary>
     /// 1 for the same name, 0.95 when only edition or credit qualifiers differ ("(2011 Remaster)" / "- Remastered
     /// 2011", "(feat. X)" / "(with X)"), 0.85 when one name contains the other as whole words, else word overlap.
+    /// Traditional and simplified Chinese compare as the same name ("周杰倫" / "周杰伦" = 1), a Windows addition
+    /// (<see cref="ChineseScripts"/>).
     /// </summary>
     public static double Similarity(string lhs, string rhs)
     {
-        var a = Normalize(lhs);
-        var b = Normalize(rhs);
+        var a = ChineseScripts.ToSimplified(Normalize(lhs));
+        var b = ChineseScripts.ToSimplified(Normalize(rhs));
         // Names made only of symbols or emoji ("!!!", "🦋") have nothing left once normalised; compare them as written.
         if (a.Length == 0 || b.Length == 0)
         {
@@ -101,8 +103,8 @@ public sealed partial record LyricQuery
         {
             return 1;
         }
-        var coreA = Core(lhs);
-        var coreB = Core(rhs);
+        var coreA = ChineseScripts.ToSimplified(Core(lhs));
+        var coreB = ChineseScripts.ToSimplified(Core(rhs));
         var x = coreA.Length == 0 ? a : coreA;
         var y = coreB.Length == 0 ? b : coreB;
         if (x == y)

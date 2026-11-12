@@ -359,6 +359,24 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.Equal("Word-by-word", report.Result!.Provenance.Precision);
     }
 
+    // Windows addition (§9 "晴天 — 周杰倫", live parity check of 13 Nov 2026): the player names the artist in traditional
+    // script, Kugou lists the song in simplified script (recorded search reply). Kugou's word timing beats LRCLIB's lines.
+    [Fact]
+    public async Task ATraditionalScriptArtistFindsKugousWordTimingOverLrclibLines()
+    {
+        var query = new LyricQuery("晴天", "周杰倫", "葉惠美", 269.747) { Genre = "Mandopop" };
+        var handler = Quiet()
+            .Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(7, "晴天", "周杰倫", "葉惠美", 270, English, wordTimed: false)))
+            .Set("mobileservice.kugou.com/api/v3/search/song", Reply.Fixture("kugou/search-qingtian-traditional.json"))
+            .Set("lyrics.kugou.com/search", Reply.Fixture("kugou/lyric-search.json"))
+            .Set("lyrics.kugou.com/download", Reply.Fixture("kugou/download-krc.json"));
+        var report = await Service(handler).LookupAsync(query, Everything, force: true, cancellationToken: Ct);
+        Assert.Equal(new LyricProvenance("Word-by-word", "Kugou Music"), Synced(report.Result).Provenance);
+        var kugou = Assert.Single(report.Candidates, c => c.Source == Kugou);
+        Assert.Equal("周杰伦", kugou.Artist);
+        Assert.Contains(Lrclib, report.Candidates.Select(c => c.Source));
+    }
+
     private sealed class RecordedAliases : IArtistAliasSearch
     {
         public List<string> Asked { get; } = [];

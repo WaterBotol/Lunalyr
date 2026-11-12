@@ -205,11 +205,28 @@ public sealed class ArtistAliases
         bool enabled, Func<LyricQuery, CancellationToken, ValueTask<LyricCandidate?>> search, CancellationToken cancellationToken = default)
     {
         var first = await search(query, cancellationToken).ConfigureAwait(false);
-        if (aliases is null || !enabled || !Catalogues.Contains(source) || !query.HasArtist || IsOtherScript(query.Artist))
+        if (!enabled || !Catalogues.Contains(source) || !query.HasArtist)
         {
             return first;
         }
         if (first is not null && (!first.MetadataReported || query.ArtistScore(first.Artist) >= 0.65))
+        {
+            return first;
+        }
+        // A Windows addition: a title or artist written in traditional Chinese is searched again in simplified script,
+        // which is how these catalogues list most Chinese songs ("晴天 周杰倫" as "晴天 周杰伦"). The reverse is not
+        // tried: these catalogues seldom list a name only in traditional script, and one simplified character can stand
+        // for several traditional ones.
+        if (SimplifiedForm(query) is { } simplified)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await search(simplified, cancellationToken).ConfigureAwait(false) is { } found
+                && LyricQuery.Similarity(found.Artist, simplified.Artist) >= 0.65)
+            {
+                return found with { Artist = query.Artist };
+            }
+        }
+        if (aliases is null || IsOtherScript(query.Artist))
         {
             return first;
         }
@@ -225,6 +242,20 @@ public sealed class ArtistAliases
             return found with { Artist = query.Artist };
         }
         return first;
+    }
+
+    /// <summary>
+    /// <paramref name="query"/> with its title and artist in simplified Chinese, or null when neither has a traditional
+    /// character. A name with kana is Japanese, which these catalogues list as written, so it is left alone.
+    /// </summary>
+    public static LyricQuery? SimplifiedForm(LyricQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var title = ChineseScripts.HasKana(query.Title) ? query.Title : ChineseScripts.ToSimplified(query.Title);
+        var artist = ChineseScripts.HasKana(query.Artist) ? query.Artist : ChineseScripts.ToSimplified(query.Artist);
+        return title == query.Title && artist == query.Artist
+            ? null
+            : new LyricQuery(title, artist, query.Album, query.Duration) { Genre = query.Genre };
     }
 
     private Dictionary<string, ArtistAliasEntryDto> Load()
