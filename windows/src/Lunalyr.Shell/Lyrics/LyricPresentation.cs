@@ -29,6 +29,9 @@ public static class LyricPresentation
             var qq = synced.Provenance.Source.Contains("qq", StringComparison.OrdinalIgnoreCase);
             IReadOnlyList<LyricLine> flagged = LyricCredits.Flagging(synced.Lines, query.Title, query.Artist);
             if (repairingGaps && qq) flagged = QQGapRepair.Repair(flagged, distribute);
+            // Phrase-token rule (12 Nov 2026, as on the Mac): tokens that are whole lines or phrases are line timing,
+            // so those lines get estimated words like any line-timed line (lyrics saved before the rule included).
+            flagged = [.. flagged.Select(line => LyricTimingRules.IsPhraseTimed(line) ? line with { WordTimed = false } : line)];
             var validated = LyricGapTiming.EstimatingWords(flagged, repairingGaps, distribute)
                 .Select(line => line with { WordTimed = LyricTimingRules.ValidWordTiming(line) })
                 .ToList();

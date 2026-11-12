@@ -19,15 +19,17 @@ public static class LyricAgreementRules
         var result = new LyricCandidate[candidates.Count];
         for (var i = 0; i < candidates.Count; i++)
         {
-            var peers = 0;
+            // Apple Music's own lyrics and Lyrics+'s relay of them are one source (they rank as one), never two that
+            // agree: peers and agreeing pairs are counted by the source each ranks as.
+            var peers = new HashSet<LyricSourceId>();
             var sameWordsTimed = new List<int>();
             for (var j = 0; j < candidates.Count; j++)
             {
-                if (j == i || candidates[j].Source == candidates[i].Source || !SameWords(texts[i], texts[j]))
+                if (j == i || candidates[j].RankingSource == candidates[i].RankingSource || !SameWords(texts[i], texts[j]))
                 {
                     continue;
                 }
-                peers++;
+                peers.Add(candidates[j].RankingSource);
                 if (timings[i].Count > 0 && timings[j].Count > 0)
                 {
                     sameWordsTimed.Add(j);
@@ -40,7 +42,8 @@ public static class LyricAgreementRules
                 {
                     for (var b = a + 1; b < sameWordsTimed.Count; b++)
                     {
-                        if (TimingAgrees(timings[sameWordsTimed[a]], timings[sameWordsTimed[b]]))
+                        int x = sameWordsTimed[a], y = sameWordsTimed[b];
+                        if (candidates[x].RankingSource != candidates[y].RankingSource && TimingAgrees(timings[x], timings[y]))
                         {
                             outlier = true;
                             break;
@@ -48,7 +51,7 @@ public static class LyricAgreementRules
                     }
                 }
             }
-            result[i] = candidates[i] with { Agreement = new LyricAgreement(peers, sameWordsTimed.Count, outlier) };
+            result[i] = candidates[i] with { Agreement = new LyricAgreement(peers.Count, sameWordsTimed.Count, outlier) };
         }
         return result;
     }

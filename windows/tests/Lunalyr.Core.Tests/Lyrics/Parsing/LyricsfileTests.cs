@@ -32,6 +32,49 @@ public class LyricsfileTests
         Assert.False(LyricsfileParser.Parse(text.Replace("end_ms: 2000", "end_ms: 4000"))[0].WordTimed);
     }
 
+    // Phrase-token rule (12 Nov 2026, as on the Mac): a line-synced upload's rows carry one token per line, or per
+    // spaced phrase; those are never word timing, and keep the estimated words every line-timed line gets.
+    [Fact]
+    public void PhraseTokensAreNotWordTiming()
+    {
+        var text = """
+            lines:
+            - text: 'Stay here with me tonight'
+              start_ms: 1000
+              end_ms: 5000
+              words:
+              - text: 'Stay here with me tonight'
+                start_ms: 1000
+                end_ms: 5000
+            - text: '君の名前を呼んで 欲しかった'
+              start_ms: 6000
+              end_ms: 9000
+              words:
+              - text: '君の名前を呼んで '
+                start_ms: 6000
+                end_ms: 8000
+              - text: '欲しかった'
+                start_ms: 8000
+                end_ms: 9000
+            - text: 'Hello'
+              start_ms: 10000
+              end_ms: 11000
+              words:
+              - text: 'Hello'
+                start_ms: 10000
+                end_ms: 11000
+            """;
+        var lines = LyricsfileParser.Parse(text);
+        Assert.False(lines[0].WordTimed);
+        Assert.Equal(5, lines[0].Words.Count); // estimated, one per word
+        Assert.Equal(1, lines[0].Words[0].Start);
+        Assert.False(lines[1].WordTimed);
+        Assert.True(LyricTimingRules.IsPhraseTimed("君の名前を呼んで 欲しかった", 2));
+        // A genuine one-word line keeps its word timing.
+        Assert.True(lines[2].WordTimed);
+        Assert.Equal("Line-synced", LyricTimingRules.Precision(lines));
+    }
+
     // Ported from NextVersionTests.swift: testLyricsfileInfersMissingWordEnds
     [Fact]
     public void LyricsfileInfersMissingWordEnds()

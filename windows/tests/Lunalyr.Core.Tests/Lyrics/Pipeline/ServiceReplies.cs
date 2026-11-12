@@ -59,8 +59,11 @@ internal static class ServiceReplies
         return $$"""{"id":{{id}},"name":{{Json(title)}},"trackName":{{Json(title)}},"artistName":{{Json(artist)}},"albumName":{{Json(album)}},"duration":{{Num(duration)}},"instrumental":false,"plainLyrics":{{Json(string.Join('\n', lines.Select(l => l.Text)))}},"syncedLyrics":{{Json(Lrc(lines))}},"lyricsfile":{{(lyricsfile is null ? "null" : Json(lyricsfile))}}}""";
     }
 
-    /// <summary>A Lyrics+ node's reply: syllable-timed lines and the matched recording.</summary>
-    public static string LyricsPlus(string title, string artist, IReadOnlyList<SungLine> lines)
+    /// <summary>
+    /// A Lyrics+ node's reply: syllable-timed lines and the matched recording, relayed from <paramref name="upstream"/>
+    /// ("Apple" ranks as Apple Music's own lyrics; any other upstream ranks as Lyrics+).
+    /// </summary>
+    public static string LyricsPlus(string title, string artist, IReadOnlyList<SungLine> lines, string upstream = "Apple")
     {
         var entries = lines.Select(line =>
         {
@@ -69,7 +72,7 @@ internal static class ServiceReplies
                 $$"""{"time":{{Ms(w.Start)}},"duration":{{Ms(w.End - w.Start)}},"text":{{Json(i + 1 < words.Count ? w.Word + " " : w.Word)}}}"""));
             return $$"""{"time":{{Ms(line.Start)}},"duration":{{Ms(line.End - line.Start)}},"text":{{Json(line.Text)}},"syllabus":[{{syllabus}}],"element":{"key":"","singer":"v1","songPartIndex":0} }""";
         });
-        return $$"""{"KpoeTools":"1.7-1-ConvertTTMLtoJSON-DOMParser","type":"Word","metadata":{"source":"Apple","songWriters":[],"title":{{Json(title)}},"language":"en","artist":{{Json(artist)}}},"lyrics":[{{string.Join(',', entries)}}],"cached":"None"}""";
+        return $$"""{"KpoeTools":"1.7-1-ConvertTTMLtoJSON-DOMParser","type":"Word","metadata":{"source":{{Json(upstream)}},"songWriters":[],"title":{{Json(title)}},"language":"en","artist":{{Json(artist)}}},"lyrics":[{{string.Join(',', entries)}}],"cached":"None"}""";
     }
 
     public const string LyricsPlusNotFound = """{"error":"Lyrics not found"}""";

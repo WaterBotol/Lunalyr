@@ -12,12 +12,17 @@ public sealed record LyricScreening(IReadOnlyList<LyricCandidate> Accepted, IRea
 /// lines, crammed words), and a match for the playing version ranks above one for another version (Live, Remix…).
 /// Then word-by-word and mixed timing rank together, first: Apple Music's own lyrics, then LRCLIB's, then the other
 /// sources'. Line timing is next, Apple Music first. Beyond those leads, sources follow the configured order, which
-/// in Accuracy first comes after agreement and a closer title and artist match.
+/// in Accuracy first comes after agreement and a closer title and artist match. Apple Music's lyrics relayed by
+/// Lyrics+ rank as Apple Music's own (<see cref="LyricCandidate.RankingSource"/>), just after the real cache's, and
+/// LRCLIB whose timing two other sources agree against ranks after every other source at its timing.
 /// </remarks>
 public static class LyricRanking
 {
     /// <summary>Starts the state of a source that an automatic lookup stopped, or never asked, because its answer could not have changed anything.</summary>
     public const string NotNeeded = "Not needed: ";
+
+    /// <summary>Added to the source-list line of Lyrics+ relaying Apple Music's lyrics (which rank as Apple Music's).</summary>
+    public const string AppleRelayNote = " · Apple Music’s lyrics";
 
     /// <summary>
     /// Accepted candidates in ranking order (<see cref="Outranks"/>), and recording mismatches with the reason. Every
@@ -132,22 +137,28 @@ public static class LyricRanking
         VersionTags.Mismatch(query, candidate.Title).Count == 0;
 
     /// <summary>
-    /// Where a source stands ahead of the configured order at a ranked timing: Apple Music's own lyrics lead timed
-    /// lyrics, and LRCLIB follows only with word-by-word or mixed timing. Every other source is 2.
+    /// Where a source stands ahead of the configured order within a timing tier (ranking decisions of 12 Nov 2026,
+    /// the same leads as the Mac): 0 Apple Music's own lyrics and 1 Apple Music's lyrics relayed by Lyrics+, both at
+    /// any timing; 2 LRCLIB, only with word-by-word or mixed timing; 3 every other source.
     /// </summary>
-    private static int Lead(LyricSourceId source, int timing) => source switch
+    /// <param name="source">The source that answered (or may still answer).</param>
+    /// <param name="rankingAs">The source it ranks as (<see cref="LyricCandidate.RankingSource"/>).</param>
+    private static int Lead(LyricSourceId source, LyricSourceId rankingAs, int timing)
     {
-        LyricSourceId.AppleMusicCache when timing >= 1 => 0,
-        LyricSourceId.Lrclib when timing == 2 => 1,
-        _ => 2,
-    };
+        if (timing >= 1 && rankingAs == LyricSourceId.AppleMusicCache)
+        {
+            return source == LyricSourceId.AppleMusicCache ? 0 : 1;
+        }
+        return source == LyricSourceId.Lrclib && timing == 2 ? 2 : 3;
+    }
 
     /// <summary>
-    /// The lead for a match: LRCLIB's word timing loses its lead when two other services agree on the timing and
-    /// LRCLIB's disagrees with both (its timing is made by listeners).
+    /// The lead for a match. LRCLIB's timing is made by listeners: when two other services agree on the timing and
+    /// LRCLIB's disagrees with both (<see cref="LyricAgreement.TimingOutlier"/>), it takes lead 4, after every other
+    /// source at its timing tier. It keeps its tier, so its word timing still beats a pair that agree on line timing.
     /// </summary>
     private static int Lead(LyricCandidate candidate, int timing) =>
-        candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier ? 2 : Lead(candidate.Source, timing);
+        candidate.Source == LyricSourceId.Lrclib && candidate.Agreement.TimingOutlier ? 4 : Lead(candidate.Source, candidate.RankingSource, timing);
 
     /// <summary>The highest confidence: both names exact and, when the playing length is known, the same length.</summary>
     private static double ClosestMatch(LyricQuery query) => query.Duration > 0 ? 2.25 : 2;
@@ -265,9 +276,9 @@ public static class LyricRanking
         {
             return ceiling > timing;
         }
-        // Agreement is weighed only among the answers in hand: waiting for more would undo stopping the other
-        // services once LRCLIB's word timing or Apple Music's lyrics lead.
-        var lead = Lead(source, timing);
+        // Agreement is weighed only among the answers in hand; a later agreement against LRCLIB is what CouldDemote
+        // keeps sources answering for. A pending Lyrics+ might relay Apple Music's own lyrics (lead 1).
+        var lead = Lead(source, LyricSourceRanking.BestRankingSource(source), timing);
         var bestLead = Lead(best, timing);
         if (lead != bestLead)
         {
@@ -279,6 +290,44 @@ public static class LyricRanking
             return true;
         }
         return options.OrderOf(source) < options.OrderOf(best.Source);
+    }
+
+    /// <summary>
+    /// Whether a pending source must keep answering because, with another, it could still agree against the timing of
+    /// LRCLIB showing and demote it (the Mac's <c>couldDemote</c>; ranking decisions of 12 Nov 2026). All of these hold:
+    /// LRCLIB's word or mixed timing is the best match; it agrees with no timed match for the same words already in
+    /// hand; and the pending source can give word timing, or has some timing while a sound word-timed rival (one that
+    /// would replace LRCLIB) is already in hand. Line-only and plain-text sources are otherwise stopped as before.
+    /// </summary>
+    /// <param name="best">What shows, or is about to.</param>
+    /// <param name="source">The pending source.</param>
+    /// <param name="accepted">The accepted matches in hand.</param>
+    public static bool CouldDemote(LyricCandidate best, LyricSourceId source, IEnumerable<LyricCandidate> accepted, LyricQuery query)
+    {
+        if (best.Source != LyricSourceId.Lrclib || source == best.Source || best.Agreement.TimingOutlier
+            || LyricTimingRules.RankedTiming(best.Result) != 2 || source.TimingCeiling() < 1)
+        {
+            return false;
+        }
+        var text = LyricAgreementRules.Text(best);
+        var timing = LyricAgreementRules.Timing(best);
+        var rival = false;
+        foreach (var other in accepted)
+        {
+            if (other.Source == best.Source || !FitsVersion(other, query))
+            {
+                continue;
+            }
+            var otherTiming = LyricAgreementRules.Timing(other);
+            if (otherTiming.Count > 0 && LyricAgreementRules.SameWords(text, LyricAgreementRules.Text(other))
+                && LyricAgreementRules.TimingAgrees(timing, otherTiming))
+            {
+                // LRCLIB can then never be the odd one out.
+                return false;
+            }
+            rival |= LyricTimingRules.RankedTiming(other.Result) == 2 && !LyricTimingRules.HasTimingFault(other.Result);
+        }
+        return source.TimingCeiling() >= 2 || rival;
     }
 
     /// <summary>
@@ -314,6 +363,11 @@ public static class LyricRanking
             var found = states.TryGetValue(candidate.Source, out var before) && before.StartsWith("Saved match", StringComparison.Ordinal)
                 ? "Saved match"
                 : "Match found";
+            // Lyrics+ relaying Apple Music's lyrics: it ranks as Apple Music, so the list says so.
+            if (candidate.RankingSource == LyricSourceId.AppleMusicCache && candidate.Source != LyricSourceId.AppleMusicCache)
+            {
+                found += AppleRelayNote;
+            }
             var other = VersionTags.Mismatch(query, candidate.Title);
             if (other.Count > 0)
             {

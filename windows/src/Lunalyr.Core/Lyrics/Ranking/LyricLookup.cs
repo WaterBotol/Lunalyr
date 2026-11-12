@@ -41,7 +41,9 @@ public sealed record LyricLookupTiming
 /// A match is shown as soon as nothing pending could beat it, or when the grace period ends; after that only a match
 /// that ranks higher replaces it, never a lower one. Saved explicit choices always win. An automatic lookup reads
 /// Apple Music's lyrics first and stops asking sources whose answer could no longer change anything; a search
-/// (<c>force</c>) asks every source so all the alternatives are listed. Only the online choice is cached, and only
+/// (<c>force</c>) asks every source so all the alternatives are listed. While LRCLIB's word timing leads, the sources
+/// that could still agree against it keep answering up to their own limits (<see cref="LyricRanking.CouldDemote"/>).
+/// Only the online choice is cached, and only
 /// when nothing stopped early could have beaten it; misses are remembered briefly unless the network was down.
 /// </remarks>
 public sealed class LyricLookup
@@ -499,7 +501,7 @@ public sealed class LyricLookup
                     var screened = Screen();
                     var best = LyricRanking.Choose(screened.Accepted, _query, _options);
                     var settled = LyricRanking.IsSettled(best, _pending, _query, _options);
-                    switch (_publication.Step(best, settled, graceOver, settleOver))
+                    switch (_publication.Step(best, settled, graceOver, settleOver, screened.Accepted))
                     {
                         case PublicationStep.Publish:
                             settleArmed = false;
@@ -519,6 +521,9 @@ public sealed class LyricLookup
                     {
                         var onlineBest = LyricRanking.Choose(screened.Accepted.Where(c => !c.Source.IsLocal()), _query, _options);
                         var idle = _pending.Where(id => !LyricRanking.Matters(id, best, onlineBest, _query, _options)).ToList();
+                        // While LRCLIB's word timing leads, the sources that could still agree against it keep answering
+                        // up to their own limits (ranking decisions of 12 Nov 2026).
+                        idle.RemoveAll(id => LyricRanking.CouldDemote(best, id, screened.Accepted, _query));
                         if (idle.Count > 0)
                         {
                             Stop(idle, best.Source == LyricSourceId.AppleMusicCache ? AppleMusicShowing : CouldNotBeat);
@@ -554,7 +559,8 @@ public sealed class LyricLookup
             }
             var final = Screen();
             // Every source has answered or been stopped, so whatever is best now is settled.
-            _publication.Step(LyricRanking.Choose(final.Accepted, _query, _options), settled: true, graceOver: true, settleOver: true);
+            _publication.Step(LyricRanking.Choose(final.Accepted, _query, _options), settled: true, graceOver: true, settleOver: true,
+                final.Accepted);
             _offline = _offline || !(_owner._connectivity?.IsOnline ?? true);
             return new Collected(Report(final, complete: true), _answered, _stopped, [.. _running.Keys]);
         }
