@@ -33,7 +33,7 @@ namespace Lunalyr.App.Hosting;
 /// main thread runs a plain Win32 loop while idle; the first "Open settings" ends it and starts WinUI on the same
 /// thread, which from then on pumps the tray window as well (Windows App SDK can only start once per process).
 /// </summary>
-internal sealed class AppHost
+internal sealed partial class AppHost
 {
     /// <summary>The generic User-Agent the development rules ask for: nothing personal in it.</summary>
     public const string UserAgent = "Lunalyr/0.1 (Windows port; dev)";
@@ -113,6 +113,7 @@ internal sealed class AppHost
         _tray.Create();
         _tray.SetTooltip("Lunalyr — starting…");
         _tray.AddIcon();
+        StartPlayer();
 
         if (_options.QuitAfterSeconds is { } seconds)
         {
@@ -369,6 +370,7 @@ internal sealed class AppHost
     {
         _quitting = true;
         _quitTimer?.Dispose();
+        StopPlayer();
         _tray.Dispose();
         var clean = Task.Run(async () =>
         {

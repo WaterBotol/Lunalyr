@@ -36,7 +36,7 @@ public readonly record struct CommandResult(CommandOutcome Outcome, string? Note
 public sealed class PlayerCommands
 {
     /// <summary>Under the card when the guard is on: the scrub still previews on the wallpaper.</summary>
-    public const string OffNote = "Playback controls are off for this run. Scrubbing previews the lyrics only.";
+    public const string OffNote = "Controls are off for this run; scrubbing only previews.";
 
     private readonly Func<IMediaSession?> _session;
     private readonly Func<PlayerCapabilities> _capabilities;

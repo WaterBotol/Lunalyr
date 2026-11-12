@@ -21,7 +21,7 @@ public sealed partial class RenderEngine
         lock (_focusGate)
         {
             var current = LyricFocusAt(_lyricFocus, now);
-            if (_lyricFocus.To == opacity && current == opacity) return;
+            if (_lyricFocus.To == opacity) return; // already there or on its way
             _lyricFocus = (current, opacity, now, seconds);
         }
 
