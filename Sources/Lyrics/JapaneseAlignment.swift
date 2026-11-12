@@ -89,7 +89,36 @@ enum JapaneseAlignment {
                     result.append(.init(text: readings[index], location: unit.location, length: unit.length, breakBefore: true))
                 }
             }
-            return result.sorted { $0.location < $1.location }
+            result.sort { $0.location < $1.location }
+            // The tokenizer may part a word at its っ (一|回), which a saved
+            // reading spells across the parts (ik kai for ikkai): they are
+            // written together.
+            var previous: Int?
+            for index in result.indices where !result[index].text.isEmpty {
+                if let previous, result[index].isJapanese, !result[index].breakBefore,
+                   JapaneseReading.splitsGeminate(result[previous].text, result[index].text) {
+                    result[index].joinsPrevious = true
+                }
+                previous = index
+            }
+            return result
+        }
+
+        /// `phrases`, with a word the tokenizer parted at its っ made one
+        /// phrase again where `readings` spell it across the parts (一|回
+        /// ik kai is ikkai).
+        private func joinedPhrases(reading readings: [String]) -> [Int] {
+            var result = phrases
+            var previous: Int?
+            for index in units.indices where !readings[index].isEmpty {
+                defer { previous = index }
+                guard let previous, result[index] != result[previous],
+                      units[previous].location + units[previous].length == units[index].location,
+                      JapaneseReading.splitsGeminate(readings[previous], readings[index]) else { continue }
+                let from = result[index], to = result[previous]
+                for other in result.indices where result[other] == from { result[other] = to }
+            }
+            return result
         }
 
         /// Each character's share of `readings` (one per unit), for lines
@@ -97,6 +126,7 @@ enum JapaneseAlignment {
         /// a run of kanji is shared out by syllable (今日 kyo, u), a っ goes
         /// with the kana after it and a ー with the one before.
         func characters(reading readings: [String]) -> [CharacterReading] {
+            let phrases = joinedPhrases(reading: readings)
             var result: [CharacterReading] = []
             var carried = ""
             var previousEnd = -1

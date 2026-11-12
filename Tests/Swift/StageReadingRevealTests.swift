@@ -119,4 +119,32 @@ final class StageReadingRevealTests: XCTestCase {
             XCTAssertEqual(rebuilt, runs, "\(texts)")
         }
     }
+
+    /// A word the tokenizer parts at its っ (一|回) reads as one word in
+    /// the run that draws it (Hinge and the other stages), not "ik kai".
+    func testAGeminateWordReadsAsOneWordInItsRun() {
+        func line(_ reading: String, _ parts: [String]) -> LyricsFetcher.Line {
+            var time = 40.0
+            let words = parts.map { part -> LyricsFetcher.Word in
+                defer { time += 0.4 }
+                return .init(text: part, start: time, end: time + 0.4)
+            }
+            return .init(start: 40, end: time, text: parts.joined(), words: words, isInstrumental: false,
+                         wordTimed: true, romanization: reading)
+        }
+        func stage(_ line: LyricsFetcher.Line) -> String {
+            let readings = LyricRomanizer.readings([line], options: Self.options)[0]
+            let glue = LyricRuns.glue(line: line, words: line.words)
+            let pairs = LyricReadingPairs.parts(readings, to: line.words, glue: StageRun.glue(line.words, glue: glue))
+            return StageRun.make(line.words, glue: glue).compactMap { StageLyricView.reading(of: $0, in: pairs) }
+                .joined(separator: " | ")
+        }
+        XCTAssertEqual(stage(line("mou ikkai", ["もう", "一回"])), "mou | ikkai")
+        XCTAssertEqual(stage(line("mou ikkai", ["もう", "一", "回"])), "mou ik | kai")
+        XCTAssertEqual(stage(line("issho ni", ["一緒", "に"])), "issho ni")
+        XCTAssertEqual(stage(line("issho ni", ["一", "緒に"])), "issho ni")
+        XCTAssertEqual(stage(line("gakkou", ["学", "校"])), "gakkou")
+        // Where 一 and 回 are runs of their own, each reads its own part.
+        XCTAssertEqual(stage(line("mou ikkai", ["も", "う", "一", "回"])), "mou ik | kai")
+    }
 }
