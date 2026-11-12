@@ -137,6 +137,18 @@ public sealed class PlayerTests : IAsyncDisposable
         Assert.Equal(CommandOutcome.Unsupported, (await none.SeekAsync(3)).Outcome);
     }
 
+    [Fact]
+    public void TheDebugFlagAndThePlayerSettings()
+    {
+        var options = ShellOptions.Parse(["--demo", "--player-debug", "Show, light,scrub=0.6"]);
+        Assert.Equal(["show", "light", "scrub=0.6"], options.PlayerDebug);
+        Assert.Empty(options.Problems);
+        Assert.Empty(ShellOptions.Parse(["--demo"]).PlayerDebug);
+        var defaults = new AppSettings();
+        Assert.True(defaults.ShowControlsOnHover);
+        Assert.Equal("remaining", defaults.DesktopPlayerTimeMode);
+    }
+
     private static async Task WaitUntil(Func<bool> condition)
     {
         for (var i = 0; i < 500 && !condition(); i++) await Task.Delay(10);

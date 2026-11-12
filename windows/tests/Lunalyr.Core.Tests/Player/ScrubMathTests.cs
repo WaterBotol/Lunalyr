@@ -151,6 +151,16 @@ public sealed class ScrubMathTests
         Assert.Equal(ScrubLyric.None, ScrubMath.Lyric(1, []));
     }
 
+    [Fact]
+    public void AnEndedAnswerLineGivesWayToTheLineStillSung()
+    {
+        // Windows addition: a duet answer inside a longer line; once the answer ends, the bubble shows the longer line.
+        ScrubLine[] lines = [Line(16.5, 20.9, "I will wait for you"), Line(18.5, 19.6, "Yeah yeah"), Line(21.5, 25.9, "Stay with me")];
+        Assert.Equal(ScrubLyric.Line(1), ScrubMath.Lyric(19, lines));
+        Assert.Equal(ScrubLyric.Line(0), ScrubMath.Lyric(20, lines));
+        Assert.Equal(ScrubLyric.Line(2), ScrubMath.Lyric(22, lines));
+    }
+
     // Ported from DesktopScrubberTests.swift: testAdjacentLineWalksThroughPreRolledSeeks
     [Fact]
     public void AdjacentLineWalksThroughPreRolledSeeks()

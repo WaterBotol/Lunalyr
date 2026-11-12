@@ -326,6 +326,18 @@ public static class ScrubMath
         }
 
         var index = low - 1;
+        // Windows addition (not on the Mac): an answer line that has already ended (a duet's "yeah yeah" sung under a
+        // longer line) gives way to the line still being sung around it, so the bubble matches the wallpaper.
+        if (lines[index].End < time)
+        {
+            for (var i = index - 1; i >= Math.Max(0, index - 3); i--)
+            {
+                if (lines[i].IsInstrumental || lines[i].Start > time || lines[i].End < time) continue;
+                index = i;
+                break;
+            }
+        }
+
         var found = lines[index];
         if (found.IsInstrumental) return ScrubLyric.Instrumental;
         var nextStart = index + 1 < lines.Count ? lines[index + 1].Start : double.PositiveInfinity;

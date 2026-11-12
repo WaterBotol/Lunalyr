@@ -315,6 +315,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private void Show(long display, double scale, PlayerNative.RECT work, double now)
     {
         var moving = _shownOn is not null && _shownOn != display;
+        _log.Debug($"Desktop player: up on display 0x{display:X} (scale {scale:0.##}).");
         _shownOn = display;
         _scale = scale;
         _work = work;
@@ -349,6 +350,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     {
         if (_shownOn is null) return;
         _shownOn = null;
+        _log.Debug("Desktop player: going.");
         var reduce = _model.Look.ReduceMotion;
         _reveal.To(0, now, PlayerCard.RevealSeconds(false, reduce));
         _scrub.PointerExited();
