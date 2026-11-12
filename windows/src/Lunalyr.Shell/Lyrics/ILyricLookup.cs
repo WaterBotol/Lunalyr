@@ -17,11 +17,28 @@ public interface ILyricLookup
     /// <inheritdoc cref="LyricService.LookupAsync"/>
     Task<LyricLookupReport> LookupAsync(LyricQuery query, LyricSourceSnapshot options,
         Func<LyricLookupReport, ValueTask>? onUpdate, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A search (Settings › Timing › Find lyrics): asks every enabled source, ignoring the cache and the miss cache, so
+    /// every alternative is listed (<see cref="LyricService.LookupAsync"/> with <c>force</c>). A saved choice still shows.
+    /// </summary>
+    Task<LyricLookupReport> SearchAsync(LyricQuery query, LyricSourceSnapshot options,
+        Func<LyricLookupReport, ValueTask>? onUpdate, CancellationToken cancellationToken) =>
+        LookupAsync(query, options, onUpdate, cancellationToken);
+
+    /// <summary>Saves the user's choice for this recording (a pin); false when it couldn't be saved.</summary>
+    bool Pin(LyricQuery query, LyricResult result) => false;
+
+    /// <summary>Forgets the user's choice for this recording.</summary>
+    void Unpin(LyricQuery query)
+    {
+    }
 }
 
 /// <summary>
 /// The real pipeline. With a <paramref name="disabledReason"/> (<c>--no-network</c>) the service is still built, but
-/// nothing is asked: every lookup returns an empty report and nothing is sent to any lyric service.
+/// nothing is asked: every lookup returns an empty report and nothing is sent to any lyric service. Pins are kept on
+/// this PC either way.
 /// </summary>
 public sealed class LyricServiceLookup(LyricService service, string? disabledReason = null) : ILyricLookup
 {
@@ -34,4 +51,14 @@ public sealed class LyricServiceLookup(LyricService service, string? disabledRea
         DisabledReason is null
             ? service.LookupAsync(query, options, force: false, onUpdate, cancellationToken)
             : Task.FromResult(new LyricLookupReport());
+
+    public Task<LyricLookupReport> SearchAsync(LyricQuery query, LyricSourceSnapshot options,
+        Func<LyricLookupReport, ValueTask>? onUpdate, CancellationToken cancellationToken) =>
+        DisabledReason is null
+            ? service.LookupAsync(query, options, force: true, onUpdate, cancellationToken)
+            : Task.FromResult(new LyricLookupReport());
+
+    public bool Pin(LyricQuery query, LyricResult result) => service.Pin(query, result);
+
+    public void Unpin(LyricQuery query) => service.Unpin(query);
 }

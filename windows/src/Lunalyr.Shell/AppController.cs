@@ -417,6 +417,7 @@ public sealed partial class AppController : IAsyncDisposable
             // player's cover arrives; with nothing playing the wallpaper goes back to the default colours.
             CancelLookupLocked();
             CancelArtworkLocked();
+            _tools = LyricToolsState.Empty;
             if (session is null) _palette = PaletteMapper.Fallback;
             _cover = null;
             _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
@@ -444,6 +445,7 @@ public sealed partial class AppController : IAsyncDisposable
         if (Monitor.Track is not { } track) return;
         // The cover's colours load beside the lyric lookup (and even when lookups are off).
         BeginArtwork(track, Monitor.Session);
+        ForgetLyricTools();
         BeginLookup(track);
     }
 
@@ -498,6 +500,7 @@ public sealed partial class AppController : IAsyncDisposable
                 Artist = track.Artist,
                 Style = _settings.Style(),
                 Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
+                NoneFound = disabled is not null,
                 ReduceMotion = _reduceMotion,
                 Album = track.AlbumTitle.Length > 0 ? track.AlbumTitle : null,
                 TrackKey = track.TrackKey,
@@ -555,7 +558,6 @@ public sealed partial class AppController : IAsyncDisposable
     private async Task RunLookupAsync(long generation, MediaTrackInfo track, CancellationTokenSource cts)
     {
         var ct = cts.Token;
-        Task? swap = null;
         try
         {
             await Task.Yield(); // Off the player's event thread.
@@ -597,8 +599,6 @@ public sealed partial class AppController : IAsyncDisposable
             {
                 Genre = track.Genre.Length > 0 ? track.Genre : null,
             };
-            LyricSourceSnapshot options;
-            bool repair;
             lock (_gate)
             {
                 if (generation != _generation) return;
@@ -606,15 +606,54 @@ public sealed partial class AppController : IAsyncDisposable
                 Volatile.Write(ref _recordingKey, query.RecordingKey);
                 _status = _status with { Duration = duration.TotalSeconds };
                 _scene = _scene with { Duration = duration.TotalSeconds };
+            }
+
+            await LookUpAndShowAsync(generation, query, query, search: false, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A newer track (or shutdown) took over.
+        }
+        catch (Exception ex)
+        {
+            _lyricLog.Error("The lyric lookup failed.", ex);
+            ShowStatus(generation, StatusText.LookupFailed);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_lookupCts, cts)) _lookupCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Asks for <paramref name="asked"/> (the playing song, or a search's own title and artist) and shows what comes
+    /// back for the playing song's <paramref name="query"/>. The first result shows at once; each later one (an
+    /// upgrade, or LRCLIB demoted by a later agreement) swaps in between lines, so a line is never re-timed while it is
+    /// sung (LyricSwap, as on the Mac). Every report is kept for Settings › Timing (<see cref="LyricTools"/>).
+    /// </summary>
+    private async Task LookUpAndShowAsync(long generation, LyricQuery query, LyricQuery asked, bool search, CancellationToken ct)
+    {
+        Task? swap = null;
+        try
+        {
+            LyricSourceSnapshot options;
+            bool repair;
+            lock (_gate)
+            {
+                if (generation != _generation) return;
                 options = _settings.SourceSnapshot();
                 repair = _settings.RepairQQGaps;
             }
 
-            // The first result shows at once; each later one (an upgrade, or LRCLIB demoted by a later agreement) swaps
-            // in between lines, so a line is never re-timed while it is sung (LyricSwap, as on the Mac).
             var applied = 0;
-            var report = await _lyrics.LookupAsync(query, options, update =>
+            Func<LyricLookupReport, ValueTask> progress = update =>
             {
+                KeepReport(generation, update);
                 var step = LyricSwap.Reception(update, applied, rerun: false);
                 if (update.Result is { } result && step != LyricReception.Ignore)
                 {
@@ -624,7 +663,11 @@ public sealed partial class AppController : IAsyncDisposable
                 }
 
                 return ValueTask.CompletedTask;
-            }, ct).ConfigureAwait(false);
+            };
+            var report = search
+                ? await _lyrics.SearchAsync(asked, options, progress, ct).ConfigureAwait(false)
+                : await _lyrics.LookupAsync(asked, options, progress, ct).ConfigureAwait(false);
+            KeepReport(generation, report);
 
             if (report.Result is not null)
             {
@@ -634,7 +677,7 @@ public sealed partial class AppController : IAsyncDisposable
                 else if (step == LyricReception.SwapAtBoundary || swap is { IsCompleted: false })
                     swap = SwapAtLineBoundaryAsync(generation, query, report.Result, repair, complete: true, ct);
                 else MarkComplete(generation);
-                _lyricLog.Info($"Showing {report.Result.Provenance.Label}{(report.Cached ? " (saved)" : "")}.");
+                _lyricLog.Info($"Showing {report.Result.Provenance.Label}{(report.Pinned ? " (your saved choice)" : report.Cached ? " (saved)" : "")}.");
             }
             else if (report.Offline)
             {
@@ -652,18 +695,9 @@ public sealed partial class AppController : IAsyncDisposable
             }
             else
             {
-                _lyricLog.Info("No lyrics found for this song.");
+                _lyricLog.Info(search ? "The search found no lyrics." : "No lyrics found for this song.");
                 ShowStatus(generation, StatusText.NoLyrics);
             }
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // A newer track (or shutdown) took over.
-        }
-        catch (Exception ex)
-        {
-            _lyricLog.Error("The lyric lookup failed.", ex);
-            ShowStatus(generation, StatusText.LookupFailed);
         }
         finally
         {
@@ -679,13 +713,6 @@ public sealed partial class AppController : IAsyncDisposable
                     _lyricLog.Error("Swapping in the better lyrics failed.", ex);
                 }
             }
-
-            lock (_gate)
-            {
-                if (ReferenceEquals(_lookupCts, cts)) _lookupCts = null;
-            }
-
-            cts.Dispose();
         }
     }
 
@@ -759,7 +786,7 @@ public sealed partial class AppController : IAsyncDisposable
             if (generation != _generation) return;
             _shown = presented;
             _offsets.ActiveSource = result.Provenance.Source;
-            _scene = _scene with { Lyrics = presented, Readings = NoReadings, WordReadings = NoWordReadings, Status = null };
+            _scene = _scene with { Lyrics = presented, Readings = NoReadings, WordReadings = NoWordReadings, Status = null, NoneFound = false };
             _status = _status with { LyricSource = presented.Provenance.Label, Status = complete ? StatusText.Showing : StatusText.LookingUp };
             readings = _settings.Readings();
         }
@@ -831,7 +858,7 @@ public sealed partial class AppController : IAsyncDisposable
         lock (_gate)
         {
             if (generation != _generation) return;
-            _scene = _scene with { Lyrics = null, Readings = NoReadings, WordReadings = NoWordReadings, Status = status };
+            _scene = _scene with { Lyrics = null, Readings = NoReadings, WordReadings = NoWordReadings, Status = status, NoneFound = StatusText.IsNoneFound(status) };
             _status = _status with { Status = status, LyricSource = null };
         }
 
