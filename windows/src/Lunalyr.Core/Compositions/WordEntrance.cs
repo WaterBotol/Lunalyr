@@ -16,6 +16,7 @@ public enum CompositionKind
     Cascade,
     /// <summary>Cutout: uneven type and album-colour labels, built word by word.</summary>
     Cutout,
+    Hinge, Broadside, Portal, Mosaic, Torque, Fable,
 }
 
 /// <summary>How a word makes its entrance. Lunalyr's cutout, highlight, swipe and mix entrances are not built yet.</summary>

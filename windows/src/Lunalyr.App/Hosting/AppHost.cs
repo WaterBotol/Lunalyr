@@ -141,6 +141,7 @@ internal sealed class AppHost
         engine.RegisterLayer(new SpokenFactory(readings.WordBreaker, Log));
         engine.RegisterLayer(new CascadeFactory(readings.WordBreaker, Log));
         engine.RegisterLayer(new CutoutFactory(readings.WordBreaker, Log));
+        foreach (var stage in Lunalyr.Render.Compositions.Stage.StageFactories.All(readings.WordBreaker, Log)) engine.RegisterLayer(stage);
         _settings.Changed += (_, e) => engine.SetPerformance(PerformanceFrom(e.NewValue));
         _log.Info($"Wallpaper layers: {string.Join(", ", engine.LayerIds.Order())}.");
         return new EngineWallpaperRenderer(engine, Log);

@@ -6,12 +6,14 @@
 //
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics; extras: japanesewords, japaneseinstead,
 // credits, highlight.
+//   (and the stage layouts: -only hinge|broadside|portal|mosaic|torque|fable)
 
 using System.Diagnostics;
 using System.Globalization;
 using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Platform.Readings;
 using Lunalyr.Render.Compositions;
+using Lunalyr.Render.Compositions.Stage;
 using Lunalyr.Render.Scene;
 using Lunalyr.Tools.CompositionPreview;
 
@@ -52,6 +54,7 @@ for (var i = 0; i < args.Length; i++)
 
 IWordBreaker breaker = IcuWordBreaker.TryCreate() ?? (IWordBreaker)SimpleWordBreaker.Instance;
 IRenderLayerFactory[] factories = [new EditorialFactory(breaker), new SpokenFactory(breaker), new CascadeFactory(breaker), new CutoutFactory(breaker)];
+factories = [.. factories, .. StageFactories.All(breaker)];
 var fixtures = new Dictionary<string, Func<SceneSnapshot>>
 {
     ["english"] = () => Fixtures.English(),

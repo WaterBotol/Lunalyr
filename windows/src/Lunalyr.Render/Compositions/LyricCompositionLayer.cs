@@ -32,6 +32,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Breaker = breaker;
         _log = (logger ?? Logger.Null).Render;
         Rules = new StageRules(RollsWordTimed: kind.ArrivalOnly());
+        if (kind.FillsStage()) Rules = Rules with { FillsStage = true };
     }
 
     protected CompositionKind Kind { get; }
@@ -291,8 +292,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Three back: after two very short lines the one before them can still be leaving.
         for (var row = index - 3; row < index; row++)
         {
-            if (!LineFlow.IsLeaving(row, index, lines, time, Rules)) continue;
+            if (!LineFlow.IsLeaving(row, index, lines, time, Rules, LeavingSpan)) continue;
             var held = Rolls(row) ? null : LineFlow.HeldShift(row, lines, time);
+            if (Rules.FillsStage) held = null;
             _drawn[count++] = new DrawnLine
             {
                 Row = row, Outgoing = true, Yield = LineFlow.CarriedYield(row, sheet, time, Rules), Opacity = lyricOpacity,
@@ -331,12 +333,15 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (upcoming < lines.Count && lines[upcoming].Words.Count > 0 && !Rolls(upcoming)
             && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming))
         {
+            if (Rules.FillsStage) { PrepareStage(upcoming); return; }
             _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
         }
     }
 
     private StackedLine Stacked(in DrawnLine line, double time)
     {
+        // A stage layout sets every line in the middle of the stage; it never stacks a held line.
+        if (Rules.FillsStage) return default;
         var lines = Sheet!.Lines;
         var row = line.Row;
         if (row < 0 || row >= lines.Count || lines[row].Words.Count == 0 || Rolls(row)) return default;
@@ -375,6 +380,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             DrawRolling(dc, row, time, stagePresence * opacity);
             return;
         }
+        if (Rules.FillsStage)
+        {
+            // A stage layout draws nothing for a preview (the Mac's firstRunOnly is a clear stage).
+            if (!drawn.Previewing) DrawStage(dc, row, time, pose, stagePresence, opacity, drawn.Yield);
+            return;
+        }
         var heldScale = 1 - LineStack.HeldShrink * Math.Min(1, drawn.Held ?? 0);
         if (line.WordTimed)
         {
@@ -402,6 +413,19 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     /// <summary>The rolling stage for line <paramref name="row"/> (Spoken).</summary>
     protected virtual void DrawRolling(ID2D1DeviceContext dc, int row, double time, double presence) { }
+
+    /// <summary>
+    /// A stage layout's line <paramref name="row"/> (Hinge, Broadside, Portal, Mosaic, Torque, Fable): the line's
+    /// presence, the hand-over opacity and how far it yields to the next line's preview.
+    /// </summary>
+    protected virtual void DrawStage(ID2D1DeviceContext dc, int row, double time, in LyricPhraseTiming pose, double presence,
+                                     double opacity, double yield) { }
+
+    /// <summary>Sets a stage layout's line ahead of time (laid out and baked), not on the frame it first appears.</summary>
+    protected virtual void PrepareStage(int row) { }
+
+    /// <summary>How long a line takes to leave once its exit has begun (Hinge folds for longer).</summary>
+    protected virtual double LeavingSpan => LyricPhraseTiming.ExitSpan;
 
     /// <summary>Maps a plan's content (top-left origin, layout pixels) onto the stage, fitted and placed.</summary>
     private Matrix3x2 ContentToDevice(LinePlan plan, double offset, double heldScale) =>

@@ -9,10 +9,19 @@ The lyric layer draws the current line(s) of a `SceneSnapshot` at `FrameContext.
 | `spoken` | Spoken: each sung word takes focus; recent words settle around it | `SpokenTypographyView` | `SpokenLayer`, `Lunalyr.Core.Compositions.RollingStage` |
 | `cascade` | Cascade: a moving column of words, arriving with the voice | `SpokenTypographyView` | `SpokenLayer` (Cascade), see [cascade-cutout.md](cascade-cutout.md) |
 | `cutout` | Cutout: uneven type and album-colour labels, built word by word | `SpokenTypographyView` | `SpokenLayer` (Cutout), `Lunalyr.Core.Compositions.RollingLabel`, see [cascade-cutout.md](cascade-cutout.md) |
+| `hinge` | Hinge: heavy words swing in on a hinge and fold into a stack | `StageLyricView` | `HingeLayer`, `Lunalyr.Core.Compositions.HingeGeometry` ([stage.md](stage.md)) |
+| `broadside` | Broadside: one strip of big type that slides along, with little words as labels | `StageLyricView` | `BroadsideLayer`, `BroadsideGeometry` |
+| `portal` | Portal: the sung word in a pill; earlier words drift away as pale ones | `StageLyricView` | `PortalLayer`, `PortalGeometry` |
+| `mosaic` | Mosaic: a collage, each word set huge, on a colour bar, or letter by letter | `StageLyricView` | `MosaicLayer`, `MosaicGeometry` |
+| `torque` | Torque: words wrung into place with a thick edge, stacking upwards | `StageLyricView` | `TorqueLayer`, `TorqueGeometry` |
+| `fable` | Fable: a new shape and accent every line; each word lands its own way | `StageLyricView` | `FableLayer`, `FableStyle`, `FableLayout` |
 
 All share the stage logic of the Mac's `LyricLayer` (which line is drawn, hand-overs, held duet lines, previews,
 line-timed phrases, backing vocals, instrumental breaks, plain lyrics, status text): `Lunalyr.Core.Compositions.LineFlow`
 and `LyricCompositionLayer` in `src/Lunalyr.Render/Compositions/`.
+
+The six stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable; the Mac's `fillsStage`) build on the same
+stage through `StageLayer` in `src/Lunalyr.Render/Compositions/Stage/`; see [stage.md](stage.md).
 
 ## Provenance
 
