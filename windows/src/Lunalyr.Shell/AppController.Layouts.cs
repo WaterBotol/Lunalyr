@@ -53,7 +53,9 @@ public sealed partial class AppController
     /// Picks the composition for the song on screen, once per song, from what is known of it now: its lyrics
     /// (<paramref name="lyrics"/>, null when there are none) and its cover's colours if they have been read.
     /// </summary>
-    private void ChooseLayout(LyricResult? lyrics = null)
+    /// <param name="onlyWhenSettled">Only when the song's lyrics are shown or its lookup has ended: a choice made mid-lookup
+    /// would know nothing of the song and would stick.</param>
+    private void ChooseLayout(LyricResult? lyrics = null, bool onlyWhenSettled = false)
     {
         string pick, background, title;
         int? cursor = null;
@@ -61,6 +63,7 @@ public sealed partial class AppController
         lock (_gate)
         {
             if (_disposed || _settings.LyricComposition != AutomaticComposition || _lookupTrack is not { } track) return;
+            if (onlyWhenSettled && _shown is null && _lookupCts is not null) return;
             lyrics ??= _shown;
             var key = track.TrackKey;
             if (key == _layoutTrack && _layout is not null) return;

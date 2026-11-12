@@ -283,7 +283,11 @@ public sealed partial class AppController : IAsyncDisposable
         if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
             _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
-        if (settings.LyricComposition == AutomaticComposition) ChooseLayout();
+        // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
+        // otherwise when they arrive. Other settings changes never decide it.
+        if (settings.LyricComposition == AutomaticComposition
+            && (old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts))
+            ChooseLayout(onlyWhenSettled: true);
         if (old.AnimationRate != settings.AnimationRate) _renderer.SetFrameRate(settings.AnimationRate);
         if (old.WallpaperPaused != settings.WallpaperPaused)
         {

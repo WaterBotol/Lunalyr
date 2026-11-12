@@ -318,6 +318,26 @@ public sealed class AppControllerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ASongIsMatchedOnlyOnceItsLyricsAreKnown()
+    {
+        var held = _lyrics.Hold("Song");
+        _source.Add(Playing("Song"));
+        var controller = Controller();
+        controller.Start();
+        await WaitUntil(() => _lyrics.Queries.Count == 1);
+        // Turned to Match the music mid-lookup, then an unrelated change: nothing is decided without the lyrics.
+        controller.ApplySettings(controller.Settings with { LyricComposition = "automatic" });
+        controller.ApplySettings(controller.Settings with { LyricOffset = 0.5 });
+        Assert.Null(controller.MatchedComposition);
+        Assert.NotEqual("automatic", _renderer.Layers.Composition);
+
+        held.SetResult(TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));
+        await controller.WhenIdleAsync();
+        Assert.NotNull(controller.MatchedComposition);
+        Assert.Equal(controller.MatchedComposition, _renderer.Layers.Composition);
+    }
+
+    [Fact]
     public async Task TheSceneCarriesTheExtrasSettingsAndTheTrackLength()
     {
         _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));

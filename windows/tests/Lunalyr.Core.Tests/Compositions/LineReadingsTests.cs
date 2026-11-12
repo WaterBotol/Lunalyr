@@ -157,3 +157,18 @@ public class LineReadingsTests
         Assert.True(Frames(11.3)[1].Reading > 0.5);
     }
 }
+
+/// <summary>Readings from a companion file attached to the lines they read.</summary>
+public class CompanionReadingTests
+{
+    // Ported from ReadingAndTTMLTests.swift: testReadingsAttachByTimestampRatherThanLineIndex
+    [Fact]
+    public void ReadingsAttachByTimestampRatherThanLineIndex()
+    {
+        var lines = Lunalyr.Core.Lyrics.Parsing.LrcParser.Parse("[00:01]one\n[00:03]two\n[00:05]three", 8);
+        var attached = Lunalyr.Core.Lyrics.Parsing.LocalSidecars.AttachingReadings("[00:03.10]second reading\n[00:05]third reading", lines, 8);
+        Assert.Null(attached[0].Romanization);
+        Assert.Equal("second reading", attached[1].Romanization);
+        Assert.Equal("third reading", attached[2].Romanization);
+    }
+}

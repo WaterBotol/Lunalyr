@@ -1,6 +1,7 @@
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Readings;
+using Lunalyr.Core.Motion;
 
 namespace Lunalyr.Core.Tests.Compositions;
 
@@ -100,5 +101,31 @@ public class HighlightTileTests
         Assert.True(HighlightTiming.HighlightsSungWords("cutoutHighlight"));
         Assert.False(HighlightTiming.HighlightsSungWords("fade"));
         Assert.False(HighlightTiming.HighlightsSungWords(null));
+    }
+
+    // Ported from LyricHighlightTests.swift: testRollingHighlightsReleaseWithTheirOwnLines (Spoken's rolling stage)
+    [Fact]
+    public void RollingHighlightsReleaseWithTheirOwnLines()
+    {
+        var first = new LyricWord("Hold", 10, 10.3);
+        var second = new LyricWord("on", 10.35, 10.6);
+        var third = new LyricWord("Again", 13.9, 14.5);
+        LyricLine[] lines =
+        [
+            new() { Start = 10, End = 13.8, Text = "Hold on", Words = [first, second], WordTimed = true },
+            new() { Start = 13.9, End = 15, Text = "Again", Words = [third], WordTimed = true },
+        ];
+        var window = new RollingSong(lines, SimpleWordBreaker.Instance, null, RomanizationDisplay.Off).Window(0, 13.7, 1.2);
+        Assert.Equal([first, second, third], window.Words);
+        Assert.Equal(13.8, window.LineEnds[first]);
+        Assert.Equal(13.8, window.LineEnds[second]);
+        Assert.Equal(15, window.LineEnds[third]);
+
+        var words = RollingWords.Prepare(window.Words, 44, ordinals: window.Ordinals);
+        var poses = words.Select(word => HighlightTiming.Pose(13.7, word.Source.Start, window.LineEnds[word.Source], false)).ToArray();
+        Assert.Equal([new HighlightPose(1, 1), new HighlightPose(1, 1), HighlightPose.Hidden], poses);
+        var shown = RollingTokenState.Make(words[0], 2, 1, 13.7, 44, 600, 0, false, WordArrival.Glide, new WordRevealOptions(),
+                                           highlightOpacity: poses[0].Opacity).Shown;
+        Assert.Equal(1, shown, 3); // the normal timed fade cannot hide a held tile
     }
 }
