@@ -82,24 +82,7 @@ internal sealed class Ink : IDisposable
         var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
         var textTransform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
 
-        if (Soft is not null && shadowOpacity * opacity > 0.004f)
-        {
-            dc.Transform = Matrix3x2.CreateTranslation(-SoftCentre) * Matrix3x2.CreateScale(1 / SoftRaster) * world;
-            if (!sliced)
-            {
-                dc.DrawBitmap(Soft, new RawRectF(0, 0, SoftWidth, SoftHeight), opacity * shadowOpacity, InterpolationMode.Linear, null, null);
-            }
-            else
-            {
-                for (var k = 0; k < tokenOpacities.Length; k++)
-                {
-                    var alpha = (float)tokenOpacities[k] * opacity * shadowOpacity;
-                    if (alpha <= 0.004f) continue;
-                    var slice = SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, SoftCentre, SoftRaster, SoftWidth, SoftHeight);
-                    dc.DrawBitmap(Soft, slice, alpha, InterpolationMode.Linear, slice, null);
-                }
-            }
-        }
+        DrawShadow(dc, world, opacity, shadowOpacity, boundaries, tokenOpacities, rightToLeft);
 
         dc.Transform = textTransform;
         if (glow.Visible)
@@ -150,6 +133,96 @@ internal sealed class Ink : IDisposable
             if (alpha <= 0.002f) continue;
             var slice = SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
             dc.DrawBitmap(Text, slice, alpha, InterpolationMode.Linear, slice, null);
+        }
+    }
+
+    /// <summary>
+    /// Draws only the soft shadow (as <see cref="Draw"/> would under the text), for a piece whose text goes on top of
+    /// something drawn after its shadow, such as a label's tile.
+    /// </summary>
+    public void DrawShadow(ID2D1DeviceContext dc, in Matrix3x2 world, float opacity, float shadowOpacity,
+                           ReadOnlySpan<double> boundaries = default, ReadOnlySpan<double> tokenOpacities = default,
+                           bool rightToLeft = false)
+    {
+        if (Soft is null || !(shadowOpacity * opacity > 0.004f)) return;
+        var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
+        dc.Transform = Matrix3x2.CreateTranslation(-SoftCentre) * Matrix3x2.CreateScale(1 / SoftRaster) * world;
+        if (!sliced)
+        {
+            dc.DrawBitmap(Soft, new RawRectF(0, 0, SoftWidth, SoftHeight), opacity * shadowOpacity, InterpolationMode.Linear, null, null);
+            return;
+        }
+        for (var k = 0; k < tokenOpacities.Length; k++)
+        {
+            var alpha = (float)tokenOpacities[k] * opacity * shadowOpacity;
+            if (alpha <= 0.004f) continue;
+            var slice = SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, SoftCentre, SoftRaster, SoftWidth, SoftHeight);
+            dc.DrawBitmap(Soft, slice, alpha, InterpolationMode.Linear, slice, null);
+        }
+    }
+
+    /// <summary>
+    /// Draws the text (no shadow, no glow) only between <paramref name="left"/> and <paramref name="right"/>, in layout
+    /// pixels from the centre of the layout box: where a label's tile has pressed in. Glued runs arrive by token as in
+    /// <see cref="Draw"/>.
+    /// </summary>
+    public void DrawBetween(ID2D1DeviceContext dc, in Matrix3x2 world, float worldScale, float opacity, float blur,
+                            float left, float right, ReadOnlySpan<double> boundaries = default,
+                            ReadOnlySpan<double> tokenOpacities = default, bool rightToLeft = false)
+    {
+        if (!(opacity > 0.002f) || !(worldScale > 0.0001f) || !(right > left)) return;
+        var from = Math.Clamp(Centre.X + left * Raster, 0, PixelWidth);
+        var to = Math.Clamp(Centre.X + right * Raster, 0, PixelWidth);
+        if (!(to > from)) return;
+        var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
+        dc.Transform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
+        var sigma = blur * 0.5f * Raster / worldScale;
+        if (!sliced)
+        {
+            var span = new RawRectF(from, 0, to, PixelHeight);
+            if (sigma < 0.2f)
+            {
+                dc.DrawBitmap(Text, span, opacity, InterpolationMode.Linear, span, null);
+            }
+            else
+            {
+                // The blur spills past the bitmap: an open side keeps its spill, as a full draw would.
+                var spill = new RawRectF(float.IsNegativeInfinity(left) ? -PixelWidth : from, -PixelHeight,
+                                         float.IsPositiveInfinity(right) ? 2f * PixelWidth : to, 2f * PixelHeight);
+                SetBlur(sigma);
+                _opacity.Value = opacity;
+                dc.DrawImage(_blurred, new Vector2(spill.Left, spill.Top), spill, InterpolationMode.Linear, CompositeMode.SourceOver);
+            }
+            return;
+        }
+        // As in Draw: the tokens fully there share the run's blur; any still arriving fade in sharp.
+        var settled = 0;
+        while (settled < tokenOpacities.Length && tokenOpacities[settled] >= 0.98) settled++;
+        var start = 0;
+        if (sigma >= 0.2f && settled > 0)
+        {
+            var first = SliceRect(0, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
+            var last = SliceRect(settled - 1, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
+            var a = MathF.Max(MathF.Min(first.Left, last.Left), from);
+            var b = MathF.Min(MathF.Max(first.Right, last.Right), to);
+            if (b > a)
+            {
+                SetBlur(sigma);
+                _opacity.Value = opacity;
+                dc.DrawImage(_blurred, new Vector2(a, 0), new RawRectF(a, 0, b, PixelHeight), InterpolationMode.Linear, CompositeMode.SourceOver);
+            }
+            start = settled;
+        }
+        for (var k = start; k < tokenOpacities.Length; k++)
+        {
+            var alpha = (float)tokenOpacities[k] * opacity;
+            if (alpha <= 0.002f) continue;
+            var slice = SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
+            var a = MathF.Max(slice.Left, from);
+            var b = MathF.Min(slice.Right, to);
+            if (!(b > a)) continue;
+            var part = new RawRectF(a, 0, b, PixelHeight);
+            dc.DrawBitmap(Text, part, alpha, InterpolationMode.Linear, part, null);
         }
     }
 

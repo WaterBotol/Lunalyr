@@ -31,7 +31,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         Kind = kind;
         Breaker = breaker;
         _log = (logger ?? Logger.Null).Render;
-        Rules = new StageRules(RollsWordTimed: kind == CompositionKind.Spoken);
+        Rules = new StageRules(RollsWordTimed: kind.ArrivalOnly());
     }
 
     protected CompositionKind Kind { get; }

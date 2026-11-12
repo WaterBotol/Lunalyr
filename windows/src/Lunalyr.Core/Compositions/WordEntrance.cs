@@ -12,6 +12,10 @@ public enum CompositionKind
 {
     Editorial,
     Spoken,
+    /// <summary>Cascade: a moving column of words, arriving with the voice.</summary>
+    Cascade,
+    /// <summary>Cutout: uneven type and album-colour labels, built word by word.</summary>
+    Cutout,
 }
 
 /// <summary>How a word makes its entrance. Lunalyr's cutout, highlight, swipe and mix entrances are not built yet.</summary>
@@ -48,11 +52,14 @@ public static class WordArrivals
         _ => WordArrival.Fade,
     };
 
-    /// <summary>"Match the style" resolved for a composition: Editorial fades in, Spoken glides.</summary>
+    /// <summary>"Match the style" resolved for a composition: Editorial fades in, Spoken glides, Cascade floats up, Cutout folds in.</summary>
     public static WordArrival Resolved(this WordArrival arrival, CompositionKind composition) =>
         arrival != WordArrival.Automatic ? arrival : composition switch
         {
             CompositionKind.Spoken => WordArrival.Glide,
+            CompositionKind.Cascade => WordArrival.Lift,
+            // The Mac's Cutout · Fold is not built yet: Unfold, the nearest built entrance, stands in for it.
+            CompositionKind.Cutout => WordArrival.Unfold,
             _ => WordArrival.Fade,
         };
 
