@@ -37,6 +37,8 @@ public sealed partial class SettingsWindow : Window
         {
             _preview?.Dispose();
             _ctx.Detach();
+            // Edit position never outlives the window that turned it on: the lyrics lock again.
+            _host.SetFloatingEditing(false);
         };
         ShowPage(page ?? "Lyric style");
         RefreshStatus();
@@ -144,7 +146,8 @@ public sealed partial class SettingsWindow : Window
         page switch
         {
             "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride),
-            "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview()),
+            "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
+                new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing)),
             "Readings" => ReadingsPage.Build(_ctx),
             "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
             "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion),

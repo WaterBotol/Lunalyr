@@ -71,6 +71,12 @@ public sealed record ShellOptions
     /// </summary>
     public IReadOnlyList<string> PlayerDebug { get; init; } = [];
 
+    /// <summary>
+    /// <c>--floating-capture &lt;file&gt;</c>: on quitting, write the floating lyrics window's back buffer as a PNG
+    /// (the engine draws a frame for it even while the displays are off), and log the window's styles. For checks.
+    /// </summary>
+    public string? FloatingCapturePath { get; init; }
+
     public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
@@ -124,6 +130,13 @@ public sealed record ShellOptions
                     {
                         if (theme.Trim().ToLowerInvariant() is "light" or "dark" or "system") options = options with { Theme = theme.Trim().ToLowerInvariant() };
                         else problems.Add($"--theme {theme}: expected light, dark or system.");
+                    }
+                    break;
+                case "--floating-capture":
+                    if (Value() is { } capture)
+                    {
+                        if (capture.Trim().Length == 0) problems.Add("--floating-capture needs a file.");
+                        else options = options with { FloatingCapturePath = Path.GetFullPath(capture.Trim()) };
                     }
                     break;
                 case "--stats":

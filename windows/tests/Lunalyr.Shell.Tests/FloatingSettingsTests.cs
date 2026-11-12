@@ -231,4 +231,18 @@ public class FloatingSettingsTests
         }.Normalized();
         Assert.Equal(["A"], s.FloatingFrames.Keys);
     }
+
+    // Ported from FloatingLyricsSection.swift's LyricSurfaceSection.caption and LyricStyleEditingNote (the Mac has no
+    // test of its own for them): the words say which style the page edits.
+    [Fact]
+    public void TheCaptionsSayWhichStyleIsEdited()
+    {
+        Assert.StartsWith("Editing the Desktop style.", FloatingCopy.SurfaceCaption(LyricsSurface.Desktop));
+        Assert.StartsWith("Editing the Floating style.", FloatingCopy.SurfaceCaption(LyricsSurface.Floating));
+        Assert.Null(FloatingCopy.EditingNote(LyricsSurface.Desktop));
+        Assert.NotNull(FloatingCopy.EditingNote(LyricsSurface.Floating));
+        Assert.Equal("Medium", FloatingCopy.SizeName(44));
+        Assert.Equal("Custom", FloatingCopy.SizeName(50));
+        Assert.Equal("44 pt", FloatingCopy.Points(44.2));
+    }
 }
