@@ -136,9 +136,6 @@ public static class FlyoutText
 
     public const string TapToSyncHelp = "Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps";
 
-    /// <summary>Windows only: Tap to Sync has its estimator (LyricTapSync) but no window yet, and no milestone named for it.</summary>
-    public const string TapToSyncLater = "Tap to sync arrives in a later build.";
-
     // ---- Search YouTube (Windows: the browser, not the Mac's music-video picker) ----
 
     public const string SearchYouTube = "Search YouTube";

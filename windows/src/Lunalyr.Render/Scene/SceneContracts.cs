@@ -70,6 +70,12 @@ public sealed record SceneSnapshot
     public string? Status { get; init; }
 
     /// <summary>
+    /// <see cref="Status"/> is a verdict that this song has no lyrics to show (none found, offline, a stream, lookups
+    /// off…), not a wait: the stage shows it as <see cref="LyricStyle.NoLyrics"/> says. False for "Looking up lyrics…".
+    /// </summary>
+    public bool NoneFound { get; init; }
+
+    /// <summary>
     /// The track's length in seconds, when the player gives one: an instrumental break after the last line then shows
     /// how far it has to go, as other breaks do. Null when unknown (the break is open-ended).
     /// </summary>
@@ -179,6 +185,12 @@ public sealed record LyricStyle
     /// listed here uses its own entrance instead of <see cref="Reveal"/>. Empty by default.
     /// </summary>
     public ValueMap RevealByLayout { get; init; } = ValueMap.Empty;
+
+    /// <summary>
+    /// What the stage shows once a song turns out to have no lyrics (<see cref="SceneSnapshot.NoneFound"/>): a short
+    /// note that fades after a few seconds, the song's title and artist, or nothing (the Mac's <c>noLyrics</c>).
+    /// </summary>
+    public Lunalyr.Core.Motion.NoLyricsDisplay NoLyrics { get; init; } = Lunalyr.Core.Motion.NoLyricsDisplay.Notice;
 
     /// <summary>The reveal id composition <paramref name="compositionId"/> uses.</summary>
     public string RevealFor(string compositionId) =>

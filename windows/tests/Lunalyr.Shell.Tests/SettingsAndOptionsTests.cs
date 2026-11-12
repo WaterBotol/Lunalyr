@@ -62,6 +62,7 @@ public sealed class AppSettingsTests
             "spotifyClientId",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode",
+            "noLyrics",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

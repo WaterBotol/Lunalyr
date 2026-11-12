@@ -152,15 +152,13 @@
                                 <FontIcon Glyph="&#xE7A7;" FontSize="14" />
                             </Button>
                         </Grid>
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
                             <TextBlock x:Name="TapSyncNote" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                            <Button x:Name="TapSyncButton" Grid.Column="1" Content="Tap to sync…" IsEnabled="False"
-                                    Padding="10,4,10,5" />
-                        </Grid>
+                            <Button x:Name="TapUndoButton" Content="Undo tap sync" Padding="10,4,10,5" Visibility="Collapsed"
+                                    Click="TapUndoButton_Click" />
+                            <Button x:Name="TapSyncButton" Content="Tap to sync…" Padding="10,4,10,5"
+                                    Click="TapSyncButton_Click" />
+                        </StackPanel>
 
                         <!-- Search YouTube: the browser, only from a click here. -->
                         <Grid ColumnSpacing="8">

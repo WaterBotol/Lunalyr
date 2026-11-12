@@ -5,6 +5,7 @@ using Lunalyr.Core.Colour;
 using Lunalyr.Core.NowPlaying;
 using Lunalyr.Shell;
 using Lunalyr.Shell.Flyout;
+using Lunalyr.Shell.LyricTools;
 using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
@@ -228,9 +229,13 @@ public sealed partial class TrayFlyout : Window
         ToolTipService.SetToolTip(ResetButton, FlyoutText.ResetHelp);
 
         TapSyncButton.Content = FlyoutText.TapToSync;
-        TapSyncNote.Text = FlyoutText.TapToSyncLater;
         AutomationProperties.SetName(TapSyncButton, "Tap to sync");
-        AutomationProperties.SetHelpText(TapSyncButton, FlyoutText.TapToSyncLater);
+        AutomationProperties.SetHelpText(TapSyncButton, FlyoutText.TapToSyncHelp);
+        ToolTipService.SetToolTip(TapSyncButton, FlyoutText.TapToSyncHelp);
+        TapUndoButton.Content = LyricToolsText.FlyoutUndoTapSync;
+        AutomationProperties.SetName(TapUndoButton, LyricToolsText.FlyoutUndoTapSync);
+        AutomationProperties.SetHelpText(TapUndoButton, LyricToolsText.UndoTapToSyncHelp);
+        ToolTipService.SetToolTip(TapUndoButton, LyricToolsText.UndoTapToSyncHelp);
 
         AutomationProperties.SetName(SearchButton, FlyoutText.SearchYouTube);
         AutomationProperties.SetHelpText(SearchButton, FlyoutText.SearchYouTubeHelp);
@@ -308,6 +313,7 @@ public sealed partial class TrayFlyout : Window
 
             EarlierButton.IsEnabled = LaterButton.IsEnabled = state.TimingEnabled;
             ResetButton.IsEnabled = state.ResetEnabled;
+            ShowTapSync();
             OffsetText.Text = state.OffsetText;
             // No offset reads quieter, as the Mac's secondary style.
             OffsetText.Opacity = state.ResetEnabled ? 1 : 0.62;
@@ -457,6 +463,33 @@ public sealed partial class TrayFlyout : Window
         Announce(OffsetText, FlyoutText.ResetNote);
         Refresh();
         EarlierButton.Focus(FocusState.Keyboard);
+    }
+
+    /// <summary>Tap to sync (the Mac's MenuBarLyricTiming): the panel takes the keyboard, so the flyout steps aside.</summary>
+    private void TapSyncButton_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        _host.ToggleTapSync();
+    }
+
+    private void TapUndoButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_host.Controller?.TapSync is not { CanUndo: true } tapSync || tapSync.LastApplied is not { } applied) return;
+        tapSync.Undo();
+        Announce(OffsetText, LyricToolsText.Undone(applied.Previous));
+        Refresh();
+    }
+
+    /// <summary>Tap to sync's row: start or stop, Undo while the last tap sync's offset is in force; shown, but off, with nothing playing.</summary>
+    private void ShowTapSync()
+    {
+        var tapSync = _host.Controller?.TapSync;
+        var listening = tapSync?.IsListening == true;
+        TapSyncButton.Content = listening ? LyricToolsText.FlyoutStopTapToSync : LyricToolsText.FlyoutTapToSync;
+        AutomationProperties.SetName(TapSyncButton, listening ? LyricToolsText.FlyoutStopTapToSync : "Tap to sync");
+        TapSyncButton.IsEnabled = listening || _host.Controller?.CanAdjustSongOffset == true;
+        TapUndoButton.Visibility = tapSync?.CanUndo == true ? Visibility.Visible : Visibility.Collapsed;
+        TapSyncNote.Text = "";
     }
 
     private void SearchButton_Click(object sender, RoutedEventArgs e)

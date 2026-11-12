@@ -146,7 +146,7 @@ public sealed partial class SettingsWindow : Window
             "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride),
             "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview()),
             "Readings" => ReadingsPage.Build(_ctx),
-            "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync),
+            "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
             "Wallpaper" => WallpaperPage.Build(_ctx),
             "Covers" => CoversPage.Build(),
             "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.Spotify, () => _host.SpotifyOffReason),

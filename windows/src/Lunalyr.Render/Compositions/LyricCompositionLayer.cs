@@ -172,6 +172,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         _plainLines = null;
         _status?.Dispose();
         _status = null;
+        DropTrackName();
         SceneShown = null;
         Sheet = null;
         InvalidateExtras();
@@ -201,7 +202,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             }
             else if (!string.IsNullOrWhiteSpace(frame.Scene.Status))
             {
-                DrawStatus(dc, frame.Scene.Status!, frame.WallSeconds);
+                // A verdict that the song has no lyrics shows as "When none are found" says; waits always show.
+                if (frame.Scene.NoneFound) DrawNoneFound(dc, frame.Scene, frame.WallSeconds);
+                else DrawStatus(dc, frame.Scene.Status!, frame.WallSeconds);
             }
             else
             {
@@ -1262,8 +1265,11 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         }
     }
 
-    /// <summary>The calm status text ("No lyrics found"), easing in when it changes.</summary>
-    private void DrawStatus(ID2D1DeviceContext dc, string status, double wall)
+    /// <summary>
+    /// The calm status text ("No lyrics found"), easing in when it changes; with <paramref name="brief"/>, held for a
+    /// few seconds and then faded away (<see cref="LyricStagePresence.Notice"/>).
+    /// </summary>
+    private void DrawStatus(ID2D1DeviceContext dc, string status, double wall, bool brief = false)
     {
         if (status != _statusText || _status is null)
         {
@@ -1277,6 +1283,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         }
         var presence = double.IsFinite(_statusSince) ? LyricMotion.Settle(wall - _statusSince, 0.6) : 1;
         IsAnimating = presence < 1;
+        if (brief && double.IsFinite(_statusSince))
+        {
+            // The clock keeps running through the hold, or a still background would never draw the fade.
+            presence *= LyricStagePresence.Notice(_statusSince, wall, WallpaperMotion.NoticeHold, WallpaperMotion.NoticeFade);
+            IsAnimating |= wall < _statusSince + WallpaperMotion.NoticeHold + WallpaperMotion.NoticeFade + 0.05;
+        }
         _status!.Draw(dc, Matrix3x2.CreateTranslation(StageCentre), 1, (float)presence, 0, GlowSpec.None, 0);
     }
 

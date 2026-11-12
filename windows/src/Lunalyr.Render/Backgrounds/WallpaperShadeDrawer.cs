@@ -104,13 +104,37 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);
         dc.FillRectangle(whole, _scrim);
 
-        var shows = frame.Scene.Title is not null || frame.Scene.Lyrics is not null || frame.Scene.Status is not null;
-        var presence = Presence(shows ? 1 : 0, frame.WallSeconds);
+        var presence = Presence(StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
         var amount = BackingAmount(frame, fieldLuminance) * presence;
         if (amount > WallpaperShade.MinimumBacking)
             dc.DrawBitmap(_backing, whole, (float)Math.Min(1, amount), InterpolationMode.Linear, null, null);
 
         if (_options.Grain && _grain is not null) dc.FillRectangle(whole, _grain);
+    }
+
+    private string? _noneFoundStatus;
+    private double _noneFoundSince;
+
+    /// <summary>
+    /// Whether the stage shows anything (1) or not (0). A song without lyrics follows "When none are found"
+    /// (<see cref="Core.Motion.LyricStagePresence"/>): the backing stays behind its title and artist, goes with its note
+    /// once that has faded, and never comes for an empty stage.
+    /// </summary>
+    private double StageShows(SceneSnapshot scene, double now)
+    {
+        if (!scene.NoneFound || scene.Lyrics is not null || scene.Status is null)
+        {
+            _noneFoundStatus = null;
+            return scene.Title is not null || scene.Lyrics is not null || scene.Status is not null ? 1 : 0;
+        }
+        if (scene.Status != _noneFoundStatus)
+        {
+            _noneFoundStatus = scene.Status;
+            _noneFoundSince = now;
+        }
+        var inputs = new Core.Motion.LyricStagePresence.Inputs(HasTrack: true, IdleSince: null, IsLoading: false, HasTimedLines: false,
+            HasPlainLines: false, NotFound: true, NotFoundAt: _noneFoundSince, scene.Style.NoLyrics);
+        return Core.Motion.LyricStagePresence.Presence(inputs, now, Core.Motion.NoticeTiming.Default) > 0.5 ? 1 : 0;
     }
 
     /// <summary>True while the backing is still fading in or out.</summary>

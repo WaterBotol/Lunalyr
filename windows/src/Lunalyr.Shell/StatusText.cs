@@ -16,4 +16,12 @@ public static class StatusText
     public const string Stream = "This looks like a live stream, so lyrics aren't looked up";
     public const string LookupFailed = "Couldn't look up lyrics for this song";
     public const string LookupsOff = "Lyric lookups are off for this run";
+
+    /// <summary>
+    /// Whether <paramref name="status"/> says the song playing has no lyrics to show (none found, offline, a stream, no
+    /// position, a failed or refused lookup), rather than that they are on their way: the wallpaper then shows what
+    /// "When none are found" asks for. The Mac's "missing" stage.
+    /// </summary>
+    public static bool IsNoneFound(string? status) =>
+        status is NoLyrics or Offline or NoPosition or Stream or LookupFailed or LookupsOff;
 }

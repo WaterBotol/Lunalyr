@@ -15,7 +15,7 @@ namespace Lunalyr.App.Settings;
 /// </summary>
 internal static class TimingPage
 {
-    public static StackPanel Build(SettingsContext ctx, Func<AppController?> controller, Func<Task<string?>> chooseFolder)
+    public static StackPanel Build(SettingsContext ctx, Func<AppController?> controller, Func<Task<string?>> chooseFolder, TimingTools tools)
     {
         var page = Page();
 
@@ -73,20 +73,14 @@ internal static class TimingPage
         page.Children.Add(Card("Song offset", "Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.",
             "", offsetControls));
         AutomationProperties.SetName(offset, "Song offset");
-        page.Children.Add(Card("Tap to sync", "Press a key each time a lyric line starts; Lunalyr sets this song’s timing from the taps.",
-            "", Button("Tap to Sync", () => { }), notYet: SettingsCopy.LaterBuild));
+        // Where the lyrics came from, a saved choice, and Tap to sync.
+        LyricToolsRows.AddThisSong(page, ctx, controller, tools);
 
         // ---- Find lyrics ----
-        Section(page, "Find lyrics");
-        page.Children.Add(Card("Search for other lyrics", "Ask every enabled source with your own title and artist.", "",
-            Button("Search…", () => { }), notYet: SettingsCopy.LaterBuild));
-        page.Children.Add(Card("Import LRC or TTML", "Use a lyrics file of your own for the playing song (up to 1 MB).", "",
-            Button("Import…", () => { }), notYet: SettingsCopy.LaterBuild));
+        LyricToolsRows.AddFindLyrics(page, ctx, controller, tools);
 
         // ---- Without synced lyrics ----
-        Section(page, "Without synced lyrics");
-        page.Children.Add(Card("When none are found", "A calm note says so on the wallpaper.", "", FixedCombo("Show a note"),
-            notYet: SettingsCopy.LaterBuild));
+        LyricToolsRows.AddWithoutSyncedLyrics(page, ctx);
 
         // ---- Selection ----
         Section(page, "Selection");
