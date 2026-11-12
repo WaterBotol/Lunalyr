@@ -187,6 +187,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
 
     protected override void PrepareStage(int row) => Line(row);
 
+    protected override bool StagePrepared(int row) => _lines.ContainsKey(row);
+
     /// <summary>The stage line for <paramref name="row"/>, set (laid out and baked) when first needed.</summary>
     protected StageLine? Line(int row)
     {

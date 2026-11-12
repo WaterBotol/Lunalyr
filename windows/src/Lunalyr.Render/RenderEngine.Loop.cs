@@ -36,6 +36,7 @@ public sealed partial class RenderEngine
     private int _rebuilds, _recoveries;
     private double _nextHousekeeping, _nextCatalogCheck, _nextStatsLog;
     private double _lastFrameAt = double.NaN;
+    private readonly AheadWork _aheadWork = new();
     private (double Song, bool Playing, double At) _lastClock = (double.NaN, false, 0);
     private (int Frames, double CpuMs) _logWindow, _statusWindow;
     private double _statusWindowStart;
@@ -142,6 +143,7 @@ public sealed partial class RenderEngine
             now = Now();
             int drawn = 0;
             double expected = 0;
+            _aheadWork.NewPass();
             for (int i = first; i < dueCount; i++)
             {
                 var s = _due[i];
@@ -307,6 +309,7 @@ public sealed partial class RenderEngine
             Dc = dc, DWrite = _dwrite, D2DFactory = _d2d, Size = new Vector2(s.Width, s.Height), Scale = s.Scale,
             WallSeconds = now, SongSeconds = song, IsPlaying = playing, Scene = _scene,
             DeltaSeconds = double.IsNaN(s.LastFrameWall) ? 0 : Math.Clamp(now - s.LastFrameWall, 0, 0.25),
+            AheadWork = _aheadWork,
         };
         dc.Target = s.Target;
         dc.BeginDraw();

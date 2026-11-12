@@ -151,6 +151,12 @@ public readonly struct FrameContext
 
     /// <summary>Seconds since the previous frame on this surface (clamped to 0..0.25).</summary>
     public required double DeltaSeconds { get; init; }
+
+    /// <summary>
+    /// The engine's allowance for work done ahead of time (one piece per render pass across all surfaces). Null when
+    /// rendering offscreen (previews, tests): then ahead-of-time work is always allowed.
+    /// </summary>
+    public Pacing.AheadWork? AheadWork { get; init; }
 }
 
 /// <summary>
