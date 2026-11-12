@@ -158,6 +158,19 @@ public sealed partial record AppSettings
     /// </summary>
     public string SpotifyClientId { get; init; } = "";
 
+    // ---- Desktop player ----
+
+    /// <summary>
+    /// "Show the player when the pointer rests on the desktop" (Mac <c>custom.showControlsOnHover</c>). On by default.
+    /// </summary>
+    public bool ShowControlsOnHover { get; init; } = true;
+
+    /// <summary>
+    /// The seek bar's right-hand label: "remaining" (time left, the default) or "total" (the song's length); any other
+    /// value reads as "remaining" (Mac <c>custom.desktopPlayer.timeMode</c>).
+    /// </summary>
+    public string DesktopPlayerTimeMode { get; init; } = "remaining";
+
     // ---- Derived values ----
 
     public static IReadOnlyList<string> Compositions { get; } =

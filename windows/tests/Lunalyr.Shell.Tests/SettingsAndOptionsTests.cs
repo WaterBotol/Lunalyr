@@ -61,6 +61,7 @@ public sealed class AppSettingsTests
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
             "spotifyClientId",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
+            "showControlsOnHover", "desktopPlayerTimeMode",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

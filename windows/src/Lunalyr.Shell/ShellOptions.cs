@@ -55,6 +55,14 @@ public sealed record ShellOptions
     /// </summary>
     public string? Theme { get; init; }
 
+    /// <summary>
+    /// <c>--player-debug show,top,light,dark,reduce-motion,opaque,contrast,scrub=0.6</c>: checks of the desktop player
+    /// without moving the pointer or changing Windows' settings. <c>show</c> keeps it up on the main display;
+    /// the looks force one accessibility look; <c>scrub=x</c> holds a drag at that share of the seek bar (the
+    /// wallpaper follows it, and nothing is ever sent to a player).
+    /// </summary>
+    public IReadOnlyList<string> PlayerDebug { get; init; } = [];
+
     public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
@@ -128,6 +136,14 @@ public sealed record ShellOptions
                             options = options with { QuitAfterSeconds = seconds };
                         else problems.Add($"--seconds {text}: expected a positive number of seconds.");
                     }
+                    break;
+                case "--player-debug":
+                    if (Value() is { } spec)
+                        options = options with
+                        {
+                            PlayerDebug = [.. spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                .Select(s => s.ToLowerInvariant())],
+                        };
                     break;
                 case "--log-level":
                     if (Value() is { } level)

@@ -113,6 +113,8 @@ public sealed partial class RenderEngine
                 _seenInputVersion = inputVersion;
                 foreach (var s in _surfaces) s.NeedsFrame = true;
             }
+            // The desktop player fading the lyrics: every frame of the fade is drawn, idle or not.
+            if (LyricFocusMoving(now)) foreach (var s in _surfaces) s.NeedsFrame = true;
             if (now >= _nextHousekeeping) Housekeeping(now);
             UpdateStates(now);
 
@@ -324,7 +326,8 @@ public sealed partial class RenderEngine
         s.Backgrounds?.Layers(now, _options.BackgroundFadeSeconds, s.Drawn);
         foreach (var d in s.Drawn)
             if (d.Opacity > 0) DrawLayer(s, d.Layer, frame, d.Opacity);
-        if (s.Lyric is not null) DrawLayer(s, s.Lyric, frame, 1);
+        var lyricOpacity = LyricFocusOpacity;
+        if (s.Lyric is not null && lyricOpacity > 0.001) DrawLayer(s, s.Lyric, frame, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
         var result = dc.EndDraw();
         if (result.Failure)
         {
