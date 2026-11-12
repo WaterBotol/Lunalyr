@@ -41,9 +41,10 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
   always Playing, a timeline that advances in real time from launch and loops through the demo songs. There is no
   audio at all, and every command (`TryPlayAsync`…) is refused (returns false). No system media session is opened.
 - **Songs** (`DemoSongs`, invented, built with `LyricBuilder` through the real TTML parser): "Neon Harbour" (37 s,
-  English: backing vocals at ~6 s, a duet answer held under the next line at ~11 s, a held note at ~14–18 s, an
-  instrumental break at 18–24.5 s, a wrapping line at ~25–30 s) then "Evening Road" (30 s, unspaced Japanese with
-  kanji; its readings are worked out by the app's own readings service, so they show below the lines). Each song has
+  English: two invented production credits shown by the credits layer after the opening title, backing vocals at ~6 s, a duet answer held under the next line at ~11 s, a held note at ~14–18 s, an
+  instrumental break at 18–24.5 s, a wrapping line at ~25–30 s) then "Evening Road" (30 s, Japanese with
+  kanji, partly unspaced and partly spaced by phrase; its readings are worked out word by word by the app's own readings
+  service, so they show under each phrase). Each song has
   a cover painted in code (`DemoCover`), so the album colours run through the real decode → palette path.
 - **Lyrics:** `DemoLyricLookup` answers only the demo songs; no lyric service is built and nothing touches the network
   or the lyric cache.
@@ -113,7 +114,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 
 | Key | Default | Values | Mac key |
 |---|---|---|---|
-| `lyricComposition` | `"editorial"` | `scattered`, `constellation`, `constellationEditorial`, `echo`, `editorial`, `spoken`, `cascade`, `cutout`, `hinge`, `broadside`, `portal`, `mosaic`, `torque`, `fable` | `lyricComposition` (Mac default: Constellation + Editorial) |
+| `lyricComposition` | `"editorial"` | `automatic` (Match the music: a composition per song, see `docs/compositions/matching.md`), `scattered`, `constellation`, `constellationEditorial`, `echo`, `editorial`, `spoken`, `cascade`, `cutout`, `hinge`, `broadside`, `portal`, `mosaic`, `torque`, `fable` | `lyricComposition` (Mac default: Constellation + Editorial) |
 | `wordArrival` | `"automatic"` | `automatic`, `fade` (Soft focus), `lift` (Float up), `pop`, `orbit`, `glide`, `unfold`, `cutoutFold`, `cutoutSlide`, `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix` | `custom.wordArrivalByStyle` (one per layout on the Mac; one for all here) |
 | `lyricScale` | `1.0` | 0.5–2 | `lyricScale` |
 | `fontChoice` | `"system"` | `system` (Segoe UI Variable), `installed` | `fontChoice` (Mac fonts aren't on Windows) |
@@ -135,6 +136,13 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricSources` | all but `lyrimuse` and `appleMusicCache` | source raw values | `custom.lyricSources` |
 | `lyricMatchMode` | `"smart"` | `smart` (Accuracy first), `priority` (Source order) | `custom.lyricMatchMode` |
 | `lyrimuseFolder` | `""` | the local lyric folder | `custom.lyrimuseFolder` |
+| `creditsLayer` | `true` | the song's title and credits on the wallpaper | `custom.creditsLayer` |
+| `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
+| `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |
+| `lyricHighlightCustom` | `"#FF92A3"` | `#RRGGBB` | `custom.lyricHighlightCustom` |
+| `rotateLayouts` | `true` | Match the music steps through a rotation (off: by the song's character) | `custom.rotateLayouts` |
+| `rotateLayoutCounts` | `{}` | composition → songs in a row, 0–5 (missing = 1) | `custom.rotateLayoutCounts` |
+| `rotateLayoutsCursor` | `0` | where the rotation got to (saved by the app) | `custom.rotateLayoutsCursor` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.

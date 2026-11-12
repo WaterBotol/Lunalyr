@@ -54,6 +54,12 @@ public sealed record AppControllerOptions
     /// song's cover), how long to wait before each further look for a different one.
     /// </summary>
     public IReadOnlyList<TimeSpan> ArtworkRechecks { get; init; } = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
+
+    /// <summary>
+    /// Called (off the controller's lock) when "Match the music" moves its rotation on, with the new cursor to save
+    /// (<c>rotateLayoutsCursor</c>), so the next launch carries on from it.
+    /// </summary>
+    public Action<int>? LayoutCursorChanged { get; init; }
 }
 
 /// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>
@@ -132,6 +138,10 @@ public sealed partial class AppController : IAsyncDisposable
     private bool _disposed;
     private readonly List<Task> _work = [];
 
+    private static readonly IReadOnlyDictionary<int, string> NoReadings = new Dictionary<int, string>();
+    private static readonly IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> NoWordReadings = new Dictionary<int, IReadOnlyList<LyricWord>>();
+    private long _readingsRequest;
+
     // Read every frame without the lock.
     private string? _recordingKey;
     private double _globalOffset;
@@ -203,7 +213,7 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         _renderer.SetClock(_clockReader);
-        _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
+        _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
         _renderer.SetFrameRate(settings.AnimationRate);
         PublishScene();
         if (!settings.WallpaperPaused) _renderer.Start();
@@ -263,13 +273,27 @@ public sealed partial class AppController : IAsyncDisposable
             else if (old.Readings() != settings.Readings() && _shown is not null)
             {
                 rereadings = _shown;
+                // The readings shown were made for the old settings ("Replace lyrics" gives them another shape): they
+                // go with the new style, and the new ones follow when worked out.
+                if (_scene.Readings.Count > 0 || _scene.WordReadings.Count > 0)
+                {
+                    _scene = _scene with { Readings = NoReadings, WordReadings = NoWordReadings };
+                    scene = _scene;
+                }
             }
 
             if (old.WallpaperPaused != settings.WallpaperPaused) _status = _status with { WallpaperPaused = settings.WallpaperPaused };
         }
 
-        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition)
-            _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
+        ApplyLayoutSettings(old, settings);
+        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition
+            || old.RotateLayouts != settings.RotateLayouts)
+            _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
+        // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
+        // otherwise when they arrive. Other settings changes never decide it.
+        if (settings.LyricComposition == AutomaticComposition
+            && (old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts))
+            ChooseLayout(onlyWhenSettled: true);
         if (old.AnimationRate != settings.AnimationRate) _renderer.SetFrameRate(settings.AnimationRate);
         if (old.WallpaperPaused != settings.WallpaperPaused)
         {
@@ -448,6 +472,7 @@ public sealed partial class AppController : IAsyncDisposable
         if (disabled is not null)
         {
             _lyricLog.Info($"Not looking lyrics up: {disabled}.");
+            ChooseLayout();
             cts.Dispose();
             lock (_gate)
             {
@@ -522,6 +547,7 @@ public sealed partial class AppController : IAsyncDisposable
                 _query = query;
                 Volatile.Write(ref _recordingKey, query.RecordingKey);
                 _status = _status with { Duration = duration.TotalSeconds };
+                _scene = _scene with { Duration = duration.TotalSeconds };
                 options = _settings.SourceSnapshot();
                 repair = _settings.RepairQQGaps;
             }
@@ -613,11 +639,12 @@ public sealed partial class AppController : IAsyncDisposable
             if (generation != _generation) return;
             _shown = presented;
             _offsets.ActiveSource = result.Provenance.Source;
-            _scene = _scene with { Lyrics = presented, Readings = new Dictionary<int, string>(), Status = null };
+            _scene = _scene with { Lyrics = presented, Readings = NoReadings, WordReadings = NoWordReadings, Status = null };
             _status = _status with { LyricSource = presented.Provenance.Label, Status = complete ? StatusText.Showing : StatusText.LookingUp };
             readings = _settings.Readings();
         }
 
+        ChooseLayout(presented);
         PublishScene();
         RaiseStatusChanged();
         StartReadings(generation, presented, readings);
@@ -638,14 +665,18 @@ public sealed partial class AppController : IAsyncDisposable
     // worked out off the lookup's flow and added to the scene when ready.
     private void StartReadings(long generation, LyricResult shown, RomanizationOptions options)
     {
+        // Only the latest request's readings are shown: readings worked out for other settings (a different display
+        // gives them a different shape) are dropped when they arrive.
+        long request;
+        lock (_gate) request = ++_readingsRequest;
         if (shown is not LyricResult.Synced || options.Display == RomanizationDisplay.Off)
         {
             var cleared = false;
             lock (_gate)
             {
-                if (generation == _generation && ReferenceEquals(_shown, shown) && _scene.Readings.Count > 0)
+                if (generation == _generation && ReferenceEquals(_shown, shown) && (_scene.Readings.Count > 0 || _scene.WordReadings.Count > 0))
                 {
-                    _scene = _scene with { Readings = new Dictionary<int, string>() };
+                    _scene = _scene with { Readings = NoReadings, WordReadings = NoWordReadings };
                     cleared = true;
                 }
             }
@@ -658,11 +689,11 @@ public sealed partial class AppController : IAsyncDisposable
         {
             try
             {
-                var readings = LyricPresentation.Readings(shown, _romanizer, options);
+                var (readings, words) = LyricPresentation.SceneReadings(shown, _romanizer, options);
                 lock (_gate)
                 {
-                    if (generation != _generation || !ReferenceEquals(_shown, shown)) return;
-                    _scene = _scene with { Readings = readings };
+                    if (generation != _generation || !ReferenceEquals(_shown, shown) || request != _readingsRequest) return;
+                    _scene = _scene with { Readings = readings, WordReadings = words };
                 }
 
                 PublishScene();
@@ -680,10 +711,12 @@ public sealed partial class AppController : IAsyncDisposable
         lock (_gate)
         {
             if (generation != _generation) return;
-            _scene = _scene with { Lyrics = null, Readings = new Dictionary<int, string>(), Status = status };
+            _scene = _scene with { Lyrics = null, Readings = NoReadings, WordReadings = NoWordReadings, Status = status };
             _status = _status with { Status = status, LyricSource = null };
         }
 
+        // A verdict that the song has no lyrics settles its layout too (waiting for a timeline or a lookup does not).
+        if (status != StatusText.LookingUp && status != StatusText.NoPosition) ChooseLayout();
         PublishScene();
         RaiseStatusChanged();
     }

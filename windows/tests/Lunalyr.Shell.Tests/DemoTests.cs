@@ -98,13 +98,16 @@ public sealed class DemoTests
         var ct = TestContext.Current.CancellationToken;
 
         var english = Assert.IsType<LyricResult.Synced>((await lookup.LookupAsync(new LyricQuery("Neon Harbour", DemoSongs.Artist, null, 37), options, null, ct)).Result);
-        Assert.All(english.Lines, line => Assert.True(line.WordTimed, line.Text));
+        Assert.All(english.Lines.Where(line => line.Credit != true), line => Assert.True(line.WordTimed, line.Text));
+        Assert.Equal(2, english.Lines.Count(line => line.Credit == true && line.Words.Count == 0)); // credits for the credits layer
         Assert.Contains(english.Lines, line => line.Words.Any(word => word.End - word.Start > 3)); // a held note
         Assert.Contains(english.Lines, line => line.Words.Count >= 12); // a line long enough to wrap
         Assert.Contains(english.Lines, line => line.Text.Contains("(oh", StringComparison.Ordinal)); // backing vocals
 
         var japanese = Assert.IsType<LyricResult.Synced>((await lookup.LookupAsync(new LyricQuery("Evening Road", DemoSongs.Artist, null, 30), options, null, ct)).Result);
-        Assert.All(japanese.Lines, line => Assert.DoesNotContain(" ", line.Text.Trim()));
+        // Unspaced, and spaced by phrase (each phrase then reads under itself).
+        Assert.Contains(japanese.Lines, line => !line.Text.Trim().Contains(' ', StringComparison.Ordinal));
+        Assert.Contains(japanese.Lines, line => line.Text.Trim().Contains(' ', StringComparison.Ordinal));
         Assert.True(japanese.Lines.Count >= 5);
 
         Assert.Null((await lookup.LookupAsync(new LyricQuery("Something Else", "Someone", null, 200), options, null, ct)).Result);

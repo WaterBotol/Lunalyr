@@ -29,6 +29,7 @@ Several Mac files behind these compositions still carry lines from the squashed 
 | `LyricLayerView.swift` | 28 | only declarations and comments; the logic around them is Lunalyr's and ported |
 | `BackingVocals.swift` | 3 | two modifier lines; ported |
 | `InstrumentalInterludeView.swift` | 18 | only the view's declarations and shell; the dot geometry used is Lunalyr's and ported |
+| `CreditsLayer.swift` (cues), `LyricHighlightTile.swift` (timing, marks), the rotation in `LyricComposition.swift` (lines 485–590) | 0 | ported faithfully; `TrackMood` and `matching()` are replaced by Windows' own `TrackCharacter`/`LayoutMatch` ([matching.md](matching.md)) |
 | `LyricStageFit.swift`, `LayerExit.swift`, `LyricRuns.swift`, `StageLyricStyles.swift`, `OrganicMotion.swift` (the parts used), `LyricHighlightTile.swift` (`LyricHighlightTiming`) | 0 | ported faithfully |
 
 The descriptions say what the Mac does (inputs, outputs, edge cases, and the quantities that shape the look). The C# is
@@ -44,14 +45,33 @@ written from them in its own structure; no Verso line was translated.
 - **Size.** The Mac's base size is `clamp(min(w, h·16/9) · 0.046, 24, 124)` points and the stage is 80% × 72% of the
   screen. Its size slider (0.7–1.5) is `LyricStyle.SizeFraction / 0.075`, so the contract's 0.075 is the Mac's 1.0.
   Points are physical pixels divided by `FrameContext.Scale`.
-- **Readings.** The snapshot gives one reading string per line, so readings are drawn for the whole line: under the
-  line in Editorial, hung under the line's first word in Spoken (the Mac's rule for a reading that cannot be split by
-  word). When the reading has exactly one space-separated part per word run, each run gets its own part, as the Mac's
-  per-word readings would. "Instead" replaces the words with that reading in Spoken when it splits by word; otherwise,
-  and in Editorial for now, it is drawn as "Below".
-- **Not in the snapshot:** the track's length (plain lyrics are shown as a still, fitted block rather than a slow
-  scroll; instrumental breaks after the last line are open-ended), the track mood (the neutral mood is used), Reduce
-  Motion, translations and credits.
+- **Readings.** `SceneSnapshot.WordReadings` holds the romanizer's readings line by line, as the Mac's `romanized`.
+  With "Below" there is one reading per word of `line.Words`, or one word spanning the line when a reading can't be
+  split. With "Instead" it holds the words to show. Use them through `LineReadings.For(line, readings, display, glue)`
+  (Core): it gives the words to set, their glue, each run's reading (`RunReadings`, by the run index that
+  `EditorialSetting.Layout` counts) and a reading of the whole line. On a rolling stage, use
+  `new RollingSong(lines, breaker, scene.WordReadings, display, scene.Readings)`. `LyricCompositionLayer.WordReadingsOf(row)`
+  does this for a row.
+  - **Editorial:** draws each run's reading under the run and an unsplittable reading once under the line. With
+    "Instead" it sets the readings in the words' place.
+  - **Spoken:** rolls with them (the Mac's `rollingWindow`).
+  - **Fallback:** a line missing from `WordReadings` (scenes made without it, or before readings are worked out) uses
+    the old per-line `Readings` string, as before.
+- **Credits** (`LyricStyle.Credits`; off in the contract's default, on in the app's settings as on the Mac). Every
+  layer that derives from `LyricCompositionLayer` draws the song's opening "Title - Artist" and any production credits
+  over the lyric. They come one after another (`CreditCues`, ported from `CreditsLayer.swift`) in Editorial's
+  typography, in a band at the top or foot of the stage. The artist's name is pressed onto highlight tiles. Backing
+  vocals move to the other band (`CreditBands`).
+- **Highlight tiles.** With `Reveal = "cutoutHighlight"`, a tile presses in behind each sung word and is let go at
+  the line end. Editorial lights a run word by word; Spoken tiles the rolling word and holds it on the stage meanwhile.
+  The words still enter as the layout has them enter. The colour follows `LyricStyle.HighlightMode` ("complement",
+  "album", "custom") and `HighlightCustom` through the ink director. Other layers can call `MarkHighlights(plan, from,
+  release)` and `DrawTile(...)`.
+- **Interludes.** `LyricStyle.Interludes` turns the dots off. `SceneSnapshot.Duration` (the track length) gives a
+  break after the last line its progress. A lit dot has the Mac's faint white ring.
+- **Not in the snapshot:** the track mood (the neutral mood is used; "Match the music" uses Windows' own
+  `TrackCharacter`, see [matching.md](matching.md)), Reduce Motion and translations. Plain lyrics are still shown as
+  a still, fitted block.
 
 ## Previews and cost
 

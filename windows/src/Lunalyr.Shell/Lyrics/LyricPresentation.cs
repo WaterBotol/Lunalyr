@@ -50,19 +50,31 @@ public static class LyricPresentation
     /// whole, otherwise the words' readings joined. Empty when readings are off or the lyrics aren't synced.
     /// </summary>
     public static IReadOnlyDictionary<int, string> Readings(LyricResult? result, LyricRomanizer romanizer, RomanizationOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        SceneReadings(result, romanizer, options, cancellationToken).Lines;
+
+    /// <summary>
+    /// The readings for the scene in both its shapes: one string per line (<see cref="Readings"/>) and, word by word,
+    /// what <see cref="LyricRomanizer.Readings"/> gives (the Mac's <c>romanized</c>, which its compositions draw).
+    /// Both empty when readings are off or the lyrics aren't synced.
+    /// </summary>
+    public static (IReadOnlyDictionary<int, string> Lines, IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> Words) SceneReadings(
+        LyricResult? result, LyricRomanizer romanizer, RomanizationOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(romanizer);
+        ArgumentNullException.ThrowIfNull(options);
         var readings = new Dictionary<int, string>();
-        if (result is not LyricResult.Synced synced || options.Display == RomanizationDisplay.Off) return readings;
-        foreach (var (index, words) in romanizer.Readings(synced.Lines, options, cancellationToken))
+        var words = new Dictionary<int, IReadOnlyList<LyricWord>>();
+        if (result is not LyricResult.Synced synced || options.Display == RomanizationDisplay.Off) return (readings, words);
+        foreach (var (index, read) in romanizer.Readings(synced.Lines, options, cancellationToken))
         {
-            if (index < 0 || index >= synced.Lines.Count) continue;
-            var text = LyricRomanizer.LineReading(words, synced.Lines[index])
-                ?? string.Join(" ", words.Select(word => word.Text.Trim()).Where(word => word.Length > 0));
+            if (index < 0 || index >= synced.Lines.Count || read.Count == 0) continue;
+            words[index] = read;
+            var text = LyricRomanizer.LineReading(read, synced.Lines[index])
+                ?? string.Join(" ", read.Select(word => word.Text.Trim()).Where(word => word.Length > 0));
             if (text.Length > 0) readings[index] = text;
         }
 
-        return readings;
+        return (readings, words);
     }
 }

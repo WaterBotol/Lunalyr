@@ -275,6 +275,88 @@ public sealed class AppControllerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task MatchTheMusicGivesEachSongALayoutAndKeepsIt()
+    {
+        _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from A")));
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from B")));
+        _renderer.LayerIds = ["gradient", "colour", "editorial", "spoken", "cascade"];
+        var cursors = new List<int>();
+        var session = _source.Add(Playing("Song A"));
+        _controller = new AppController(_source, _lyrics, _renderer, new AppSettings { LyricComposition = "automatic" }, _offsets,
+            ReadingServices.Basic, _guard, Logger.Null, _connectivity, new AppControllerOptions
+            {
+                TimeProvider = _time, TimelineWait = TimeSpan.FromMilliseconds(60), TimelinePoll = TimeSpan.FromMilliseconds(10),
+                ArtworkRetries = [], LayoutCursorChanged = cursors.Add,
+            });
+        var controller = _controller;
+        controller.Start();
+        // Until a song is matched, the renderer is never handed "automatic", which it does not have.
+        Assert.NotEqual("automatic", _renderer.Layers.Composition);
+        await controller.WhenIdleAsync();
+        var first = _renderer.Layers.Composition;
+        Assert.Contains(first, new[] { "editorial", "spoken", "cascade" });
+        Assert.Equal(first, controller.MatchedComposition);
+
+        session.SetTrack("Song B");
+        session.SetTimeline(1, 180);
+        await WaitUntil(() => _lyrics.Queries.Count == 2);
+        await controller.WhenIdleAsync();
+        var second = _renderer.Layers.Composition;
+        Assert.NotEqual(first, second); // each new song takes the next layout
+        Assert.Equal(2, cursors.Count); // the rotation's place is saved
+
+        // Coming back to the first song brings back its layout.
+        session.SetTrack("Song A");
+        session.SetTimeline(1, 200);
+        await WaitUntil(() => _lyrics.Queries.Count == 3);
+        await controller.WhenIdleAsync();
+        Assert.Equal(first, _renderer.Layers.Composition);
+
+        // A chosen layout is drawn as it is.
+        controller.ApplySettings(controller.Settings with { LyricComposition = "spoken" });
+        Assert.Equal("spoken", _renderer.Layers.Composition);
+    }
+
+    [Fact]
+    public async Task ASongIsMatchedOnlyOnceItsLyricsAreKnown()
+    {
+        var held = _lyrics.Hold("Song");
+        _source.Add(Playing("Song"));
+        var controller = Controller();
+        controller.Start();
+        await WaitUntil(() => _lyrics.Queries.Count == 1);
+        // Turned to Match the music mid-lookup, then an unrelated change: nothing is decided without the lyrics.
+        controller.ApplySettings(controller.Settings with { LyricComposition = "automatic" });
+        controller.ApplySettings(controller.Settings with { LyricOffset = 0.5 });
+        Assert.Null(controller.MatchedComposition);
+        Assert.NotEqual("automatic", _renderer.Layers.Composition);
+
+        held.SetResult(TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));
+        await controller.WhenIdleAsync();
+        Assert.NotNull(controller.MatchedComposition);
+        Assert.Equal(controller.MatchedComposition, _renderer.Layers.Composition);
+    }
+
+    [Fact]
+    public async Task TheSceneCarriesTheExtrasSettingsAndTheTrackLength()
+    {
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line")));
+        _source.Add(Playing("Song"));
+        var controller = Controller(new AppSettings { LyricHighlightMode = "custom", LyricHighlightCustom = "#2bd96b", ShowInterludes = false });
+        controller.Start();
+        await controller.WhenIdleAsync();
+        var scene = _renderer.Last!;
+        Assert.True(scene.Style.Credits); // on by default, as on the Mac
+        Assert.False(scene.Style.Interludes);
+        Assert.Equal("custom", scene.Style.HighlightMode);
+        Assert.Equal("#2BD96B", scene.Style.HighlightCustom);
+        Assert.Equal(200, scene.Duration);
+
+        controller.ApplySettings(controller.Settings with { CreditsLayer = false });
+        Assert.False(_renderer.Last!.Style.Credits);
+    }
+
+    [Fact]
     public async Task LookupsSwitchedOffSaySoAndAskNothing()
     {
         _lyrics.DisabledReason = "--no-network";
@@ -395,6 +477,33 @@ public sealed class AppControllerTests : IAsyncDisposable
         await controller.WhenIdleAsync();
         Assert.Empty(_renderer.Last!.Readings);
         Assert.Equal(Render.Scene.ReadingPlacement.Off, _renderer.Last.Style.Readings);
+    }
+
+    [Fact]
+    public async Task ReadingsAreAddedWordByWordForTheDisplayChosen()
+    {
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "안녕하세요 친구", "Hello")));
+        _source.Add(Playing("Song"));
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+
+        var scene = _renderer.Last!;
+        var lines = ((LyricResult.Synced)scene.Lyrics!).Lines;
+        var words = scene.WordReadings[0];
+        Assert.Equal(lines[0].Words.Count, words.Count);
+        Assert.Contains("annyeong", words[0].Text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(scene.WordReadings.ContainsKey(1)); // already Latin
+
+        // "Replace lyrics": the old readings go with the old style at once; the words to show follow.
+        controller.ApplySettings(controller.Settings with { RomanizationDisplay = "replace" });
+        Assert.Equal(Render.Scene.ReadingPlacement.Instead, _renderer.Last!.Style.Readings);
+        await controller.WhenIdleAsync();
+        Assert.Contains("annyeong", _renderer.Last!.WordReadings[0][0].Text, StringComparison.OrdinalIgnoreCase);
+
+        controller.ApplySettings(controller.Settings with { RomanizationDisplay = "off" });
+        await controller.WhenIdleAsync();
+        Assert.Empty(_renderer.Last!.WordReadings);
     }
 
     [Fact]

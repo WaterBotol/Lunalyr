@@ -280,6 +280,55 @@ public class WindowsLyricRunReadingTests
         Assert.Contains(" ", RunReadings(lines[3])[0], StringComparison.Ordinal);
     }
 
+    // Ported from LyricRunReadingTests.swift: testEveryLayoutDrawsTheRunsReadingSpacedByPhrase (Editorial's runs and
+    // Spoken's rolling stage: the layouts Windows has)
+    [Fact]
+    public void EveryLayoutDrawsTheRunsReadingSpacedByPhrase()
+    {
+        var today = CharacterTimed("今日も");
+        var below = _t.Readings(today);
+        Assert.NotNull(below);
+        var set = Core.Compositions.LineReadings.For(today, below, RomanizationDisplay.Below);
+        // Editorial: one run, one reading.
+        var layout = Core.Compositions.EditorialSetting.Layout(today.Words, set.Glue, 60, 11, 0, wordTimed: true,
+                                                               editorial: true, set.RunReadings(today.Words, set.Glue));
+        Assert.Single(layout.Runs);
+        Assert.Equal("kyou mo", layout.Runs[0].Reading);
+        // Spoken: the run rolls as one word with it.
+        var song = new Core.Compositions.RollingSong([today], _t.Services.WordBreaker,
+            new Dictionary<int, IReadOnlyList<LyricWord>> { [0] = below! }, RomanizationDisplay.Below);
+        var window = song.Window(0, 10.5, 1.2);
+        var word = Assert.Single(window.Words);
+        Assert.Equal("今日も", word.Text);
+        Assert.Equal("kyou mo", window.Readings[word]);
+    }
+
+    // Ported from LyricHighlightTests.swift: testARunOfJapaneseIsHighlightedWordByWord (Editorial's runs)
+    [Fact]
+    public void ARunOfJapaneseIsHighlightedWordByWord()
+    {
+        (string, double, double)[] timed = [("君", 30.0, 30.3), ("と", 30.3, 30.5), ("歩いた", 30.5, 31.0), ("あの", 31.0, 31.4),
+            ("道", 31.4, 31.7), ("を", 31.7, 31.9), ("今も", 31.9, 32.4), ("覚えてる", 32.4, 33.6)];
+        var words = timed.Select(token => new LyricWord(token.Item1, token.Item2, token.Item3)).ToList();
+        var line = new LyricLine { Start = 30, End = 33.6, Text = "君と歩いたあの道を今も覚えてる", Words = words, WordTimed = true };
+        var glue = LyricRuns.Glue(line, words);
+        var layout = Core.Compositions.EditorialSetting.Layout(words, glue, 44, 11, 0, wordTimed: true, editorial: true);
+        Assert.Single(layout.Runs); // set as one run, as written
+        var segments = Core.Compositions.HighlightSegments.For(words, layout.Runs[0].Boundaries, _t.Services.WordBreaker);
+        // Each word a reader takes in has its own tile, along its own letters.
+        Assert.True(segments.Length >= 5, string.Join(" ", segments));
+        Assert.Equal(0, segments[0].From);
+        Assert.Equal(1, segments[^1].To, 9);
+        foreach (var (first, second) in segments.Zip(segments.Skip(1)))
+        {
+            Assert.Equal(first.To, second.From, 9);
+            Assert.True(first.Onset < second.Onset);
+        }
+        Span<Core.Compositions.HighlightMark> marks = stackalloc Core.Compositions.HighlightMark[16];
+        Assert.Equal(segments.Length, Core.Compositions.HighlightSegments.Marks(segments, 33.9, 34, false, marks));
+        Assert.Equal(0, Core.Compositions.HighlightSegments.Marks(segments, 34.4, 34, false, marks));
+    }
+
     // Ported from LyricRunReadingTests.swift: testALineTimedJapaneseRunKeepsTheReadingsWordsApart
     [Fact]
     public void ALineTimedJapaneseRunKeepsTheReadingsWordsApart()
