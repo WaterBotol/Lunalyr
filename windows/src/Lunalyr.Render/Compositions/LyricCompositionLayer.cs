@@ -71,18 +71,25 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     protected LyricInk InkAt(double songSeconds)
     {
         var ink = _ink;
-        ink.Phase = LyricInks.DriftPhase(songSeconds);
+        ink.Phase = LyricInks.DriftPhase(songSeconds, ReduceMotion);
         return ink;
     }
+
+    /// <summary>
+    /// The scene asks for less motion (<see cref="SceneSnapshot.ReduceMotion"/>, the Mac's <c>lyricReduceMotion</c>):
+    /// entrances, swells, drifts, travel and blur become plain fades.
+    /// </summary>
+    protected bool ReduceMotion => SceneShown?.ReduceMotion == true;
 
     /// <summary>The colours of a word at <paramref name="slot"/> along its line, sung around <paramref name="songSeconds"/>.</summary>
     protected LyricInkSample InkSample(double songSeconds, double slot, ulong seed) => InkAt(songSeconds).Sample(slot, seed);
 
     private readonly Dictionary<int, LinePlan> _plans = [];
     private readonly Dictionary<int, LinePlan> _phrases = [];
-    private readonly DrawnLine[] _drawn = new DrawnLine[6];
-    private readonly StackedLine[] _stacked = new StackedLine[6];
-    private readonly double[] _offsets = new double[6];
+    // Three leaving lines (each drawn twice while a held one cross-fades under Reduce Motion), the line and its preview.
+    private readonly DrawnLine[] _drawn = new DrawnLine[9];
+    private readonly StackedLine[] _stacked = new StackedLine[9];
+    private readonly double[] _offsets = new double[9];
     private IReadOnlyList<string>? _plainLines;
     private Ink?[] _plain = [];
     private double _plainFit = 1;
@@ -211,7 +218,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         var old = SceneShown;
         if (old is not null && ReferenceEquals(old.Lyrics, scene.Lyrics) && SameReadings(old.Readings, scene.Readings)
-            && SameWordReadings(old.WordReadings, scene.WordReadings) && old.Style == scene.Style && LyricInks.SameInk(old.Palette, scene.Palette))
+            && SameWordReadings(old.WordReadings, scene.WordReadings) && old.Style == scene.Style && LyricInks.SameInk(old.Palette, scene.Palette)
+            && old.ReduceMotion == scene.ReduceMotion)
         {
             SceneShown = scene;
             return;
@@ -336,11 +344,24 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             if (!LineFlow.IsLeaving(row, index, lines, time, Rules, LeavingSpan)) continue;
             var held = Rolls(row) ? null : LineFlow.HeldShift(row, lines, time);
             if (Rules.FillsStage) held = null;
-            _drawn[count++] = new DrawnLine
+            var leaving = new DrawnLine
             {
                 Row = row, Outgoing = true, Yield = LineFlow.CarriedYield(row, sheet, time, Rules), Opacity = lyricOpacity,
                 Held = held, PreviewSince = double.NegativeInfinity,
             };
+            if (ReduceMotion && held is { } shift)
+            {
+                // Reduce Motion: a held line does not travel aside; it fades out where it was as it fades in where it
+                // goes (the Mac's earlierLine).
+                if (shift > 0 && shift < 1)
+                {
+                    _drawn[count++] = leaving with { Held = 0, Opacity = lyricOpacity * (1 - shift) };
+                    _drawn[count++] = leaving with { Held = 1, Opacity = lyricOpacity * shift };
+                    continue;
+                }
+                leaving.Held = shift >= 1 ? 1 : 0;
+            }
+            _drawn[count++] = leaving;
         }
         int? next = active is not null ? LineFlow.NextLinePreview(index, sheet, time, Rules) : null;
         var since = sheet.PreviewSince[index];
@@ -437,9 +458,11 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             var plan = Plan(row);
             if (plan is null) return;
             var exitStart = drawn.Previewing ? double.PositiveInfinity : LineFlow.StageExitStart(line, pose);
-            var swell = 0.965 + 0.035 * pose.Arrival - 0.012 * pose.Exit;
+            // Reduce Motion: the line fades; it does not slide or swell.
+            var still = ReduceMotion;
+            var swell = still ? 1 : 0.965 + 0.035 * pose.Arrival - 0.012 * pose.Exit;
             var makesWay = drawn.Outgoing ? LineFlow.IncomingArrival(row, lines, time, Rules) : 0;
-            var slide = ((1 - pose.Arrival) * 0.20 - pose.Exit * 0.10 - 0.30 * makesWay) * BaseSize;
+            var slide = still ? 0 : ((1 - pose.Arrival) * 0.20 - pose.Exit * 0.10 - 0.30 * makesWay) * BaseSize;
             var content = ContentToDevice(plan, offset, heldScale);
             DrawBacking(dc, plan, time, opacity, row);
             DrawWordTimed(dc, plan, time, exitStart, drawn.PreviewSince, content, plan.Fit * heldScale,
@@ -690,12 +713,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             if (tokens[i].Source.Start > time) { next = i; break; }
         var energy = OrganicMotion.VocalIntensity(plan.Words, time);
         var highlighted = plan.Segments is not null;
+        var reduce = ReduceMotion;
         for (var i = 0; i < tokens.Count; i++)
         {
             var eligible = i > 0 ? tokens[i - 1].Source.Start : previewSince;
             // A word with a highlight tile stays until its tile is released at the line's end.
             var leaves = highlighted && plan.Chosen[tokens[i].Run].HighlightsSungWords() ? Math.Max(exitStart, plan.Release) : exitStart;
-            plan.TokenFrames[i] = EditorialTokenFrame.Make(tokens[i], next, time, energy, leaves, false, eligible, Options);
+            plan.TokenFrames[i] = EditorialTokenFrame.Make(tokens[i], next, time, energy, leaves, reduce, eligible, Options);
         }
         var runs = typography.Runs;
         for (var r = 0; r < runs.Count; r++)
@@ -719,7 +743,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             * Matrix3x2.CreateTranslation(blockCentre.X, blockCentre.Y + (float)slide) * content;
         if (plan.Echo is { } echo) DrawEcho(dc, plan, echo, time, blockCentre, block, contentScale * swell, opacity * echoPresence);
         if (plan.Links.Length > 0) DrawLinks(dc, plan, Matrix3x2.CreateTranslation((float)origin.X, (float)origin.Y) * block, opacity);
-        var idle = OrganicMotion.IdleAmplitude(plan.IdleFloat, 1, false);
+        var idle = OrganicMotion.IdleAmplitude(plan.IdleFloat, 1, reduce);
         foreach (var r in order)
         {
             var run = runs[r];
@@ -727,39 +751,42 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             ref readonly var frame = ref plan.RunFrames[r];
             var size = run.Metrics.Size;
             var leave = frame.Leave;
+            // Reduce Motion: the exit is a plain fade, with no drift, turn or blur (the Mac's WordFloat).
+            var travel = reduce ? 0 : leave;
             var presentation = frame.Presentation;
             var visibility = presentation.Opacity * (1 - leave) * opacity;
             if (!(visibility > 0.002)) continue;
             var heat = Math.Min(1, frame.Heat);
             var motion = plan.Motions[r];
             var direction = r % 2 == 0 ? 1.0 : -1.0;
-            var transform = EntranceTransform.Make(presentation.Progress, presentation.Arrival, motion, size, direction, false);
+            var transform = EntranceTransform.Make(presentation.Progress, presentation.Arrival, motion, size, direction, reduce);
             var drift = LyricMotion.IdleDrift(run.Seed, Math.Floor(time * 12) / 12, idle);
             var lateral = LyricMotion.Jitter(run.Seed, 12) * 0.10;
             var swellCap = EditorialRunFrame.CappedSwell(
-                EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, false), run.Inset.Width, ink.Unit.Width);
-            var holding = run.Sustain > 0.02 ? run.Sustain * Easing.Smoothstep(frame.Fill) : 0;
-            var floatScale = drift.Scale * (1 - 0.04 * leave);
+                EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce), run.Inset.Width, ink.Unit.Width);
+            // A held word's letters swell only with motion (the Mac's HeldGlyphRenderer takes no sustain under Reduce Motion).
+            var holding = !reduce && run.Sustain > 0.02 ? run.Sustain * Easing.Smoothstep(frame.Fill) : 0;
+            var floatScale = drift.Scale * (1 - 0.04 * travel);
             var local =
                 Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
                 * Matrix3x2.CreateScale((float)swellCap)
-                * Matrix3x2.CreateRotation(Radians(frame.DriftAngle))
-                * Matrix3x2.CreateTranslation((float)(frame.DriftX * size), (float)(frame.DriftY * size))
+                * Matrix3x2.CreateRotation(Radians(reduce ? 0 : frame.DriftAngle))
+                * Matrix3x2.CreateTranslation((float)(reduce ? 0 : frame.DriftX * size), (float)(reduce ? 0 : frame.DriftY * size))
                 * Entrance(transform)
                 * Matrix3x2.CreateScale((float)floatScale)
-                * Matrix3x2.CreateRotation(Radians(drift.Angle + LyricMotion.Jitter(run.Seed, 13) * 3 * leave))
-                * Matrix3x2.CreateTranslation((float)((drift.X + lateral * leave) * size), (float)((drift.Y - 0.26 * leave) * size))
+                * Matrix3x2.CreateRotation(Radians(drift.Angle + LyricMotion.Jitter(run.Seed, 13) * 3 * travel))
+                * Matrix3x2.CreateTranslation((float)((drift.X + lateral * travel) * size), (float)((drift.Y - 0.26 * travel) * size))
                 * Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y + run.Metrics.WaveOffset))
                 * block;
             var heldUp = 1 + plan.HeldY[r] * holding;
             var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale;
-            var blur = Combine(Points(motion.Blur(presentation.Progress)), Points(2.4 * leave)) * (float)scale;
+            var blur = Combine(Points(motion.Blur(presentation.Progress, reduce)), Points(2.4 * travel)) * (float)scale;
             // "Cutout · Highlight": the tiles behind this run's sung words, and how strong the strongest is.
             var tiled = 0.0;
             var segments = highlighted && plan.Chosen[r].HighlightsSungWords() ? plan.Segments![r] : null;
             if (segments is not null)
                 foreach (var segment in segments)
-                    tiled = Math.Max(tiled, LyricHighlightTiming.Pose(time, segment.Onset, segment.Release, false).Opacity);
+                    tiled = Math.Max(tiled, LyricHighlightTiming.Pose(time, segment.Onset, segment.Release, reduce).Opacity);
             var glowStrength = frame.Glow * (1 - tiled);
             var glow = glowStrength > 0.002
                 ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)(0.6 * glowStrength * frame.Fill)),
@@ -786,7 +813,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 reading.Draw(dc, Matrix3x2.CreateTranslation(ink.ReadingOffset) * local, (float)scale,
                              (float)(visibility * readingOpacity), blur, GlowSpec.None, shadow, clip: clip);
             }
-            if (LyricSwipe.Shows(motion, presentation.Progress, false))
+            if (LyricSwipe.Shows(motion, presentation.Progress, reduce))
                 DrawSwipe(dc, local, ink.Unit, presentation.Progress, direction, motion, opacity);
         }
     }
@@ -804,7 +831,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (!(revealed > 0)) return;
         for (var slot = 0; slot < EchoBackdrop.Repeats.Count; slot++)
         {
-            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, false);
+            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, ReduceMotion);
             var ghost = pose.Repeat;
             var alpha = EchoBackdrop.Opacity(ghost, presence);
             if (!(alpha > 0.002)) continue;
@@ -1012,8 +1039,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var level = BackingVocalLayout.Level(group, time);
         if (!(level > 0.004)) return;
         var box = BackingVocalLayout.Box(Stage);
-        var (sink, shrink) = BackingVocalLayout.Exit(BackingVocalLayout.ExitProgress(group, time), box.Height);
-        var position = BackingVocalLayout.Position(group, seed, Stage, BaseSize, time, false, CreditBands);
+        // Reduce Motion: backing vocals neither drift nor sink as they leave; they only fade (the Mac's layerExit).
+        var (sink, shrink) = ReduceMotion ? (0.0, 1.0) : BackingVocalLayout.Exit(BackingVocalLayout.ExitProgress(group, time), box.Height);
+        var position = BackingVocalLayout.Position(group, seed, Stage, BaseSize, time, ReduceMotion, CreditBands);
         var hold = BackingVocalLayout.Hold(group);
         var plan = backing.Plan;
         var scale = plan.Fit * shrink;
@@ -1057,12 +1085,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // A line sung as one has no words to highlight one by one: it enters as its layout has it enter.
         var motion = Choice.For(Kind, TimedWordKey.SeedOf(line.Text, line.Start)).Motion(Kind);
         var direction = row % 2 == 0 ? 1.0 : -1.0;
-        var transform = EntranceTransform.Make(progress, previewing ? 1 : pose.Arrival, motion, pointSize, direction, false);
+        var transform = EntranceTransform.Make(progress, previewing ? 1 : pose.Arrival, motion, pointSize, direction, ReduceMotion);
         var phrase = Matrix3x2.CreateTranslation(-(float)(plan.Content.Width / 2), -(float)(plan.Content.Height / 2))
             * Entrance(transform)
             * Matrix3x2.CreateTranslation((float)(plan.Content.Width / 2), (float)(plan.Content.Height / 2)) * content;
         var entranceScale = scale * transform.Scale;
-        var blur = Points(motion.Blur(progress)) * (float)entranceScale;
+        var blur = Points(motion.Blur(progress, ReduceMotion)) * (float)entranceScale;
         // A cutout phrase is unmasked from its leading edge (in the block's own width).
         var shown = motion.PaperShown(transform.Eased);
         var width = plan.Block.Width;
@@ -1072,7 +1100,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // The line itself (in preview: only its first word, where it will be).
         DrawPhraseRuns(dc, plan, phrase, entranceScale, alpha * opacity, blur, firstRunOnly: previewing ? previewOpacity : null,
                        hidesFirstRun: holdsFirstRun, readings: !previewing, cropLeft, cropRight);
-        if (!previewing && LyricSwipe.Shows(motion, progress, false))
+        if (!previewing && LyricSwipe.Shows(motion, progress, ReduceMotion))
         {
             var origin = plan.BlockOrigin;
             DrawSwipe(dc, Matrix3x2.CreateTranslation((float)(origin.X + width / 2), (float)(origin.Y + plan.Block.Height / 2)) * phrase,
@@ -1120,13 +1148,15 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var diameter = (float)(Math.Min(40, Math.Max(15, BaseSize / Scale * 0.3)) * Scale);
         var spacing = diameter * 0.65f;
         var width = diameter * 3 + spacing * 2;
+        // The wander grows in with the cue, so the dots arrive still; under Reduce Motion they never wander.
+        var wander = ReduceMotion ? 0 : cue.Opacity;
         dc.Transform = Matrix3x2.Identity;
         for (var i = 0; i < 3; i++)
         {
             var highlight = cue.Highlight(i);
-            var radius = diameter / 2 * (float)(1 + cue.Opacity * cue.Breath(i) * 0.09);
+            var radius = diameter / 2 * (float)(1 + wander * cue.Breath(i) * 0.09);
             var x = StageCentre.X - width / 2 + diameter / 2 + i * (diameter + spacing);
-            var y = StageCentre.Y + (float)(cue.Opacity * cue.Bob(i)) * diameter * 0.42f;
+            var y = StageCentre.Y + (float)(wander * cue.Bob(i)) * diameter * 0.42f;
             _dotBrush.Color = new Color4(accent.X, accent.Y, accent.Z, (float)(cue.Opacity * (0.32 + highlight * 0.62)));
             dc.FillEllipse(new Ellipse(new Vector2(x, y), radius, radius), _dotBrush);
             // A lit dot carries a faint white ring (the Mac's strokeBorder, 1 point inside the edge).

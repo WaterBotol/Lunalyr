@@ -58,27 +58,30 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
     }
 
     protected override void DrawLine(ID2D1DeviceContext dc, StageLine stageLine, double time, double exitStart, in Matrix4x4 stage,
-                                      double alpha, float blur)
+                                      double alpha, float blur, int shown)
     {
         var line = (HingeLine)stageLine;
         var runs = line.Runs;
-        var n = StageMotion.ShownCount(runs, time);
+        var n = shown;
         if (n == 0) return;
         var total = runs.Count;
         var u = Unit;
         var speed = line.Speed;
+        var reduce = ReduceMotion;
+        // Reduce Motion: nothing folds, so the line fades out as every other line does.
+        var leaving = reduce ? 1 - StageMotion.Leave(time, exitStart) : 1;
         var arrivals = line.A.AsSpan(0, n);
         var weights = line.B.AsSpan(0, n);
         for (var i = 0; i < n; i++)
         {
-            arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed);
+            arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed, reduce);
             weights[i] = StageMotion.Weight(arrivals[i]);
         }
         var hasBar = n > 2;
         var barStart = hasBar ? runs[2].Start : double.PositiveInfinity;
         // How far the bar has settled from huge to its place, and how far the pair has been pushed to the corner.
-        var settle = hasBar ? Easing.Smoothstep((time - barStart - 0.25) / 0.5) : 0;
-        var pushed = hasBar ? Easing.Smoothstep((time - barStart + 0.05) / 0.4) : 0;
+        var settle = !hasBar ? 0 : reduce ? 1 : Easing.Smoothstep((time - barStart - 0.25) / 0.5);
+        var pushed = !hasBar ? 0 : reduce ? 1 : Easing.Smoothstep((time - barStart + 0.05) / 0.4);
         var columnCount = Math.Max(0, n - 3);
         var (fit, shrink) = HingeGeometry.Fit(line.Texts.AsSpan(0, n), weights, settle, u, Stage, line.ReadingCounts.AsSpan(0, n), Pt);
         var slots = line.Slots;
@@ -89,8 +92,8 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
         var barScale = (3.4 - 1.8 * settle) / 1.6;
         var firstColumn = columnCount > 0 ? weights[3] : 0;
         // The faces swing shut as the words fold away, all within the line's exit.
-        var close = LyricMotion.Settle(time - exitStart, StageMotion.HingeClose);
-        var faceAngle = 52 + (88 - 52) * close;
+        var close = reduce ? 0 : LyricMotion.Settle(time - exitStart, StageMotion.HingeClose);
+        var faceAngle = reduce ? 0 : 52 + (88 - 52) * close;
         var words = line.Words;
         var bounds = Bounds;
         double edge = bounds.MidX, gap = u * 0.12;
@@ -145,7 +148,7 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
 
         // Looked at from a little above, the whole corner fitted to the stage.
         var middle = new Vector2((float)bounds.MidX, (float)bounds.MidY);
-        var whole = Homography.TurnX(9, middle, Stage, 0.5)
+        var whole = Homography.TurnX(reduce ? 0 : 9, middle, Stage, 0.5)
             * Matrix4x4.CreateScale((float)fit, (float)fit, 1, new Vector3(middle, 0)) * stage;
         var leftFace = Homography.TurnY(faceAngle, middle, Stage, 0.8) * whole;
         var rightFace = Homography.TurnY(-faceAngle, middle, Stage, 0.8) * whole;
@@ -157,14 +160,14 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
             var a = arrivals[id];
             var scale = isPair ? pairScale : isBar ? barScale : ColumnScale(id - 3, arrivals);
             // Words fold away oldest first.
-            var fold = StageMotion.HingeFold((double)id / Math.Max(total - 1, 1), time, exitStart);
-            var opacity = Math.Min(1, a * 1.6) * (1 - fold) * alpha;
+            var fold = reduce ? 0 : StageMotion.HingeFold((double)id / Math.Max(total - 1, 1), time, exitStart);
+            var opacity = Math.Min(1, a * 1.6) * (1 - fold) * alpha * leaving;
             if (!(opacity > 0.002)) continue;
             var sx = (float)(scale * (isBar || isPair ? 1 : 0.86));
             var sy = (float)(scale * (isBar || isPair ? 1 : 1.1));
             // Each word unfolds from the edge like a panel on a hinge, with a little spring; on the way out they fold
             // shut one after another.
-            var angle = (isLeft ? 1 : -1) * (84 * (1 - a) - 80 * fold);
+            var angle = reduce ? 0 : (isLeft ? 1 : -1) * (84 * (1 - a) - 80 * fold);
             var anchor = new Vector2((float)((isLeft ? 1 : -1) * word.Size.Width / 2), 0);
             var unit = Matrix4x4.CreateScale(sx, sy, 1)
                 * Homography.TurnY(angle, anchor, word.Size, 0.6)
@@ -172,11 +175,11 @@ internal sealed class HingeLayer(IWordBreaker breaker, Logger? logger) : StageLa
                 * (isLeft ? leftFace : rightFace);
             var run = runs[id];
             // (Drawn in perspective, so without its arrival blur: Direct2D turns bitmaps, not effects, in depth.)
-            var wordBlur = blur + (float)(FontSize(id, u) * scale * fit * 0.08 * (1 - Math.Min(a, 1)));
+            var wordBlur = blur + (reduce ? 0 : (float)(FontSize(id, u) * scale * fit * 0.08 * (1 - Math.Min(a, 1))));
             DrawLabel(dc, line, word, run, 0, time, unit, opacity, wordBlur);
             // The bar arrives huge and settles into place; its reading comes once it is nearly there.
-            var shown = isBar ? Easing.Smoothstep((settle - 0.5) / 0.5) : 1;
-            DrawReading(dc, word, 0, unit, opacity * shown, wordBlur);
+            var readingShown = isBar ? Easing.Smoothstep((settle - 0.5) / 0.5) : 1;
+            DrawReading(dc, word, 0, unit, opacity * readingShown, wordBlur);
         }
     }
 }

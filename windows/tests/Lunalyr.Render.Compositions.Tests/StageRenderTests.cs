@@ -130,20 +130,59 @@ public sealed class StageRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Ported from StageMotionTests.swift: testEveryLayoutDrawsThroughHandOversAndReduceMotion (Reduce Motion is not in
-    // the scene snapshot), with the stage's exit as the line's own
+    // Ported from StageMotionTests.swift: testEveryLayoutDrawsThroughHandOversAndReduceMotion, with the stage's exit as
+    // the line's own
     [Theory]
     [MemberData(nameof(Layouts))]
-    public void EveryLayoutDrawsThroughHandOversAndTheExit(string id)
+    public void EveryLayoutDrawsThroughHandOversAndReduceMotion(string id)
     {
-        using var layer = Layer(id);
         var line = Line("Rain over the city can fly away tonight".Split(' '), 0.6);
-        var scene = Scene(line);
-        foreach (var t in new[] { 2.75, 2.8, 2.85, 2.9, 3.0, 3.15, 5.5, 6.2 })
-            Assert.True(Lit(Frame(layer, scene, t)) > 100, $"{id} drew nothing at {t}");
-        // Gone once the line has been held and has left.
-        Assert.Equal(0, Lit(Frame(layer, scene, LyricPhraseTimingEnd(line) + 0.9)));
+        foreach (var reduceMotion in new[] { false, true })
+        {
+            using var layer = Layer(id);
+            var scene = Scene(line) with { ReduceMotion = reduceMotion };
+            foreach (var t in new[] { 2.75, 2.8, 2.85, 2.9, 3.0, 3.15, 5.5, 6.2 })
+                Assert.True(Lit(Frame(layer, scene, t)) > 100, $"{id} drew nothing at {t}{(reduceMotion ? " under Reduce Motion" : "")}");
+            // Gone once the line has been held and has left.
+            Assert.Equal(0, Lit(Frame(layer, scene, LyricPhraseTimingEnd(line) + 0.9)));
+        }
         Assert.Empty(_sink.Entries);
+    }
+
+    // Under Reduce Motion a stage step is a short dissolve between where the words were and where they now are
+    // (StageLyricView's reducedDissolve), and once it is over nothing moves: a word, once landed, holds still while the
+    // next is sung. Fable never moves its words.
+    [Theory]
+    [MemberData(nameof(Layouts))]
+    public void UnderReduceMotionALandedStageHoldsStill(string id)
+    {
+        var line = Line("Rain over the city can fly away tonight".Split(' '), 1.0);
+        var scene = Scene(line) with { ReduceMotion = true };
+        using var layer = Layer(id);
+        // The fourth word lands at 4 s; by 4.45 s its dissolve (0.18 s from 0.04 s ahead) and its fades are long over.
+        var landed = Frame(layer, scene, 4.45);
+        Assert.True(Difference(landed, Frame(layer, scene, 4.9)) < 30, $"{id} still moved after the step had landed");
+        // Part way through the step, the stage is neither the old step nor the new.
+        var during = Frame(layer, scene, 4.02);
+        Assert.True(Difference(during, landed) > 0 || id == "fable", $"{id} jumped straight to the new step");
+        // A frame is still a pure function of song time.
+        using var fresh = Layer(id);
+        Assert.Equal(during, Frame(fresh, scene, 4.02));
+        Assert.Empty(_sink.Entries);
+    }
+
+    // Reduce Motion takes the motion out of every stage layout, but the words still come and go.
+    [Theory]
+    [MemberData(nameof(Layouts))]
+    public void ReduceMotionChangesHowTheWordsArriveNotWhichAreShown(string id)
+    {
+        var line = Line("Rain over the city can fly away tonight".Split(' '), 0.6);
+        using var moving = Layer(id);
+        using var still = Layer(id);
+        // As the fourth word arrives the layouts differ; with nothing sung yet both are empty.
+        Assert.True(Difference(Frame(moving, Scene(line), 2.82), Frame(still, Scene(line) with { ReduceMotion = true }, 2.82)) > 50,
+            $"{id} ignored Reduce Motion");
+        Assert.Equal(0, Lit(Frame(still, Scene(line) with { ReduceMotion = true }, 0.5)));
     }
 
     private static double LyricPhraseTimingEnd(LyricLine line) => Core.Motion.LyricPhraseTiming.StageHeldUntil(line);

@@ -44,11 +44,17 @@ internal static class LyricInks
         _ => LyricHighlightMode.Complement,
     };
 
-    /// <summary>The drift's phase at a song time, quantised as the director quantises it (1/720 of a loop).</summary>
-    public static double DriftPhase(double songSeconds)
+    /// <summary>The drift under Reduce Motion: ten times slower (the Mac's director, <c>calm ? 0.1 : 1</c>).</summary>
+    public const double ReducedDrift = 0.1;
+
+    /// <summary>
+    /// The drift's phase at a song time, quantised as the director quantises it (1/720 of a loop); ten times slower
+    /// under Reduce Motion.
+    /// </summary>
+    public static double DriftPhase(double songSeconds, bool reduceMotion = false)
     {
         if (!double.IsFinite(songSeconds)) return 0;
-        var phase = songSeconds * DriftPerSecond % 1;
+        var phase = songSeconds * DriftPerSecond * (reduceMotion ? ReducedDrift : 1) % 1;
         if (phase < 0) phase += 1;
         return Math.Round(phase * 720) / 720 % 1;
     }

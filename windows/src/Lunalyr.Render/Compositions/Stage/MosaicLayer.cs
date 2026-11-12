@@ -136,21 +136,22 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
     }
 
     protected override void DrawLine(ID2D1DeviceContext dc, StageLine stageLine, double time, double exitStart, in Matrix4x4 stage,
-                                     double alpha, float blur)
+                                     double alpha, float blur, int shown)
     {
         var line = (MosaicLine)stageLine;
         var runs = line.Runs;
-        var n = StageMotion.ShownCount(runs, time);
+        var n = shown;
         if (n == 0) return;
         var whole = (1 - StageMotion.Leave(time, exitStart)) * alpha;
         if (!(whole > 0.002)) return;
         var speed = line.Speed;
+        var reduce = ReduceMotion;
         var seed = line.Seed;
         var u = Unit;
         var arrivals = line.A.AsSpan(0, n);
         var ranks = line.B.AsSpan(0, n);
-        for (var i = 0; i < n; i++) arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed);
-        StageMotion.Ranks(runs, n, time, speed, seed, false, ranks);
+        for (var i = 0; i < n; i++) arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed, reduce);
+        StageMotion.Ranks(runs, n, time, speed, seed, reduce, ranks);
         // The stack's rows make room for readings when the line has any.
         var step = MosaicGeometry.StackStep(u, line.HasReadings, Pt);
         var flat = Homography.Flat(stage);
@@ -176,32 +177,32 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 var big = Matrix3x2.CreateScale((float)morph.BigScale) * at;
                 if (kind == 0)
                 {
-                    var unit = Matrix3x2.CreateTranslation((float)((1 - Math.Min(a, 1)) * Stage.Width * 0.35 * side), 0) * big;
+                    var unit = Matrix3x2.CreateTranslation(reduce ? 0 : (float)((1 - Math.Min(a, 1)) * Stage.Width * 0.35 * side), 0) * big;
                     DrawLabel(dc, line, word, run, 0, time, Homography.Of(unit), bigOpacity, blur);
                     DrawReading(dc, word, 0, Homography.Of(unit), bigOpacity, blur);
-                    var star = Matrix3x2.CreateRotation(Radians(time * 40))
+                    var star = Matrix3x2.CreateRotation(Radians(reduce ? 0 : time * 40))
                         * Matrix3x2.CreateTranslation((float)(word.Size.Width / 2 - size * 0.16 + size * 0.1),
                                                       (float)(-word.Size.Height / 2 + size * 0.16 - size * 0.12)) * unit;
                     FillStar(dc, star, size * 0.32, tile, bigOpacity);
                 }
                 else if (kind == 1)
                 {
-                    var wipe = StageShared.Glide((time - (run.Start - 0.04)) / (0.32 / speed));
+                    var wipe = reduce ? 1 : StageShared.Glide((time - (run.Start - 0.04)) / (0.32 / speed));
                     var tilt = (StageShared.Chance(seed, id, 28) - 0.5) * 5;
                     var bar = line.Bar[id];
                     // The pale panel behind, a little off-square, arriving a beat after the bar.
                     var panelIn = StageShared.Glide((time - (run.Start + 0.05)) / 0.3);
                     var panel = Matrix3x2.CreateRotation(Radians(-tilt * 0.8))
                         * Matrix3x2.CreateTranslation((float)(size * 0.12), (float)(size * 0.1))
-                        * Matrix3x2.CreateScale((float)(0.6 + 0.4 * panelIn), 1) * big;
+                        * Matrix3x2.CreateScale(reduce ? 1 : (float)(0.6 + 0.4 * panelIn), 1) * big;
                     SoftRounded(dc, Matrix3x2.CreateTranslation(0, Points(3)) * panel, bar.Width + size * 1.1, bar.Height + size * 0.68,
                                 Points(4), Points(8), new Vector4(0, 0, 0, 1), 0.25 * panelIn * bigOpacity);
                     FillRounded(dc, panel, bar.Width + size * 1.1, bar.Height + size * 0.68, Points(4), white, 0.9 * panelIn * bigOpacity);
                     // The bar wipes across, then the word lands on it.
                     var turned = Matrix3x2.CreateRotation(Radians(tilt)) * big;
-                    var shown = bar.Width * wipe;
-                    var barCentre = side > 0 ? -bar.Width / 2 + shown / 2 : bar.Width / 2 - shown / 2;
-                    FillRounded(dc, Matrix3x2.CreateTranslation((float)barCentre, 0) * turned, shown, bar.Height, 0, tile, bigOpacity);
+                    var wiped = bar.Width * wipe;
+                    var barCentre = side > 0 ? -bar.Width / 2 + wiped / 2 : bar.Width / 2 - wiped / 2;
+                    FillRounded(dc, Matrix3x2.CreateTranslation((float)barCentre, 0) * turned, wiped, bar.Height, 0, tile, bigOpacity);
                     var landed = StageShared.Glide((time - (run.Start + 0.1)) / 0.2) * bigOpacity;
                     var unit = Homography.Of(Matrix3x2.CreateRotation(Radians(tilt))
                         * Matrix3x2.CreateTranslation((float)((1 - wipe) * size * 0.5 * side), 0) * big);
@@ -209,7 +210,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                     DrawReading(dc, word, 0, unit, landed, blur);
                     // A star above the word, which a reading under it lifts.
                     var lift = word.HasReading ? StageShared.ReadingSlot(size, point: Pt) / 2 : 0;
-                    var star = Matrix3x2.CreateScale((float)wipe) * Matrix3x2.CreateRotation(Radians(time * 50))
+                    var star = Matrix3x2.CreateScale((float)wipe) * Matrix3x2.CreateRotation(Radians(reduce ? 0 : time * 50))
                         * Matrix3x2.CreateTranslation((float)(side * size * 0.1), (float)(-size * 0.62 - lift)) * big;
                     FillStar(dc, Matrix3x2.CreateTranslation(0, Points(1)) * star, size * 0.3, new Vector4(0, 0, 0, 1), 0.2 * bigOpacity);
                     FillStar(dc, star, size * 0.3, white, bigOpacity);
@@ -225,7 +226,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                         var letter = letters[k];
                         var reveal = StageShared.Glide((time - (run.Start + k * 0.05)) / 0.25);
                         var local = Matrix3x2.CreateRotation(Radians(letter.Turn))
-                            * Matrix3x2.CreateTranslation((float)letter.X, (float)(letter.Y + (1 - reveal) * size * 0.3)) * lettersAt;
+                            * Matrix3x2.CreateTranslation((float)letter.X, (float)(letter.Y + (reduce ? 0 : (1 - reveal) * size * 0.3))) * lettersAt;
                         DrawInk(dc, letter.Ink, Homography.Of(local), Vector2.Zero, reveal * bigOpacity, blur);
                     }
                     if (line.LetterReadings[id] is { } under)

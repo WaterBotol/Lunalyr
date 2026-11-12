@@ -45,16 +45,17 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
     }
 
     protected override void DrawLine(ID2D1DeviceContext dc, StageLine stageLine, double time, double exitStart, in Matrix4x4 stage,
-                                     double alpha, float blur)
+                                     double alpha, float blur, int shown)
     {
         var line = (TorqueLine)stageLine;
         var runs = line.Runs;
-        var n = StageMotion.ShownCount(runs, time);
+        var n = shown;
         if (n == 0) return;
         var leaving = StageMotion.Leave(time, exitStart);
         var whole = (1 - leaving) * alpha;
         if (!(whole > 0.002)) return;
         var speed = line.Speed;
+        var reduce = ReduceMotion;
         var seed = line.Seed;
         var u = Unit;
         var rest = TorqueGeometry.RestSize(u);
@@ -63,8 +64,8 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
         var scales = line.C.AsSpan(0, n);
         var weights = line.D.AsSpan(0, n);
         var sizes = line.Sizes.AsSpan(0, n);
-        for (var i = 0; i < n; i++) arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed);
-        StageMotion.Ranks(runs, n, time, speed, seed, false, ranks);
+        for (var i = 0; i < n; i++) arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed, reduce);
+        StageMotion.Ranks(runs, n, time, speed, seed, reduce, ranks);
         for (var i = 0; i < n; i++)
         {
             scales[i] = TorqueGeometry.ScaleFor(ranks[i]);
@@ -82,8 +83,8 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
         var fit = LyricStageFit.Scale(new SizeD(Stage.Width, height), Stage);
         var middle = new Vector2((float)(Stage.Width / 2), (float)(Stage.Height / 2));
         var all = Matrix4x4.CreateScale((float)fit, (float)fit, 1, new Vector3(middle, 0))
-            * Homography.TurnY(-10, middle, Stage, 0.5)
-            * Matrix4x4.CreateTranslation(0, (float)(Stage.Height * 0.12 * leaving), 0) * stage;
+            * Homography.TurnY(reduce ? 0 : -10, middle, Stage, 0.5)
+            * Matrix4x4.CreateTranslation(0, reduce ? 0 : (float)(Stage.Height * 0.12 * leaving), 0) * stage;
         for (var id = 0; id < n; id++)
         {
             var word = line.Words[id];
@@ -97,15 +98,15 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
             var scale = scales[id];
             var even = id % 2 == 0;
             // The word's own wringing, unless another word entrance has been chosen.
-            var entrance = StageShared.ChosenEntrance(ChosenFor(run), a, rest * scale, even ? 1 : -1, false);
-            var twist = entrance is null ? (1 - Math.Min(a, 1)) * 110 * (even ? 1 : -1) : 0;
+            var entrance = StageShared.ChosenEntrance(ChosenFor(run), a, rest * scale, even ? 1 : -1, reduce);
+            var twist = reduce || entrance is not null ? 0 : (1 - Math.Min(a, 1)) * 110 * (even ? 1 : -1);
             // Wrung and loosened again, all the while it is held.
-            var breathe = Math.Sin(time * 2.1 + id * 1.7) * (5 + 6 * live);
-            var wander = Math.Sin(time * 1.3 + id * 2.3) * u * (0.08 + 0.06 * live);
+            var breathe = reduce ? 0 : Math.Sin(time * 2.1 + id * 1.7) * (5 + 6 * live);
+            var wander = reduce ? 0 : Math.Sin(time * 1.3 + id * 2.3) * u * (0.08 + 0.06 * live);
             var lean = Math.Min(rank, 2) * 3 * (even ? 1 : -1);
             var e = entrance ?? EntranceTransform.Rest;
             var unit = Matrix4x4.CreateScale((float)scale, (float)scale, 1)
-                * Matrix4x4.CreateRotationZ(Radians(-4 * live + lean * (1 - live)))
+                * Matrix4x4.CreateRotationZ(Radians(reduce ? 0 : -4 * live + lean * (1 - live)))
                 * Homography.TurnY(twist + breathe, Vector2.Zero, word.Size, 0.6)
                 * Homography.TurnX(breathe * 0.5, Vector2.Zero, word.Size, 0.6)
                 * Homography.TurnX(e.Fold, Vector2.Zero, word.Size, 0.6)
@@ -114,7 +115,7 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
                 * Matrix4x4.CreateTranslation((float)(wander + e.OffsetX + places[id].X), (float)(e.OffsetY + places[id].Y), 0)
                 * all;
             var shadow = (float)((0.15 + 0.15 * live) / 0.3);
-            var wordBlur = blur + (float)(rest * scale * 0.07 * (1 - Math.Min(a, 1)));
+            var wordBlur = blur + (reduce ? 0 : (float)(rest * scale * 0.07 * (1 - Math.Min(a, 1))));
             if (live > 0.001)
             {
                 // The thick edge: darker copies stepping back, thinning away as the word hands over.
