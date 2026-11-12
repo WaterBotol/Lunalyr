@@ -732,4 +732,18 @@ final class RomanizationTests: XCTestCase {
         XCTAssertEqual(LyricReadingPairs.parts(shared, to: words, glue: [false, true]).mapValues { $0 },
                        [words[0].presentationID: "haji", words[1].presentationID: "mari ni"])
     }
+
+    /// Apple's ikkai for 一回, which the tokenizer parts as 一|回, is one
+    /// word under the line, not "ik kai".
+    func testAGeminateWordPartedByTheTokenizerReadsAsOneWord() {
+        XCTAssertEqual(texts(line(["もう", "一回"], reading: "mou ikkai")), ["mou", "ikkai"])
+        XCTAssertEqual(texts(line(["もう", "一", "回"], reading: "mou ikkai")), ["mou", "ik", "kai"])
+        let parted = line(["もう", "一", "回"], reading: "mou ikkai")
+        XCTAssertEqual(LyricReadingPairs.match(readings(parted), to: parted.words, glue: [false, true, true])[parted.words[0].presentationID],
+                       "mou ikkai")
+        XCTAssertEqual(texts(line(["一緒", "に"], reading: "issho ni")), ["issho", "ni"])
+        XCTAssertEqual(texts(line(["学", "校"], reading: "gakkou")), ["gak", "kou"])
+        XCTAssertEqual(texts(line(["学校", "へ"], reading: "gakkou e")), ["gakkou", "e"])
+        XCTAssertEqual(texts(characterTimed("もう一回", reading: "mou ikkai")), ["mo", "u", "ik", "kai"])
+    }
 }

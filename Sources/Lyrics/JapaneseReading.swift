@@ -445,10 +445,19 @@ enum JapaneseReading {
         }
     }
 
-    private static func geminate(_ following: String) -> String? {
+    static func geminate(_ following: String) -> String? {
         if following.hasPrefix("ch") { return "t" }
         guard let first = following.first, "bcdfghjklmpqrstvwxyz".contains(first) else { return nil }
         return String(first)
+    }
+
+    /// Whether `before` ends in the first half of a doubled consonant that
+    /// `after` starts with (ik kai, is sho, gak kou): romaji ends in no
+    /// consonant but n, so the two are one word cut at its っ.
+    static func splitsGeminate(_ before: String, _ after: String) -> Bool {
+        guard let last = before.last?.lowercased(), last != "n",
+              let double = geminate(after.lowercased()) else { return false }
+        return last == double
     }
 
     static func punctuation(_ source: String) -> String {
