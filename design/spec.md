@@ -1,6 +1,6 @@
 # Settings design spec: Bold and Calm
 
-Decisions from `design/research.md`: two themes, **Calm** (flat, opaque, native-feeling) and **Bold** (toned-down neubrutalism); a sidebar with search. Both are opaque and static: no blur, no animated gradients, no transparency to lose under Reduce Transparency. Shared violet accent (`LunalyrAccent`) is the selection colour in both, with white text on it (4.5:1+ already tested).
+The look of Lunalyr's Settings window, menu-bar panel and welcome. It has two themes, **Calm** (flat, opaque, native-feeling) and **Bold** (toned-down neubrutalism), and a sidebar with search. Both are opaque and static: no blur, no animated gradients, no transparency to lose under Reduce Transparency. Shared violet accent (`LunalyrAccent`) is the selection colour in both, with white text on it (4.5:1+ already tested).
 
 ## Thumbnail test
 
