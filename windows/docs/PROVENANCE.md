@@ -160,3 +160,17 @@ Consulted for facts or behaviour only (nothing translated):
 
 Third-party code reached through these files is MIT (Synesthia, Fosfora, Wavefield); its notices are in
 `THIRD-PARTY-NOTICES.md`.
+
+## Animated covers (milestone 6)
+
+Checked at `next/integration` `79b84db` with `git blame -w -M -C` (13 Nov 2026):
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/NowPlaying/MotionArtworkProvider.swift` | 38 / 244: the `Motion` struct, `motion(album:artist:title:)`'s signature, the iTunes search request, `fetchText`/`fetchData` and the search reply's shape | `Core/Covers/MotionArtwork.cs` (`MotionArtworkPages`, `MotionArtwork`), `MotionArtworkFinder.cs` | Lunalyr's lines ported faithfully: `parse`, `singleMP4`, `matchingPages`, the variant choice (H.264 nearest 768 wide, three tried), `progressive` (both renditions at once, one fetch for a single rendition), the lookup order and its miss rule, `cacheKey`. The Verso lines are **re-implemented from what they do**: an HTTPS GET with a 10 s timeout that only takes HTTP 200, an iTunes search URL of `term`, `entity`, `country`, `limit=20`, and a JSON reply read for four fields. Windows sends its own User-Agent, not the Mac's browser one. |
+| `Sources/UI/MotionArtworkView.swift` | 116 / 181: the view, its player layer, placement layout | `Render/Backgrounds/MotionCoverLayer.cs` (with `VideoLayer`'s decoder) | **Re-implemented from behaviour**: placement geometry is the shared `WallpaperPlacements` already used for imported pictures; the reveal is the engine's first-frame crossfade. The `rendition(portrait:)` extension (Lunalyr's lines, `aa22c91`) is ported faithfully into `MotionArtwork.Rendition`. |
+| `Sources/UI/NowPlayingView.swift`, `.motion` case | 13 of its lines in that case (the blur, the 1.04 overscan, the flat shade, the radial vignette) | `MotionCoverLayer` | **Re-implemented from a behaviour description** (in the layer's header): softened by Softening, an even shade following Darkening, a round shade darkest in the middle; its visible amounts are kept so both apps look alike. The overscan is replaced by Direct2D's hard-edged blur. Ported faithfully (Lunalyr's lines): the album gradient beneath, the 18% album tint, the cover luminance and the text-backing sum for animated covers (`91b3259`, `aa22c91`). The Mac's still cover under Reduce Motion is replaced, as the brief asked, by the video's first frame. |
+| `Sources/Settings/Settings.swift` (exclusions) | `exclusionKey`, `excludesMotion`, `setMotionExcluded` are all Verso lines | `Shell/Settings/AppSettings.Covers.cs` | **Re-implemented from behaviour**: an album-wide key, artist and album in lower case joined by `\|`, nothing to exclude when both are empty. Key name kept for compatibility. |
+| `Sources/NowPlaying/NowPlayingMonitor.swift` (`updateMotionArtwork`), `PlayerConnection.swift` (`allowsMotionLookup`) | 3 (closing braces) | `Shell/AppController.MotionArtwork.cs` | Faithful port of the gate and the hold-across-an-album rule |
+| `Sources/Settings/Pages/CoversPage.swift` | 1 / 113 (an `@Environment` declaration) | `App/Settings/CoversPage.cs`, `SettingsCopy.CoverStatus` | Faithful port of the page's rows and words (WinUI controls; "Music" reads "Apple Music") |
+| `Sources/Settings/LunalyrWorkspace.swift` (`coverLookupSkipped`, `coverIdlePrompt`, `reduceMotionCovers`) | 0 | `SettingsCopy.CoverStatus` | Faithful port, Windows' wording for Reduce Motion |
