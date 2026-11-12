@@ -18,6 +18,7 @@ namespace Lunalyr.Shell;
 /// of the system's players; implies <c>--no-network</c> and <c>--no-playback</c>, and keeps its own data folder.</description></item>
 /// <item><term><c>--stats &lt;file&gt;</c></term><description>On quitting, write the renderer's frame statistics to this JSON
 /// file (for measurements).</description></item>
+/// <item><term><c>--settings-page &lt;page&gt;</c>, <c>--theme &lt;light|dark|system&gt;</c></term><description>Open a settings page; the windows' look for this run.</description></item>
 /// <item><term><c>lunalyr://…</c></term><description>A link to act on (forwarded to the running instance).</description></item>
 /// </list>
 /// </summary>
@@ -40,6 +41,19 @@ public sealed record ShellOptions
 
     /// <summary>Where to write the renderer's frame statistics on quitting, or null.</summary>
     public string? StatsPath { get; init; }
+
+    /// <summary>
+    /// <c>--settings-page &lt;page&gt;</c>: the settings page to show (general, lyric-style, readings, timing, wallpaper,
+    /// covers, players, performance, about); implies <c>--settings</c>. A second launch forwards it, so checks and other
+    /// surfaces can open a page.
+    /// </summary>
+    public string? SettingsPage { get; init; }
+
+    /// <summary>
+    /// <c>--theme &lt;light|dark|system&gt;</c>: the look of Lunalyr's own windows for this run only (for screenshots);
+    /// nothing is saved and Windows' own setting is never touched.
+    /// </summary>
+    public string? Theme { get; init; }
 
     public IReadOnlyList<string> Links { get; init; } = [];
 
@@ -78,6 +92,20 @@ public sealed record ShellOptions
                 case "--demo":
                     // Silent and offline by definition: no real player is followed and nothing is looked up.
                     options = options with { Demo = true, NoNetwork = true, NoPlayback = true };
+                    break;
+                case "--settings-page":
+                    if (Value() is { } page)
+                    {
+                        if (page.Trim().Length == 0) problems.Add("--settings-page needs a page.");
+                        else options = options with { SettingsPage = page.Trim(), OpenSettings = true };
+                    }
+                    break;
+                case "--theme":
+                    if (Value() is { } theme)
+                    {
+                        if (theme.Trim().ToLowerInvariant() is "light" or "dark" or "system") options = options with { Theme = theme.Trim().ToLowerInvariant() };
+                        else problems.Add($"--theme {theme}: expected light, dark or system.");
+                    }
                     break;
                 case "--stats":
                     if (Value() is { } stats)

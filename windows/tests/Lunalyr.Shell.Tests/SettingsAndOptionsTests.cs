@@ -60,6 +60,7 @@ public sealed class AppSettingsTests
             "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "showInterludes",
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
             "spotifyClientId",
+            "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

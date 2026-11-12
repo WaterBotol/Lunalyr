@@ -102,6 +102,30 @@ internal sealed class AppHost
 
     public PlaybackGuard Guard => PlaybackGuard.Process;
 
+    // ---- Settings window (milestone 5) ----
+
+    private string? _requestedPage;
+    private volatile ReadingServices? _readings;
+
+    /// <summary>The look <c>--theme</c> asked for this run (light, dark or system), or null for the App theme setting.</summary>
+    public string? ThemeOverride { get; private set; }
+
+    /// <summary>Windows' "Animation effects" is off (read, never changed).</summary>
+    public bool ReduceMotion => _motion?.ReduceMotion ?? false;
+
+    /// <summary>The readings services the wallpaper uses, once started (the settings preview draws with them).</summary>
+    public ReadingServices? Readings => _readings;
+
+    /// <summary>The page <c>--settings-page</c> asked for, once.</summary>
+    public string? TakeRequestedPage() => Interlocked.Exchange(ref _requestedPage, null);
+
+    /// <summary>Opens settings at <paramref name="page"/> (a page title or short name).</summary>
+    public void OpenSettingsPage(string? page)
+    {
+        if (page is not null) _requestedPage = page;
+        OpenSettings();
+    }
+
     /// <summary>Runs until Quit (tray, <c>--seconds</c>), then shuts down in order. Returns the exit code.</summary>
     public int Run()
     {
@@ -125,7 +149,8 @@ internal sealed class AppHost
 
         _log.Info($"Start-up: tray ready {SinceLaunch():0} ms after launch.");
         _init = Task.Run(InitializeAsync);
-        if (_options.OpenSettings) OpenSettings();
+        ThemeOverride = _options.Theme;
+        if (_options.OpenSettings) OpenSettingsPage(_options.SettingsPage);
 
         RunWin32Loop();
         if (_uiRequested && !_quitting) RunWinUi();
@@ -180,6 +205,7 @@ internal sealed class AppHost
         {
             // The Japanese dictionary expands under the data folder, so --data test runs never touch the real one.
             var readings = WindowsReadingServices.Create(Path.Combine(DataRoot, "Dictionaries"));
+            _readings = readings;
             ILyricLookup lookup;
             if (_options.Demo)
             {
@@ -326,7 +352,7 @@ internal sealed class AppHost
         if (_quitting) return;
         if (_app is not null)
         {
-            _app.ShowSettings();
+            _app.ShowSettings(TakeRequestedPage());
             return;
         }
 
@@ -367,7 +393,12 @@ internal sealed class AppHost
         }
 
         foreach (var link in forwarded.Links) _log.Info($"Received a link: {link} (links aren't handled yet).");
-        if (forwarded.Links.Count == 0 || forwarded.OpenSettings) OpenSettings();
+        if (forwarded.Theme is { } theme)
+        {
+            ThemeOverride = theme;
+            _app?.ApplyTheme();
+        }
+        if (forwarded.Links.Count == 0 || forwarded.OpenSettings) OpenSettingsPage(forwarded.SettingsPage);
     }
 
     private (string NowPlaying, bool Paused) DescribeMenu()

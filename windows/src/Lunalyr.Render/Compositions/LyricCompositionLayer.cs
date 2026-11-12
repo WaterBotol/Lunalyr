@@ -83,6 +83,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// </summary>
     protected bool ReduceMotion => SceneShown?.ReduceMotion == true;
 
+    /// <summary>The style of the scene shown (the default before the first).</summary>
+    protected LyricStyle StyleShown => SceneShown?.Style ?? LyricStyle.Default;
+
     /// <summary>The colours of a word at <paramref name="slot"/> along its line, sung around <paramref name="songSeconds"/>.</summary>
     protected LyricInkSample InkSample(double songSeconds, double slot, ulong seed) => InkAt(songSeconds).Sample(slot, seed);
 
@@ -236,7 +239,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Metrics = ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.
-        Choice = EntranceChoice.Parse(scene.Style.Reveal);
+        Choice = scene.Style.EntranceFor(Kind);
         Arrival = Choice.For(Kind, 0).Motion(Kind);
         var highlight = (scene.Style.HighlightMode, scene.Style.HighlightCustom);
         if ((!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
@@ -607,7 +610,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Shadow: wordTimed ? new ShadowSpec(0.52f, Points(7) * 0.5f, Points(2)) : new ShadowSpec(0.32f, Points(8) * 0.5f, Points(2)),
             Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: baseSize * 0.38,
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
-            Connections: connections, Spread: ConstellationLayout.DefaultSpread,
+            Connections: connections, Spread: StyleShown.ConstellationSpread,
             EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
@@ -865,7 +868,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         {
             var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, ReduceMotion);
             var ghost = pose.Repeat;
-            var alpha = EchoBackdrop.Opacity(ghost, presence);
+            var alpha = EchoBackdrop.Opacity(ghost, presence, StyleShown.EchoStrength);
             if (!(alpha > 0.002)) continue;
             var relative = ghost.SizeShare / echo.BakedScale;
             var size = new SizeD(phrase.Box.X * relative, phrase.Box.Y * relative);
@@ -919,7 +922,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// <summary>A constellation's hairlines, each with a dot at both ends, lit with the heat of the words they join.</summary>
     private void DrawLinks(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 blockToDevice, double opacity)
     {
-        if (_paint is null || !(ConstellationLayout.DefaultLinkOpacity > 0)) return;
+        var links = StyleShown.ConstellationLinkOpacity;
+        if (_paint is null || !(links > 0)) return;
         var link = _ink.Link;
         dc.Transform = blockToDevice;
         var width = Points(ConstellationLayout.LinkWidth);
@@ -932,7 +936,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             ref readonly var b = ref plan.RunFrames[edge.To];
             var shownA = a.Visible * (1 - tokens[runs[edge.From].TokenStart].Leave);
             var shownB = b.Visible * (1 - tokens[runs[edge.To].TokenStart].Leave);
-            var alpha = ConstellationLayout.LinkAlpha(ConstellationLayout.DefaultLinkOpacity, Math.Max(a.Heat, b.Heat),
+            var alpha = ConstellationLayout.LinkAlpha(links, Math.Max(a.Heat, b.Heat),
                                                       Math.Min(shownA, shownB)) * opacity * link.A;
             if (!(alpha > 0.002)) continue;
             _paint.Color = new Color4((float)link.R, (float)link.G, (float)link.B, (float)alpha);

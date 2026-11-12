@@ -155,6 +155,46 @@ public sealed record LyricStyle
 
     /// <summary>The album cover beside the opening title, when the song has one (the Mac's <c>custom.openingTitleCover</c>).</summary>
     public bool OpeningTitleCover { get; init; } = true;
+
+    // ---- Milestone 5: the Scattered family's own settings, the custom mix and an entrance per layout ----
+
+    /// <summary>How far the constellations throw their words apart, 0.4–1.8 (the Mac's "Spread", <c>constellationSpread</c>).</summary>
+    public double ConstellationSpread { get; init; } = Lunalyr.Core.Compositions.ConstellationLayout.DefaultSpread;
+
+    /// <summary>The constellations' hairlines, 0–0.6; 0 draws none (the Mac's "Links", <c>constellationLinkOpacity</c>).</summary>
+    public double ConstellationLinkOpacity { get; init; } = Lunalyr.Core.Compositions.ConstellationLayout.DefaultLinkOpacity;
+
+    /// <summary>How present Echo's repeats are, 0–1.8; 0 draws none (the Mac's "Repeats", <c>echoStrength</c>).</summary>
+    public double EchoStrength { get; init; } = Lunalyr.Core.Compositions.EchoBackdrop.DefaultStrength;
+
+    /// <summary>
+    /// The custom mix's entrances (the Mac's <c>custom.wordEntranceMix</c>, its raw values), used when a reveal is
+    /// "mix" without a list of its own. Null is the Mac's default mix (Soft focus, Float up, Cutout · Fold); an empty
+    /// list leaves each layout its own entrance.
+    /// </summary>
+    public ValueList? MixEntrances { get; init; }
+
+    /// <summary>
+    /// A reveal per composition id ("editorial", "scattered"…), the Mac's <c>custom.wordArrivalByStyle</c>: a layout
+    /// listed here uses its own entrance instead of <see cref="Reveal"/>. Empty by default.
+    /// </summary>
+    public ValueMap RevealByLayout { get; init; } = ValueMap.Empty;
+
+    /// <summary>The reveal id composition <paramref name="compositionId"/> uses.</summary>
+    public string RevealFor(string compositionId) =>
+        RevealByLayout.TryGetValue(compositionId, out var reveal) ? reveal : Reveal;
+
+    /// <summary>
+    /// The entrance a composition makes its words with: its reveal (<see cref="RevealFor"/>), and for a custom mix
+    /// named without a list, <see cref="MixEntrances"/>.
+    /// </summary>
+    public Lunalyr.Core.Compositions.EntranceChoice EntranceFor(Lunalyr.Core.Compositions.CompositionKind kind)
+    {
+        var reveal = RevealFor(Lunalyr.Core.Compositions.CompositionTraits.Id(kind));
+        var choice = Lunalyr.Core.Compositions.EntranceChoice.Parse(reveal);
+        if (choice.Selected != Lunalyr.Core.Compositions.WordArrival.Mix || MixEntrances is null || reveal.Contains(':')) return choice;
+        return Lunalyr.Core.Compositions.EntranceChoice.Parse("mix:" + string.Join(",", MixEntrances));
+    }
 }
 
 public enum ReadingPlacement { Off, Below, Instead }
