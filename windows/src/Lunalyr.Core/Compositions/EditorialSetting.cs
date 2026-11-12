@@ -236,11 +236,12 @@ public static class EditorialSetting
         var wave = Math.Sin(index * 0.85) * setting.Wave * baseSize * moodIntensity;
         if (connections)
         {
-            // Words at clearly different heights, so the links are not collinear; short lines scatter less.
+            // The constellation offset (docs/compositions/scattered.md): a hashed share of 2.1 base sizes plus a sine
+            // term, scaled by the line's fullness and the Spread setting.
             var scatter = (double)((hash / 7) % 100) / 100 - 0.5;
             var reach = (0.30 + 0.70 * fullness) * spread;
             wave += (scatter * baseSize * 2.1 + Math.Sin(index * 2.3) * baseSize * 0.42) * reach;
-            // Held words carry the figure; the others shrink back.
+            // Heroes 6% larger, other runs 4% smaller (Lunalyr's factors).
             size *= hero ? 1.06 : 0.96;
         }
         var rotation = ((long)((hash / 1000) % 9) - 4) * 0.35 * setting.RotationSpread * moodIntensity;

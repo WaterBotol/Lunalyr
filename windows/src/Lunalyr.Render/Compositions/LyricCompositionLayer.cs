@@ -356,7 +356,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         : new LineFit(Kind.HasConnections() ? ConstellationLayout.FitArea(Stage) : Stage, Metrics.UserScale, 0.75);
 
     /// <summary>The composition a backing group animates in: the lead's when it sets words loose or links them, else Editorial.</summary>
-    private static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
+    internal static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
         or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Editorial;
 
     private void DrawLine(ID2D1DeviceContext dc, in DrawnLine drawn, double time, double offset)
@@ -587,7 +587,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             if (string.IsNullOrWhiteSpace(text)) return;
             var rightToLeft = ScriptDirection.LineIsRightToLeft(visible.Select(word => word.Text));
             var largest = 0.0;
-            foreach (var ghost in EchoBackdrop.Ghosts) largest = Math.Max(largest, ghost.Scale);
+            foreach (var ghost in EchoBackdrop.Repeats) largest = Math.Max(largest, ghost.SizeShare);
             using var layout = Kit!.Layout(text, Face.Regular, (float)(baseSize * largest), TextKit.LocaleFor(text), rightToLeft);
             // The repeats take the ink's colour at the middle of the line.
             var tint = LyricInks.Vector(ink.Sample(0.5, EchoBackdrop.Magnitude(seed)).Rest);
@@ -729,20 +729,20 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var phrase = echo.Phrase;
         var revealed = Options.RevealsWords ? WordReveal.LineRevealed(plan.Words, time) : 1;
         if (!(revealed > 0)) return;
-        for (var slot = 0; slot < EchoBackdrop.Ghosts.Count; slot++)
+        for (var slot = 0; slot < EchoBackdrop.Repeats.Count; slot++)
         {
             var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, false);
-            var ghost = pose.Ghost;
+            var ghost = pose.Repeat;
             var alpha = EchoBackdrop.Opacity(ghost, presence);
             if (!(alpha > 0.002)) continue;
-            var relative = ghost.Scale / echo.BakedScale;
+            var relative = ghost.SizeShare / echo.BakedScale;
             var size = new SizeD(phrase.Box.X * relative, phrase.Box.Y * relative);
             var fit = EchoBackdrop.Fit(size, echo.Stage, pose);
             if (!(fit > 0)) continue;
             var k = (float)(relative * fit);
             var world = Matrix3x2.CreateScale(k)
                 * Matrix3x2.CreateRotation(Radians(pose.Angle))
-                * Matrix3x2.CreateScale(1, ghost.Flipped ? -1 : 1)
+                * Matrix3x2.CreateScale(1, ghost.Mirrored ? -1 : 1)
                 * Matrix3x2.CreateTranslation((float)pose.X, (float)pose.Y)
                 * Matrix3x2.CreateTranslation(blockCentre) * block;
             DrawSwept(dc, phrase, world, (float)(k * blockScale), (float)alpha, revealed, EchoBackdrop.Feather, echo.RightToLeft);

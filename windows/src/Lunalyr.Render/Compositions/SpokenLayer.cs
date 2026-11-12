@@ -282,7 +282,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
                     var group = groups[g];
                     var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id,
                                          group.Words.Count > 0 ? group.Words[0].Start : 0, wordTimed: true,
-                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width);
+                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width,
+                                         kind: BackingKind(Kind));
                     plans[g] = new BackingPlan(group, plan);
                 }
                 _backing[row] = plans;

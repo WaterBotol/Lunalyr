@@ -20,7 +20,7 @@ metrics of `ScatteredTypography` in `LyricTypography.swift`); Echo adds `EchoBac
 | &nbsp;&nbsp;`WordArrival` (15–72) | 25 / 58 | the original seven cases, their titles and `resolved` are described below; the cutout, highlight, swipe and mix cases, `isCutout`, `isSwipe`, `requiresReveal`, `travelBounds`, `motion(in:)` are Lunalyr's and ported |
 | &nbsp;&nbsp;`LyricComposition` (74–154) | 60 / 81 | titles, details and traits described below |
 | &nbsp;&nbsp;`ConstellationLines` (298–376) | 53 / 79 | described below; the per-link alpha, colour and insets are Lunalyr's and ported |
-| &nbsp;&nbsp;`EchoBackdrop` (378–480) | 54 / 103 | the ghost table and the shell described below; the reveal mask, drift, seeds, fit and tint are Lunalyr's and ported |
+| &nbsp;&nbsp;`EchoBackdrop` (378–480) | 54 / 103 | the table of repeats and the shell described below; the reveal mask, drift, seeds, fit and tint are Lunalyr's and ported |
 | `LyricTypography.swift` `metrics` connection offset (289–302) | 13 / 14 | described below (the `1.06 / 0.96` size line is Lunalyr's) |
 | `LyricLayerView.swift` density scale (723) | 1 / 1 (moved from `NowPlayingView`) | described below; the fit area and word parting around it are Lunalyr's |
 | `LyricSwipe.swift` | 4 / 62 | only the closing modifier lines; ported |
@@ -48,8 +48,7 @@ editorial.md), with these differences:
   - *Word heights.* A word-timed run's baseline offset gains
     `(spread × base × 2.1 + sin(index × 2.3) × base × 0.42) × reach`, where `spread` is `((hash / 7) mod 100) / 100 − 0.5`
     (hash as in editorial.md) and `reach` is `(0.30 + 0.70 × fullness) × the Spread setting` (0.4–1.8, 1 by default),
-    fullness being the run count over seven, at most 1. So words sit at clearly different heights and links are not
-    collinear; short lines scatter less.
+    fullness being the run count over seven, at most 1 (shorter lines scatter less).
   - Hero runs are set 6% larger, other runs 4% smaller (Lunalyr's).
   - Gaps: `0.06 × base` between runs; rows `(0.34 + 0.96 × fullness) × base` apart on word-timed lines (0.30 × base
     otherwise).
@@ -68,10 +67,10 @@ editorial.md), with these differences:
     indexes) that is not a hero (Lunalyr's rule).
 - **Echo** draws the line's phrase repeated behind the live line (only word-timed lines; a line-timed line is a plain
   Scattered phrase in every one of the four):
-  - Five repeats ("ghosts"), each with a scale of the base size, a place in base sizes (`dx × 3.2` across,
-    `dy × 1.5` down from the line's centre), a turn in degrees, an opacity and whether it is mirrored top to bottom:
+  - Five repeats, each with a size share of the base size, a place in base sizes (`Across × 3.2` rightward,
+    `Down × 1.5` downward from the line's centre), a tilt in degrees, a strength (opacity) and whether it is drawn upside down:
 
-    | Scale | dx | dy | Turn | Opacity | Mirrored |
+    | Size share | Across | Down | Tilt | Strength | Mirrored |
     |---|---|---|---|---|---|
     | 0.85 | −0.30 | −0.62 | −2.0 | 0.055 | yes |
     | 0.42 | 0.46 | −0.44 | 1.5 | 0.085 | no |
@@ -79,14 +78,14 @@ editorial.md), with these differences:
     | 0.60 | 0.34 | 0.66 | 2.5 | 0.065 | yes |
     | 0.22 | 0.10 | −0.78 | 0.0 | 0.12 | no |
 
-  - The line's seed (its index; its magnitude, so any integer works) rotates which ghost leads: slot `k` takes ghost
+  - The line's seed (its index; its magnitude, so any integer works) rotates which repeat leads: slot `k` takes repeat
     `(k + seed mod 5) mod 5`.
-  - Each ghost is the whole phrase on one line in the lyric face (not the held face), at `base × scale`, faint, so
-    nothing behind reads as the line being sung. It fades in with the line's presence.
+  - Each repeat is the whole phrase on one line in the lyric face (not the held face), at `base × size share`, at the
+    opacity in the table. It fades in with the line's presence.
   - Lunalyr's (ported): the phrase is the line as it reads (`LyricRuns.Text`); it is laid out whole and revealed
     through a soft sweep (feather 0.2) in reading direction, by `WordReveal.LineRevealed` when words are revealed;
-    the tint is the ink's colour at the middle of the line; opacity `ghost × presence × the Repeats setting` (0–1.8,
-    1 by default); each ghost wanders (seed `|seed| × 31 + slot`, wrapping): `noise2(seed, t × 0.09) × 0.10 × base`
+    the tint is the ink's colour at the middle of the line; opacity `strength × presence × the Repeats setting` (0–1.8,
+    1 by default); each repeat wanders (seed `|seed| × 31 + slot`, wrapping): `noise2(seed, t × 0.09) × 0.10 × base`
     across, `noise2(seed ^ 0x5EED, t × 0.07) × 0.06 × base` down, turn `noise(seed ^ 0xA9, t × 0.11) × 0.9`
     degrees; and it is shrunk (never grown) to keep within two thirds of the stage around its resting centre
     (`WordStageFit`, scale 1.04, margin 4). Reduce Motion stops the wander.

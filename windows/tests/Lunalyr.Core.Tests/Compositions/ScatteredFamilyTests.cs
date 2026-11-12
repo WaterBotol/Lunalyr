@@ -419,7 +419,7 @@ public class ScatteredFamilyTests
                 var pose = EchoBackdrop.Pose(slot, seed, 3, 40, false);
                 Assert.True(double.IsFinite(pose.X) && double.IsFinite(pose.Y) && double.IsFinite(pose.Angle));
             }
-            _ = EchoBackdrop.GhostAt(0, seed);
+            _ = EchoBackdrop.RepeatAt(0, seed);
         }
         Assert.Equal(EchoBackdrop.WanderSeed(-7, 2), EchoBackdrop.WanderSeed(7, 2));
     }
@@ -427,22 +427,22 @@ public class ScatteredFamilyTests
     [Fact]
     public void EchoRepeatsThePhraseFiveTimesTwoMirroredAndTheSeedPicksTheLead()
     {
-        Assert.Equal(5, EchoBackdrop.Ghosts.Count);
-        Assert.Equal(2, EchoBackdrop.Ghosts.Count(ghost => ghost.Flipped));
-        Assert.All(EchoBackdrop.Ghosts, ghost => Assert.InRange(ghost.Opacity, 0.05, 0.12));
-        Assert.All(EchoBackdrop.Ghosts, ghost => Assert.InRange(ghost.Scale, 0.2, 0.85));
-        Assert.Equal(EchoBackdrop.Ghosts[0], EchoBackdrop.GhostAt(0, 0));
-        Assert.Equal(EchoBackdrop.Ghosts[3], EchoBackdrop.GhostAt(0, 8));
-        Assert.Equal(EchoBackdrop.Ghosts[3], EchoBackdrop.GhostAt(0, -3));
-        Assert.Equal(EchoBackdrop.Ghosts.ToHashSet(), Enumerable.Range(0, 5).Select(slot => EchoBackdrop.GhostAt(slot, 2)).ToHashSet());
+        Assert.Equal(5, EchoBackdrop.Repeats.Count);
+        Assert.Equal(2, EchoBackdrop.Repeats.Count(ghost => ghost.Mirrored));
+        Assert.All(EchoBackdrop.Repeats, ghost => Assert.InRange(ghost.Strength, 0.05, 0.12));
+        Assert.All(EchoBackdrop.Repeats, ghost => Assert.InRange(ghost.SizeShare, 0.2, 0.85));
+        Assert.Equal(EchoBackdrop.Repeats[0], EchoBackdrop.RepeatAt(0, 0));
+        Assert.Equal(EchoBackdrop.Repeats[3], EchoBackdrop.RepeatAt(0, 8));
+        Assert.Equal(EchoBackdrop.Repeats[3], EchoBackdrop.RepeatAt(0, -3));
+        Assert.Equal(EchoBackdrop.Repeats.ToHashSet(), Enumerable.Range(0, 5).Select(slot => EchoBackdrop.RepeatAt(slot, 2)).ToHashSet());
         // At rest under Reduce Motion; wandering a little otherwise, never far.
         var still = EchoBackdrop.Pose(1, 4, 30, 50, true);
         Assert.Equal(still.RestX, still.X);
-        Assert.Equal(still.Ghost.Angle, still.Angle);
+        Assert.Equal(still.Repeat.Tilt, still.Angle);
         var moving = EchoBackdrop.Pose(1, 4, 30, 50, false);
         Assert.InRange(Math.Abs(moving.X - moving.RestX), 0, 50 * 0.10 + 1e-9);
-        Assert.InRange(Math.Abs(moving.Angle - moving.Ghost.Angle), 0, 0.9 + 1e-9);
-        Assert.Equal(0.1 * 0.5 * 1.5, EchoBackdrop.Opacity(new EchoGhost(1, 0, 0, 0, 0.1, false), 0.5, 1.5), 9);
+        Assert.InRange(Math.Abs(moving.Angle - moving.Repeat.Tilt), 0, 0.9 + 1e-9);
+        Assert.Equal(0.1 * 0.5 * 1.5, EchoBackdrop.Opacity(new EchoRepeat(1, 0, 0, 0, 0.1, false), 0.5, 1.5), 9);
         // A ghost is shrunk to keep within two thirds of the stage, never grown.
         Assert.Equal(1, EchoBackdrop.Fit(new SizeD(10, 5), new SizeD(1200, 600), still));
         Assert.True(EchoBackdrop.Fit(new SizeD(4000, 50), new SizeD(1200, 600), still) < 0.3);

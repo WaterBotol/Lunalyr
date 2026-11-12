@@ -1,29 +1,29 @@
-// Echo's backdrop: the phrase repeated behind the live line. The ghost table and which ghost leads are re-implemented
-// from the description in docs/compositions/scattered.md (EchoBackdrop in LyricComposition.swift traces back to the
-// squashed Verso import). Lunalyr's own parts are ported as they are: the drift seeds and wander, the fit to the
-// stage, the reveal sweep (LyricSweepMask) and the tint and strength.
+// Echo's backdrop: the phrase repeated behind the live line. The table of repeats and which one leads are
+// re-implemented from the description in docs/compositions/scattered.md (EchoBackdrop in LyricComposition.swift traces
+// back to the squashed Verso import). Lunalyr's own parts are ported as they are: the drift seeds and wander, the fit
+// to the stage, the reveal sweep (LyricSweepMask) and the tint and strength.
 
 using Lunalyr.Core.Motion;
 
 namespace Lunalyr.Core.Compositions;
 
-/// <summary>One repeat of the phrase.</summary>
-/// <param name="Scale">Its type size, as a share of the base size.</param>
-/// <param name="Dx">Across from the line's centre, in units of 3.2 base sizes.</param>
-/// <param name="Dy">Down from the line's centre, in units of 1.5 base sizes.</param>
-/// <param name="Angle">Its turn, degrees.</param>
-/// <param name="Opacity">Its opacity before the line's presence and the Repeats setting.</param>
-/// <param name="Flipped">Mirrored top to bottom, like a reflection in glass.</param>
-public readonly record struct EchoGhost(double Scale, double Dx, double Dy, double Angle, double Opacity, bool Flipped);
+/// <summary>One repeat of the phrase in Echo's table.</summary>
+/// <param name="SizeShare">Type size as a share of the base size.</param>
+/// <param name="Across">Rightward from the line's centre, in steps of 3.2 base sizes.</param>
+/// <param name="Down">Downward from the line's centre, in steps of 1.5 base sizes.</param>
+/// <param name="Tilt">Degrees.</param>
+/// <param name="Strength">Opacity, before the line's presence and the Repeats setting.</param>
+/// <param name="Mirrored">Drawn upside down (reflected about its horizontal axis).</param>
+public readonly record struct EchoRepeat(double SizeShare, double Across, double Down, double Tilt, double Strength, bool Mirrored);
 
-/// <summary>Where a ghost is on one frame, relative to the line's centre.</summary>
-/// <param name="Ghost">The ghost.</param>
-/// <param name="X">Across, in the base size's units.</param>
-/// <param name="Y">Down.</param>
-/// <param name="Angle">Its turn with the wander, degrees.</param>
-/// <param name="RestX">Its resting place across (without the wander).</param>
-/// <param name="RestY">Its resting place down.</param>
-public readonly record struct EchoGhostPose(EchoGhost Ghost, double X, double Y, double Angle, double RestX, double RestY);
+/// <summary>Where a repeat is drawn on one frame, relative to the line's centre (base-size units).</summary>
+/// <param name="Repeat">The repeat.</param>
+/// <param name="X">Rightward.</param>
+/// <param name="Y">Downward.</param>
+/// <param name="Angle">Its tilt plus the wander, degrees.</param>
+/// <param name="RestX">Where it sits without the wander, rightward.</param>
+/// <param name="RestY">Where it sits without the wander, downward.</param>
+public readonly record struct EchoRepeatPose(EchoRepeat Repeat, double X, double Y, double Angle, double RestX, double RestY);
 
 public static class EchoBackdrop
 {
@@ -33,11 +33,8 @@ public static class EchoBackdrop
     /// <summary>The soft edge of the reveal sweep, as a share of the phrase.</summary>
     public const double Feather = 0.2;
 
-    /// <summary>
-    /// Five repeats, every one well under the live line in size or strength and away from the centre, so none reads as
-    /// the line being sung; two are mirrored.
-    /// </summary>
-    public static IReadOnlyList<EchoGhost> Ghosts { get; } =
+    /// <summary>The five repeats (see docs/compositions/scattered.md for the values).</summary>
+    public static IReadOnlyList<EchoRepeat> Repeats { get; } =
     [
         new(0.85, -0.30, -0.62, -2.0, 0.055, true),
         new(0.42, 0.46, -0.44, 1.5, 0.085, false),
@@ -52,42 +49,43 @@ public static class EchoBackdrop
     /// <summary>Each repeat's drift seed (wrapping, so it never traps however large or negative the seed).</summary>
     public static ulong WanderSeed(long seed, int slot) => unchecked(Magnitude(seed) * 31 + Magnitude(slot));
 
-    /// <summary>The ghost in <paramref name="slot"/> (0…4): the line's seed rotates which one leads.</summary>
-    public static EchoGhost GhostAt(int slot, long seed)
+    /// <summary>The repeat drawn in <paramref name="slot"/> (0…4): the line's seed shifts the table.</summary>
+    public static EchoRepeat RepeatAt(int slot, long seed)
     {
-        var offset = (int)(Magnitude(seed) % (ulong)Ghosts.Count);
-        return Ghosts[(slot + offset) % Ghosts.Count];
+        var shift = (int)(Magnitude(seed) % (ulong)Repeats.Count);
+        return Repeats[(slot + shift) % Repeats.Count];
     }
 
-    /// <summary>The ghost in <paramref name="slot"/> at <paramref name="time"/>: its place and a slow seeded wander (none under Reduce Motion).</summary>
-    public static EchoGhostPose Pose(int slot, long seed, double time, double baseSize, bool reduceMotion)
+    /// <summary>The repeat in <paramref name="slot"/> at <paramref name="time"/>: its place and a slow seeded wander (none under Reduce Motion).</summary>
+    public static EchoRepeatPose Pose(int slot, long seed, double time, double baseSize, bool reduceMotion)
     {
-        var ghost = GhostAt(slot, seed);
+        var repeat = RepeatAt(slot, seed);
         var wander = WanderSeed(seed, slot);
         var drift = reduceMotion || !double.IsFinite(time) ? 0.0 : 1.0;
-        var restX = baseSize * ghost.Dx * 3.2;
-        var restY = baseSize * ghost.Dy * 1.5;
+        var restX = baseSize * repeat.Across * 3.2;
+        var restY = baseSize * repeat.Down * 1.5;
         var x = restX + drift * LyricMotion.Noise2(wander, time * 0.09) * baseSize * 0.10;
         var y = restY + drift * LyricMotion.Noise2(wander ^ 0x5EED, time * 0.07) * baseSize * 0.06;
-        var angle = ghost.Angle + drift * LyricMotion.Noise(wander ^ 0xA9, time * 0.11) * 0.9;
-        return new EchoGhostPose(ghost, x, y, angle, restX, restY);
+        var angle = repeat.Tilt + drift * LyricMotion.Noise(wander ^ 0xA9, time * 0.11) * 0.9;
+        return new EchoRepeatPose(repeat, x, y, angle, restX, restY);
     }
 
     /// <summary>
-    /// How much a ghost of <paramref name="ink"/> size is shrunk (never grown) to stay within two thirds of
+    /// How much a repeat of <paramref name="ink"/> size is shrunk (never grown) to stay within two thirds of
     /// <paramref name="stage"/> around its resting place.
     /// </summary>
-    public static double Fit(SizeD ink, SizeD stage, in EchoGhostPose pose)
+    public static double Fit(SizeD ink, SizeD stage, in EchoRepeatPose pose)
     {
         var area = new SizeD(stage.Width * 2 / 3, stage.Height * 2 / 3);
         var centre = new PointD(area.Width / 2 + pose.RestX, area.Height / 2 + pose.RestY);
-        return WordStageFit.Scale(ink, area, centre, 1.04, pose.Ghost.Angle, 4);
+        return WordStageFit.Scale(ink, area, centre, 1.04, pose.Repeat.Tilt, 4);
     }
 
-    /// <summary>A ghost's opacity: its own, times the line's presence and the Repeats setting.</summary>
-    public static double Opacity(in EchoGhost ghost, double presence, double strength = DefaultStrength) =>
-        ghost.Opacity * presence * strength;
+    /// <summary>A repeat's opacity: its strength times the line's presence and the Repeats setting.</summary>
+    public static double Opacity(in EchoRepeat repeat, double presence, double strength = DefaultStrength) =>
+        repeat.Strength * presence * strength;
 }
+
 
 /// <summary>
 /// A soft-edged reveal that runs in reading direction (the Mac's <c>LyricSweepMask</c>): the feather travels past

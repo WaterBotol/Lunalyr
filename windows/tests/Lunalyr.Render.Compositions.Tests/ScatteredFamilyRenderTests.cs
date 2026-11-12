@@ -184,9 +184,10 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         var afterPlaying = Frame(played, scene, 12.15);
         using var fresh = Layer(composition);
         var jumpedTo = Frame(fresh, scene, 12.15);
-        // Entrances drawn through effects (tinted words on tiles, swipes over blurred words) may round a pixel one
-        // level differently after a different effect history; anything more is a real difference.
-        var tolerance = reveal == "automatic" ? 0 : 1;
+        // With three effect-drawn entrances on screen at once (tinted words on tiles, swipe layers, clipped blurs) the
+        // device rounds a few pixels one level differently depending on what other layers drew on it before (two fresh
+        // layers, and a layer played from any start time, agree exactly when drawn in another order). Exact otherwise.
+        var tolerance = reveal.StartsWith("mix:", StringComparison.Ordinal) ? 1 : 0;
         var differing = Enumerable.Range(0, afterPlaying.Length).Where(i => Math.Abs(afterPlaying[i] - jumpedTo[i]) > tolerance).ToList();
         Assert.True(differing.Count == 0, $"{differing.Count} bytes differ, first at x {differing.FirstOrDefault() / 4 % Width}, y {differing.FirstOrDefault() / 4 / Width}, max {differing.Select(i => Math.Abs(afterPlaying[i] - jumpedTo[i])).DefaultIfEmpty(0).Max()}");
     }
@@ -436,18 +437,40 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
     [Fact]
     public void TheGapBeforeAHeldWordStaysOpenWhileItIsSung()
     {
-        using var layer = Layer("editorial");
-        var scene = Fixtures.English(Style("fade"));
-        int GapBeforeLast(double time)
+        using var wide = new Offscreen(1920, 1080);
+        // "neon rain", with "rain" held (a hero, set in capitals) or not.
+        SceneSnapshot Scene(double rainEnd) => new()
         {
-            var pixels = Frame(layer, scene, time);
-            var gaps = Gaps(InkedColumns(pixels, Width, Height, Height / 2 - 60, Height / 2 + 60));
-            return gaps.Count > 0 ? gaps[^1] : 0;
+            Lyrics = new LyricResult.Synced(
+            [
+                new() { Start = 10, End = 12, Text = "neon rain", WordTimed = true, Words = [new("neon", 10, 10.35), new("rain", 10.4, rainEnd)] },
+                new() { Start = 12.5, End = 13, Text = "la", WordTimed = true, Words = [new("la", 12.5, 13)] },
+            ], new LyricProvenance("Word-by-word", "Test")),
+            Palette = Fixtures.Night, Style = Style("fade"),
+        };
+        int WordGap(IRenderLayer layer, SceneSnapshot scene, double time)
+        {
+            wide.Render(layer, scene, time, 100, Scale, Background);
+            return Gaps(InkedColumns(wide.Pixels(), wide.Width, wide.Height, 0, wide.Height)).DefaultIfEmpty(0).Max();
         }
-        var sung = GapBeforeLast(12.9);
-        var metrics = ViewportMetrics.For(Width, Height, Scale, LyricStyle.Default.SizeFraction);
-        // At least half of "neon"'s own clearance (0.12 em of a word near 0.64 of the base size) is left.
-        Assert.True(sung > 0.12 * 0.64 * metrics.BaseSize * 0.5, $"gap of {sung} px at base {metrics.BaseSize:0.0}");
+        using var plain = Layer("editorial", wide);
+        var settled = WordGap(plain, Scene(10.75), 11.6);
+        using var layer = Layer("editorial", wide);
+        var held = Scene(11.5);
+        // "rain" is sung from 10.4 to 11.5 (its entrance done by 10.55): its swell and its hold peak on the way.
+        var narrowest = int.MaxValue;
+        for (var time = 10.55; time <= 11.6; time += 0.05) narrowest = Math.Min(narrowest, WordGap(layer, held, time));
+        // Measured on the RTX 5060: 17 px against an ordinary 21 px gap; 14 px when the hold widened the whole word
+        // about its centre on top of the capped swell (the milestone 3 capture's "neonRAIN").
+        Assert.True(narrowest >= 0.75 * settled, $"narrowest gap before the held word {narrowest} px; ordinary gap {settled} px");
+        // The hold itself barely widens a Latin word: 5% over its glyph count across, 5% up.
+        using var probe = new Probe(CompositionKind.Editorial);
+        probe.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), Scale);
+        _stage.Render(probe, held, 11, 100, Scale, Background);
+        var plan = probe.PlanFor(0)!;
+        Assert.Equal("RAIN", plan.Typography.Runs[1].Label);
+        Assert.Equal(0.05 / 4, plan.HeldX[1], 9);
+        Assert.Equal(0.05, plan.HeldY[1], 9);
     }
 
     // Ported from RenderingPerformanceTests.swift: testRenderedConstellationWithWideWordsStaysOnPortraitDesktop (at the
@@ -482,5 +505,38 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         Assert.True(minX > 0.06 && maxX < 0.94, $"{composition}: x {minX:0.00}…{maxX:0.00}");
         Assert.True(minY > 0.09 && maxY < 0.91, $"{composition}: y {minY:0.00}…{maxY:0.00}");
         Assert.Empty(_sink.Entries);
+    }
+
+    // Ported from BackingVocalsTests.swift: testBackingWordsNeverAnimateInTheRollingLayouts (there is no chosen backing
+    // style on Windows, so the "chosen" case is left out)
+    [Fact]
+    public void BackingWordsNeverAnimateInTheRollingLayouts()
+    {
+        Assert.Equal(CompositionKind.Editorial, LyricCompositionLayer.BackingKind(CompositionKind.Spoken));
+        CompositionKind[] choices = [CompositionKind.Scattered, CompositionKind.Constellation, CompositionKind.ConstellationEditorial,
+                                     CompositionKind.Echo, CompositionKind.Editorial];
+        foreach (var lead in choices) Assert.Equal(lead, LyricCompositionLayer.BackingKind(lead));
+        Assert.DoesNotContain(choices, kind => kind.ArrivalOnly());
+    }
+
+    // Ported from OrganicMotionTests.swift: testHeldArabicWordIsSetAsOneShapedWord (the setting: a held Arabic word is
+    // one shaped word that swells 7% as a whole; the Mac's width comparison of two SwiftUI texts has no counterpart)
+    [Fact]
+    public void AHeldArabicWordIsSetAsOneShapedWord()
+    {
+        LyricLine Filler(int i) => new() { Start = i * 0.2, End = i * 0.2 + 0.1, Text = "la", WordTimed = true, Words = [new("la", i * 0.2, i * 0.2 + 0.1)] };
+        LyricLine[] lines = [Filler(0), Filler(1), Filler(2), Filler(3), new() { Start = 1, End = 4, Text = "حبيبي", WordTimed = true, Words = [new("حبيبي", 1, 3.2)] }];
+        var scene = new SceneSnapshot { Lyrics = new LyricResult.Synced(lines, new LyricProvenance("Word-by-word", "Test")), Palette = Fixtures.Night };
+        using var probe = new Probe(CompositionKind.Scattered);
+        probe.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), Scale);
+        _stage.Render(probe, scene, 3, 100, Scale, Background);
+        var plan = probe.PlanFor(4)!;
+        var run = plan.Typography.Runs[0];
+        Assert.True(run.Sustain > 0.02);
+        Assert.True(run.RightToLeft);
+        Assert.False(Core.Motion.ScriptDirection.AllowsGlyphMotion(run.Label));
+        Assert.Equal(0.07, plan.HeldX[0], 9);
+        Assert.Equal(0.07, plan.HeldY[0], 9);
+        Assert.Single(plan.Runs);
     }
 }
