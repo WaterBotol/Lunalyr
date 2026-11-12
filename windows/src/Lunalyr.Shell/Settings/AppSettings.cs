@@ -14,7 +14,7 @@ namespace Lunalyr.Shell.Settings;
 /// </summary>
 /// <remarks>Immutable: change it with <c>store.Update(s =&gt; s with { … })</c>. <see cref="Normalized"/> repairs
 /// out-of-range or unknown values read from disk.</remarks>
-public sealed record AppSettings
+public sealed partial record AppSettings
 {
     /// <summary>The schema version this build writes.</summary>
     public const int SchemaVersion = 1;
@@ -144,7 +144,7 @@ public sealed record AppSettings
     /// "Search under other names" (Mac <c>custom.artistAliases</c>): when a service finds nothing under the listed
     /// names, NetEase, QQ, Kugou and Kuwo search again under the artist's native name (from MusicBrainz), and a song
     /// listed under an English title is searched again under its original one (from Apple's catalogue). On by default.
-    /// No settings window yet (milestone 5).
+    /// Settings › Timing › Sources.
     /// </summary>
     public bool ArtistAliases { get; init; } = true;
 
@@ -164,7 +164,7 @@ public sealed record AppSettings
     public AppSettings Normalized()
     {
         var defaults = new AppSettings();
-        return this with
+        return (this with
         {
             LyricComposition = Compositions.Contains(LyricComposition) ? LyricComposition : defaults.LyricComposition,
             WordArrival = WordArrivals.Contains(WordArrival) ? WordArrival : defaults.WordArrival,
@@ -187,7 +187,7 @@ public sealed record AppSettings
             LyricHighlightCustom = Core.Colour.ColourHex.ToOkLab(LyricHighlightCustom) is null ? defaults.LyricHighlightCustom : LyricHighlightCustom.Trim().ToUpperInvariant(),
             RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
-        };
+        }).NormalizedWindowSettings();
     }
 
     /// <summary>What the lyric lookup asks: the configured order (unknown names dropped, new sources appended) and the switched-on set.</summary>
@@ -217,7 +217,7 @@ public sealed record AppSettings
         RomanizationSaved);
 
     /// <summary>The renderer's view of the lyric settings.</summary>
-    public LyricStyle Style() => new()
+    public LyricStyle Style() => WithWindowStyle(new()
     {
         FontFamily = FontChoice == "installed" && !string.IsNullOrWhiteSpace(FontFamily) ? FontFamily.Trim() : LyricStyle.Default.FontFamily,
         SizeFraction = (float)(LyricStyle.Default.SizeFraction * (double.IsFinite(LyricScale) ? Math.Clamp(LyricScale, 0.5, 2) : 1)),
@@ -234,7 +234,7 @@ public sealed record AppSettings
             Core.Lyrics.Readings.RomanizationDisplay.Replace => ReadingPlacement.Instead,
             _ => ReadingPlacement.Below,
         },
-    };
+    });
 
     /// <summary>
     /// The scene contract names reveals "softFocus", "floatUp"…, but the Mac's stored values are "fade", "lift"…:
