@@ -79,52 +79,6 @@ internal static class ReadingsPage
     }
 }
 
-/// <summary>Wallpaper: the background type and the adjustments every drawn type shares.</summary>
-internal static class WallpaperPage
-{
-    public static StackPanel Build(SettingsContext ctx)
-    {
-        var page = Page();
-        Section(page, "Wallpaper");
-        var types = new RadioButtons { MaxColumns = 1 };
-        AutomationProperties.SetName(types, "Wallpaper type");
-        foreach (var type in SettingsCopy.WallpaperTypes)
-        {
-            var texts = new StackPanel { Spacing = 1, Margin = new Thickness(0, 2, 0, 6) };
-            texts.Children.Add(new TextBlock { Text = type.Title });
-            texts.Children.Add(Caption(type.Summary));
-            if (type.NotYet is { } note) texts.Children.Add(Caption(note));
-            var radio = new RadioButton { Content = texts, Tag = type.Value, IsEnabled = type.Available };
-            AutomationProperties.SetName(radio, type.Title);
-            AutomationProperties.SetHelpText(radio, type.NotYet is null ? type.Summary : $"{type.Summary} {type.NotYet}");
-            types.Items.Add(radio);
-        }
-        ctx.OnRefresh(s =>
-        {
-            var chosen = SettingsCopy.WallpaperTypeFor(s.BackgroundMode);
-            for (var i = 0; i < types.Items.Count; i++)
-                if (types.Items[i] is RadioButton { Tag: string value } && value == chosen) types.SelectedIndex = i;
-        });
-        types.SelectionChanged += (_, _) =>
-        {
-            if (types.SelectedItem is RadioButton { Tag: string value, IsEnabled: true }) ctx.Update(s => s with { BackgroundMode = value });
-        };
-        var typeCard = new Border { Style = Resource<Style>("Card"), Child = types };
-        page.Children.Add(typeCard);
-
-        Section(page, "Legibility");
-        page.Children.Add(Card("Automatic text backing",
-            "Light covers and images get a soft shadow behind the lyrics, just strong enough for white text to stay readable. Always on in this build.",
-            "", FixedToggle(true), notYet: SettingsCopy.LaterBuild));
-
-        Section(page, "Adjustments");
-        page.Children.Add(Card("Motion speed", null, "", FixedSlider(0.2, 2, 1), notYet: SettingsCopy.LaterBuild));
-        page.Children.Add(Card("Colour richness", null, "", FixedSlider(0.4, 1.8, 1), notYet: SettingsCopy.LaterBuild));
-        page.Children.Add(Card("Darkening", null, "", FixedSlider(0, 2, 1), notYet: SettingsCopy.LaterBuild));
-        return page;
-    }
-}
-
 /// <summary>Covers (the Mac's "Animated covers"): Apple Music's motion artwork behind the lyrics.</summary>
 internal static class CoversPage
 {

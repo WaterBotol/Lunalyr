@@ -544,6 +544,64 @@ theme. The window opens at Lyric style (or `--settings-page`).
 - **App theme** (General): follow Windows, light or dark, for Lunalyr's windows only (`Root.RequestedTheme` and the
   title bar's caption buttons). `--theme` overrides it for one run.
 
+## Wallpaper types (milestone 6)
+
+Settings › Wallpaper offers the Mac's eight types (`backgroundMode`, the Mac's raw values). Owner of the page, the
+setting and the plumbing: the `m6/wallpaper-types` branch. What each type draws:
+
+| `backgroundMode` | Type | Background layer drawn |
+|---|---|---|
+| `auto` (default) | Match the music | per song: `shader.<id>` or `pattern.<id>` ("Match the music" below); the album colours (`gradient`) while neither exists |
+| `shader` | GPU effects | `shader.<shaderStyle>`, or the song's match when `shaderStyle` is `""` |
+| `pattern` | Line patterns | `pattern.<patternStyle>`, or the song's match when `patternStyle` is `""` |
+| `visualizer` | Visualisers | `WallpaperCatalog.VisualiserLayerFor(settings)` (`visualizer` unless the visualiser's hook says otherwise) |
+| `colourOnly` | Colour only | `colour` (Album gradient on) or `gradient` (off) |
+| `desktop` | Your wallpaper | `desktop`: only the text backing, the rest see-through |
+| `custom` | Imported image or video | `custom` (the imported file); `gradient` while there is none |
+| `musicVideo` | Music video | not in this build (the type is disabled); read as Match the music |
+
+A layer id the renderer hasn't registered falls back to `gradient` (`EngineWallpaperRenderer.SetLayers`, logged), so
+`auto`, `shader`, `pattern` and `visualizer` draw the album colours until their layers land. Windows' earlier value
+`"gradient"` (the album colour field, the old default) is read as `colourOnly` with `albumGradientWallpaper: false`,
+which draws exactly that; `"colour"` / `"colorOnly"` as `colourOnly`; anything unknown as `auto`.
+
+### Hooks for other layers
+
+GPU effects, line patterns and visualisers join from **their own files** by implementing `static partial void` methods
+declared here. An unimplemented one compiles away, so nobody edits the files above to plug in. Each has one
+implementation, so the effects/patterns agent and the visualiser agent each own theirs.
+
+| Where | Hook (declared in) | Implement in | What it does |
+|---|---|---|---|
+| Catalogue | `AddEffects(List<WallpaperStyle>)`, `AddPatterns(List<WallpaperStyle>)` (`Shell/Wallpaper/WallpaperCatalog.cs`) | `WallpaperCatalog.Effects.cs`, `WallpaperCatalog.Patterns.cs` | One `WallpaperStyle(Id, Title, Character, Heavy, Detail)` per effect / pattern, in menu order. The Wallpaper page's "GPU effect" and "Pattern" menus list them after "Match the music"; "Match the music" chooses among them by `Character` (`WallpaperCharacter(Energy, Density, Organic)`, 0…1 each, in `Lunalyr.Core.Compositions`). Ids are saved in `shaderStyle` / `patternStyle`, so keep them stable. Write your own names and characters: the Mac's tables (`ShaderBackgroundView.swift`, `FractalBackgroundView.swift`) are Verso. |
+| Catalogue | `ProvidesVisualisers(ref bool)`, `VisualiserLayer(AppSettings, ref string)` (`WallpaperCatalog.cs`) | `WallpaperCatalog.Visualisers.cs` | Say a visualiser exists (the page then drops its placeholder) and which layer id the Visualisers type draws for the settings (a scene's own id, say). |
+| Layers | `AddEffectLayers`, `AddPatternLayers`, `AddVisualiserLayers(List<IRenderLayerFactory>, BackgroundOptions, Logger?)` (`Shell/Rendering/WallpaperLayers.cs`) | `WallpaperLayers.Effects.cs`, `…Patterns.cs`, `…Visualisers.cs` | Add the factories: one per effect with id `shader.<id>`, one per pattern with id `pattern.<id>`, and the visualisers' (ids starting `visualizer`). The desktop (`AppHost.CreateWallpaper`) and the settings preview both register `WallpaperLayers.Factories`, so they never drift apart. |
+| Page | `AddEffectOptions(StackPanel, SettingsContext)`, `AddPatternOptions(…)` (`App/Settings/WallpaperPage.cs`) | `WallpaperPage.Effects.cs`, `WallpaperPage.Patterns.cs` | Optional rows of your own under the "GPU effect" / "Pattern" menus (which the page owns). The panel is shown with Match the music and with your type. |
+| Page | `AddVisualiserSections(StackPanel, SettingsContext, ref bool added)` (`WallpaperPage.cs`) | `WallpaperPage.Visualiser.cs` | The whole "Visualiser" section (its scene menu and options) and any after it ("Music response"), built with `SettingsKit`; set `added = true`. The panel shows only while Visualisers is the type; until then it holds a placeholder ("Arrives in a later build of milestone 6."). |
+| Settings | `NormalizeEffects(ref AppSettings)`, `NormalizeVisualiser(ref AppSettings)` (`Shell/Settings/AppSettings.Wallpaper.cs`) | `AppSettings.Effects.cs`, `AppSettings.Visualiser.cs` | Your own keys go in your own `partial record AppSettings` file (camelCase JSON, the Mac's key without `custom.`); put them in range here. Called at the end of `Normalized()`. |
+
+**What a background layer receives.**
+- `BackgroundOptions` (factory argument) holds what is fixed for the run: power saving's pixel budget (`Economical`,
+  `PixelBudget`), `Grain`, and test overrides. The base values of `Speed`, `Vividness` and `ScrimStrength` stay 1.
+- `FrameContext.Scene.Adjustments` (`WallpaperAdjustments`, new) holds the Wallpaper page's sliders, read every
+  frame so a drag applies at once without rebuilding factories:
+  - `Speed` (0.2–2, "Motion speed"), `Vividness` (0.4–1.8, "Colour richness"), `Darkening` (0–2);
+  - `ManualBacking` (null = automatic text backing), `PatternOpacity` (0–1, "Pattern visibility").
+  Multiply the speed, richness and darkening into your options' values (`options.Speed * scene.Adjustments.Speed`),
+  and rebuild only what you bake: brushes coloured with the richness, say.
+- `FrameContext.Scene.ReduceMotion` is Windows' "Animation effects" off: ambient motion at 15%, as the field does.
+- The album colours are `Scene.Palette` (`Accents`, `Base`, `ArtworkStops`).
+- Draw the scrim and text backing as `gradient` and `colour` do: `WallpaperShadeDrawer`, internal to `Lunalyr.Render`.
+  It reads the adjustments itself; pass it your backdrop's luminance.
+- A background is opaque: it covers the frame. The engine clears to transparent black, and only `desktop` lets the
+  desktop show through (`ISeeThroughLayer`).
+
+**"Match the music"** (`Lunalyr.Core.Compositions.WallpaperMatch`, `AppController.Wallpaper.cs`) picks once per song,
+when its lyrics (or the verdict that there are none) arrive. An energetic song (above 0.72) gets a GPU effect, any
+other a line pattern. A pinned `shaderStyle` / `patternStyle` is honoured. A kind with nothing in the catalogue falls
+back to the other kind, then to the album colours. The choice is deterministic for a song (its seed) and remembered
+per track for the session. See [compositions/matching.md](compositions/matching.md), "The wallpaper".
+
 ## Lyric tools
 
 What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5). Logic in `AppController.LyricTools.cs`

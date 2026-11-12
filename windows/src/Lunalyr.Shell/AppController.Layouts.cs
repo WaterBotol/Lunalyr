@@ -90,7 +90,7 @@ public sealed partial class AppController
             pick = remembered;
             _layout = pick;
             _layoutTrack = key;
-            background = _settings.BackgroundMode;
+            background = BackgroundLayerFor(_settings);
             title = track.Title;
         }
 

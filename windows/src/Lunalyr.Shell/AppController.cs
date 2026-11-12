@@ -235,7 +235,7 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         _renderer.SetClock(_clockReader);
-        _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
+        _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         _renderer.SetFrameRate(settings.AnimationRate);
         PublishScene();
         if (!settings.WallpaperPaused) _renderer.Start();
@@ -308,9 +308,9 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         ApplyLayoutSettings(old, settings);
-        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition
+        if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
-            _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
+            _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
         // otherwise when they arrive. Other settings changes never decide it.
         if (settings.LyricComposition == AutomaticComposition

@@ -8,28 +8,6 @@ using Lunalyr.Render.Scene;
 namespace Lunalyr.Shell.Rendering;
 
 /// <summary>
-/// The wallpaper's layers as the app registers them (the backgrounds and every lyric composition), for the settings
-/// preview. Keep in step with <c>AppHost.CreateWallpaper</c>: a layer missing here previews as Editorial.
-/// </summary>
-public static class WallpaperLayers
-{
-    public static IReadOnlyList<IRenderLayerFactory> Factories(IWordBreaker breaker, Logger? logger = null) =>
-    [
-        new GradientLayerFactory(BackgroundOptions.Default, logger),
-        new ColourLayerFactory(BackgroundOptions.Default, logger),
-        new EditorialFactory(breaker, logger),
-        new SpokenFactory(breaker, logger),
-        new CascadeFactory(breaker, logger),
-        new CutoutFactory(breaker, logger),
-        .. Lunalyr.Render.Compositions.Stage.StageFactories.All(breaker, logger),
-        new ScatteredFactory(breaker, logger),
-        new ConstellationFactory(breaker, logger),
-        new ConstellationEditorialFactory(breaker, logger),
-        new EchoFactory(breaker, logger),
-    ];
-}
-
-/// <summary>
 /// The settings window's live preview (the Mac's <c>SettingsLivePreview</c>): the scene on the wallpaper, drawn by the
 /// same layers into a small offscreen surface and read back as pixels. The surface is laid out as a 1080-line display
 /// shrunk to the preview's size, so type and spacing keep the wallpaper's proportions. Not thread-safe: one thread draws.

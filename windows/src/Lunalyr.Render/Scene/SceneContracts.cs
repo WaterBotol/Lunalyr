@@ -89,6 +89,12 @@ public sealed record SceneSnapshot
     /// </summary>
     public bool ReduceMotion { get; init; }
 
+    /// <summary>
+    /// The Wallpaper page's adjustments (motion speed, colour richness, darkening, text backing, pattern visibility),
+    /// read by the backgrounds every frame so a slider applies at once. Neutral by default.
+    /// </summary>
+    public WallpaperAdjustments Adjustments { get; init; } = WallpaperAdjustments.Default;
+
     // ---- The song's opening title (LyricStyle.OpeningTitle) ----
 
     /// <summary>The album the track is on, as the player reports it, or null.</summary>

@@ -15,7 +15,7 @@ namespace Lunalyr.Shell.Settings;
 public sealed record SettingsChoice(string Value, string Title, string? Detail = null);
 
 /// <summary>One background type: what it is called, what it does, and (when Windows can't show it yet) why not.</summary>
-public sealed record WallpaperType(string Value, string Title, string Summary, string? NotYet = null)
+public sealed record WallpaperType(string Value, string Title, string ShortTitle, string Glyph, string Summary, string? NotYet = null)
 {
     public bool Available => NotYet is null;
 }
@@ -185,26 +185,37 @@ public static class SettingsCopy
 
     // ---- Wallpaper ----
 
-    /// <summary>The Mac's background types, with the two Windows draws now first.</summary>
+    /// <summary>What isn't in this build of milestone 6 yet.</summary>
+    public const string Milestone6Later = "Arrives in a later build of milestone 6.";
+
+    /// <summary>
+    /// The Mac's wallpaper types in its grid's order (QuickControls.swift: the five Lunalyr draws, then the three that
+    /// start from something of yours), with its titles, tile names and summaries; the glyphs are Segoe Fluent's.
+    /// </summary>
     public static IReadOnlyList<WallpaperType> WallpaperTypes { get; } =
     [
-        new("gradient", "Album colours", "A slowly moving field of the cover’s colours, darkened so the lyrics stay readable."),
-        new("colourOnly", "Colour only", "Blends the cover’s colours into a moving gradient."),
-        new("auto", "Match the music", "GPU effects and line patterns picked to suit each song, with animated covers.", LaterBuild),
-        new("shader", "GPU effects", "Flowing GPU-drawn effects in the album’s colours.", LaterBuild),
-        new("pattern", "Line patterns", "Fine moving line patterns in the album’s colours.", LaterBuild),
-        new("visualizer", "Visualisers", "Scenes that move with the music playing.", Milestone6),
-        new("musicVideo", "Music video", "The song’s music video behind the lyrics.", Milestone6),
-        new("desktop", "Your wallpaper", "Only the lyrics, over your own Windows wallpaper.", LaterBuild),
-        new("custom", "Imported image or video", "A picture or video of your own behind the lyrics.", LaterBuild),
+        new("auto", "Match the music", "Match", "",
+            "Each song picks a look to suit its energy and feel, with animated covers where Apple Music has them."),
+        new("visualizer", "Visualisers", "Visualiser", "", "Scenes that move with the music itself, with System audio on."),
+        new("shader", "GPU effects", "Effects", "", "Plasma, aurora, nebulae and more, drawn on the GPU in the album’s colours."),
+        new("pattern", "Line patterns", "Patterns", "", "Line patterns in the album’s colours, the gentlest on power after Colour only."),
+        new("colourOnly", "Colour only", "Colour", "", "The album’s colours alone, the lightest on power."),
+        new("desktop", "Your wallpaper", "Your wallpaper", "", "Keep your own wallpaper and show lyrics and instrumental cues over it."),
+        new("custom", "Imported image or video", "Image or video", "", "A picture or video of your own behind the lyrics."),
+        new("musicVideo", "Music video", "Music video", "",
+            "The song’s music video behind the lyrics, muted and in time with the song.", Milestone6Later),
     ];
 
-    /// <summary>The type the Wallpaper page shows as chosen for a stored <c>backgroundMode</c>.</summary>
-    public static string WallpaperTypeFor(string? backgroundMode) => backgroundMode switch
+    /// <summary>The type the Wallpaper page shows as chosen for a stored <c>backgroundMode</c> (normalised first).</summary>
+    public static string WallpaperTypeFor(string? backgroundMode) =>
+        new AppSettings { BackgroundMode = backgroundMode ?? "" }.Normalized().BackgroundMode;
+
+    /// <summary>The type's entry, or Match the music's.</summary>
+    public static WallpaperType WallpaperTypeOf(string? backgroundMode)
     {
-        "colourOnly" or "colour" or "colorOnly" => "colourOnly",
-        _ => "gradient",
-    };
+        var value = WallpaperTypeFor(backgroundMode);
+        return WallpaperTypes.FirstOrDefault(t => t.Value == value) ?? WallpaperTypes[0];
+    }
 
     // ---- Performance ----
 
