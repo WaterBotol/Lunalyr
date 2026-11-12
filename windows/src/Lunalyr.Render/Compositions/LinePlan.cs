@@ -54,7 +54,7 @@ internal sealed class LinePlan : IDisposable
     /// <summary>The line reading's centre in content coordinates.</summary>
     public PointD ReadingCentre { get; init; }
     public double Fit { get; init; }
-    public BackingPlan[] Backing { get; init; } = [];
+    public BackingPlan[] Backing { get; set; } = [];
 
     // Per-frame scratch, sized once.
     public EditorialTokenFrame[] TokenFrames { get; init; } = [];
@@ -63,6 +63,25 @@ internal sealed class LinePlan : IDisposable
     public int[] Order { get; init; } = [];
     public long LastUsed { get; set; }
 
+    // The entrances and their extras (set once, after the plan is built).
+    /// <summary>Per run: the entrance chosen for it (a mix picks per run; "Cutout · Highlight" kept as such).</summary>
+    public WordArrival[] Chosen { get; set; } = [];
+    /// <summary>Per run: the entrance it moves with (<see cref="WordArrivals.Motion"/>).</summary>
+    public WordArrival[] Motions { get; set; } = [];
+    /// <summary>Per run: its sung words, for the highlight tiles (null when no run is highlighted).</summary>
+    public HighlightSegment[][]? Segments { get; set; }
+    /// <summary>When the line's highlight tiles release (its end).</summary>
+    public double Release { get; set; } = double.PositiveInfinity;
+    /// <summary>The constellation's links, in block coordinates.</summary>
+    public Lunalyr.Core.Motion.Segment[] Links { get; set; } = [];
+    /// <summary>Echo's repeated phrase.</summary>
+    public EchoPlan? Echo { get; set; }
+    /// <summary>Per run: how much a held word grows across and up at full hold (see <see cref="EditorialRun.Sustain"/>).</summary>
+    public double[] HeldX { get; set; } = [];
+    public double[] HeldY { get; set; } = [];
+    /// <summary>The slow float settled words keep, for the composition the line is set in.</summary>
+    public double IdleFloat { get; set; } = Lunalyr.Core.Motion.OrganicMotion.DefaultLayoutFloat;
+
     public PointD BlockOrigin => new((Content.Width - Block.Width) / 2, 0);
 
     public void Dispose()
@@ -70,6 +89,7 @@ internal sealed class LinePlan : IDisposable
         foreach (var run in Runs) run.Dispose();
         LineReading?.Dispose();
         foreach (var backing in Backing) backing.Dispose();
+        Echo?.Dispose();
     }
 }
 
@@ -78,7 +98,7 @@ internal readonly record struct PlanSpec(
     double BaseSize, double MinimumSize, int LineIndex, bool WordTimed, bool Editorial, bool Heavy, double MaxWidth,
     double Spacing, double LineSpacing, LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
-    LyricInk? Ink = null);
+    LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false);
 
 internal static class LinePlans
 {
@@ -87,7 +107,8 @@ internal static class LinePlans
                                  IReadOnlyList<string?>? runReadings, string? lineReading)
     {
         var typography = EditorialSetting.Layout(words, glue, spec.BaseSize, spec.MinimumSize, spec.LineIndex, spec.WordTimed,
-                                                 spec.Editorial, runReadings);
+                                                 spec.Editorial, runReadings, 1, spec.Connections, spec.Spread,
+                                                 spec.EvenRunsAlternate);
         var locale = TextKit.LocaleFor(string.Concat(words.Select(word => word.Text)));
         var count = typography.Runs.Count;
         var labels = new IDWriteTextLayout[count];
@@ -117,7 +138,10 @@ internal static class LinePlans
             }
             var centres = new PointD[count];
             var alignment = spec.WordTimed ? typography.Setting.Rows : RowAlignment.Center;
-            var block = EditorialFlow.Place(slots, spec.MaxWidth, spec.Spacing, spec.LineSpacing, alignment,
+            // The constellations scatter into more room between rows on fuller lines.
+            var lineSpacing = spec.Connections ? spec.BaseSize * ConstellationLayout.LineSpacing(true, spec.WordTimed, typography.Fullness)
+                : spec.LineSpacing;
+            var block = EditorialFlow.Place(slots, spec.MaxWidth, spec.Spacing, lineSpacing, alignment,
                                             typography.RightToLeft, centres);
 
             IDWriteTextLayout? lineLayout = null;
@@ -184,4 +208,18 @@ internal static class LinePlans
             foreach (var layout in readings) layout?.Dispose();
         }
     }
+}
+
+/// <summary>Echo's phrase baked once (at the largest ghost's size), and how wide it reads.</summary>
+internal sealed class EchoPlan(Ink phrase, double bakedScale, bool rightToLeft) : IDisposable
+{
+    public Ink Phrase { get; } = phrase;
+    /// <summary>The ghost scale (share of the base size) the phrase was baked at.</summary>
+    public double BakedScale { get; } = bakedScale;
+    public bool RightToLeft { get; } = rightToLeft;
+    /// <summary>The base size, stage and seed of the line the ghosts belong to (layout pixels).</summary>
+    public double BaseSize { get; init; }
+    public SizeD Stage { get; init; }
+    public int Seed { get; init; }
+    public void Dispose() => Phrase.Dispose();
 }

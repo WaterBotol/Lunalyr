@@ -111,7 +111,9 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
             var unit = _preparedUnits[k] ??= Unit(token);
             unit.LastUsed = Frame;
             var eligible = k > 0 ? prepared[k - 1].Source.Start : double.NegativeInfinity;
-            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, Arrival,
+            // Each word its own entrance (a mix picks per word; "Cutout · Highlight" moves as Glide).
+            var motion = Choice.For(Kind, token.Seed).Motion(Kind);
+            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, motion,
                                                Options, eligible);
             _members[count] = k;
             _sizes[count] = unit.Size;
@@ -155,7 +157,11 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
                 * Matrix3x2.CreateRotation(Radians(state.Angle))
                 * Matrix3x2.CreateTranslation(origin.X + (float)centre.X, origin.Y + (float)centre.Y);
             var scale = (float)(slot.EntranceScale * fit * state.Scale);
-            var blur = Combine(Points(Arrival.Blur(state.Presentation.Progress)), Points(state.Pose.Blur)) * scale;
+            var motion = Choice.For(Kind, token.Seed).Motion(Kind);
+            var progress = state.Presentation.Progress;
+            var blur = Combine(Points(motion.Blur(progress)), Points(state.Pose.Blur)) * scale;
+            // A cutout is unmasked from its leading edge while it arrives (cutouts follow the reveal itself).
+            var clip = InkClip.Leading(motion.PaperShown(progress), unit.Size.Width, token.Direction < 0);
             var reveal = Span<double>.Empty;
             if (token.Parts.Count > 1)
             {
@@ -164,9 +170,10 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger)
                     reveal = _reveal.AsSpan(0, token.Parts.Count);
             }
             unit.Label.Draw(dc, Matrix3x2.CreateTranslation(unit.LabelOffset) * world, scale, (float)opacity, blur,
-                            GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
+                            GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
             if (unit.Reading is { } reading && !state.Presentation.Preview)
-                reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1);
+                reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1, clip: clip);
+            if (LyricSwipe.Shows(motion, progress, false)) DrawSwipe(dc, world, unit.Size, progress, token.Direction, motion, alpha);
         }
     }
 

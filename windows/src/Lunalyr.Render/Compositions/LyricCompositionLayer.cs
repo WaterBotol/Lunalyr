@@ -16,6 +16,9 @@ using Lunalyr.Render.Scene;
 using Vortice.Direct2D1;
 using Vortice.DirectWrite;
 using Vortice.Mathematics;
+using Box = Lunalyr.Core.Motion.Box;
+using Double3 = Lunalyr.Core.Colour.Double3;
+using Segment = Lunalyr.Core.Motion.Segment;
 
 namespace Lunalyr.Render.Compositions;
 
@@ -44,6 +47,9 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     protected ViewportMetrics Metrics { get; private set; }
     protected LyricSheet? Sheet { get; private set; }
     protected SceneSnapshot? SceneShown { get; private set; }
+    /// <summary>The entrance the style chose (one entrance, "Match the style" or a mix).</summary>
+    protected EntranceChoice Choice { get; private set; } = new(WordArrival.Fade);
+    /// <summary>The layer's own entrance when no word decides it (a mix gives each word its own: see <see cref="Choice"/>).</summary>
     protected WordArrival Arrival { get; private set; } = WordArrival.Fade;
     /// <summary>The palette's still text colour: status text, plain lyrics and anything not set word by word.</summary>
     protected Vector4 TextColour { get; private set; } = Vector4.One;
@@ -85,6 +91,15 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     private double _statusSince = double.NaN;
     private ID2D1SolidColorBrush? _dotBrush;
     private string[]? _readingParts;
+    // Entrance extras: the swipe's colours and ribbon, highlight tiles, constellation links.
+    private ID2D1SolidColorBrush? _paint;
+    private ID2D1StrokeStyle? _roundCaps;
+    private ID2D1RectangleGeometry? _unitSquare;
+    private ID2D1GradientStopCollection? _ribbonStops;
+    private ID2D1LinearGradientBrush? _ribbon;
+    private LyricSwipePalette _swipe = LyricSwipePalette.Default;
+    private readonly Box[] _linkBoxes = new Box[ConstellationGeometry.MaxWords];
+    private readonly Segment[] _linkScratch = new Segment[ConstellationGeometry.MaxWords - 1];
 
     public bool IsAnimating { get; private set; }
 
@@ -93,6 +108,15 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         ReleaseResources();
         Kit = new TextKit(dc, dwrite);
         _dotBrush = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
+        _paint = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
+        using (var factory = dc.Factory)
+        {
+            _roundCaps = factory.CreateStrokeStyle(new StrokeStyleProperties
+            {
+                StartCap = CapStyle.Round, EndCap = CapStyle.Round, DashCap = CapStyle.Round, LineJoin = LineJoin.Round,
+            });
+            _unitSquare = factory.CreateRectangleGeometry(new Vortice.RawRectF(0, 0, 1, 1));
+        }
         Resize(size, scale);
     }
 
@@ -108,6 +132,13 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         Invalidate();
         _dotBrush?.Dispose();
         _dotBrush = null;
+        _paint?.Dispose();
+        _paint = null;
+        _roundCaps?.Dispose();
+        _roundCaps = null;
+        _unitSquare?.Dispose();
+        _unitSquare = null;
+        DropRibbon();
         Kit?.Dispose();
         Kit = null;
     }
@@ -186,11 +217,20 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         SceneShown = scene;
         Kit!.SetFamily(scene.Style.FontFamily);
         Metrics = ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
-        Arrival = WordArrivals.Parse(scene.Style.Reveal).Resolved(Kind);
+        Choice = EntranceChoice.Parse(scene.Style.Reveal);
+        Arrival = Choice.For(Kind, 0).Motion(Kind);
         if (!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
         {
             _ink = LyricInks.Settled(scene.Palette);
             _inkPalette = scene.Palette;
+            var stops = new Double3[scene.Palette.ArtworkStops.Count];
+            for (var i = 0; i < stops.Length; i++)
+            {
+                var stop = scene.Palette.ArtworkStops[i];
+                stops[i] = new Double3(stop.X, stop.Y, stop.Z);
+            }
+            _swipe = LyricSwipePalette.ForCover(stops);
+            DropRibbon();
         }
         // Status text and plain lyrics keep the palette's still text colour; timed words take the drifting ink.
         TextColour = scene.Palette.Text;
@@ -313,7 +353,11 @@ internal abstract class LyricCompositionLayer : IRenderLayer
 
     private LineFit FitFor(int row) => Rolls(row)
         ? new LineFit(Stage, 1, 1)
-        : new LineFit(Stage, Metrics.UserScale, 0.75);
+        : new LineFit(Kind.HasConnections() ? ConstellationLayout.FitArea(Stage) : Stage, Metrics.UserScale, 0.75);
+
+    /// <summary>The composition a backing group animates in: the lead's when it sets words loose or links them, else Editorial.</summary>
+    private static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
+        or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Editorial;
 
     private void DrawLine(ID2D1DeviceContext dc, in DrawnLine drawn, double time, double offset)
     {
@@ -350,7 +394,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             var content = ContentToDevice(plan, offset, heldScale);
             DrawBacking(dc, plan, time, opacity, row);
             DrawWordTimed(dc, plan, time, exitStart, drawn.PreviewSince, content, plan.Fit * heldScale,
-                          stagePresence * opacity, swell, slide);
+                          stagePresence * opacity, swell, slide, stagePresence * (1 - pose.Exit));
             DrawLineReading(dc, plan, content, plan.Fit * heldScale, pose.Progress * (1 - pose.Exit) * opacity);
         }
         else
@@ -379,7 +423,11 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     {
         if (_plans.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
         var line = Sheet!.Lines[row];
-        var glue = Sheet.Glue[row];
+        IReadOnlyList<bool> glue = Sheet.Glue[row];
+        var connections = Kind.HasConnections() && line.WordTimed;
+        // A constellation is a web of fragments: an unspaced line is parted into its phrases, or it is one fragment
+        // with nothing to link.
+        if (connections) glue = LyricRuns.SplittingWords(line.Words, glue, Breaker);
         IReadOnlyList<LyricWord> words = line.Words;
         IReadOnlyList<bool> mainGlue = glue;
         var groups = Array.Empty<BackingGroup>() as IReadOnlyList<BackingGroup>;
@@ -394,8 +442,10 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             }
         }
         var (runReadings, lineReading) = Readings(row, words, mainGlue);
-        var plan = BuildPlan(words, mainGlue, BaseSize, row, line.Start, wordTimed: true, editorial: true, runReadings,
-                             lineReading, FitFor(row), Stage.Width, groups, row);
+        // Dense web layouts set long lines smaller.
+        var lineBase = connections ? BaseSize * ConstellationLayout.DensityScale(line.Words) : BaseSize;
+        var plan = BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
+                             runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End);
         plan.LastUsed = Frame;
         _plans[row] = plan;
         return plan;
@@ -426,52 +476,138 @@ internal abstract class LyricCompositionLayer : IRenderLayer
     }
 
     /// <param name="inkTime">The song time whose drift the line's colours take (its start).</param>
+    /// <param name="kind">The composition the line is set in (the layer's own by default): its typography, entrances, links and echo.</param>
+    /// <param name="lineEnd">The line's end, where highlight tiles release.</param>
     protected LinePlan BuildPlan(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize, int lineIndex,
                                  double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
                                  LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
-                                 bool heavy = false)
+                                 bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN)
     {
         var ink = InkAt(inkTime);
+        var planKind = kind ?? Kind;
+        var connections = wordTimed && planKind.HasConnections();
         var spec = new PlanSpec(
             BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorial,
-            Heavy: heavy, MaxWidth: maxWidth, Spacing: baseSize * 0.02, LineSpacing: baseSize * 0.30, Fit: fit,
+            Heavy: heavy, MaxWidth: maxWidth, Spacing: baseSize * ConstellationLayout.Spacing(connections),
+            LineSpacing: baseSize * 0.30, Fit: fit,
             RasterBoost: wordTimed ? 1.12 : 1.0,
             Shadow: wordTimed ? new ShadowSpec(0.52f, Points(7) * 0.5f, Points(2)) : new ShadowSpec(0.32f, Points(8) * 0.5f, Points(2)),
-            Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: BaseSize * 0.38,
-            LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink);
+            Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: baseSize * 0.38,
+            LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
+            Connections: connections, Spread: ConstellationLayout.DefaultSpread,
+            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading);
+        Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
         {
             var box = BackingVocalLayout.Box(Stage);
+            var backingKind = BackingKind(planKind);
+            var backingConnections = backingKind.HasConnections();
             var backing = new BackingPlan[groups.Count];
             for (var g = 0; g < groups.Count; g++)
             {
                 var group = groups[g];
                 var sub = LinePlans.Build(Kit!, group.Words, group.Glue, spec with
                 {
-                    BaseSize = baseSize * 0.5, LineIndex = backingSeed + group.Id, Editorial = true, Heavy = false,
-                    MaxWidth = box.Width, Spacing = baseSize * 0.5 * 0.02, LineSpacing = baseSize * 0.5 * 0.30,
-                    Fit = new LineFit(box, 1, 1),
+                    BaseSize = baseSize * 0.5, LineIndex = backingSeed + group.Id,
+                    Editorial = backingKind.HasEditorialTypography(), Heavy = false,
+                    MaxWidth = box.Width, Spacing = baseSize * 0.5 * ConstellationLayout.Spacing(backingConnections),
+                    LineSpacing = baseSize * 0.5 * 0.30, Fit = new LineFit(box, 1, 1), Connections = backingConnections,
+                    EvenRunsAlternate = backingKind == CompositionKind.ConstellationEditorial,
                 }, null, null);
+                Decorate(sub, backingKind, group.Words, group.Glue, double.NaN, backingSeed + group.Id, baseSize * 0.5, box, ink);
                 backing[g] = new BackingPlan(group, sub);
             }
-            return new LinePlan
-            {
-                Typography = plan.Typography, Runs = plan.Runs, Words = plan.Words, Block = plan.Block,
-                LineReading = plan.LineReading, Content = plan.Content, ReadingCentre = plan.ReadingCentre, Fit = plan.Fit,
-                TokenFrames = plan.TokenFrames, RunFrames = plan.RunFrames, TokenOpacities = plan.TokenOpacities,
-                Order = plan.Order, Backing = backing,
-            };
+            plan.Backing = backing;
         }
         return plan;
     }
 
     /// <summary>
-    /// A word-timed line set as Editorial sets it: each run lit, swelled, floated and revealed by its own timing; the
-    /// whole block eased in (swell and slide), placed by <paramref name="content"/>.
+    /// What a plan needs beyond its words, worked out once: each run's entrance (a mix picks per run), the highlight
+    /// tiles' words, the constellation's links and Echo's phrase.
     /// </summary>
+    private void Decorate(LinePlan plan, CompositionKind kind, IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue,
+                          double lineEnd, int seed, double baseSize, SizeD stage, LyricInk ink)
+    {
+        var typography = plan.Typography;
+        var runs = typography.Runs;
+        var n = runs.Count;
+        plan.Chosen = new WordArrival[n];
+        plan.Motions = new WordArrival[n];
+        plan.HeldX = new double[n];
+        plan.HeldY = new double[n];
+        plan.IdleFloat = kind.IdleFloat();
+        var highlights = false;
+        for (var r = 0; r < n; r++)
+        {
+            var chosen = Choice.For(kind, runs[r].Seed);
+            plan.Chosen[r] = chosen;
+            plan.Motions[r] = chosen.Motion(kind);
+            highlights |= chosen.HighlightsSungWords();
+            // A held word swells: glyph by glyph where the script allows it (each about its own foot, so the word
+            // hardly widens), else the whole shaped word (joined scripts).
+            if (ScriptDirection.AllowsGlyphMotion(runs[r].Label))
+            {
+                plan.HeldY[r] = 0.05;
+                plan.HeldX[r] = 0.05 / Math.Max(1, new System.Globalization.StringInfo(runs[r].Label).LengthInTextElements);
+            }
+            else
+            {
+                plan.HeldX[r] = plan.HeldY[r] = 0.07;
+            }
+        }
+        if (!typography.WordTimed || n == 0) return;
+        var (visible, _) = LyricRuns.Visible(words, glue);
+        if (highlights)
+        {
+            var release = LyricHighlightTiming.LineEnd(double.IsFinite(lineEnd) ? lineEnd : null, visible);
+            plan.Release = release;
+            plan.Segments = HighlightSegment.Of(typography, words, glue, Breaker, release);
+        }
+        if (kind.HasConnections() && n >= 2 && n <= ConstellationGeometry.MaxWords)
+        {
+            // Each run's box is its fixed slot less its inset, where the slot sits on the wave: it never changes as
+            // words enter, light and swell.
+            for (var r = 0; r < n; r++)
+            {
+                var unit = plan.Runs[r];
+                var metrics = runs[r].Metrics;
+                var envelope = ConstellationGeometry.WordEnvelope(unit.Unit.Width, unit.Unit.Height, 1, Math.Abs(metrics.Rotation) + 0.5);
+                _linkBoxes[r] = new Box(unit.Centre.X - envelope.Width / 2, unit.Centre.Y + metrics.WaveOffset - envelope.Height / 2,
+                                        envelope.Width, envelope.Height);
+            }
+            var count = ConstellationGeometry.BuildConnections(_linkBoxes.AsSpan(0, n), new Box(0, 0, plan.Block.Width, plan.Block.Height),
+                                                               ConstellationLayout.LinkClearance * Scale, _linkScratch);
+            plan.Links = _linkScratch.AsSpan(0, count).ToArray();
+        }
+        if (kind == CompositionKind.Echo)
+        {
+            var text = LyricRuns.Text(words, glue);
+            if (string.IsNullOrWhiteSpace(text)) return;
+            var rightToLeft = ScriptDirection.LineIsRightToLeft(visible.Select(word => word.Text));
+            var largest = 0.0;
+            foreach (var ghost in EchoBackdrop.Ghosts) largest = Math.Max(largest, ghost.Scale);
+            using var layout = Kit!.Layout(text, Face.Regular, (float)(baseSize * largest), TextKit.LocaleFor(text), rightToLeft);
+            // The repeats take the ink's colour at the middle of the line.
+            var tint = LyricInks.Vector(ink.Sample(0.5, EchoBackdrop.Magnitude(seed)).Rest);
+            var raster = (float)Math.Clamp(plan.Fit, 0.2, 2);
+            plan.Echo = new EchoPlan(Kit.Bake(layout, tint, raster, ShadowSpec.None), largest, rightToLeft)
+            {
+                BaseSize = baseSize, Stage = stage, Seed = seed,
+            };
+        }
+    }
+
+    /// <summary>
+    /// A word-timed line set as Editorial sets it: each run lit, swelled, floated and revealed by its own timing; the
+    /// whole block eased in (swell and slide), placed by <paramref name="content"/>. Echo's repeats and a
+    /// constellation's links are drawn behind the words.
+    /// </summary>
+    /// <param name="echoPresence">How present Echo's repeats are (the line's presence less its exit).</param>
     protected void DrawWordTimed(ID2D1DeviceContext dc, LinePlan plan, double time, double exitStart, double previewSince,
-                                 in Matrix3x2 content, double contentScale, double opacity, double swell, double slide)
+                                 in Matrix3x2 content, double contentScale, double opacity, double swell, double slide,
+                                 double echoPresence = 1)
     {
         var typography = plan.Typography;
         var tokens = typography.Tokens;
@@ -480,10 +616,13 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         for (var i = 0; i < tokens.Count; i++)
             if (tokens[i].Source.Start > time) { next = i; break; }
         var energy = OrganicMotion.VocalIntensity(plan.Words, time);
+        var highlighted = plan.Segments is not null;
         for (var i = 0; i < tokens.Count; i++)
         {
             var eligible = i > 0 ? tokens[i - 1].Source.Start : previewSince;
-            plan.TokenFrames[i] = EditorialTokenFrame.Make(tokens[i], next, time, energy, exitStart, false, eligible, Options);
+            // A word with a highlight tile stays until its tile is released at the line's end.
+            var leaves = highlighted && plan.Chosen[tokens[i].Run].HighlightsSungWords() ? Math.Max(exitStart, plan.Release) : exitStart;
+            plan.TokenFrames[i] = EditorialTokenFrame.Make(tokens[i], next, time, energy, leaves, false, eligible, Options);
         }
         var runs = typography.Runs;
         for (var r = 0; r < runs.Count; r++)
@@ -505,6 +644,9 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var blockCentre = new Vector2((float)(origin.X + plan.Block.Width / 2), (float)(plan.Block.Height / 2));
         var block = Matrix3x2.CreateTranslation(-blockCentre) * Matrix3x2.CreateScale((float)swell)
             * Matrix3x2.CreateTranslation(blockCentre.X, blockCentre.Y + (float)slide) * content;
+        if (plan.Echo is { } echo) DrawEcho(dc, plan, echo, time, blockCentre, block, contentScale * swell, opacity * echoPresence);
+        if (plan.Links.Length > 0) DrawLinks(dc, plan, Matrix3x2.CreateTranslation((float)origin.X, (float)origin.Y) * block, opacity);
+        var idle = OrganicMotion.IdleAmplitude(plan.IdleFloat, 1, false);
         foreach (var r in order)
         {
             var run = runs[r];
@@ -516,17 +658,18 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             var visibility = presentation.Opacity * (1 - leave) * opacity;
             if (!(visibility > 0.002)) continue;
             var heat = Math.Min(1, frame.Heat);
-            var transform = EntranceTransform.Make(presentation.Progress, presentation.Arrival, Arrival, size,
-                                                   r % 2 == 0 ? 1 : -1, false);
-            var drift = LyricMotion.IdleDrift(run.Seed, Math.Floor(time * 12) / 12, OrganicMotion.IdleAmplitude(OrganicMotion.DefaultLayoutFloat, 1, false));
+            var motion = plan.Motions[r];
+            var direction = r % 2 == 0 ? 1.0 : -1.0;
+            var transform = EntranceTransform.Make(presentation.Progress, presentation.Arrival, motion, size, direction, false);
+            var drift = LyricMotion.IdleDrift(run.Seed, Math.Floor(time * 12) / 12, idle);
             var lateral = LyricMotion.Jitter(run.Seed, 12) * 0.10;
             var swellCap = EditorialRunFrame.CappedSwell(
                 EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, false), run.Inset.Width, ink.Unit.Width);
-            var held = run.Sustain > 0.02 ? 1 + 0.05 * run.Sustain * Easing.Smoothstep(frame.Fill) : 1;
+            var holding = run.Sustain > 0.02 ? run.Sustain * Easing.Smoothstep(frame.Fill) : 0;
             var floatScale = drift.Scale * (1 - 0.04 * leave);
             var local =
                 Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
-                * Matrix3x2.CreateScale((float)(swellCap * held))
+                * Matrix3x2.CreateScale((float)swellCap)
                 * Matrix3x2.CreateRotation(Radians(frame.DriftAngle))
                 * Matrix3x2.CreateTranslation((float)(frame.DriftX * size), (float)(frame.DriftY * size))
                 * Entrance(transform)
@@ -535,25 +678,261 @@ internal abstract class LyricCompositionLayer : IRenderLayer
                 * Matrix3x2.CreateTranslation((float)((drift.X + lateral * leave) * size), (float)((drift.Y - 0.26 * leave) * size))
                 * Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y + run.Metrics.WaveOffset))
                 * block;
-            var scale = contentScale * swell * swellCap * held * transform.Scale * floatScale;
-            var blur = Combine(Points(Arrival.Blur(presentation.Progress)), Points(2.4 * leave)) * (float)scale;
-            var glow = frame.Glow > 0.002
-                ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)(0.6 * frame.Glow * frame.Fill)),
+            var heldUp = 1 + plan.HeldY[r] * holding;
+            var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale;
+            var blur = Combine(Points(motion.Blur(presentation.Progress)), Points(2.4 * leave)) * (float)scale;
+            // "Cutout · Highlight": the tiles behind this run's sung words, and how strong the strongest is.
+            var tiled = 0.0;
+            var segments = highlighted && plan.Chosen[r].HighlightsSungWords() ? plan.Segments![r] : null;
+            if (segments is not null)
+                foreach (var segment in segments)
+                    tiled = Math.Max(tiled, LyricHighlightTiming.Pose(time, segment.Onset, segment.Release, false).Opacity);
+            var glowStrength = frame.Glow * (1 - tiled);
+            var glow = glowStrength > 0.002
+                ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)(0.6 * glowStrength * frame.Fill)),
                                Points(10 + 22 * frame.Glow) * (float)scale)
                 : GlowSpec.None;
             var shadow = (float)((0.28 + 0.24 * heat) / 0.52);
             var tokenOpacities = frame.RevealsByToken ? plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount) : default;
-            var labelWorld = Matrix3x2.CreateTranslation(ink.LabelOffset) * local;
+            // A held word grows about its foot: glyph by glyph it barely widens (the Mac swells each glyph in place).
+            var labelHeight = ink.Label.Box.Y;
+            var held = holding > 0
+                ? Matrix3x2.CreateScale((float)(1 + plan.HeldX[r] * holding), (float)heldUp, new Vector2(0, labelHeight / 2))
+                : Matrix3x2.Identity;
+            var labelWorld = held * Matrix3x2.CreateTranslation(ink.LabelOffset) * local;
+            // A cutout is unmasked from its leading edge while it arrives.
+            var clip = InkClip.Leading(motion.PaperShown(transform.Eased), ink.Unit.Width, direction < 0);
+            var tiles = segments is not null && tiled > 0.001;
+            if (tiles) DrawTiles(dc, segments!, ink.Label.Box, labelWorld, size, run.RightToLeft, time, visibility, null);
             ink.Label.Draw(dc, labelWorld, (float)scale, (float)visibility, blur, glow, shadow,
-                           run.Boundaries, tokenOpacities, run.RightToLeft);
+                           run.Boundaries, tokenOpacities, run.RightToLeft, clip);
+            if (tiles) DrawTiles(dc, segments!, ink.Label.Box, labelWorld, size, run.RightToLeft, time, visibility, ink.Label);
             if (ink.Reading is { } reading)
             {
                 var readingOpacity = frame.ReadingOpacity(plan.TokenOpacities.AsSpan(run.TokenStart, run.TokenCount));
                 reading.Draw(dc, Matrix3x2.CreateTranslation(ink.ReadingOffset) * local, (float)scale,
-                             (float)(visibility * readingOpacity), blur, GlowSpec.None, shadow);
+                             (float)(visibility * readingOpacity), blur, GlowSpec.None, shadow, clip: clip);
+            }
+            if (LyricSwipe.Shows(motion, presentation.Progress, false))
+                DrawSwipe(dc, local, ink.Unit, presentation.Progress, direction, motion, opacity);
+        }
+    }
+
+    /// <summary>
+    /// Echo's repeats of the phrase behind the live line: faint, at many sizes, two mirrored, each wandering slowly
+    /// and revealed with the line.
+    /// </summary>
+    private void DrawEcho(ID2D1DeviceContext dc, LinePlan plan, EchoPlan echo, double time, Vector2 blockCentre,
+                          in Matrix3x2 block, double blockScale, double presence)
+    {
+        if (!(presence > 0.002)) return;
+        var phrase = echo.Phrase;
+        var revealed = Options.RevealsWords ? WordReveal.LineRevealed(plan.Words, time) : 1;
+        if (!(revealed > 0)) return;
+        for (var slot = 0; slot < EchoBackdrop.Ghosts.Count; slot++)
+        {
+            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, false);
+            var ghost = pose.Ghost;
+            var alpha = EchoBackdrop.Opacity(ghost, presence);
+            if (!(alpha > 0.002)) continue;
+            var relative = ghost.Scale / echo.BakedScale;
+            var size = new SizeD(phrase.Box.X * relative, phrase.Box.Y * relative);
+            var fit = EchoBackdrop.Fit(size, echo.Stage, pose);
+            if (!(fit > 0)) continue;
+            var k = (float)(relative * fit);
+            var world = Matrix3x2.CreateScale(k)
+                * Matrix3x2.CreateRotation(Radians(pose.Angle))
+                * Matrix3x2.CreateScale(1, ghost.Flipped ? -1 : 1)
+                * Matrix3x2.CreateTranslation((float)pose.X, (float)pose.Y)
+                * Matrix3x2.CreateTranslation(blockCentre) * block;
+            DrawSwept(dc, phrase, world, (float)(k * blockScale), (float)alpha, revealed, EchoBackdrop.Feather, echo.RightToLeft);
+        }
+    }
+
+    /// <summary>
+    /// Text revealed through a soft sweep in reading order (the Mac's <c>LyricSweepMask</c>): solid up to the sweep, then
+    /// a feathered edge drawn as a few strips of falling opacity.
+    /// </summary>
+    private static void DrawSwept(ID2D1DeviceContext dc, Ink ink, in Matrix3x2 world, float worldScale, float opacity,
+                                  double progress, double feather, bool rightToLeft)
+    {
+        var (solid, clear) = LyricSweep.Edges(progress, feather);
+        if (solid >= 1)
+        {
+            ink.Draw(dc, world, worldScale, opacity, 0, GlowSpec.None, 0);
+            return;
+        }
+        var width = ink.Box.X;
+        if (solid > 0) ink.Draw(dc, world, worldScale, opacity, 0, GlowSpec.None, 0, clip: SweepSpan(-1, solid, width, rightToLeft));
+        const int strips = 6;
+        var step = (clear - solid) / strips;
+        if (!(step > 0)) return;
+        for (var s = 0; s < strips; s++)
+        {
+            var from = solid + s * step;
+            var alpha = LyricSweep.Alpha(from + step / 2, progress, feather);
+            if (alpha > 0.002)
+                ink.Draw(dc, world, worldScale, (float)(opacity * alpha), 0, GlowSpec.None, 0,
+                         clip: SweepSpan(from, from + step, width, rightToLeft));
+        }
+    }
+
+    /// <summary>A stretch of a label between two reading-order positions (0…1), as a clip about the label's centre.</summary>
+    private static InkClip SweepSpan(double from, double to, float width, bool rightToLeft)
+    {
+        float X(double along) => (float)(rightToLeft ? width / 2 - along * width : -width / 2 + along * width);
+        return rightToLeft ? new InkClip(X(to), X(from)) : new InkClip(X(from), X(to));
+    }
+
+    /// <summary>A constellation's hairlines, each with a dot at both ends, lit with the heat of the words they join.</summary>
+    private void DrawLinks(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 blockToDevice, double opacity)
+    {
+        if (_paint is null || !(ConstellationLayout.DefaultLinkOpacity > 0)) return;
+        var link = _ink.Link;
+        dc.Transform = blockToDevice;
+        var width = Points(ConstellationLayout.LinkWidth);
+        var dot = Points(ConstellationLayout.DotRadius);
+        var tokens = plan.TokenFrames;
+        var runs = plan.Typography.Runs;
+        foreach (var edge in plan.Links)
+        {
+            ref readonly var a = ref plan.RunFrames[edge.From];
+            ref readonly var b = ref plan.RunFrames[edge.To];
+            var shownA = a.Visible * (1 - tokens[runs[edge.From].TokenStart].Leave);
+            var shownB = b.Visible * (1 - tokens[runs[edge.To].TokenStart].Leave);
+            var alpha = ConstellationLayout.LinkAlpha(ConstellationLayout.DefaultLinkOpacity, Math.Max(a.Heat, b.Heat),
+                                                      Math.Min(shownA, shownB)) * opacity * link.A;
+            if (!(alpha > 0.002)) continue;
+            _paint.Color = new Color4((float)link.R, (float)link.G, (float)link.B, (float)alpha);
+            var from = new Vector2((float)edge.Ax, (float)edge.Ay);
+            var to = new Vector2((float)edge.Bx, (float)edge.By);
+            dc.DrawLine(from, to, _paint, width, _roundCaps);
+            dc.FillEllipse(new Ellipse(from, dot, dot), _paint);
+            dc.FillEllipse(new Ellipse(to, dot, dot), _paint);
+        }
+    }
+
+    /// <summary>
+    /// "Cutout · Highlight" on one label. Without <paramref name="text"/>: the tiles behind it, pressed in from each
+    /// sung word's leading edge and tilted a little. With it: the word in the tile's text colour where a tile has
+    /// pressed in and is strong enough to carry it.
+    /// </summary>
+    private void DrawTiles(ID2D1DeviceContext dc, HighlightSegment[] segments, Vector2 label, in Matrix3x2 labelWorld,
+                           double pointSize, bool rightToLeft, double time, double visibility, Ink? text)
+    {
+        if (_paint is null) return;
+        double width = label.X, height = label.Y;
+        foreach (var segment in segments)
+        {
+            var pose = LyricHighlightTiming.Pose(time, segment.Onset, segment.Release, false);
+            if (!pose.IsVisible) continue;
+            if (text is null)
+            {
+                var rect = segment.Rect(width, height, pointSize, rightToLeft);
+                var tile = _ink.TileColour;
+                _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * pose.Opacity * visibility));
+                var w = (float)rect.Width;
+                var h = (float)rect.Height;
+                // Pressed in from the leading edge, then given Cutout's small tilt about its centre.
+                dc.Transform = Matrix3x2.CreateScale((float)pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
+                    * Matrix3x2.CreateRotation(Radians(CutoutTile.Tilt), new Vector2(w / 2, h / 2))
+                    * Matrix3x2.CreateTranslation((float)(rect.X - width / 2), (float)(rect.Y - height / 2))
+                    * labelWorld;
+                var radius = Points(CutoutTile.CornerRadius);
+                dc.FillRoundedRectangle(new RoundedRectangle(new Vortice.RawRectF(0, 0, w, h), radius, radius), _paint);
+            }
+            else
+            {
+                var shown = LyricHighlightTiming.TextOpacity(pose.Opacity, _ink.TileTextSwitch) * visibility;
+                if (!(shown > 0.002)) continue;
+                var pressed = segment.Pressed(pose, width, height, pointSize, rightToLeft);
+                var colour = _ink.TileText;
+                text.DrawTinted(dc, labelWorld, new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown)),
+                                new InkClip((float)(pressed.X - width / 2), (float)(pressed.X + pressed.Width - width / 2)));
             }
         }
     }
+
+    /// <summary>
+    /// Satin Ribbon or Split Ink over a word (or a phrase) while it arrives, clipped to its box of size
+    /// <paramref name="box"/> centred on the origin of <paramref name="boxWorld"/>.
+    /// </summary>
+    protected void DrawSwipe(ID2D1DeviceContext dc, in Matrix3x2 boxWorld, SizeD box, double progress, double direction,
+                           WordArrival style, double opacity)
+    {
+        if (_paint is null || _unitSquare is null) return;
+        var alpha = (float)(LyricSwipe.Opacity(progress) * opacity);
+        if (!(alpha > 0.002f) || !(box.Width > 0) || !(box.Height > 0)) return;
+        float w = (float)box.Width, h = (float)box.Height;
+        // Box coordinates: top-left origin.
+        var toBox = Matrix3x2.CreateTranslation(-w / 2, -h / 2) * boxWorld;
+        dc.Transform = toBox;
+        var layer = new LayerParameters1
+        {
+            ContentBounds = new Vortice.RawRectF(-1e6f, -1e6f, 1e6f, 1e6f),
+            GeometricMask = _unitSquare,
+            MaskAntialiasMode = AntialiasMode.PerPrimitive,
+            MaskTransform = Matrix3x2.CreateScale(w, h),
+            Opacity = 1,
+            LayerOptions = LayerOptions1.None,
+        };
+        dc.PushLayer(ref layer, null);
+        if (style == WordArrival.SatinRibbon)
+        {
+            var ribbon = Ribbon();
+            var bar = LyricSwipe.Ribbon(progress, direction, w, h);
+            float bw = (float)bar.Width, bh = (float)bar.Height;
+            dc.Transform = Matrix3x2.CreateRotation(Radians(bar.Turn), new Vector2(bw / 2, bh / 2))
+                * Matrix3x2.CreateTranslation((float)bar.X, (float)bar.Y) * toBox;
+            if (ribbon is not null)
+            {
+                ribbon.StartPoint = new Vector2(0, 0);
+                ribbon.EndPoint = new Vector2(bw, 0);
+                ribbon.Opacity = alpha;
+                dc.FillRectangle(new Vortice.RawRectF(0, 0, bw, bh), ribbon);
+            }
+        }
+        else
+        {
+            var (top, edge, bottom) = LyricSwipe.Split(progress, direction, w, h);
+            Bar(dc, top, _swipe.Ink, 0.68f * alpha);
+            Bar(dc, edge, _swipe.Highlight, 0.88f * alpha);
+            Bar(dc, bottom, _swipe.Ink, 0.52f * alpha);
+        }
+        dc.PopLayer();
+    }
+
+    private void Bar(ID2D1DeviceContext dc, SwipeBar bar, Double3 colour, float alpha)
+    {
+        _paint!.Color = new Color4((float)colour.X, (float)colour.Y, (float)colour.Z, alpha);
+        dc.FillRectangle(new Vortice.RawRectF((float)bar.X, (float)bar.Y, (float)(bar.X + bar.Width), (float)(bar.Y + bar.Height)), _paint);
+    }
+
+    /// <summary>Satin Ribbon's band: clear, the ribbon colour at 23%, the highlight at 65%, clear; made when first needed.</summary>
+    private ID2D1LinearGradientBrush? Ribbon()
+    {
+        if (_ribbon is not null || Kit is null) return _ribbon;
+        var ribbon = _swipe.Ribbon;
+        var highlight = _swipe.Highlight;
+        _ribbonStops = Kit.Draw.CreateGradientStopCollection(
+        [
+            new GradientStop(0, new Color4((float)ribbon.X, (float)ribbon.Y, (float)ribbon.Z, 0)),
+            new GradientStop(1f / 3, new Color4((float)ribbon.X, (float)ribbon.Y, (float)ribbon.Z, 0.23f)),
+            new GradientStop(2f / 3, new Color4((float)highlight.X, (float)highlight.Y, (float)highlight.Z, 0.65f)),
+            new GradientStop(1, new Color4((float)highlight.X, (float)highlight.Y, (float)highlight.Z, 0)),
+        ]);
+        _ribbon = Kit.Draw.CreateLinearGradientBrush(new LinearGradientBrushProperties(new Vector2(0, 0), new Vector2(1, 0)), _ribbonStops);
+        return _ribbon;
+    }
+
+    private void DropRibbon()
+    {
+        _ribbon?.Dispose();
+        _ribbon = null;
+        _ribbonStops?.Dispose();
+        _ribbonStops = null;
+    }
+
 
     private void DrawLineReading(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 content, double scale, double opacity)
     {
@@ -596,7 +975,7 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var (runReadings, lineReading) = Readings(row, line.Words, glue);
         var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
         var plan = BuildPlan(line.Words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
-                             new LineFit(Stage, Metrics.UserScale, 0.75), Stage.Width);
+                             FitFor(row), Stage.Width);
         plan.LastUsed = Frame;
         _phrases[row] = plan;
         return plan;
@@ -614,28 +993,43 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         var content = ContentToDevice(plan, offset, heldScale);
         var scale = plan.Fit * heldScale;
         var progress = previewing ? 1 : pose.Progress;
-        var transform = EntranceTransform.Make(progress, previewing ? 1 : pose.Arrival, Arrival, pointSize, row % 2 == 0 ? 1 : -1, false);
+        // A line sung as one has no words to highlight one by one: it enters as its layout has it enter.
+        var motion = Choice.For(Kind, TimedWordKey.SeedOf(line.Text, line.Start)).Motion(Kind);
+        var direction = row % 2 == 0 ? 1.0 : -1.0;
+        var transform = EntranceTransform.Make(progress, previewing ? 1 : pose.Arrival, motion, pointSize, direction, false);
         var phrase = Matrix3x2.CreateTranslation(-(float)(plan.Content.Width / 2), -(float)(plan.Content.Height / 2))
             * Entrance(transform)
             * Matrix3x2.CreateTranslation((float)(plan.Content.Width / 2), (float)(plan.Content.Height / 2)) * content;
         var entranceScale = scale * transform.Scale;
-        var blur = Points(Arrival.Blur(progress)) * (float)entranceScale;
+        var blur = Points(motion.Blur(progress)) * (float)entranceScale;
+        // A cutout phrase is unmasked from its leading edge (in the block's own width).
+        var shown = motion.PaperShown(transform.Eased);
+        var width = plan.Block.Width;
+        var (cropLeft, cropRight) = shown >= 1 ? (double.NegativeInfinity, double.PositiveInfinity)
+            : direction >= 0 ? (double.NegativeInfinity, shown * width) : (width - shown * width, double.PositiveInfinity);
         var alpha = previewing ? 1 : visibility;
         // The line itself (in preview: only its first word, where it will be).
         DrawPhraseRuns(dc, plan, phrase, entranceScale, alpha * opacity, blur, firstRunOnly: previewing ? previewOpacity : null,
-                       hidesFirstRun: holdsFirstRun, readings: !previewing);
+                       hidesFirstRun: holdsFirstRun, readings: !previewing, cropLeft, cropRight);
+        if (!previewing && LyricSwipe.Shows(motion, progress, false))
+        {
+            var origin = plan.BlockOrigin;
+            DrawSwipe(dc, Matrix3x2.CreateTranslation((float)(origin.X + width / 2), (float)(origin.Y + plan.Block.Height / 2)) * phrase,
+                      plan.Block, progress, direction, motion, opacity);
+        }
         if (holdsFirstRun)
         {
             // The previewed first word stays where the preview showed it while the rest makes its entrance.
             DrawPhraseRuns(dc, plan, content, scale, opacity, 0,
                            firstRunOnly: LineFlow.HeldFirstRunOpacity(pose.Presence) * (1 - 0.5 * drawn.Yield),
-                           hidesFirstRun: false, readings: false);
+                           hidesFirstRun: false, readings: false, double.NegativeInfinity, double.PositiveInfinity);
         }
         if (!previewing) DrawLineReading(dc, plan, content, scale, pose.Progress * (1 - pose.Exit) * opacity);
     }
 
     private static void DrawPhraseRuns(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 content, double scale, double opacity,
-                                       float blur, double? firstRunOnly, bool hidesFirstRun, bool readings)
+                                       float blur, double? firstRunOnly, bool hidesFirstRun, bool readings,
+                                       double cropLeft, double cropRight)
     {
         var origin = plan.BlockOrigin;
         for (var r = 0; r < plan.Runs.Length; r++)
@@ -644,10 +1038,13 @@ internal abstract class LyricCompositionLayer : IRenderLayer
             alpha *= opacity;
             if (!(alpha > 0.002)) continue;
             var ink = plan.Runs[r];
+            // The crop is in block coordinates; each label is centred on its slot.
+            var clip = double.IsNegativeInfinity(cropLeft) && double.IsPositiveInfinity(cropRight) ? InkClip.None
+                : new InkClip((float)(cropLeft - ink.Centre.X), (float)(cropRight - ink.Centre.X));
             var local = Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y)) * content;
-            ink.Label.Draw(dc, Matrix3x2.CreateTranslation(ink.LabelOffset) * local, (float)scale, (float)alpha, blur, GlowSpec.None, 1);
+            ink.Label.Draw(dc, Matrix3x2.CreateTranslation(ink.LabelOffset) * local, (float)scale, (float)alpha, blur, GlowSpec.None, 1, clip: clip);
             if (readings && firstRunOnly is null && ink.Reading is { } reading)
-                reading.Draw(dc, Matrix3x2.CreateTranslation(ink.ReadingOffset) * local, (float)scale, (float)alpha, blur, GlowSpec.None, 1);
+                reading.Draw(dc, Matrix3x2.CreateTranslation(ink.ReadingOffset) * local, (float)scale, (float)alpha, blur, GlowSpec.None, 1, clip: clip);
         }
     }
 

@@ -1,7 +1,11 @@
 // CompositionPreview: renders the lyric compositions offscreen to PNGs, and measures their per-frame cost.
 //
-//   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken]
+//   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken|scattered|...]
+//                      [-reveal fade|lift|pop|orbit|glide|unfold|cutoutFold|cutoutSlide|cutoutHighlight|satinRibbon|splitInk|mix]
 //                      [-shot fixture@seconds ...] [-bench] [-warp]
+//
+// Compositions: editorial, spoken, scattered, constellation, constellationEditorial, echo. With -reveal, every fixture
+// uses that word entrance and the file names carry it.
 //
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics.
 
@@ -17,6 +21,7 @@ var output = "previews";
 int width = 1920, height = 1080;
 var scale = 1.25f;
 string? only = null;
+string? reveal = null;
 var bench = false;
 var warp = false;
 var shots = new List<(string Fixture, double Time)>();
@@ -30,6 +35,7 @@ for (var i = 0; i < args.Length; i++)
         case "height": height = int.Parse(Next(), CultureInfo.InvariantCulture); break;
         case "scale": scale = float.Parse(Next(), CultureInfo.InvariantCulture); break;
         case "only": only = Next(); break;
+        case "reveal": reveal = Next(); break;
         case "bench": bench = true; break;
         case "dump":
             foreach (var line in ((Lunalyr.Core.Lyrics.LyricResult.Synced)Fixtures.English().Lyrics!).Lines)
@@ -47,15 +53,20 @@ for (var i = 0; i < args.Length; i++)
 }
 
 IWordBreaker breaker = IcuWordBreaker.TryCreate() ?? (IWordBreaker)SimpleWordBreaker.Instance;
-IRenderLayerFactory[] factories = [new EditorialFactory(breaker), new SpokenFactory(breaker)];
+IRenderLayerFactory[] factories =
+[
+    new EditorialFactory(breaker), new SpokenFactory(breaker), new ScatteredFactory(breaker), new ConstellationFactory(breaker),
+    new ConstellationEditorialFactory(breaker), new EchoFactory(breaker),
+];
+var style = reveal is null ? null : LyricStyle.Default with { Reveal = reveal };
 var fixtures = new Dictionary<string, Func<SceneSnapshot>>
 {
-    ["english"] = () => Fixtures.English(),
-    ["japanese"] = () => Fixtures.Japanese(),
-    ["arabic"] = () => Fixtures.Arabic(),
-    ["emoji"] = () => Fixtures.Emoji(),
-    ["linetimed"] = () => Fixtures.LineTimed(),
-    ["plain"] = () => Fixtures.Plain(),
+    ["english"] = () => Fixtures.English(style),
+    ["japanese"] = () => Fixtures.Japanese(style),
+    ["arabic"] = () => Fixtures.Arabic(style),
+    ["emoji"] = () => Fixtures.Emoji(style),
+    ["linetimed"] = () => Fixtures.LineTimed(style),
+    ["plain"] = () => Fixtures.Plain(style),
     ["nolyrics"] = () => Fixtures.NoLyrics(),
 };
 if (shots.Count == 0)
@@ -97,7 +108,7 @@ foreach (var factory in factories)
         // A few frames leading up to the shot, as the app would draw them.
         for (var t = time - 0.2; t < time; t += 1.0 / 60) stage.Render(layer, scene, t, 10 + t, scale, background);
         stage.Render(layer, scene, time, 10 + time, scale, background);
-        var path = Path.Combine(output, $"{factory.Id}-{name}-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png");
+        var path = Path.Combine(output, $"{factory.Id}{(reveal is null ? "" : "-" + reveal)}-{name}-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png");
         stage.SavePng(path);
         Console.WriteLine(path);
     }
