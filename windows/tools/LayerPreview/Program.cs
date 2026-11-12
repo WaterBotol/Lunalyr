@@ -3,6 +3,8 @@
 //   LayerPreview -covers <folder> -out <folder> [-layer gradient|colour] [-times 0,5,10] [-size 1920x1080]
 //                [-scale 1] [-hardware] [-quiet] [-fade a.jpg,b.png] [-adjust speed=2,vividness=1.8,darkening=0,backing=0.5]
 //   LayerPreview -wallpaper <picture or video> -out <folder> [-placements fill,fillTop,fillBottom,fit] [-times 1,3] [-hardware]
+//   LayerPreview -wallpaper <cover.mp4> -motion [-cover <still.jpg>] [-reduce-motion] … draws an animated cover ("motion")
+//                with the album's colours and still cover from -cover; -adjust softening=0..25 sets Covers › Softening.
 //
 // -layer desktop draws "Your wallpaper" (see-through: the PNG keeps its alpha). -wallpaper draws an imported picture or
 // video as the "custom" layer in each placement; a video plays in real time to each -times mark.
@@ -33,7 +35,19 @@ IRenderLayerFactory factory = options.Layer switch
     "desktop" => new DesktopLayerFactory(),
     _ => new GradientLayerFactory(),
 };
-var scene = new SceneSnapshot { Title = options.Quiet ? null : "Preview" };
+var scene = new SceneSnapshot { Title = options.Quiet ? null : "Preview", ReduceMotion = options.ReduceMotion };
+if (options.Cover is { } still)
+{
+    var bytes = File.ReadAllBytes(still);
+    scene = scene with { Palette = PaletteOf(still), Cover = ArtworkDecoder.DecodeCover(bytes) };
+}
+
+IRenderLayerFactory Wallpaper(string file, WallpaperPlacement placement) => options.Motion
+    ? new MotionCoverLayerFactory(file, null, placement)
+    : new CustomLayerFactory(file, placement);
+
+string Suffix() => string.Create(CultureInfo.InvariantCulture,
+    $"{(options.Adjustments.Softening != 5 ? $"-soft{options.Adjustments.Softening:0.#}" : "")}{(options.ReduceMotion ? "-still" : "")}");
 
 Palette PaletteOf(string path)
 {
@@ -48,11 +62,11 @@ if (options.Wallpaper is { } benched && options.Bench > 0)
 {
     // The imported wallpaper drawn at 60 fps for -bench seconds, as the desktop would (each frame waits for the next
     // 1/60 s): render-thread time per frame and the process's CPU, for the cost of a video wallpaper without a desktop.
-    var custom = new CustomLayerFactory(benched, WallpaperPlacements.Parse(options.Placements[0]));
+    var custom = Wallpaper(benched, WallpaperPlacements.Parse(options.Placements[0]));
     using var layer = custom.Create();
     surface.Prepare(layer);
     var clock = System.Diagnostics.Stopwatch.StartNew();
-    while (layer is IFirstFrameLayer { HasFirstFrame: false } && clock.Elapsed.TotalSeconds < 10) { surface.Draw(layer, scene, clock.Elapsed.TotalSeconds, 1 / 60.0); Thread.Sleep(5); }
+    while (layer is IFirstFrameLayer { HasFirstFrame: false } && clock.Elapsed.TotalSeconds < 10) { surface.Draw(layer, scene with { Adjustments = options.Adjustments }, clock.Elapsed.TotalSeconds, 1 / 60.0); Thread.Sleep(5); }
     var process = System.Diagnostics.Process.GetCurrentProcess();
     var cpuStart = process.TotalProcessorTime;
     clock.Restart();
@@ -61,7 +75,7 @@ if (options.Wallpaper is { } benched && options.Bench > 0)
     while (clock.Elapsed.TotalSeconds < options.Bench)
     {
         var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        surface.Draw(layer, scene, clock.Elapsed.TotalSeconds, 1 / 60.0);
+        surface.Draw(layer, scene with { Adjustments = options.Adjustments }, clock.Elapsed.TotalSeconds, 1 / 60.0);
         drawMs += System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
         frames++;
         var next = frames / 60.0;
@@ -81,7 +95,7 @@ if (options.Wallpaper is { } wallpaper)
     foreach (var raw in options.Placements)
     {
         var placement = WallpaperPlacements.Parse(raw);
-        var custom = new CustomLayerFactory(wallpaper, placement);
+        var custom = Wallpaper(wallpaper, placement);
         using var layer = custom.Create();
         surface.Prepare(layer);
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -96,7 +110,7 @@ if (options.Wallpaper is { } wallpaper)
             }
             while (waited < time || (layer is IFirstFrameLayer { HasFirstFrame: false } && waited < 10));
             surface.Draw(layer, scene with { Adjustments = options.Adjustments }, waited, 0);
-            var file = Path.Combine(options.Out, string.Create(CultureInfo.InvariantCulture, $"custom-{Name(wallpaper)}-{raw}-t{time:0.##}.png"));
+            var file = Path.Combine(options.Out, string.Create(CultureInfo.InvariantCulture, $"{custom.Id}-{Name(wallpaper)}-{raw}{Suffix()}-t{time:0.##}.png"));
             surface.SavePng(file);
             Console.WriteLine(file);
         }
@@ -143,7 +157,8 @@ return 0;
 
 internal sealed record Arguments(string Covers, string Out, string Layer, double[] Times, int Width, int Height, float Scale,
                                  bool Hardware, bool Quiet, (string From, string To)? Fade, string? Wallpaper, string[] Placements,
-                                 WallpaperAdjustments Adjustments, double Bench)
+                                 WallpaperAdjustments Adjustments, double Bench, bool Motion = false, string? Cover = null,
+                                 bool ReduceMotion = false)
 {
     public static Arguments? Parse(string[] args)
     {
@@ -156,6 +171,8 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
         string? wallpaper = null;
         string[] placements = ["fill"];
         double bench = 0;
+        bool motion = false, reduceMotion = false;
+        string? cover = null;
         var adjustments = WallpaperAdjustments.Default;
         for (var i = 0; i < args.Length; i++)
         {
@@ -181,6 +198,9 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
                 case "-wallpaper": wallpaper = Next(); break;
                 case "-placements": placements = Next().Split(','); break;
                 case "-bench": bench = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "-motion": motion = true; break;
+                case "-reduce-motion": reduceMotion = true; break;
+                case "-cover": cover = Next(); break;
                 case "-adjust":
                     foreach (var pair2 in Next().Split(','))
                     {
@@ -192,6 +212,7 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
                             "vividness" => adjustments with { Vividness = v },
                             "darkening" => adjustments with { Darkening = v },
                             "backing" => adjustments with { ManualBacking = v },
+                            "softening" => adjustments with { Softening = v },
                             _ => throw new ArgumentException(kv[0]),
                         };
                     }
@@ -200,6 +221,7 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
             }
         }
         if (output is null || (covers is null && fade is null && wallpaper is null)) return null;
-        return new Arguments(covers ?? ".", output, layer, times, width, height, scale, hardware, quiet, fade, wallpaper, placements, adjustments, bench);
+        return new Arguments(covers ?? ".", output, layer, times, width, height, scale, hardware, quiet, fade, wallpaper, placements, adjustments, bench,
+            motion, cover, reduceMotion);
     }
 }
