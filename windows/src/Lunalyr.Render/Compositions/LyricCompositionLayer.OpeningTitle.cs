@@ -63,6 +63,10 @@ internal abstract partial class LyricCompositionLayer
         }
         else
         {
+            // The stage already shows the song's name in place of lyrics ("Show title and artist"): no opening title
+            // (the Mac's openingSchedule for a song without lyrics).
+            if (scene.NoneFound && !string.IsNullOrWhiteSpace(scene.Status) && scene.Style.NoLyrics == NoLyricsDisplay.TrackName)
+                return null;
             // Looking lyrics up, none found, offline: nothing to sing along to (yet).
             words = OpeningWords.None;
         }
