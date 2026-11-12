@@ -11,5 +11,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+    <!-- The invented lyrics the composition previews use, for frames with lyrics over an effect. -->
+    <Compile Include="..\CompositionPreview\Fixtures.cs" Link="Fixtures.cs" />
   </ItemGroup>
 </Project>

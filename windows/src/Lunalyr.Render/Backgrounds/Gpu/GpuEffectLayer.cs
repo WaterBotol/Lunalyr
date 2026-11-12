@@ -22,9 +22,12 @@ public sealed class GpuEffectLayerFactory : IRenderLayerFactory
     private readonly GpuEffect _effect;
     private readonly BackgroundOptions _options;
     private readonly Logger _log;
+    private readonly double? _pixelBudget;
 
-    public GpuEffectLayerFactory(string effectId, BackgroundOptions? options = null, Logger? log = null)
+    /// <param name="pixelBudget">Pixels to shade per frame instead of the effect's own budget (measurements only).</param>
+    public GpuEffectLayerFactory(string effectId, BackgroundOptions? options = null, Logger? log = null, double? pixelBudget = null)
     {
+        _pixelBudget = pixelBudget;
         _effect = GpuEffectCatalog.Find(effectId) ?? throw new ArgumentException($"There is no GPU effect \"{effectId}\".", nameof(effectId));
         _options = options ?? BackgroundOptions.Default;
         _log = log ?? Logger.Null;
@@ -34,7 +37,7 @@ public sealed class GpuEffectLayerFactory : IRenderLayerFactory
 
     public GpuEffect Effect => _effect;
 
-    public IRenderLayer Create() => new GpuEffectLayer(_effect, _options, _log);
+    public IRenderLayer Create() => new GpuEffectLayer(_effect, _options, _log, _pixelBudget);
 
     /// <summary>A factory for every effect in <see cref="GpuEffectCatalog"/>.</summary>
     public static IReadOnlyList<GpuEffectLayerFactory> All(BackgroundOptions? options = null, Logger? log = null) =>
@@ -87,8 +90,11 @@ public sealed class GpuEffectLayer : IRenderLayer
     private EffectClock _clock;
     private ShaderTimeBase _timeBase;
 
-    internal GpuEffectLayer(GpuEffect effect, BackgroundOptions options, Logger log)
+    private readonly double? _pixelBudget;
+
+    internal GpuEffectLayer(GpuEffect effect, BackgroundOptions options, Logger log, double? pixelBudget = null)
     {
+        _pixelBudget = pixelBudget;
         _effect = effect;
         _options = options;
         _log = log;
@@ -142,8 +148,11 @@ public sealed class GpuEffectLayer : IRenderLayer
         }
     }
 
-    /// <summary>The pixel budget for this surface: the options' own, or the Mac's for the effect's cost.</summary>
-    internal double Budget => _options.PixelBudget ?? ShaderRenderBudget.Pixels(_effect.Cost, preview: false, _options.Economical);
+    /// <summary>
+    /// The pixel budget for this surface: the Mac's for the effect's cost (smaller when economical). Not
+    /// <see cref="BackgroundOptions.PixelBudget"/>, which is the colour field's.
+    /// </summary>
+    internal double Budget => _pixelBudget ?? ShaderRenderBudget.Pixels(_effect.Cost, preview: false, _options.Economical);
 
     private void SizeCanvas()
     {

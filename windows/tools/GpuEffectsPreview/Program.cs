@@ -1,10 +1,13 @@
 // GpuEffectsPreview: the GPU effects and line patterns, drawn offscreen.
 //
 //   GpuEffectsPreview sheet -out <folder> [-kind effects|patterns|all] [-only id,id] [-times 8,40] [-tile 400x225]
-//                     [-palettes dark,bright,two] [-hardware]
+//                     [-palettes dark,bright,two] [-hardware | -adapter <name part>]
 //       One contact sheet per palette and time: every layer as a labelled tile.
 //   GpuEffectsPreview one -layer shader.plasma -out <file.png> [-size 1280x720] [-time 8] [-palette dark] [-hardware]
 //       One frame of one layer.
+//   GpuEffectsPreview stage -layer shader.aurora -out <folder> [-size 1920x1080] [-palette bright] [-adapter <name part>]
+//       The layer under Editorial lyrics (the composition previews' invented English song) at a few moments, then a
+//       palette change to "two" part-way through its fade.
 //   GpuEffectsPreview bench -adapter <name part> [-size 2560x1440] [-frames 240] [-kind all] [-only id,id] [-out file.md]
 //                     [-budget pixels]  (every effect at this pixel budget instead of its own)
 //       Per-layer GPU time (D3D11 timestamps around the whole frame) and render-thread CPU time on that adapter.
@@ -39,6 +42,7 @@ return arguments.Command switch
     "sheet" => Preview.Sheets(arguments),
     "one" => Preview.One(arguments),
     "bench" => Bench.Run(arguments),
+    "stage" => Preview.Stage(arguments),
     _ => 2,
 };
 
@@ -89,8 +93,12 @@ internal sealed record Args(string Command, string? Out, string Kind, string[]? 
 
     public IReadOnlyList<IRenderLayerFactory> Factories()
     {
-        var options = new BackgroundOptions { PixelBudget = Budget };
-        return [.. GpuBackgrounds.Factories(options).Where(f =>
+        var options = new BackgroundOptions();
+        IReadOnlyList<IRenderLayerFactory> all = Budget is { } budget
+            ? [.. GpuEffectLayerFactory.All(options).Select(f => (IRenderLayerFactory)new GpuEffectLayerFactory(f.Effect.Id, options, pixelBudget: budget)),
+               .. LinePatternLayerFactory.All(options)]
+            : GpuBackgrounds.Factories(options);
+        return [.. all.Where(f =>
             (Kind == "all" || (Kind == "effects" && f.Id.StartsWith("shader.", StringComparison.Ordinal))
                            || (Kind == "patterns" && f.Id.StartsWith("pattern.", StringComparison.Ordinal)))
             && (Only is null || Only.Any(o => f.Id == o || f.Id.EndsWith("." + o, StringComparison.Ordinal))))];
@@ -144,7 +152,7 @@ internal sealed class LabelLayer(string text) : IRenderLayer
     public void Dispose() => ReleaseResources();
 }
 
-internal static class Preview
+internal static partial class Preview
 {
     public static int Sheets(Args a)
     {
@@ -153,7 +161,7 @@ internal static class Preview
         var factories = a.Factories();
         const int columns = 5;
         var rows = (factories.Count + columns - 1) / columns;
-        using var surface = new OffscreenSurface(a.Width, a.Height, 1, a.Hardware);
+        using var surface = Surfaces.Make(a, 1);
         foreach (var name in a.Palettes)
         {
             var palette = Palettes.Named(name);
@@ -175,7 +183,7 @@ internal static class Preview
                     for (var y = 0; y < a.Height; y++)
                         Buffer.BlockCopy(pixels, y * a.Width * 4, sheet, ((y0 + y) * a.Width * columns + x0) * 4, a.Width * 4);
                 }
-                var file = Path.Combine(a.Out, string.Create(CultureInfo.InvariantCulture, $"{a.Kind}-{name}-t{time:0.##}.png"));
+                var file = Path.Combine(a.Out, string.Create(CultureInfo.InvariantCulture, $"{a.Kind}{(a.Adapter is null ? "" : "-" + a.Adapter.ToLowerInvariant())}-{name}-t{time:0.##}.png"));
                 Png.Save(file, sheet, a.Width * columns, a.Height * rows);
                 Console.WriteLine(file);
             }
@@ -304,5 +312,62 @@ internal static class Bench
         T value;
         while (context.GetData(query, (IntPtr)(&value), (uint)sizeof(T), AsyncGetDataFlags.None).Code != 0) { }
         return value;
+    }
+}
+
+internal static class Surfaces
+{
+    /// <summary>An offscreen surface on the adapter whose name contains -adapter, or WARP / the default GPU.</summary>
+    public static OffscreenSurface Make(Args a, float scale)
+    {
+        if (a.Adapter is null) return new OffscreenSurface(a.Width, a.Height, scale, a.Hardware);
+        using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+        for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+        {
+            using (adapter)
+            {
+                if (adapter.Description1.Description.Contains(a.Adapter, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"adapter: {adapter.Description1.Description}");
+                    return new OffscreenSurface(a.Width, a.Height, scale, adapter);
+                }
+            }
+        }
+        throw new ArgumentException($"No adapter matches \"{a.Adapter}\".");
+    }
+}
+
+internal static partial class Preview
+{
+    public static int Stage(Args a)
+    {
+        if (a.Out is null || a.Layer is null) return 2;
+        var factory = GpuBackgrounds.Factories(new BackgroundOptions()).FirstOrDefault(f => f.Id == a.Layer);
+        if (factory is null) return 2;
+        Directory.CreateDirectory(a.Out);
+        var breaker = (Lunalyr.Core.Lyrics.Readings.IWordBreaker)Lunalyr.Core.Lyrics.Readings.SimpleWordBreaker.Instance;
+        using var surface = Surfaces.Make(a, 1.25f);
+        using var background = factory.Create();
+        using var lyrics = new Lunalyr.Render.Compositions.EditorialFactory(breaker).Create();
+        surface.Prepare(background);
+        surface.Prepare(lyrics);
+        var song = Lunalyr.Tools.CompositionPreview.Fixtures.English();
+        var scene = song with { Palette = Palettes.Named(a.Palettes[0]) };
+        var changed = song with { Palette = Palettes.Named("two") };
+        var name = a.Layer.Replace('.', '-') + (a.Adapter is null ? "" : "-" + a.Adapter.ToLowerInvariant());
+        void Shot(SceneSnapshot s, double from, double to, string label)
+        {
+            for (var t = from; t < to; t += 1.0 / 30) surface.Draw([background, lyrics], s, t, true, 10 + t, 1.0 / 30);
+            surface.Draw([background, lyrics], s, to, true, 10 + to, 1.0 / 30);
+            var file = Path.Combine(a.Out, $"stage-{name}-{label}.png");
+            surface.SavePng(file);
+            Console.WriteLine(file);
+        }
+        Shot(scene, 8.5, 10.25, "10.25s");
+        Shot(scene, 10.25, 12.9, "12.9s");
+        // The cover changes at 13 s: the colours fade, the motion carries on.
+        Shot(changed, 12.9, 13.4, "palette-change-0.4s");
+        Shot(changed, 13.4, 15.9, "palette-change-2.9s");
+        return 0;
     }
 }
