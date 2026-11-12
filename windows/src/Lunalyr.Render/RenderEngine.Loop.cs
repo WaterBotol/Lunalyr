@@ -256,7 +256,7 @@ public sealed partial class RenderEngine
                 s.Plan = plan;
                 s.Rate = rate;
                 s.NextDue = now;
-                _log.Debug($"Surface {i}: {rate} at {s.Window.Monitor.RefreshHz} Hz -> sync interval {plan.SyncInterval}"
+                _log.Debug($"{(s.IsFloating ? "Floating lyrics" : $"Surface {i}")}: {rate} at {s.Window.Monitor.RefreshHz} Hz -> sync interval {plan.SyncInterval}"
                     + (plan.IsGated ? $", every {plan.GatePeriod * 1000:0.0} ms" : ""));
                 changed = true;
             }

@@ -20,6 +20,9 @@ internal sealed record FloatingHooks(Func<IReadOnlyList<DisplayChoice>> Displays
 
 internal static class FloatingLyricsSection
 {
+    /// <summary>The section's tag, so `--settings-page floating` can bring it into view.</summary>
+    public const string SectionTag = "floating-lyrics";
+
     /// <summary>"Show lyrics": on the desktop or floating over the apps; the style controls below edit the chosen one's.</summary>
     public static void AddSurface(StackPanel page, SettingsContext ctx)
     {
@@ -41,6 +44,8 @@ internal static class FloatingLyricsSection
     public static void AddFloating(StackPanel page, SettingsContext ctx, FloatingHooks hooks)
     {
         var section = Page();
+        section.Tag = SectionTag;
+        section.Margin = new Thickness(0, 18, 0, 0);
         Section(section, "Floating lyrics");
 
         // Size: the presets, and the text size itself.
