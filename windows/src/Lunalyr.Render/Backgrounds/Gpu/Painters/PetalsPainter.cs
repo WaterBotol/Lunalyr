@@ -13,13 +13,15 @@ internal sealed class PetalsPainter : ILinePainter
     private const int Layers = 3;
     private static readonly float[] Reach = [0.17f, 0.30f, 0.45f];     // petal length, as a share of the shorter side
     private static readonly float[] Opacity = [0.13f, 0.11f, 0.09f];
-    private readonly ID2D1PathGeometry?[] _layers = new ID2D1PathGeometry?[Layers];
+    private readonly ID2D1GeometryRealization?[] _layers = new ID2D1GeometryRealization?[Layers];
+    private readonly Realizations _shapes = new();
     private readonly float[] _rate = new float[Layers];
     private readonly float[] _start = new float[Layers];
 
     public void Prepare(ID2D1DeviceContext dc, ID2D1Factory1 factory, Vector2 size, float scale, int seed)
     {
         Release();
+        _shapes.Use(dc);
         var petals = 5 + (int)(Hash(seed, 0, 1) * 5);   // 5...9
         var unit = MathF.Min(size.X, size.Y);
         for (var layer = 0; layer < Layers; layer++)
@@ -28,7 +30,7 @@ internal sealed class PetalsPainter : ILinePainter
             var breadth = length * MathF.Tan(MathF.PI / petals) * Range(seed, layer, 2, 0.75f, 1.0f);
             var inner = length * (layer == 0 ? 0.02f : 0.25f);
             var offset = layer % 2 == 1 ? MathF.PI / petals : 0;
-            var path = factory.CreatePathGeometry();
+            using var path = factory.CreatePathGeometry();
             using (var sink = path.Open())
             {
                 for (var k = 0; k < petals; k++)
@@ -42,7 +44,8 @@ internal sealed class PetalsPainter : ILinePainter
                 }
                 sink.Close();
             }
-            _layers[layer] = path;
+            // Tessellated once here, turned each frame.
+            _layers[layer] = _shapes.Stroke(path, 0.9f * scale);
             var direction = (layer % 2 == 0) == (Hash(seed, layer, 3) < 0.5f) ? 1f : -1f;
             _rate[layer] = direction * Range(seed, layer, 4, 0.025f, 0.06f) / (1 + layer * 0.5f);
             _start[layer] = Hash(seed, layer, 5) * Tau;
@@ -53,13 +56,12 @@ internal sealed class PetalsPainter : ILinePainter
     {
         var found = dc.Transform;
         var centre = frame.Size * 0.5f;
-        var width = 0.9f * frame.Scale;
         for (var layer = 0; layer < Layers; layer++)
         {
             var geometry = _layers[layer];
             if (geometry is null) continue;
             dc.Transform = Matrix3x2.CreateRotation(Angle(frame.Phase, _rate[layer], _start[layer])) * Matrix3x2.CreateTranslation(centre) * found;
-            dc.DrawGeometry(geometry, frame.Ink(Opacity[layer]), width);
+            _shapes.Draw(geometry, frame.Ink(Opacity[layer]));
         }
         dc.Transform = found;
     }
@@ -71,6 +73,7 @@ internal sealed class PetalsPainter : ILinePainter
             _layers[i]?.Dispose();
             _layers[i] = null;
         }
+        _shapes.Dispose();
     }
 
     public void Dispose() => Release();

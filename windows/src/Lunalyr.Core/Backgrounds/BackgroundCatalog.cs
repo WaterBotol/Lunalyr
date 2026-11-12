@@ -6,7 +6,11 @@
 
 namespace Lunalyr.Core.Backgrounds;
 
-/// <summary>How much a GPU effect costs per pixel, measured on this port's shaders.</summary>
+/// <summary>
+/// How much a GPU effect costs, measured on this port's shaders: the whole frame on the Intel integrated GPU at
+/// 2560×1440 with the standard pixel budget (docs/measurements/gpu-effects): Light up to 1.1 ms, Medium up to 1.8 ms,
+/// Heavy above.
+/// </summary>
 public enum GpuEffectCost
 {
     /// <summary>Cheap enough to leave running on battery or an integrated GPU.</summary>
@@ -42,17 +46,17 @@ public static class GpuEffectCatalog
     public static IReadOnlyList<GpuEffect> All { get; } =
     [
         new("plasma", "Plasma", GpuEffectCost.Light),
-        new("kaleido", "Kaleidoscope", GpuEffectCost.Medium),
-        new("aurora", "Aurora", GpuEffectCost.Light),
-        new("fractal", "Fractal", GpuEffectCost.Heavy),
-        new("liquid", "Liquid", GpuEffectCost.Medium),
-        new("warp", "Marble", GpuEffectCost.Medium),
+        new("kaleido", "Kaleidoscope", GpuEffectCost.Light),
+        new("aurora", "Aurora", GpuEffectCost.Medium),
+        new("fractal", "Fractal", GpuEffectCost.Light),
+        new("liquid", "Liquid", GpuEffectCost.Light),
+        new("warp", "Marble", GpuEffectCost.Heavy),
         new("nebula", "Nebula", GpuEffectCost.Heavy),
-        new("voronoi", "Voronoi", GpuEffectCost.Medium),
-        new("orbs", "Orbs", GpuEffectCost.Medium),
-        new("silk", "Silk", GpuEffectCost.Light),
+        new("voronoi", "Voronoi", GpuEffectCost.Heavy),
+        new("orbs", "Orbs", GpuEffectCost.Light),
+        new("silk", "Silk", GpuEffectCost.Medium),
         new("waves", "Waves", GpuEffectCost.Heavy),
-        new("helix", "Helix", GpuEffectCost.Heavy),
+        new("helix", "Helix", GpuEffectCost.Medium),
         new("ripple", "Ripple", GpuEffectCost.Light),
         new("mirror", "Mirror", GpuEffectCost.Light),
         new("wormhole", "Wormhole", GpuEffectCost.Light),
@@ -60,9 +64,9 @@ public static class GpuEffectCatalog
         new("vortex", "Vortex", GpuEffectCost.Light),
         new("orbit", "Orbit", GpuEffectCost.Light),
         new("bubbles", "Bubbles", GpuEffectCost.Medium),
-        new("galaxy", "Galaxy", GpuEffectCost.Medium),
-        new("strata", "Strata", GpuEffectCost.Light),
-        new("clouds", "Clouds", GpuEffectCost.Medium),
+        new("galaxy", "Galaxy", GpuEffectCost.Light),
+        new("strata", "Strata", GpuEffectCost.Medium),
+        new("clouds", "Clouds", GpuEffectCost.Heavy),
         new("curtains", "Curtains", GpuEffectCost.Light),
         new("ribbons", "Ribbons", GpuEffectCost.Light),
         new("prism", "Prism", GpuEffectCost.Light),

@@ -6,6 +6,7 @@
 //   GpuEffectsPreview one -layer shader:plasma -out <file.png> [-size 1280x720] [-time 8] [-palette dark] [-hardware]
 //       One frame of one layer.
 //   GpuEffectsPreview bench -adapter <name part> [-size 2560x1440] [-frames 240] [-kind all] [-only id,id] [-out file.md]
+//                     [-budget pixels]  (every effect at this pixel budget instead of its own)
 //       Per-layer GPU time (D3D11 timestamps around the whole frame) and render-thread CPU time on that adapter.
 //
 // Palettes are made up (no covers needed): "dark" (deep navy, wine and teal), "bright" (pale yellow, pink and sky) and
@@ -42,7 +43,7 @@ return arguments.Command switch
 };
 
 internal sealed record Args(string Command, string? Out, string Kind, string[]? Only, double[] Times, int Width, int Height,
-                            string[] Palettes, bool Hardware, string? Layer, string? Adapter, int Frames)
+                            string[] Palettes, bool Hardware, string? Layer, string? Adapter, int Frames, double? Budget)
 {
     public static Args? Parse(string[] args)
     {
@@ -54,6 +55,7 @@ internal sealed record Args(string Command, string? Out, string Kind, string[]? 
         int width = 0, height = 0, frames = 240;
         string[] palettes = ["dark", "bright", "two"];
         var hardware = false;
+        double? budget = null;
         for (var i = 1; i < args.Length; i++)
         {
             string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value");
@@ -76,17 +78,18 @@ internal sealed record Args(string Command, string? Out, string Kind, string[]? 
                 case "-layer": layer = Next(); break;
                 case "-adapter": adapter = Next(); break;
                 case "-frames": frames = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "-budget": budget = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 default: return null;
             }
         }
         var command = args[0].ToLowerInvariant();
         if (width == 0) (width, height) = command switch { "sheet" => (400, 225), "bench" => (2560, 1440), _ => (1280, 720) };
-        return new Args(command, output, kind, only, times, width, height, palettes, hardware, layer, adapter, frames);
+        return new Args(command, output, kind, only, times, width, height, palettes, hardware, layer, adapter, frames, budget);
     }
 
     public IReadOnlyList<IRenderLayerFactory> Factories()
     {
-        var options = new BackgroundOptions();
+        var options = new BackgroundOptions { PixelBudget = Budget };
         return [.. GpuBackgrounds.Factories(options).Where(f =>
             (Kind == "all" || (Kind == "effects" && f.Id.StartsWith("shader:", StringComparison.Ordinal))
                            || (Kind == "patterns" && f.Id.StartsWith("pattern:", StringComparison.Ordinal)))

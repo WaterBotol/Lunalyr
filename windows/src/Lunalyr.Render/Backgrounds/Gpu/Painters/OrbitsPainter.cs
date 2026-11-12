@@ -16,9 +16,13 @@ internal sealed class OrbitsPainter : ILinePainter
     private readonly float[] _turnStart = new float[Count];
     private readonly float[] _beadRate = new float[Count];
     private readonly float[] _beadStart = new float[Count];
+    private readonly ID2D1GeometryRealization?[] _rings = new ID2D1GeometryRealization?[Count];
+    private readonly Realizations _shapes = new();
 
     public void Prepare(ID2D1DeviceContext dc, ID2D1Factory1 factory, Vector2 size, float scale, int seed)
     {
+        Release();
+        _shapes.Use(dc);
         var reach = 0.5f * MathF.Max(size.X, size.Y);
         for (var i = 0; i < Count; i++)
         {
@@ -30,6 +34,9 @@ internal sealed class OrbitsPainter : ILinePainter
             _turnStart[i] = Hash(seed, i, 5) * Tau;
             _beadRate[i] = direction * Range(seed, i, 6, 0.15f, 0.45f) / (0.4f + step);
             _beadStart[i] = Hash(seed, i, 7) * Tau;
+            // Tessellated once here, turned each frame.
+            using var ellipse = factory.CreateEllipseGeometry(new Ellipse(Vector2.Zero, _rx[i], _ry[i]));
+            _rings[i] = _shapes.Stroke(ellipse, 0.8f * scale);
         }
     }
 
@@ -37,20 +44,27 @@ internal sealed class OrbitsPainter : ILinePainter
     {
         var found = dc.Transform;
         var centre = frame.Size * 0.5f;
-        var width = 0.8f * frame.Scale;
         var bead = 1.7f * frame.Scale;
         for (var i = 0; i < Count; i++)
         {
-            dc.Transform = Matrix3x2.CreateRotation(Angle(frame.Phase, _turnRate[i], _turnStart[i]), centre) * found;
-            dc.DrawEllipse(new Ellipse(centre, _rx[i], _ry[i]), frame.Ink(0.07f + 0.05f * (1 - i / (float)Count)), width);
+            dc.Transform = Realizations.Turned(Angle(frame.Phase, _turnRate[i], _turnStart[i]), centre, found);
+            _shapes.Draw(_rings[i], frame.Ink(0.07f + 0.05f * (1 - i / (float)Count)));
             var a = Angle(frame.Phase, _beadRate[i], _beadStart[i]);
-            var at = centre + new Vector2(_rx[i] * MathF.Cos(a), _ry[i] * MathF.Sin(a));
+            var at = new Vector2(_rx[i] * MathF.Cos(a), _ry[i] * MathF.Sin(a));
             dc.FillEllipse(new Ellipse(at, bead, bead), frame.Ink(0.26f));
         }
         dc.Transform = found;
     }
 
-    public void Release() { }
+    public void Release()
+    {
+        for (var i = 0; i < Count; i++)
+        {
+            _rings[i]?.Dispose();
+            _rings[i] = null;
+        }
+        _shapes.Dispose();
+    }
 
-    public void Dispose() { }
+    public void Dispose() => Release();
 }
