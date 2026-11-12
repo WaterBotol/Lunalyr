@@ -40,12 +40,14 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
 - **Player:** `DemoMediaSessionSource` (`src/Lunalyr.Shell/Demo/`) stands in for GSMTC: one session, "Lunalyr demo",
   always Playing, a timeline that advances in real time from launch and loops through the demo songs. There is no
   audio at all, and every command (`TryPlayAsync`…) is refused (returns false). No system media session is opened.
-- **Songs** (`DemoSongs`, invented, built with `LyricBuilder` through the real TTML parser): "Neon Harbour" (37 s,
-  English: two invented production credits shown by the credits layer after the opening title, backing vocals at ~6 s, a duet answer held under the next line at ~11 s, a held note at ~14–18 s, an
-  instrumental break at 18–24.5 s, a wrapping line at ~25–30 s) then "Evening Road" (30 s, Japanese with
-  kanji, partly unspaced and partly spaced by phrase; its readings are worked out word by word by the app's own readings
-  service, so they show under each phrase). Each song has
-  a cover painted in code (`DemoCover`), so the album colours run through the real decode → palette path.
+- **Songs** (`DemoSongs`, invented, built with `LyricBuilder` through the real TTML parser): "Neon Harbour" (45 s,
+  English: an 8 s intro with the full opening title, then two invented production credits shown by the credits layer
+  once it has gone, backing vocals at ~14 s, a duet answer held under the next line at ~19 s, a held note at ~22–26 s,
+  an instrumental break at 26–32.5 s, a wrapping line at ~33–38 s) then "夕暮れの窓" (35 s, Japanese: a 5 s intro whose
+  opening title shows the title's reading, "Yuugure no Mado"; kanji, partly unspaced and partly spaced by phrase; its
+  readings are worked out word by word by the app's own readings service, so they show under each phrase). Each song
+  has a cover painted in code (`DemoCover`), so the album colours and the opening title's cover run through the real
+  decode path.
 - **Lyrics:** `DemoLyricLookup` answers only the demo songs; no lyric service is built and nothing touches the network
   or the lyric cache.
 - **Data folder:** its own (`…\Lunalyr\Demo`), so it never changes the real settings; that also makes it a separate

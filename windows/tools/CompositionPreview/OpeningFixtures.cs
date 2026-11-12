@@ -120,6 +120,14 @@ public static class OpeningFixtures
         Add("h-no-artwork", Scene("Human Nature", "Yot Club", "Rare Hymns", standard, null), held);
         Add("i-no-lyrics", Scene("Human Nature", "Yot Club", "Rare Hymns", null, Warm.Value) with { Status = "No lyrics found for this song" });
         Add("j-joined-part-way", Scene("Human Nature", "Yot Club", "Rare Hymns", standard, Warm.Value), joined: 95);
+        // The --demo songs as the app presents them: their own lyrics, painted covers and (for the Japanese title) reading.
+        foreach (var (name, demo) in new[] { ("k-demo-english", DemoSongs.Songs[0]), ("l-demo-japanese", DemoSongs.Songs[1]) })
+        {
+            var presented = Lunalyr.Shell.Lyrics.LyricPresentation.Prepare(demo.Lyrics, new LyricQuery(demo.Title, demo.Artist, demo.Album, demo.Duration), true);
+            var scene = Scene(demo.Title, demo.Artist, demo.Album, presented, Cover(demo.Cover),
+                              reading: LyricRomanizer.ContainsNonLatin(demo.Title) ? JapaneseReading(demo.Title) : null);
+            Add(name, scene, [.. CardMoments(scene).Where(moment => moment.Item1 is "2-entering" or "3-holding")]);
+        }
         return songs;
     }
 }
