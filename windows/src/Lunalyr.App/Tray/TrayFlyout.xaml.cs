@@ -50,6 +50,7 @@ public sealed partial class TrayFlyout : Window
     private CoverArt? _coverShown;
     private TrayFlyoutState? _state;
     private int _chromeHeight;
+    private FocusState? _focusWhenPlaced;
 
     internal TrayFlyout(AppHost host)
     {
@@ -121,7 +122,10 @@ public sealed partial class TrayFlyout : Window
         Activate();
         Win32.SetForegroundWindow(_hwnd);
         _timer.Start();
-        Focus(keyboard ? FocusState.Keyboard : FocusState.Programmatic);
+        var how = keyboard ? FocusState.Keyboard : FocusState.Programmatic;
+        // The first time the panel isn't laid out yet: the focus goes in once it is placed.
+        if (_placedOnce) Focus(how);
+        else _focusWhenPlaced = how;
         _host.Log.App.Info("Tray panel opened.");
     }
 
@@ -166,13 +170,21 @@ public sealed partial class TrayFlyout : Window
         var contentHeight = Panel.DesiredSize.Height;
         if (contentHeight <= 0) return;
         if (_chromeHeight == 0 && AppWindow.IsVisible) _chromeHeight = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
-        var width = FlyoutPlacement.ToPixels(WidthDip, dpi) + Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
-        var height = FlyoutPlacement.ToPixels(contentHeight, dpi) + _chromeHeight;
-        var rect = FlyoutPlacement.Place(width, height, _anchor, monitor, work, FlyoutPlacement.ToPixels(FlyoutPlacement.MarginDip, dpi));
+        // The window's rectangle includes invisible resize borders; the gap to the taskbar is measured from what shows.
+        var hidden = FlyoutNative.InvisibleBorders(_hwnd);
+        var width = FlyoutPlacement.ToPixels(WidthDip, dpi) + Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width) - hidden.Left - hidden.Right;
+        var height = FlyoutPlacement.ToPixels(contentHeight, dpi) + _chromeHeight - hidden.Top - hidden.Bottom;
+        var visible = FlyoutPlacement.Place(width, height, _anchor, monitor, work, FlyoutPlacement.ToPixels(FlyoutPlacement.MarginDip, dpi));
+        var rect = new PixelRect(visible.Left - hidden.Left, visible.Top - hidden.Top, visible.Right + hidden.Right, visible.Bottom + hidden.Bottom);
         var current = new PixelRect(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Position.X + AppWindow.Size.Width,
             AppWindow.Position.Y + AppWindow.Size.Height);
         if (current != rect) AppWindow.MoveAndResize(new RectInt32(rect.Left, rect.Top, rect.Width, rect.Height));
         _placedOnce = true;
+        if (_focusWhenPlaced is { } how)
+        {
+            _focusWhenPlaced = null;
+            Focus(how);
+        }
     }
 
     private void ApplyTheme()

@@ -6,7 +6,8 @@ using Microsoft.UI.Xaml;
 namespace Lunalyr.App;
 
 /// <summary>
-/// The WinUI application, started only when a window is first needed. It never quits on its own: the tray decides
+/// The WinUI application, started at launch right after the tray icon (no window until one is asked for: the tray
+/// flyout, settings). It never quits on its own: the tray decides
 /// (<see cref="DispatcherShutdownMode.OnExplicitShutdown"/>), so closing the settings window leaves Lunalyr running.
 /// </summary>
 public partial class App : Application

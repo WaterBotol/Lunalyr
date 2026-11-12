@@ -49,6 +49,27 @@ internal static unsafe partial class FlyoutNative
         return (ToPixelRect(info.rcMonitor), ToPixelRect(info.rcWork), dpi);
     }
 
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetWindowRect(nint hwnd, out Win32.RECT rect);
+
+    [LibraryImport("dwmapi.dll")]
+    private static partial int DwmGetWindowAttribute(nint hwnd, int attribute, out Win32.RECT value, int size);
+
+    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    /// <summary>
+    /// The invisible resize borders around the visible frame (left, top, right, bottom), in pixels: the window's own
+    /// rectangle is that much larger than what shows. Zeros when DWM doesn't say.
+    /// </summary>
+    public static (int Left, int Top, int Right, int Bottom) InvisibleBorders(nint hwnd)
+    {
+        if (!GetWindowRect(hwnd, out var window) || DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out var frame, sizeof(Win32.RECT)) != 0)
+            return (0, 0, 0, 0);
+        return (Math.Max(0, frame.Left - window.Left), Math.Max(0, frame.Top - window.Top),
+            Math.Max(0, window.Right - frame.Right), Math.Max(0, window.Bottom - frame.Bottom));
+    }
+
     /// <summary>Asks for Windows 11's rounded corners and a border that matches the flyout's theme.</summary>
     public static void StyleWindow(nint hwnd, bool dark)
     {

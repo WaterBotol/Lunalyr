@@ -7,10 +7,10 @@ using Lunalyr.Shell.Flyout;
 namespace Lunalyr.App.Tray;
 
 /// <summary>
-/// The app's hidden top-level window and its notification-area icon, in plain Win32 so the app idles without XAML.
+/// The app's hidden top-level window and its notification-area icon, in plain Win32 (up before WinUI starts).
 /// The window also receives activations from a second launch (<c>WM_COPYDATA</c>), Explorer restarts
 /// (<c>TaskbarCreated</c>) and work posted from other threads (<see cref="Post"/>). Everything runs on the UI thread,
-/// whichever message loop (the plain one or WinUI's) is pumping it.
+/// pumped by WinUI's message loop.
 /// </summary>
 internal sealed unsafe class TrayHost : IDisposable
 {
