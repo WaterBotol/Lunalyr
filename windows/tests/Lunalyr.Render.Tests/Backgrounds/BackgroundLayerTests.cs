@@ -254,6 +254,45 @@ public sealed class BackgroundLayerTests : IDisposable
         Assert.True(row.Max(p => p.R + p.G + p.B) - row.Min(p => p.R + p.G + p.B) > 20);
     }
 
+    // The Mac slows the ambient wallpaper under Reduce Motion (NowPlayingView: speed × reducedMotionRate) on a clock that
+    // advances at the current rate, so the field never jumps when the setting changes.
+    [Fact]
+    public void TheFieldSlowsUnderTheScenesReduceMotionWithoutAJump()
+    {
+        var palette = PaletteMapper.FromAlbum(new AlbumWallpaperPalette(AlbumColourGrid.FallbackHsb));
+        var calm = Quiet(palette) with { ReduceMotion = true };
+        using var layer = new GradientLayerFactory(Plain).Create();
+        _surface.Prepare(layer);
+        var before = Frame(layer, Quiet(palette), 100);
+        Assert.Equal(0, Difference(before, Frame(layer, calm, 100)));
+        var slowed = Frame(layer, calm, 160);
+        using var full = new GradientLayerFactory(Plain).Create();
+        _surface.Prepare(full);
+        Frame(full, Quiet(palette), 100);
+        var moved = Frame(full, Quiet(palette), 160);
+        Assert.True(Difference(before, slowed) < Difference(before, moved) * 0.5,
+            $"a minute under Reduce Motion: {Difference(before, slowed)} vs {Difference(before, moved)}");
+        Assert.True(layer.IsAnimating); // still moving, at 15%
+        // The options' own Reduce Motion is the same 15% (ColourField.ReducedMotionRate).
+        Assert.Equal(0.15 * ColourField.Clock(60, 1, false), ColourField.Clock(60, 1, true), 9);
+    }
+
+    [Fact]
+    public void TheColourGradientHoldsStillUnderTheScenesReduceMotion()
+    {
+        var two = new Palette(new Vector4(0.1f, 0.1f, 0.1f, 1),
+            [new(0.9f, 0.2f, 0.2f, 1), new(0.9f, 0.2f, 0.2f, 1), new(0.5f, 0.5f, 0.5f, 1), new(0.2f, 0.2f, 0.9f, 1), new(0.2f, 0.2f, 0.9f, 1)],
+            Vector4.One, Vector4.One);
+        using var layer = new ColourLayerFactory(Plain).Create();
+        _surface.Prepare(layer);
+        var calm = Quiet(two) with { ReduceMotion = true };
+        var c = Frame(layer, calm, 0);
+        Assert.Equal(0, Difference(c, Frame(layer, calm, 10)));
+        Assert.False(layer.IsAnimating);
+        Frame(layer, Quiet(two), 10);
+        Assert.True(layer.IsAnimating);
+    }
+
     [Fact]
     public void TheColourGradientTiltsSlowlyAndHoldsStillUnderReduceMotion()
     {

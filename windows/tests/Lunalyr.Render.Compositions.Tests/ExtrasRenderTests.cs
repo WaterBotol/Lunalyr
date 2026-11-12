@@ -166,6 +166,25 @@ public sealed class ExtrasRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
+    // The Mac presses a rolling word's tile behind the whole unit (SpokenTypographyView: the CutoutTile behind a
+    // RollingUnit, padded by labelReach): with readings shown the tile reaches down over them too.
+    [Theory]
+    [InlineData("spoken")]
+    [InlineData("cascade")]
+    public void ARollingTileCoversTheWordAndItsReading(string composition)
+    {
+        static bool Green(int r, int g, int b) => g > 120 && g > r + 50 && g > b + 30;
+        var style = LyricStyle.Default with { Reveal = "cutoutHighlight", HighlightMode = "custom", HighlightCustom = "#2BD96B" };
+        var below = ExtrasFixtures.JapaneseWords(style);
+        var off = below with { Style = below.Style with { Readings = ReadingPlacement.Off } };
+        using var layer = Layer(composition);
+        var withReadings = Count(Frame(layer, below, 12.9), Green);
+        var withoutReadings = Count(Frame(layer, off, 12.9), Green);
+        Assert.True(withoutReadings > 300, $"{withoutReadings}");
+        Assert.True(withReadings > withoutReadings * 1.25, $"{withReadings} vs {withoutReadings}");
+        Assert.Empty(_sink.Entries);
+    }
+
     [Fact]
     public void TheHighlightColourFollowsTheSetting()
     {

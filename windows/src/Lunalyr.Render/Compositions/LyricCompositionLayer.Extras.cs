@@ -47,6 +47,9 @@ internal abstract partial class LyricCompositionLayer
 
     // ---- Highlight tiles ---------------------------------------------------------------------------------------------
 
+    /// <summary>A cutout tile's tilt as drawn, degrees: none under Reduce Motion (the Mac's <c>CutoutTile</c>).</summary>
+    protected double TileTilt => ReduceMotion ? 0 : CutoutTile.Tilt;
+
     /// <summary>
     /// The tiles of one run's sung words (<paramref name="segments"/>) on its <paramref name="label"/>: behind it, or
     /// (with <paramref name="overlay"/>) the label's ink in the tile's text colour where the tiles have pressed in.
@@ -54,7 +57,7 @@ internal abstract partial class LyricCompositionLayer
     private void DrawRunTiles(ID2D1DeviceContext dc, ReadOnlySpan<HighlightSegment> segments, Ink label, in Matrix3x2 labelWorld,
                               double pointSize, bool rightToLeft, double time, double visibility, bool overlay)
     {
-        var count = HighlightSegment.Marks(segments, time, false, _marks);
+        var count = HighlightSegment.Marks(segments, time, ReduceMotion, _marks);
         for (var k = 0; k < count; k++) DrawTile(dc, label, labelWorld, pointSize, rightToLeft, _marks[k], visibility, overlay);
     }
 
@@ -77,7 +80,7 @@ internal abstract partial class LyricCompositionLayer
             _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * mark.Pose.Opacity * visibility));
             float w = (float)rect.Width, h = (float)rect.Height;
             dc.Transform = Matrix3x2.CreateScale((float)mark.Pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
-                * Matrix3x2.CreateRotation(Radians(CutoutTile.Tilt), new Vector2(w / 2, h / 2))
+                * Matrix3x2.CreateRotation(Radians(TileTilt), new Vector2(w / 2, h / 2))
                 * Matrix3x2.CreateTranslation((float)(rect.X - width / 2), (float)(rect.Y - height / 2))
                 * labelWorld;
             var radius = Points(CutoutTile.CornerRadius);
@@ -90,6 +93,39 @@ internal abstract partial class LyricCompositionLayer
         var colour = _ink.TileText;
         label.DrawTinted(dc, labelWorld, new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown)),
                          new InkClip((float)(pressed.X - width / 2), (float)(pressed.X + pressed.Width - width / 2)));
+    }
+
+    /// <summary>
+    /// A highlight tile filling <paramref name="rect"/> (in <paramref name="world"/>'s units, which place a whole unit
+    /// about its centre): pressed in from the leading edge by the pose's width, given the cutout tilt, at the pose's
+    /// opacity. The way the rolling stages tile a word with its reading (the Mac's <c>CutoutTile</c> behind a
+    /// <c>RollingUnit</c>).
+    /// </summary>
+    protected void DrawTileRect(ID2D1DeviceContext dc, in Matrix3x2 world, RectD rect, HighlightPose pose, bool rightToLeft,
+                                double visibility)
+    {
+        if (_paint is null || !pose.IsVisible || !(visibility > 0.002) || !(rect.Width > 0) || !(rect.Height > 0)) return;
+        var tile = _ink.TileColour;
+        _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * pose.Opacity * visibility));
+        float w = (float)rect.Width, h = (float)rect.Height;
+        dc.Transform = Matrix3x2.CreateScale((float)pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
+            * Matrix3x2.CreateRotation(Radians(TileTilt), new Vector2(w / 2, h / 2))
+            * Matrix3x2.CreateTranslation((float)rect.X, (float)rect.Y)
+            * world;
+        var radius = Points(CutoutTile.CornerRadius);
+        dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, w, h), radius, radius), _paint);
+    }
+
+    /// <summary>
+    /// The colour a word takes on a highlight tile at <paramref name="pose"/> (straight alpha): the ink's tile text, as
+    /// strong as the tile is to carry it, times <paramref name="visibility"/> and <paramref name="share"/> (a reading
+    /// takes <c>LyricHighlight.ReadingOpacity</c>).
+    /// </summary>
+    protected Vector4 TileTextColour(HighlightPose pose, double visibility, double share = 1)
+    {
+        var shown = LyricHighlightTiming.TextOpacity(pose.Opacity, _ink.TileTextSwitch) * visibility * share;
+        var colour = _ink.TileText;
+        return new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown));
     }
 
     // ---- Credits ---------------------------------------------------------------------------------------------------
@@ -110,7 +146,7 @@ internal abstract partial class LyricCompositionLayer
             if (!(level > 0.004)) continue;
             var plan = CreditPlan(cue, box);
             var exit = LayerExit.Pose(cue.Title is not null ? LayerExitKind.Title : LayerExitKind.Credit,
-                                      CreditCues.ExitProgress(cue, time), box.Height, cue.Top);
+                                      CreditCues.ExitProgress(cue, time), box.Height, cue.Top, ReduceMotion);
             var scale = plan.Fit * exit.Scale;
             var centre = new Vector2(origin.X + (float)(Stage.Width * 0.5),
                                      origin.Y + (float)(Stage.Height * (cue.Top ? 0.1 : 0.9) + exit.Offset));

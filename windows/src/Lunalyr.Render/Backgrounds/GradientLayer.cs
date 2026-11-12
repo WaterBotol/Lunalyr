@@ -55,6 +55,7 @@ public sealed class GradientLayer : IRenderLayer
     private bool _halfFloat;
     private double _lastNow;
     private bool _failed;
+    private AmbientClock _clock;
 
     internal GradientLayer(BackgroundOptions options, Logger log)
     {
@@ -125,7 +126,8 @@ public sealed class GradientLayer : IRenderLayer
         try
         {
             Observe(frame.Scene.Palette, now);
-            var clock = ColourField.Clock(now, _options.Speed, _options.ReduceMotion);
+            // Reduce Motion (the options' or the scene's) slows the field to 15%; a change of it never jumps the field.
+            var clock = _clock.At(now, _options.Speed, _options.ReduceMotion || frame.Scene.ReduceMotion);
             var progress = _fade.Progress(now);
             var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);
             if (progress < 1)
@@ -274,5 +276,32 @@ public sealed class GradientLayer : IRenderLayer
             ReleaseBrushes();
             ReleaseBitmap();
         }
+    }
+}
+
+/// <summary>
+/// The colour field's clock (<see cref="ColourField.Clock"/>), kept continuous when Reduce Motion changes while it runs:
+/// the Mac advances its gradient clock at the current rate, so turning Reduce Motion on or off changes how fast the field
+/// moves from then on, never where it is. Until the first change it is exactly <see cref="ColourField.Clock"/>.
+/// </summary>
+internal struct AmbientClock
+{
+    private bool _started;
+    private bool _reduceMotion;
+    private double _offset;
+
+    public double At(double wallSeconds, double speed, bool reduceMotion)
+    {
+        if (!_started)
+        {
+            _started = true;
+            _reduceMotion = reduceMotion;
+        }
+        else if (reduceMotion != _reduceMotion && double.IsFinite(wallSeconds))
+        {
+            _offset += ColourField.Clock(wallSeconds, speed, _reduceMotion) - ColourField.Clock(wallSeconds, speed, reduceMotion);
+            _reduceMotion = reduceMotion;
+        }
+        return ColourField.Clock(wallSeconds, speed, reduceMotion) + _offset;
     }
 }

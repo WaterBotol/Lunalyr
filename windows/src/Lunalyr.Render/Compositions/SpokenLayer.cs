@@ -103,17 +103,20 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         for (var i = 0; i < n; i++)
             if (prepared[i].Source.Start > time) { next = i; break; }
         var intensity = OrganicMotion.VocalIntensity(_window!.Words, time);
-        var cursor = RollingWords.Cursor(prepared, time, intensity, false);
-        var stacks = RollingWords.Stacks(cursor, false);
-        DrawStack(dc, stacks.Position, stacks.Opacity * presence, time, next, intensity, lineBase);
-        if (stacks.Count > 1) DrawStack(dc, stacks.SecondPosition, stacks.SecondOpacity * presence, time, next, intensity, lineBase);
+        var cursor = RollingWords.Cursor(prepared, time, intensity, ReduceMotion);
+        var stacks = RollingWords.Stacks(cursor, ReduceMotion);
+        // A word missing from the window's line ends releases its tile with the line on stage (the Mac's defaultEnd).
+        var lineEnd = LyricHighlightTiming.LineEnd(Sheet!.Lines[row].End, _window.Words);
+        DrawStack(dc, stacks.Position, stacks.Opacity * presence, time, next, intensity, lineBase, lineEnd);
+        if (stacks.Count > 1) DrawStack(dc, stacks.SecondPosition, stacks.SecondOpacity * presence, time, next, intensity, lineBase, lineEnd);
     }
 
     private void DrawStack(ID2D1DeviceContext dc, double position, double alpha, double time, int? next, double intensity,
-                           double lineBase)
+                           double lineBase, double defaultEnd)
     {
         var prepared = _prepared;
         var stage = Stage;
+        var reduce = ReduceMotion;
         var count = 0;
         for (var k = 0; k < prepared.Length; k++)
         {
@@ -128,10 +131,12 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             var motion = chosen.Motion(Kind);
             // "Cutout · Highlight": the word's tile, held until its own line ends, keeps it on the stage meanwhile.
             // Cutout's labels are tiles already and take none.
-            var tile = chosen.HighlightsSungWords() && !token.Tile && _window!.LineEnds.TryGetValue(token.Source, out var lineEnd)
-                ? LyricHighlightTiming.Pose(time, token.Source.Start, lineEnd, false) : HighlightPose.Hidden;
+            var tile = chosen.HighlightsSungWords() && !token.Tile
+                ? LyricHighlightTiming.Pose(time, token.Source.Start,
+                                            _window!.LineEnds.TryGetValue(token.Source, out var lineEnd) ? lineEnd : defaultEnd, reduce)
+                : HighlightPose.Hidden;
             _tiles[count] = tile;
-            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, motion,
+            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, reduce, motion,
                                                Options, eligible, tile.Opacity, Kind);
             _members[count] = k;
             _sizes[count] = unit.Size;
@@ -174,7 +179,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 // Cascade and Cutout fold an Unfold or Cutout · Fold entrance in about the unit's bottom edge
                 // (foreshortened). Spoken draws them without the fold, as it always has.
                 var fold = EntranceTransform.Make(state.Presentation.Progress, state.Presentation.Arrival, motion, token.PointSize,
-                                                  token.Direction, false, token.TurnLimit).Fold;
+                                                  token.Direction, reduce, token.TurnLimit).Fold;
                 if (fold != 0) entrance *= Fold(fold, unit.Size.Height);
             }
             var world =
@@ -185,32 +190,43 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 * Matrix3x2.CreateTranslation(origin.X + (float)centre.X, origin.Y + (float)centre.Y);
             var scale = (float)(slot.EntranceScale * fit * state.Scale);
             var progress = state.Presentation.Progress;
-            var blur = Combine(Points(motion.Blur(progress)), Points(state.Pose.Blur)) * scale;
+            var blur = Combine(Points(motion.Blur(progress, reduce)), Points(state.Pose.Blur)) * scale;
             // A cutout is unmasked from its leading edge while it arrives (cutouts follow the reveal itself).
-            var clip = InkClip.Leading(motion.PaperShown(progress), unit.Size.Width, token.Direction < 0);
+            var clip = InkClip.Leading(motion.PaperShown(reduce ? 1 : progress), unit.Size.Width, token.Direction < 0);
             var reveal = Span<double>.Empty;
             if (token.Parts.Count > 1)
             {
                 if (_reveal.Length < token.Parts.Count) _reveal = new double[token.Parts.Count * 2];
-                if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, intensity, false, Options, _reveal))
+                if (RollingTokenState.PartReveal(token, time, state.Presentation.Opacity, intensity, reduce, Options, _reveal))
                     reveal = _reveal.AsSpan(0, token.Parts.Count);
             }
             var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
-            var mark = new HighlightMark(0, 1, _tiles[m]);
             if (unit.Tile is not null)
             {
                 DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip);
             }
             else
             {
-                if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, opacity, overlay: false);
+                // "Cutout · Highlight": the tile lies behind the whole unit, word and reading, reaching a label's padding
+                // past it; where it has pressed in, both take the colour set on it.
+                var tile = _tiles[m];
+                var tileRect = tile.IsVisible ? RollingLabel.HighlightRect(unit.Size.Width, unit.Size.Height, Scale) : default;
+                if (tile.IsVisible) DrawTileRect(dc, world, tileRect, tile, token.RightToLeft, opacity);
                 unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
                                 GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
-                if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, opacity, overlay: true);
-                if (unit.Reading is { } reading && !state.Presentation.Preview)
-                    reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1, clip: clip);
+                var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
+                var reading = state.Presentation.Preview ? null : unit.Reading;
+                reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, clip: clip);
+                if (tile.IsVisible)
+                {
+                    var pressed = RollingLabel.Pressed(tileRect, tile.Width, token.RightToLeft);
+                    var on = new InkClip((float)pressed.X, (float)(pressed.X + pressed.Width));
+                    if (clip.IsSet) on = new InkClip(MathF.Max(on.Left, clip.Left), MathF.Min(on.Right, clip.Right));
+                    unit.Label.DrawTinted(dc, labelWorld, TileTextColour(tile, opacity), on);
+                    reading?.DrawTinted(dc, readingWorld, TileTextColour(tile, opacity, Core.Colour.LyricHighlight.ReadingOpacity), on);
+                }
             }
-            if (LyricSwipe.Shows(motion, progress, false)) DrawSwipe(dc, world, unit.Size, progress, token.Direction, motion, alpha);
+            if (LyricSwipe.Shows(motion, progress, reduce)) DrawSwipe(dc, world, unit.Size, progress, token.Direction, motion, alpha);
         }
     }
 
@@ -243,7 +259,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         }
         try
         {
-            DrawLabelParts(dc, token, unit, state, world, labelWorld, readingWorld, reading, scale, opacity, blur, boundaries, reveal);
+            DrawLabelParts(dc, token, unit, state, world, labelWorld, readingWorld, reading, scale, opacity, blur, boundaries, reveal,
+                           ReduceMotion);
         }
         finally
         {
@@ -254,18 +271,19 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private static void DrawLabelParts(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
                                        in Matrix3x2 world, in Matrix3x2 labelWorld, in Matrix3x2 readingWorld, Ink? reading,
                                        float scale, float opacity, float blur, ReadOnlySpan<double> boundaries,
-                                       ReadOnlySpan<double> reveal)
+                                       ReadOnlySpan<double> reveal, bool reduce)
     {
+        // Under Reduce Motion the label is simply there (no press, no tilt) and fades in with its word.
         var rightToLeft = token.RightToLeft;
         unit.Label.DrawShadow(dc, labelWorld, opacity, 1, boundaries, reveal, rightToLeft);
         reading?.DrawShadow(dc, readingWorld, opacity, 1);
 
         var width = (float)unit.Size.Width;
-        var pressed = (float)RollingLabel.TileWidth(state.Presentation.Arrival, false);
+        var pressed = (float)RollingLabel.TileWidth(state.Presentation.Arrival, reduce);
         var edge = rightToLeft ? width / 2 : -width / 2;
         var tileWorld =
             Matrix3x2.CreateTranslation(-edge, 0) * Matrix3x2.CreateScale(pressed, 1) * Matrix3x2.CreateTranslation(edge, 0)
-            * Matrix3x2.CreateRotation(Radians(RollingLabel.DrawnTilt)) * world;
+            * Matrix3x2.CreateRotation(Radians(reduce ? 0 : RollingLabel.DrawnTilt)) * world;
         unit.Tile!.Draw(dc, tileWorld, scale, opacity, blur, GlowSpec.None, 1);
 
         // Where the tile has pressed in (from the leading edge; the word and reading are centred on the unit) they take

@@ -131,3 +131,28 @@ public class HighlightTileTests
         Assert.Equal(1, shown, 3); // the normal timed fade cannot hide a held tile
     }
 }
+
+/// <summary>A rolling word's "Cutout · Highlight" tile (the Mac's CutoutTile behind a RollingUnit, padded by labelReach).</summary>
+public class RollingHighlightTileTests
+{
+    [Fact]
+    public void TheTileCoversTheWholeUnitAndALabelsPaddingMore()
+    {
+        // A unit 120 × 60 pixels at 2 pixels a point: 9 × 3 points more at each side, centred on the unit.
+        var rect = RollingLabel.HighlightRect(120, 60, 2);
+        Assert.Equal(new RectD(-78, -36, 156, 72), rect);
+        // A label's padding past an unlabelled word's: the tile is a label's size.
+        Assert.Equal(RollingLabel.PaddingX - RollingLabel.PlainPaddingX, RollingLabel.ReachX);
+        Assert.Equal(RollingLabel.PaddingY, RollingLabel.ReachY);
+    }
+
+    [Fact]
+    public void ThePressedPartGrowsFromTheLeadingEdge()
+    {
+        var rect = RollingLabel.HighlightRect(120, 60, 2);
+        Assert.Equal(rect with { Width = 39 }, RollingLabel.Pressed(rect, 0.25, rightToLeft: false));
+        Assert.Equal(rect with { X = rect.X + 117, Width = 39 }, RollingLabel.Pressed(rect, 0.25, rightToLeft: true));
+        Assert.Equal(rect, RollingLabel.Pressed(rect, 1.3, rightToLeft: false));
+        Assert.Equal(0, RollingLabel.Pressed(rect, -1, rightToLeft: true).Width);
+    }
+}

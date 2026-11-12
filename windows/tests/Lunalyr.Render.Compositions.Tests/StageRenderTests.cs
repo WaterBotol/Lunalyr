@@ -130,20 +130,66 @@ public sealed class StageRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Ported from StageMotionTests.swift: testEveryLayoutDrawsThroughHandOversAndReduceMotion (Reduce Motion is not in
-    // the scene snapshot), with the stage's exit as the line's own
+    // Ported from StageMotionTests.swift: testEveryLayoutDrawsThroughHandOversAndReduceMotion, with the stage's exit as
+    // the line's own
     [Theory]
     [MemberData(nameof(Layouts))]
-    public void EveryLayoutDrawsThroughHandOversAndTheExit(string id)
+    public void EveryLayoutDrawsThroughHandOversAndReduceMotion(string id)
     {
-        using var layer = Layer(id);
         var line = Line("Rain over the city can fly away tonight".Split(' '), 0.6);
-        var scene = Scene(line);
-        foreach (var t in new[] { 2.75, 2.8, 2.85, 2.9, 3.0, 3.15, 5.5, 6.2 })
-            Assert.True(Lit(Frame(layer, scene, t)) > 100, $"{id} drew nothing at {t}");
-        // Gone once the line has been held and has left.
-        Assert.Equal(0, Lit(Frame(layer, scene, LyricPhraseTimingEnd(line) + 0.9)));
+        foreach (var reduceMotion in new[] { false, true })
+        {
+            using var layer = Layer(id);
+            var scene = Scene(line) with { ReduceMotion = reduceMotion };
+            foreach (var t in new[] { 2.75, 2.8, 2.85, 2.9, 3.0, 3.15, 5.5, 6.2 })
+                Assert.True(Lit(Frame(layer, scene, t)) > 100, $"{id} drew nothing at {t}{(reduceMotion ? " under Reduce Motion" : "")}");
+            // Gone once the line has been held and has left.
+            Assert.Equal(0, Lit(Frame(layer, scene, LyricPhraseTimingEnd(line) + 0.9)));
+        }
         Assert.Empty(_sink.Entries);
+    }
+
+    // Under Reduce Motion a stage step is a short dissolve between where the words were and where they now are
+    // (StageLyricView's reducedDissolve), and once it is over nothing moves: a word, once landed, holds still while the
+    // next is sung. Fable never moves its words.
+    [Theory]
+    [MemberData(nameof(Layouts))]
+    public void UnderReduceMotionALandedStageHoldsStill(string id)
+    {
+        var line = Line("Rain over the city can fly away tonight".Split(' '), 1.0);
+        var scene = Scene(line) with { ReduceMotion = true };
+        using var layer = Layer(id);
+        // The fourth word lands at 4 s; by 4.45 s its dissolve (0.18 s from 0.04 s ahead) and its fades are long over.
+        var landed = Frame(layer, scene, 4.45);
+        Assert.True(Difference(landed, Frame(layer, scene, 4.9)) < 30, $"{id} still moved after the step had landed");
+        // Part way through the step, the stage is neither the old step nor the new.
+        var during = Frame(layer, scene, 4.02);
+        Assert.True(Difference(during, landed) > 0 || id == "fable", $"{id} jumped straight to the new step");
+        // A frame is still a pure function of song time.
+        using var fresh = Layer(id);
+        Assert.Equal(during, Frame(fresh, scene, 4.02));
+        Assert.Empty(_sink.Entries);
+    }
+
+    // Reduce Motion takes the motion out of every stage layout, but the words still come and go. The line starts at the
+    // top of the song, where the lyric colours' drift is at the same phase with and without Reduce Motion (a stage line
+    // takes the colours of its start), so what differs is only how the words are placed and posed.
+    [Theory]
+    [MemberData(nameof(Layouts))]
+    public void ReduceMotionChangesHowTheWordsArriveNotWhichAreShown(string id)
+    {
+        var line = Line("Rain over the city can fly away tonight".Split(' '), 0.6, start: 0.01);
+        Assert.Equal(LyricInks.DriftPhase(line.Start, reduceMotion: false), LyricInks.DriftPhase(line.Start, reduceMotion: true));
+        using var moving = Layer(id);
+        using var still = Layer(id);
+        var calm = Scene(line) with { ReduceMotion = true };
+        // As the fourth word arrives the layouts differ.
+        var arriving = line.Words[3].Start + 0.02;
+        Assert.True(Difference(Frame(moving, Scene(line), arriving), Frame(still, calm, arriving)) > 50, $"{id} ignored Reduce Motion");
+        // Before anything is sung both are empty, and once the line has gone both are again.
+        using var early = Layer(id);
+        Assert.Equal(0, Lit(Frame(early, Scene(Line(["Rain", "over"], 0.6)) with { ReduceMotion = true }, 0.5)));
+        Assert.Equal(0, Lit(Frame(still, calm, LyricPhraseTimingEnd(line) + 0.9)));
     }
 
     private static double LyricPhraseTimingEnd(LyricLine line) => Core.Motion.LyricPhraseTiming.StageHeldUntil(line);
@@ -297,6 +343,35 @@ public sealed class StageRenderTests : IDisposable
         using var lifted = Layer("fable");
         var lift = Scene(line) with { Style = Scene(line).Style with { Reveal = "lift" } };
         Assert.True(Difference(plain, Frame(lifted, lift, 3.08)) > 50);
+    }
+
+    // A mix gives each word its own entrance, as the Mac's chosenEntrance asks the settings per run (by the run's visual
+    // seed): while a word arrives, the mix draws exactly what its pick alone draws, and not the other entrance. (Only
+    // Torque and Fable make chosen entrances.)
+    [Theory]
+    [InlineData("torque")]
+    [InlineData("fable")]
+    public void AMixPicksTheEntranceWordByWord(string id)
+    {
+        var line = Line("Rain over the city can fly".Split(' '), 0.5);
+        SceneSnapshot With(string reveal) => Scene(line) with { Style = Scene(line).Style with { Reveal = reveal } };
+        var mix = Core.Compositions.EntranceChoice.Parse("mix:lift,pop");
+        var runs = Core.Motion.StageRun.Make(line.Words, new bool[line.Words.Count]);
+        var picks = runs.Select(run => mix.For(Core.Compositions.CompositionKind.Torque, Core.Motion.TimedWordKey.SeedOf(run.Text, run.Start))).ToList();
+        Assert.Contains(Core.Compositions.WordArrival.Lift, picks);
+        Assert.Contains(Core.Compositions.WordArrival.Pop, picks);
+        foreach (var (pick, other) in new[] { ("lift", "pop"), ("pop", "lift") })
+        {
+            // The first word with this pick, part way through its arrival (the words before it have landed).
+            var run = runs[picks.FindIndex(p => p.ToString().Equals(pick, StringComparison.OrdinalIgnoreCase))];
+            var time = run.Start - 0.04 + 0.05;
+            using var mixed = Layer(id);
+            using var alone = Layer(id);
+            using var otherwise = Layer(id);
+            var drawn = Frame(mixed, With("mix:lift,pop"), time);
+            Assert.True(Difference(drawn, Frame(alone, With(pick), time)) < 5, $"{id}: \"{run.Text}\" did not {pick} in");
+            Assert.True(Difference(drawn, Frame(otherwise, With(other), time)) > 50, $"{id}: \"{run.Text}\" made the other entrance");
+        }
     }
 
     private static LyricLine Japanese => Line(["君", "の", "名", "前", "を", "呼", "ん", "で", "夜", "空", "に", "消", "え", "た"], 0.22, 1,

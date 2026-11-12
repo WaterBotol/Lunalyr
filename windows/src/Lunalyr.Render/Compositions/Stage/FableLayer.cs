@@ -74,7 +74,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
     }
 
     protected override void DrawLine(ID2D1DeviceContext dc, StageLine stageLine, double time, double exitStart, in Matrix4x4 stage,
-                                     double alpha, float blur)
+                                     double alpha, float blur, int shown)
     {
         var line = (FableLine)stageLine;
         var laid = line.Arrangement;
@@ -84,13 +84,14 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
         var whole = (1 - leaving) * alpha;
         if (!(whole > 0.002)) return;
         var speed = line.Speed;
+        var reduce = ReduceMotion;
         var seed = line.Seed;
         var style = line.Style;
         var tile = Tile(line.InkTime);
         // The block, fitted inside the stage, readings and all.
         var block = Matrix3x2.CreateTranslation(-(float)(laid.Size.Width / 2), -(float)(laid.Size.Height / 2))
             * Matrix3x2.CreateScale((float)laid.Scale)
-            * Matrix3x2.CreateTranslation((float)(Stage.Width / 2), (float)(Stage.Height / 2 - Stage.Height * 0.04 * leaving));
+            * Matrix3x2.CreateTranslation((float)(Stage.Width / 2), (float)(Stage.Height / 2 - (reduce ? 0 : Stage.Height * 0.04 * leaving)));
         var blockWorld = Homography.Of(block) * stage;
         // The word being sung: from its onset until the next word's.
         var current = -1;
@@ -112,16 +113,16 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             var wear = rise * fall;
             var opacity = Math.Min(1, a * 1.8) * (0.8 + 0.2 * (id == current ? 1 : wear)) * whole;
             if (!(opacity > 0.002)) continue;
-            var entrance = StageShared.ChosenEntrance(Arrival, a, size, id % 2 == 0 ? 1 : -1, false);
+            var entrance = StageShared.ChosenEntrance(ChosenFor(run), a, size, id % 2 == 0 ? 1 : -1, reduce);
             var kind = (int)(StageShared.Chance(seed, id, 73) * 4) % 4;
-            var motion = entrance is null
+            var motion = !reduce && entrance is null
                 ? FableStyle.Entrance(kind, a, size, StageShared.Chance(seed, id, 74) < 0.5 ? -1 : 1)
                 : (OffsetX: 0, OffsetY: 0, Scale: 1, Spin: 0);
             var e = entrance ?? EntranceTransform.Rest;
             var frame = laid.Frames[id];
             var bottom = new Vector2(0, (float)(frame.Height / 2));
             var unitSize = frame.Size;
-            var unit = Matrix4x4.CreateRotationZ(Radians((StageShared.Chance(seed, id, 72) - 0.5) * style.Shape.Tilt()))
+            var unit = Matrix4x4.CreateRotationZ(Radians(reduce ? 0 : (StageShared.Chance(seed, id, 72) - 0.5) * style.Shape.Tilt()))
                 * Homography.TurnX(e.Fold, Vector2.Zero, unitSize, 0.6)
                 * Matrix4x4.CreateRotationZ(Radians(motion.Spin + e.Turn), new Vector3(bottom, 0))
                 * Matrix4x4.CreateScale((float)(motion.Scale * e.Scale), (float)(motion.Scale * e.Scale), 1)
@@ -141,7 +142,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             if (style.Accent == FableAccent.Star && wear > 0.001)
             {
                 var dir = line.RightToLeft ? -1 : 1;
-                var star = Matrix3x2.CreateScale((float)wear) * Matrix3x2.CreateRotation(Radians((1 - wear) * 90))
+                var star = Matrix3x2.CreateScale((float)wear) * Matrix3x2.CreateRotation(Radians(reduce ? 0 : (1 - wear) * 90))
                     * Matrix3x2.CreateTranslation((float)(dir * (w / 2 - size * 0.21 + size * 0.12)), (float)(-h / 2 + size * 0.21 - size * 0.08))
                     * label;
                 FillStar(dc, star, size * 0.42, tile, opacity);
@@ -157,7 +158,8 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             case FableAccent.Underline:
             {
                 var thick = stroke * 1.4;
-                var length = w * wear;
+                // Under Reduce Motion the accents only fade: no growing, shrinking or turning.
+                var length = ReduceMotion ? w : w * wear;
                 var x = rightToLeft ? w / 2 - length / 2 : -w / 2 + length / 2;
                 var at = Matrix3x2.CreateTranslation((float)x, (float)(h / 2 - thick / 2 + size * 0.1)) * label;
                 FillRounded(dc, at, length, thick, thick / 2, colour, wear * opacity);
@@ -166,7 +168,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             case FableAccent.Ring:
             {
                 double rw = w + size * 0.36, rh = h + size * 0.2;
-                var at = Matrix3x2.CreateRotation(Radians(-3)) * Matrix3x2.CreateScale((float)(0.9 + 0.1 * wear)) * label;
+                var at = Matrix3x2.CreateRotation(Radians(-3)) * Matrix3x2.CreateScale(ReduceMotion ? 1 : (float)(0.9 + 0.1 * wear)) * label;
                 StrokeRounded(dc, at, rw, rh, rh / 2, stroke, colour, wear * 0.95 * opacity, inside: false);
                 break;
             }
@@ -177,7 +179,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             {
                 double bw = w + size * 0.32, bh = h + size * 0.12;
                 FableLayout.Brackets(new StageRect(-bw / 2, -bh / 2, bw, bh), size * 0.22, _brackets);
-                dc.Transform = Matrix3x2.CreateScale((float)(1.15 - 0.15 * wear)) * label;
+                dc.Transform = Matrix3x2.CreateScale(ReduceMotion ? 1 : (float)(1.15 - 0.15 * wear)) * label;
                 foreach (var (from, to) in _brackets)
                     Line(dc, new Vector2((float)from.X, (float)from.Y), new Vector2((float)to.X, (float)to.Y), stroke, colour, wear * opacity);
                 break;

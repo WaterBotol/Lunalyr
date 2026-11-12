@@ -75,16 +75,17 @@ internal sealed class BroadsideLayer(IWordBreaker breaker, Logger? logger) : Sta
     }
 
     protected override void DrawLine(ID2D1DeviceContext dc, StageLine stageLine, double time, double exitStart, in Matrix4x4 stage,
-                                      double alpha, float blur)
+                                      double alpha, float blur, int shown)
     {
         var line = (BroadsideLine)stageLine;
         var runs = line.Runs;
-        var n = StageMotion.ShownCount(runs, time);
+        var n = shown;
         if (n == 0) return;
         var opacity = (1 - StageMotion.Leave(time, exitStart)) * alpha;
         if (!(opacity > 0.002)) return;
         var u = Unit;
         var speed = line.Speed;
+        var reduce = ReduceMotion;
         // Snappy: each word springs in, and the strip glides along with it; the glide hands over without a jolt.
         var arrivals = line.A.AsSpan(0, n);
         var moves = line.B.AsSpan(0, n);
@@ -92,8 +93,8 @@ internal sealed class BroadsideLayer(IWordBreaker breaker, Logger? logger) : Sta
         var sizes = line.Sizes.AsSpan(0, n);
         for (var i = 0; i < n; i++)
         {
-            arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed);
-            moves[i] = StageMotion.Handoff(runs[i].Start, time, StageMotion.RunSeed(line.Seed, runs[i].Id), speed);
+            arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed, reduce);
+            moves[i] = StageMotion.Handoff(runs[i].Start, time, StageMotion.RunSeed(line.Seed, runs[i].Id), speed, reduce);
             var size = line.Words[i].Size;
             var pad = line.Padding[i];
             sizes[i] = new SizeD(size.Width + 2 * pad.X, size.Height + 2 * pad.Y);
@@ -129,7 +130,7 @@ internal sealed class BroadsideLayer(IWordBreaker breaker, Logger? logger) : Sta
                 var place = Matrix3x2.CreateTranslation((float)places[id].X, (float)places[id].Y);
                 if (little[id])
                 {
-                    var local = Matrix3x2.CreateScale((float)(0.8 + 0.2 * a))
+                    var local = Matrix3x2.CreateScale(reduce ? 1 : (float)(0.8 + 0.2 * a))
                         * Matrix3x2.CreateRotation(Radians(id % 2 == 0 ? -3 : 2.5)) * place * flat;
                     FillRounded(dc, local, sizes[id].Width, sizes[id].Height, Points(3), tile, alphaWord);
                     var unit = Homography.Of(local);
@@ -138,7 +139,7 @@ internal sealed class BroadsideLayer(IWordBreaker breaker, Logger? logger) : Sta
                 }
                 else
                 {
-                    var local = Matrix3x2.CreateScale((float)(0.86 + 0.14 * a)) * place * flat;
+                    var local = Matrix3x2.CreateScale(reduce ? 1 : (float)(0.86 + 0.14 * a)) * place * flat;
                     var unit = Homography.Of(local);
                     DrawLabel(dc, line, word, run, 1, time, unit, alphaWord, blur, 0, new Vector2((float)hard, (float)(hard * 1.15)));
                     DrawLabel(dc, line, word, run, 0, time, unit, alphaWord, blur, 0);

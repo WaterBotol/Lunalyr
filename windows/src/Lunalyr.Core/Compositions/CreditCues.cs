@@ -157,4 +157,12 @@ public static class LayerExit
             _ => (p * size * 0.3, 1 - 0.06 * p, 0),
         };
     }
+
+    /// <summary>
+    /// As <see cref="Pose(LayerExitKind, double, double, bool)"/>, except that under Reduce Motion a layer only fades as it
+    /// leaves: it neither moves, swells nor blurs (the Mac's <c>LayerExitModifier</c>).
+    /// </summary>
+    public static (double Offset, double Scale, double Blur) Pose(LayerExitKind kind, double progress, double size, bool towardTop,
+                                                                 bool reduceMotion) =>
+        reduceMotion ? (0, 1, 0) : Pose(kind, progress, size, towardTop);
 }

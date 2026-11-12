@@ -45,6 +45,13 @@ public sealed class LyricSourceSet
             ? availability.Reason ?? "Not available on this PC"
             : null;
 
+    /// <summary>
+    /// Why <paramref name="id"/> can never answer a lookup with <paramref name="folder"/> (the local source with no
+    /// folder chosen), or null when it can be asked.
+    /// </summary>
+    public string? NotConfiguredReason(LyricSourceId id, string folder) =>
+        _sources.TryGetValue(id, out var source) && source is IFolderLyricSource local ? local.NotConfiguredReason(folder) : null;
+
     /// <summary>Identity of the local lyric files that could hold this track's lyrics, for <see cref="LyricLookup.RefreshLocalAsync"/>.</summary>
     public string? LocalFingerprint(LyricQuery query, string folder) =>
         _sources.TryGetValue(LyricSourceId.Lyrimuse, out var source) && source is IFolderLyricSource local ? local.Fingerprint(query, folder) : null;

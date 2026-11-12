@@ -71,8 +71,9 @@ written from them in its own structure; no Verso line was translated.
   - `mix` gives each word one entrance of the mix, by its visual seed. The mix list is not in the snapshot: `mix` is
     the Mac's default mix (Soft focus, Float up, Cutout · Fold), and `mix:pop,orbit,satinRibbon` names its entrances.
   - Every entrance applies word by word on word-timed lines (the rolling stage included), and to a line-timed phrase
-    as a whole (without tiles: the Mac has no words to highlight in a line sung as one). The stage layouts take one
-    entrance for the layer (a mix's first), as `StageShared.ChosenEntrance` uses it.
+    as a whole (without tiles: the Mac has no words to highlight in a line sung as one). The stage layouts pick for
+    each run too (`StageLayer.ChosenFor`, the Mac's `chosenEntrance`; Torque and Fable are the two that make chosen
+    entrances), and a line-timed line on a stage picks for its phrase.
 - **Size.** The Mac's base size is `clamp(min(w, h·16/9) · 0.046, 24, 124)` points and the stage is 80% × 72% of the
   screen. Its size slider (0.7–1.5) is `LyricStyle.SizeFraction / 0.075`, so the contract's 0.075 is the Mac's 1.0.
   Points are physical pixels divided by `FrameContext.Scale`.
@@ -103,12 +104,31 @@ written from them in its own structure; no Verso line was translated.
   colour where it has pressed in. A word whose entrance is `cutoutHighlight` (the choice, or its pick of a mix) gets
   one. Editorial and the Scattered family tile each word of a run (an unspaced run word by word) and keep tiled words
   until the line's end; Spoken and Cascade tile the rolling word and hold it on the stage meanwhile (Cutout's labels
-  are tiles already); the stage layouts only move. The colour follows `LyricStyle.HighlightMode` ("complement",
+  are tiles already): the tile lies behind the whole unit, word and reading, reaching a label's padding (9 × 3 points,
+  `RollingLabel.HighlightRect`) past it, and the reading takes the tile's text colour too (at the highlight's reading
+  opacity), as the Mac's `RollingUnit` does. A rolling word missing from the window's line ends releases with the
+  line on stage (the Mac's `defaultEnd`). The stage layouts only move. The colour follows `LyricStyle.HighlightMode` ("complement",
   "album", "custom") and `HighlightCustom` through the ink director.
 - **Interludes.** `LyricStyle.Interludes` turns the dots off. `SceneSnapshot.Duration` (the track length) gives a
   break after the last line its progress. A lit dot has the Mac's faint white ring.
+- **Reduce Motion** (`SceneSnapshot.ReduceMotion`, false by default). The app fills it from Windows' "Animation
+  effects" (Settings › Accessibility › Visual effects; off means Reduce Motion), read with
+  `SPI_GETCLIENTAREAANIMATION` and followed through `UISettings.AnimationsEnabledChanged` and `WM_SETTINGCHANGE`
+  (`Lunalyr.Platform.Desktop.SystemMotion`, through `AppControllerOptions.ReduceMotion` and
+  `AppController.SetReduceMotion`); it is never changed. A layer reads it each frame, and a change sets the lyric again.
+  Every layer does what the Mac's `lyricReduceMotion` does:
+  - entrances (and a line-timed phrase's) are plain fades with no blur, swipe, cutout mask or tilt; the line's own
+    swell and slide, the emphasis swell and drift, a held word's letter swell, the idle float and the travel of a word
+    leaving are gone (it only fades); Echo's repeats stay put;
+  - a held duet line cross-fades into its place above instead of travelling there;
+  - the rolling stage dissolves between settled places (`RollingWords.Stacks`), with Cutout's labels simply there;
+  - the stage layouts step and dissolve each step (see [stage.md](stage.md));
+  - highlight tiles only fade (no press, no tilt); credits and backing vocals leave by fading; the interlude dots do
+    not wander; the lyric colours drift ten times slower (`LyricInks.DriftPhase`);
+  - the colour field (`gradient`) moves at 15% without a jump when the setting changes (`AmbientClock`), and the
+    colour-only gradient (`colour`) holds still. `BackgroundOptions.ReduceMotion` still works on its own.
 - **Not in the snapshot:** the track mood (the neutral mood is used; "Match the music" uses Windows' own
-  `TrackCharacter`, see [matching.md](matching.md)), Reduce Motion and translations; the Scattered family's settings
+  `TrackCharacter`, see [matching.md](matching.md)) and translations; the Scattered family's settings
   (the Mac's defaults are used: Spread 1.0, Links 0.20, Repeats 1.0), the custom mix's list (see above) and the
   "reveal sung words" switch (words are always revealed one by one, which the cutouts and swipes need anyway). Plain
   lyrics are still shown as a still, fitted block.
@@ -117,10 +137,12 @@ written from them in its own structure; no Verso line was translated.
 
 `docs/previews/compositions/` holds frames rendered by `tools/CompositionPreview` (offscreen Direct2D on the hardware
 device, 1920×1080 at 125%) for invented fixture songs, named `<composition>-<fixture>-<song seconds>.png`, or
-`<composition>-<reveal>-<fixture>-<song seconds>.png` for a shot rendered with `-reveal`:
+`<composition>-<reveal>-<fixture>-<song seconds>.png` for a shot rendered with `-reveal`, and with `-reduced` after the
+composition (and reveal) for one rendered with `-reduce` (Reduce Motion; the tool never reads the system's setting):
 
     dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions
     dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions -only scattered -reveal splitInk -shot english@12.17
+    dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions -only hinge -reduce -shot english@11.3
     dotnet run --project tools/CompositionPreview -- -bench -width 2560 -height 1440 [-reveal mix]
 
 The first command renders every composition at the default shots: the seven lyric fixtures and the extras
@@ -129,7 +151,9 @@ in a custom green). The `scattered-<reveal>-*` shots show Scattered with each of
 `cutoutSlide`, `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix`) part way through "rain" arriving
 (`-shot english@12.17`), settled (`english@12.5`), and a line-timed phrase arriving (`linetimed@10.15`). The
 `cascade-automatic-*` and `cutout-automatic-*` shots are `-reveal automatic` at `arabic@10.9`, `english@11.4`,
-`english@15.8` and `japanese@11.0`.
+`english@15.8` and `japanese@11.0`. The `*-reduced-*` shots are Editorial and Spoken at `english@11.3` (Spoken part way
+through a dissolve between two settled places), Hinge at `english@11.3` (part way through a step's dissolve, its faces
+flat), and Cutout, Portal and Torque at `english@12.9`.
 
 On the RTX 5060 at 2560×1440, a frame costs about 0.1–0.2 ms (Echo 0.2 ms, the constellations 0.16 ms on the
 English fixture; a swipe or tiles on every word add up to 0.06 ms) of render-thread time (draw calls and `EndDraw`, GPU

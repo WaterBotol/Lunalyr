@@ -9,6 +9,7 @@ using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.Lyrics.Timing;
 using Lunalyr.Core.Playback;
 using Lunalyr.Platform;
+using Lunalyr.Platform.Desktop;
 using Lunalyr.Platform.Logging;
 using Lunalyr.Platform.Lyrics;
 using Lunalyr.Platform.Network;
@@ -52,6 +53,7 @@ internal sealed class AppHost
     private volatile AppController? _controller;
     private volatile IMediaSessionSource? _sessions;
     private volatile NetworkConnectivity? _connectivity;
+    private volatile SystemMotion? _motion;
     private Timer? _statsReset;
 
     private bool _uiRequested;
@@ -105,6 +107,8 @@ internal sealed class AppHost
         _tray.Quit = Quit;
         _tray.Activated = OnActivated;
         _tray.DescribeMenu = DescribeMenu;
+        // "Animation effects" may have been switched (WM_SETTINGCHANGE): read it again (never changed here).
+        _tray.SettingChanged = () => _motion?.Refresh();
         _tray.OnError = ex => ReportCrash(ex, "window procedure", fatal: false);
         _tray.Create();
         _tray.SetTooltip("Lunalyr — starting…");
@@ -207,12 +211,18 @@ internal sealed class AppHost
             var offsets = new SongOffsets(_settings.Current.SongOffsets,
                 saved => _settings.Update(s => s with { SongOffsets = new Dictionary<string, double>(saved) }));
             _wallpaper = CreateWallpaper(readings);
+            // Windows' "Animation effects" off is the wallpaper's Reduce Motion; read, and followed, never changed.
+            var motion = new SystemMotion(logger: Log);
+            _motion = motion;
             var controller = new AppController(_sessions, lookup, _wallpaper, _settings.Current, offsets, readings,
                 PlaybackGuard.Process, Log, _connectivity, new AppControllerOptions
                 {
                     // "Match the music" carries on from where its rotation got to.
                     LayoutCursorChanged = cursor => _settings.Update(s => s with { RotateLayoutsCursor = cursor }),
+                    ReduceMotion = motion.ReduceMotion,
                 });
+            motion.Changed += (_, reduce) => controller.SetReduceMotion(reduce);
+            if (motion.ReduceMotion) _log.Info("Animation effects are off: the wallpaper moves less (Reduce Motion).");
             controller.StatusChanged += (_, _) => QueueStatusUpdate();
             _settings.Changed += (_, e) => controller.ApplySettings(e.NewValue);
             controller.Start();
@@ -280,6 +290,8 @@ internal sealed class AppHost
     {
         // The controller hears about it through the settings store, which also remembers it for next time.
         if (!_settings.Update(s => s with { WallpaperPaused = !s.WallpaperPaused })) return;
+        // A change to "Animation effects" while paused is taken up as the wallpaper resumes, whatever told us of it.
+        if (!_settings.Current.WallpaperPaused) _motion?.Refresh();
         if (_controller is null) _log.Info(_settings.Current.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
         UpdateStatus();
     }
@@ -360,6 +372,7 @@ internal sealed class AppHost
             }
 
             if (_statsReset is { } reset) await reset.DisposeAsync().ConfigureAwait(false);
+            _motion?.Dispose();
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);

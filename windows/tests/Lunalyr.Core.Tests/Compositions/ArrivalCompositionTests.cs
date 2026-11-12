@@ -115,8 +115,8 @@ public class ArrivalCompositionTests
         }
     }
 
-    // Ported from LyricReviewFixesTests.swift: testReduceMotionKeepsCutoutLabelsAndSungWordsStill (the label width;
-    // the swell and plain-lyrics parts belong to the line-setting layouts)
+    // Ported from LyricReviewFixesTests.swift: testReduceMotionKeepsCutoutLabelsAndSungWordsStill (the label width and
+    // the swell; unsynced lyrics never scroll on Windows, so the PlainLyricsScroll part has nothing to test)
     [Fact]
     public void ReduceMotionKeepsCutoutLabelsStill()
     {
@@ -124,6 +124,9 @@ public class ArrivalCompositionTests
             Assert.Equal(1, RollingLabel.TileWidth(arrival, reduceMotion: true));
         Assert.Equal(0.05, RollingLabel.TileWidth(0, reduceMotion: false));
         Assert.Equal(0.5, RollingLabel.TileWidth(0.5, reduceMotion: false), 9);
+        // The word in focus does not zoom; emphasis stays in light and glow.
+        Assert.Equal(1, EditorialRunFrame.Swell(heat: 1, glow: 1, gesture: 1.12, reduceMotion: true));
+        Assert.True(EditorialRunFrame.Swell(heat: 1, glow: 1, gesture: 1.12, reduceMotion: false) > 1.1);
         // Pressed on with a little give, never further than 6% past the word.
         Assert.Equal(1.06, RollingLabel.TileWidth(1.3, reduceMotion: false), 9);
     }

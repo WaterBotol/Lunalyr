@@ -31,7 +31,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         foreach (var session in _sessions) Assert.Empty(session.Commands);
     }
 
-    private AppController Controller(AppSettings? settings = null)
+    private AppController Controller(AppSettings? settings = null, bool reduceMotion = false)
     {
         _controller = new AppController(_source, _lyrics, _renderer, settings ?? new AppSettings(), _offsets, ReadingServices.Basic,
             _guard, Logger.Null, _connectivity,
@@ -42,8 +42,52 @@ public sealed class AppControllerTests : IAsyncDisposable
                 TimelinePoll = TimeSpan.FromMilliseconds(10),
                 LateTimelinePoll = TimeSpan.FromMilliseconds(20),
                 ArtworkRetries = [],
+                ReduceMotion = reduceMotion,
             });
         return _controller;
+    }
+
+    [Fact]
+    public async Task ReduceMotionTravelsWithEveryScene()
+    {
+        // Off unless the app says the system asks for it.
+        _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from A")));
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from B")));
+        var first = _source.Add(Playing("Song A"));
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+        Assert.All(_renderer.Scenes, scene => Assert.False(scene.ReduceMotion));
+
+        // Switched on while a song shows: the scene on screen is handed over again at once, lyrics and all.
+        var before = _renderer.Scenes.Count;
+        controller.SetReduceMotion(true);
+        Assert.Equal(before + 1, _renderer.Scenes.Count);
+        Assert.True(_renderer.Last!.ReduceMotion);
+        Assert.Equal("Line from A", Assert.IsType<LyricResult.Synced>(_renderer.Last.Lyrics).Lines[0].Text);
+        controller.SetReduceMotion(true);
+        Assert.Equal(before + 1, _renderer.Scenes.Count); // no change, nothing handed over
+
+        // It stays through a settings change, a new song and the player going away.
+        controller.ApplySettings(controller.Settings with { LyricComposition = "spoken" });
+        _source.Add(Playing("Song B", appId: "AppleInc.AppleMusicWin_nzyj5cx40ttqa!App"));
+        await WaitUntil(() => _renderer.Last?.Lyrics is LyricResult.Synced { Lines: [{ Text: "Line from B" }] });
+        _source.Remove(first);
+        await controller.WhenIdleAsync();
+        Assert.All(_renderer.Scenes.Skip(before), scene => Assert.True(scene.ReduceMotion));
+
+        controller.SetReduceMotion(false);
+        Assert.False(_renderer.Last!.ReduceMotion);
+    }
+
+    [Fact]
+    public async Task ReduceMotionAtStartUpIsInTheFirstScene()
+    {
+        _source.Add(Playing("Song", timeline: false));
+        var controller = Controller(reduceMotion: true);
+        controller.Start();
+        await WaitUntil(() => _renderer.Last?.Status == StatusText.NoPosition);
+        Assert.All(_renderer.Scenes, scene => Assert.True(scene.ReduceMotion));
     }
 
     private FakeMediaSession Playing(string title, string artist = "Artist", string appId = "Spotify.exe", double? duration = 200, bool timeline = true)

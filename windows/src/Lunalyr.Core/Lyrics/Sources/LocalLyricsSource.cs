@@ -35,6 +35,9 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
     {
     }
 
+    /// <summary>What the source says when no folder has been chosen: it can never answer then.</summary>
+    public const string ChooseFolder = "Choose the Lyrimuse lyrics folder";
+
     public LyricSourceId Id => LyricSourceId.Lyrimuse;
 
     public Task<RawLyrics?> FetchAsync(LyricQuery query, CancellationToken ct) => FetchAsync(query, folder(), ct);
@@ -47,11 +50,14 @@ public sealed class LocalLyricsSource(Func<string?> folder, ILyricPayloadProbe? 
 
     string IFolderLyricSource.Fingerprint(LyricQuery query, string? folder) => Fingerprint(query, folder);
 
+    /// <summary>Each lookup names the folder, so a lookup that names none can never be answered.</summary>
+    string? IFolderLyricSource.NotConfiguredReason(string? folder) => string.IsNullOrEmpty(folder) ? ChooseFolder : null;
+
     private RawLyrics? Find(LyricQuery query, string? path, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(path))
         {
-            throw new LyricSourceException(LyricSourceFailure.NotConfigured, "Choose the Lyrimuse lyrics folder");
+            throw new LyricSourceException(LyricSourceFailure.NotConfigured, ChooseFolder);
         }
         List<FileInfo> all;
         try

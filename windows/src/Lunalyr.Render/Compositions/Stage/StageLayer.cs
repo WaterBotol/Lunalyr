@@ -156,6 +156,12 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
 
     protected StageRect Bounds => new(0, 0, Stage.Width, Stage.Height);
 
+    /// <summary>
+    /// The entrance chosen for <paramref name="run"/> (the Mac's <c>settings.arrival(in:for:)</c> on the run as a word):
+    /// one entrance for every run, or a mix's pick by the run's visual seed.
+    /// </summary>
+    protected WordArrival ChosenFor(StageRun run) => Choice.For(Kind, TimedWordKey.SeedOf(run.Text, run.Start));
+
     protected override void Invalidate()
     {
         base.Invalidate();
@@ -295,10 +301,12 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     /// <summary>
     /// Draws the line's words. <paramref name="stage"/> maps stage pixels (top-left origin, <see cref="Stage"/> in
     /// size) to the device; <paramref name="alpha"/> is the line's opacity and <paramref name="blur"/> a line-timed
-    /// line's entrance blur (device pixels).
+    /// line's entrance blur (device pixels). <paramref name="shown"/> is how many of the line's runs are laid out (the
+    /// ones that have arrived, or one fewer for the step a Reduce Motion dissolve starts from); Fable lays out its
+    /// whole line and ignores it.
     /// </summary>
     protected abstract void DrawLine(ID2D1DeviceContext dc, StageLine line, double time, double exitStart, in Matrix4x4 stage,
-                                     double alpha, float blur);
+                                     double alpha, float blur, int shown);
 
     protected override void DrawStage(ID2D1DeviceContext dc, int row, double time, in LyricPhraseTiming pose, double presence,
                                       double opacity, double yield)
@@ -314,20 +322,24 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         Matrix3x2 local;
         double alpha;
         float blur = 0;
+        var reduce = ReduceMotion;
         if (source.WordTimed)
         {
             alpha = presence * opacity;
-            var swell = (float)(0.965 + 0.035 * pose.Arrival - 0.012 * pose.Exit);
-            var slide = (float)(((1 - pose.Arrival) * 0.20 - pose.Exit * 0.10) * BaseSize);
+            // Reduce Motion: the line fades; it does not slide or swell.
+            var swell = reduce ? 1 : (float)(0.965 + 0.035 * pose.Arrival - 0.012 * pose.Exit);
+            var slide = reduce ? 0 : (float)(((1 - pose.Arrival) * 0.20 - pose.Exit * 0.10) * BaseSize);
             local = Matrix3x2.CreateScale(swell, centre) * Matrix3x2.CreateTranslation(0, slide);
         }
         else
         {
             alpha = pose.Presence * (1 - 0.5 * yield) * opacity;
             var pointSize = BaseSize * 1.06 * 0.68;
-            var entrance = EntranceTransform.Make(pose.Progress, pose.Arrival, Arrival, pointSize, row % 2 == 0 ? 1 : -1, false);
+            // A line sung as one enters as its layout has it enter: the choice for the phrase (a mix picks by its seed).
+            var motion = Choice.For(Kind, TimedWordKey.SeedOf(source.Text, source.Start)).Motion(Kind);
+            var entrance = EntranceTransform.Make(pose.Progress, pose.Arrival, motion, pointSize, row % 2 == 0 ? 1 : -1, reduce);
             local = Matrix3x2.CreateTranslation(-centre) * Entrance(entrance) * Matrix3x2.CreateTranslation(centre);
-            blur = Points(Arrival.Blur(pose.Progress));
+            blur = Points(motion.Blur(pose.Progress, reduce));
         }
         if (!(alpha > 0.002)) return;
         // A reading that cannot be split by run sits once under the stage; the two are fitted to the stage together.
@@ -344,7 +356,19 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var toDevice = local
             * Matrix3x2.CreateScale((float)fit, centre)
             * Matrix3x2.CreateTranslation(origin.X, origin.Y + (float)lift);
-        DrawLine(dc, line, time, exitStart, new Matrix4x4(toDevice), alpha, blur);
+        var stage = new Matrix4x4(toDevice);
+        var shown = StageMotion.ShownCount(line.Runs, time);
+        // Reduce Motion: every layout step is a short dissolve between where the words were and where they now are, not a
+        // journey; the curves keep the sum of the two near 1 where nothing moved. Fable never moves its words.
+        if (StageMotion.ReducedDissolve(line.Runs, shown, Kind != CompositionKind.Fable, time, reduce) is { } step)
+        {
+            DrawLine(dc, line, time, exitStart, stage, alpha * (1 - step * step), blur, shown - 1);
+            DrawLine(dc, line, time, exitStart, stage, alpha * (1 - (1 - step) * (1 - step)), blur, shown);
+        }
+        else
+        {
+            DrawLine(dc, line, time, exitStart, stage, alpha, blur, shown);
+        }
         if (line.LineReading is { } under)
         {
             // Below the stage, in the stack the two are fitted as (the Mac's VStack of the stage and its reading).

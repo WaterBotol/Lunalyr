@@ -66,6 +66,12 @@ public sealed record AppControllerOptions
 
     /// <summary>The longest a better match waits for the line being sung to end before it is swapped in anyway.</summary>
     public TimeSpan SwapLimit { get; init; } = LyricSwap.Limit;
+
+    /// <summary>
+    /// Whether the system asks for less motion at start-up (<see cref="SceneSnapshot.ReduceMotion"/>); later changes come
+    /// through <see cref="AppController.SetReduceMotion"/>. False unless the app reads the system's setting.
+    /// </summary>
+    public bool ReduceMotion { get; init; }
 }
 
 /// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>
@@ -140,6 +146,7 @@ public sealed partial class AppController : IAsyncDisposable
     private LyricQuery? _query;
     private LyricResult? _shown;
     private bool _retryWhenOnline;
+    private bool _reduceMotion;
     private bool _started;
     private bool _disposed;
     private readonly List<Task> _work = [];
@@ -179,7 +186,8 @@ public sealed partial class AppController : IAsyncDisposable
         _lyricLog = logger.Lyrics;
         _settings = settings.Normalized();
         _globalOffset = _settings.LyricOffset;
-        _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette };
+        _reduceMotion = _options.ReduceMotion;
+        _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
         _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
         _clockReader = ReadClock;
         Monitor = new NowPlayingMonitor(source, _options.TimeProvider, _options.Clock, message => _player.Debug(message));
@@ -323,6 +331,24 @@ public sealed partial class AppController : IAsyncDisposable
         RaiseStatusChanged();
     }
 
+    /// <summary>
+    /// The system's reduce-motion preference changed (Windows' "Animation effects"): every scene from now on carries it,
+    /// and the one on screen is handed over again at once. Read only: the controller never changes the setting.
+    /// </summary>
+    public void SetReduceMotion(bool reduceMotion)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _reduceMotion == reduceMotion) return;
+            _reduceMotion = reduceMotion;
+            _scene = _scene with { ReduceMotion = reduceMotion };
+        }
+
+        _app.Info(reduceMotion ? "Animation effects are off: the wallpaper moves less (Reduce Motion)." : "Animation effects are on: full motion.");
+        PublishScene();
+        RaiseStatusChanged();
+    }
+
     /// <summary>Completes when no lookup or readings work is running (for tests and orderly shutdown).</summary>
     internal async Task WhenIdleAsync()
     {
@@ -382,10 +408,10 @@ public sealed partial class AppController : IAsyncDisposable
             CancelLookupLocked();
             CancelArtworkLocked();
             if (session is null) _palette = PaletteMapper.Fallback;
-            _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette };
+            _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
             _status = _status with
             {
-                Player = session?.SourceApp.DisplayName,
+                Player =session?.SourceApp.DisplayName,
                 PlayerAppId = session?.SourceAppUserModelId,
                 Playback = Monitor.PlaybackInfo.Status,
                 Title = null,
@@ -460,6 +486,7 @@ public sealed partial class AppController : IAsyncDisposable
                 Artist = track.Artist,
                 Style = _settings.Style(),
                 Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
+                ReduceMotion = _reduceMotion,
             };
             _status = _status with
             {

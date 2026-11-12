@@ -54,8 +54,13 @@ public sealed class ColourLayer : IRenderLayer
         _shade = new WallpaperShadeDrawer(options);
     }
 
-    /// <summary>Still under Reduce Motion, as on the Mac, except while a fade runs.</summary>
-    public bool IsAnimating => (!_options.ReduceMotion && _options.Speed > 0) || _fade.IsFading(_lastNow) || _shade.IsEasing(_lastNow);
+    /// <summary>Still under Reduce Motion (the options' or the scene's), as on the Mac, except while a fade runs.</summary>
+    public bool IsAnimating => (!ReduceMotion && _options.Speed > 0) || _fade.IsFading(_lastNow) || _shade.IsEasing(_lastNow);
+
+    /// <summary>The options ask for less motion, or the last scene drawn did (<see cref="SceneSnapshot.ReduceMotion"/>).</summary>
+    private bool ReduceMotion => _options.ReduceMotion || _sceneReduces;
+
+    private bool _sceneReduces;
 
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
@@ -88,7 +93,8 @@ public sealed class ColourLayer : IRenderLayer
         try
         {
             Observe(frame.Dc, frame.Scene.Palette, now);
-            var turn = (float)Turn(now, _options.Speed, _options.ReduceMotion);
+            _sceneReduces = frame.Scene.ReduceMotion;
+            var turn = (float)Turn(now, _options.Speed, ReduceMotion);
             var start = new Vector2(0, _size.Y * (0.22f + turn));
             var end = new Vector2(_size.X, _size.Y * (0.78f - turn));
             var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);

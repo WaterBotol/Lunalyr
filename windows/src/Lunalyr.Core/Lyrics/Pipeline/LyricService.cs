@@ -77,7 +77,8 @@ public sealed class LyricService
         _sources = sources;
         _saved = saved;
         Lookup = new LyricLookup(saved, sources.Fetch, connectivity, timing, timeProvider: timeProvider,
-            localFingerprint: sources.LocalFingerprint, logger: logger, unavailable: sources.UnavailableReason);
+            localFingerprint: sources.LocalFingerprint, logger: logger, unavailable: sources.UnavailableReason,
+            notConfigured: sources.NotConfiguredReason);
     }
 
     /// <summary>

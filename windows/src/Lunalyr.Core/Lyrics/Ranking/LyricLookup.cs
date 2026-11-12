@@ -74,6 +74,7 @@ public sealed class LyricLookup
     private readonly Func<LyricQuery, string, string?>? _localFingerprint;
     private readonly CategoryLogger _log;
     private readonly Func<LyricSourceId, string?>? _unavailable;
+    private readonly Func<LyricSourceId, string, string?>? _notConfigured;
 
     /// <param name="saved">Saved choices and the automatic cache.</param>
     /// <param name="fetch">Asks one source for its best match.</param>
@@ -90,12 +91,18 @@ public sealed class LyricLookup
     /// Why a source cannot be asked on this PC (Apple Music on Windows), or null when it can. An enabled source that is
     /// unavailable is never asked; every report lists it with this reason as its state, so it is not hidden.
     /// </param>
+    /// <param name="notConfigured">
+    /// Why a source can never answer a lookup in a given local folder (the local source with no folder chosen), or null
+    /// when it can be asked. Such a source is not run: the report lists it with this reason at once, so its state never
+    /// depends on how quickly the other sources settle.
+    /// </param>
     public LyricLookup(SavedLyrics saved, LyricSourceFetch fetch, ILyricConnectivity? connectivity = null,
         LyricLookupTiming? timing = null, LyricMissCache? misses = null, TimeProvider? timeProvider = null,
         Func<LyricQuery, string, string?>? localFingerprint = null, Logger? logger = null,
-        Func<LyricSourceId, string?>? unavailable = null)
+        Func<LyricSourceId, string?>? unavailable = null, Func<LyricSourceId, string, string?>? notConfigured = null)
     {
         _unavailable = unavailable;
+        _notConfigured = notConfigured;
         _saved = saved;
         _fetch = fetch;
         _connectivity = connectivity;
@@ -151,6 +158,19 @@ public sealed class LyricLookup
         LyricCandidate? saved = null;
         var seeded = new List<LyricCandidate>();
         var states = new Dictionary<LyricSourceId, string>(blocked);
+        var printsLocal = local.Contains(LyricSourceId.Lyrimuse);
+        // A local source with no folder chosen can never answer: it says so now rather than racing the others.
+        if (_notConfigured is not null)
+        {
+            foreach (var id in local.ToList())
+            {
+                if (_notConfigured(id, options.LocalFolder) is { } reason)
+                {
+                    states[id] = reason;
+                    local.Remove(id);
+                }
+            }
+        }
         if (!force && online.Count > 0)
         {
             if (_saved.ReadCandidate(key) is { } candidate && online.Contains(candidate.Source))
@@ -175,7 +195,7 @@ public sealed class LyricLookup
                 seeded.AddRange(recent.Rejected);
             }
         }
-        var localPrint = local.Contains(LyricSourceId.Lyrimuse) ? _localFingerprint?.Invoke(query, options.LocalFolder) : null;
+        var localPrint = printsLocal ?_localFingerprint?.Invoke(query, options.LocalFolder) : null;
         var session = new Session(this, query, options, local, online, seeded, states, pinned, automatic: !force, localPrint,
             onUpdate, cancellationToken);
         var collected = await session.RunAsync().ConfigureAwait(false);

@@ -41,6 +41,33 @@ public static class RollingLabel
     public const double PlainPaddingX = 2;
 
     /// <summary>
+    /// How far a "Cutout · Highlight" tile reaches past an unlabelled rolling unit on each side, points: a label's
+    /// padding past the plain word's (the Mac's <c>RollingUnit.labelReach</c>), so the tile is a label's size.
+    /// </summary>
+    public const double ReachX = 9, ReachY = 3;
+
+    /// <summary>
+    /// The highlight tile behind an unlabelled rolling unit (its word and reading, <paramref name="width"/> ×
+    /// <paramref name="height"/> pixels with their own padding), centred on the unit: the whole unit and
+    /// <see cref="ReachX"/> × <see cref="ReachY"/> points more at each side. <paramref name="scale"/> is pixels per point.
+    /// </summary>
+    public static RectD HighlightRect(double width, double height, double scale)
+    {
+        double x = ReachX * scale, y = ReachY * scale;
+        return new RectD(-width / 2 - x, -height / 2 - y, width + 2 * x, height + 2 * y);
+    }
+
+    /// <summary>
+    /// The part of a tile's <paramref name="rect"/> the press has reached (<paramref name="share"/>, 0…1), from the
+    /// word's leading edge: where the word and its reading take the colour set on the tile.
+    /// </summary>
+    public static RectD Pressed(RectD rect, double share, bool rightToLeft)
+    {
+        var width = rect.Width * Math.Min(1, Math.Max(0, share));
+        return rightToLeft ? rect with { X = rect.X + rect.Width - width, Width = width } : rect with { Width = width };
+    }
+
+    /// <summary>
     /// How far a label has pressed in, as a share of its word: one rule before and after the onset. A sliver under
     /// the faint preview, then pressed on with the word's spring (<paramref name="arrival"/>), so it lands with a
     /// little give. With Reduce Motion the label is simply there and fades in with its word.

@@ -74,6 +74,14 @@ public sealed record SceneSnapshot
     /// how far it has to go, as other breaks do. Null when unknown (the break is open-ended).
     /// </summary>
     public double? Duration { get; init; }
+
+    /// <summary>
+    /// The system asks for less motion (Windows' "Animation effects" turned off; the Mac's Reduce Motion). Every layer
+    /// honours it as the Mac does: entrances, swells, drifts and travel become plain fades, layout steps short
+    /// dissolves, the lyric colours drift ten times slower, the colour field's ambient motion runs at 15% and the
+    /// colour-only gradient holds still. Read from the system by the app, never changed by it; false by default.
+    /// </summary>
+    public bool ReduceMotion { get; init; }
 }
 
 /// <summary>Settings shared by the lyric compositions. Each composition reads what applies to it.</summary>
