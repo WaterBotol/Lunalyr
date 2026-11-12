@@ -13,7 +13,7 @@ public sealed partial class AppController
 {
     private const int PaletteCacheSize = 32;
 
-    /// <summary>How many of the most recent tracks keep their decoded cover (about 0.6 MB each); older ones keep only their colours.</summary>
+    /// <summary>At most this many cached tracks keep their decoded cover (up to 0.6 MB each); the others keep only their colours.</summary>
     private const int CoverCacheSize = 8;
 
     private readonly Lock _publishGate = new();
@@ -210,6 +210,22 @@ public sealed partial class AppController
         }
     }
 
+    // Must hold _gate. At most CoverCacheSize cached tracks keep their decoded cover: the earliest cached others let theirs
+    // go (their colours stay; the cover is read again if they come back).
+    private void TrimCoversLocked(string keep)
+    {
+        var covers = 0;
+        foreach (var entry in _palettes.Values)
+            if (entry.Art is not null) covers++;
+        foreach (var key in _paletteOrder)
+        {
+            if (covers <= CoverCacheSize) break;
+            if (key == keep || !_palettes.TryGetValue(key, out var entry) || entry.Art is null) continue;
+            _palettes[key] = entry with { Art = null };
+            covers--;
+        }
+    }
+
     /// <summary>Shows a cover's colours and cover (or the default ones) if the track is still the one playing; caches real ones.</summary>
     private void ApplyPalette(string key, Palette? palette, byte[]? cover, CoverArt? art, bool cache = true)
     {
@@ -230,14 +246,9 @@ public sealed partial class AppController
                     _palettes[key] = (palette, cover, art);
                     _paletteOrder.Enqueue(key);
                     while (_paletteOrder.Count > PaletteCacheSize) _palettes.Remove(_paletteOrder.Dequeue());
-                    // Only the most recent tracks keep their decoded cover.
-                    if (_paletteOrder.Count > CoverCacheSize
-                        && _palettes.TryGetValue(_paletteOrder.ElementAt(_paletteOrder.Count - CoverCacheSize - 1), out var older)
-                        && older.Art is not null)
-                    {
-                        _palettes[_paletteOrder.ElementAt(_paletteOrder.Count - CoverCacheSize - 1)] = older with { Art = null };
-                    }
                 }
+
+                if (art is not null) TrimCoversLocked(key);
             }
 
             var shown = palette ?? PaletteMapper.Fallback;
