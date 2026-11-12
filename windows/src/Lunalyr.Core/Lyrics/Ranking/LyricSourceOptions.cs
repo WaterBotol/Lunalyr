@@ -65,10 +65,10 @@ public sealed record LyricSourceSnapshot(
     /// Bump when matching, ranking or parsing changes, so automatic choices made under the old rules are looked up
     /// again. Saved explicit choices are keyed separately and are unaffected. Kept in step with the Mac:
     /// v11 ranks lyrics for another version (Live, Remix…) below the playing one's; v12 ranks timing faults below
-    /// sound timing; v13 ranks Apple Music's lyrics relayed by Lyrics+ as Apple Music's own and lets a later
-    /// agreement demote LRCLIB (the ranking decisions of 12 Nov 2026).
+    /// sound timing; v14 (the Mac's number for the same change) ranks Apple Music's lyrics relayed by Lyrics+ as
+    /// Apple Music's own, lets a later agreement demote LRCLIB and applies the phrase-token rule (12 Nov 2026).
     /// </summary>
-    public const string CachePolicy = "v13";
+    public const string CachePolicy = "v14";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =

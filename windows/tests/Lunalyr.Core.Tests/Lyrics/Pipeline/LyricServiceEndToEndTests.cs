@@ -166,6 +166,7 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         var report = await service.LookupAsync(ShapeOfYou, Everything, cancellationToken: Ct);
         Assert.Equal(new LyricProvenance("Word-by-word", "Apple via Lyrics+"), report.Result!.Provenance);
         Assert.EndsWith("showing", report.States[LyricsPlus], StringComparison.Ordinal);
+        Assert.StartsWith("Match found" + LyricRanking.AppleRelayNote, report.States[LyricsPlus], StringComparison.Ordinal);
         Assert.Equal(LyricsPlus, report.Candidates[0].Source);
         Assert.Equal(AppleMusicCache, report.Candidates[0].RankingSource);
 
@@ -225,9 +226,9 @@ public sealed class LyricServiceEndToEndTests : IDisposable
             : null;
         world.Set("music.163.com/api/search/get", Reply.Text(200, ServiceReplies.NetEaseSearch((1, "Shape of You", "Ed Sheeran", 233.7)))
             with { Wait = lrclibShown.Task });
-        // A short grace period shows LRCLIB promptly; a long settle period keeps the agreement window open however
-        // slowly the held replies are parsed (the lookup still ends as soon as every source has answered).
-        var timing = Quick with { Grace = TimeSpan.FromMilliseconds(300), UpgradeSettle = TimeSpan.FromSeconds(10) };
+        // A short grace period shows LRCLIB promptly. Lyrics+ and NetEase can give word timing, so they keep answering
+        // while LRCLIB shows (couldDemote), up to their 10 s limit here.
+        var timing = Quick with { Grace = TimeSpan.FromMilliseconds(300) };
         var shown = new List<LyricLookupReport>();
         var report = await Service(world, timing: timing).LookupAsync(ShapeOfYou, sourceOrder, onUpdate: progress =>
         {

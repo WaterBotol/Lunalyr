@@ -27,10 +27,11 @@ public static class LyricTimingRules
         {
             return false;
         }
-        // Windows-only rule (12 Nov 2026), not yet on the Mac: tokens that each span a whole line or phrase are line
+        // Phrase-token rule (12 Nov 2026, now on the Mac too): tokens that each span a whole line or phrase are line
         // timing dressed as word timing. LRCLIB's Lyricsfile does this for line-synced uploads (one token per line,
         // or per space-separated phrase in Japanese), which otherwise ranked as word or mixed timing and stopped
-        // sources with real word timing. A genuine one-word line still counts.
+        // sources with real word timing. A genuine one-word line still counts. The Lyricsfile parser and the
+        // presentation apply the same check (IsPhraseTimed), so such lines get estimated words instead.
         if (IsPhraseTimed(line.Text, lineLetters, line.Words.Count))
         {
             return false;
@@ -53,7 +54,20 @@ public static class LyricTimingRules
     /// (real word or syllable timing there runs one to three characters a token). In spaced scripts: one token over
     /// several words, or fewer than half as many tokens as words.
     /// </summary>
-    static bool IsPhraseTimed(string text, string letters, int tokens)
+    public static bool IsPhraseTimed(string text, int tokens)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return IsPhraseTimed(text, LyricTextFolding.LettersAndNumbers(text), tokens);
+    }
+
+    /// <summary>A line marked word-timed whose tokens are phrases (<see cref="IsPhraseTimed(string, int)"/>).</summary>
+    public static bool IsPhraseTimed(LyricLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return line.WordTimed && !line.IsInstrumental && IsPhraseTimed(line.Text, line.Words.Count);
+    }
+
+    private static bool IsPhraseTimed(string text, string letters, int tokens)
     {
         if (tokens <= 0)
         {

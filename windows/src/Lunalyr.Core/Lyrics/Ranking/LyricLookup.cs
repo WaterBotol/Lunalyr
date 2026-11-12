@@ -41,9 +41,9 @@ public sealed record LyricLookupTiming
 /// A match is shown as soon as nothing pending could beat it, or when the grace period ends; after that only a match
 /// that ranks higher replaces it, never a lower one. Saved explicit choices always win. An automatic lookup reads
 /// Apple Music's lyrics first and stops asking sources whose answer could no longer change anything; a search
-/// (<c>force</c>) asks every source so all the alternatives are listed. While LRCLIB's word timing leads, the timed
-/// sources that could still agree against it are stopped only once the grace period is over and one settle period has
-/// passed since it showed (the agreement window). Only the online choice is cached, and only
+/// (<c>force</c>) asks every source so all the alternatives are listed. While LRCLIB's word timing leads, the sources
+/// that could still agree against it keep answering up to their own limits (<see cref="LyricRanking.CouldDemote"/>).
+/// Only the online choice is cached, and only
 /// when nothing stopped early could have beaten it; misses are remembered briefly unless the network was down.
 /// </remarks>
 public sealed class LyricLookup
@@ -281,9 +281,6 @@ public sealed class LyricLookup
     /// <summary>Apple Music took too long; the services are asked anyway.</summary>
     private sealed record OnlineDueEvent : LookupEvent;
 
-    /// <summary>One upgrade-settle period has passed since a match was shown: the agreement window can close.</summary>
-    private sealed record AgreementWindowEvent(int Token) : LookupEvent;
-
     /// <summary>What a lookup's collection gathered, and which sources it asked or stopped.</summary>
     private sealed record Collected(LyricLookupReport Report, HashSet<LyricSourceId> Answered, HashSet<LyricSourceId> Stopped,
         HashSet<LyricSourceId> Asked);
@@ -450,10 +447,6 @@ public sealed class LyricLookup
                 }
                 bool graceOver = false, settleOver = false, settleArmed = false;
                 var settleToken = 0;
-                // The agreement window: from each match shown until the grace period is over and one settle period
-                // has passed since it showed.
-                var windowOver = false;
-                var windowToken = 0;
                 // Apple Music's second look is an upgrade opportunity; it never holds back the first result, so it
                 // is not counted as pending.
                 bool appleRetried = false, appleRetrying = false;
@@ -504,9 +497,6 @@ public sealed class LyricLookup
                         case OnlineDueEvent:
                             onlineDue = true;
                             break;
-                        case AgreementWindowEvent { Token: var token }:
-                            windowOver = windowOver || token == windowToken;
-                            break;
                     }
                     var screened = Screen();
                     var best = LyricRanking.Choose(screened.Accepted, _query, _options);
@@ -517,9 +507,6 @@ public sealed class LyricLookup
                             settleArmed = false;
                             settleOver = false;
                             settleToken++;
-                            windowOver = false;
-                            windowToken++;
-                            Schedule(new AgreementWindowEvent(windowToken), _owner._timing.UpgradeSettle);
                             break;
                         case PublicationStep.HoldForUpgrade when !settleArmed:
                             settleArmed = true;
@@ -534,13 +521,9 @@ public sealed class LyricLookup
                     {
                         var onlineBest = LyricRanking.Choose(screened.Accepted.Where(c => !c.Source.IsLocal()), _query, _options);
                         var idle = _pending.Where(id => !LyricRanking.Matters(id, best, onlineBest, _query, _options)).ToList();
-                        // While LRCLIB's word timing leads, the timed sources that could still make two agree against
-                        // it keep running for the agreement window, then stop (ranking decision of 12 Nov 2026).
-                        if ((!graceOver || !windowOver) && idle.Count > 0
-                            && LyricRanking.LeadCouldBeLostToAgreement(best, screened.Accepted, _pending, _query))
-                        {
-                            idle.RemoveAll(id => id.TimingCeiling() > 0);
-                        }
+                        // While LRCLIB's word timing leads, the sources that could still agree against it keep answering
+                        // up to their own limits (ranking decisions of 12 Nov 2026).
+                        idle.RemoveAll(id => LyricRanking.CouldDemote(best, id, screened.Accepted, _query));
                         if (idle.Count > 0)
                         {
                             Stop(idle, best.Source == LyricSourceId.AppleMusicCache ? AppleMusicShowing : CouldNotBeat);

@@ -3,6 +3,7 @@
 // Decodable struct: a missing or mistyped required field makes the whole file unreadable, as a failed decode does.
 
 using System.Text;
+using Lunalyr.Core.Lyrics.Ranking;
 using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
@@ -47,7 +48,10 @@ public static class LyricsfileParser
                 token.StartMs / 1000 + offset,
                 token.EndMs is { } tokenEnd ? tokenEnd / 1000 + offset : i + 1 < tokens.Count ? tokens[i + 1].StartMs / 1000 + offset : end)).ToList();
             var covered = TextRules.WithoutWhitespace(string.Concat(words.Select(word => word.Text)));
-            if (words.Count > 0 && covered == TextRules.WithoutWhitespace(row.Text) && words.Select((word, i) =>
+            // Phrase-token rule (12 Nov 2026, as on the Mac): a row whose tokens are whole lines or phrases (a
+            // line-synced upload) is not word timing; it keeps the estimated words MakeLine gave it.
+            if (words.Count > 0 && covered == TextRules.WithoutWhitespace(row.Text) && !LyricTimingRules.IsPhraseTimed(row.Text, words.Count)
+                && words.Select((word, i) =>
                     double.IsFinite(word.Start) && double.IsFinite(word.End) && word.Start >= start && word.End > word.Start && word.End <= end
                     && (i == 0 || word.Start >= words[i - 1].End)).All(ok => ok))
             {

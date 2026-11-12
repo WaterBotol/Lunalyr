@@ -69,6 +69,11 @@ public sealed class RankingDecisionsTests : IDisposable
             // Timing still comes first: LRCLIB's word timing beats the relay's line timing.
             Assert.Equal([Lrclib, LyricsPlus], Ranking([Song(Lrclib), Song(LyricsPlus, AppleRelay, words: false)], options));
         }
+        // The source list keeps the relay's label and says whose lyrics they are.
+        var screened = LyricRanking.Screen([Song(Lrclib), relay], _query, new LyricSourceSnapshot([LyricsPlus, Lrclib], LyricMatchMode.AccuracyFirst));
+        var states = LyricRanking.Annotate(new Dictionary<LyricSourceId, string>(), screened, LyricsPlus, _query);
+        Assert.Equal("Match found · Apple Music’s lyrics · 1 other source agrees · showing", states[LyricsPlus]);
+        Assert.Equal("Match found · 1 other source agrees", states[Lrclib]);
     }
 
     [Fact]
@@ -84,6 +89,8 @@ public sealed class RankingDecisionsTests : IDisposable
         foreach (var options in Modes(LyricsPlus, NetEase, Lrclib))
         {
             Assert.Equal([Lrclib, LyricsPlus, NetEase], Ranking([Song(Lrclib), Song(NetEase), musixmatch], options));
+            var screened = LyricRanking.Screen([musixmatch], _query, options);
+            Assert.Equal("Match found", LyricRanking.Annotate(new Dictionary<LyricSourceId, string>(), screened, null, _query)[LyricsPlus]);
         }
     }
 
@@ -254,10 +261,12 @@ public sealed class RankingDecisionsTests : IDisposable
     }
 
     [Fact]
-    public async Task TheAgreeingSourcesStopWhenTheAgreementWindowCloses()
+    public async Task SourcesThatCouldDemoteLrclibKeepAnsweringUpToTheirLimit()
     {
-        // They never answer: kept for the grace period and one settle period after LRCLIB showed, then stopped.
-        var options = new LyricSourceSnapshot([LyricsPlus, NetEase, QQMusic, Lrclib, LyricsOvh], LyricMatchMode.AccuracyFirst);
+        // Only LRCLIB answers. NetEase can give word timing, so it could still agree against LRCLIB: it keeps answering
+        // up to its own limit. Kuwo (line timing only, and no word-timed rival in hand) and lyrics.ovh (no timing) stop
+        // as soon as LRCLIB shows.
+        var options = new LyricSourceSnapshot([LyricsPlus, NetEase, Kuwo, Lrclib, LyricsOvh], LyricMatchMode.AccuracyFirst);
         var start = _clock.GetUtcNow();
         var stoppedAt = new Dictionary<LyricSourceId, TimeSpan>();
         var never = new Gate();
@@ -278,19 +287,76 @@ public sealed class RankingDecisionsTests : IDisposable
         var report = await lookup.LookupAsync(_query, options, onUpdate: log.Update, cancellationToken: Ct);
         var fast = Lookups.Fast;
         Assert.Equal(LyricLookup.Searching, log.Shown(1)?.States[NetEase]);
-        Assert.Equal(fast.Grace + fast.UpgradeSettle, stoppedAt[NetEase]);
-        Assert.Equal(fast.Grace + fast.UpgradeSettle, stoppedAt[QQMusic]);
-        Assert.Equal(LyricLookup.CouldNotBeat, report.States[NetEase]);
-        Assert.Equal(LyricLookup.CouldNotBeat, report.States[QQMusic]);
-        // lyrics.ovh has no timing to agree with: it stops as soon as LRCLIB shows.
+        Assert.Equal(fast.SourceLimit, stoppedAt[NetEase]);
+        Assert.Equal(LyricLookup.TimedOut, report.States[NetEase]);
+        Assert.Equal(fast.Grace, stoppedAt[Kuwo]);
         Assert.Equal(fast.Grace, stoppedAt[LyricsOvh]);
-        // Lyrics+ might relay Apple Music's lyrics: it runs to its own limit.
+        Assert.Equal(LyricLookup.CouldNotBeat, report.States[Kuwo]);
+        Assert.Equal(LyricLookup.CouldNotBeat, report.States[LyricsOvh]);
+        // Lyrics+ might relay Apple Music's lyrics: it runs to its own limit too.
         Assert.Equal(LyricLookup.TimedOut, report.States[LyricsPlus]);
         Assert.Equal(1, report.Revision);
     }
 
     [Fact]
-    public async Task NoAgreementWindowOnceAnotherSourceAgreesWithLrclib()
+    public async Task ALineTimedSourceIsKeptWhenAWordTimedRivalIsInHand()
+    {
+        // Kugou's word timing, two seconds from LRCLIB's, is in hand; LRCLIB still leads. Kuwo has only line timing,
+        // but with Kugou in hand its agreement would demote LRCLIB, so it keeps answering, and it does agree.
+        var options = new LyricSourceSnapshot([Kugou, Kuwo, Lrclib], LyricMatchMode.AccuracyFirst);
+        var log = new LookupLog();
+        var later = new Gate();
+        var lookup = Lookups.Create(_folder.Path, async (id, _, _, ct) =>
+        {
+            switch (id)
+            {
+                case Lrclib:
+                    return Song(Lrclib);
+                case Kugou:
+                    return Song(Kugou, shift: 2);
+            }
+            await later.WaitAsync(ct);
+            return ct.IsCancellationRequested ? null : Song(Kuwo, shift: 2, words: false);
+        }, _clock);
+        var report = await lookup.LookupAsync(_query, options, onUpdate: async update =>
+        {
+            await log.Update(update);
+            if (update.Revision == 1)
+            {
+                later.Release();
+            }
+        }, cancellationToken: Ct);
+        Assert.Equal(Lrclib.Title(), L.SourceOf(log.Shown(1)?.Result));
+        Assert.Equal(LyricLookup.Searching, log.Shown(1)?.States[Kuwo]);
+        Assert.Equal(2, report.Revision);
+        Assert.Equal(Kugou.Title(), L.SourceOf(report.Result));
+        Assert.Equal([Kugou, Lrclib, Kuwo], report.Candidates.Select(c => c.Source));
+    }
+
+    [Fact]
+    public void ADemotedLrclibRanksAfterEveryOtherSourceAtItsTimingButKeepsItsTiming()
+    {
+        // Lyrics+ and NetEase agree against LRCLIB; QQ Music's word timing agrees with no one. LRCLIB, first in the
+        // configured order, now ranks after QQ Music and Lyrics+ too (lead 4, after the others' 3).
+        var candidates = new[] { Song(Lrclib), Song(LyricsPlus, shift: 2), Song(NetEase, shift: 2, words: false), Song(QQMusic, shift: 5) };
+        foreach (var options in Modes(Lrclib, QQMusic, NetEase, LyricsPlus))
+        {
+            // (Ranked weighs agreement; Choose, on unweighed candidates, would not.)
+            Assert.Equal([QQMusic, LyricsPlus, Lrclib, NetEase], LyricRanking.Ranked(candidates, _query, options).Select(c => c.Source));
+            Assert.Equal([QQMusic, LyricsPlus, Lrclib, NetEase], LyricRanking.Ranked(candidates.Reverse(), _query, options).Select(c => c.Source));
+        }
+        // When the pair agreeing against it has only line timing, LRCLIB's word timing still wins.
+        var linePair = new[] { Song(Lrclib), Song(NetEase, shift: 2, words: false), Song(Kugou, shift: 2, words: false) };
+        foreach (var options in Modes(NetEase, Kugou, Lrclib))
+        {
+            var ranked = LyricRanking.Ranked(linePair, _query, options);
+            Assert.True(ranked[0].Agreement.TimingOutlier);
+            Assert.Equal(Lrclib, ranked[0].Source);
+        }
+    }
+
+    [Fact]
+    public async Task NothingIsKeptForADemotionOnceAnotherSourceAgreesWithLrclib()
     {
         // Kugou already agrees with LRCLIB's timing, so LRCLIB can never be the odd one out: NetEase stops at once.
         var options = new LyricSourceSnapshot([LyricsPlus, NetEase, Lrclib, Kugou], LyricMatchMode.AccuracyFirst);
@@ -317,9 +383,16 @@ public sealed class RankingDecisionsTests : IDisposable
         Assert.Equal(Lrclib.Title(), L.SourceOf(report.Result));
         Assert.Equal(Lookups.Fast.Grace, netEaseStopped);
         Assert.Equal(LyricLookup.CouldNotBeat, report.States[NetEase]);
-        Assert.False(LyricRanking.LeadCouldBeLostToAgreement(Song(Lrclib), [Song(Kugou, words: false)], [NetEase, QQMusic], _query));
-        Assert.True(LyricRanking.LeadCouldBeLostToAgreement(Song(Lrclib), [Song(Kugou, shift: 2, words: false)], [NetEase], _query));
-        Assert.False(LyricRanking.LeadCouldBeLostToAgreement(Song(Lrclib), [], [NetEase, LyricsOvh], _query));
-        Assert.False(LyricRanking.LeadCouldBeLostToAgreement(Song(Lrclib, words: false), [], [NetEase, QQMusic], _query));
+        // couldDemote, source by source.
+        var lrclib = Song(Lrclib);
+        Assert.False(LyricRanking.CouldDemote(lrclib, NetEase, [lrclib, Song(Kugou, words: false)], _query));
+        Assert.True(LyricRanking.CouldDemote(lrclib, NetEase, [lrclib], _query));
+        Assert.True(LyricRanking.CouldDemote(lrclib, NetEase, [lrclib, Song(Kugou, shift: 2, words: false)], _query));
+        Assert.False(LyricRanking.CouldDemote(lrclib, Kuwo, [lrclib, Song(Kugou, shift: 2, words: false)], _query));
+        Assert.True(LyricRanking.CouldDemote(lrclib, Kuwo, [lrclib, Song(Kugou, shift: 2)], _query));
+        Assert.False(LyricRanking.CouldDemote(lrclib, LyricsOvh, [lrclib, Song(Kugou, shift: 2)], _query));
+        // Only LRCLIB's word or mixed timing showing keeps sources for a demotion.
+        Assert.False(LyricRanking.CouldDemote(Song(Lrclib, words: false), NetEase, [], _query));
+        Assert.False(LyricRanking.CouldDemote(Song(NetEase), QQMusic, [], _query));
     }
 }
