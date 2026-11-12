@@ -45,3 +45,9 @@ need repeating on a quiet PC.
   context, so this is possible).
 - A new song's first frame (17–30 ms) is one stutter per song.
 - Repeat these runs on a quiet PC and in Duplicate mode.
+
+## On a quiet PC (Test Build 4.1, 1983ecb)
+
+After the agents had finished, a live demo run of Hinge (both monitors, 75 s, three desktop captures during it) had
+**1 slow pass in 75 s** (`live-hinge-quiet.stats.json`). Captures: `live-hinge-opening-title.png` (the title card at
+3 s) and `live-hinge-singing.png`.

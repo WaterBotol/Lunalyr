@@ -81,7 +81,7 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 
 ## Milestone 4: all compositions and readings
 
-1458 tests (1457 pass, 1 skipped opt-in). Report: [docs/milestones/M4.md](docs/milestones/M4.md).
+1633 tests (1632 pass, 1 skipped opt-in) at Test Build 4.1. Report: [docs/milestones/M4.md](docs/milestones/M4.md).
 
 | Item | Status | Evidence |
 | --- | --- | --- |
@@ -93,5 +93,8 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Credits, interlude ring, highlight colours | unit (Mac CreditsLayer/Highlight tests) + offscreen | `CreditCueTests`, `LyricHighlightTests` |
 | Match the music (automatic) | unit (10 Mac tests) + AOT smoke run picked a layout | `MatchTheMusicTests`, Test Build 4 log |
 | Previous song's cover not kept | unit | `AppControllerArtworkTests` |
-| Live desktop frames for the new layouts; slow-frame cause | not verified: display was off | owner's screen on, then `--demo --stats` |
-| Real players, Extend, 280 Hz, battery | needs the owner | Test Build 4 README |
+| Opening title card (replaces the "Title – Artist" cue) | unit (15 Mac tests) + offscreen + live demo run | `OpeningTitleTests`, `OpeningTitleReadingTests`, `OpeningTitleRenderTests`, `docs/previews/opening/` |
+| Readings fill in syllable by syllable; Stage/Arrival read per word | unit (10 Mac tests) + offscreen | `ReadingSyllableRevealTests`, `StageReadingRevealTests`, `ReadingRevealRenderTests`, `docs/previews/readings/` |
+| Japanese songs under English titles (language versions, original-title search) | unit (15 Mac tests) + recorded iTunes replies | `LanguageVersionTests`, `OriginalTitleTests` |
+| Live desktop frames; slow-frame cause | measured live (Extend, 60 fps): line setup on both monitors in one pass, fixed to one per pass | `AheadWorkTests`, [m4/frame-trace.md](docs/measurements/m4/frame-trace.md) |
+| Real players, Duplicate mode, battery | needs the owner | Test Build 4.1 README |
