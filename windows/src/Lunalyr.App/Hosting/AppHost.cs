@@ -274,6 +274,7 @@ internal sealed partial class AppHost
             _settings.Changed += (_, e) => controller.ApplySettings(e.NewValue);
             controller.Start();
             controller.ApplySettings(_settings.Current); // anything changed while starting
+            StartVisualisers(controller);
             _controller = controller;
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
@@ -505,6 +506,7 @@ internal sealed partial class AppHost
             _motion?.Dispose();
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
+            StopVisualisers();
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);
             _wallpaper?.Dispose(); // detaches from the desktop, leaving the system wallpaper
             _sessions?.Dispose();

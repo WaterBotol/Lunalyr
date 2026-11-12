@@ -47,6 +47,7 @@ public sealed class VisualiserLayer : IRenderLayer
     private readonly BackgroundOptions _options;
     private readonly Logger _log;
     private readonly WallpaperShadeDrawer _shade;
+    private readonly ColourLayer _powerFallback;
     private readonly string _display;
     private VisualiserGpu? _gpu;
     private nint _device;
@@ -66,6 +67,7 @@ public sealed class VisualiserLayer : IRenderLayer
         _options = options;
         _log = log;
         _shade = new WallpaperShadeDrawer(options);
+        _powerFallback = new ColourLayer(options, log);
         _display = "surface " + Interlocked.Increment(ref _surfaces);
     }
 
@@ -82,17 +84,26 @@ public sealed class VisualiserLayer : IRenderLayer
         _failed = false;
         _size = size;
         _shade.CreateResources(dc, size, scale);
+        _powerFallback.CreateResources(dc, dwrite, size, scale);
     }
 
     public void Resize(Vector2 size, float scale)
     {
         _size = size;
         _shade.Resize(size, scale);
+        _powerFallback.Resize(size, scale);
     }
 
     public void Render(in FrameContext frame)
     {
         if (!_ready || _failed) return;
+        // Power saving replaced the visualiser: the album colours, as the Mac's Colour only (its scenes and the
+        // GPU work they cost wait until power allows them again).
+        if (_host.ReplacedForPower?.Invoke() == true)
+        {
+            _powerFallback.Render(frame);
+            return;
+        }
         try
         {
             Draw(frame);
@@ -231,6 +242,7 @@ public sealed class VisualiserLayer : IRenderLayer
     {
         ReleaseGpu();
         _shade.ReleaseResources();
+        _powerFallback.ReleaseResources();
         _ready = false;
     }
 
@@ -240,5 +252,6 @@ public sealed class VisualiserLayer : IRenderLayer
         _scene?.Dispose();
         _scene = null;
         _shade.Dispose();
+        _powerFallback.Dispose();
     }
 }

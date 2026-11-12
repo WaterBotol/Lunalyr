@@ -27,6 +27,34 @@ int width = int.Parse(size[0], CultureInfo.InvariantCulture), height = int.Parse
 Directory.CreateDirectory(outDir);
 var styles = VisualizerStyles.All.Where(s => only is null || s.RawValue() == only).ToArray();
 
+if (args.Contains("--loopback-check"))
+{
+    // A short live check of System audio: loopback of the default output for a few seconds, printing levels only.
+    // Nothing is saved; nothing is played.
+    var audio = new VisualizerAudio();
+    var feed = new Lunalyr.Core.Visualisers.Capture.CaptureFeed(audio);
+    using var meter = new Lunalyr.Platform.Audio.OutputActivityMeter();
+    var events = new PrintEvents();
+    var opened = System.Diagnostics.Stopwatch.StartNew();
+    using (var session = Lunalyr.Platform.Audio.WasapiLoopback.Open(feed, events))
+    {
+        Console.WriteLine($"Started in {opened.ElapsedMilliseconds} ms; output latency {(session.OutputLatency is { } l ? $"{l * 1000:0.0} ms" : "not reported")}.");
+        for (var second = 1; second <= 6; second++)
+        {
+            Thread.Sleep(1000);
+            var now = AudioAnalyzer.Now();
+            var report = feed.Read(now);
+            var snapshot = audio.Latest();
+            Console.WriteLine(report is { } r
+                ? $"{second}s: packets {r.Packets}, rms {r.Levels.Rms:0.000}, bass {snapshot.Bass:0.00}, mid {snapshot.Mid:0.00}, treble {snapshot.Treble:0.00}, audible {(r.AudibleAt is { } a ? $"{now - a:0.00}s ago" : "never")}, format {r.FormatLabel}, output active {meter.IsActive()}"
+                : $"{second}s: no packets (nothing playing?), output active {meter.IsActive()}");
+        }
+    }
+    var stopped = System.Diagnostics.Stopwatch.StartNew();
+    Console.WriteLine($"Stopped cleanly ({stopped.ElapsedMilliseconds} ms after the last read).");
+    return;
+}
+
 var signals = new (string Name, AudioSnapshot Sound, double Time)[]
 {
     ("silence", Synth.Silence(), 12),
@@ -201,4 +229,12 @@ static class Synth
         var random = new Random(11);
         return Run(2, (_, _) => (float)((random.NextDouble() * 2 - 1) * 0.9));
     }
+}
+
+/// <summary>Prints what the loopback session reports.</summary>
+sealed class PrintEvents : Lunalyr.Core.Visualisers.Capture.ICaptureSessionEvents
+{
+    public void RouteChanged(string reason) => Console.WriteLine("Route changed: " + reason);
+
+    public void Failed(string message) => Console.WriteLine("Failed: " + message);
 }

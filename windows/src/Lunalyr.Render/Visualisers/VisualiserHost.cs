@@ -56,26 +56,33 @@ public sealed class VisualiserHost
 {
     private double _flow, _lastWall = double.NaN;
 
+    private readonly IVisualiserSound? _sound;
+
     /// <param name="settings">The visualiser's settings now; read once per frame, so it must be cheap.</param>
     /// <param name="sound">The sound; null draws the quiet ambient spectrum (System audio off).</param>
-
     /// <param name="targetFps">The frame rate the wallpaper aims for, the GPU budget the scale ladder works to.</param>
     public VisualiserHost(Func<VisualiserSettings>? settings = null, IVisualiserSound? sound = null,
         Func<double>? targetFps = null, bool preview = false)
     {
         Settings = settings ?? (() => VisualiserSettings.Default);
-        Sound = sound;
-
+        _sound = sound;
         TargetFps = targetFps ?? (() => 60);
         Preview = preview;
     }
 
     public Func<VisualiserSettings> Settings { get; }
 
-    /// <summary>The sound source; swapped by the app as System audio goes on and off.</summary>
-    public IVisualiserSound? Sound { get; set; }
+    /// <summary>Where the app's sound comes from now (System audio, or the demo's signal); null when there is none.</summary>
+    public Func<IVisualiserSound?>? SoundSource { get; init; }
 
+    /// <summary>
+    /// Whether power saving has replaced the visualiser (the Mac's effective background under "Line patterns" or
+    /// "Colour only" power rules): the layer then draws the album colours, and System audio pauses.
+    /// </summary>
+    public Func<bool>? ReplacedForPower { get; init; }
 
+    /// <summary>The sound now.</summary>
+    public IVisualiserSound? Sound => SoundSource is { } source ? source() : _sound;
     public Func<double> TargetFps { get; }
 
     /// <summary>A settings preview: a small pixel budget and its own scene clocks.</summary>

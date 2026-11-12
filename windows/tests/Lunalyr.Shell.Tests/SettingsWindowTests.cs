@@ -413,7 +413,7 @@ public sealed class SettingsPreviewRendererTests
         Assert.True(changed > 200, $"{changed} pixels differ: the lyrics should show");
 
         // Unknown ids fall back as the desktop does: the album colours and Editorial.
-        Assert.Equal(withLyrics, Draw(scene, "visualizer", "nope", 15.5));
+        Assert.Equal(withLyrics, Draw(scene, "visualizer.nope", "nope", 15.5));
 
         // Nothing playing: the background alone.
         Assert.True(Coloured(Draw(new SceneSnapshot(), "colourOnly", "echo", double.NaN, playing: false)) > 320 * 180 / 2);

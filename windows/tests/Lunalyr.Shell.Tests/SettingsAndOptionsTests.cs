@@ -66,6 +66,7 @@ public sealed class AppSettingsTests
             "albumGradientWallpaper", "shaderStyle", "patternStyle", "wallpaperPath", "wallpaperName", "wallpaperPlacement",
             "effectSpeed", "vividness", "scrimStrength", "patternOpacity", "motionBlur", "textBackingAutomatic", "textBacking",
             "useMotionArtwork", "motionPlacement",
+            "visualizerStyle", "audioReactiveEnabled", "audioSensitivity", "visualizerPunch", "starTrailsColours",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
