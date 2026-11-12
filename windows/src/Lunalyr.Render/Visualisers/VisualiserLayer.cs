@@ -50,7 +50,7 @@ public sealed class VisualiserLayer : IRenderLayer
     private readonly ColourLayer _powerFallback;
     private readonly string _display;
     private VisualiserGpu? _gpu;
-    private nint _device;
+    private nint _device, _context;
     private VisualiserScene? _scene, _outgoing;
     private double _fadeStart = double.NegativeInfinity;
     private Vector2 _size;
@@ -59,6 +59,7 @@ public sealed class VisualiserLayer : IRenderLayer
     private AlbumWallpaperPalette _cover = AlbumWallpaperPalette.Fallback;
     private bool _hasCover;
     private Vector3[] _coverStops = [];
+    private double _backdrop = LyricLegibility.VisualizerLuminance(AlbumWallpaperPalette.Fallback);
     private double _lastNow;
 
     internal VisualiserLayer(VisualiserHost host, BackgroundOptions options, Logger log)
@@ -178,7 +179,7 @@ public sealed class VisualiserLayer : IRenderLayer
         if (_scene.Bitmap is { } bitmap)
             dc.DrawBitmap(bitmap, whole, _outgoing is null ? 1 : (float)fade, InterpolationMode.Linear, null, null);
         dc.Transform = transform;
-        _shade.Draw(frame, LyricLegibility.VisualizerLuminance(_cover));
+        _shade.Draw(frame, _backdrop);
     }
 
     /// <summary>The newest sung word, which Star Trails lights stars by.</summary>
@@ -197,17 +198,24 @@ public sealed class VisualiserLayer : IRenderLayer
         {
             _cover = AlbumWallpaperPalette.Fallback;
             _coverStops = [];
+            _backdrop = LyricLegibility.VisualizerLuminance(_cover);
             return;
         }
         var grid = new Double3[9];
         for (var i = 0; i < 9; i++) grid[i] = AlbumColourGrid.Hsb(Double3.From(palette.ArtworkStops[i]));
         _cover = new AlbumWallpaperPalette(grid);
         _coverStops = [.. _cover.Stops];
+        // How bright the scene is behind the lyrics, for the text backing (the Mac's visualizerLuminance).
+        _backdrop = LyricLegibility.VisualizerLuminance(_cover);
     }
 
     /// <summary>The visualiser GPU objects for the device behind <paramref name="dc"/>, made again when it changes.</summary>
     private VisualiserGpu Gpu(ID2D1DeviceContext dc)
     {
+        // The same context is the same device until the engine recreates resources (which releases _gpu): asking
+        // Direct2D for its device would make new wrappers every frame.
+        if (_gpu is not null && dc.NativePointer == _context) return _gpu;
+        _context = dc.NativePointer;
         using var d2d = dc.Device;
         using var d2d2 = d2d.QueryInterface<ID2D1Device2>();
         using var dxgi = d2d2.DxgiDevice;
@@ -236,6 +244,7 @@ public sealed class VisualiserLayer : IRenderLayer
         }
         _gpu = null;
         _device = 0;
+        _context = 0;
     }
 
     public void ReleaseResources()

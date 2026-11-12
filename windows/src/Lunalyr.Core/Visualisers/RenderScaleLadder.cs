@@ -11,7 +11,10 @@ namespace Lunalyr.Core.Visualisers;
 public struct RenderScaleLadder
 {
     /// <summary>The scene renders at this fraction of its budgeted pixels per axis; the bottom rung costs a quarter.</summary>
-    public static ReadOnlySpan<double> Scales => [0.5, 0.625, 0.75, 0.875, 1.0];
+    public static ReadOnlySpan<double> Scales => ScaleSteps;
+
+    // An array, not a collection expression in the property: that would make a new array on every read.
+    private static readonly double[] ScaleSteps = [0.5, 0.625, 0.75, 0.875, 1.0];
 
     public RenderScaleLadder()
     {
