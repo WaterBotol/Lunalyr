@@ -24,7 +24,7 @@
   <a href="CHANGELOG.md">What's new</a>
 </p>
 
-[![Lunalyr on a Mac desktop: a song's lyrics arriving word by word over a background in the album's colours](docs/media/hero.gif)](docs/media/hero.mp4)
+[![Lunalyr on a Mac desktop: a song's lyrics arriving word by word in the Fable layout over the Aurora Curtains visualiser](docs/media/hero.gif)](docs/media/hero.mp4)
 
 Play a song and Lunalyr puts its lyrics on your desktop, lighting each word as it is sung. It follows Apple Music, Spotify and more, sits quietly in the menu bar, and draws beneath your desktop icons, so there is no window to manage. Prefer to see the words while you work? Float them over your apps instead.
 
@@ -65,32 +65,32 @@ Each layout sets the words in its own way, from calm and spacious to bold and pl
 
 <table>
   <tr>
-    <td width="25%" align="center"><img src="docs/media/layout-scattered.png" alt="Scattered layout"><br><b>Scattered</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-constellation.png" alt="Constellation layout"><br><b>Constellation</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-constellationEditorial.png" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-editorial.png" alt="Editorial layout"><br><b>Editorial</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-scattered.jpg" alt="Scattered layout"><br><b>Scattered</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-constellation.jpg" alt="Constellation layout"><br><b>Constellation</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-constellationEditorial.jpg" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm</td>
+    <td width="25%" align="center"><img src="docs/media/layout-editorial.jpg" alt="Editorial layout"><br><b>Editorial</b> · Calm</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-spoken.png" alt="Spoken layout"><br><b>Spoken</b> · Calm</td>
-    <td align="center"><img src="docs/media/layout-echo.png" alt="Echo layout"><br><b>Echo</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-cascade.png" alt="Cascade layout"><br><b>Cascade</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-hinge.png" alt="Hinge layout"><br><b>Hinge</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-spoken.jpg" alt="Spoken layout"><br><b>Spoken</b> · Calm</td>
+    <td align="center"><img src="docs/media/layout-echo.jpg" alt="Echo layout"><br><b>Echo</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-cascade.jpg" alt="Cascade layout"><br><b>Cascade</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-hinge.jpg" alt="Hinge layout"><br><b>Hinge</b> · Bold</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-broadside.png" alt="Broadside layout"><br><b>Broadside</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-torque.png" alt="Torque layout"><br><b>Torque</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-cutout.png" alt="Cutout layout"><br><b>Cutout</b> · Playful</td>
-    <td align="center"><img src="docs/media/layout-portal.png" alt="Portal layout"><br><b>Portal</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-broadside.jpg" alt="Broadside layout"><br><b>Broadside</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-torque.jpg" alt="Torque layout"><br><b>Torque</b> · Bold</td>
+    <td align="center"><img src="docs/media/layout-cutout.jpg" alt="Cutout layout"><br><b>Cutout</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-portal.jpg" alt="Portal layout"><br><b>Portal</b> · Playful</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-mosaic.png" alt="Mosaic layout"><br><b>Mosaic</b> · Playful</td>
-    <td align="center"><img src="docs/media/layout-fable.png" alt="Fable layout"><br><b>Fable</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-mosaic.jpg" alt="Mosaic layout"><br><b>Mosaic</b> · Playful</td>
+    <td align="center"><img src="docs/media/layout-fable.jpg" alt="Fable layout"><br><b>Fable</b> · Playful</td>
     <td></td>
     <td></td>
   </tr>
 </table>
 
-![The Lyric style page in Lunalyr's Settings, with a live preview of the lyrics beside the layout, typeface and word entrance choices](docs/media/settings-lyrics.png)
+![The Lyric style page in Lunalyr's Settings: where lyrics show, the layout, the opening title, credits and backing vocals](docs/media/settings-lyrics.png)
 
 ### Japanese, Chinese and Korean readings
 
@@ -102,7 +102,7 @@ Lyrics in a language you don't read can also be **translated on your Mac**, with
 
 ### Floating lyrics over your apps
 
-[![Lyrics floating in a see-through window over an open app, fading as the pointer moves over them](docs/media/floating-lyrics.gif)](docs/media/floating-lyrics.mp4)
+[![Lyrics floating over an open TextEdit note, line by line as the song plays](docs/media/floating-lyrics.gif)](docs/media/floating-lyrics.mp4)
 
 Choose **Floating over apps** (in **Settings › Lyric style**, or the **Floating** button in the menu bar) and the lyrics move into a see-through window above every app, full-screen ones included. Place them in a corner, the centre, under the menu bar or above the Dock, on the display you choose, and give them their own style, size and shade. Clicks pass straight through, the lyrics fade while the pointer is over them, and they hide when nothing is playing. **Edit position** lets you drag them anywhere.
 
@@ -137,8 +137,8 @@ Apple Music's **animated album covers** can play behind the lyrics too.
     <td align="center"><b>Music video</b></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/media/background-wallpaper.png" alt="Lyrics drawn over an ordinary macOS desktop picture"></td>
-    <td width="50%"><img src="docs/media/album-colours.png" alt="A background and lyrics tinted in the colours of the playing album's cover"></td>
+    <td width="50%"><img src="docs/media/background-wallpaper.jpg" alt="Lyrics drawn over a macOS desktop picture chosen as the wallpaper"></td>
+    <td width="50%"><img src="docs/media/album-colours.jpg" alt="A background and lyrics tinted in the colours of the playing album's cover"></td>
   </tr>
   <tr>
     <td align="center"><b>Your wallpaper</b></td>
@@ -150,7 +150,7 @@ Apple Music's **animated album covers** can play behind the lyrics too.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/media/player-sleeve.png" alt="The Sleeve desktop player: a card in the album's colours with a large cover, the song title, a seek bar and a round play button"></td>
+    <td width="50%"><img src="docs/media/player-sleeve.png" alt="The Sleeve desktop player: the album cover with its record peeking out, the song title, a seek bar and a round play button"></td>
     <td width="50%"><img src="docs/media/player-queue.png" alt="The desktop player with its queue open beside the cover, listing what played, what's playing and what's next"></td>
   </tr>
 </table>
@@ -159,7 +159,7 @@ Rest the pointer on an empty part of the desktop and **Sleeve**, the desktop pla
 
 ### Lyric cards
 
-![A lyric card: three lyric lines over the album's colours, with the Lunalyr mark in the corner](docs/media/lyric-card.png)
+![The lyric card window: a portrait card of the current line over the album's colours, with its layout, background, clip length and sound options](docs/media/lyric-card.png)
 
 Pick lines from the playing song and make a card to share, as an MP4, GIF or PNG in 4:5, 1:1, 9:16 or 16:9. Put your own picture, GIF or video behind the words, and add sound: the song itself, the background video's sound or any audio file, each with its own level.
 
@@ -184,7 +184,7 @@ By default, **Accuracy first** rejects results whose title, artist or length do 
 
 Lyrics early or late? Nudge them for that song, or use **Tap to Sync Lyrics** in the menu bar: press any key as each line starts, and after four taps that agree Lunalyr sets the timing for you.
 
-![The Timing & sources page in Settings, listing lyric sources in priority order](docs/media/settings-sources.png)
+![The Timing & sources page in Settings: nudging this song's timing, where its lyrics came from, and searching for other lyrics](docs/media/settings-sources.png)
 
 ### Works with the music apps you use
 
@@ -195,8 +195,6 @@ Lyrics early or late? Nudge them for that song, or use **Tap to Sync Lyrics** in
 Lunalyr only reads a player that is already open; it never opens one itself.
 
 ### Menu bar, keyboard shortcuts and Shortcuts
-
-![The Lunalyr menu-bar panel, showing the playing song, quick toggles for the wallpaper and lyric timing controls](docs/media/menu-bar.png)
 
 - **The menu-bar panel** shows what is playing and where its lyrics came from, with quick switches for the wallpaper, floating lyrics, the visualiser scene and lyric timing.
 - **The current line in the menu bar**, if you like.
