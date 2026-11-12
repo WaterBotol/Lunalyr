@@ -118,6 +118,7 @@ When merging, keep every entry and combine duplicate headings.
 - Music video: Lunalyr no longer sets a video's timing by itself (from YouTube captions, the library video's soundtrack, or its cuts against the beat), and never turns System audio's capture on for it. Timings it found before are no longer used: the video goes back to the length estimate until you tap, nudge or align it. Re-sync is gone; Align video's Automatic button is now Reset.
 
 ### Fixed
+- Apple Music's lyrics from the Lyrics+ mirror that labels them "qApple" now rank as Apple Music's, as they do from the other mirrors, instead of as an ordinary source. Saved automatic choices are looked up again once.
 - Readings below Japanese lyrics: a word with a doubled consonant that the reading spells across two characters (一回 ikkai, 学校 gakkou) is written as one word, not "ik kai", under floating and desktop lyrics and in Hinge and the other stage layouts.
 - Readings below Japanese lyrics: where a word ends inside a timed part that goes on into the next word (Apple Music times 始まりに as 始 | まりに), each part now reads its own characters (haji under 始, mari ni under まりに) instead of the whole word's reading under the first part and only the rest after it.
 

@@ -151,9 +151,16 @@ enum KPoeLyricsProvider {
         guard !lines.isEmpty else { return nil }
         // The node reports which upstream it pulled from, e.g. "Apple" or
         // "Lyrics+ (via Apple with QQ)"; keep just the leading name.
-        let raw = payload.metadata?.source ?? "Lyrics+"
-        let source = raw.components(separatedBy: " (").first ?? raw
-        return Hit(lines: lines, source: source, title: payload.metadata?.title, artist: payload.metadata?.artist)
+        return Hit(lines: lines, source: upstreamName(payload.metadata?.source), title: payload.metadata?.title, artist: payload.metadata?.artist)
+    }
+
+    /// The upstream a node names, cut to its leading name. Mirrors name
+    /// Apple's lyrics differently: lyricsplus.binimum.org says "qApple" for
+    /// the same lines another mirror calls "Apple", so both read "Apple".
+    static func upstreamName(_ raw: String?) -> String {
+        let raw = raw ?? "Lyrics+"
+        let name = (raw.components(separatedBy: " (").first ?? raw).trimmingCharacters(in: .whitespaces)
+        return name.lowercased() == "qapple" ? "Apple" : name
     }
 
     // MARK: - Conversion

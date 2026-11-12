@@ -93,7 +93,8 @@ final class LyricSourceOptions: ObservableObject {
         /// v14: a whole line or a few long phrases timed as "words" is line
         /// timing (`LyricsFetcher.isPhraseTimed`); Apple's lyrics relayed by
         /// Lyrics+ rank as Apple Music's.
-        static let cachePolicy = "v14"
+        /// v15: a Lyrics+ mirror's "qApple" is Apple's lyrics too.
+        static let cachePolicy = "v15"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

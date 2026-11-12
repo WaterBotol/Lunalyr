@@ -533,7 +533,7 @@ final class LyricsFetcher {
     static func isAppleRelay(provenanceSource source: String) -> Bool {
         guard source.hasSuffix(lyricsPlusSuffix) else { return false }
         let upstream = source.dropLast(lyricsPlusSuffix.count).trimmingCharacters(in: .whitespaces).lowercased()
-        return upstream == "apple" || upstream == "apple music"
+        return upstream == "apple" || upstream == "apple music" || upstream == "qapple"
     }
     private static func order(_ source: LyricSourceID, in options: LyricSourceOptions.Snapshot) -> Int {
         options.enabled.firstIndex(of: source) ?? 999
