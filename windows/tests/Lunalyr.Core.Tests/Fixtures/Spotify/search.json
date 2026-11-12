@@ -1,0 +1,102 @@
+{
+  "tracks": {
+    "href": "https://api.spotify.com/v1/search?offset=0&limit=8&query=blinding&type=track&market=from_token",
+    "limit": 8,
+    "next": null,
+    "offset": 0,
+    "previous": null,
+    "total": 4,
+    "items": [
+      {
+        "album": {
+          "album_type": "album",
+          "total_tracks": 14,
+          "id": "4yP0hdKOZPNshxUOjY0cZj",
+          "uri": "spotify:album:4yP0hdKOZPNshxUOjY0cZj",
+          "name": "After Hours",
+          "images": [
+            { "url": "https://i.scdn.co/image/after-hours-640", "height": 640, "width": 640 },
+            { "url": "https://i.scdn.co/image/after-hours-300", "height": 300, "width": 300 },
+            { "url": "https://i.scdn.co/image/after-hours-64", "height": 64, "width": 64 }
+          ],
+          "release_date": "2020-03-20",
+          "release_date_precision": "day",
+          "type": "album",
+          "artists": [ { "id": "1Xyo4u8uXC1ZmMpatF05PJ", "name": "The Weeknd", "type": "artist", "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ" } ]
+        },
+        "artists": [ { "id": "1Xyo4u8uXC1ZmMpatF05PJ", "name": "The Weeknd", "type": "artist", "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ" } ],
+        "disc_number": 1,
+        "duration_ms": 200040,
+        "explicit": false,
+        "id": "0VjIjW4GlUZAMYd2vXMi3b",
+        "is_playable": true,
+        "name": "Blinding Lights",
+        "track_number": 9,
+        "type": "track",
+        "uri": "spotify:track:0VjIjW4GlUZAMYd2vXMi3b",
+        "is_local": false
+      },
+      {
+        "album": {
+          "album_type": "single",
+          "total_tracks": 1,
+          "id": "0000000000000000single",
+          "uri": "spotify:album:0000000000000000single",
+          "name": "Breathe (Single)",
+          "images": [ { "url": "http://i.scdn.co/image/plain-http", "height": 300, "width": 300 } ],
+          "type": "album",
+          "artists": [ { "name": "Telepopmusik" } ]
+        },
+        "artists": [ { "name": "Telepopmusik" }, { "name": "Angela McCluskey" } ],
+        "disc_number": 1,
+        "id": "4VqPOruhp5EdPBeR92t6lQ",
+        "is_playable": true,
+        "name": "Breathe",
+        "track_number": 1,
+        "type": "track",
+        "uri": "spotify:track:4VqPOruhp5EdPBeR92t6lQ",
+        "is_local": false
+      },
+      {
+        "album": { "name": "Unavailable here", "uri": "spotify:album:000000000000unavailable", "total_tracks": 3 },
+        "artists": [ { "name": "Somebody" } ],
+        "id": "00000000000unplayable",
+        "is_playable": false,
+        "restrictions": { "reason": "market" },
+        "name": "Not in this market",
+        "track_number": 2,
+        "disc_number": 1,
+        "type": "track",
+        "uri": "spotify:track:00000000000unplayable",
+        "is_local": false
+      },
+      {
+        "album": null,
+        "artists": [ { "name": "Me" } ],
+        "id": null,
+        "name": "My own recording",
+        "type": "track",
+        "uri": "spotify:local:Me::My+own+recording:180",
+        "is_local": true
+      }
+    ]
+  },
+  "albums": {
+    "href": "https://api.spotify.com/v1/search?offset=0&limit=8&query=blinding&type=album&market=from_token",
+    "limit": 8,
+    "next": null,
+    "offset": 0,
+    "previous": null,
+    "total": 6,
+    "items": [
+      { "album_type": "album", "total_tracks": 14, "id": "4yP0hdKOZPNshxUOjY0cZj", "uri": "spotify:album:4yP0hdKOZPNshxUOjY0cZj", "name": "After Hours",
+        "images": [ { "url": "https://i.scdn.co/image/after-hours-640", "height": 640, "width": 640 }, { "url": "https://i.scdn.co/image/after-hours-64", "height": 64, "width": 64 } ],
+        "type": "album", "artists": [ { "name": "The Weeknd" } ] },
+      { "album_type": "album", "total_tracks": 11, "id": "a2", "uri": "spotify:album:a2", "name": "Album Two", "images": [], "type": "album", "artists": [ { "name": "Two" } ] },
+      { "album_type": "album", "total_tracks": 10, "id": "a3", "uri": "spotify:album:a3", "name": "Album Three", "type": "album", "artists": [ { "name": "Three" } ] },
+      { "album_type": "single", "total_tracks": 2, "id": "a4", "uri": "spotify:album:a4", "name": "Album Four", "type": "album", "artists": [ { "name": "Four" } ] },
+      { "album_type": "album", "total_tracks": 9, "id": "a5", "uri": "spotify:album:a5", "name": "Album Five", "type": "album", "artists": [ { "name": "Five" } ] },
+      null
+    ]
+  }
+}
