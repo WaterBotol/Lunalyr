@@ -286,8 +286,10 @@ Why not the others:
 - **A windowless RichEdit** (`ITextServices`) draws into Direct2D, but needs a full `ITextHost` (40-odd methods) through
   source-generated COM and its own UI Automation wiring.
 
-Not seen: a real IME composition (switching the keyboard layout is a Windows setting) and Narrator's speech (it makes
-sound). Both rest on the stock EDIT; its MSAA name and value were read with a silent client.
+Checked with silent clients: native UI Automation reads the box as an Edit named "Search Spotify" with its value;
+keys posted to it type, delete a word and reach the card under both message loops (see M5.md). Not seen: a real IME
+composition (switching the keyboard layout is a Windows setting), the clipboard (it would touch the owner's) and
+Narrator's speech (it makes sound); all three are the stock EDIT's.
 
 ### Left for the next rounds
 

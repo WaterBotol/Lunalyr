@@ -21,6 +21,8 @@ internal sealed unsafe partial class DesktopPlayer
     private string? _queueTrack;
     private float _cardHeightDip = CardPainter.Height;
     private bool _debugPaneOpened;
+    private (string? App, PlayerSearchAvailability Availability, string Name) _searcherKey;
+    private (string? App, PlayerSearchAvailability Availability) _queueKey = ("\0", default);
 
     /// <summary>The host's side of search and the queue; set before <see cref="Start"/>.</summary>
     public PlayerSearchSource Search { get; set; } = new();
@@ -62,6 +64,11 @@ internal sealed unsafe partial class DesktopPlayer
                 _interaction.SearchFocused = focused;
                 _model.FieldFocused = focused;
                 if (focused) _automation?.Focus(CardPart.SearchField);
+                // The keyboard left through the box for another app: Esc must not hand it back to an older window later.
+                else _post(() =>
+                {
+                    if (!HasKeyboard) _previousForeground = 0;
+                });
                 Invalidate();
                 StartFrames(16);
             };
@@ -111,8 +118,21 @@ internal sealed unsafe partial class DesktopPlayer
         }
 
         var (availability, searcher) = Search.For(_searchApp);
-        _search.SetSearcher(searcher);
-        _search.SetQueueSearcher(Search.QueueFor?.Invoke(playing) ?? Search.For(playing).Search);
+        // A player with no search is made afresh each time: only a different player or availability changes the search
+        // (setting it clears the results and searches again).
+        var key = (_searchApp?.AppId, availability, searcher.PlayerName);
+        if (key != _searcherKey)
+        {
+            _searcherKey = key;
+            _search.SetSearcher(searcher);
+        }
+
+        var queueKey = (playing?.AppId, availability);
+        if (queueKey != _queueKey)
+        {
+            _queueKey = queueKey;
+            _search.SetQueueSearcher(Search.QueueFor?.Invoke(playing) ?? Search.For(playing).Search);
+        }
         _model.Prompt = PlayerSearchPrompt.For(availability, _searchApp, Search.SpotifyOffReason());
         _model.Pickers = [.. apps.Select(a => a.DisplayName)];
         _model.PickerSelected = _searchApp is null ? -1 : apps.FindIndex(a => a.AppId == _searchApp.AppId);

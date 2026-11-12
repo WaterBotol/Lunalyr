@@ -466,9 +466,15 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
 
         public nint ElementProviderFromPoint(double x, double y)
         {
+            // From the snapshot (UIA calls on its own threads; the card's hit list is the UI thread's).
             var s = owner.Snapshot;
-            var part = owner.Player.PartAtScreen(x, y);
-            return part == CardPart.None ? owner.RootFragment() : owner.Provider(part);
+            for (var i = s.Items.Count - 1; i >= 0; i--)
+            {
+                var r = PartRect(s, s.Items[i].Part);
+                if (r.Width > 0 && x >= r.Left && x < r.Left + r.Width && y >= r.Top && y < r.Top + r.Height) return owner.Provider(s.Items[i].Part);
+            }
+
+            return owner.RootFragment();
         }
 
         public nint GetFocus() => owner.Provider(owner.Snapshot.Focus);
