@@ -8,7 +8,10 @@ using Lunalyr.Core.Lyrics.Readings;
 using Lunalyr.Core.Lyrics.Sources;
 using Lunalyr.Core.Lyrics.Timing;
 using Lunalyr.Core.Playback;
+using Lunalyr.Core.Player;
+using Lunalyr.Core.Player.Spotify;
 using Lunalyr.Platform;
+using Lunalyr.Platform.Spotify;
 using Lunalyr.Platform.Desktop;
 using Lunalyr.Platform.Logging;
 using Lunalyr.Platform.Lyrics;
@@ -217,6 +220,7 @@ internal sealed class AppHost
 
                 // Read-only: the guard refuses every command while --no-playback is set, and nothing here sends any.
                 _sessions = await GsmtcMediaSessionSource.CreateAsync(PlaybackGuard.Process, message => Log.Player.Debug(message)).ConfigureAwait(false);
+                CreateSpotify();
             }
             var offsets = new SongOffsets(_settings.Current.SongOffsets,
                 saved => _settings.Update(s => s with { SongOffsets = new Dictionary<string, double>(saved) }));
@@ -252,6 +256,41 @@ internal sealed class AppHost
             _log.Error("Couldn't start following now playing.", ex);
             _tray.Post(() => _tray.SetTooltip("Lunalyr — couldn't connect to now playing (see the log)"));
         }
+    }
+
+    // ---- Spotify search and queue (docs/APP-SHELL.md) ----
+
+    private volatile PlayerSearches _playerSearches = PlayerSearches.Off;
+
+    /// <summary>
+    /// The desktop player's search for the player playing: <c>PlayerSearch.For(session.SourceApp)</c> and
+    /// <c>PlayerSearch.Availability(…)</c>. <see cref="PlayerSearches.Off"/> under <c>--demo</c> and <c>--no-network</c>,
+    /// and until start-up has built it.
+    /// </summary>
+    public PlayerSearches PlayerSearch => _playerSearches;
+
+    /// <summary>The Spotify sign-in for the settings page (sign in, sign out, state), or null when Spotify is off this run.</summary>
+    public SpotifyAccount? Spotify => _playerSearches.Spotify?.Account;
+
+    /// <summary>
+    /// Builds the Spotify service. Nothing is sent until the user signs in or searches: no token refresh at start-up.
+    /// Not built under --no-network (nothing may reach Spotify) or --demo (which never gets here).
+    /// </summary>
+    private void CreateSpotify()
+    {
+        if (_options.NoNetwork) return;
+        var http = new LyricHttpClient(LyricHttpClient.CreateDefaultHttpClient(), new LyricHttpOptions { UserAgent = UserAgent }, Log);
+        var account = new SpotifyAccount(http,
+            new ProtectedFileTokenStore(ProtectedFileTokenStore.PathIn(DataRoot), new DpapiTokenProtector()),
+            new SystemBrowserLauncher(), _settings.Current.SpotifyClientId, new SpotifyOptions { Logger = Log });
+        _settings.Changed += (_, e) => account.SetClientId(e.NewValue.SpotifyClientId);
+        _playerSearches = new PlayerSearches(new SpotifyPlayerSearch(account, http, PlaybackGuard.Process));
+        _log.Info($"Spotify search: {account.State switch
+        {
+            SpotifyAccountState.NotSetUp => "no client ID set",
+            SpotifyAccountState.SignedIn => "signed in",
+            _ => "not signed in",
+        }}.");
     }
 
     // ---- Message loops ----
