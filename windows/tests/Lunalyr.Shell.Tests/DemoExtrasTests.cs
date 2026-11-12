@@ -17,16 +17,15 @@ public class DemoExtrasTests
         LyricPresentation.Prepare(song.Lyrics, new LyricQuery(song.Title, song.Artist, song.Album, song.Duration), repairingGaps: true));
 
     [Fact]
-    public void TheEnglishSongOpensWithItsTitleThenItsTwoCredits()
+    public void TheEnglishSongShowsItsTwoCredits()
     {
         var song = DemoSongs.Songs[0];
         var lines = Presented(song).Lines;
         Assert.Equal(2, lines.Count(line => line.Credit == true));
         var cues = CreditCues.Cues(lines, song.Title, song.Artist);
-        Assert.Equal(3, cues.Count);
-        Assert.Equal($"{song.Title} - {song.Artist}", cues[0].Text);
-        Assert.NotNull(cues[0].HighlightFrom);
-        Assert.StartsWith("Produced by", cues[1].Text, StringComparison.Ordinal);
+        Assert.Equal(2, cues.Count);
+        Assert.StartsWith("Produced by", cues[0].Text, StringComparison.Ordinal);
+        Assert.StartsWith("Written by", cues[1].Text, StringComparison.Ordinal);
     }
 
     [Fact]

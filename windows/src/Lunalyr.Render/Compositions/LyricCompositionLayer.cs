@@ -569,13 +569,10 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// <param name="inkTime">The song time whose drift the line's colours take (its start).</param>
     /// <param name="kind">The composition the line is set in (the layer's own by default): its typography, entrances, links and echo.</param>
     /// <param name="lineEnd">The line's end, where highlight tiles release.</param>
-    /// <param name="highlightFrom">Runs sung from this time on are pressed onto highlight tiles whatever the entrance
-    /// (the credits' artist; the Mac's <c>highlightFrom</c>).</param>
     protected LinePlan BuildPlan(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize, int lineIndex,
                                  double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
                                  LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
-                                 bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN,
-                                 double? highlightFrom = null)
+                                 bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN)
     {
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
@@ -591,7 +588,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Connections: connections, Spread: ConstellationLayout.DefaultSpread,
             EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading);
-        Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink, highlightFrom);
+        Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
         {
             var box = BackingVocalLayout.Box(Stage);
@@ -622,7 +619,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// tiles' words, the constellation's links and Echo's phrase.
     /// </summary>
     private void Decorate(LinePlan plan, CompositionKind kind, IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue,
-                          double lineEnd, int seed, double baseSize, SizeD stage, LyricInk ink, double? highlightFrom = null)
+                          double lineEnd, int seed, double baseSize, SizeD stage, LyricInk ink)
     {
         var typography = plan.Typography;
         var runs = typography.Runs;
@@ -635,9 +632,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var highlights = false;
         for (var r = 0; r < n; r++)
         {
-            var chosen = highlightFrom is { } from && runs[r].Source.Start >= from
-                ? WordArrival.CutoutHighlight
-                : Choice.For(kind, runs[r].Seed);
+            var chosen = Choice.For(kind, runs[r].Seed);
             plan.Chosen[r] = chosen;
             plan.Motions[r] = chosen.Motion(kind);
             highlights |= chosen.HighlightsSungWords();

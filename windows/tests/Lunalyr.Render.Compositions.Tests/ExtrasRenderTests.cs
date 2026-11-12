@@ -128,12 +128,12 @@ public sealed class ExtrasRenderTests : IDisposable
     [InlineData("constellation")]
     [InlineData("constellationEditorial")]
     [InlineData("echo")]
-    public void CreditsOpenTheSongAndThenFollowEachOther(string composition)
+    public void CreditsFollowEachOther(string composition)
     {
         using var layer = Layer(composition);
         var on = ExtrasFixtures.Credits();
         var off = on with { Style = on.Style with { Credits = false } };
-        // Before the first line, only the opening "Title - Artist" is up, in the top band.
+        // Before the first line, only the first production credit is up, in the top band.
         var opening = Frame(layer, on, 2.0);
         Assert.True(Lit(opening, 0, Height / 3) > 150, $"{Lit(opening, 0, Height / 3)}");
         // (Credits off: only the intro's interlude dots, in the middle.)
@@ -214,7 +214,14 @@ public sealed class ExtrasRenderTests : IDisposable
             for (var t = 10.0; t < 12.9; t += 1.0 / 30) Frame(played, scene, t);
             var afterPlaying = Frame(played, scene, 12.9);
             using var fresh = Layer(composition);
-            Assert.Equal(afterPlaying, Frame(fresh, scene, 12.9));
+            // The same picture. The GPU may round a handful of blended pixels one level apart depending on what it drew
+            // before (seen with the Highlight scene drawn on its own, before any change here), so a channel may differ
+            // by a level or two, never more.
+            var freshPixels = Frame(fresh, scene, 12.9);
+            var apart = 0;
+            for (var i = 0; i < freshPixels.Length; i++)
+                if (Math.Abs(freshPixels[i] - afterPlaying[i]) > 2) apart++;
+            Assert.True(apart == 0, $"{scene.Title} ({scene.Style.Reveal}): {apart} channels differ");
         }
     }
 }

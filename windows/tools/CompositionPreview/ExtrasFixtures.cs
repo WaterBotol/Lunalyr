@@ -51,7 +51,7 @@ public static class ExtrasFixtures
         return Scene("Evening Road", lyrics, style) with { WordReadings = words, Readings = lines };
     }
 
-    /// <summary>The English fixture with two production credits, credits on: the opening title, then the credits.</summary>
+    /// <summary>The English fixture with two production credits, credits on: one after the other, top band then foot.</summary>
     public static SceneSnapshot Credits(LyricStyle? style = null)
     {
         var english = Fixtures.English(style);
