@@ -41,6 +41,9 @@ public sealed partial class RenderEngine
     private double _statusWindowStart;
     private RenderSurface[] _due = [];
     private nint[] _waitHandles = [];
+    // When each song was first seen, for the opening title (FrameContext.SongJoined). Kept here, not in a layer, so a
+    // layout or device change mid-song does not make the song look joined part-way.
+    private readonly Lunalyr.Core.Compositions.OpeningTitleMemory _joins = new();
 
     private double Now() => Stopwatch.GetElapsedTime(_epoch).TotalSeconds;
 
@@ -307,6 +310,7 @@ public sealed partial class RenderEngine
             Dc = dc, DWrite = _dwrite, D2DFactory = _d2d, Size = new Vector2(s.Width, s.Height), Scale = s.Scale,
             WallSeconds = now, SongSeconds = song, IsPlaying = playing, Scene = _scene,
             DeltaSeconds = double.IsNaN(s.LastFrameWall) ? 0 : Math.Clamp(now - s.LastFrameWall, 0, 0.25),
+            SongJoined = _joins.Joined(_scene.TrackKey, song),
         };
         dc.Target = s.Target;
         dc.BeginDraw();

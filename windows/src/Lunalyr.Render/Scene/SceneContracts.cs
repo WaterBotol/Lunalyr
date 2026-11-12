@@ -82,6 +82,29 @@ public sealed record SceneSnapshot
     /// colour-only gradient holds still. Read from the system by the app, never changed by it; false by default.
     /// </summary>
     public bool ReduceMotion { get; init; }
+
+    // ---- The song's opening title (LyricStyle.OpeningTitle) ----
+
+    /// <summary>The album the track is on, as the player reports it, or null.</summary>
+    public string? Album { get; init; }
+
+    /// <summary>
+    /// Which track this is (the player's track key), or null. The engine uses it to tell a song seen from its start
+    /// from one joined part-way (<see cref="FrameContext.SongJoined"/>); looking the same song up again keeps it.
+    /// </summary>
+    public string? TrackKey { get; init; }
+
+    /// <summary>
+    /// The title's reading, capitalised as a title ("Yoru ni Kakeru"), when readings are shown and the title needs one;
+    /// null otherwise or until worked out. The opening title sets it under the title.
+    /// </summary>
+    public string? TitleReading { get; init; }
+
+    /// <summary>
+    /// The song's cover as the opening title draws it (decoded off the render thread), or null when the player shares
+    /// none or it is not read yet. Never the previous song's.
+    /// </summary>
+    public Lunalyr.Core.Colour.CoverArt? Cover { get; init; }
 }
 
 /// <summary>Settings shared by the lyric compositions. Each composition reads what applies to it.</summary>
@@ -122,6 +145,16 @@ public sealed record LyricStyle
 
     /// <summary>The custom highlight colour as <c>#RRGGBB</c> (the Mac's <c>custom.lyricHighlightCustom</c>).</summary>
     public string HighlightCustom { get; init; } = "#FF92A3";
+
+    /// <summary>
+    /// The song's opening title as it starts: title, artist, album and the title's reading, low on the left, gone before
+    /// the first line is sung (the Mac's <c>custom.openingTitle</c>). Off by default here so scenes made without it draw
+    /// as before; the app's setting defaults to on, as the Mac's does.
+    /// </summary>
+    public bool OpeningTitle { get; init; }
+
+    /// <summary>The album cover beside the opening title, when the song has one (the Mac's <c>custom.openingTitleCover</c>).</summary>
+    public bool OpeningTitleCover { get; init; } = true;
 }
 
 public enum ReadingPlacement { Off, Below, Instead }
@@ -151,6 +184,13 @@ public readonly struct FrameContext
 
     /// <summary>Seconds since the previous frame on this surface (clamped to 0..0.25).</summary>
     public required double DeltaSeconds { get; init; }
+
+    /// <summary>
+    /// The song time at which the engine first saw the scene's track (<see cref="SceneSnapshot.TrackKey"/>): 0 for a
+    /// song seen from its start, or once playback is back at its start (the Mac's <c>OpeningTitleMemory.joined</c>).
+    /// The opening title is brief for a song joined part-way. 0 when not set.
+    /// </summary>
+    public double SongJoined { get; init; }
 }
 
 /// <summary>

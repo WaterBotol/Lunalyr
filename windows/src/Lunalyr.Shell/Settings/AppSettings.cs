@@ -43,8 +43,14 @@ public sealed record AppSettings
     /// <summary>An installed font family, used when <see cref="FontChoice"/> is "installed" (Mac <c>googleFontFamily</c>).</summary>
     public string FontFamily { get; init; } = "";
 
-    /// <summary>Show the song's title and credits on the wallpaper (Mac <c>custom.creditsLayer</c>).</summary>
+    /// <summary>Show the song's production credits on the wallpaper (Mac <c>custom.creditsLayer</c>).</summary>
     public bool CreditsLayer { get; init; } = true;
+
+    /// <summary>"Show the song title at the start": the opening title card as a song begins (Mac <c>custom.openingTitle</c>).</summary>
+    public bool OpeningTitle { get; init; } = true;
+
+    /// <summary>"Show the album cover" beside the opening title (Mac <c>custom.openingTitleCover</c>).</summary>
+    public bool OpeningTitleCover { get; init; } = true;
 
     /// <summary>Three dots during instrumental breaks (Mac <c>custom.showInterludes</c>).</summary>
     public bool ShowInterludes { get; init; } = true;
@@ -209,6 +215,8 @@ public sealed record AppSettings
         SizeFraction = (float)(LyricStyle.Default.SizeFraction * (double.IsFinite(LyricScale) ? Math.Clamp(LyricScale, 0.5, 2) : 1)),
         Reveal = SceneReveal(WordArrival),
         Credits = CreditsLayer,
+        OpeningTitle = OpeningTitle,
+        OpeningTitleCover = OpeningTitleCover,
         Interludes = ShowInterludes,
         HighlightMode = LyricHighlightMode,
         HighlightCustom = LyricHighlightCustom,

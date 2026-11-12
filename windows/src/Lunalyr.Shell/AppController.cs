@@ -43,6 +43,12 @@ public sealed record AppControllerOptions
     public Func<Stream, CancellationToken, Task<Palette?>> ArtworkPalette { get; init; } = Artwork.ArtworkPalettes.FromStreamAsync;
 
     /// <summary>
+    /// Turns a track's artwork into the cover the opening title draws, off the caller's thread; null when the bytes are
+    /// not an image. Default: <see cref="Artwork.ArtworkPalettes.CoverAsync"/> (WIC, smooth scaling, premultiplied BGRA).
+    /// </summary>
+    public Func<byte[], CancellationToken, Task<Core.Colour.CoverArt?>> ArtworkCover { get; init; } = Artwork.ArtworkPalettes.CoverAsync;
+
+    /// <summary>
     /// How long to wait before each further look for a cover when the player has none yet: players often send the
     /// artwork a moment after the title (and some never do; the default colours are used then).
     /// </summary>
@@ -323,9 +329,12 @@ public sealed partial class AppController : IAsyncDisposable
             _lyricLog.Info("Lyric source settings changed: looking the song up again.");
             BeginLookup(relook);
         }
-        else if (rereadings is not null)
+        else
         {
-            StartReadings(generation, rereadings, settings.Readings());
+            if (rereadings is not null) StartReadings(generation, rereadings, settings.Readings());
+            // The opening title's reading of the song's title follows the readings settings too.
+            if (old.Readings() != settings.Readings() && Scene.Title is { Length: > 0 } title)
+                StartTitleReading(generation, title, settings.Readings());
         }
 
         RaiseStatusChanged();
@@ -408,6 +417,7 @@ public sealed partial class AppController : IAsyncDisposable
             CancelLookupLocked();
             CancelArtworkLocked();
             if (session is null) _palette = PaletteMapper.Fallback;
+            _cover = null;
             _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
             _status = _status with
             {
@@ -470,6 +480,7 @@ public sealed partial class AppController : IAsyncDisposable
     {
         long generation;
         CancellationTokenSource cts;
+        RomanizationOptions titleReadings;
         var disabled = _lyrics.DisabledReason;
         lock (_gate)
         {
@@ -487,7 +498,13 @@ public sealed partial class AppController : IAsyncDisposable
                 Style = _settings.Style(),
                 Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
                 ReduceMotion = _reduceMotion,
+                Album = track.AlbumTitle.Length > 0 ? track.AlbumTitle : null,
+                TrackKey = track.TrackKey,
+                Cover = _cover,
+                // Looking the same song up again keeps its title's reading.
+                TitleReading = _scene.Title == track.Title ? _scene.TitleReading : null,
             };
+            titleReadings = _settings.Readings();
             _status = _status with
             {
                 Title = track.Title,
@@ -503,6 +520,7 @@ public sealed partial class AppController : IAsyncDisposable
         _player.Info($"Now playing: \"{track.Title}\" by \"{track.Artist}\".");
         PublishScene();
         RaiseStatusChanged();
+        StartTitleReading(generation, track.Title, titleReadings);
         if (disabled is not null)
         {
             _lyricLog.Info($"Not looking lyrics up: {disabled}.");

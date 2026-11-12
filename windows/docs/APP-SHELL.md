@@ -136,7 +136,9 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricSources` | all but `lyrimuse` and `appleMusicCache` | source raw values | `custom.lyricSources` |
 | `lyricMatchMode` | `"smart"` | `smart` (Accuracy first), `priority` (Source order) | `custom.lyricMatchMode` |
 | `lyrimuseFolder` | `""` | the local lyric folder | `custom.lyrimuseFolder` |
-| `creditsLayer` | `true` | the song's title and credits on the wallpaper | `custom.creditsLayer` |
+| `creditsLayer` | `true` | the song's production credits on the wallpaper | `custom.creditsLayer` |
+| `openingTitle` | `true` | "Show the song title at the start": the opening title card | `custom.openingTitle` |
+| `openingTitleCover` | `true` | "Show the album cover" beside the opening title | `custom.openingTitleCover` |
 | `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
 | `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |
 | `lyricHighlightCustom` | `"#FF92A3"` | `#RRGGBB` | `custom.lyricHighlightCustom` |
