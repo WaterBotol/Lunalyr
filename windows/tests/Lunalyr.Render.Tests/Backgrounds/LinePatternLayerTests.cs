@@ -22,9 +22,17 @@ public sealed class LinePatternLayerTests : IDisposable
     // No title: the stage is empty, so no text backing (whose strength follows the pattern) darkens the comparison.
     private static SceneSnapshot Quiet => new() { Palette = GpuEffectLayerTests.TwoColour };
 
-    private byte[] Frame(IRenderLayer layer, double wall)
+    // Pattern visibility at 0: the factory's opacity, or the scene's once the wallpaper-types adjustments are merged.
+    private static SceneSnapshot Hidden =>
+#if LUNALYR_WALLPAPER_TYPES
+        Quiet with { Adjustments = new WallpaperAdjustments { PatternOpacity = 0 } };
+#else
+        Quiet;
+#endif
+
+    private byte[] Frame(IRenderLayer layer, double wall, SceneSnapshot? scene = null)
     {
-        _surface.Draw(layer, Quiet, wall);
+        _surface.Draw(layer, scene ?? Quiet, wall);
         return _surface.ReadPixels();
     }
 
@@ -62,7 +70,7 @@ public sealed class LinePatternLayerTests : IDisposable
         using var layer = new LinePatternLayerFactory(id, Plain).Create();
         _surface.Prepare(none);
         _surface.Prepare(layer);
-        var plain = Frame(none, 20);
+        var plain = Frame(none, 20, Hidden);
         var drawn = Frame(layer, 20);
         Assert.True(Sum(drawn) > Sum(plain) * 1.001, $"{id} added no light: {Sum(drawn)} vs {Sum(plain)}");
 
