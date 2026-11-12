@@ -30,7 +30,7 @@
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="Width" Value="44" />
-                <Setter Property="Height" Value="36" />
+
                 <Setter Property="Padding" Value="0" />
             </Style>
             <!-- A footer row, like the end of a menu: highlighted under the pointer, its keys at the trailing edge. -->
@@ -45,7 +45,7 @@
             <Style x:Key="ModeTile" TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment" Value="Center" />
-                <Setter Property="Height" Value="36" />
+
             </Style>
             <!-- A quick toggle, drawn like a Control Center / Quick Settings control: a round button that lights in the
                  accent while on, its name beneath. -->
@@ -188,22 +188,7 @@
                                              Margin="0,0,-6,0" Content="Options…" Click="OptionsButton_Click" />
                         </Grid>
                         <Grid x:Name="ModeTiles" ColumnSpacing="6" AutomationProperties.Name="Wallpaper type">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <ToggleButton x:Name="GradientTile" Style="{StaticResource ModeTile}" Click="ModeTile_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE771;" FontSize="14" />
-                                    <TextBlock x:Name="GradientTileText" />
-                                </StackPanel>
-                            </ToggleButton>
-                            <ToggleButton x:Name="ColourTile" Grid.Column="1" Style="{StaticResource ModeTile}" Click="ModeTile_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE790;" FontSize="14" />
-                                    <TextBlock x:Name="ColourTileText" />
-                                </StackPanel>
-                            </ToggleButton>
+                            <!-- Filled from code: every wallpaper type as a tile (TrayFlyout.BuildModeTiles). -->
                         </Grid>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>

@@ -30,10 +30,11 @@ public sealed class LyricsOvhSource(LyricHttpClient http, LyricsOvhOptions? opti
         }
         var uri = new Uri(_options.BaseAddress + Uri.EscapeDataString(query.Artist) + "/" + Uri.EscapeDataString(query.Title));
         var response = await http.GetAsync(Service, uri, _options.RequestTimeout, null, ct).ConfigureAwait(false);
-        // Unlike the Mac, a 404 is lyrics.ovh's own "No lyrics found", not an outage.
+        // As on the Mac, a 404 (lyrics.ovh's "No lyrics found") is an error rather than an answer: it is not remembered
+        // as a miss, so lyrics.ovh is asked again at the next lookup (parity check of 13 Nov 2026, row 11).
         if (response.StatusCode == 404)
         {
-            return null;
+            throw new LyricSourceException(LyricSourceFailure.HttpStatus, "lyrics.ovh: no lyrics found (HTTP 404).", 404);
         }
         LyricHttpClient.EnsureOk(Service, response);
         using var document = LyricHttpClient.ParseJson(Service, response.Body);

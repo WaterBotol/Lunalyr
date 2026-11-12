@@ -87,12 +87,12 @@ public sealed partial record AppSettings
     // ---- Wallpaper ----
 
     /// <summary>
-    /// The background: "gradient" (the animated album colour field; Windows' default) or the Mac's "colourOnly" (the
-    /// straight album gradient), then the Mac's other <c>backgroundMode</c> values as they are ported ("pattern",
-    /// "shader", "visualizer", "desktop", "custom", "musicVideo"). EngineWallpaperRenderer.BackgroundLayerFor maps a
-    /// value to its layer.
+    /// The wallpaper type, the Mac's <c>backgroundMode</c> raw values: "auto" (Match the music, the default), "pattern",
+    /// "shader", "colourOnly", "visualizer", "desktop" (Your wallpaper), "custom" (Imported image or video),
+    /// "musicVideo". Windows' earlier "gradient" is read as Colour only with Album gradient off (see
+    /// AppSettings.Wallpaper.cs); AppController.Wallpaper.cs turns the type into a background layer.
     /// </summary>
-    public string BackgroundMode { get; init; } = "gradient";
+    public string BackgroundMode { get; init; } = "auto";
 
     /// <summary>The wallpaper is paused from the tray (Mac <c>custom.wallpaperPaused</c>).</summary>
     public bool WallpaperPaused { get; init; }
@@ -196,7 +196,6 @@ public sealed partial record AppSettings
             FontFamily = FontFamily?.Trim() ?? "",
             RomanizationDisplay = RomanizationOptions.ParseDisplay(RomanizationDisplay) is null ? defaults.RomanizationDisplay : RomanizationDisplay,
             RomanizationLanguage = RomanizationOptions.ParseLanguage(RomanizationLanguage) is null ? defaults.RomanizationLanguage : RomanizationLanguage,
-            BackgroundMode = string.IsNullOrWhiteSpace(BackgroundMode) ? defaults.BackgroundMode : BackgroundMode,
             AnimationRate = AnimationRates.Contains(AnimationRate) ? AnimationRate : defaults.AnimationRate,
             LyricOffset = double.IsFinite(LyricOffset)
                 ? Math.Clamp(LyricOffset, -Core.Lyrics.Timing.SongOffsets.GlobalOffsetLimit, Core.Lyrics.Timing.SongOffsets.GlobalOffsetLimit)
@@ -211,7 +210,7 @@ public sealed partial record AppSettings
             RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
-        }).NormalizedWindowSettings().NormalizedLyricTools();
+        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper();
     }
 
     /// <summary>What the lyric lookup asks: the configured order (unknown names dropped, new sources appended) and the switched-on set.</summary>

@@ -128,6 +128,57 @@ C++/WinRT can host WinUI 3 and Direct2D in one native process. With C# and Rust 
 would add nothing measurable, and C++/WinRT is in maintenance mode, its XAML tooling is weaker, and the rest of the
 app (HTTP lyric providers, JSON, OAuth, Discord RPC, ported unit tests) would be slower and riskier to write.
 
+## See-through wallpaper ("Your wallpaper", milestone 6)
+
+**Decision: every wallpaper surface presents a premultiplied-alpha composition swap chain through DirectComposition,
+and the engine clears it transparent while a see-through background is on screen. Lunalyr never reads or changes the
+user's wallpaper.**
+
+- **How.** `RenderEngine.CreateSwapChain` makes the swap chain with `CreateSwapChainForComposition`
+  (`DXGI_ALPHA_MODE_PREMULTIPLIED`, flip-discard, frame-latency waitable as before) and shows it through one
+  DirectComposition target and visual on the surface's own `WS_CHILD` window under `Progman`
+  (`Engine/SurfaceComposition.cs`: three calls through the COM vtables, as the desktop player's card makes them; no
+  package). The Direct2D target is premultiplied too, and text was already grayscale-antialiased.
+- **When it shows through.** A background that implements `ISeeThroughLayer` (only `DesktopLayer`, id `desktop`)
+  makes `DrawSurface` clear to transparent black, and the crossfade passes `isOpaque` (the Mac's `BackgroundCrossfade`
+  rule): a transparent layer fades out what it replaces instead of leaving it drawn beneath. Every other background is
+  opaque and the clear stays opaque black, so the first fade-in still comes from black as on the Mac.
+- **Checked on this PC (Windows 11 25H2, 24H2 desktop).** With `backgroundMode: "desktop"` the demo drew only its lyrics
+  and text backing, and `tools/peek-desktop.ps1` (both its PrintWindow mode and the DWM thumbnail) showed Windows'
+  own wallpaper behind them on the uncovered display (`docs/previews/wallpaper/`). DWM composes what lies beneath the
+  window under `Progman`: here the system wallpaper (`WorkerW`). A wallpaper app's window there (Wallpaper Engine,
+  Lively) should show through the same way, but that was not seen: the display Wallpaper Engine drew on was covered,
+  so the demo's surface there was paused.
+- **Why always, not only for Your wallpaper.** Switching one window between a window swap chain and a composition one
+  means releasing the first and making the second on a window that already had one, at the moment of a crossfade.
+  One kind of swap chain is one code path; opaque content composes the same. The old window swap chain is still there
+  for comparison: `LUNALYR_HWND_SWAPCHAIN=1` (opaque only).
+- **The fallback not taken.** Drawing the desktop picture read through `IDesktopWallpaper` would show a still picture
+  only: not a slideshow, Spotlight or a wallpaper app such as Wallpaper Engine, which this PC runs. True transparency
+  needed no such reading.
+- **Cost.** Not re-measured on the desktop in this round: the displays were off for the whole run (the engine paused
+  every surface with `DisplayOff`), so no live `--stats` exists yet; see `docs/milestones/M6.md`.
+- **The settings preview** draws offscreen into black, so with Your wallpaper it shows the lyrics over black (the page
+  says so); the Mac's preview puts the desktop picture there.
+
+## Imported pictures and videos (milestone 6)
+
+- **Pictures** decode through the WinRT `BitmapDecoder` (WIC underneath: every codec the PC has, HEIC and AVIF when
+  their Store extensions are installed), upright by their EXIF orientation, colour-managed to sRGB, at most 4096 pixels
+  on the longer side, once per file for every display (`Platform/Wallpaper/WallpaperPicture.cs`). The layer draws the
+  picture once at the surface's size (high-quality cubic) on a device context of its own, then copies it each frame.
+- **Videos** read through a Media Foundation Source Reader (`Platform/Media/VideoReader.cs`, COM vtables, no package)
+  with **only the first video stream selected**: an audio stream is never decoded and nothing renders sound (a Source
+  Reader plays nothing itself). Decoding is DXVA on the surface's own GPU (a DXGI device manager over the engine's
+  device, now made with `D3D11_CREATE_DEVICE_VIDEO_SUPPORT` and multithread protection) and the reader's video
+  processor converts to BGRA; frames are textures on that device, copied into the layer's own texture. A worker thread
+  per surface reads ahead two frames and then waits; the layer's clock advances only while it is drawn, so a paused,
+  hidden or covered wallpaper costs nothing and resumes where it was. It loops by seeking to the start. Under Reduce
+  Motion (Windows' Animation effects off) it holds its first frame. A device without video support decodes in memory.
+- **First frames.** A background implementing `IFirstFrameLayer` holds its crossfade until it can draw (or 3 s pass,
+  the Mac's `firstFrameWait`), so a picture or video never fades in from black. `RenderEngine.ReplaceLayer` renews the
+  `custom` layer when the file or placement changes.
+
 ## Proposal
 
 **C# / .NET 10 (Native AOT) + WinUI 3 for every window, with a Direct2D/DirectWrite/D3D11 renderer (Vortice)

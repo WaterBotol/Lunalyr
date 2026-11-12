@@ -19,6 +19,13 @@ internal static unsafe partial class Win32
     public const int SM_CXSMICON = 49;
     public const uint ASFW_ANY = unchecked((uint)-1);
 
+    /// <summary>Under every other window, without activating it (--quiet-windows).</summary>
+    public static void SendToBottom(nint hwnd) => SetWindowPos(hwnd, 1 /* HWND_BOTTOM */, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetWindowPos(nint hwnd, nint after, int x, int y, int cx, int cy, uint flags);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
 

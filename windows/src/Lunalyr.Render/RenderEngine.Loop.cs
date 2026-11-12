@@ -116,6 +116,7 @@ public sealed partial class RenderEngine
             // The desktop player fading the lyrics: every frame of the fade is drawn, idle or not.
             if (LyricFocusMoving(now)) foreach (var s in _surfaces) s.NeedsFrame = true;
             if (now >= _nextHousekeeping) Housekeeping(now);
+            ReleaseHeldFades(now);
             UpdateStates(now);
 
             // Which surfaces draw now, and when the next gated one is due.
@@ -322,10 +323,14 @@ public sealed partial class RenderEngine
         };
         dc.Target = s.Target;
         dc.BeginDraw();
-        dc.Clear(new Color4(0, 0, 0, 1));
-        s.Backgrounds?.Layers(now, _options.BackgroundFadeSeconds, s.Drawn);
+        // Opaque black beneath, as the Mac's window is, unless a see-through background is on screen.
+        bool seeThrough = s.SeeThrough && ShowsSeeThrough(s);
+        dc.Clear(seeThrough ? new Color4(0, 0, 0, 0) : new Color4(0, 0, 0, 1));
+        s.Backgrounds?.Layers(now, _options.BackgroundFadeSeconds, s.Drawn, IsOpaque);
         foreach (var d in s.Drawn)
+            // A background still loading is drawn unseen, so it can load (a video starts decoding when first drawn).
             if (d.Opacity > 0) DrawLayer(s, d.Layer, frame, d.Opacity);
+            else if (d.Layer.Layer is IFirstFrameLayer { HasFirstFrame: false }) DrawLayer(s, d.Layer, frame, 0.001);
         var lyricOpacity = LyricFocusOpacity;
         if (s.Lyric is not null && lyricOpacity > 0.001) DrawLayer(s, s.Lyric, frame, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
         var result = dc.EndDraw();
@@ -358,6 +363,35 @@ public sealed partial class RenderEngine
         s.LastFrameWall = now;
         s.NeedsFrame = false;
         if (s.Plan.IsGated) s.NextDue = FramePacing.NextDue(s.NextDue, now, s.Plan.GatePeriod);
+    }
+
+    /// <summary>How long a crossfade waits for a background's first frame before showing it anyway (the Mac's firstFrameWait).</summary>
+    private const double FirstFrameWait = 3;
+
+    private static bool HasFirstFrame(LayerSlot slot) => slot.Layer is not IFirstFrameLayer layer || layer.HasFirstFrame;
+
+    /// <summary>Starts each crossfade held for its background's first frame once it has one, or has waited long enough.</summary>
+    private void ReleaseHeldFades(double now)
+    {
+        foreach (var s in _surfaces)
+        {
+            if (s.Backgrounds is not { IsHeld: true } fade) continue;
+            if (!HasFirstFrame(fade.Current) && now - fade.ChangedAt < FirstFrameWait && !double.IsNegativeInfinity(fade.ChangedAt)) continue;
+            fade.BecameReady(s.State == SurfaceState.Drawing ? now : double.NegativeInfinity);
+            s.NeedsFrame = true;
+        }
+    }
+
+    /// <summary>Every background covers what is beneath it except a see-through one ("Your wallpaper").</summary>
+    private static readonly Func<LayerSlot, bool> IsOpaque = static slot => slot.Layer is not ISeeThroughLayer;
+
+    /// <summary>A see-through background is among the surface's backgrounds (on screen, or fading in or out).</summary>
+    private static bool ShowsSeeThrough(RenderSurface s)
+    {
+        if (s.Backgrounds is null) return false;
+        foreach (var e in s.Backgrounds.Entries)
+            if (e.Layer.Layer is ISeeThroughLayer) return true;
+        return false;
     }
 
     private void DrawLayer(RenderSurface s, LayerSlot slot, in FrameContext frame, double opacity)
@@ -477,7 +511,7 @@ public sealed partial class RenderEngine
             }
             var background = NewSlot(_backgroundId);
             // A wallpaper fades in from its black window once it can draw (the Mac's first-layer fade).
-            s.Backgrounds = background is null ? null : new LayerCrossfade<LayerSlot>(background, ready: true, fadingInAt: now);
+            s.Backgrounds = background is null ? null : new LayerCrossfade<LayerSlot>(background, ready: HasFirstFrame(background), fadingInAt: now);
             s.Lyric = _lyricId is null ? null : NewSlot(_lyricId);
             CreateLayerResources(s);
             _surfaces.Add(s);
@@ -530,28 +564,54 @@ public sealed partial class RenderEngine
         CreateSwapChain(s);
     }
 
+    /// <summary>
+    /// Every surface presents through DirectComposition with premultiplied alpha, so a see-through background ("Your
+    /// wallpaper") shows the desktop beneath: docs/ARCHITECTURE.md, "See-through wallpaper". Setting
+    /// <c>LUNALYR_HWND_SWAPCHAIN=1</c> brings back the plain window swap chain (opaque only), for comparisons.
+    /// </summary>
+    private static readonly bool WindowSwapChains = Environment.GetEnvironmentVariable("LUNALYR_HWND_SWAPCHAIN") == "1";
+
     private void CreateSwapChain(RenderSurface s)
     {
         var gpu = s.Gpu!;
+        bool composed = !WindowSwapChains;
         var desc = new SwapChainDescription1
         {
             Width = (uint)s.Width, Height = (uint)s.Height, Format = Format.B8G8R8A8_UNorm,
             BufferCount = 2, BufferUsage = Usage.RenderTargetOutput, SampleDescription = new SampleDescription(1, 0),
-            SwapEffect = SwapEffect.FlipDiscard, AlphaMode = Vortice.DXGI.AlphaMode.Ignore, Scaling = Scaling.Stretch,
-            Flags = SwapChainFlags.FrameLatencyWaitableObject,
+            SwapEffect = SwapEffect.FlipDiscard, AlphaMode = composed ? Vortice.DXGI.AlphaMode.Premultiplied : Vortice.DXGI.AlphaMode.Ignore,
+            Scaling = Scaling.Stretch, Flags = SwapChainFlags.FrameLatencyWaitableObject,
         };
         // The swap chain must come from the factory that made the device's adapter.
         using var dxgiDevice = gpu.D3D.QueryInterface<IDXGIDevice>();
         using var adapter = dxgiDevice.GetAdapter();
         using var factory = adapter.GetParent<IDXGIFactory2>();
-        using var swap1 = factory.CreateSwapChainForHwnd(gpu.D3D, s.Window.Hwnd, desc);
-        factory.MakeWindowAssociation(s.Window.Hwnd, WindowAssociationFlags.IgnoreAll);
-        s.Swap = swap1.QueryInterface<IDXGISwapChain2>();
+        IDXGISwapChain1 swap1;
+        if (composed)
+        {
+            swap1 = factory.CreateSwapChainForComposition(gpu.D3D, desc);
+            try
+            {
+                s.Composition = new SurfaceComposition(dxgiDevice.NativePointer, s.Window.Hwnd, swap1.NativePointer);
+            }
+            catch
+            {
+                swap1.Dispose();
+                throw;
+            }
+        }
+        else
+        {
+            swap1 = factory.CreateSwapChainForHwnd(gpu.D3D, s.Window.Hwnd, desc);
+            factory.MakeWindowAssociation(s.Window.Hwnd, WindowAssociationFlags.IgnoreAll);
+        }
+        using (swap1) s.Swap = swap1.QueryInterface<IDXGISwapChain2>();
+        s.SeeThrough = composed;
         s.Swap.MaximumFrameLatency = 1;
         s.Waitable = s.Swap.FrameLatencyWaitableObject;
         using var surface = s.Swap.GetBuffer<IDXGISurface>(0);
         s.Target = gpu.Dc.CreateBitmapFromDxgiSurface(surface,
-            new BitmapProperties1(new D2DPixelFormat(Format.B8G8R8A8_UNorm, D2DAlphaMode.Ignore), 96, 96,
+            new BitmapProperties1(new D2DPixelFormat(Format.B8G8R8A8_UNorm, composed ? D2DAlphaMode.Premultiplied : D2DAlphaMode.Ignore), 96, 96,
                 BitmapOptions.Target | BitmapOptions.CannotDraw));
         s.NeedsFrame = true;
         s.Presented = false;
@@ -567,6 +627,8 @@ public sealed partial class RenderEngine
         s.Target = null;
         if (s.Waitable != 0) CloseHandle(s.Waitable);
         s.Waitable = 0;
+        s.Composition?.Dispose();
+        s.Composition = null;
         s.Swap?.Dispose();
         s.Swap = null;
         if (s.Gpu is { } g)
@@ -634,9 +696,10 @@ public sealed partial class RenderEngine
         catch (Exception ex) { _log.Warn($"Layer \"{slot.Id}\" failed to dispose", ex); }
     }
 
-    private void ApplyLayers(string backgroundId, string? lyricId)
+    private void ApplyLayers(string backgroundId, string? lyricId, bool renew = false)
     {
-        bool backgroundChanged = backgroundId != _backgroundId, lyricChanged = lyricId != _lyricId;
+        // A renewed background (its factory replaced: another imported file) crossfades into a new instance of the same id.
+        bool backgroundChanged = backgroundId != _backgroundId || renew, lyricChanged = lyricId != _lyricId;
         _backgroundId = backgroundId;
         _lyricId = lyricId;
         if (!backgroundChanged && !lyricChanged) return;
@@ -647,13 +710,13 @@ public sealed partial class RenderEngine
             {
                 if (s.Backgrounds is null)
                 {
-                    s.Backgrounds = new LayerCrossfade<LayerSlot>(slot, ready: true, fadingInAt: now);
+                    s.Backgrounds = new LayerCrossfade<LayerSlot>(slot, ready: HasFirstFrame(slot), fadingInAt: now);
                 }
                 else
                 {
                     var before = s.Backgrounds.Entries.Select(e => e.Layer).ToArray();
                     // A paused wallpaper can't run a fade: the still frame shows the new layer at once.
-                    s.Backgrounds.Change(slot, ready: true, s.State == SurfaceState.Drawing ? now : double.NegativeInfinity,
+                    s.Backgrounds.Change(slot, ready: HasFirstFrame(slot), s.State == SurfaceState.Drawing ? now : double.NegativeInfinity,
                         _options.BackgroundFadeSeconds);
                     DisposeDropped(s, before);
                 }

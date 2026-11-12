@@ -56,12 +56,15 @@ public sealed class GradientLayer : IRenderLayer
     private double _lastNow;
     private bool _failed;
     private AmbientClock _clock;
+    /// <summary>The colour richness the brushes are made with: the options' times the scene's.</summary>
+    private double _vividness;
 
     internal GradientLayer(BackgroundOptions options, Logger log)
     {
         _options = options;
         _log = log;
         _shade = new WallpaperShadeDrawer(options);
+        _vividness = options.Vividness;
     }
 
     public bool IsAnimating => _options.Speed > 0 || _fade.IsFading(_lastNow) || _shade.IsEasing(_lastNow);
@@ -127,7 +130,14 @@ public sealed class GradientLayer : IRenderLayer
         {
             Observe(frame.Scene.Palette, now);
             // Reduce Motion (the options' or the scene's) slows the field to 15%; a change of it never jumps the field.
-            var clock = _clock.At(now, _options.Speed, _options.ReduceMotion || frame.Scene.ReduceMotion);
+            // "Motion speed" and "Colour richness" apply at once; a richness change makes the brushes again.
+            var vividness = _options.Vividness * frame.Scene.Adjustments.Vividness;
+            if (vividness != _vividness)
+            {
+                _vividness = vividness;
+                RebuildBrushes();
+            }
+            var clock = _clock.At(now, _options.Speed * frame.Scene.Adjustments.Speed, _options.ReduceMotion || frame.Scene.ReduceMotion);
             var progress = _fade.Progress(now);
             var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);
             if (progress < 1)
@@ -204,8 +214,8 @@ public sealed class GradientLayer : IRenderLayer
 
     private Vector4 Saturated(Vector4 colour)
     {
-        if (_options.Vividness == 1) return colour;
-        var rgb = AlbumWallpaperPalette.Saturated(new Vector3(colour.X, colour.Y, colour.Z), _options.Vividness);
+        if (_vividness == 1) return colour;
+        var rgb = AlbumWallpaperPalette.Saturated(new Vector3(colour.X, colour.Y, colour.Z), _vividness);
         return new Vector4(rgb, colour.W);
     }
 
@@ -288,19 +298,26 @@ internal struct AmbientClock
 {
     private bool _started;
     private bool _reduceMotion;
+    private double _speed;
     private double _offset;
 
+    /// <summary>
+    /// The field's clock at <paramref name="wallSeconds"/>. A change of Reduce Motion or of "Motion speed" changes how
+    /// fast the field moves from then on, never where it is (a dragged speed slider never jumps the colours).
+    /// </summary>
     public double At(double wallSeconds, double speed, bool reduceMotion)
     {
         if (!_started)
         {
             _started = true;
             _reduceMotion = reduceMotion;
+            _speed = speed;
         }
-        else if (reduceMotion != _reduceMotion && double.IsFinite(wallSeconds))
+        else if ((reduceMotion != _reduceMotion || speed != _speed) && double.IsFinite(wallSeconds))
         {
-            _offset += ColourField.Clock(wallSeconds, speed, _reduceMotion) - ColourField.Clock(wallSeconds, speed, reduceMotion);
+            _offset += ColourField.Clock(wallSeconds, _speed, _reduceMotion) - ColourField.Clock(wallSeconds, speed, reduceMotion);
             _reduceMotion = reduceMotion;
+            _speed = speed;
         }
         return ColourField.Clock(wallSeconds, speed, reduceMotion) + _offset;
     }

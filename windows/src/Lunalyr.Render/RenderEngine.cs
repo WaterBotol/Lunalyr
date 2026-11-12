@@ -214,6 +214,19 @@ public sealed partial class RenderEngine : IDisposable
         Post(() => ApplyLayers(backgroundId, lyricId));
     }
 
+    /// <summary>
+    /// Registers <paramref name="factory"/> in place of the one with its id; when that id is the background on screen, it
+    /// crossfades into a new instance (another imported file, another placement). Otherwise the next change uses it.
+    /// </summary>
+    public void ReplaceLayer(IRenderLayerFactory factory)
+    {
+        RegisterLayer(factory);
+        Post(() =>
+        {
+            if (_backgroundId == factory.Id) ApplyLayers(factory.Id, _lyricId, renew: true);
+        });
+    }
+
     /// <summary>The Performance settings (frame rate, low power, battery, covered and paused wallpapers).</summary>
     public void SetPerformance(PerformanceOptions performance)
     {

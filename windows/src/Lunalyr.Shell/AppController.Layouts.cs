@@ -57,6 +57,7 @@ public sealed partial class AppController
     /// would know nothing of the song and would stick.</param>
     private void ChooseLayout(LyricResult? lyrics = null, bool onlyWhenSettled = false)
     {
+        ChooseWallpaper(lyrics, onlyWhenSettled);
         string pick, background, title;
         int? cursor = null;
         var available = AvailableCompositions();
@@ -90,7 +91,7 @@ public sealed partial class AppController
             pick = remembered;
             _layout = pick;
             _layoutTrack = key;
-            background = _settings.BackgroundMode;
+            background = BackgroundLayerFor(_settings);
             title = track.Title;
         }
 

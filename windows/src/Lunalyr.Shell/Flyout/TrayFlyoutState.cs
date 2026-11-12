@@ -8,7 +8,15 @@ namespace Lunalyr.Shell.Flyout;
 public sealed record TransportButton(bool Enabled, string Title);
 
 /// <summary>A wallpaper type the flyout offers as a tile.</summary>
-public sealed record BackgroundChoice(string Value, string Title, string Summary);
+/// <summary>A wallpaper-type tile: the stored value, the tile's name, the type's summary, its full name and glyph, and whether this build has it.</summary>
+public sealed record BackgroundChoice(string Value, string ShortTitle, string Summary)
+{
+    public string Title { get; init; } = ShortTitle;
+
+    public string Glyph { get; init; } = "";
+
+    public bool Available { get; init; } = true;
+}
 
 /// <summary>A lyric layout the flyout's picker offers.</summary>
 public sealed record LayoutChoice(string Value, string Title);
@@ -121,14 +129,12 @@ public sealed record TrayFlyoutState
     // ---- Choices ----
 
     /// <summary>
-    /// The wallpaper types this build draws, as tiles (the Mac's grid has eight; Windows has these two so far). The
-    /// Windows gradient is its own default; "Colour" is the Mac's <c>colourOnly</c> with its tile name and summary.
+    /// Every wallpaper type as a tile, as the Mac's menu-bar panel shows them (its <c>WallpaperModeGrid</c>: the five
+    /// Lunalyr draws, then the three that start from something of yours), with the tiles' short names and the types'
+    /// summaries. Music video isn't in this build, so its tile is off.
     /// </summary>
     public static IReadOnlyList<BackgroundChoice> Backgrounds { get; } =
-    [
-        new("gradient", "Gradient", "The album’s colours, drifting slowly behind the lyrics."),
-        new("colourOnly", "Colour", "The album’s colours alone, the lightest on power."),
-    ];
+        [.. SettingsCopy.WallpaperTypes.Select(t => new BackgroundChoice(t.Value, t.ShortTitle, t.Summary) { Glyph = t.Glyph, Available = t.Available, Title = t.Title })];
 
     /// <summary>"Match the music" and every composition, in the settings' order.</summary>
     public static IReadOnlyList<LayoutChoice> Layouts { get; } = BuildLayouts();
@@ -141,12 +147,7 @@ public sealed record TrayFlyoutState
     }
 
     /// <summary>The background value the tile for <paramref name="backgroundMode"/> stands for.</summary>
-    public static string? BackgroundTile(string? backgroundMode) => backgroundMode switch
-    {
-        null or "" or "auto" or "gradient" => "gradient",
-        "colourOnly" or "colorOnly" or "colour" => "colourOnly",
-        _ => null,
-    };
+    public static string? BackgroundTile(string? backgroundMode) => SettingsCopy.WallpaperTypeFor(backgroundMode);
 
     /// <summary>Readings on means below the lyrics; off means off. "Replace" counts as on, and stays until switched off.</summary>
     public static string ReadingsValue(bool on, string current) =>

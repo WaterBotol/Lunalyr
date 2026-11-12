@@ -359,6 +359,24 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.Equal("Word-by-word", report.Result!.Provenance.Precision);
     }
 
+    // Windows addition (§9 "晴天 — 周杰倫", live parity check of 13 Nov 2026): the player names the artist in traditional
+    // script, Kugou lists the song in simplified script (recorded search reply). Kugou's word timing beats LRCLIB's lines.
+    [Fact]
+    public async Task ATraditionalScriptArtistFindsKugousWordTimingOverLrclibLines()
+    {
+        var query = new LyricQuery("晴天", "周杰倫", "葉惠美", 269.747) { Genre = "Mandopop" };
+        var handler = Quiet()
+            .Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(7, "晴天", "周杰倫", "葉惠美", 270, English, wordTimed: false)))
+            .Set("mobileservice.kugou.com/api/v3/search/song", Reply.Fixture("kugou/search-qingtian-traditional.json"))
+            .Set("lyrics.kugou.com/search", Reply.Fixture("kugou/lyric-search.json"))
+            .Set("lyrics.kugou.com/download", Reply.Fixture("kugou/download-krc.json"));
+        var report = await Service(handler).LookupAsync(query, Everything, force: true, cancellationToken: Ct);
+        Assert.Equal(new LyricProvenance("Word-by-word", "Kugou Music"), Synced(report.Result).Provenance);
+        var kugou = Assert.Single(report.Candidates, c => c.Source == Kugou);
+        Assert.Equal("周杰伦", kugou.Artist);
+        Assert.Contains(Lrclib, report.Candidates.Select(c => c.Source));
+    }
+
     private sealed class RecordedAliases : IArtistAliasSearch
     {
         public List<string> Asked { get; } = [];
@@ -412,16 +430,42 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.False(report.Offline);
         Assert.True(report.IsComplete);
         Assert.Equal(0, report.Revision);
-        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, LyricsOvh, Amll })
+        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, Amll })
         {
             Assert.Equal(LyricLookup.NoUsableMatch, report.States[id]);
         }
         Assert.Equal(AppleUnavailable, report.States[AppleMusicCache]);
-        // Asked again within minutes, the services that answered are not asked again.
+        // lyrics.ovh's 404 is an error, as on the Mac (parity row 11): it is not remembered as a miss.
+        Assert.Equal("lyrics.ovh: no lyrics found (HTTP 404).", report.States[LyricsOvh]);
+        // Asked again within minutes, the services that answered are not asked again; lyrics.ovh is.
         var asked = handler.Requests.Count;
         var again = await service.LookupAsync(query, Everything, cancellationToken: Ct);
-        Assert.Equal(asked, handler.Requests.Count);
+        Assert.Equal(asked + 1, handler.Requests.Count);
+        Assert.Equal("api.lyrics.ovh", handler.Requests[^1].RequestUri!.Host);
         Assert.Equal(LyricLookup.RecentMiss, again.States[Lrclib]);
+    }
+
+    // Written from the spec (§4.5, §5.1; parity check of 13 Nov 2026, row 13): synced lyrics whose lines are all
+    // instrumental breaks are a candidate at timing tier 0, ranked with untimed text, and LRCLIB's exact match of that
+    // kind ends its search. Like the Mac, it can then outrank lyrics.ovh's plain text, which reports no length.
+    [Fact]
+    public async Task SyncedLyricsOfInstrumentalBreaksAloneAreKeptAsUntimedAndEndLrclibsSearch()
+    {
+        var query = new LyricQuery("Interlude", "Somebody", null, 200);
+        SungLine[] breaks = [new("♪", 0, 60), new("♪", 60, 120), new("", 120, 180)];
+        var handler = Quiet()
+            .Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(9, "Interlude", "Somebody", "", 200, breaks, wordTimed: false)))
+            .Set("api.lyrics.ovh/v1/Somebody/Interlude", Reply.Text(200, ServiceReplies.LyricsOvh(["An invented line", "And another"])));
+        var report = await Service(handler).LookupAsync(query, Everything, force: true, cancellationToken: Ct);
+        Assert.DoesNotContain(handler.Requests, r => r.RequestUri!.AbsolutePath == "/api/search");
+        var lrclib = Assert.Single(report.Candidates, c => c.Source == Lrclib);
+        var lines = Assert.IsType<LyricResult.Synced>(lrclib.Result).Lines;
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.True(line.IsInstrumental));
+        Assert.Equal(0, LyricTimingRules.TimingTier(lrclib.Result));
+        Assert.Contains(LyricsOvh, report.Candidates.Select(c => c.Source));
+        Assert.Same(lrclib, report.Candidates[0]);
+        Assert.Equal("LRCLIB", report.Result!.Provenance.Source);
     }
 
     // ---- (e) Offline ---------------------------------------------------------------------------------------------

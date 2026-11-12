@@ -36,6 +36,12 @@ public interface IWallpaperRenderer : IDisposable
     /// when it cannot say; the controller then assumes the compositions every build has ("editorial", "spoken").
     /// </summary>
     IReadOnlyCollection<string> LayerIds => [];
+
+    /// <summary>
+    /// Registers a layer in place of the one with its id (the imported picture or video when its file or placement
+    /// changes); the background on screen crossfades into it. Renderers that can't ignore it.
+    /// </summary>
+    void ReplaceLayer(IRenderLayerFactory factory) { }
 }
 
 /// <summary>
@@ -89,6 +95,11 @@ public sealed class NullWallpaperRenderer(Logger? logger = null) : IWallpaperRen
     }
 
     public void SetClock(Func<(double Seconds, bool Playing)> clock) => _clock = clock;
+
+    /// <summary>The layers handed over with <see cref="ReplaceLayer"/>, last first.</summary>
+    public List<IRenderLayerFactory> Replaced { get; } = [];
+
+    public void ReplaceLayer(IRenderLayerFactory factory) => Replaced.Insert(0, factory);
 
     public void SetFrameRate(int framesPerSecond)
     {

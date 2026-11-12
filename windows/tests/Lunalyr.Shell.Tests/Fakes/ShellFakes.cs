@@ -113,6 +113,11 @@ internal sealed class FakeRenderer : IWallpaperRenderer
 
     public void SetFrameRate(int framesPerSecond) => FrameRate = framesPerSecond;
 
+    /// <summary>The layers handed over with ReplaceLayer, oldest first.</summary>
+    public List<IRenderLayerFactory> Replaced { get; } = [];
+
+    public void ReplaceLayer(IRenderLayerFactory factory) => Replaced.Add(factory);
+
     public void Dispose() => Stop();
 }
 

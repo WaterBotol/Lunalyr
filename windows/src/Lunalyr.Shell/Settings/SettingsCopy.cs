@@ -15,7 +15,7 @@ namespace Lunalyr.Shell.Settings;
 public sealed record SettingsChoice(string Value, string Title, string? Detail = null);
 
 /// <summary>One background type: what it is called, what it does, and (when Windows can't show it yet) why not.</summary>
-public sealed record WallpaperType(string Value, string Title, string Summary, string? NotYet = null)
+public sealed record WallpaperType(string Value, string Title, string ShortTitle, string Glyph, string Summary, string? NotYet = null)
 {
     public bool Available => NotYet is null;
 }
@@ -185,26 +185,99 @@ public static class SettingsCopy
 
     // ---- Wallpaper ----
 
-    /// <summary>The Mac's background types, with the two Windows draws now first.</summary>
+    /// <summary>What isn't in this build of milestone 6 yet.</summary>
+    public const string Milestone6Later = "Arrives in a later build of milestone 6.";
+
+    /// <summary>
+    /// The Mac's wallpaper types in its grid's order (QuickControls.swift: the five Lunalyr draws, then the three that
+    /// start from something of yours), with its titles, tile names and summaries; the glyphs are Segoe Fluent's.
+    /// </summary>
     public static IReadOnlyList<WallpaperType> WallpaperTypes { get; } =
     [
-        new("gradient", "Album colours", "A slowly moving field of the cover’s colours, darkened so the lyrics stay readable."),
-        new("colourOnly", "Colour only", "Blends the cover’s colours into a moving gradient."),
-        new("auto", "Match the music", "GPU effects and line patterns picked to suit each song, with animated covers.", LaterBuild),
-        new("shader", "GPU effects", "Flowing GPU-drawn effects in the album’s colours.", LaterBuild),
-        new("pattern", "Line patterns", "Fine moving line patterns in the album’s colours.", LaterBuild),
-        new("visualizer", "Visualisers", "Scenes that move with the music playing.", Milestone6),
-        new("musicVideo", "Music video", "The song’s music video behind the lyrics.", Milestone6),
-        new("desktop", "Your wallpaper", "Only the lyrics, over your own Windows wallpaper.", LaterBuild),
-        new("custom", "Imported image or video", "A picture or video of your own behind the lyrics.", LaterBuild),
+        new("auto", "Match the music", "Match", "",
+            "Each song picks a look to suit its energy and feel."),
+        new("visualizer", "Visualisers", "Visualiser", "", "Scenes that move with the music itself, with System audio on."),
+        new("shader", "GPU effects", "Effects", "", "Plasma, aurora, nebulae and more, drawn on the GPU in the album’s colours."),
+        new("pattern", "Line patterns", "Patterns", "", "Line patterns in the album’s colours, the gentlest on power after Colour only."),
+        new("colourOnly", "Colour only", "Colour", "", "The album’s colours alone, the lightest on power."),
+        new("desktop", "Your wallpaper", "Your wallpaper", "", "Keep your own wallpaper and show lyrics and instrumental cues over it."),
+        new("custom", "Imported image or video", "Image or video", "", "A picture or video of your own behind the lyrics."),
+        new("musicVideo", "Music video", "Music video", "",
+            "The song’s music video behind the lyrics, muted and in time with the song.", Milestone6Later),
     ];
 
-    /// <summary>The type the Wallpaper page shows as chosen for a stored <c>backgroundMode</c>.</summary>
-    public static string WallpaperTypeFor(string? backgroundMode) => backgroundMode switch
+    /// <summary>The type the Wallpaper page shows as chosen for a stored <c>backgroundMode</c> (normalised first).</summary>
+    public static string WallpaperTypeFor(string? backgroundMode) =>
+        new AppSettings { BackgroundMode = backgroundMode ?? "" }.Normalized().BackgroundMode;
+
+    /// <summary>The Mac's placements (<c>MotionPlacement</c>): titles and captions.</summary>
+    public static IReadOnlyList<SettingsChoice> Placements { get; } =
+    [
+        new("fill", "Fill", "Crops equally top and bottom."),
+        new("fillTop", "Fill, top", "Crops from the bottom, keeping the top."),
+        new("fillBottom", "Fill, bottom", "Crops from the top."),
+        new("fit", "Fit whole frame", "Nothing cropped; the sides are left black."),
+    ];
+
+    public const string MatchTheMusicPicks = "Match the music picks one of each per song; choose one to pin it.";
+
+    public const string EffectsNotYet = "GPU effects arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
+
+    public const string PatternsNotYet = "Line patterns arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
+
+    public const string VisualisersNotYet = "Visualisers arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
+
+    public const string YourWallpaper =
+        "Only lyrics are drawn over your desktop. Keep using your current Windows wallpaper or wallpaper app; Lunalyr leaves it in place.";
+
+    public const string YourWallpaperPreview =
+        "Your wallpaper shows through behind the lyrics on each monitor. The live preview can’t show it, so it draws the lyrics over black.";
+
+    public const string AlbumGradientCaption = "Blends the cover’s colours into a moving gradient.";
+
+    public const string AlbumGradientOff = "Off: a slowly drifting field of the cover’s colours instead.";
+
+    /// <summary>The Legibility section's caption (the Mac's <c>LyricBackingSection.caption</c>).</summary>
+    public static string BackingCaption(bool desktop, bool automatic) => desktop
+        ? automatic
+            ? "While lyrics are on screen, a soft shadow sits behind them, strong enough for white text over a light desktop. With nothing playing, your desktop is left as it is."
+            : "While lyrics are on screen, a soft shadow behind them keeps them readable over light parts of your desktop."
+        : automatic
+            ? "Light covers and images get a soft shadow behind the lyrics, just strong enough for white text to stay readable."
+            : "The soft shadow behind the lyrics, on top of Darkening.";
+
+    public const string ResetAdjustmentsHelp =
+        "Motion speed, Colour richness, Darkening, Pattern visibility and the covers’ Softening go back to how Lunalyr comes.";
+
+    /// <summary>"1.25×".</summary>
+    public static string Multiplier(double value) => value.ToString("0.00", CultureInfo.InvariantCulture) + "×";
+
+    /// <summary>"None" or "35%".</summary>
+    public static string PercentOrNone(double value) => value <= 0 ? "None" : Percent(value);
+
+    /// <summary>The menu for GPU effects or line patterns: "Match the music", then the catalogue's.</summary>
+    public static IReadOnlyList<SettingsChoice> StyleChoices(IEnumerable<(string Id, string Title, string? Detail)> styles) =>
+        [new("", "Match the music"), .. styles.Select(s => new SettingsChoice(s.Id, s.Title, s.Detail))];
+
+    // ---- Covers ----
+
+    /// <summary>
+    /// Why animated covers don't play on Windows yet. The Mac finds them without any Apple developer key (the public
+    /// iTunes search, the album's public Apple Music page and Apple's video playlists), so Windows could too; it isn't
+    /// built in this milestone.
+    /// </summary>
+    public const string AnimatedCoversNotYet =
+        "Apple Music’s animated covers can be found the way the Mac app finds them, from Apple’s public album pages; Windows doesn’t fetch them yet. Arrives in a later build.";
+
+    public const string CoverFramingNote =
+        "Framing applies to animated covers, so it waits with them. Imported pictures and videos have their own Placement under Wallpaper.";
+
+    /// <summary>The type's entry, or Match the music's.</summary>
+    public static WallpaperType WallpaperTypeOf(string? backgroundMode)
     {
-        "colourOnly" or "colour" or "colorOnly" => "colourOnly",
-        _ => "gradient",
-    };
+        var value = WallpaperTypeFor(backgroundMode);
+        return WallpaperTypes.FirstOrDefault(t => t.Value == value) ?? WallpaperTypes[0];
+    }
 
     // ---- Performance ----
 
