@@ -97,12 +97,12 @@ public class StageLayoutTests
         Assert.Equal(0.85, previous.Shrink, 3); // A long column still ends 15% smaller
     }
 
-    // Ported from StageMotionTests.swift: testChosenEntrancesMatchTheOtherLayouts (the entrances built on Windows; the
-    // cutout entrances are not built yet)
+    // Ported from StageMotionTests.swift: testChosenEntrancesMatchTheOtherLayouts
     [Fact]
     public void ChosenEntrancesMatchTheOtherLayouts()
     {
-        foreach (var style in new[] { WordArrival.Lift, WordArrival.Pop, WordArrival.Orbit, WordArrival.Glide, WordArrival.Unfold })
+        foreach (var style in new[] { WordArrival.Lift, WordArrival.Pop, WordArrival.Orbit, WordArrival.Glide, WordArrival.Unfold,
+                                    WordArrival.CutoutFold, WordArrival.CutoutSlide })
         {
             var stage = StageShared.ChosenEntrance(style, 0.3, 40, -1, false);
             Assert.NotNull(stage);

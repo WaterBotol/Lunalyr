@@ -155,8 +155,10 @@ per-layout entrances, Cutout · Highlight tiles, track mood or per-word readings
 
 - full motion;
 - the lyric face only (heavy cut for words, the quiet cut for readings);
-- `LyricStyle.Reveal` as the chosen entrance;
-- no tiles;
+- `LyricStyle.Reveal` as the chosen entrance, one for the whole layer (a mix gives its first entrance; the Mac picks
+  per word). Lift, Pop, Orbit, Glide, Unfold and the cutouts (Fold, Slide) move a word as in every other layout; the
+  swipes and Cutout · Highlight keep the layout's own motion;
+- no tiles (the Mac presses a tile behind a word whose entrance is Cutout · Highlight);
 - the neutral mood;
 - the line's reading split by run as above.
 

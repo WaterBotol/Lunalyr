@@ -101,14 +101,16 @@ public static class StageShared
 
     /// <summary>
     /// The pose a chosen entrance gives a word, or null when the layout's own motion stays: the layout's default (Soft
-    /// focus), and everything under Reduce Motion. The chosen entrances move exactly as in every other layout.
+    /// focus), the swipes, and everything under Reduce Motion. The chosen entrances (the cutouts too) move exactly as in
+    /// every other layout.
     /// </summary>
     public static EntranceTransform? ChosenEntrance(WordArrival arrival, double progress, double size, double side, bool reduceMotion)
     {
         if (reduceMotion) return null;
         return arrival switch
         {
-            WordArrival.Lift or WordArrival.Pop or WordArrival.Orbit or WordArrival.Glide or WordArrival.Unfold =>
+            WordArrival.Lift or WordArrival.Pop or WordArrival.Orbit or WordArrival.Glide or WordArrival.Unfold
+                or WordArrival.CutoutFold or WordArrival.CutoutSlide =>
                 EntranceTransform.Make(Math.Min(Math.Max(progress, 0), 1), progress, arrival, size, side, false),
             _ => null,
         };
