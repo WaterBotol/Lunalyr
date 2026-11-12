@@ -136,8 +136,9 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.EndsWith("showing", report.States[Lrclib], StringComparison.Ordinal);
         // Apple Music cannot be read on Windows: listed with its reason, never asked.
         Assert.Equal(AppleUnavailable, report.States[AppleMusicCache]);
-        // No local folder chosen: the local source says so.
-        Assert.Equal("Choose the Lyrimuse lyrics folder", report.States[Lyrimuse]);
+        // No local folder chosen: the local source says so. (It reads on the thread pool; on a busy machine LRCLIB's
+        // match can settle before it has started, and it is then not needed.)
+        Assert.Contains(report.States[Lyrimuse], new[] { "Choose the Lyrimuse lyrics folder", LyricLookup.CouldNotBeat });
 
         // A search asks every source, so the whole ranking shows: word timing first (LRCLIB leads Lyrics+), then line
         // timing, then plain text.
