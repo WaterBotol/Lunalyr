@@ -361,3 +361,82 @@ public sealed class EntranceSupportTests
         Assert.Equal("Soft focus", SettingsCopy.Entrances("automatic").Single(c => c.Value == "fade").Title);
     }
 }
+
+/// <summary>The window's command-line flags and the settings log line.</summary>
+public sealed class SettingsWindowOptionsTests
+{
+    [Fact]
+    public void ASettingsPageOpensSettingsAndTheThemeIsForThisRunOnly()
+    {
+        var options = Lunalyr.Shell.ShellOptions.Parse(["--settings-page", "timing", "--theme", "Dark"]);
+        Assert.True(options.OpenSettings);
+        Assert.Equal("timing", options.SettingsPage);
+        Assert.Equal("dark", options.Theme);
+        Assert.Empty(options.Problems);
+
+        var bad = Lunalyr.Shell.ShellOptions.Parse(["--theme", "purple", "--settings-page"]);
+        Assert.Null(bad.Theme);
+        Assert.Null(bad.SettingsPage);
+        Assert.Equal(2, bad.Problems.Count);
+    }
+
+    [Fact]
+    public void TheLogNamesTheKeysThatChanged()
+    {
+        var before = new AppSettings();
+        Assert.Empty(AppSettings.ChangedKeys(before, before with { }));
+        Assert.Equal(["lyricComposition", "echoStrength"],
+            AppSettings.ChangedKeys(before, before with { LyricComposition = "echo", EchoStrength = 0.5 }));
+        Assert.Equal(["wordArrivalByStyle"], AppSettings.ChangedKeys(before, before.WithEntranceForControls("pop")));
+    }
+}
+
+/// <summary>The settings window's live preview, drawn offscreen by the wallpaper's own layers (WARP: no GPU needed).</summary>
+public sealed class SettingsPreviewRendererTests
+{
+    [Fact]
+    public void ThePreviewDrawsTheSceneWithTheWallpapersLayers()
+    {
+        var song = Lunalyr.Shell.Demo.DemoSongs.Songs[0];
+        var scene = new SceneSnapshot
+        {
+            Title = song.Title, Artist = song.Artist, Lyrics = song.Lyrics, Style = new AppSettings().Style(), TrackKey = "demo",
+        };
+        var withLyrics = Draw(scene, "gradient", "editorial", 15.5);
+        var without = Draw(scene with { Lyrics = null }, "gradient", "editorial", 15.5);
+        Assert.True(Coloured(without) > 320 * 180 / 2, "the album colour field should fill the frame");
+        var changed = Differing(withLyrics, without);
+        Assert.True(changed > 200, $"{changed} pixels differ: the lyrics should show");
+
+        // Unknown ids fall back as the desktop does: the album colours and Editorial.
+        Assert.Equal(withLyrics, Draw(scene, "visualizer", "nope", 15.5));
+
+        // Nothing playing: the background alone.
+        Assert.True(Coloured(Draw(new SceneSnapshot(), "colourOnly", "echo", double.NaN, playing: false)) > 320 * 180 / 2);
+    }
+
+    private static byte[] Draw(SceneSnapshot scene, string background, string composition, double time, bool playing = true)
+    {
+        using var renderer = new Lunalyr.Shell.Rendering.SettingsPreviewRenderer(320, 180,
+            Lunalyr.Shell.Rendering.WallpaperLayers.Factories(Lunalyr.Core.Lyrics.Readings.ReadingServices.Basic.WordBreaker), hardware: false);
+        var pixels = new byte[320 * 180 * 4];
+        renderer.Render(scene, background, composition, time, playing, wallSeconds: 1, pixels);
+        return pixels;
+    }
+
+    private static int Differing(byte[] a, byte[] b)
+    {
+        var count = 0;
+        for (var i = 0; i < a.Length; i += 4)
+            if (Math.Abs(a[i] - b[i]) + Math.Abs(a[i + 1] - b[i + 1]) + Math.Abs(a[i + 2] - b[i + 2]) > 30) count++;
+        return count;
+    }
+
+    private static int Coloured(byte[] pixels)
+    {
+        var count = 0;
+        for (var i = 0; i < pixels.Length; i += 4)
+            if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 12) count++;
+        return count;
+    }
+}

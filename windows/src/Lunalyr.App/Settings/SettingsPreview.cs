@@ -104,6 +104,12 @@ internal sealed class SettingsPreview : IDisposable
             {
                 if (!_active || !_visible)
                 {
+                    // Off its page, the preview lets its device and layers go (about 100 MB); they come back when it shows.
+                    if (!_active && renderer is not null)
+                    {
+                        renderer.Dispose();
+                        renderer = null;
+                    }
                     _wake.Wait(TimeSpan.FromSeconds(1));
                     _wake.Reset();
                     continue;

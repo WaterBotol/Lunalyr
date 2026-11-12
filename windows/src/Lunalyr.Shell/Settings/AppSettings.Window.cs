@@ -124,4 +124,20 @@ public sealed partial record AppSettings
             EchoStrength = double.IsFinite(EchoStrength) ? Math.Clamp(EchoStrength, RepeatsMin, RepeatsMax) : EchoBackdrop.DefaultStrength,
         };
     }
+
+    /// <summary>The keys (as <c>settings.json</c> names them) whose values differ, for the log.</summary>
+    public static IReadOnlyList<string> ChangedKeys(AppSettings before, AppSettings after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        using var a = System.Text.Json.JsonSerializer.SerializeToDocument(before, AppSettingsJsonContext.Default.AppSettings);
+        using var b = System.Text.Json.JsonSerializer.SerializeToDocument(after, AppSettingsJsonContext.Default.AppSettings);
+        var changed = new List<string>();
+        foreach (var property in b.RootElement.EnumerateObject())
+        {
+            if (!a.RootElement.TryGetProperty(property.Name, out var old) || old.GetRawText() != property.Value.GetRawText())
+                changed.Add(property.Name);
+        }
+        return changed;
+    }
 }

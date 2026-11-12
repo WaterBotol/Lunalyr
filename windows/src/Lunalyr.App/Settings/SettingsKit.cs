@@ -19,12 +19,16 @@ internal sealed class SettingsContext
 {
     private readonly List<Action<AppSettings>> _refreshers = [];
     private readonly DispatcherQueue _dispatcher;
+    private readonly Action<string>? _log;
+    private string? _lastLog;
+    private long _lastLogAt;
     private int _queued;
 
-    public SettingsContext(SettingsStore<AppSettings> store, DispatcherQueue dispatcher)
+    public SettingsContext(SettingsStore<AppSettings> store, DispatcherQueue dispatcher, Action<string>? log = null)
     {
         Store = store;
         _dispatcher = dispatcher;
+        _log = log;
         store.Changed += OnChanged;
     }
 
@@ -48,7 +52,17 @@ internal sealed class SettingsContext
     public void Update(Func<AppSettings, AppSettings> change)
     {
         if (Loading) return;
-        Store.Update(change);
+        var before = Store.Current;
+        if (!Store.Update(change) || _log is null) return;
+        var keys = AppSettings.ChangedKeys(before, Store.Current);
+        if (keys.Count == 0) return;
+        // A slider dragged writes many times a second: one line per run of the same keys.
+        var message = $"Settings changed in the window: {string.Join(", ", keys)}.";
+        var now = Environment.TickCount64;
+        if (message == _lastLog && now - _lastLogAt < 2000) return;
+        _lastLog = message;
+        _lastLogAt = now;
+        _log(message);
     }
 
     /// <summary>Runs <paramref name="refresh"/> now and whenever the settings change.</summary>
@@ -140,14 +154,29 @@ internal static class SettingsKit
                             bool stacked = false, string? notYet = null)
     {
         var card = new Card(title, description, glyph, control, stacked, notYet);
-        if (control is not null)
+        // Narrator names the row's control after the row (a slider row names its slider), with the description and
+        // note as its help text.
+        if (Named(control) is { } named)
         {
-            if (string.IsNullOrEmpty(AutomationProperties.GetName(control))) AutomationProperties.SetName(control, title);
-            var help = string.Join(" ", new[] { description, notYet }.Where(s => !string.IsNullOrEmpty(s)));
-            if (help.Length > 0 && string.IsNullOrEmpty(AutomationProperties.GetHelpText(control))) AutomationProperties.SetHelpText(control, help);
+            if (string.IsNullOrEmpty(AutomationProperties.GetName(named))) AutomationProperties.SetName(named, title);
+            if (string.IsNullOrEmpty(AutomationProperties.GetHelpText(named)))
+            {
+                card.HelpTarget = named;
+                card.Note = notYet;
+                card.Description = description ?? "";
+            }
         }
         return card;
     }
+
+    /// <summary>The control a row's title names: the control itself, or the slider in a slider row.</summary>
+    private static FrameworkElement? Named(FrameworkElement? control) => control switch
+    {
+        null => null,
+        Control c => c,
+        Panel panel => panel.Children.OfType<Slider>().FirstOrDefault() ?? (panel.Children.OfType<Panel>().Select(Named).FirstOrDefault(n => n is not null)),
+        _ => control,
+    };
 
     public static ToggleSwitch Toggle(SettingsContext ctx, Func<AppSettings, bool> get, Func<AppSettings, bool, AppSettings> set)
     {
@@ -334,7 +363,9 @@ internal sealed partial class Card : UserControl
         }
         else
         {
-            grid.ColumnSpacing = 0;
+            // No icon: keep its column, so the title lines up with the rows that have one (an expander header has none).
+            if (bare) grid.ColumnSpacing = 0;
+            else grid.Children.Add(new Border { Width = 20 });
         }
 
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 1, Margin = new Thickness(glyph is null ? 0 : 0, 0, 12, 0) };
@@ -394,8 +425,16 @@ internal sealed partial class Card : UserControl
         {
             _description.Text = value;
             _description.Visibility = string.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible;
+            if (HelpTarget is not null)
+                AutomationProperties.SetHelpText(HelpTarget, string.Join(" ", new[] { value, Note }.Where(s => !string.IsNullOrEmpty(s))));
         }
     }
+
+    /// <summary>The control whose help text follows the description.</summary>
+    public FrameworkElement? HelpTarget { get; set; }
+
+    /// <summary>The row's "arrives in" note, read after the description.</summary>
+    public string? Note { get; set; }
 
     public string Title
     {

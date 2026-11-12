@@ -28,7 +28,7 @@ internal static class TimingPage
             if (status?.Title is { } title)
             {
                 song.Title = status.Artist is { Length: > 0 } artist ? $"{title} — {artist}" : title;
-                song.Description = status.LyricSource is { } source ? $"Lyrics from {source}" : status.Status;
+                song.Description = status.LyricSource ?? status.Status;
             }
             else
             {

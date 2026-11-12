@@ -28,7 +28,7 @@ public sealed partial class SettingsWindow : Window
         SetTitleBar(TitleBar);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1400, 1040));
 
-        _ctx = new SettingsContext(host.Settings, DispatcherQueue);
+        _ctx = new SettingsContext(host.Settings, DispatcherQueue, message => host.Log.App.Info(message));
         _ctx.OnRefresh(_ => ApplyTheme());
         VersionText.Text = $"Version {host.Version}";
         NoticesText.Text = ReadNotices();
@@ -48,7 +48,7 @@ public sealed partial class SettingsWindow : Window
         var wanted = Normalise(page);
         foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems).OfType<NavigationViewItem>())
         {
-            if (item.Tag is string tag && (Normalise(tag) == wanted || Normalise(tag).StartsWith(wanted, StringComparison.Ordinal)))
+            if (item.Tag is string tag && wanted.Length > 0 && Normalise(tag).Contains(wanted, StringComparison.Ordinal))
             {
                 Nav.SelectedItem = item;
                 return;

@@ -28,7 +28,7 @@ internal static class GeneralPage
             notYet: SettingsCopy.Milestone8));
 
         Section(page, "Updates");
-        page.Children.Add(Card($"Lunalyr {version}", "Lunalyr checks for new versions and installs them when you agree.", "",
+        page.Children.Add(Card($"Lunalyr {version.Split('+')[0]}", "Lunalyr checks for new versions and installs them when you agree.", "",
             Button("Check for Updates…", () => { }), notYet: SettingsCopy.Milestone8));
 
         Section(page, "Welcome");

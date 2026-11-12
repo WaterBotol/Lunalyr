@@ -7,7 +7,10 @@ using Lunalyr.Render.Scene;
 
 namespace Lunalyr.Shell.Rendering;
 
-/// <summary>The wallpaper's layers, as the app registers them (the backgrounds and every lyric composition).</summary>
+/// <summary>
+/// The wallpaper's layers as the app registers them (the backgrounds and every lyric composition), for the settings
+/// preview. Keep in step with <c>AppHost.CreateWallpaper</c>: a layer missing here previews as Editorial.
+/// </summary>
 public static class WallpaperLayers
 {
     public static IReadOnlyList<IRenderLayerFactory> Factories(IWordBreaker breaker, Logger? logger = null) =>

@@ -1,7 +1,7 @@
 # The app shell
 
 `src/Lunalyr.App` (the `Lunalyr.exe` process) hosts `src/Lunalyr.Shell` (its logic, tested with fakes in
-`tests/Lunalyr.Shell.Tests`). Milestone 3; the real settings pages and the Fluent tray flyout are milestone 5.
+`tests/Lunalyr.Shell.Tests`). Milestone 3; the settings window's pages are milestone 5 (see "Settings window").
 
 ## Build and run
 
@@ -25,6 +25,8 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--settings` | Open the settings window (a second launch does this anyway). |
 | `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
 | `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
+| `--settings-page <page>` | Open settings at a page: `general`, `lyric-style`, `readings`, `timing`, `wallpaper`, `covers`, `players`, `performance` or `about` (any part of the page's name). Implies `--settings`; a second launch forwards it, so checks (and other surfaces) can open a page. |
+| `--theme <light\|dark\|system>` | How Lunalyr's own windows look for this run only (for screenshots). Nothing is saved and Windows' setting is never touched; a second launch can change it in the running instance. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
@@ -117,7 +119,12 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | Key | Default | Values | Mac key |
 |---|---|---|---|
 | `lyricComposition` | `"editorial"` | `automatic` (Match the music: a composition per song, see `docs/compositions/matching.md`), `scattered`, `constellation`, `constellationEditorial`, `echo`, `editorial`, `spoken`, `cascade`, `cutout`, `hinge`, `broadside`, `portal`, `mosaic`, `torque`, `fable` | `lyricComposition` (Mac default: Constellation + Editorial) |
-| `wordArrival` | `"automatic"` | `automatic`, `fade` (Soft focus), `lift` (Float up), `pop`, `orbit`, `glide`, `unfold`, `cutoutFold`, `cutoutSlide`, `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix` | `custom.wordArrivalByStyle` (one per layout on the Mac; one for all here) |
+| `wordArrival` | `"automatic"` | `automatic`, `fade` (Soft focus), `lift` (Float up), `pop`, `orbit`, `glide`, `unfold`, `cutoutFold`, `cutoutSlide`, `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix` | The entrance for every layout without one of its own in `wordArrivalByStyle` (Windows v1's one-for-all key) |
+| `wordArrivalByStyle` | `{}` | composition id → `wordArrival` value; `"automatic"` is Match the music's own, used for every layout it picks. The window writes here, for the layout chosen (re-implemented from the behaviour of the Mac's `arrival(in:)`) | `custom.wordArrivalByStyle` |
+| `wordEntranceMix` | `["fade","lift","cutoutFold"]` | the Custom mix's entrances (any `wordArrival` value but `automatic` and `mix`), kept in the Mac's order; empty leaves each layout its own | `custom.wordEntranceMix` |
+| `constellationSpread` | `1.0` | 0.4–1.8: "Spread", how far the constellations throw their words apart | `constellationSpread` |
+| `constellationLinkOpacity` | `0.2` | 0–0.6: "Links", the constellations' hairlines (0 draws none) | `constellationLinkOpacity` |
+| `echoStrength` | `1.0` | 0–1.8: "Repeats", how present Echo's repeats are (0 draws none) | `echoStrength` |
 | `lyricScale` | `1.0` | 0.5–2 | `lyricScale` |
 | `fontChoice` | `"system"` | `system` (Segoe UI Variable), `installed` | `fontChoice` (Mac fonts aren't on Windows) |
 | `fontFamily` | `""` | an installed family | `googleFontFamily` |
@@ -138,7 +145,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricSources` | all but `lyrimuse` and `appleMusicCache` | source raw values | `custom.lyricSources` |
 | `lyricMatchMode` | `"smart"` | `smart` (Accuracy first), `priority` (Source order) | `custom.lyricMatchMode` |
 | `lyrimuseFolder` | `""` | the local lyric folder | `custom.lyrimuseFolder` |
-| `artistAliases` | `true` | "Search under other names": artists' native names (MusicBrainz) and songs' original titles (Apple's catalogue) when the listed names find nothing usable; no settings window yet | `custom.artistAliases` |
+| `artistAliases` | `true` | "Search under other names": artists' native names (MusicBrainz) and songs' original titles (Apple’s catalogue) when the listed names find nothing usable (Timing › Sources) | `custom.artistAliases` |
 | `creditsLayer` | `true` | the song's production credits on the wallpaper | `custom.creditsLayer` |
 | `openingTitle` | `true` | "Show the song title at the start": the opening title card | `custom.openingTitle` |
 | `openingTitleCover` | `true` | "Show the album cover" beside the opening title | `custom.openingTitleCover` |
@@ -148,9 +155,52 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `rotateLayouts` | `true` | Match the music steps through a rotation (off: by the song's character) | `custom.rotateLayouts` |
 | `rotateLayoutCounts` | `{}` | composition → songs in a row, 0–5 (missing = 1) | `custom.rotateLayoutCounts` |
 | `rotateLayoutsCursor` | `0` | where the rotation got to (saved by the app) | `custom.rotateLayoutsCursor` |
+| `appTheme` | `"system"` | `system` (follow Windows), `light`, `dark`: how Lunalyr's own windows look. Windows only; never changes Windows' setting | Windows only (the Mac's "Look" is a different choice) |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
+
+The lyric settings reach the renderer as `LyricStyle` (`AppSettings.Style()`): besides the font, size, reveal,
+readings, credits, opening title and highlight, milestone 5 added `ConstellationSpread`, `ConstellationLinkOpacity`,
+`EchoStrength`, `MixEntrances` (the custom mix) and `RevealByLayout` (an entrance per composition id), additively. Their
+lists and maps are `ValueList`/`ValueMap`, which compare by value, so equal settings give equal styles and a settings
+change that doesn't touch the style never sets the lyrics again. Each layer takes its entrance from
+`LyricStyle.EntranceFor(kind)`.
+
+## Settings window
+
+`src/Lunalyr.App/SettingsWindow.xaml(.cs)` and `src/Lunalyr.App/Settings/`: Mica, a NavigationView grouped as the
+Mac's sidebar is (Look: Lyric style, Wallpaper, Covers; Words: Timing, Readings; App: Music players, General,
+Performance; About in the footer), Windows 11 settings cards with Segoe Fluent Icons, light/dark/accent from the
+theme. The window opens at Lyric style (or `--settings-page`).
+
+- **Built in code, no runtime binding.** Each page (`LyricStylePage`, `TimingPage`, `SettingsPages.cs`) is built on
+  first visit from `SettingsKit` rows: cards, toggles, menus, sliders with their value beside them, number boxes,
+  check boxes, expanders, a colour picker and the folder picker. A row's control reads the current settings through a
+  refresh list (`SettingsContext`) and writes with `store.Update`. Putting values into controls is guarded so it never
+  writes back; the store's `Changed` (from any thread: the tray's pause, the rotation cursor, song offsets) is
+  marshalled to the UI thread. Choices, wording and captions live in `Lunalyr.Shell.Settings.SettingsCopy` and
+  `EntranceSupport` (tested).
+- **Live.** The wallpaper follows every change at once through the store (`AppController.ApplySettings`): layers,
+  style, frame rate, pauses, readings, and a new lookup when the sources change. The window logs which keys it changed
+  ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
+- **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
+  milestone 6" (visualisers, music video), "…milestone 7" (floating lyrics, tray lyric, shortcuts, Discord, lyric
+  cards), "…milestone 8" (launch at login, updates, the welcome again), "Arrives in a later build" for the rest. Launch
+  at login writes nothing anywhere.
+- **Live preview** (`SettingsPreview`, `Lunalyr.Shell.Rendering.SettingsPreviewRenderer`): at the top of Lyric style,
+  the scene on the wallpaper (the controller's scene, clock, background and the composition Match the music chose)
+  drawn by the wallpaper's own layers into a 640×360 offscreen surface on its own thread at 15 fps, laid out as a
+  1080-line display, read back into a `WriteableBitmap`. It draws only while Lyric style shows and the window is
+  visible, and lets its device go when you leave the page. About 5% of one core while showing; about 100 MB more
+  working set while it exists (a second Direct3D device).
+- **Accessibility.** Every control is named after its row for Narrator, with the description (and any note) as help
+  text; sliders announce their value in words ("Lyrics 0.25 seconds earlier"); section titles are headings. Colours
+  are theme resources set through styles (`App.xaml`), so the App theme, light, dark and high contrast all apply per
+  element. The window adds no animations of its own; with Windows' "Animation effects" off, the entrance menu says
+  every entrance plays as a simple fade, as the wallpaper and the preview do.
+- **App theme** (General): follow Windows, light or dark, for Lunalyr's windows only (`Root.RequestedTheme` and the
+  title bar's caption buttons). `--theme` overrides it for one run.
 
 ## Measured (this PC, Release, Native AOT, `--no-playback --no-network`)
 
@@ -162,6 +212,7 @@ Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
 | Idle (tray only, no window opened yet) | 39.7–41.7 MB working set, 13.6–14.0 MB private |
 | Settings window open | 135 MB working set, 103 MB private; WinUI up 18–176 ms after the request |
 | Settings window closed again | 130 MB working set, 104 MB private (WinUI stays loaded) |
+| Settings window, milestone 5 (`--demo`, the wallpaper drawing on two displays) | General page: 258 MB working set, 229 MB private; Lyric style with the live preview: 373 MB / 346 MB, 5.3% of one core (0.2% on another page) |
 
 Live checks so far saw no media session (nothing was playing), so the GSMTC session path has run only in the unit
 tests and the read-only `NowPlayingProbe`, not yet in the AOT app.
