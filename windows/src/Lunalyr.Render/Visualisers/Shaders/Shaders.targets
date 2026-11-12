@@ -1,0 +1,41 @@
+<Project>
+  <!-- The visualiser scenes' HLSL, compiled at build time with the Windows SDK's fxc and embedded as bytecode: the
+       Native AOT app carries no shader compiler. Every *.hlsl here is a pixel shader (ps_4_0, so feature level 10
+       devices draw them too) except Fullscreen.hlsl, the shared vertex stage. Set FxcPath to use another fxc. -->
+  <PropertyGroup>
+    <VisualiserShaderDir>$(MSBuildThisFileDirectory)</VisualiserShaderDir>
+    <VisualiserShaderOut>$(BaseIntermediateOutputPath)shaders\</VisualiserShaderOut>
+  </PropertyGroup>
+  <ItemGroup>
+    <VisualiserShader Include="$(VisualiserShaderDir)*.hlsl" Profile="ps_4_0" />
+    <VisualiserShader Update="$(VisualiserShaderDir)Fullscreen.hlsl" Profile="vs_4_0" />
+    <VisualiserShaderHeader Include="$(VisualiserShaderDir)*.hlsli" />
+    <None Remove="$(VisualiserShaderDir)**" />
+  </ItemGroup>
+
+  <Target Name="FindVisualiserFxc">
+    <ItemGroup Condition="'$(FxcPath)' == ''">
+      <_VisualiserFxc Include="$(MSBuildProgramFiles32)\Windows Kits\10\bin\10.*\x64\fxc.exe" />
+    </ItemGroup>
+    <PropertyGroup Condition="'$(FxcPath)' == ''">
+      <FxcPath>%(_VisualiserFxc.FullPath)</FxcPath>
+    </PropertyGroup>
+    <Error Condition="'$(FxcPath)' == '' Or !Exists('$(FxcPath)')"
+           Text="The visualiser shaders need fxc.exe from the Windows 10/11 SDK (Windows Kits\10\bin\&lt;version&gt;\x64). Install the Windows SDK or set FxcPath." />
+  </Target>
+
+  <Target Name="CompileVisualiserShaders" DependsOnTargets="FindVisualiserFxc"
+          Inputs="@(VisualiserShader);@(VisualiserShaderHeader);$(MSBuildThisFileFullPath)"
+          Outputs="@(VisualiserShader->'$(VisualiserShaderOut)%(Filename).cso')">
+    <MakeDir Directories="$(VisualiserShaderOut)" />
+    <Exec Command="&quot;$(FxcPath)&quot; /nologo /T %(VisualiserShader.Profile) /E main /O3 /WX /Fo &quot;$(VisualiserShaderOut)%(VisualiserShader.Filename).cso&quot; &quot;%(VisualiserShader.FullPath)&quot;"
+          StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="EmbedVisualiserShaders" BeforeTargets="PrepareResourceNames" DependsOnTargets="CompileVisualiserShaders">
+    <ItemGroup>
+      <EmbeddedResource Include="@(VisualiserShader->'$(VisualiserShaderOut)%(Filename).cso')"
+                        LogicalName="Lunalyr.Render.Visualisers.%(Filename).cso" WithCulture="false" Type="Non-Resx" />
+    </ItemGroup>
+  </Target>
+</Project>

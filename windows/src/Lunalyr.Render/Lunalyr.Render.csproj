@@ -19,5 +19,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Lunalyr.Render.Compositions.Tests" />
+    <InternalsVisibleTo Include="Lunalyr.Render.Tests" />
   </ItemGroup>
+  <!-- The visualiser scenes' shaders: compiled with fxc at build time and embedded. -->
+  <Import Project="Visualisers\Shaders\Shaders.targets" />
 </Project>
