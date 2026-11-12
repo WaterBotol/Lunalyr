@@ -13,7 +13,7 @@ public class HighlightTileTests
     public void TheTilePressesInAtTheOnsetAndFadesAtTheLineEnd()
     {
         const double onset = 10.0, release = 13.6;
-        static HighlightPose Pose(double time, bool reduce = false) => HighlightTiming.Pose(time, onset, release, reduce);
+        static HighlightPose Pose(double time, bool reduce = false) => LyricHighlightTiming.Pose(time, onset, release, reduce);
         Assert.False(Pose(onset - 0.001).IsVisible); // nothing before the word is sung
         Assert.False(Pose(onset).IsVisible);
         // A quick ease-out from the leading edge, about 120 ms, with no pop: it never passes the word's width and
@@ -21,7 +21,7 @@ public class HighlightTileTests
         var width = 0.0;
         for (var step = 1; step <= 24; step++)
         {
-            var current = Pose(onset + HighlightTiming.Press * step / 24);
+            var current = Pose(onset + LyricHighlightTiming.Press * step / 24);
             Assert.True(current.IsVisible);
             Assert.True(current.Width >= width);
             Assert.True(current.Width <= 1);
@@ -29,28 +29,28 @@ public class HighlightTileTests
         }
         Assert.True(Pose(onset + 0.02).Width < 0.6, "it presses in rather than appearing whole");
         Assert.True(Pose(onset + 0.06).Width > 0.7, "most of the way in half way through");
-        Assert.Equal(1, Pose(onset + HighlightTiming.Press).Width, 9);
-        Assert.Equal(1, Pose(onset + HighlightTiming.Press).Opacity, 9);
+        Assert.Equal(1, Pose(onset + LyricHighlightTiming.Press).Width, 9);
+        Assert.Equal(1, Pose(onset + LyricHighlightTiming.Press).Opacity, 9);
         // Held for the rest of the line.
         for (var time = onset + 0.13; time < release; time += 0.05) Assert.Equal(new HighlightPose(1, 1), Pose(time));
         // Fades over about 300 ms after the line ends.
         var opacity = 1.0;
         for (var step = 1; step <= 30; step++)
         {
-            var current = Pose(release + HighlightTiming.Fade * step / 30);
+            var current = Pose(release + LyricHighlightTiming.Fade * step / 30);
             Assert.True(current.Opacity < opacity);
             if (current.IsVisible) Assert.Equal(1, current.Width); // it fades; it does not shrink
             opacity = current.Opacity;
         }
-        Assert.False(Pose(release + HighlightTiming.Fade).IsVisible);
-        Assert.Equal(0.3, HighlightTiming.Fade, 0.05);
-        Assert.Equal(0.12, HighlightTiming.Press, 0.03);
+        Assert.False(Pose(release + LyricHighlightTiming.Fade).IsVisible);
+        Assert.Equal(0.3, LyricHighlightTiming.Fade, 0.05);
+        Assert.Equal(0.12, LyricHighlightTiming.Press, 0.03);
     }
 
     [Fact]
     public void WithReduceMotionTheTileOnlyFades()
     {
-        var pose = HighlightTiming.Pose(10.03, 10, 12, reduceMotion: true);
+        var pose = LyricHighlightTiming.Pose(10.03, 10, 12, reduceMotion: true);
         Assert.Equal(1, pose.Width);
         Assert.InRange(pose.Opacity, 0.01, 0.99);
     }
@@ -58,9 +58,9 @@ public class HighlightTileTests
     [Fact]
     public void TheWordsInkSwitchesWithinAFrameOfTheFade()
     {
-        Assert.Equal(1, HighlightTiming.TextOpacity(0.9, 0.4));
-        Assert.Equal(0, HighlightTiming.TextOpacity(0.1, 0.4));
-        Assert.Equal(0.5, HighlightTiming.TextOpacity(0.4, 0.4), 6);
+        Assert.Equal(1, LyricHighlightTiming.TextOpacity(0.9, 0.4));
+        Assert.Equal(0, LyricHighlightTiming.TextOpacity(0.1, 0.4));
+        Assert.Equal(0.5, LyricHighlightTiming.TextOpacity(0.4, 0.4), 6);
     }
 
     [Fact]
@@ -87,20 +87,22 @@ public class HighlightTileTests
     public void TheSyllablesOfOneLatinWordAreOneTile()
     {
         LyricWord[] syllables = [new("beau", 5, 5.2), new("ti", 5.2, 5.4), new("ful", 5.4, 5.6)];
-        var segments = HighlightSegments.For(syllables, [0, 4.0 / 9, 6.0 / 9, 1], SimpleWordBreaker.Instance);
-        Assert.Equal([new HighlightSegment(0, 1, 5)], segments);
+        bool[] glue = [false, true, true];
+        var line = EditorialSetting.Layout(syllables, glue, 44, 11, 0, wordTimed: true, editorial: false);
+        var segments = HighlightSegment.Of(line, syllables, glue, SimpleWordBreaker.Instance, 6)[0];
+        Assert.Equal([(0.0, 1.0, 5.0)], segments.Select(segment => (segment.From, segment.To, segment.Onset)));
         Span<HighlightMark> marks = stackalloc HighlightMark[4];
-        Assert.Equal(0, HighlightSegments.Marks(segments, 4.9, 6, false, marks));
-        Assert.Equal(1, HighlightSegments.Marks(segments, 5.5, 6, false, marks));
-        Assert.Equal(0, HighlightSegments.Marks(segments, 6.4, 6, false, marks));
+        Assert.Equal(0, HighlightSegment.Marks(segments, 4.9, false, marks));
+        Assert.Equal(1, HighlightSegment.Marks(segments, 5.5, false, marks));
+        Assert.Equal(0, HighlightSegment.Marks(segments, 6.4, false, marks));
     }
 
     [Fact]
     public void OnlyTheEntranceNamedHighlightPressesTiles()
     {
-        Assert.True(HighlightTiming.HighlightsSungWords("cutoutHighlight"));
-        Assert.False(HighlightTiming.HighlightsSungWords("fade"));
-        Assert.False(HighlightTiming.HighlightsSungWords(null));
+        Assert.True(LyricHighlightTiming.HighlightsSungWords("cutoutHighlight"));
+        Assert.False(LyricHighlightTiming.HighlightsSungWords("fade"));
+        Assert.False(LyricHighlightTiming.HighlightsSungWords(null));
     }
 
     // Ported from LyricHighlightTests.swift: testRollingHighlightsReleaseWithTheirOwnLines (Spoken's rolling stage)
@@ -122,7 +124,7 @@ public class HighlightTileTests
         Assert.Equal(15, window.LineEnds[third]);
 
         var words = RollingWords.Prepare(window.Words, 44, ordinals: window.Ordinals);
-        var poses = words.Select(word => HighlightTiming.Pose(13.7, word.Source.Start, window.LineEnds[word.Source], false)).ToArray();
+        var poses = words.Select(word => LyricHighlightTiming.Pose(13.7, word.Source.Start, window.LineEnds[word.Source], false)).ToArray();
         Assert.Equal([new HighlightPose(1, 1), new HighlightPose(1, 1), HighlightPose.Hidden], poses);
         var shown = RollingTokenState.Make(words[0], 2, 1, 13.7, 44, 600, 0, false, WordArrival.Glide, new WordRevealOptions(),
                                            highlightOpacity: poses[0].Opacity).Shown;

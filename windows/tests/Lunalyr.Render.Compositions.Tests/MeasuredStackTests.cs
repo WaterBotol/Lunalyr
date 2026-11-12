@@ -120,13 +120,14 @@ public sealed class MeasuredStackTests : IDisposable
     }
 
     // Ported from RollingStackTests.swift: testPreviewCurrentAndFadingWordsNeverOverlapOnTheRealStage and
-    // testEveryEntranceStyleStaysClearAsDrawn (Spoken, with the entrances built on Windows)
+    // testEveryEntranceStyleStaysClearAsDrawn (Spoken, with every entrance the Mac test lists)
     [Fact]
     public void PreviewCurrentAndFadingWordsNeverOverlapInAnyEntrance()
     {
         var stage = new SizeD(1210, 707);
         var crowded = 0;
-        WordArrival[] styles = [WordArrival.Fade, WordArrival.Lift, WordArrival.Pop, WordArrival.Orbit, WordArrival.Glide, WordArrival.Unfold];
+        WordArrival[] styles = [WordArrival.Fade, WordArrival.Lift, WordArrival.Pop, WordArrival.Orbit, WordArrival.Glide, WordArrival.Unfold,
+                                WordArrival.CutoutFold, WordArrival.CutoutSlide, WordArrival.SatinRibbon, WordArrival.SplitInk];
         foreach (var style in styles)
         foreach (var userScale in new[] { 0.7, 1.0, 1.5 })
         foreach (var lyric in Lyrics.Append(Phrases))

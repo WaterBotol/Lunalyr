@@ -72,3 +72,14 @@ so a line always sets the same way:
   revealed one by one (the default), the progress otherwise.
 - A word with any heat (above 0.05) is drawn above its neighbours.
 - The emphasis turn (`driftAngle`) rotates the word; under Reduce Motion it does not.
+
+## Held words and the gap before them (Lunalyr's own)
+
+- A word's swell (heat, glow and gesture) is held to its slot's inset (`CappedGrowth`), so emphasis never pushes it
+  into its neighbours: at most about nine tenths of its own clearance is used, and the neighbour's clearance stays.
+- A held single word also grows as it is sung (`HeldWordText`): on the Mac each glyph swells by up to 5% about its own
+  foot (where the script allows glyphs to move apart), so the word grows taller but hardly wider; joined scripts
+  swell the whole shaped word by up to 7% from its foot. Windows draws a word as one bitmap, so it scales the word by
+  the full 5% upwards and by 5% over the glyph count across, anchored at its foot (7% both ways for joined scripts).
+  It used to scale the whole word by 5% about its centre, on top of the capped swell, which closed the gap before a
+  held, emphasised word ("neonRAIN" in the milestone 3 capture).

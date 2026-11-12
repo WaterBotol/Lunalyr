@@ -123,11 +123,15 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             var unit = _preparedUnits[k] ??= Unit(token);
             unit.LastUsed = Frame;
             var eligible = k > 0 ? prepared[k - 1].Source.Start : double.NegativeInfinity;
+            // Each word its own entrance (a mix picks per word; "Cutout · Highlight" moves as the layout's own).
+            var chosen = Choice.For(Kind, token.Seed);
+            var motion = chosen.Motion(Kind);
             // "Cutout · Highlight": the word's tile, held until its own line ends, keeps it on the stage meanwhile.
-            var tile = HighlightsSungWords && _window!.LineEnds.TryGetValue(token.Source, out var lineEnd)
-                ? HighlightTiming.Pose(time, token.Source.Start, lineEnd, false) : HighlightPose.Hidden;
+            // Cutout's labels are tiles already and take none.
+            var tile = chosen.HighlightsSungWords() && !token.Tile && _window!.LineEnds.TryGetValue(token.Source, out var lineEnd)
+                ? LyricHighlightTiming.Pose(time, token.Source.Start, lineEnd, false) : HighlightPose.Hidden;
             _tiles[count] = tile;
-            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, Arrival,
+            var state = RollingTokenState.Make(token, next, rank, time, lineBase, stage.Width, intensity, false, motion,
                                                Options, eligible, tile.Opacity, Kind);
             _members[count] = k;
             _sizes[count] = unit.Size;
@@ -163,11 +167,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             if (!(fit > 0)) continue;
             var token = prepared[_members[m]];
             var unit = _preparedUnits[_members[m]]!;
+            var motion = Choice.For(Kind, token.Seed).Motion(Kind);
             var entrance = Matrix3x2.CreateScale((float)slot.EntranceScale) * Matrix3x2.CreateRotation(Radians(slot.Turn));
-            if (Kind != CompositionKind.Spoken && Arrival == WordArrival.Unfold)
+            if (Kind != CompositionKind.Spoken && motion is WordArrival.Unfold or WordArrival.CutoutFold)
             {
-                // Cascade and Cutout fold an Unfold entrance in about the unit's bottom edge (foreshortened).
-                var fold = EntranceTransform.Make(state.Presentation.Progress, state.Presentation.Arrival, Arrival, token.PointSize,
+                // Cascade and Cutout fold an Unfold or Cutout · Fold entrance in about the unit's bottom edge
+                // (foreshortened). Spoken draws them without the fold, as it always has.
+                var fold = EntranceTransform.Make(state.Presentation.Progress, state.Presentation.Arrival, motion, token.PointSize,
                                                   token.Direction, false, token.TurnLimit).Fold;
                 if (fold != 0) entrance *= Fold(fold, unit.Size.Height);
             }
@@ -178,7 +184,10 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 * Matrix3x2.CreateRotation(Radians(state.Angle))
                 * Matrix3x2.CreateTranslation(origin.X + (float)centre.X, origin.Y + (float)centre.Y);
             var scale = (float)(slot.EntranceScale * fit * state.Scale);
-            var blur = Combine(Points(Arrival.Blur(state.Presentation.Progress)), Points(state.Pose.Blur)) * scale;
+            var progress = state.Presentation.Progress;
+            var blur = Combine(Points(motion.Blur(progress)), Points(state.Pose.Blur)) * scale;
+            // A cutout is unmasked from its leading edge while it arrives (cutouts follow the reveal itself).
+            var clip = InkClip.Leading(motion.PaperShown(progress), unit.Size.Width, token.Direction < 0);
             var reveal = Span<double>.Empty;
             if (token.Parts.Count > 1)
             {
@@ -190,25 +199,30 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             var mark = new HighlightMark(0, 1, _tiles[m]);
             if (unit.Tile is not null)
             {
-                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal);
-                continue;
+                DrawLabelled(dc, token, unit, state, world, scale, (float)opacity, blur, reveal, clip);
             }
-            if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, (float)opacity, overlay: false);
-            unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
-                            GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
-            if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, (float)opacity, overlay: true);
-            if (unit.Reading is { } reading && !state.Presentation.Preview)
-                reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1);
+            else
+            {
+                if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, opacity, overlay: false);
+                unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
+                                GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
+                if (mark.Pose.IsVisible) DrawTile(dc, unit.Label, labelWorld, token.PointSize, token.RightToLeft, mark, opacity, overlay: true);
+                if (unit.Reading is { } reading && !state.Presentation.Preview)
+                    reading.Draw(dc, Matrix3x2.CreateTranslation(unit.ReadingOffset) * world, scale, (float)opacity, blur, GlowSpec.None, 1, clip: clip);
+            }
+            if (LyricSwipe.Shows(motion, progress, false)) DrawSwipe(dc, world, unit.Size, progress, token.Direction, motion, alpha);
         }
     }
 
     /// <summary>
     /// A word on Cutout's label. The tile is pressed on from the word's leading edge by its spring (a sliver under the
     /// faint preview), tilted a little; where it has pressed in, the word and its reading take the colour set on it.
-    /// The unit's shadow lies under the tile, as the Mac shadows the label and its word as one.
+    /// The unit's shadow lies under the tile, as the Mac shadows the label and its word as one. A cutout entrance
+    /// unmasks the whole label (tile, word, reading and shadow) from its leading edge (<paramref name="clip"/>).
     /// </summary>
     private void DrawLabelled(ID2D1DeviceContext dc, RollingWord token, SpokenUnit unit, in RollingTokenState state,
-                              in Matrix3x2 world, float scale, float opacity, float blur, ReadOnlySpan<double> reveal)
+                              in Matrix3x2 world, float scale, float opacity, float blur, ReadOnlySpan<double> reveal,
+                              InkClip clip)
     {
         var boundaries = reveal.IsEmpty ? default : AsSpan(token.Boundaries);
         var rightToLeft = token.RightToLeft;
@@ -216,21 +230,15 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
         var reading = state.Presentation.Preview ? null : unit.Reading;
         // The label fades as one piece (its word stays dark on a fading tile, as on the Mac), so a label that is not
-        // fully there is drawn in a layer at its opacity.
-        var layered = opacity < 0.995f;
+        // fully there is drawn in a layer at its opacity; a cutout's label is drawn in a layer cut to its unmasked part.
+        if (clip.IsSet && !(clip.Right > clip.Left)) return;
+        var layered = opacity < 0.995f || clip.IsSet;
         if (layered)
         {
             var margin = (float)(unit.Size.Height + unit.Size.Width * 0.1);
-            dc.Transform = world;
-            dc.PushLayer(new LayerParameters1
-            {
-                ContentBounds = new Vortice.RawRectF(-(float)unit.Size.Width / 2 - margin, -(float)unit.Size.Height / 2 - margin,
-                                                     (float)unit.Size.Width / 2 + margin, (float)unit.Size.Height / 2 + margin),
-                MaskAntialiasMode = AntialiasMode.PerPrimitive,
-                MaskTransform = Matrix3x2.Identity,
-                Opacity = opacity,
-                LayerOptions = LayerOptions1.None,
-            }, null!);
+            var bounds = new Vortice.RawRectF(-(float)unit.Size.Width / 2 - margin, -(float)unit.Size.Height / 2 - margin,
+                                              (float)unit.Size.Width / 2 + margin, (float)unit.Size.Height / 2 + margin);
+            PushPieceLayer(dc, world, bounds, opacity, clip);
             opacity = 1;
         }
         try
@@ -421,7 +429,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                     var group = groups[g];
                     var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id,
                                          group.Words.Count > 0 ? group.Words[0].Start : 0, wordTimed: true,
-                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width);
+                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width,
+                                         kind: BackingKind(Kind));
                     plans[g] = new BackingPlan(group, plan);
                 }
                 _backing[row] = plans;

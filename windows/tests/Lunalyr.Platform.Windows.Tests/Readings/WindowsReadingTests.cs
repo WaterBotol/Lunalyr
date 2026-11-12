@@ -314,7 +314,7 @@ public class WindowsLyricRunReadingTests
         var glue = LyricRuns.Glue(line, words);
         var layout = Core.Compositions.EditorialSetting.Layout(words, glue, 44, 11, 0, wordTimed: true, editorial: true);
         Assert.Single(layout.Runs); // set as one run, as written
-        var segments = Core.Compositions.HighlightSegments.For(words, layout.Runs[0].Boundaries, _t.Services.WordBreaker);
+        var segments = Core.Compositions.HighlightSegment.Of(layout, words, glue, _t.Services.WordBreaker, 34)[0];
         // Each word a reader takes in has its own tile, along its own letters.
         Assert.True(segments.Length >= 5, string.Join(" ", segments));
         Assert.Equal(0, segments[0].From);
@@ -325,8 +325,8 @@ public class WindowsLyricRunReadingTests
             Assert.True(first.Onset < second.Onset);
         }
         Span<Core.Compositions.HighlightMark> marks = stackalloc Core.Compositions.HighlightMark[16];
-        Assert.Equal(segments.Length, Core.Compositions.HighlightSegments.Marks(segments, 33.9, 34, false, marks));
-        Assert.Equal(0, Core.Compositions.HighlightSegments.Marks(segments, 34.4, 34, false, marks));
+        Assert.Equal(segments.Length, Core.Compositions.HighlightSegment.Marks(segments, 33.9, false, marks));
+        Assert.Equal(0, Core.Compositions.HighlightSegment.Marks(segments, 34.4, false, marks));
     }
 
     // Ported from LyricRunReadingTests.swift: testALineTimedJapaneseRunKeepsTheReadingsWordsApart

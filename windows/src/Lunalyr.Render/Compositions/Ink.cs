@@ -25,6 +25,8 @@ internal sealed class Ink : IDisposable
     private readonly ID2D1DeviceContext _owner;
     private Vortice.Direct2D1.Effects.Shadow? _glow;
     private ID2D1Image? _glowOut;
+    private Vortice.Direct2D1.Effects.Shadow? _tint;
+    private ID2D1Image? _tintOut;
 
     public Ink(ID2D1DeviceContext owner, ID2D1Bitmap1 text, float raster, Vector2 centre, Vector2 box, ID2D1Bitmap1? soft,
                float softRaster, Vector2 softCentre)
@@ -74,15 +76,17 @@ internal sealed class Ink : IDisposable
     /// pixels. With <paramref name="boundaries"/> and <paramref name="tokenOpacities"/>, each token's share of the
     /// label (by character, in reading order) is drawn at its own opacity, so a glued run's syllables arrive one by one.
     /// </summary>
+    /// <param name="clip">Only this stretch across the text is drawn (a cutout unmasked from its leading edge, a sweep).</param>
     public void Draw(ID2D1DeviceContext dc, in Matrix3x2 world, float worldScale, float opacity, float blur, GlowSpec glow,
                      float shadowOpacity, ReadOnlySpan<double> boundaries = default,
-                     ReadOnlySpan<double> tokenOpacities = default, bool rightToLeft = false)
+                     ReadOnlySpan<double> tokenOpacities = default, bool rightToLeft = false, InkClip clip = default)
     {
         if (!(opacity > 0.002f) || !(worldScale > 0.0001f)) return;
+        if (clip.IsSet && !(clip.Right > clip.Left)) return;
         var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
         var textTransform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
 
-        DrawShadow(dc, world, opacity, shadowOpacity, boundaries, tokenOpacities, rightToLeft);
+        DrawShadow(dc, world, opacity, shadowOpacity, boundaries, tokenOpacities, rightToLeft, clip);
 
         dc.Transform = textTransform;
         if (glow.Visible)
@@ -95,7 +99,8 @@ internal sealed class Ink : IDisposable
             }
             _glow.BlurStandardDeviation = MathF.Max(0.1f, glow.Radius * 0.5f * Raster / worldScale);
             _glow.Color = new Vector4(glow.Colour.X, glow.Colour.Y, glow.Colour.Z, Math.Clamp(glow.Colour.W * opacity, 0, 1));
-            dc.DrawImage(_glowOut!, InterpolationMode.Linear, CompositeMode.SourceOver);
+            if (!clip.IsSet) dc.DrawImage(_glowOut!, InterpolationMode.Linear, CompositeMode.SourceOver);
+            else dc.DrawImage(_glowOut!, null, Spill(clip), InterpolationMode.Linear, CompositeMode.SourceOver);
         }
 
         var sigma = blur * 0.5f * Raster / worldScale;
@@ -103,13 +108,22 @@ internal sealed class Ink : IDisposable
         {
             if (sigma < 0.2f)
             {
-                dc.DrawBitmap(Text, new RawRectF(0, 0, PixelWidth, PixelHeight), opacity, InterpolationMode.Linear, null, null);
+                if (!clip.IsSet)
+                {
+                    dc.DrawBitmap(Text, new RawRectF(0, 0, PixelWidth, PixelHeight), opacity, InterpolationMode.Linear, null, null);
+                }
+                else
+                {
+                    var whole = Clipped(new RawRectF(0, 0, PixelWidth, PixelHeight), clip, Centre, Raster);
+                    if (whole.Right > whole.Left) dc.DrawBitmap(Text, whole, opacity, InterpolationMode.Linear, whole, null);
+                }
             }
             else
             {
                 SetBlur(sigma);
                 _opacity.Value = opacity;
-                dc.DrawImage(_blurred, InterpolationMode.Linear, CompositeMode.SourceOver);
+                if (!clip.IsSet) dc.DrawImage(_blurred, InterpolationMode.Linear, CompositeMode.SourceOver);
+                else dc.DrawImage(_blurred, null, Spill(clip), InterpolationMode.Linear, CompositeMode.SourceOver);
             }
             return;
         }
@@ -121,18 +135,20 @@ internal sealed class Ink : IDisposable
         {
             var first = SliceRect(0, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
             var last = SliceRect(settled - 1, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
-            var span = new RawRectF(MathF.Min(first.Left, last.Left), 0, MathF.Max(first.Right, last.Right), PixelHeight);
+            var span = Clipped(new RawRectF(MathF.Min(first.Left, last.Left), 0, MathF.Max(first.Right, last.Right), PixelHeight),
+                               clip, Centre, Raster);
             SetBlur(sigma);
             _opacity.Value = opacity;
-            dc.DrawImage(_blurred, null, span, InterpolationMode.Linear, CompositeMode.SourceOver);
+            if (span.Right > span.Left) dc.DrawImage(_blurred, null, span, InterpolationMode.Linear, CompositeMode.SourceOver);
             start = settled;
         }
         for (var k = start; k < tokenOpacities.Length; k++)
         {
             var alpha = (float)tokenOpacities[k] * opacity;
             if (alpha <= 0.002f) continue;
-            var slice = SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight);
-            dc.DrawBitmap(Text, slice, alpha, InterpolationMode.Linear, slice, null);
+            var slice = Clipped(SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, Centre, Raster, PixelWidth, PixelHeight),
+                                clip, Centre, Raster);
+            if (slice.Right > slice.Left) dc.DrawBitmap(Text, slice, alpha, InterpolationMode.Linear, slice, null);
         }
     }
 
@@ -140,24 +156,33 @@ internal sealed class Ink : IDisposable
     /// Draws only the soft shadow (as <see cref="Draw"/> would under the text), for a piece whose text goes on top of
     /// something drawn after its shadow, such as a label's tile.
     /// </summary>
+    /// <param name="clip">Only this stretch across the text casts a shadow (as in <see cref="Draw"/>).</param>
     public void DrawShadow(ID2D1DeviceContext dc, in Matrix3x2 world, float opacity, float shadowOpacity,
                            ReadOnlySpan<double> boundaries = default, ReadOnlySpan<double> tokenOpacities = default,
-                           bool rightToLeft = false)
+                           bool rightToLeft = false, InkClip clip = default)
     {
         if (Soft is null || !(shadowOpacity * opacity > 0.004f)) return;
+        if (clip.IsSet && !(clip.Right > clip.Left)) return;
         var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
         dc.Transform = Matrix3x2.CreateTranslation(-SoftCentre) * Matrix3x2.CreateScale(1 / SoftRaster) * world;
         if (!sliced)
         {
-            dc.DrawBitmap(Soft, new RawRectF(0, 0, SoftWidth, SoftHeight), opacity * shadowOpacity, InterpolationMode.Linear, null, null);
+            if (!clip.IsSet)
+            {
+                dc.DrawBitmap(Soft, new RawRectF(0, 0, SoftWidth, SoftHeight), opacity * shadowOpacity, InterpolationMode.Linear, null, null);
+                return;
+            }
+            var whole = Clipped(new RawRectF(0, 0, SoftWidth, SoftHeight), clip, SoftCentre, SoftRaster);
+            if (whole.Right > whole.Left) dc.DrawBitmap(Soft, whole, opacity * shadowOpacity, InterpolationMode.Linear, whole, null);
             return;
         }
         for (var k = 0; k < tokenOpacities.Length; k++)
         {
             var alpha = (float)tokenOpacities[k] * opacity * shadowOpacity;
             if (alpha <= 0.004f) continue;
-            var slice = SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, SoftCentre, SoftRaster, SoftWidth, SoftHeight);
-            dc.DrawBitmap(Soft, slice, alpha, InterpolationMode.Linear, slice, null);
+            var slice = Clipped(SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, SoftCentre, SoftRaster, SoftWidth, SoftHeight),
+                                clip, SoftCentre, SoftRaster);
+            if (slice.Right > slice.Left) dc.DrawBitmap(Soft, slice, alpha, InterpolationMode.Linear, slice, null);
         }
     }
 
@@ -226,6 +251,43 @@ internal sealed class Ink : IDisposable
         }
     }
 
+    /// <summary>
+    /// The text's shape in one flat <paramref name="colour"/> (straight alpha), within <paramref name="clip"/>: a word
+    /// set on a highlight tile. Made through an effect created when first needed.
+    /// </summary>
+    public void DrawTinted(ID2D1DeviceContext dc, in Matrix3x2 world, Vector4 colour, InkClip clip)
+    {
+        if (!(colour.W > 0.004f) || (clip.IsSet && !(clip.Right > clip.Left))) return;
+        if (_tint is null)
+        {
+            _tint = new Vortice.Direct2D1.Effects.Shadow(_owner) { Optimization = ShadowOptimization.Speed, BlurStandardDeviation = 0 };
+            _tint.SetInput(0, Text, true);
+            _tintOut = _tint.Output;
+        }
+        _tint.Color = new Vector4(colour.X, colour.Y, colour.Z, Math.Clamp(colour.W, 0, 1));
+        dc.Transform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
+        var rect = Clipped(new RawRectF(0, 0, PixelWidth, PixelHeight), clip, Centre, Raster);
+        if (rect.Right > rect.Left) dc.DrawImage(_tintOut!, null, rect, InterpolationMode.Linear, CompositeMode.SourceOver);
+    }
+
+    /// <summary><paramref name="rect"/> (bitmap pixels) cut to the clip's stretch across the text.</summary>
+    private RawRectF Clipped(RawRectF rect, InkClip clip, Vector2 centre, float raster)
+    {
+        if (!clip.IsSet) return rect;
+        var left = MathF.Max(rect.Left, centre.X + clip.Left * raster);
+        var right = MathF.Min(rect.Right, centre.X + clip.Right * raster);
+        return new RawRectF(left, rect.Top, MathF.Max(left, right), rect.Bottom);
+    }
+
+    /// <summary>The clip as an image rectangle for an effect's output, which spills past the bitmap (blur, glow).</summary>
+    private RawRectF Spill(InkClip clip)
+    {
+        const float far = 100_000;
+        var left = float.IsNegativeInfinity(clip.Left) ? -far : Centre.X + clip.Left * Raster;
+        var right = float.IsPositiveInfinity(clip.Right) ? far : Centre.X + clip.Right * Raster;
+        return new RawRectF(left, -far, MathF.Max(left, right), far);
+    }
+
     /// <summary>The blur's standard deviation (property 0), set through the float overload: the typed setter boxes.</summary>
     private void SetBlur(float sigma) => _blur.SetValue(0u, sigma);
 
@@ -252,6 +314,8 @@ internal sealed class Ink : IDisposable
 
     public void Dispose()
     {
+        _tintOut?.Dispose();
+        _tint?.Dispose();
         _glowOut?.Dispose();
         _glow?.Dispose();
         _blurred.Dispose();
@@ -259,5 +323,23 @@ internal sealed class Ink : IDisposable
         _blur.Dispose();
         Soft?.Dispose();
         Text.Dispose();
+    }
+}
+
+/// <summary>
+/// A stretch across a piece of text, in layout pixels from the centre of its layout box (left to right); only that
+/// stretch is drawn. The default draws everything.
+/// </summary>
+internal readonly record struct InkClip(float Left, float Right, bool IsSet = true)
+{
+    public static InkClip None => default;
+
+    /// <summary>The leading <paramref name="shown"/> share of a box <paramref name="width"/> wide (the trailing share when <paramref name="fromRight"/>).</summary>
+    public static InkClip Leading(double shown, double width, bool fromRight)
+    {
+        if (!(shown < 1)) return default;
+        var w = (float)width;
+        var cut = (float)(Math.Max(0, shown) * width);
+        return fromRight ? new InkClip(w / 2 - cut, float.PositiveInfinity) : new InkClip(float.NegativeInfinity, -w / 2 + cut);
     }
 }

@@ -3,7 +3,6 @@
 // Lunalyr's own, ported), in the colour the highlight setting picks.
 
 using System.Numerics;
-using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Readings;
@@ -17,29 +16,17 @@ namespace Lunalyr.Render.Compositions;
 
 internal abstract partial class LyricCompositionLayer
 {
-    private ID2D1SolidColorBrush? _tileBrush;
     private readonly HighlightMark[] _marks = new HighlightMark[32];
     private IReadOnlyList<CreditCue> _cues = [];
     private CreditBand[] _creditBands = [];
     private readonly Dictionary<int, LinePlan> _creditPlans = [];
     private int _creditSeed;
 
-    /// <summary>The scene's reveal presses a tile behind each sung word ("cutoutHighlight").</summary>
-    protected bool HighlightsSungWords => HighlightTiming.HighlightsSungWords(SceneShown?.Style.Reveal);
-
     /// <summary>The bands the credit cues hold, and when: backing vocals keep to the other band meanwhile.</summary>
     protected ReadOnlySpan<CreditBand> CreditBands => _creditBands;
 
     /// <summary>The credit cues of the scene's song (empty when credits are off).</summary>
     protected IReadOnlyList<CreditCue> Cues => _cues;
-
-    private void CreateExtras(ID2D1DeviceContext dc) => _tileBrush = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
-
-    private void ReleaseExtras()
-    {
-        _tileBrush?.Dispose();
-        _tileBrush = null;
-    }
 
     private void InvalidateExtras()
     {
@@ -61,90 +48,55 @@ internal abstract partial class LyricCompositionLayer
     // ---- Highlight tiles ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Marks <paramref name="plan"/>'s runs for highlight tiles: every run sung from <paramref name="from"/> on gets a
-    /// tile behind each word a reader takes in, pressed in as it is sung and held until <paramref name="release"/>.
+    /// The tiles of one run's sung words (<paramref name="segments"/>) on its <paramref name="label"/>: behind it, or
+    /// (with <paramref name="overlay"/>) the label's ink in the tile's text colour where the tiles have pressed in.
     /// </summary>
-    protected void MarkHighlights(LinePlan plan, double from, double release)
+    private void DrawRunTiles(ID2D1DeviceContext dc, ReadOnlySpan<HighlightSegment> segments, Ink label, in Matrix3x2 labelWorld,
+                              double pointSize, bool rightToLeft, double time, double visibility, bool overlay)
     {
-        ArgumentNullException.ThrowIfNull(plan);
-        var runs = plan.Typography.Runs;
-        var tokens = plan.Typography.Tokens;
-        var segments = new HighlightSegment[runs.Count][];
-        for (var r = 0; r < runs.Count; r++)
-        {
-            var run = runs[r];
-            var words = new LyricWord[run.TokenCount];
-            for (var i = 0; i < words.Length; i++) words[i] = tokens[run.TokenStart + i].Source;
-            segments[r] = HighlightSegments.For(words, run.Boundaries, Breaker);
-        }
-        plan.HighlightSegments = segments;
-        plan.HighlightFrom = from;
-        plan.HighlightRelease = release;
-    }
-
-    /// <summary>The tiles of run <paramref name="r"/> of <paramref name="plan"/>: behind its label, or (with
-    /// <paramref name="overlay"/>) the label's ink in the tile's text colour where the tiles have pressed in.</summary>
-    private void DrawRunTiles(ID2D1DeviceContext dc, LinePlan plan, int r, Ink label, in Matrix3x2 labelWorld,
-                              float visibility, double time, bool overlay)
-    {
-        if (plan.HighlightSegments is not { } all || r >= all.Length) return;
-        var run = plan.Typography.Runs[r];
-        if (run.Source.Start < plan.HighlightFrom) return;
-        var count = HighlightSegments.Marks(all[r], time, plan.HighlightRelease, false, _marks);
-        for (var k = 0; k < count; k++)
-            DrawTile(dc, label, labelWorld, run.Metrics.Size, run.RightToLeft, _marks[k], visibility, overlay);
+        var count = HighlightSegment.Marks(segments, time, false, _marks);
+        for (var k = 0; k < count; k++) DrawTile(dc, label, labelWorld, pointSize, rightToLeft, _marks[k], visibility, overlay);
     }
 
     /// <summary>
     /// One highlight tile on <paramref name="label"/> (drawn with <paramref name="labelWorld"/>, origin at the label's
-    /// centre): flat paper with slightly rounded corners and a small tilt, pressed in from the word's leading edge
-    /// (<paramref name="overlay"/> false, drawn before the label); or the label's ink in the colour set on the tile,
-    /// where the press has reached, while the tile is strong enough to carry it (drawn after the label).
+    /// centre), the one way every layer draws them (the Mac's <c>CutoutTile</c> and <c>LyricHighlightMask</c>). Without
+    /// <paramref name="overlay"/>, drawn before the label: flat paper with slightly rounded corners, pressed in from the
+    /// word's leading edge and then given Cutout's small tilt about its centre. With it, drawn after the label: the
+    /// word in the colour set on the tile where the press has reached, while the tile is strong enough to carry it.
     /// </summary>
     protected void DrawTile(ID2D1DeviceContext dc, Ink label, in Matrix3x2 labelWorld, double pointSize, bool rightToLeft,
-                            HighlightMark mark, float visibility, bool overlay)
+                            HighlightMark mark, double visibility, bool overlay)
     {
-        if (_tileBrush is null || !(visibility > 0.002f)) return;
-        var ink = _ink;
+        if (_paint is null || !mark.Pose.IsVisible || !(visibility > 0.002)) return;
         double width = label.Box.X, height = label.Box.Y;
-        var rect = mark.Pressed(width, height, pointSize, rightToLeft);
-        if (!(rect.Width > 0.01)) return;
-        var toCentre = Matrix3x2.CreateTranslation(-(float)(width / 2), -(float)(height / 2));
         if (!overlay)
         {
-            var tile = LyricInks.Vector(ink.TileColour);
-            var centre = new Vector2((float)(rect.X + rect.Width / 2), (float)(rect.Y + rect.Height / 2));
-            dc.Transform = Matrix3x2.CreateTranslation(-centre) * Matrix3x2.CreateRotation(Radians(HighlightTiming.Tilt))
-                * Matrix3x2.CreateTranslation(centre) * toCentre * labelWorld;
-            _tileBrush.Color = new Color4(tile.X, tile.Y, tile.Z, (float)(mark.Pose.Opacity * visibility));
-            var radius = Points(HighlightTiming.CornerRadius);
-            dc.FillRoundedRectangle(new RoundedRectangle(
-                new RawRectF((float)rect.X, (float)rect.Y, (float)(rect.X + rect.Width), (float)(rect.Y + rect.Height)), radius, radius),
-                _tileBrush);
+            var rect = mark.Rect(width, height, pointSize, rightToLeft);
+            var tile = _ink.TileColour;
+            _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * mark.Pose.Opacity * visibility));
+            float w = (float)rect.Width, h = (float)rect.Height;
+            dc.Transform = Matrix3x2.CreateScale((float)mark.Pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
+                * Matrix3x2.CreateRotation(Radians(CutoutTile.Tilt), new Vector2(w / 2, h / 2))
+                * Matrix3x2.CreateTranslation((float)(rect.X - width / 2), (float)(rect.Y - height / 2))
+                * labelWorld;
+            var radius = Points(CutoutTile.CornerRadius);
+            dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, w, h), radius, radius), _paint);
             return;
         }
-        var alpha = HighlightTiming.TextOpacity(mark.Pose.Opacity, ink.TileTextSwitch) * visibility;
-        if (!(alpha > 0.002)) return;
-        var text = LyricInks.Vector(ink.TileText);
-        _tileBrush.Color = new Color4(text.X, text.Y, text.Z, (float)alpha);
-        // In the label bitmap's pixels: its ink as a mask, filled with the tile's text colour.
-        var raster = label.Raster;
-        var left = Math.Clamp(label.Centre.X + (float)(rect.X - width / 2) * raster, 0, label.PixelWidth);
-        var right = Math.Clamp(label.Centre.X + (float)(rect.X + rect.Width - width / 2) * raster, 0, label.PixelWidth);
-        if (!(right > left)) return;
-        var source = new RawRectF(left, 0, right, label.PixelHeight);
-        dc.Transform = Matrix3x2.CreateTranslation(-label.Centre) * Matrix3x2.CreateScale(1 / raster) * labelWorld;
-        var antialias = dc.AntialiasMode;
-        dc.AntialiasMode = AntialiasMode.Aliased;
-        dc.FillOpacityMask(label.Text, _tileBrush, source, source);
-        dc.AntialiasMode = antialias;
+        var shown = LyricHighlightTiming.TextOpacity(mark.Pose.Opacity, _ink.TileTextSwitch) * visibility;
+        if (!(shown > 0.002)) return;
+        var pressed = mark.Pressed(width, height, pointSize, rightToLeft);
+        var colour = _ink.TileText;
+        label.DrawTinted(dc, labelWorld, new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown)),
+                         new InkClip((float)(pressed.X - width / 2), (float)(pressed.X + pressed.Width - width / 2)));
     }
 
     // ---- Credits ---------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The song's credits, over the lyric: each cue spelled out word by word in Editorial's typography at most of the
-    /// lead's size and its full brightness, in a thin band along the top or foot of the stage, clear of the middle
+    /// The song's credits, over the lyric: each cue spelled out word by word in the backing vocals' typography
+    /// (<see cref="BackingKind"/>: Editorial's, or the Scattered family's own) at most of the lead's size and its full brightness, in a thin band along the top or foot of the stage, clear of the middle
     /// where the lyric sits; a production credit lifts away toward its edge, the opening title blooms.
     /// </summary>
     private void DrawCredits(ID2D1DeviceContext dc, double time)
@@ -172,10 +124,13 @@ internal abstract partial class LyricCompositionLayer
     {
         if (_creditPlans.TryGetValue(cue.Id, out var found)) return found;
         // Credits are not sung: "Song (Remix)" keeps its brackets in the line rather than losing them to backing vocals.
+        // They are set as backing vocals are (the lead's composition when it sets words loose or links them, else
+        // Editorial), and the artist's words, from HighlightFrom on, are pressed onto highlight tiles.
         var glue = new bool[cue.Words.Count];
+        var kind = BackingKind(Kind);
         var plan = BuildPlan(cue.Words, glue, BaseSize * 0.72, _creditSeed + cue.Id, cue.Start, wordTimed: true,
-                             editorial: true, null, null, new LineFit(box, 1, 1), box.Width);
-        if (cue.HighlightFrom is { } from) MarkHighlights(plan, from, cue.End);
+                             editorial: kind.HasEditorialTypography(), null, null, new LineFit(box, 1, 1), box.Width,
+                             kind: kind, lineEnd: cue.End, highlightFrom: cue.HighlightFrom);
         _creditPlans[cue.Id] = plan;
         return plan;
     }

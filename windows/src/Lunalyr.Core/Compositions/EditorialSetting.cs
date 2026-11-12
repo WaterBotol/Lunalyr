@@ -101,9 +101,13 @@ public static class EditorialSetting
     /// <param name="editorial">The editorial range and second face (Editorial itself; not a line-timed phrase).</param>
     /// <param name="readings">A reading per run, by run index; null for none.</param>
     /// <param name="moodIntensity">The track mood's intensity (1 for the neutral mood).</param>
+    /// <param name="connections">The constellations: words scattered to different heights, heroes larger, the rest smaller.</param>
+    /// <param name="spread">The constellations' Spread setting (1 by default).</param>
+    /// <param name="evenRunsAlternate">Constellation + Editorial: the second face goes to every other run rather than every third by hash.</param>
     public static EditorialLine Layout(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize,
                                        double minimumSize, int lineIndex, bool wordTimed, bool editorial,
-                                       IReadOnlyList<string?>? readings = null, double moodIntensity = 1)
+                                       IReadOnlyList<string?>? readings = null, double moodIntensity = 1,
+                                       bool connections = false, double spread = 1, bool evenRunsAlternate = false)
     {
         ArgumentNullException.ThrowIfNull(words);
         ArgumentNullException.ThrowIfNull(glue);
@@ -130,13 +134,15 @@ public static class EditorialSetting
         var average = durationCount == 0 ? 0.3 : durationSum / durationCount;
         var lineRightToLeft = ScriptDirection.LineIsRightToLeft(visible.Select(word => word.Text));
         var span = (double)Math.Max(ranges.Count - 1, 1);
+        var fullness = Math.Min(ranges.Count / 7.0, 1);
         var tokens = new List<EditorialToken>(visible.Count);
         var runs = new List<EditorialRun>(ranges.Count);
         for (var r = 0; r < ranges.Count; r++)
         {
             var (start, end) = ranges[r];
             var source = sources[r];
-            var metrics = Metrics(r, source, average, setting, baseSize, minimumSize, wordTimed, editorial, moodIntensity);
+            var metrics = Metrics(r, source, average, setting, baseSize, minimumSize, wordTimed, editorial, moodIntensity,
+                                  connections, spread, fullness, evenRunsAlternate);
             var order = ranges.Count > 1 ? r / span : 0.5;
             var runCadence = r + 1 < ranges.Count ? Math.Max(0.05, sources[r + 1].Start - source.Start)
                 : Math.Max(source.End - source.Start, 0.12);
@@ -202,9 +208,15 @@ public static class EditorialSetting
         return text[start..end];
     }
 
-    /// <summary>How run <paramref name="index"/> of a line is set (see docs/compositions/editorial.md).</summary>
+    /// <summary>
+    /// How run <paramref name="index"/> of a line is set (see docs/compositions/editorial.md; the constellations'
+    /// differences in scattered.md).
+    /// </summary>
+    /// <param name="fullness">The line's run count over seven, at most 1: short constellation lines scatter less.</param>
     public static RunMetrics Metrics(int index, LyricWord word, double averageDuration, LineSetting setting, double baseSize,
-                                     double minimumSize, bool wordTimed, bool editorial, double moodIntensity = 1)
+                                     double minimumSize, bool wordTimed, bool editorial, double moodIntensity = 1,
+                                     bool connections = false, double spread = 1, double fullness = 1,
+                                     bool evenRunsAlternate = false)
     {
         var hash = RunHash(word.Text, index);
         var held = wordTimed ? Held(word, averageDuration) : 0;
@@ -216,11 +228,22 @@ public static class EditorialSetting
         if (editorial)
         {
             size *= 1 + 0.10 * (hero ? 1 : jitter);
-            alternate = !hero && (hash / 10_000) % 3 == 0;
+            var eligible = evenRunsAlternate ? index % 2 == 0 : (hash / 10_000) % 3 == 0;
+            alternate = !hero && eligible;
         }
         if (!wordTimed)
             return new RunMetrics(Math.Max(baseSize * 0.68, minimumSize), false, 0, 0, false, alternate);
         var wave = Math.Sin(index * 0.85) * setting.Wave * baseSize * moodIntensity;
+        if (connections)
+        {
+            // The constellation offset (docs/compositions/scattered.md): a hashed share of 2.1 base sizes plus a sine
+            // term, scaled by the line's fullness and the Spread setting.
+            var scatter = (double)((hash / 7) % 100) / 100 - 0.5;
+            var reach = (0.30 + 0.70 * fullness) * spread;
+            wave += (scatter * baseSize * 2.1 + Math.Sin(index * 2.3) * baseSize * 0.42) * reach;
+            // Heroes 6% larger, other runs 4% smaller (Lunalyr's factors).
+            size *= hero ? 1.06 : 0.96;
+        }
         var rotation = ((long)((hash / 1000) % 9) - 4) * 0.35 * setting.RotationSpread * moodIntensity;
         return new RunMetrics(Math.Max(size, minimumSize), hero, rotation, wave, hero && setting.CapitalHeroes, alternate);
     }
