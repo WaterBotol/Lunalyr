@@ -30,7 +30,18 @@ public sealed class ExtrasRenderTests : IDisposable
     private IRenderLayer Layer(string id)
     {
         var breaker = IcuWordBreaker.TryCreate();
-        IRenderLayerFactory factory = id == "spoken" ? new SpokenFactory(breaker, _logger) : new EditorialFactory(breaker, _logger);
+        IRenderLayerFactory factory = id switch
+        {
+            "spoken" => new SpokenFactory(breaker, _logger),
+            "cascade" => new CascadeFactory(breaker, _logger),
+            "cutout" => new CutoutFactory(breaker, _logger),
+            "scattered" => new ScatteredFactory(breaker, _logger),
+            "constellation" => new ConstellationFactory(breaker, _logger),
+            "constellationEditorial" => new ConstellationEditorialFactory(breaker, _logger),
+            "echo" => new EchoFactory(breaker, _logger),
+            _ => new EditorialFactory(breaker, _logger),
+        };
+        Assert.Equal(id, factory.Id);
         var layer = factory.Create();
         layer.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), Scale);
         return layer;
@@ -68,6 +79,12 @@ public sealed class ExtrasRenderTests : IDisposable
     [Theory]
     [InlineData("editorial")]
     [InlineData("spoken")]
+    [InlineData("cascade")]
+    [InlineData("cutout")]
+    [InlineData("scattered")]
+    [InlineData("constellation")]
+    [InlineData("constellationEditorial")]
+    [InlineData("echo")]
     public void WordReadingsAreDrawnUnderTheirWords(string composition)
     {
         using var layer = Layer(composition);
@@ -83,6 +100,12 @@ public sealed class ExtrasRenderTests : IDisposable
     [Theory]
     [InlineData("editorial")]
     [InlineData("spoken")]
+    [InlineData("cascade")]
+    [InlineData("cutout")]
+    [InlineData("scattered")]
+    [InlineData("constellation")]
+    [InlineData("constellationEditorial")]
+    [InlineData("echo")]
     public void InsteadSetsTheReadingsInTheWordsPlace(string composition)
     {
         using var layer = Layer(composition);
@@ -99,6 +122,12 @@ public sealed class ExtrasRenderTests : IDisposable
     [Theory]
     [InlineData("editorial")]
     [InlineData("spoken")]
+    [InlineData("cascade")]
+    [InlineData("cutout")]
+    [InlineData("scattered")]
+    [InlineData("constellation")]
+    [InlineData("constellationEditorial")]
+    [InlineData("echo")]
     public void CreditsOpenTheSongAndThenFollowEachOther(string composition)
     {
         using var layer = Layer(composition);
@@ -119,6 +148,11 @@ public sealed class ExtrasRenderTests : IDisposable
     [Theory]
     [InlineData("editorial")]
     [InlineData("spoken")]
+    [InlineData("cascade")]
+    [InlineData("scattered")]
+    [InlineData("constellation")]
+    [InlineData("constellationEditorial")]
+    [InlineData("echo")]
     public void SungWordsGetAHighlightTile(string composition)
     {
         using var layer = Layer(composition);
@@ -147,6 +181,12 @@ public sealed class ExtrasRenderTests : IDisposable
     [Theory]
     [InlineData("editorial")]
     [InlineData("spoken")]
+    [InlineData("cascade")]
+    [InlineData("cutout")]
+    [InlineData("scattered")]
+    [InlineData("constellation")]
+    [InlineData("constellationEditorial")]
+    [InlineData("echo")]
     public void ExtrasFramesAreAPureFunctionOfSongTime(string composition)
     {
         foreach (var scene in new[] { ExtrasFixtures.Credits(), ExtrasFixtures.Highlight(), ExtrasFixtures.JapaneseWords() })

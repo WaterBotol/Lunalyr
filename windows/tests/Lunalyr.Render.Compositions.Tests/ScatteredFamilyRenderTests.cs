@@ -268,8 +268,8 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         return count;
     }
 
-    // Ported from LyricHighlightTests.swift: testEveryLayoutHighlightsTheSungWord (the whole-line layouts; Spoken's
-    // tiles belong to the rolling stage and are not built yet)
+    // Ported from LyricHighlightTests.swift: testEveryLayoutHighlightsTheSungWord (the whole-line layouts; the rolling
+    // stage's tiles are in ExtrasRenderTests)
     [Theory]
     [InlineData("editorial")]
     [InlineData("scattered")]
@@ -315,6 +315,42 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         Assert.NotEmpty(plain.Links);
         Assert.Equal(plain.Centres, tiled.Centres);
         Assert.Equal(plain.Links, tiled.Links);
+    }
+
+    /// <summary>
+    /// The constellations part an unspaced line into fragments before its word-by-word readings are paired with its
+    /// runs: each fragment reads its own words, as the Mac joins the readings of each run's own words.
+    /// </summary>
+    [Theory]
+    [InlineData(CompositionKind.Constellation)]
+    [InlineData(CompositionKind.Echo)]
+    public void EachFragmentReadsItsOwnWords(CompositionKind kind)
+    {
+        // A Japanese line written without spaces: the sheet glues it into one run.
+        (string, double, double, string)[] tokens =
+        [
+            ("君", 30.0, 30.3, "kimi"), ("と", 30.3, 30.5, "to"), ("歩いた", 30.5, 31.0, "aruita"), ("あの", 31.0, 31.4, "ano"),
+            ("道", 31.4, 31.7, "michi"), ("を", 31.7, 31.9, "o"), ("今も", 31.9, 32.4, "imamo"), ("覚えてる", 32.4, 33.6, "oboeteru"),
+        ];
+        var words = tokens.Select(token => new LyricWord(token.Item1, token.Item2, token.Item3)).ToList();
+        LyricLine[] lines = [new() { Start = 30, End = 33.6, Text = "君と歩いたあの道を今も覚えてる", Words = words, WordTimed = true }];
+        var readings = tokens.Select(token => new LyricWord(token.Item4, token.Item2, token.Item3)).ToList();
+        var scene = new SceneSnapshot
+        {
+            Lyrics = new LyricResult.Synced(lines, new LyricProvenance("Word-by-word", "Test")), Palette = Fixtures.Night,
+            WordReadings = new Dictionary<int, IReadOnlyList<LyricWord>> { [0] = readings },
+        };
+        using var probe = new Probe(kind);
+        probe.CreateResources(_stage.Dc, _stage.DWrite, new Vector2(Width, Height), Scale);
+        _stage.Render(probe, scene, 33, 100, Scale, Background);
+        var runs = probe.PlanFor(0)!.Typography.Runs;
+        var read = runs.Select(run => run.Reading).ToArray();
+        var labels = string.Join(" | ", runs.Select(run => $"{run.Label}: {run.Reading}"));
+        // Each run (each fragment of a constellation) carries a reading, and together they read the line once, in order.
+        Assert.All(read, reading => Assert.False(string.IsNullOrWhiteSpace(reading), labels));
+        Assert.Equal(string.Concat(readings.Select(word => word.Text)), string.Concat(read).Replace(" ", "", StringComparison.Ordinal));
+        if (kind == CompositionKind.Constellation) Assert.True(runs.Count >= 2, labels);
+        else Assert.Single(runs);
     }
 
     [Fact]
