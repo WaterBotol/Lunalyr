@@ -11,11 +11,16 @@ namespace Lunalyr.Core.Lyrics.Ranking;
 /// <remarks>
 /// Only qualifier segments count: text in brackets, after " - " ("Song - Live"), or a Japanese "~…~" subtitle.
 /// Remasters, mono/stereo, editions and credits name the same recording and are not tags, and a bare "Version" says
-/// nothing. Names that only translate the qualifier ("现场" for "Live") fold to the same tag. Ported from the Mac's
-/// <c>VersionTags</c> (Lunalyr's own code).
+/// nothing. Names that only translate the qualifier ("现场" for "Live") fold to the same tag. A language version
+/// ("English Version", "Eng ver.", "(English)", "英語ver.") is a version too (<see cref="Languages"/>): the same tune,
+/// sung in other words. Ported from the Mac's <c>VersionTags</c> (Lunalyr's own code).
 /// </remarks>
 public static partial class VersionTags
 {
+    /// <summary>The tags naming a language version.</summary>
+    public static IReadOnlySet<string> Languages { get; } =
+        new HashSet<string>(["english", "japanese", "korean", "chinese"], StringComparer.Ordinal);
+
     /// <summary>The version tags <paramref name="name"/> declares, e.g. {"live"}.</summary>
     public static IReadOnlySet<string> Tags(string name)
     {
@@ -149,6 +154,15 @@ public static partial class VersionTags
         ["dj mix"] = "dj mix", ["continuous mix"] = "dj mix",
     };
 
+    /// <summary>A language named before "Version" / "Ver." ("English Version", "Eng ver."), or alone in a qualifier ("(English)").</summary>
+    private static readonly Dictionary<string, string> LanguageWords = new(StringComparer.Ordinal)
+    {
+        ["english"] = "english", ["eng"] = "english", ["japanese"] = "japanese", ["jpn"] = "japanese", ["jp"] = "japanese",
+        ["korean"] = "korean", ["kor"] = "korean", ["chinese"] = "chinese", ["mandarin"] = "chinese",
+    };
+
+    private static readonly HashSet<string> VersionWords = new(["version", "ver", "vers", "edition"], StringComparer.Ordinal);
+
     // Matched inside the segment, for scripts written without spaces. The keys go through the same folding as the
     // names, so kana with voicing marks ("ライブ") match however the folding treats those marks.
     private static readonly (string Span, string Tag)[] SpanTags =
@@ -163,6 +177,10 @@ public static partial class VersionTags
             ("清唱", "a cappella"), ("아카펠라", "a cappella"),
             ("加速", "sped up"), ("降速", "slowed"), ("慢速", "slowed"),
             ("アコースティック", "acoustic"), ("어쿠스틱", "acoustic"),
+            ("英語", "english"), ("英文", "english"), ("英語版", "english"), ("영어", "english"),
+            ("日本語", "japanese"), ("日文", "japanese"), ("일본어", "japanese"),
+            ("韓国語", "korean"), ("韓國語", "korean"), ("韩语", "korean"), ("한국어", "korean"),
+            ("中文版", "chinese"), ("中国語", "chinese"),
         }.Select(pair => (string.Join(' ', Words(pair.Item1)), pair.Item2)),
     ];
 
@@ -177,6 +195,11 @@ public static partial class VersionTags
         {
             found.Add("dj mix");
         }
+        // "(English)" names a language version; "(JP)" or "(Eng)" alone is too short to tell.
+        if (list.Count == 1 && list[0].Length > 3 && LanguageWords.TryGetValue(list[0], out var alone))
+        {
+            found.Add(alone);
+        }
         for (var index = 0; index < list.Count; index++)
         {
             var word = list[index];
@@ -187,6 +210,10 @@ public static partial class VersionTags
             if (index + 1 < list.Count && PairTags.TryGetValue(word + " " + list[index + 1], out var pair))
             {
                 found.Add(pair);
+            }
+            if (index + 1 < list.Count && LanguageWords.TryGetValue(word, out var language) && VersionWords.Contains(list[index + 1]))
+            {
+                found.Add(language);
             }
             // "Club Mix", "Extended Mix": another mix, but "Original Mix" is the original.
             if (word == "mix" && index > 0 && !NotAnotherMix.Contains(list[index - 1]))
