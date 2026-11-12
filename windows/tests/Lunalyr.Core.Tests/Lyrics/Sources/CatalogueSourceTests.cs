@@ -164,7 +164,9 @@ public class CatalogueSourceTests
     {
         var handler = new FixtureHandler { Fallback = Reply.Text(404, """{"error":"No lyrics found"}""") };
         var source = new LyricsOvhSource(handler.Client());
-        Assert.Null(await source.FetchAsync(ShapeOfYou, Ct));
+        // As on the Mac, its 404 ("No lyrics found") is an error, asked again next time, not a miss.
+        var missing = await Assert.ThrowsAsync<LyricSourceException>(() => source.FetchAsync(ShapeOfYou, Ct));
+        Assert.Equal((LyricSourceFailure.HttpStatus, 404), (missing.Failure, missing.StatusCode));
         // Without an artist there is nothing to ask.
         Assert.Null(await source.FetchAsync(new LyricQuery("Shape of You", "", null, 234), Ct));
         Assert.Single(handler.Requests);

@@ -430,15 +430,18 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         Assert.False(report.Offline);
         Assert.True(report.IsComplete);
         Assert.Equal(0, report.Revision);
-        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, LyricsOvh, Amll })
+        foreach (var id in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou, Kuwo, Amll })
         {
             Assert.Equal(LyricLookup.NoUsableMatch, report.States[id]);
         }
         Assert.Equal(AppleUnavailable, report.States[AppleMusicCache]);
-        // Asked again within minutes, the services that answered are not asked again.
+        // lyrics.ovh's 404 is an error, as on the Mac (parity row 11): it is not remembered as a miss.
+        Assert.Equal("lyrics.ovh: no lyrics found (HTTP 404).", report.States[LyricsOvh]);
+        // Asked again within minutes, the services that answered are not asked again; lyrics.ovh is.
         var asked = handler.Requests.Count;
         var again = await service.LookupAsync(query, Everything, cancellationToken: Ct);
-        Assert.Equal(asked, handler.Requests.Count);
+        Assert.Equal(asked + 1, handler.Requests.Count);
+        Assert.Equal("api.lyrics.ovh", handler.Requests[^1].RequestUri!.Host);
         Assert.Equal(LyricLookup.RecentMiss, again.States[Lrclib]);
     }
 
