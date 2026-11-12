@@ -23,8 +23,9 @@ public static class LyricCandidateBuilder
         {
             case LyricResult.Synced synced:
                 var lines = LyricCredits.Flagging(synced.Lines, query.Title, query.Artist);
-                // Credits alone are not lyrics.
-                if (!lines.Any(line => !line.IsInstrumental))
+                // As on the Mac (§4.5, §5.1), synced lyrics that are only instrumental breaks or credits are kept: they
+                // rank with untimed text (timing tier 0), below any timed match. Only no lines at all is nothing.
+                if (lines.Count == 0)
                 {
                     return null;
                 }

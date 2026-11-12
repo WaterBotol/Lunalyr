@@ -31,6 +31,12 @@ public sealed record AppControllerOptions
     /// </summary>
     public TimeSpan LateTimelinePoll { get; init; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// After a lookup found nothing because the network looked unreachable, how long to wait once the connection
+    /// returns before looking again (name resolution can lag behind the link coming up). The Mac's 2 s.
+    /// </summary>
+    public TimeSpan OnlineRetryDelay { get; init; } = TimeSpan.FromSeconds(2);
+
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     public SongClockOptions? Clock { get; init; }
@@ -152,6 +158,9 @@ public sealed partial class AppController : IAsyncDisposable
     private LyricQuery? _query;
     private LyricResult? _shown;
     private bool _retryWhenOnline;
+    // The one look again this track gets when a lookup looked offline while Windows reported a connection.
+    private bool _retriedWhileOnline;
+    private CancellationTokenSource? _onlineRetryCts;
     private bool _reduceMotion;
     private bool _started;
     private bool _disposed;
@@ -384,6 +393,7 @@ public sealed partial class AppController : IAsyncDisposable
             _disposed = true;
             _generation++;
             _lookupCts?.Cancel();
+            CancelOnlineRetryLocked();
             CancelArtworkLocked();
         }
 
@@ -416,6 +426,7 @@ public sealed partial class AppController : IAsyncDisposable
             // A different player: whatever was being looked up belongs to the old one. Its colours stay until the new
             // player's cover arrives; with nothing playing the wallpaper goes back to the default colours.
             CancelLookupLocked();
+            _retriedWhileOnline = false;
             CancelArtworkLocked();
             _tools = LyricToolsState.Empty;
             if (session is null) _palette = PaletteMapper.Fallback;
@@ -446,6 +457,12 @@ public sealed partial class AppController : IAsyncDisposable
         // The cover's colours load beside the lyric lookup (and even when lookups are off).
         BeginArtwork(track, Monitor.Session);
         ForgetLyricTools();
+        lock (_gate)
+        {
+            // A new track gets its own look again (the Mac's onlineRetries, reset on a track change).
+            _retriedWhileOnline = false;
+        }
+
         BeginLookup(track);
     }
 
@@ -462,19 +479,65 @@ public sealed partial class AppController : IAsyncDisposable
         RaiseStatusChanged();
     }
 
-    private void OnConnectivityRestored(object? sender, EventArgs e)
+    private void OnConnectivityRestored(object? sender, EventArgs e) => RetryWhenOnline(_options.OnlineRetryDelay, "Back online");
+
+    /// <summary>
+    /// Looks the song up again after a lookup found nothing because the network looked unreachable (ported from the
+    /// Mac's <c>LyricsViewModel.connectionRestored</c>): after <paramref name="delay"/>, if the same lookup is still the
+    /// latest and nothing is showing.
+    /// </summary>
+    private void RetryWhenOnline(TimeSpan delay, string reason)
     {
-        MediaTrackInfo? track;
+        MediaTrackInfo track;
+        long generation;
+        CancellationTokenSource cts;
         lock (_gate)
         {
-            if (_disposed || !_retryWhenOnline) return;
+            if (_disposed || !_retryWhenOnline || _lookupTrack is null) return;
             _retryWhenOnline = false;
             track = _lookupTrack;
+            generation = _generation;
+            CancelOnlineRetryLocked();
+            cts = _onlineRetryCts = new CancellationTokenSource();
         }
 
-        if (track is null) return;
-        _lyricLog.Info("Back online: looking the song up again.");
-        BeginLookup(track);
+        Track(RetryAsync());
+
+        async Task RetryAsync()
+        {
+            try
+            {
+                if (delay > TimeSpan.Zero) await Task.Delay(delay, _options.TimeProvider, cts.Token).ConfigureAwait(false);
+                else await Task.Yield(); // Off the finished lookup's flow.
+                lock (_gate)
+                {
+                    if (_disposed || generation != _generation || !ReferenceEquals(_lookupTrack, track) || _shown is not null) return;
+                }
+
+                _lyricLog.Info($"{reason}: looking the song up again.");
+                BeginLookup(track);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                // A newer track, or shutdown.
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    if (ReferenceEquals(_onlineRetryCts, cts)) _onlineRetryCts = null;
+                }
+
+                cts.Dispose();
+            }
+        }
+    }
+
+    // Must hold _gate.
+    private void CancelOnlineRetryLocked()
+    {
+        _onlineRetryCts?.Cancel();
+        _onlineRetryCts = null;
     }
 
     // ---- Lookups ----
@@ -551,6 +614,7 @@ public sealed partial class AppController : IAsyncDisposable
         _query = null;
         _shown = null;
         _retryWhenOnline = false;
+        CancelOnlineRetryLocked();
         Volatile.Write(ref _recordingKey, null);
         _offsets.ActiveSource = null;
     }
@@ -681,13 +745,26 @@ public sealed partial class AppController : IAsyncDisposable
             }
             else if (report.Offline)
             {
+                // As on the Mac (foundNothingOffline): look again when the connection returns. When Windows already
+                // reports a connection (it came back before the lookup finished, or one request failed on a working
+                // link), look again at once instead, once per track.
+                var online = _connectivity?.IsOnline == true;
+                var again = false;
                 lock (_gate)
                 {
-                    if (generation == _generation) _retryWhenOnline = true;
+                    if (generation == _generation)
+                    {
+                        _retryWhenOnline = true;
+                        again = online && !_retriedWhileOnline;
+                        if (again) _retriedWhileOnline = true;
+                    }
                 }
 
-                _lyricLog.Info("No lyrics: offline. Looking again when the connection is back.");
+                _lyricLog.Info(online
+                    ? "No lyrics: the services looked unreachable, though Windows reports a connection."
+                    : "No lyrics: offline. Looking again when the connection is back.");
                 ShowStatus(generation, StatusText.Offline);
+                if (again) RetryWhenOnline(TimeSpan.Zero, "Still online");
             }
             else if (report.SkippedStream)
             {

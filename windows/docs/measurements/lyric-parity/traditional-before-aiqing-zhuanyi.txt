@@ -1,0 +1,55 @@
+Query: "愛情轉移" by "陳奕迅" (4:20, 259.987 s), album "認了吧 (台灣版)", genre "Mandopop", automatic lookup
+Storefront for original titles: au; cache policy v17
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.67s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.67s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.67s    Lyrics+ (KPoe): Searching…
+  0.67s    AMLL TTML DB: Searching…
+  0.67s    NetEase Cloud Music: Searching…
+  0.67s    LRCLIB: Match found
+  0.67s    QQ Music: Searching…
+  0.67s    Kugou Music: Searching…
+  0.67s    Kuwo Music: Searching…
+  0.67s    lyrics.ovh: Searching…
+  0.81s    Kugou Music: No usable match / unavailable
+  0.92s    AMLL TTML DB: No usable match / unavailable
+  1.02s    NetEase Cloud Music: No usable match / unavailable
+  1.24s    QQ Music: No usable match / unavailable
+  1.68s    LRCLIB: Match found · showing
+  1.68s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  1.68s  showing (revision 1): Line-synced · LRCLIB
+  1.83s    Kuwo Music: No usable match / unavailable
+  5.36s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    No usable match / unavailable
+  LRCLIB                 Match found · showing
+  QQ Music               No usable match / unavailable
+  Kugou Music            No usable match / unavailable
+  Kuwo Music             No usable match / unavailable
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Line-synced · LRCLIB                          "愛情轉移" / "陳奕迅" 4:20, 42 lines, score 93.0, tier 1
+
+Chosen: Line-synced · LRCLIB
+  0:23  (text omitted)
+  0:27  (text omitted)
+  0:31  (text omitted)
+  0:37  (text omitted)
+  0:41  (text omitted)
+  0:45  (text omitted)
