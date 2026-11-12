@@ -14,12 +14,28 @@ public static class LyricSourceRanking
     public const string AppleUpstream = "Apple";
 
     /// <summary>
-    /// Whether a Lyrics+ node's upstream name means Apple Music's lyrics. Nodes differ: one names them "Apple", another
-    /// "qApple" for the very same lyrics (same lines, same song parts; checked live 13 Nov 2026).
+    /// Whether a Lyrics+ node's upstream name means Apple Music's lyrics: "Apple" or "Apple Music" in any case, as on
+    /// the Mac (<c>isAppleRelay</c>, spec §2.3), and "qApple", which one node gives for the very same lyrics (same
+    /// lines, same song parts; checked live 13 Nov 2026; a Windows addition the Mac lacks). "Applesauce", "Musixmatch",
+    /// "Spotify", "QQ" and "Lyrics+" are other upstreams.
     /// </summary>
     public static bool IsAppleUpstream(string? upstream) =>
         string.Equals(upstream, AppleUpstream, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(upstream, "Apple Music", StringComparison.OrdinalIgnoreCase)
         || string.Equals(upstream, "qApple", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The upstream name a relay is labelled with: "Apple" for a node's "qApple" (or "apple"), so the same lyrics carry
+    /// one label (and one per-song offset) whichever node answered. "Apple Music" stays as the node wrote it, as the
+    /// Mac labels it; every other name is kept as given.
+    /// </summary>
+    public static string RelayLabel(string upstream)
+    {
+        ArgumentNullException.ThrowIfNull(upstream);
+        return IsAppleUpstream(upstream) && !string.Equals(upstream, "Apple Music", StringComparison.OrdinalIgnoreCase)
+            ? AppleUpstream
+            : upstream;
+    }
 
     /// <summary>
     /// The upstream a Lyrics+ match was relayed from, from its provenance label ("Apple via Lyrics+" → "Apple"), or
