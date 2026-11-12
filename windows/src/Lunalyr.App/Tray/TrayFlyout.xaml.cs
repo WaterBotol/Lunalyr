@@ -145,6 +145,7 @@ public sealed partial class TrayFlyout : Window
     private void OnActivated(object sender, WindowActivatedEventArgs args)
     {
         // A click anywhere else takes the focus away: the flyout goes, as the system's own do.
+        _host.Log.App.Debug($"Tray panel: {args.WindowActivationState}.");
         if (args.WindowActivationState == WindowActivationState.Deactivated) Hide();
     }
 

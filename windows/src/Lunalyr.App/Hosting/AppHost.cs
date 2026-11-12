@@ -30,9 +30,10 @@ using Lunalyr.Render.Pacing;
 namespace Lunalyr.App.Hosting;
 
 /// <summary>
-/// The running app: logging, crash files, settings, the tray icon, the controller, and the two message loops. The
-/// main thread runs a plain Win32 loop while idle; the first "Open settings" ends it and starts WinUI on the same
-/// thread, which from then on pumps the tray window as well (Windows App SDK can only start once per process).
+/// The running app: logging, crash files, settings, the tray icon, the controller, and the message loop. The main
+/// thread starts WinUI right after the tray icon (no window until one is asked for), and WinUI's loop pumps the tray
+/// window too; start-up begins inside WinUI's first callback. Starting WinUI later, after a cover had been decoded,
+/// failed most times (see docs/APP-SHELL.md, "Process").
 /// </summary>
 internal sealed class AppHost
 {
@@ -57,7 +58,7 @@ internal sealed class AppHost
     private volatile SystemMotion? _motion;
     private Timer? _statsReset;
 
-    private bool _uiRequested;
+
     private bool _quitting;
     private App? _app;
 
@@ -128,11 +129,12 @@ internal sealed class AppHost
         }
 
         _log.Info($"Start-up: tray ready {SinceLaunch():0} ms after launch.");
-        _init = Task.Run(InitializeAsync);
-        if (_options.OpenSettings) OpenSettings();
+        if (_options.OpenSettings) _pendingSettings = true;
 
-        RunWin32Loop();
-        if (_uiRequested && !_quitting) RunWinUi();
+        // WinUI starts now, before anything else, and pumps the tray window from here on; start-up (players, lyrics,
+        // wallpaper) begins inside its first callback. Starting WinUI later, once a cover had been decoded (WIC), failed
+        // most times with 0x8007029C, and a retry ended in a fail-fast (docs/APP-SHELL.md, "Process").
+        RunWinUi();
         return Shutdown();
     }
 
@@ -261,28 +263,21 @@ internal sealed class AppHost
         }
     }
 
-    // ---- Message loops ----
+    // ---- Message loop ----
 
-    private static void RunWin32Loop()
-    {
-        while (Win32.GetMessage(out var msg, 0, 0, 0) > 0)
-        {
-            Win32.TranslateMessage(msg);
-            Win32.DispatchMessage(msg);
-        }
-    }
-
+    /// <summary>WinUI's loop on the main thread, which also pumps the tray window, until Quit.</summary>
     private void RunWinUi()
     {
         var started = Stopwatch.StartNew();
-        _log.Info("Starting the settings UI (WinUI).");
+        _log.Info("Starting WinUI.");
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Microsoft.UI.Xaml.Application.Start(_ =>
         {
             var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             SynchronizationContext.SetSynchronizationContext(new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(dispatcher));
             _app = new App(this);
-            _log.Info($"WinUI started in {started.ElapsedMilliseconds} ms.");
+            _log.Info($"WinUI started in {started.ElapsedMilliseconds} ms ({SinceLaunch():0} ms after launch).");
+            _init = Task.Run(InitializeAsync);
         });
         _app = null;
     }
@@ -298,11 +293,10 @@ internal sealed class AppHost
             return;
         }
 
-        _pendingSettings = true;
-        StartUi();
+        _pendingSettings = true; // WinUI is still starting: shown as soon as it is up
     }
 
-    /// <summary>A left click on the tray icon: the flyout opens beside it (starting WinUI the first time), or closes.</summary>
+    /// <summary>A left click on the tray icon: the flyout opens beside it, or closes.</summary>
     public void ToggleFlyout(PixelRect anchor, bool keyboard)
     {
         if (_quitting) return;
@@ -312,23 +306,15 @@ internal sealed class AppHost
             return;
         }
 
-        _pendingFlyout = (anchor, keyboard);
-        StartUi();
+        _pendingFlyout = (anchor, keyboard); // WinUI is still starting: opened as soon as it is up
     }
 
-    private void StartUi()
-    {
-        if (_uiRequested) return;
-        _uiRequested = true;
-        Win32.PostQuitMessage(0); // leave the plain loop; Run() starts WinUI
-    }
-
-    /// <summary>WinUI is up: show what was asked for while it started (settings when nothing was).</summary>
+    /// <summary>WinUI is up: show what was asked for while it started (<c>--settings</c>, an early click), else nothing.</summary>
     internal void ShowPendingUi(App app)
     {
         var flyout = _pendingFlyout;
         _pendingFlyout = null;
-        if (_pendingSettings || flyout is null) app.ShowSettings();
+        if (_pendingSettings) app.ShowSettings();
         _pendingSettings = false;
         if (flyout is { } f) app.ToggleFlyout(f.Anchor, f.Keyboard);
     }
