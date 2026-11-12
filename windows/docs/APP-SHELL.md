@@ -140,7 +140,9 @@ renderer.
 Status lines (`StatusText`), shown instead of lyrics: "Looking up lyrics…", "No lyrics found for this song",
 "Offline — showing nothing until you're back online" (looked up again when the connection returns), "This player
 doesn't share its position", "This looks like a live stream, so lyrics aren't looked up", "Couldn't look up lyrics
-for this song", "Lyric lookups are off for this run".
+for this song", "Lyric lookups are off for this run". Since the lyric tools, every one of these but "Looking up lyrics…"
+counts as "none found" and shows as `noLyrics` says: by default it fades after 4 s instead of staying (see "Lyric
+tools"); the tray tooltip, the flyout and Settings keep showing it.
 
 **Album colours:** on each track change the controller reads the player's thumbnail
 (`IMediaSession.OpenThumbnailAsync`; if there is none yet it looks again after 0.5, 1, 2 and 4 s, as players often
@@ -496,6 +498,9 @@ What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5)
   tap sync's offset is still the one in force for the song playing.
 - **Narrator:** the panel and every button are named (Stop is "Stop Tap to Sync", Undo "Undo Tap to Sync" with its
   Ctrl+Z); each tap is announced ("Tap 2 of 4"), and so is the result.
+- **Checked live** (M5 "Lyric tools"): taps from the Tap button and from key messages to the panel (a letter, Space
+  with the Tap button focused, Esc). **Not yet live:** Enter, Ctrl+Z and swallowed keys on a result, the keyboard after
+  a real mouse click, and stopping on a real click elsewhere.
 
 ### Find lyrics, a saved choice, importing
 

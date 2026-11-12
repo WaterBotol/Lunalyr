@@ -98,10 +98,15 @@ public sealed class LyricToolsTests : IAsyncDisposable
         Assert.Equal(TapKeyResponse.Pass, Response(true, 0x51, shortcut: true));
         Assert.Equal(TapKeyResponse.Pass, Response(false, 0x10));
         Assert.Equal(TapKeyResponse.Pass, TapSyncKeys.Response(false, 0x41, false, false, textInputFocused: true));
-        // A held key is one tap, not many.
-        Assert.Equal(TapKeyResponse.Pass, Response(true, 0x20, repeats: true));
-        // Esc stops even with a modifier held.
-        Assert.Equal(TapKeyResponse.Stop, Response(true, 0x1B, shortcut: true));
+    }
+
+    // Windows' own: the parts of the Mac's keyAction its test doesn't cover.
+    [Fact]
+    public void AHeldKeyTapsOnceAndEscStopsWithAModifierHeld()
+    {
+        Assert.Equal(TapKeyResponse.Pass, TapSyncKeys.Response(true, 0x20, shortcut: false, isRepeat: true, textInputFocused: false));
+        Assert.Equal(TapKeyResponse.Stop, TapSyncKeys.Response(true, 0x1B, shortcut: true, isRepeat: false, textInputFocused: false));
+        Assert.Equal(TapKeyResponse.Pass, TapSyncKeys.Response(true, 0x5B, shortcut: false, isRepeat: false, textInputFocused: false)); // Windows key
     }
 
     // Ported from LyricTapSyncTests.swift: testTheResultLooksAndStaysAsItShould (the symbols and Narrator's
