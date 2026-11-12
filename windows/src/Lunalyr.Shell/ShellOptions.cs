@@ -42,7 +42,7 @@ public sealed record ShellOptions
     public string? StatsPath { get; init; }
 
     /// <summary>
-    /// <c>--player-debug show,light,dark,reduce-motion,opaque,contrast,scrub=0.6</c>: checks of the desktop player
+    /// <c>--player-debug show,top,light,dark,reduce-motion,opaque,contrast,scrub=0.6</c>: checks of the desktop player
     /// without moving the pointer or changing Windows' settings. <c>show</c> keeps it up on the main display;
     /// the looks force one accessibility look; <c>scrub=x</c> holds a drag at that share of the seek bar (the
     /// wallpaper follows it, and nothing is ever sent to a player).

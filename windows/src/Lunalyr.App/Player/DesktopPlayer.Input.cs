@@ -38,6 +38,7 @@ internal sealed unsafe partial class DesktopPlayer
 
     private nint OnMessage(nint hwnd, uint msg, nuint wParam, nint lParam)
     {
+        if (msg is PlayerNative.WM_LBUTTONDOWN or PlayerNative.WM_LBUTTONUP) _log.Debug(msg == PlayerNative.WM_LBUTTONDOWN ? "Desktop player: button down." : "Desktop player: button up.");
         switch (msg)
         {
             case PlayerNative.WM_TIMER:
@@ -411,6 +412,7 @@ internal sealed unsafe partial class DesktopPlayer
     /// <summary>The seek bar's one seek, on release (or a key's): refused, the bar goes back to the player's time.</summary>
     private void Seek(double songSeconds)
     {
+        _log.Debug($"Desktop player: seek to {songSeconds:0.##} s (sent once, through the guard).");
         Run(_commands.SeekAsync(songSeconds), result =>
         {
             _scrub.Release();
@@ -491,7 +493,11 @@ internal sealed unsafe partial class DesktopPlayer
     }
 
     /// <summary>Narrator set the seek bar's value: a seek there, as a key would make.</summary>
-    internal void SeekFromAutomation(double seconds) => _scrub.SeekNow(seconds, flash: true);
+    internal void SeekFromAutomation(double seconds)
+    {
+        _log.Debug("Desktop player: UI Automation set the seek bar.");
+        _scrub.SeekNow(seconds, flash: true);
+    }
 
     // ---- The wallpaper under a drag ----
 
@@ -514,8 +520,16 @@ internal sealed unsafe partial class DesktopPlayer
         if (_engine() is not { } engine) return;
         var target = _shownOn is null ? 1 : PlayerHoverFocus.WallpaperOpacity(hovered: true, previewing: _preview.AnySongTime() is not null);
         var reduce = _model.Look.ReduceMotion;
+        if (target != _focusTarget)
+        {
+            _focusTarget = target;
+            _log.Debug($"Desktop player: wallpaper lyrics to {target:0.##} (preview {_controller()?.IsPreviewing}).");
+        }
+
         engine.SetLyricFocus(target, _shownOn is null ? (reduce ? 0.12 : 0.25) : (reduce ? 0.15 : 0.3));
     }
+
+    private double _focusTarget = double.NaN;
 
     /// <summary><c>--player-debug scrub=x</c>: a drag held at that share of the bar (the preview only; never a seek).</summary>
     private void StartDebugScrub()

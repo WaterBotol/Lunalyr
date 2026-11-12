@@ -26,7 +26,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
 | `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
-| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). |
+| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
 ## Demo mode (`--demo`)
@@ -121,7 +121,7 @@ Automation), `src/Lunalyr.Core/Player/` (the portable rules, ported with the Mac
 
 The card is a borderless `WS_POPUP` tool window with `WS_EX_NOREDIRECTIONBITMAP`. Its one DirectComposition visual is a
 premultiplied-alpha flip swap chain, drawn with Direct2D and DirectWrite on the UI thread, on a small D3D11 device of
-its own. Windows 11 rounds the window and gives it its shadow (`DWMWA_WINDOW_CORNER_PREFERENCE`). The three
+its own. Windows 11 rounds the window at 8 px (`DWMWA_WINDOW_CORNER_PREFERENCE`) and draws its 1 px border in the album's colour (`DWMWA_BORDER_COLOR`). A pop-up gets no system shadow: seen on screen with `--player-debug top`, the card's edge is that border alone. The three
 DirectComposition calls go through the COM vtables, so there is no new package. Why not a borderless WinUI window with
 Acrylic:
 - **WinUI is not running while Lunalyr idles.** It can only start by leaving the plain Win32 loop, once per process,
@@ -134,7 +134,7 @@ Acrylic:
   transparent margin for its shadow, and that margin would eat clicks meant for the desktop (`HTTRANSPARENT` only
   passes clicks to windows on the same thread). The window is exactly the card, so clicks beside it reach the
   desktop. DWM rounds it at Windows 11's own 8 px, not the Mac's 28.
-- **No Acrylic.** An inactive window's Acrylic falls back to a flat colour, and the card is almost always inactive.
+- **No Acrylic.** Windows' Acrylic backdrops are documented to fall back to a flat colour while the window is inactive, and the card is almost always inactive (not tried here).
   The card's "glass" is the album wash at 93 % over the wallpaper instead (the Mac's preview look). With
   transparency effects off it is solid.
 - **The price is accessibility, paid in code.** `PlayerAutomation.cs` is a UI Automation provider using

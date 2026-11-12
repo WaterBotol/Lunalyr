@@ -12,7 +12,7 @@ namespace Lunalyr.App.Player;
 /// <summary>
 /// The card's window and what it draws into: a borderless pop-up with no redirection bitmap, whose one
 /// DirectComposition visual is a premultiplied-alpha flip swap chain drawn with Direct2D. Windows 11 rounds the window
-/// and gives it its shadow (DWM), so the window is exactly the card: clicks beside it reach the desktop. Everything
+/// (DWM; no shadow for a pop-up), so the window is exactly the card: clicks beside it reach the desktop. Everything
 /// here runs on the UI thread; the device is small and separate from the wallpaper's.
 /// </summary>
 internal sealed unsafe class CardSurface : IDisposable

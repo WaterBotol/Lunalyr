@@ -14,7 +14,7 @@ namespace Lunalyr.App.Player;
 /// <summary>
 /// Draws the "Sleeve" card from a <see cref="CardModel"/> with Direct2D and DirectWrite, in DIPs. Device resources
 /// (brushes, the cover bitmap, gradients) are made once and kept until the device or the theme changes; text layouts
-/// are kept per string. Drawing a frame allocates nothing once those exist.
+/// are kept per string. A frame allocates only when a string it shows changes (the times, once a second).
 /// </summary>
 internal sealed class CardPainter : IDisposable
 {
@@ -288,7 +288,7 @@ internal sealed class CardPainter : IDisposable
         // The player, small, over the song (or the note about a command, while it shows).
         if (m.PlayerName.Length > 0 && m.NoteAlpha < 0.999f)
         {
-            var label = Layout(m.PlayerName.ToUpperInvariant(), TextStyle.Label, (int)width - 14);
+            var label = Layout(Upper(m.PlayerName), TextStyle.Label, (int)width - 14);
             var alpha = secondary * (1 - m.NoteAlpha);
             Fill(dc, new Ellipse(new Vector2(left + 3, CardLayout.ColumnTop + 8), 3, 3), WithAlpha(t.HighContrast ? t.Ink : t.Accent, alpha));
             DrawText(dc, label, left + 11, CardLayout.ColumnTop + 1, WithAlpha(t.Ink, alpha));
@@ -361,7 +361,7 @@ internal sealed class CardPainter : IDisposable
             }
             case ScrubRowKind.ElapsedOnly:
             {
-                var elapsed = Layout(ScrubMath.Timestamp(m.Elapsed), TextStyle.Time, 80);
+                var elapsed = Layout(Elapsed(m.Elapsed), TextStyle.Time, 80);
                 DrawText(dc, elapsed, left, CardLayout.SeekRowTop + CardLayout.BarBand, WithAlpha(t.Ink, timeAlpha));
                 var unknown = Layout("Length unknown", TextStyle.Time, 200);
                 DrawText(dc, unknown, left + elapsed.Metrics.Width + 8, CardLayout.SeekRowTop + CardLayout.BarBand, WithAlpha(t.Ink, timeAlpha * 0.6f));
@@ -440,8 +440,8 @@ internal sealed class CardPainter : IDisposable
         }
         else
         {
-            DrawText(dc, Layout(ScrubMath.Timestamp(m.Elapsed), TextStyle.Time, 100), times.X, times.Y, timeColour);
-            var trailing = Layout(ScrubMath.TrailingLabel(m.Elapsed, duration, m.ShowsRemaining), TextStyle.Time, 100);
+            DrawText(dc, Layout(Elapsed(m.Elapsed), TextStyle.Time, 100), times.X, times.Y, timeColour);
+            var trailing = Layout(Trailing(m.Elapsed, duration, m.ShowsRemaining), TextStyle.Time, 100);
             DrawText(dc, trailing, times.Right - trailing.Metrics.Width, times.Y, m.HoverPart == CardPart.TimeLabel ? WithAlpha(t.Ink, 1) : timeColour);
         }
 
@@ -484,7 +484,7 @@ internal sealed class CardPainter : IDisposable
         var time = m.CapsuleTime;
 
         // The time, with the rate under a slow hand.
-        var timeLayout = Layout(ScrubMath.Timestamp(time), TextStyle.CapsuleTime, 100);
+        var timeLayout = Layout(CapsuleTime(time), TextStyle.CapsuleTime, 100);
         var rate = m.Session?.RateLabel is { } r ? Layout(r, TextStyle.Rate, 120) : null;
         var timeWidth = timeLayout.Metrics.Width + (rate is null ? 0 : rate.Metrics.Width + 6) + 18;
         var timeBox = Clamp(new RectF(left + (float)m.CapsuleX - timeWidth / 2, bottom - 22, timeWidth, 22), left, width);
@@ -659,6 +659,39 @@ internal sealed class CardPainter : IDisposable
     }
 
     // ---- Text ----
+
+    // The strings that change with the clock, made again only when the second (or the label) changes.
+    private (long Key, string Text) _elapsed = (long.MinValue, ""), _capsuleTime = (long.MinValue, "");
+    private ((long, long, bool) Key, string Text) _trailing = ((long.MinValue, 0, false), "");
+    private (string Source, string Upper) _upper = ("", "");
+
+    private string Elapsed(double seconds)
+    {
+        var key = double.IsFinite(seconds) ? (long)Math.Floor(Math.Max(-1, seconds)) : -1;
+        if (key != _elapsed.Key) _elapsed = (key, ScrubMath.Timestamp(seconds));
+        return _elapsed.Text;
+    }
+
+    private string CapsuleTime(double seconds)
+    {
+        var key = double.IsFinite(seconds) ? (long)Math.Floor(Math.Max(-1, seconds)) : -1;
+        if (key != _capsuleTime.Key) _capsuleTime = (key, ScrubMath.Timestamp(seconds));
+        return _capsuleTime.Text;
+    }
+
+    private string Trailing(double elapsed, double duration, bool remaining)
+    {
+        var left = Math.Ceiling(Math.Max(0, duration - Math.Min(Math.Max(double.IsFinite(elapsed) ? elapsed : 0, 0), Math.Max(duration, 0))));
+        var key = ((long)(remaining ? left : -1), (long)Math.Floor(double.IsFinite(duration) ? duration : 0), remaining);
+        if (key != _trailing.Key) _trailing = (key, ScrubMath.TrailingLabel(elapsed, duration, remaining));
+        return _trailing.Text;
+    }
+
+    private string Upper(string text)
+    {
+        if (!ReferenceEquals(text, _upper.Source)) _upper = (text, text.ToUpperInvariant());
+        return _upper.Upper;
+    }
 
     private IDWriteTextLayout Layout(string text, TextStyle style, int maxWidth)
     {

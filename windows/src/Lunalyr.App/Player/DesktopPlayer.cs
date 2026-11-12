@@ -50,6 +50,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private long _primary;
     private readonly double _debugScrub = double.NaN;
     private readonly bool _debugShow;
+    private readonly bool _debugTop;
     private PlayerAutomation? _automation;
 
     // Hover poll.
@@ -70,6 +71,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _titles = new(1), _note = new(0);
     private double _noteUntil = double.NegativeInfinity;
     private uint _frameMs;
+    private double _automationAt = double.NegativeInfinity;
     private bool _dirty = true;
     private int _drawnVersion = -1;
 
@@ -108,6 +110,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         foreach (var flag in debug)
         {
             if (flag == "show") _debugShow = true;
+            else if (flag == "top") _debugTop = true;
             else if (flag.StartsWith("scrub=", StringComparison.Ordinal)
                      && double.TryParse(flag.AsSpan(6), NumberStyles.Float, CultureInfo.InvariantCulture, out var share))
                 _debugScrub = Math.Clamp(share, 0, 1);
@@ -378,6 +381,13 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     /// <summary>Just above the desktop, under every app's window: a window over the middle of the screen covers the card.</summary>
     private void PlaceAboveDesktop()
     {
+        if (_debugTop)
+        {
+            // --player-debug top: over every window, to check what the card looks like on screen (never by default).
+            PlayerNative.SetWindowPos(_surface.Hwnd, -1, 0, 0, 0, 0, PlayerNative.SWP_NOMOVE | PlayerNative.SWP_NOSIZE | PlayerNative.SWP_NOACTIVATE);
+            return;
+        }
+
         var desktop = PlayerNative.FindWindow("Progman", null);
         var above = desktop == 0 ? 0 : PlayerNative.GetWindow(desktop, PlayerNative.GW_HWNDPREV);
         if (above == _surface.Hwnd) return;
@@ -430,6 +440,12 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         StartFrames(animating ? 16u : _model.DisplayedPlaying || _scrub.Flashing ? 100u : 250u);
     }
 
+    // Made once: a frame allocates no delegate.
+    private Action<Vortice.Direct2D1.ID2D1DeviceContext>? _paint;
+
+    private void PaintCard(Vortice.Direct2D1.ID2D1DeviceContext dc) =>
+        _painter.Paint(dc, _surface.Factory, _model, (float)PlayerCard.Width, CardPainter.Height);
+
     private void Draw()
     {
         _dirty = false;
@@ -442,9 +458,8 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             if (reset) _painter.ReleaseDevice();
             var dc = _surface.Dc!;
             dc.Dpi = new Vortice.Mathematics.Size((float)(96 * _scale), (float)(96 * _scale));
-            var width = (float)PlayerCard.Width;
-            var height = CardPainter.Height;
-            if (!_surface.Draw(d => _painter.Paint(d, _surface.Factory, _model, width, height))) _painter.ReleaseDevice();
+            _paint ??= PaintCard;
+            if (!_surface.Draw(_paint)) _painter.ReleaseDevice();
         }
         catch (Exception ex) when (ex is SharpGen.Runtime.SharpGenException or COMException or InvalidOperationException)
         {
@@ -585,7 +600,13 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         m.TitleAlpha = _titles.Value(now);
         m.NoteAlpha = _note.Value(now);
         m.PressedPart = _pressed;
-        _automation?.Update(m);
+        // What UI Automation reads changes at most once a second (the time, the line) or on a press: a few times a
+        // second is plenty, and the frames in between build nothing for it.
+        if (now - _automationAt >= 0.25)
+        {
+            _automationAt = now;
+            _automation?.Update(m);
+        }
     }
 
     private void RefreshLook()
