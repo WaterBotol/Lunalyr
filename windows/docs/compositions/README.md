@@ -7,8 +7,10 @@ The lyric layer draws the current line(s) of a `SceneSnapshot` at `FrameContext.
 |---|---|---|---|
 | `editorial` | Editorial: two typefaces in one line, set like a spread | `ScatteredLyricText` | `EditorialLayer`, `Lunalyr.Core.Compositions.EditorialSetting` |
 | `spoken` | Spoken: each sung word takes focus; recent words settle around it | `SpokenTypographyView` | `SpokenLayer`, `Lunalyr.Core.Compositions.RollingStage` |
+| `cascade` | Cascade: a moving column of words, arriving with the voice | `SpokenTypographyView` | `SpokenLayer` (Cascade), see [cascade-cutout.md](cascade-cutout.md) |
+| `cutout` | Cutout: uneven type and album-colour labels, built word by word | `SpokenTypographyView` | `SpokenLayer` (Cutout), `Lunalyr.Core.Compositions.RollingLabel`, see [cascade-cutout.md](cascade-cutout.md) |
 
-Both share the stage logic of the Mac's `LyricLayer` (which line is drawn, hand-overs, held duet lines, previews,
+All share the stage logic of the Mac's `LyricLayer` (which line is drawn, hand-overs, held duet lines, previews,
 line-timed phrases, backing vocals, instrumental breaks, plain lyrics, status text): `Lunalyr.Core.Compositions.LineFlow`
 and `LyricCompositionLayer` in `src/Lunalyr.Render/Compositions/`.
 
@@ -22,7 +24,7 @@ Several Mac files behind these compositions still carry lines from the squashed 
 | `LyricComposition.swift` | 245 | described in [shared.md](shared.md), re-implemented |
 | `ScatteredLyricText.swift` | 288 | described in [editorial.md](editorial.md), re-implemented; Lunalyr's own parts ported |
 | `LyricTypography.swift` | 165 | described in [editorial.md](editorial.md) and [spoken.md](spoken.md), re-implemented |
-| `SpokenTypographyView.swift` | 54 | described in [spoken.md](spoken.md); Lunalyr's own parts ported |
+| `SpokenTypographyView.swift` | 54 | described in [spoken.md](spoken.md) and [cascade-cutout.md](cascade-cutout.md); Lunalyr's own parts ported |
 | `WordPresentation.swift` | 24 | already re-implemented in Core (`WordReveal`, `WordPresentation`) |
 | `LyricLayerView.swift` | 28 | only declarations and comments; the logic around them is Lunalyr's and ported |
 | `BackingVocals.swift` | 3 | two modifier lines; ported |
@@ -38,7 +40,7 @@ written from them in its own structure; no Verso line was translated.
   `lift` (Float up), `pop`, `orbit`, `glide`, `unfold` and `automatic` are built. `cutoutFold`, `cutoutSlide`,
   `cutoutHighlight`, `satinRibbon`, `splitInk` and `mix` are not yet and draw as Soft focus. (The spelled-out
   `softFocus`, `floatUp` and `matchStyle` are accepted too.) On the Mac, Spoken's automatic entrance is Glide; choose
-  `automatic` to get that.
+  `automatic` to get that. Cascade's is Float up; Cutout's (Cutout · Fold) is not built yet and Unfold stands in.
 - **Size.** The Mac's base size is `clamp(min(w, h·16/9) · 0.046, 24, 124)` points and the stage is 80% × 72% of the
   screen. Its size slider (0.7–1.5) is `LyricStyle.SizeFraction / 0.075`, so the contract's 0.075 is the Mac's 1.0.
   Points are physical pixels divided by `FrameContext.Scale`.
