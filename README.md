@@ -122,7 +122,7 @@ Choose what the lyrics sit on in **Settings › Wallpaper**:
 - **Colour only**: a moving gradient of the album's colours.
 - **Visualisers** that move with your Mac's sound: Silk Ribbons, Spectral Aurora, Spectrum Tunnel, Aurora Curtains, Fosfora Aurora, Star Trails, Wavefield, Wavecore, Light 3D, Colour Strata, Overprint and more. The sound is analysed in memory on your Mac and never recorded.
 - **Music video**: the song's own music video, muted and kept in time with the music. Lunalyr looks in your Music library first and, if you allow it, searches YouTube. You can pick a different video, paste a link, or line it up yourself by tapping or dragging.
-- **Your wallpaper**: just the lyrics, over the desktop picture (or wallpaper app) you already have.
+- **Your wallpaper**: just the lyrics, over the desktop picture you already have. Other wallpaper apps keep working underneath, so a live wallpaper from an app such as Vinyl stays on show.
 - **Image or video**: a picture or looping video of your own.
 
 Apple Music's **animated album covers** can play behind the lyrics too.
@@ -137,11 +137,19 @@ Apple Music's **animated album covers** can play behind the lyrics too.
     <td align="center"><b>Music video</b></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/media/background-wallpaper.jpg" alt="Lyrics drawn over a macOS desktop picture chosen as the wallpaper"></td>
+    <td width="50%"><img src="docs/media/background-wallpaper.jpg" alt="Lyrics in the Spoken layout over the desktop, where the Vinyl wallpaper app shows the playing album on a turntable"></td>
+    <td width="50%"><img src="docs/media/background-image.jpg" alt="Lyrics in the Scattered layout over the Sonoma picture chosen as an image wallpaper"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Your wallpaper</b> · with the Vinyl app underneath</td>
+    <td align="center"><b>Image or video</b></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/background-gpu-effect.jpg" alt="Lyrics in the Constellation + Editorial layout over the Plasma GPU effect"></td>
     <td width="50%"><img src="docs/media/album-colours.jpg" alt="A background and lyrics tinted in the colours of the playing album's cover"></td>
   </tr>
   <tr>
-    <td align="center"><b>Your wallpaper</b></td>
+    <td align="center"><b>GPU effect</b> · Plasma</td>
     <td align="center"><b>Album colours</b></td>
   </tr>
 </table>
