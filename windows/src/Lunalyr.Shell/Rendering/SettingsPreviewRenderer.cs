@@ -61,6 +61,14 @@ public sealed class SettingsPreviewRenderer : IDisposable
         _surface.ReadPixels(pixels);
     }
 
+    /// <summary>Uses <paramref name="factory"/> for its id from now on (the imported picture or video), dropping any instance made from another.</summary>
+    public void Use(IRenderLayerFactory? factory)
+    {
+        if (factory is null || (_factories.TryGetValue(factory.Id, out var known) && ReferenceEquals(known, factory))) return;
+        _factories[factory.Id] = factory;
+        if (_layers.Remove(factory.Id, out var old)) old.Dispose();
+    }
+
     private IRenderLayer Layer(string id, string fallback)
     {
         if (!_factories.ContainsKey(id)) id = fallback;

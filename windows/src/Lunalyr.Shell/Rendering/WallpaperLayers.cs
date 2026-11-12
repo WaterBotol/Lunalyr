@@ -31,6 +31,7 @@ public static partial class WallpaperLayers
         {
             new GradientLayerFactory(options, logger),
             new ColourLayerFactory(options, logger),
+            new DesktopLayerFactory(options, logger),
         };
         AddEffectLayers(list, options, logger);
         AddPatternLayers(list, options, logger);

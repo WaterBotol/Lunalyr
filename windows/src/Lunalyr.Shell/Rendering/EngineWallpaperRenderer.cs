@@ -72,6 +72,8 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
         _engine.SetLayers(bg, ids.Contains(lyric) ? lyric : null);
     }
 
+    public void ReplaceLayer(IRenderLayerFactory factory) => _engine.ReplaceLayer(factory);
+
     public void SetClock(Func<(double Seconds, bool Playing)> clock) => _engine.SongClock = clock;
 
     public void SetFrameRate(int framesPerSecond) => _engine.SetFrameRate(framesPerSecond switch

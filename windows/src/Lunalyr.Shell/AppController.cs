@@ -140,6 +140,7 @@ public sealed partial class AppController : IAsyncDisposable
     private readonly CategoryLogger _app;
     private readonly CategoryLogger _player;
     private readonly CategoryLogger _lyricLog;
+    private readonly Logger _logger;
     private readonly Lock _gate = new();
     private readonly Func<(double Seconds, bool Playing)> _clockReader;
 
@@ -190,10 +191,11 @@ public sealed partial class AppController : IAsyncDisposable
         _app = logger.App;
         _player = logger.Player;
         _lyricLog = logger.Lyrics;
+        _logger = logger;
         _settings = settings.Normalized();
         _globalOffset = _settings.LyricOffset;
         _reduceMotion = _options.ReduceMotion;
-        _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
+        _scene = new SceneSnapshot { Style = _settings.Style(), Adjustments = _settings.Adjustments(), Palette = _palette, ReduceMotion = _reduceMotion };
         _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
         // The scrub preview stands in for the player's clock on the wallpaper only (LineBeingSung keeps ReadClock).
         _clockReader = ReadRendererClock;
@@ -235,6 +237,7 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         _renderer.SetClock(_clockReader);
+        ApplyCustomWallpaper(null, settings);
         _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         _renderer.SetFrameRate(settings.AnimationRate);
         PublishScene();
@@ -286,6 +289,13 @@ public sealed partial class AppController : IAsyncDisposable
                 _scene = _scene with { Style = style };
                 scene = _scene;
             }
+            // The Wallpaper page's sliders reach the backgrounds through the scene, so a drag applies at once.
+            var adjustments = settings.Adjustments();
+            if (adjustments != _scene.Adjustments)
+            {
+                _scene = _scene with { Adjustments = adjustments };
+                scene = _scene;
+            }
 
             if ((!old.SourceSnapshot().Equals(settings.SourceSnapshot()) || old.RepairQQGaps != settings.RepairQQGaps)
                 && _lookupTrack is not null)
@@ -308,6 +318,7 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         ApplyLayoutSettings(old, settings);
+        ApplyCustomWallpaper(old, settings);
         if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
             _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
@@ -420,7 +431,7 @@ public sealed partial class AppController : IAsyncDisposable
             _tools = LyricToolsState.Empty;
             if (session is null) _palette = PaletteMapper.Fallback;
             _cover = null;
-            _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
+            _scene = new SceneSnapshot { Style = _settings.Style(), Adjustments = _settings.Adjustments(), Palette = _palette, ReduceMotion = _reduceMotion };
             _status = _status with
             {
                 Player =session?.SourceApp.DisplayName,
@@ -499,6 +510,7 @@ public sealed partial class AppController : IAsyncDisposable
                 Title = track.Title,
                 Artist = track.Artist,
                 Style = _settings.Style(),
+                Adjustments = _settings.Adjustments(),
                 Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
                 NoneFound = disabled is not null,
                 ReduceMotion = _reduceMotion,
