@@ -90,7 +90,10 @@ final class LyricSourceOptions: ObservableObject {
         /// v13: a language version (English Version…), or lyrics in another
         /// language than the song's, rank below the playing one's; songs listed
         /// under an English title are searched under their original title too.
-        static let cachePolicy = "v13"
+        /// v14: a whole line or a few long phrases timed as "words" is line
+        /// timing (`LyricsFetcher.isPhraseTimed`); Apple's lyrics relayed by
+        /// Lyrics+ rank as Apple Music's.
+        static let cachePolicy = "v14"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

@@ -610,7 +610,7 @@ final class LyricsFetcher {
         if hasWordTiming(result) { return 3 }
         if case .synced(let lines, _) = result {
             let vocal = lines.filter { !$0.isInstrumental }
-            if vocal.contains(where: { validWordTiming($0) }) { return 2 }
+            if vocal.contains(where: { validWordTiming($0) }), hasWordTimingEvidence(vocal) { return 2 }
             return vocal.isEmpty ? 0 : 1
         }
         return 0
@@ -695,7 +695,10 @@ final class LyricsFetcher {
     static func validWordTiming(_ line: Line) -> Bool {
         guard line.wordTimed, !line.words.isEmpty, line.start.isFinite, line.end.isFinite, line.end > line.start else { return false }
         let covered = line.words.map(\.text).joined().filter { $0.isLetter || $0.isNumber }
-        guard covered == line.text.filter({ $0.isLetter || $0.isNumber }) else { return false }
+        let letters = line.text.filter { $0.isLetter || $0.isNumber }
+        guard covered == letters else { return false }
+        // A whole line or a few long phrases timed as "words" (`isPhraseTimed`).
+        guard !isPhraseTimed(line.text, letters: letters, tokens: line.words.count) else { return false }
         return line.words.enumerated().allSatisfy { i, word in
             word.start.isFinite && word.end.isFinite && word.start >= line.start - 0.05 && word.end > word.start && word.end <= line.end + 0.05 &&
                 (i == 0 || word.start >= line.words[i - 1].start)
@@ -704,11 +707,13 @@ final class LyricsFetcher {
     static func hasWordTiming(_ result: Result) -> Bool {
         guard case .synced(let lines, _) = result else { return false }
         let vocal = lines.filter { !$0.isInstrumental }
-        return !vocal.isEmpty && vocal.allSatisfy { validWordTiming($0) }
+        return !vocal.isEmpty && vocal.allSatisfy { validWordTiming($0) } && hasWordTimingEvidence(vocal)
     }
     static func precision(_ lines: [Line]) -> String {
         let vocal = lines.filter { !$0.isInstrumental }
-        if !vocal.isEmpty, vocal.allSatisfy({validWordTiming($0)}) {return "Word-by-word"}
+        // Real word timing must be there to show (`hasWordTimingEvidence`).
+        guard hasWordTimingEvidence(vocal) else {return "Line-synced"}
+        if vocal.allSatisfy({validWordTiming($0)}) {return "Word-by-word"}
         if vocal.contains(where:{validWordTiming($0)}) {return "Mixed timing"}
         return "Line-synced"
     }
@@ -847,7 +852,9 @@ final class LyricsFetcher {
                      end: token.end_ms.map { $0 / 1000 + offset } ?? (i + 1 < tokens.count ? tokens[i + 1].start_ms / 1000 + offset : end))
             }
             let covered = words.map(\.text).joined().filter { !$0.isWhitespace }
-            if !words.isEmpty, covered == row.text.filter({ !$0.isWhitespace }), words.enumerated().allSatisfy({ i, word in
+            // Rows timed by the line or by long phrases keep estimated words (`isPhraseTimed`).
+            if !words.isEmpty, covered == row.text.filter({ !$0.isWhitespace }),
+               !isPhraseTimed(row.text, letters: row.text.filter { $0.isLetter || $0.isNumber }, tokens: words.count), words.enumerated().allSatisfy({ i, word in
                 word.start.isFinite && word.end.isFinite && word.start >= start && word.end > word.start && word.end <= end &&
                     (i == 0 || word.start >= words[i - 1].end)
             }) {

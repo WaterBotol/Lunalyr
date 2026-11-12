@@ -23,7 +23,14 @@ final class LanguageVersionTests: XCTestCase {
         let lines = text.enumerated().map { index, row -> LyricsFetcher.Line in
             let start = Double(index) * 4 + 1
             var line = LyricsFetcher.makeLine(text: row, start: start, end: start + 3.5)
-            if words { line.wordTimed = true; line.words = [.init(text: row, start: start, end: start + 3)] }
+            if words {
+                // A token a word, or a character in a script written without spaces (`LyricsFetcher.isPhraseTimed`).
+                let tokens = LyricScript.keepsSyllables(row) ? row.filter { !$0.isWhitespace }.map(String.init)
+                    : row.split(separator: " ").map(String.init)
+                let step = 3 / Double(tokens.count)
+                line.wordTimed = true
+                line.words = tokens.enumerated().map { i, token in .init(text: token, start: start + Double(i) * step, end: start + Double(i + 1) * step) }
+            }
             return line
         }
         return .init(source: source, result: .synced(lines, .init(precision: "fixture", source: source.title)),
