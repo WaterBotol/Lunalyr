@@ -104,9 +104,15 @@ public sealed class LyricServiceEndToEndTests : IDisposable
 
     private static SungLine[] Shifted(IEnumerable<SungLine> lines, double by) => [.. lines.Select(l => l with { Start = l.Start + by, End = l.End + by })];
 
-    private static FixtureHandler EnglishWorld(bool lrclibWords = true, double othersShift = 0, IReadOnlyList<SungLine>? lrclibLines = null)
+    /// <summary>
+    /// LRCLIB, Lyrics+, NetEase and lyrics.ovh with the invented English lines. Lyrics+ relays
+    /// <paramref name="lyricsPlusUpstream"/>: "Apple" ranks as Apple Music's own lyrics, so tests about LRCLIB's lead
+    /// use another upstream.
+    /// </summary>
+    private static FixtureHandler EnglishWorld(bool lrclibWords = true, double othersShift = 0, IReadOnlyList<SungLine>? lrclibLines = null,
+        string lyricsPlusUpstream = "Apple")
     {
-        var lyricsPlus = ServiceReplies.LyricsPlus("Shape of You", "Ed Sheeran", Shifted(English, othersShift));
+        var lyricsPlus = ServiceReplies.LyricsPlus("Shape of You", "Ed Sheeran", Shifted(English, othersShift), lyricsPlusUpstream);
         var handler = Quiet()
             .Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(1470135, "Shape of You", "Ed Sheeran", "Divide", 234,
                 lrclibLines ?? English, lrclibWords)))
@@ -122,7 +128,8 @@ public sealed class LyricServiceEndToEndTests : IDisposable
     [Fact]
     public async Task EnglishSongLrclibWordTimingBeatsLineTimedSources()
     {
-        var handler = EnglishWorld();
+        // Lyrics+ relays another service's lyrics here: Apple Music's, relayed, would rank above LRCLIB's (the next test).
+        var handler = EnglishWorld(lyricsPlusUpstream: "Musixmatch");
         var service = Service(handler);
         var report = await service.LookupAsync(ShapeOfYou, Everything, cancellationToken: Ct);
         var shown = Synced(report.Result);
@@ -144,9 +151,33 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         // timing, then plain text.
         var all = await service.LookupAsync(ShapeOfYou, Everything, force: true, cancellationToken: Ct);
         Assert.Equal([Lrclib, LyricsPlus, NetEase, LyricsOvh], all.Candidates.Select(c => c.Source));
-        Assert.Equal(["Word-by-word · LRCLIB", "Word-by-word · Apple via Lyrics+", "Line-synced · NetEase", "Plain text · no timing · lyrics.ovh"],
+        Assert.Equal(["Word-by-word · LRCLIB", "Word-by-word · Musixmatch via Lyrics+", "Line-synced · NetEase", "Plain text · no timing · lyrics.ovh"],
             all.Candidates.Select(c => c.Provenance.Label));
         Assert.Equal(new LyricProvenance("Word-by-word", "LRCLIB"), all.Result!.Provenance);
+    }
+
+    [Fact]
+    public async Task AppleLyricsRelayedByLyricsPlusRankAsAppleMusic()
+    {
+        // Ranking decision of 12 Nov 2026: Lyrics+ relaying Apple Music's lyrics ranks as Apple Music, so its word
+        // timing leads LRCLIB's. It is still listed and shown as Lyrics+.
+        var handler = EnglishWorld();
+        var service = Service(handler);
+        var report = await service.LookupAsync(ShapeOfYou, Everything, cancellationToken: Ct);
+        Assert.Equal(new LyricProvenance("Word-by-word", "Apple via Lyrics+"), report.Result!.Provenance);
+        Assert.EndsWith("showing", report.States[LyricsPlus], StringComparison.Ordinal);
+        Assert.Equal(LyricsPlus, report.Candidates[0].Source);
+        Assert.Equal(AppleMusicCache, report.Candidates[0].RankingSource);
+
+        var all = await service.LookupAsync(ShapeOfYou, Everything, force: true, cancellationToken: Ct);
+        Assert.Equal([LyricsPlus, Lrclib, NetEase, LyricsOvh], all.Candidates.Select(c => c.Source));
+
+        // Apple Music's own word timing still ranks above its relay.
+        const string wordTtml = "<tt><body><div><p begin='11.65' end='13.9'><span begin='11.65' end='12.5'>Invented</span> <span begin='12.5' end='13'>first</span> <span begin='13' end='13.4'>line</span> <span begin='13.4' end='13.9'>here</span></p></div></body></tt>";
+        var both = await Service(EnglishWorld(), new AppleMusic(wordTtml), cacheFolder: _cache.File("both"))
+            .LookupAsync(ShapeOfYou, Everything, force: true, cancellationToken: Ct);
+        Assert.Equal([AppleMusicCache, LyricsPlus, Lrclib, NetEase, LyricsOvh], both.Candidates.Select(c => c.Source));
+        Assert.Equal(new LyricProvenance("Word-by-word", "Apple Music"), both.Result!.Provenance);
     }
 
     [Fact]
@@ -154,11 +185,11 @@ public sealed class LyricServiceEndToEndTests : IDisposable
     {
         // Lyrics+ and NetEase agree with each other, two seconds from LRCLIB's listener-made timing. LRCLIB's word
         // timing then has no lead over Lyrics+'s: in Source order, Lyrics+ (earlier in the list) wins.
-        // Agreement is weighed among the answers in hand (LyricRanking.CouldBeat), so LRCLIB answers last here: had it
-        // answered first, its word timing would lead with nothing yet to disagree and the other services would stop.
+        // LRCLIB answers last here, so it is never shown; the next test has it answer first and be replaced.
+        // Lyrics+ relays another service: Apple Music's lyrics, relayed, would outrank LRCLIB's without any agreement.
         var sourceOrder = Everything with { Mode = LyricMatchMode.SourceOrder };
         var othersIn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var world = EnglishWorld(othersShift: 2);
+        var world = EnglishWorld(othersShift: 2, lyricsPlusUpstream: "Musixmatch");
         world.Set("lrclib.net/api/get", Reply.Text(200, ServiceReplies.LrclibRow(1470135, "Shape of You", "Ed Sheeran", "Divide", 234,
             English, true)) with { Wait = othersIn.Task });
         var report = await Service(world).LookupAsync(ShapeOfYou, sourceOrder, force: true, onUpdate: progress =>
@@ -169,14 +200,57 @@ public sealed class LyricServiceEndToEndTests : IDisposable
             }
             return ValueTask.CompletedTask;
         }, cancellationToken: Ct);
-        Assert.Equal(new LyricProvenance("Word-by-word", "Apple via Lyrics+"), report.Result!.Provenance);
+        Assert.Equal(new LyricProvenance("Word-by-word", "Musixmatch via Lyrics+"), report.Result!.Provenance);
         Assert.Equal([LyricsPlus, Lrclib, NetEase, LyricsOvh], report.Candidates.Select(c => c.Source));
         Assert.True(report.Candidates[1].Agreement.TimingOutlier);
         Assert.Contains("timing differs from other sources", report.States[Lrclib], StringComparison.Ordinal);
         // With the timing agreeing (the first test), LRCLIB leads in Source order too.
-        var agreeing = await Service(EnglishWorld(), cacheFolder: _cache.File("agreeing")).LookupAsync(ShapeOfYou, sourceOrder, force: true,
-            cancellationToken: Ct);
+        var agreeing = await Service(EnglishWorld(lyricsPlusUpstream: "Musixmatch"), cacheFolder: _cache.File("agreeing"))
+            .LookupAsync(ShapeOfYou, sourceOrder, force: true, cancellationToken: Ct);
         Assert.Equal(Lrclib, agreeing.Candidates[0].Source);
+    }
+
+    [Fact]
+    public async Task LrclibShowingFirstIsReplacedWhenTwoOtherSourcesLaterAgreeAgainstItsTiming()
+    {
+        // Ranking decision of 12 Nov 2026. The same disagreement as above, but LRCLIB answers first and is shown; Lyrics+
+        // and NetEase answer only once it shows. An automatic lookup keeps them running (the agreement window), and
+        // their agreement then demotes LRCLIB: a new revision switches to Lyrics+.
+        var sourceOrder = Everything with { Mode = LyricMatchMode.SourceOrder };
+        var lrclibShown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var world = EnglishWorld(othersShift: 2, lyricsPlusUpstream: "Musixmatch");
+        var lyricsPlus = ServiceReplies.LyricsPlus("Shape of You", "Ed Sheeran", Shifted(English, 2), "Musixmatch");
+        world.Responder = request => request.RequestUri!.Host.StartsWith("lyricsplus.", StringComparison.Ordinal)
+            ? Reply.Text(200, lyricsPlus) with { Wait = lrclibShown.Task }
+            : null;
+        world.Set("music.163.com/api/search/get", Reply.Text(200, ServiceReplies.NetEaseSearch((1, "Shape of You", "Ed Sheeran", 233.7)))
+            with { Wait = lrclibShown.Task });
+        // A short grace period shows LRCLIB promptly; a long settle period keeps the agreement window open however
+        // slowly the held replies are parsed (the lookup still ends as soon as every source has answered).
+        var timing = Quick with { Grace = TimeSpan.FromMilliseconds(300), UpgradeSettle = TimeSpan.FromSeconds(10) };
+        var shown = new List<LyricLookupReport>();
+        var report = await Service(world, timing: timing).LookupAsync(ShapeOfYou, sourceOrder, onUpdate: progress =>
+        {
+            if (progress.Revision > 0 && (shown.Count == 0 || shown[^1].Revision != progress.Revision))
+            {
+                shown.Add(progress);
+            }
+            if (progress.Result?.Provenance.Source == "LRCLIB")
+            {
+                lrclibShown.TrySetResult();
+            }
+            return ValueTask.CompletedTask;
+        }, cancellationToken: Ct);
+        var lrclib = Assert.Single(shown, s => s.Result?.Provenance.Source == "LRCLIB");
+        // When LRCLIB showed, the sources that could agree against it were still running.
+        Assert.Equal(LyricLookup.Searching, lrclib.States[NetEase]);
+        Assert.Equal(new LyricProvenance("Word-by-word", "Musixmatch via Lyrics+"), report.Result!.Provenance);
+        Assert.Equal(lrclib.Revision + 1, report.Revision);
+        // (lyrics.ovh, plain text, may have been stopped before answering, so only the timed matches are compared.)
+        Assert.Equal([LyricsPlus, Lrclib, NetEase], report.Candidates.Take(3).Select(c => c.Source));
+        Assert.True(report.Candidates[1].Agreement.TimingOutlier);
+        Assert.Contains("timing differs from other sources", report.States[Lrclib], StringComparison.Ordinal);
+        Assert.EndsWith("showing", report.States[LyricsPlus], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -206,7 +280,9 @@ public sealed class LyricServiceEndToEndTests : IDisposable
     {
         const string lineTtml = "<tt><body><div><p begin='11.65' end='13.9'>Invented first line here</p><p begin='14.05' end='16.6'>Second made up line</p></div></body></tt>";
         const string wordTtml = "<tt><body><div><p begin='11.65' end='13.9'><span begin='11.65' end='12.5'>Invented</span> <span begin='12.5' end='13'>first</span> <span begin='13' end='13.4'>line</span> <span begin='13.4' end='13.9'>here</span></p></div></body></tt>";
-        var lines = await Service(EnglishWorld(), new AppleMusic(lineTtml)).LookupAsync(ShapeOfYou, Everything, force: true, cancellationToken: Ct);
+        // Lyrics+ relays another service here: Apple Music's lyrics, relayed, would lead LRCLIB's word timing too.
+        var lines = await Service(EnglishWorld(lyricsPlusUpstream: "Musixmatch"), new AppleMusic(lineTtml))
+            .LookupAsync(ShapeOfYou, Everything, force: true, cancellationToken: Ct);
         Assert.Equal([Lrclib, LyricsPlus, AppleMusicCache, NetEase, LyricsOvh], lines.Candidates.Select(c => c.Source));
         Assert.Equal("Line-synced · Apple Music", lines.Candidates[2].Provenance.Label);
 
@@ -365,7 +441,8 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         service.Unpin(ShapeOfYou);
         var unpinned = await service.LookupAsync(ShapeOfYou, Everything, cancellationToken: Ct);
         Assert.False(unpinned.Pinned);
-        Assert.Equal("LRCLIB", unpinned.Result!.Provenance.Source);
+        // Lyrics+ relays Apple Music's lyrics, which rank above LRCLIB's (ranking decision of 12 Nov 2026).
+        Assert.Equal("Apple via Lyrics+", unpinned.Result!.Provenance.Source);
     }
 
     // ---- (g) A cache hit -----------------------------------------------------------------------------------------

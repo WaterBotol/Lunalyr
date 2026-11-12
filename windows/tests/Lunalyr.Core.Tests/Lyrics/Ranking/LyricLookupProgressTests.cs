@@ -117,7 +117,10 @@ public sealed class LyricLookupProgressTests : IDisposable
         Assert.False(LyricRanking.IsSettled(words, [Lrclib], _query, options));
         // Kuwo only ever has line timing.
         Assert.True(LyricRanking.IsSettled(words, [Kuwo], _query, options));
-        Assert.True(LyricRanking.IsSettled(Candidate(Lrclib, 3), [LyricsPlus, NetEase, Kuwo], _query, options));
+        // Changed for the ranking decision of 12 Nov 2026: a pending Lyrics+ might relay Apple Music's lyrics, which
+        // rank as Apple Music's own, so LRCLIB's word timing waits for it (the Mac test had it settled).
+        Assert.True(LyricRanking.IsSettled(Candidate(Lrclib, 3), [NetEase, Kuwo], _query, options));
+        Assert.False(LyricRanking.IsSettled(Candidate(Lrclib, 3), [LyricsPlus, NetEase, Kuwo], _query, options));
         Assert.False(LyricRanking.IsSettled(Candidate(Lrclib, 1), [LyricsPlus], _query, options));
     }
 

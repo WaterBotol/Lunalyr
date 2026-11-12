@@ -54,7 +54,7 @@ public static class LyricParser
                 return PlainResult(raw.Payload, raw.Source);
             case LyricFormat.KPoeJson:
                 if (KPoeJsonParser.Parse(raw.Payload) is not { } hit) return null;
-                return new LyricResult.Synced(hit.Lines, new LyricProvenance(LyricTimingRules.Precision(hit.Lines), hit.Source + " via Lyrics+"));
+                return new LyricResult.Synced(hit.Lines, new LyricProvenance(LyricTimingRules.Precision(hit.Lines), hit.Source + LyricSourceRanking.RelaySuffix));
             case LyricFormat.Ttml:
                 lines = TtmlParser.Parse(raw.Payload, duration, options?.PreferredLanguages, options?.Distribute);
                 if (!lines.Any(line => !line.IsInstrumental)) lines = [];

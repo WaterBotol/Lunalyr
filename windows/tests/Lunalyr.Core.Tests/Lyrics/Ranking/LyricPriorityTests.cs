@@ -253,7 +253,9 @@ public sealed class LyricPriorityTests : IDisposable
             }
             // Only Apple Music's own lyrics can rank above LRCLIB's.
             Assert.False(LyricRanking.IsSettled(Candidate(Lrclib, Timing.Word), [AppleMusicCache], _query, options));
-            Assert.True(LyricRanking.IsSettled(Candidate(Lrclib, Timing.Mixed), services.Where(s => s != Lrclib), _query, options));
+            // Changed for the ranking decision of 12 Nov 2026: Lyrics+ might relay Apple Music's lyrics, so it is waited for.
+            Assert.True(LyricRanking.IsSettled(Candidate(Lrclib, Timing.Mixed), services.Where(s => s is not (Lrclib or LyricsPlus)), _query, options));
+            Assert.False(LyricRanking.IsSettled(Candidate(Lrclib, Timing.Mixed), [LyricsPlus], _query, options));
             // Apple Music's line timing waits for every source that can have word timing.
             var ownLines = Candidate(AppleMusicCache, Timing.Line);
             foreach (var source in new[] { Lrclib, LyricsPlus, NetEase, QQMusic, Kugou })
@@ -305,7 +307,7 @@ public sealed class LyricPriorityTests : IDisposable
     /// <paramref name="musicLater"/> on its second look. Each stub has its own cache.
     /// </summary>
     private Stub Make(Dictionary<LyricSourceId, LyricCandidate?> answers, LookupLog log, Dictionary<LyricSourceId, Gate>? gates = null,
-        LyricCandidate? musicLater = null)
+        LyricCandidate? musicLater = null, LyricLookupTiming? timing = null)
     {
         var cache = _folder.Sub(Guid.NewGuid().ToString("N"));
         var clock = new FakeClock();
@@ -325,7 +327,7 @@ public sealed class LyricPriorityTests : IDisposable
                 return musicLater;
             }
             return answers.GetValueOrDefault(id);
-        }, clock);
+        }, clock, timing);
         return new Stub(lookup, cache, clock);
     }
 
@@ -464,10 +466,13 @@ public sealed class LyricPriorityTests : IDisposable
                 var report = await stub.Lookup.LookupAsync(_query, options, cancellationToken: Ct);
                 Assert.Equal(LrclibTitle, L.SourceOf(report.Result));
                 Assert.Equal(1, report.Revision);
-                foreach (var id in others)
+                foreach (var id in others.Where(id => id != LyricsPlus))
                 {
                     Assert.Equal(LyricLookup.CouldNotBeat, report.States[id]);
                 }
+                // Changed for the ranking decision of 12 Nov 2026: Lyrics+ might relay Apple Music's lyrics, which would
+                // rank above LRCLIB's, so it is not stopped; here it never answers and is given up at its limit.
+                Assert.Equal(LyricLookup.TimedOut, report.States[LyricsPlus]);
                 Assert.Equal(others.ToHashSet(), log.Cancelled.ToHashSet());
                 // Nothing stopped could have beaten it, so replays use it straight away.
                 Assert.Equal(Lrclib, stub.Saved(_query, options));
@@ -484,12 +489,15 @@ public sealed class LyricPriorityTests : IDisposable
         {
             var log = new LookupLog();
             var never = new Gate();
+            // Changed for the ranking decision of 12 Nov 2026: the others now stop once the agreement window closes
+            // (grace over, and one settle period after LRCLIB showed), so Apple Music's second look comes after that.
             var stub = Make(new() { [Lrclib] = Candidate(Lrclib, Timing.Word) }, log, others.ToDictionary(id => id, _ => never),
-                musicLater: Candidate(AppleMusicCache, Timing.Mixed));
+                musicLater: Candidate(AppleMusicCache, Timing.Mixed), timing: Lookups.Fast with { AppleRetry = TimeSpan.FromSeconds(1) });
             var report = await stub.Lookup.LookupAsync(_query, options, onUpdate: log.Update, cancellationToken: Ct);
             var first = log.Shown(1);
             Assert.Equal(LrclibTitle, L.SourceOf(first?.Result));
-            Assert.Equal(LyricLookup.CouldNotBeat, first?.States[NetEase]);
+            Assert.Equal(LyricLookup.Searching, first?.States[NetEase]);
+            Assert.Equal(LyricLookup.CouldNotBeat, log.Updates.Last(u => u.Revision == 1).States[NetEase]);
             Assert.Equal(2, report.Revision);
             Assert.Equal(Music, L.SourceOf(report.Result));
             Assert.Equal("Match found · showing", report.States[AppleMusicCache]);
