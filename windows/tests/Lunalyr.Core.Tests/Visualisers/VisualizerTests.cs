@@ -108,8 +108,7 @@ public class VisualizerTests
         Assert.All(smoother.Frame(target, 1).Bands.ToArray(), v => Assert.True(float.IsFinite(v) && v == 0));
     }
 
-    // Ported from VisualizerTests.swift: testWavefieldMapsLiveFFTPeaksToDistinctResonances (the spectrum part: the
-    // live FFT's strongest peaks; the mode atlas half needs WavefieldModes, which a later port adds)
+    // Ported from VisualizerTests.swift: testWavefieldMapsLiveFFTPeaksToDistinctResonances
     [Fact]
     public void WavefieldMapsLiveFFTPeaksToDistinctResonances()
     {
@@ -119,5 +118,35 @@ public class VisualizerTests
         Assert.True(high.Wavefield.PeakCount > 0);
         Assert.True(Math.Abs(low.Wavefield.GetPeak(0).Frequency - 220) <= 6, $"{low.Wavefield.GetPeak(0).Frequency}");
         Assert.True(Math.Abs(high.Wavefield.GetPeak(0).Frequency - 1100) <= 6, $"{high.Wavefield.GetPeak(0).Frequency}");
+
+        var bank = new WavefieldModes();
+        var lowFrame = bank.Frame(low, 0, 0, 1, false);
+        Assert.True(lowFrame.ModeCount > 0);
+        var lowMode = lowFrame.Modes[0];
+        Assert.Equal(2f, lowMode.Shape.X);
+        Assert.Equal(3f, lowMode.Shape.Y);
+        var highFrame = bank.Frame(high, 1.0 / 60, 0, 1, false);
+        var kept = false;
+        foreach (var mode in highFrame.Modes) kept |= mode.Shape.X == 2 && mode.Shape.Y == 3;
+        Assert.True(kept, "The old resonance must stay visible while the new one attacks");
+        for (var step = 2; step <= 60; step++) highFrame = bank.Frame(high, step / 60.0, 0, 1, false);
+        Assert.True(highFrame.ModeCount > 0);
+        var highMode = highFrame.Modes[0];
+        Assert.NotEqual((lowMode.Shape.X, lowMode.Shape.Y), (highMode.Shape.X, highMode.Shape.Y));
+    }
+
+    // Not a Mac test: the per-mode GPU struct is the shader's WavefieldMode (three float4s), and a frame holds at most
+    // the twelve modes the shader reads.
+    [Fact]
+    public void WavefieldModesMatchTheShaderLayout()
+    {
+        Assert.Equal(48, System.Runtime.CompilerServices.Unsafe.SizeOf<WavefieldModeUniforms>());
+        Assert.Equal(12, WavefieldFrame.MaximumModes);
+        var ambient = new WavefieldModes().Frame(new AudioSnapshot(), 0, 1, 1, false);
+        Assert.Equal(WavefieldFrame.MaximumModes, ambient.ModeCount);
+        var options = new float[WavefieldFrame.OptionSlots];
+        ambient.Apply(options);
+        Assert.Equal(12f, options[3]);
+        Assert.Equal(ambient.OnsetsAndEnergy.W, options[13]);
     }
 }
