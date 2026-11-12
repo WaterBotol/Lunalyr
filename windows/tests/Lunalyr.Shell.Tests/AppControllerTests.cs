@@ -41,6 +41,7 @@ public sealed class AppControllerTests : IAsyncDisposable
                 TimelineWait = TimeSpan.FromMilliseconds(60),
                 TimelinePoll = TimeSpan.FromMilliseconds(10),
                 LateTimelinePoll = TimeSpan.FromMilliseconds(20),
+                OnlineRetryDelay = TimeSpan.FromMilliseconds(150),
                 ArtworkRetries = [],
                 ReduceMotion = reduceMotion,
             });
@@ -229,6 +230,8 @@ public sealed class AppControllerTests : IAsyncDisposable
     [Fact]
     public async Task OfflineWaitsAndLooksAgainWhenTheConnectionReturns()
     {
+        // As on the Mac (§3.5): looked up again a moment (OnlineRetryDelay, 2 s in the app) after the connection returns.
+        _connectivity.IsOnline = false;
         _lyrics.Answer("Song", new LyricLookupReport { Offline = true });
         _source.Add(Playing("Song"));
         var controller = Controller();
@@ -239,11 +242,62 @@ public sealed class AppControllerTests : IAsyncDisposable
 
         _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Back")));
         _connectivity.Restore();
+        Assert.Single(_lyrics.Queries); // not at once
         await controller.WhenIdleAsync();
 
         Assert.Equal(2, _lyrics.Queries.Count);
         Assert.Null(_renderer.Last!.Status);
         Assert.Equal("Back", Assert.IsType<LyricResult.Synced>(_renderer.Last.Lyrics).Lines[0].Text);
+    }
+
+    [Fact]
+    public async Task AnOfflineAnswerWhileOnlineLooksAgainAtOnceButOncePerTrack()
+    {
+        // Windows reports a connection, but every service looked unreachable (one connection dropped on a working
+        // link): the Mac looks again straight away, once per track, and still when the connection is next restored.
+        _lyrics.Answer("Song", new LyricLookupReport { Offline = true });
+        var session = Playing("Song");
+        _source.Add(session);
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+        Assert.Equal(2, _lyrics.Queries.Count);
+        Assert.Equal(StatusText.Offline, _renderer.Last!.Status);
+
+        _connectivity.Restore();
+        await controller.WhenIdleAsync();
+        Assert.Equal(3, _lyrics.Queries.Count);
+
+        // The next track gets its own look again.
+        _lyrics.Answer("Song B", new LyricLookupReport { Offline = true });
+        _time.AdvanceSeconds(1);
+        session.SetTrack("Song B", "Artist");
+        session.SetTimeline(1, 200);
+        await WaitUntil(() => _lyrics.Queries.Count(q => q.Title == "Song B") == 2);
+        await controller.WhenIdleAsync();
+        Assert.Equal(2, _lyrics.Queries.Count(q => q.Title == "Song B"));
+    }
+
+    [Fact]
+    public async Task ARestoredConnectionDoesNotLookAgainWhenTheTrackHasChanged()
+    {
+        _connectivity.IsOnline = false;
+        _lyrics.Answer("Song", new LyricLookupReport { Offline = true });
+        var session = Playing("Song");
+        _source.Add(session);
+        var controller = Controller();
+        controller.Start();
+        await controller.WhenIdleAsync();
+
+        // Restored, then the track changes before the retry is due: only the new track is looked up.
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "B")));
+        _connectivity.Restore();
+        _time.AdvanceSeconds(1);
+        session.SetTrack("Song B", "Artist");
+        session.SetTimeline(1, 200);
+        await WaitUntil(() => _lyrics.Queries.Any(q => q.Title == "Song B"));
+        await controller.WhenIdleAsync();
+        Assert.Equal(["Song", "Song B"], _lyrics.Queries.Select(q => q.Title));
     }
 
     [Fact]
