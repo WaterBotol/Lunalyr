@@ -655,9 +655,9 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             var control = _vectors[i];
             var to = (_vectors[i] + _vectors[(i + 1) % count]) / 2;
             var previous = from;
-            for (var s = 1; s <= 3; s++)
+            for (var s = 1; s <= 2; s++)
             {
-                var t = s / 3f;
+                var t = s / 2f;
                 var point = (1 - t) * (1 - t) * from + 2 * (1 - t) * t * control + t * t * to;
                 dc.DrawLine(previous, point, brush, (float)stroke, _round);
                 previous = point;
