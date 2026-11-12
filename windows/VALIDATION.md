@@ -86,11 +86,11 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Item | Status | Evidence |
 | --- | --- | --- |
 | Scattered, Constellation, Constellation + Editorial, Echo | unit + offscreen renders | `ScatteredFamilyTests`, `ScatteredFamilyRenderTests`, previews |
-| Cascade, Cutout | unit (Mac rolling-stack tests) + offscreen | `ArrivalCompositionTests`, previews |
+| Cascade, Cutout | unit (Mac rolling-stack tests) + offscreen | `ArrivalCompositionTests`, `ArrivalStackTests`, previews |
 | Hinge, Broadside, Portal, Mosaic, Torque, Fable | unit (29 Mac tests) + offscreen | `StageLayoutTests`, `FableLayoutTests`, `StageRenderTests` |
-| Every reveal style, "Match the style" per composition | unit + offscreen (every entrance × whole-line layouts, Spoken clearance) | `ScatteredFamilyRenderTests`, `RollingStackTests` |
+| Every reveal style, "Match the style" per composition | unit + offscreen (every entrance × whole-line layouts, Spoken clearance) | `ScatteredFamilyRenderTests`, `MeasuredStackTests` |
 | Per-word readings (below / instead), Japanese, Mandarin, Korean, Cantonese | unit + offscreen | `LineReadingsTests`, `ExtrasRenderTests` |
-| Credits, interlude ring, highlight colours | unit (Mac CreditsLayer/Highlight tests) + offscreen | `CreditCuesTests`, `LyricHighlightTests` |
+| Credits, interlude ring, highlight colours | unit (Mac CreditsLayer/Highlight tests) + offscreen | `CreditCueTests`, `LyricHighlightTests` |
 | Match the music (automatic) | unit (10 Mac tests) + AOT smoke run picked a layout | `MatchTheMusicTests`, Test Build 4 log |
 | Previous song's cover not kept | unit | `AppControllerArtworkTests` |
 | Live desktop frames for the new layouts; slow-frame cause | not verified: display was off | owner's screen on, then `--demo --stats` |
