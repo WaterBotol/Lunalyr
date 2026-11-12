@@ -31,7 +31,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         Kind = kind;
         Breaker = breaker;
         _log = (logger ?? Logger.Null).Render;
-        Rules = new StageRules(RollsWordTimed: kind == CompositionKind.Spoken, FillsStage: kind.FillsStage());
+        Rules = new StageRules(RollsWordTimed: kind == CompositionKind.Spoken);
+        if (kind.FillsStage()) Rules = Rules with { FillsStage = true };
     }
 
     protected CompositionKind Kind { get; }
@@ -256,7 +257,8 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         for (var row = index - 3; row < index; row++)
         {
             if (!LineFlow.IsLeaving(row, index, lines, time, Rules, LeavingSpan)) continue;
-            var held = Rolls(row) || Rules.FillsStage ? null : LineFlow.HeldShift(row, lines, time);
+            var held = Rolls(row) ? null : LineFlow.HeldShift(row, lines, time);
+            if (Rules.FillsStage) held = null;
             _drawn[count++] = new DrawnLine
             {
                 Row = row, Outgoing = true, Yield = LineFlow.CarriedYield(row, sheet, time, Rules), Opacity = lyricOpacity,
@@ -294,16 +296,18 @@ internal abstract class LyricCompositionLayer : IRenderLayer
         if (upcoming < lines.Count && lines[upcoming].Words.Count > 0 && !Rolls(upcoming)
             && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming))
         {
-            if (Rules.FillsStage) PrepareStage(upcoming);
-            else _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
+            if (Rules.FillsStage) { PrepareStage(upcoming); return; }
+            _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
         }
     }
 
     private StackedLine Stacked(in DrawnLine line, double time)
     {
+        // A stage layout sets every line in the middle of the stage; it never stacks a held line.
+        if (Rules.FillsStage) return default;
         var lines = Sheet!.Lines;
         var row = line.Row;
-        if (row < 0 || row >= lines.Count || lines[row].Words.Count == 0 || Rolls(row) || Rules.FillsStage) return default;
+        if (row < 0 || row >= lines.Count || lines[row].Words.Count == 0 || Rolls(row)) return default;
         var plan = lines[row].WordTimed ? Plan(row) : Phrase(row);
         if (plan is null) return default;
         var pose = new LyricPhraseTiming(lines[row], LineFlow.HandOver(row, lines, Rules), time);

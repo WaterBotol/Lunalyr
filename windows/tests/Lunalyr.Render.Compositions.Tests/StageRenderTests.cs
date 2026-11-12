@@ -59,6 +59,10 @@ public sealed class StageRenderTests : IDisposable
 
     private static bool IsLit(byte[] pixels, int i) => pixels[i] + pixels[i + 1] + pixels[i + 2] > 3 * 110;
 
+    /// <summary>Anything drawn at all (dim words, readings, shadows): the pixel differs from the empty background.</summary>
+    private static bool Drawn(byte[] pixels, int i, byte[] blank) =>
+        Math.Abs(pixels[i] - blank[i]) + Math.Abs(pixels[i + 1] - blank[i + 1]) + Math.Abs(pixels[i + 2] - blank[i + 2]) > 6;
+
     private static int Lit(byte[] pixels) => Enumerable.Range(0, pixels.Length / 4).Count(i => IsLit(pixels, i * 4));
 
     private static int Difference(byte[] a, byte[] b)
@@ -70,14 +74,14 @@ public sealed class StageRenderTests : IDisposable
     }
 
     /// <summary>Lit pixels within <paramref name="inset"/> of the edge of the surface.</summary>
-    private static int EdgeLit(byte[] pixels, int width, int height, int inset)
+    private static int EdgeLit(byte[] pixels, int width, int height, int inset, byte[] blank)
     {
         var count = 0;
         for (var y = 0; y < height; y++)
         for (var x = 0; x < width; x++)
         {
             if (y >= inset && y < height - inset && x >= inset && x < width - inset) continue;
-            if (IsLit(pixels, (y * width + x) * 4)) count++;
+            if (Drawn(pixels, (y * width + x) * 4, blank)) count++;
         }
         return count;
     }
@@ -241,8 +245,8 @@ public sealed class StageRenderTests : IDisposable
                 {
                     var pixels = Frame(layer, Scene(line, reading), time, on);
                     Assert.True(Lit(pixels) > 20, $"{name} on {w} drew nothing at {time}");
-                    // The stage is 80% × 72% of the screen: nothing reaches the band round it.
-                    Assert.Equal(0, StageBandLit(pixels, w, h));
+                    // The stage is 80% × 72% of the screen: nothing at all (shadows included) reaches the band round it.
+                    Assert.Equal(0, StageBandLit(pixels, w, h, Frame(layer, new SceneSnapshot(), 0, on)));
                 }
             }
         }
@@ -250,7 +254,7 @@ public sealed class StageRenderTests : IDisposable
     }
 
     /// <summary>Lit pixels outside the stage (80% × 72% of the surface, centred), less 3 pixels.</summary>
-    private static int StageBandLit(byte[] pixels, int width, int height)
+    private static int StageBandLit(byte[] pixels, int width, int height, byte[] blank)
     {
         int left = (int)(width * 0.1) - 3, right = (int)(width * 0.9) + 3, top = (int)(height * 0.14) - 3, bottom = (int)(height * 0.86) + 3;
         var count = 0;
@@ -258,7 +262,7 @@ public sealed class StageRenderTests : IDisposable
         for (var x = 0; x < width; x++)
         {
             if (x >= left && x < right && y >= top && y < bottom) continue;
-            if (IsLit(pixels, (y * width + x) * 4)) count++;
+            if (Drawn(pixels, (y * width + x) * 4, blank)) count++;
         }
         return count;
     }
@@ -352,7 +356,7 @@ public sealed class StageRenderTests : IDisposable
                     using var layer = Layer(id, on);
                     // The size slider at its top (the Mac's 1.5).
                     var pixels = Frame(layer, Scene(line, reading, size: 0.1125f), time, on);
-                    Assert.True(EdgeLit(pixels, w, h, 3) == 0, $"{id} at {time} s on {w} reaches the screen edge");
+                    Assert.True(EdgeLit(pixels, w, h, 3, Frame(layer, new SceneSnapshot(), 0, on)) == 0, $"{id} at {time} s on {w} reaches the screen edge");
                 }
             }
         }

@@ -77,8 +77,8 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
             }
             else
             {
-                // Letter by letter, each on its own baseline: the word baked as a whole only for its measured size.
-                words[i] = Bake(run, run.Text, new WordSpec(size, [Colour(sample.Sung)]) { MaxWidth = Stage.Width * 0.8, MinimumScale = 0.4 });
+                // Letter by letter, each on its own baseline: the word as a whole is only measured (no colour baked).
+                words[i] = Bake(run, run.Text, new WordSpec(size, []) { MaxWidth = Stage.Width * 0.8, MinimumScale = 0.4 });
                 BakeLetters(line, i, run, size, Colour(sample.Sung), reading, Colour(sample.Reading));
             }
             // The small version it becomes, taking over once the big one has shrunk to its size.

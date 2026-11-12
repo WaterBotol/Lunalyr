@@ -2,10 +2,14 @@
 
 On the Mac these six are drawn by `StageLyricView` (`Sources/UI/StageLyricStyles.swift`), chosen by the composition's
 `fillsStage` trait. `git blame -w -M -C` at `next/integration` gives that file **0 lines** from the Verso import
-(`a99fd65`), so it is ported faithfully: same geometry, timing, constants and per-line seeds. Its routing in
-`LyricLayerView.swift` (28 Verso lines, all declarations and comments; the stage rules used here are Lunalyr's own)
-is ported into the shared stage. `LyricComposition.swift` (245 Verso lines) contributes only the `fillsStage` list
-and the titles below, re-implemented from their behaviour.
+(`a99fd65`), so it is ported faithfully: same geometry, timing, constants and per-line seeds. The other Mac lines
+used here were blamed line by line (`git blame -w -M -C -L`):
+
+- `LyricLayerView.swift` 590–920: the stage rules (held shift, exit, preview, fit, line base, seed). One Verso line,
+  Constellation's density scale, which is not used.
+- `LyricComposition.swift`, the stage layouts' titles and descriptions (100–105, 119–124), their "Match the style"
+  (`.fade`, line 69) and the `fillsStage` call site (261–263). None of these are Verso; the Verso lines in those ranges
+  are the other compositions' cases and the Echo/Spoken routing.
 
 | Id | Title | One line | Windows type |
 |---|---|---|---|
@@ -60,7 +64,10 @@ and the titles below, re-implemented from their behaviour.
 - **3D turns.** SwiftUI's `rotation3DEffect` is drawn as a planar projection: each turn is a homography about its
   anchor with the eye `max(width, height) / perspective` from the view (`Homography.TurnX/TurnY`), composed as SwiftUI
   nests them. Words under a turn go through Direct2D's perspective `DrawBitmap`, slice by slice for glued syllables.
-  A positive turn about the vertical axis sends the side left of the axis away (this gives Hinge's convex corner).
+  A positive turn about the vertical axis sends the side right of the axis away, and one about the horizontal axis
+  sends the top away. The direction was checked against frames of the Mac's README gallery
+  (`docs/images/layouts/layout-hinge.webp` and `layout-torque.webp`): Hinge's faces come towards the viewer at their
+  outer ends, a concave corner.
 
 ## Hinge
 
@@ -161,7 +168,8 @@ The Reduce Motion code paths of the geometry are ported (and tested) but not rea
   not drawn while a word is turned. Flat words (Broadside, Portal, Mosaic, Fable, a line-timed line's entrance) blur
   as on the Mac.
 - **Perspective.** SwiftUI's exact depth for `perspective` is not documented; the eye is taken
-  `max(width, height) / perspective` from each turned view, which matches the Mac's look in the previews.
+  `max(width, height) / perspective` from each turned view. The direction of each turn was checked against the Mac's
+  gallery frames, and the strength looks similar by eye, but the depth itself is not verified.
 - **Shadows.** Shadows are baked under each word (a SwiftUI `compositingGroup` shadow, as on Fable's block, becomes a
   shadow per word). Soft shadows and the ripple under shapes are a few widening translucent copies, not a blur.
 - **Shapes.** Portal's badges are simple shapes in place of SF Symbols, and its hand-drawn outline is flattened into
@@ -209,5 +217,11 @@ Japanese fixtures:
 | Torque | 0.14 ms | 0.05 ms |
 | Fable | 0.13 ms | 0.08 ms |
 
-Nothing is allocated on any frame once a line is set. Portal costs most: it draws its live pill's outlines as about
-290 short lines, and its soft shapes as several translucent copies.
+Nothing is allocated on any frame once a line is set. Portal costs most. It draws its live pill's two outlines as
+about 290 short lines, and its soft shapes as several translucent copies, but which of these costs most has not been
+profiled: halving the outline's segments saved only 0.13 ms.
+
+Setting a line (laying it out and baking every word, reading and colour variant) costs about 3–15 ms once the tool has
+warmed up. That is in the same range as Editorial in the same run, and it is done up to 1.5 s before the line starts.
+Torque and Mosaic cost most, with five and up to four baked pieces a word. The first lines of a run also pay for JIT in
+this non-AOT tool (20–55 ms).

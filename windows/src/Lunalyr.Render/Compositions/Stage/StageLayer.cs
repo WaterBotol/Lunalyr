@@ -688,7 +688,8 @@ internal static class Homography
     /// <summary>
     /// A turn of <paramref name="degrees"/> about a vertical axis through <paramref name="anchor"/>, seen in perspective:
     /// SwiftUI's <c>rotation3DEffect(axis: (0, 1, 0), perspective:)</c> for a view of <paramref name="viewSize"/> (the
-    /// eye <c>max(width, height) / perspective</c> away). A positive turn sends the side left of the axis away.
+    /// eye <c>max(width, height) / perspective</c> away). A positive turn sends the side right of the axis away (checked
+    /// against the Mac's gallery frames of Hinge and Torque).
     /// </summary>
     public static Matrix4x4 TurnY(double degrees, Vector2 anchor, SizeD viewSize, double perspective)
     {
@@ -697,7 +698,7 @@ internal static class Homography
         var distance = Math.Max(1, Math.Max(viewSize.Width, viewSize.Height)) / Math.Max(0.01, perspective);
         var turn = Matrix4x4.Identity;
         turn.M11 = (float)Math.Cos(radians);
-        turn.M14 = (float)(-Math.Sin(radians) / distance);
+        turn.M14 = (float)(Math.Sin(radians) / distance);
         return Matrix4x4.CreateTranslation(-anchor.X, -anchor.Y, 0) * turn * Matrix4x4.CreateTranslation(anchor.X, anchor.Y, 0);
     }
 

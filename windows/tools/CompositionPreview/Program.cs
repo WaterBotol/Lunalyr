@@ -1,8 +1,9 @@
 // CompositionPreview: renders the lyric compositions offscreen to PNGs, and measures their per-frame cost.
 //
-//   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken|hinge|broadside|portal|mosaic|torque|fable]
+//   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken]
 //                      [-shot fixture@seconds ...] [-bench] [-warp]
 //
+//   (and the stage layouts: -only hinge|broadside|portal|mosaic|torque|fable)
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics.
 
 using System.Diagnostics;
@@ -48,7 +49,8 @@ for (var i = 0; i < args.Length; i++)
 }
 
 IWordBreaker breaker = IcuWordBreaker.TryCreate() ?? (IWordBreaker)SimpleWordBreaker.Instance;
-IRenderLayerFactory[] factories = [new EditorialFactory(breaker), new SpokenFactory(breaker), .. StageFactories.All(breaker)];
+IRenderLayerFactory[] factories = [new EditorialFactory(breaker), new SpokenFactory(breaker)];
+factories = [.. factories, .. StageFactories.All(breaker)];
 var fixtures = new Dictionary<string, Func<SceneSnapshot>>
 {
     ["english"] = () => Fixtures.English(),
