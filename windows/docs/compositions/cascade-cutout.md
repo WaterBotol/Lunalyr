@@ -64,9 +64,10 @@ Checked with `git blame -w -M -C` at `d63068a`:
 - Editorial typography's alternate face (the Mac's "editorial" font identity) is not in the snapshot, so it never
   applies.
 - "Cutout · Highlight" tiles Cascade's rolling words as Spoken's (see [README.md](README.md)); Cutout's labels take no
-  second tile (as on the Mac), its other words do. The tile hugs the word's label (0.1 em by 0.05 em past it), where
-  the Mac draws it out to a label's padding (9 by 3 points) around the whole unit, reading included, and tints the
-  reading too.
+  second tile (as on the Mac), its other words do. As on the Mac, the tile lies behind the whole unit (word and
+  reading) and reaches a label's padding past it (`RollingLabel.ReachX/ReachY`, 9 by 3 points); the word and its
+  reading (at the highlight's reading opacity) take the tile's text colour where it has pressed in. The tinted copy is
+  drawn over the word as on the Mac, but a glued run's syllables still to come are not held back on it.
 
 ## Previews and cost
 

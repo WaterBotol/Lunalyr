@@ -150,19 +150,25 @@ used here were blamed line by line (`git blame -w -M -C -L`):
 
 ## Constants not in the snapshot (gaps)
 
-The scene snapshot has no Reduce Motion, editorial typography (the alternate face for about a third of the words),
-per-layout entrances, Cutout · Highlight tiles, track mood or per-word readings. The layouts take:
+The scene snapshot has no editorial typography (the alternate face for about a third of the words), per-layout
+entrances, track mood or per-word readings for the stage layouts. The layouts take:
 
-- full motion;
 - the lyric face only (heavy cut for words, the quiet cut for readings);
-- `LyricStyle.Reveal` as the chosen entrance, one for the whole layer (a mix gives its first entrance; the Mac picks
-  per word). Lift, Pop, Orbit, Glide, Unfold and the cutouts (Fold, Slide) move a word as in every other layout; the
-  swipes and Cutout · Highlight keep the layout's own motion;
+- `LyricStyle.Reveal` as the chosen entrance, picked for each run as the Mac's `chosenEntrance` asks the settings for
+  each word (`StageLayer.ChosenFor`: a mix gives each run the entrance at its visual seed). Only Torque and Fable make
+  chosen entrances, as on the Mac: Lift, Pop, Orbit, Glide, Unfold and the cutouts (Fold, Slide) move a word as in
+  every other layout; the swipes and Cutout · Highlight keep the layout's own motion. A line-timed line enters with the
+  choice for its phrase;
 - no tiles (the Mac presses a tile behind a word whose entrance is Cutout · Highlight);
 - the neutral mood;
 - the line's reading split by run as above.
 
-The Reduce Motion code paths of the geometry are ported (and tested) but not reachable from a scene.
+**Reduce Motion** (`SceneSnapshot.ReduceMotion`) is honoured as on the Mac: arrivals and hand-offs step at each onset,
+and each step is a short dissolve between the layout without the newest run and with it (`StageMotion.ReducedDissolve`,
+drawn as two passes at `1 − step²` and `1 − (1 − step)²`; Fable needs none, as its words never travel). Every twist,
+tilt, fold, spin, squash, breath, wander, ripple and boil is gone, Hinge's faces lie flat with no look from above and
+its line fades out instead of folding, Portal's pills land settled, Mosaic's bar is there at once and its letters only
+fade in, Torque's stack is not turned, and Fable's accents only fade. The word-timed line's own swell and slide go too.
 
 ## Differences from the Mac
 
