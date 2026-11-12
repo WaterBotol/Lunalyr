@@ -195,7 +195,8 @@ public sealed partial class AppController : IAsyncDisposable
         _reduceMotion = _options.ReduceMotion;
         _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
         _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
-        _clockReader = ReadClock;
+        // The scrub preview stands in for the player's clock on the wallpaper only (LineBeingSung keeps ReadClock).
+        _clockReader = ReadRendererClock;
         Monitor = new NowPlayingMonitor(source, _options.TimeProvider, _options.Clock, message => _player.Debug(message));
     }
 
