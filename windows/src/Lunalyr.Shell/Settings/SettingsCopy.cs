@@ -210,6 +210,68 @@ public static class SettingsCopy
     public static string WallpaperTypeFor(string? backgroundMode) =>
         new AppSettings { BackgroundMode = backgroundMode ?? "" }.Normalized().BackgroundMode;
 
+    /// <summary>The Mac's placements (<c>MotionPlacement</c>): titles and captions.</summary>
+    public static IReadOnlyList<SettingsChoice> Placements { get; } =
+    [
+        new("fill", "Fill", "Crops equally top and bottom."),
+        new("fillTop", "Fill, top", "Crops from the bottom, keeping the top."),
+        new("fillBottom", "Fill, bottom", "Crops from the top."),
+        new("fit", "Fit whole frame", "Nothing cropped; the sides are left black."),
+    ];
+
+    public const string MatchTheMusicPicks = "Match the music picks one of each per song; choose one to pin it.";
+
+    public const string EffectsNotYet = "GPU effects arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
+
+    public const string PatternsNotYet = "Line patterns arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
+
+    public const string VisualisersNotYet = "Visualisers arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
+
+    public const string YourWallpaper =
+        "Only lyrics are drawn over your desktop. Keep using your current Windows wallpaper or wallpaper app; Lunalyr leaves it in place.";
+
+    public const string YourWallpaperPreview =
+        "Your wallpaper shows through behind the lyrics on each monitor. The live preview can’t show it, so it draws the lyrics over black.";
+
+    public const string AlbumGradientCaption = "Blends the cover’s colours into a moving gradient.";
+
+    public const string AlbumGradientOff = "Off: a slowly drifting field of the cover’s colours instead.";
+
+    /// <summary>The Legibility section's caption (the Mac's <c>LyricBackingSection.caption</c>).</summary>
+    public static string BackingCaption(bool desktop, bool automatic) => desktop
+        ? automatic
+            ? "While lyrics are on screen, a soft shadow sits behind them, strong enough for white text over a light desktop. With nothing playing, your desktop is left as it is."
+            : "While lyrics are on screen, a soft shadow behind them keeps them readable over light parts of your desktop."
+        : automatic
+            ? "Light covers and images get a soft shadow behind the lyrics, just strong enough for white text to stay readable."
+            : "The soft shadow behind the lyrics, on top of Darkening.";
+
+    public const string ResetAdjustmentsHelp =
+        "Motion speed, Colour richness, Darkening, Pattern visibility and the covers’ Softening go back to how Lunalyr comes.";
+
+    /// <summary>"1.25×".</summary>
+    public static string Multiplier(double value) => value.ToString("0.00", CultureInfo.InvariantCulture) + "×";
+
+    /// <summary>"None" or "35%".</summary>
+    public static string PercentOrNone(double value) => value <= 0 ? "None" : Percent(value);
+
+    /// <summary>The menu for GPU effects or line patterns: "Match the music", then the catalogue's.</summary>
+    public static IReadOnlyList<SettingsChoice> StyleChoices(IEnumerable<(string Id, string Title, string? Detail)> styles) =>
+        [new("", "Match the music"), .. styles.Select(s => new SettingsChoice(s.Id, s.Title, s.Detail))];
+
+    // ---- Covers ----
+
+    /// <summary>
+    /// Why animated covers don't play on Windows yet. The Mac finds them without any Apple developer key (the public
+    /// iTunes search, the album's public Apple Music page and Apple's video playlists), so Windows could too; it isn't
+    /// built in this milestone.
+    /// </summary>
+    public const string AnimatedCoversNotYet =
+        "Apple Music’s animated covers can be found the way the Mac app finds them, from Apple’s public album pages; Windows doesn’t fetch them yet. Arrives in a later build.";
+
+    public const string CoverFramingNote =
+        "Framing applies to animated covers, so it waits with them. Imported pictures and videos have their own Placement under Wallpaper.";
+
     /// <summary>The type's entry, or Match the music's.</summary>
     public static WallpaperType WallpaperTypeOf(string? backgroundMode)
     {

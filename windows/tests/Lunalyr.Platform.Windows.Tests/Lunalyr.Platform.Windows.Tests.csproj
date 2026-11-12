@@ -16,6 +16,8 @@
   <ItemGroup>
     <!-- Generated covers (make-fixtures.ps1): no artwork from anywhere. -->
     <None Include="Fixtures\Artwork\*.jpg;Fixtures\Artwork\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Made by tools/WallpaperTestMedia: clip.mp4 (its "clip" mode) and turned.jpg (EXIF orientation 6). -->
+    <None Include="Fixtures\Wallpaper\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <!-- Helpers shared by every test project (fake time). -->

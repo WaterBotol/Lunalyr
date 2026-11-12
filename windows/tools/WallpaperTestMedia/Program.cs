@@ -1,5 +1,6 @@
 // WallpaperTestMedia <folder>: writes gradient.mp4 (1280x720, 30 fps, 6 s, H.264, no audio track), landscape.png,
 // portrait.jpg (taller than wide) and turned.jpg (stored sideways, EXIF orientation 6 = shown upright) into <folder>.
+// "WallpaperTestMedia <folder> clip" writes only clip.mp4 (160x96, 15 fps, 1 s), the unit tests' fixture.
 // Everything is drawn in code.
 
 using System.Runtime.InteropServices;
@@ -8,6 +9,13 @@ using Windows.Storage.Streams;
 
 var folder = Path.GetFullPath(args.Length > 0 ? args[0] : "test-media");
 Directory.CreateDirectory(folder);
+if (args.Length > 1 && args[1] == "clip")
+{
+    // The unit tests' fixture: small and short, checked in under tests/Lunalyr.Platform.Windows.Tests/Fixtures/Wallpaper.
+    Video.Write(Path.Combine(folder, "clip.mp4"), 160, 96, 15, 1);
+    Console.WriteLine($"Wrote clip.mp4 to {folder}");
+    return;
+}
 Video.Write(Path.Combine(folder, "gradient.mp4"), 1280, 720, 30, 6);
 await Pictures.WriteAsync(Path.Combine(folder, "landscape.png"), 1600, 900, BitmapEncoder.PngEncoderId, null, Pictures.Landscape);
 await Pictures.WriteAsync(Path.Combine(folder, "portrait.jpg"), 900, 1600, BitmapEncoder.JpegEncoderId, null, Pictures.Portrait);
