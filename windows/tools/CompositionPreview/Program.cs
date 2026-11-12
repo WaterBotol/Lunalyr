@@ -3,7 +3,8 @@
 //   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken]
 //                      [-shot fixture@seconds ...] [-bench] [-warp]
 //
-// Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics.
+// Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics; extras: japanesewords, japaneseinstead,
+// credits, highlight.
 
 using System.Diagnostics;
 using System.Globalization;
@@ -57,6 +58,11 @@ var fixtures = new Dictionary<string, Func<SceneSnapshot>>
     ["linetimed"] = () => Fixtures.LineTimed(),
     ["plain"] = () => Fixtures.Plain(),
     ["nolyrics"] = () => Fixtures.NoLyrics(),
+    // The wallpaper extras: word-by-word readings below and instead, credits, highlight tiles.
+    ["japanesewords"] = () => ExtrasFixtures.JapaneseWords(),
+    ["japaneseinstead"] = () => ExtrasFixtures.JapaneseWords(LyricStyle.Default with { Readings = ReadingPlacement.Instead }),
+    ["credits"] = () => ExtrasFixtures.Credits(),
+    ["highlight"] = () => ExtrasFixtures.Highlight(),
 };
 if (shots.Count == 0)
 {
@@ -69,6 +75,8 @@ if (shots.Count == 0)
         ("linetimed", 9.8), ("linetimed", 10.15), ("linetimed", 12.0), ("linetimed", 13.8), ("linetimed", 14.4),
         ("linetimed", 32.0),
         ("plain", 5), ("nolyrics", 0),
+        ("japanesewords", 12.8), ("japanesewords", 16.5), ("japaneseinstead", 12.8), ("credits", 1.6), ("credits", 10.5),
+        ("highlight", 12.9), ("highlight", 15.9),
     ]);
 }
 

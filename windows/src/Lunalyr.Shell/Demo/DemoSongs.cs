@@ -7,9 +7,11 @@ namespace Lunalyr.Shell.Demo;
 public sealed record DemoSong(string Title, string Artist, string Album, double Duration, LyricResult Lyrics, byte[] Cover);
 
 /// <summary>
-/// The songs <c>--demo</c> plays in a loop. Both are invented (not from any real song). The English one has a held
+/// The songs <c>--demo</c> plays in a loop. Both are invented (not from any real song). The English one has production
+/// credits (shown by the credits layer after the opening title), a held
 /// note, backing vocals, a duet answer held under the next line, an instrumental break and a line long enough to wrap;
-/// the Japanese one is unspaced and full of kanji, so the readings (worked out by the app as for any song) show.
+/// the Japanese one is full of kanji, partly unspaced and partly spaced by phrase, so the readings (worked out by the
+/// app as for any song, word by word) show under each phrase.
 /// </summary>
 public static class DemoSongs
 {
@@ -52,7 +54,15 @@ public static class DemoSongs
                                "back", "the", "colours", "of", "the", "morning", "light");
         Sung[] last = Even(31.0, 0.5, 0.45, "And", "the", "river", "carries", "us", "home");
         const double duration = 37;
-        var lyrics = Parse(Core.Lyrics.LyricFormat.Ttml, Ttml("en", first, second, duet, answer, held, wrapping, last), duration);
+        var parsed = (LyricResult.Synced)Parse(Core.Lyrics.LyricFormat.Ttml, Ttml("en", first, second, duet, answer, held, wrapping, last), duration);
+        // Production credits, as lyric services publish them ahead of the lyric: shown by the credits layer after the
+        // opening "Title - Artist", never as lead lines.
+        LyricLine[] credits =
+        [
+            new() { Start = 0, End = 0.01, Text = "Produced by: Mira Okafor", IsInstrumental = true, Credit = true },
+            new() { Start = 0, End = 0.01, Text = "Written by: Jun Ishida & Lea Brandt", IsInstrumental = true, Credit = true },
+        ];
+        var lyrics = new LyricResult.Synced([.. credits, .. parsed.Lines], parsed.Provenance);
         var cover = DemoCover.Paint(new(232, 58, 160), new(74, 40, 176), new(22, 160, 172), new(250, 140, 52), new(255, 120, 200));
         return new DemoSong("Neon Harbour", Artist, Album, duration, lyrics, cover);
     }
@@ -66,8 +76,10 @@ public static class DemoSongs
             W("窓辺", 4.9, 5.4), W("に", 5.4, 5.6), W("座って", 5.7, 6.4), W("海", 6.5, 6.9), W("を", 6.9, 7.1),
             W("見ていた", 7.2, 8.5),
         ];
-        Sung[] third = [W("星空", 9.2, 9.9), W("の", 9.9, 10.1), W("下", 10.2, 10.7), W("で", 10.7, 10.9), W("君", 11.0, 11.5), W("を", 11.5, 11.7), W("待つ", 11.8, 12.9)];
-        Sung[] fourth = [W("明日", 13.5, 14.1), W("も", 14.1, 14.3), W("また", 14.4, 14.9), W("会える", 15.0, 15.7), W("よう", 15.7, 16.4), W("に", 16.4, 17.0)];
+        // Spaced by phrase, as many lyric files write Japanese: each phrase carries its own reading.
+        static Sung P(string text, double start, double end) => new(text, start, end, Space: true);
+        Sung[] third = [W("星空", 9.2, 9.9), P("の", 9.9, 10.1), W("下", 10.2, 10.7), P("で", 10.7, 10.9), W("君", 11.0, 11.5), P("を", 11.5, 11.7), W("待つ", 11.8, 12.9)];
+        Sung[] fourth = [W("明日", 13.5, 14.1), P("も", 14.1, 14.3), P("また", 14.4, 14.9), W("会える", 15.0, 15.7), W("よう", 15.7, 16.4), W("に", 16.4, 17.0)];
         Sung[] fifth = [W("夏", 18.0, 18.5), W("の", 18.5, 18.7), W("終わり", 18.8, 19.5), W("に", 19.5, 19.7), W("歌おう", 19.8, 21.6)];
         Sung[] sixth = [W("遠い", 23.0, 23.6), W("街", 23.7, 24.3), W("の", 24.3, 24.5), W("灯り", 24.6, 25.4), W("が", 25.4, 25.6), W("揺れる", 25.7, 27.0)];
         const double duration = 30;
