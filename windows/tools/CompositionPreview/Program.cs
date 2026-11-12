@@ -90,7 +90,7 @@ if (shots.Count == 0)
         ("linetimed", 9.8), ("linetimed", 10.15), ("linetimed", 12.0), ("linetimed", 13.8), ("linetimed", 14.4),
         ("linetimed", 32.0),
         ("plain", 5), ("nolyrics", 0),
-        ("japanesewords", 12.8), ("japanesewords", 16.5), ("japaneseinstead", 12.8), ("credits", 1.6), ("credits", 10.5),
+        ("japanesewords", 12.8), ("japanesewords", 16.5), ("japaneseinstead", 12.8), ("credits", 1.6), ("credits", 5.5), ("credits", 10.5),
         ("highlight", 12.9), ("highlight", 15.9),
     ]);
 }

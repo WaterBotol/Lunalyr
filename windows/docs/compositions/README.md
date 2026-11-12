@@ -123,8 +123,13 @@ device, 1920×1080 at 125%) for invented fixture songs, named `<composition>-<fi
     dotnet run --project tools/CompositionPreview -- -out docs/previews/compositions -only scattered -reveal splitInk -shot english@12.17
     dotnet run --project tools/CompositionPreview -- -bench -width 2560 -height 1440 [-reveal mix]
 
-The `scattered-<reveal>-*` shots show Scattered with each of the newer entrances part way through "rain" arriving
-(12.17 s), settled (12.5 s), and a line-timed phrase arriving (10.15 s).
+The first command renders every composition at the default shots: the seven lyric fixtures and the extras
+(`japanesewords` and `japaneseinstead` for word-by-word readings, `credits`, and `highlight` for "Cutout · Highlight"
+in a custom green). The `scattered-<reveal>-*` shots show Scattered with each of the newer entrances (`cutoutFold`,
+`cutoutSlide`, `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix`) part way through "rain" arriving
+(`-shot english@12.17`), settled (`english@12.5`), and a line-timed phrase arriving (`linetimed@10.15`). The
+`cascade-automatic-*` and `cutout-automatic-*` shots are `-reveal automatic` at `arabic@10.9`, `english@11.4`,
+`english@15.8` and `japanese@11.0`.
 
 On the RTX 5060 at 2560×1440, a frame costs about 0.1–0.2 ms (Echo 0.2 ms, the constellations 0.16 ms on the
 English fixture; a swipe or tiles on every word add up to 0.06 ms) of render-thread time (draw calls and `EndDraw`, GPU
