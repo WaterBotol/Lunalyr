@@ -109,7 +109,7 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Tray flyout: now playing, transport, line, nudges, quick toggles | unit (7 Mac tests) + live + screenshots | `AppControllerFlyoutTests`, `docs/previews/tray/` |
 | Desktop player: card, scrub with the wallpaper following, keys | unit (50 Mac tests) + live (debug flag) + screenshots | `ScrubMathTests`, `HoverIntentTests`, `docs/previews/player/` |
 | Search, picker and queue (Spotify Web API, own sign-in) | unit with hand-built fixtures; no Spotify request made | `SpotifyPlayerSearchTests`, `DesktopPlayerModelTests`, `docs/previews/player-search/` |
-| Tap to Sync, find and choose lyrics, import, when none are found | unit (Mac tap-sync tests) + live demo + screenshots | `TapSync*Tests`, `docs/previews/lyric-tools/` |
+| Tap to Sync, find and choose lyrics, import, when none are found | unit (Mac tap-sync tests) + live demo + screenshots | `LyricTapSyncTests`, `docs/previews/lyric-tools/` |
 | Lyric lookup parity with the Mac spec | unit (spec examples) + live lookups of the §9 hard cases | `MacSpecParityTests`, `docs/measurements/lyric-parity/` |
 | "qApple" relay ranks as Apple Music | unit + live (12 songs) | `RankingDecisionsTests`, d392a6d |
 | A held clock keeps the lyric on screen (all 14 compositions) | offscreen guard test + live captures | `HeldLyricRenderTests`, `docs/previews/held-line/` |
