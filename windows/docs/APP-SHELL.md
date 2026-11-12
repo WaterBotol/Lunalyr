@@ -1,7 +1,8 @@
 # The app shell
 
 `src/Lunalyr.App` (the `Lunalyr.exe` process) hosts `src/Lunalyr.Shell` (its logic, tested with fakes in
-`tests/Lunalyr.Shell.Tests`). Milestone 3; the real settings pages and the Fluent tray flyout are milestone 5.
+`tests/Lunalyr.Shell.Tests`). Milestone 3; the real settings pages are milestone 5, and so is the tray flyout ("Tray
+flyout" below).
 
 ## Build and run
 
@@ -25,6 +26,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--settings` | Open the settings window (a second launch does this anyway). |
 | `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
 | `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
+| `--theme <light\|dark>` | Light or dark for Lunalyr's windows (the tray flyout, settings) whatever Windows uses, for screenshots. Windows' own setting is never changed. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
@@ -59,13 +61,19 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
 - **Single instance per data folder:** a named mutex `Local\Lunalyr.{hash of the data folder}`. A second launch
   finds the first's hidden window (class `Lunalyr.Host.{hash}`), calls `AllowSetForegroundWindow` for it, sends its
   command line with `WM_COPYDATA` and exits 0. The first opens settings (or logs the links).
-- **Idle without XAML:** the main thread runs a plain Win32 message loop for the hidden window and the tray icon
-  (`Shell_NotifyIcon`, version 4, re-added on `TaskbarCreated`). The first "Open settings" leaves that loop and
-  starts WinUI (`Application.Start`) on the same thread, which pumps the tray window from then on;
-  `DispatcherShutdownMode.OnExplicitShutdown` keeps it running when the window closes. Windows App SDK can only
-  start once per process, so after the first window WinUI stays loaded (see "Measured").
-- **Start-up:** the tray icon is up before anything else; the lyric service, GSMTC and the controller start on a
-  background task. Both moments are logged ("tray ready … ms", "following now playing … ms").
+- **WinUI from launch (since the tray flyout):** the tray icon (`Shell_NotifyIcon`, version 4, re-added on
+  `TaskbarCreated`) goes up first; then the main thread starts WinUI (`Application.Start`), whose loop pumps the
+  hidden tray window too. No window opens until one is asked for; `DispatcherShutdownMode.OnExplicitShutdown` keeps
+  it running with none. Until milestone 5 WinUI started only on the first "Open settings", from a plain Win32 loop.
+  That stopped working once start-up decoded a cover: `Application.Start` then failed with `0x8007029C` (an
+  assertion) in most runs, Test Builds 3 and 4.1 included (5 of 6 and 6 of 6 second launches asking for settings
+  crashed), and a retry was followed by a fail-fast in `combase.dll`. With the cover decoding (WIC, on each track
+  change) switched off it started every time; one shared WIC factory didn't help, so the exact cause is still open.
+  Starting WinUI before any cover is decoded (as `--settings` always did) never failed (10 of 10 tray opens, 4 of 4
+  second launches). It costs about 30 MB (see "Measured"); whether to keep it this way is the owner's call.
+- **Start-up:** the tray icon is up before anything else, then WinUI; the lyric service, GSMTC and the controller start
+  on a background task begun in WinUI's first callback, so nothing decodes a cover before WinUI is up. The moments are
+  logged ("tray ready … ms", "WinUI started in … ms (… ms after launch)", "following now playing … ms").
 - **Shutdown:** tray icon removed, controller disposed (lookups cancelled), settings flushed, log flushed, mutex
   released; each step bounded by a time-out. Logged as "Stopped cleanly".
 - **Crashes:** `AppDomain.UnhandledException`, WinUI's `UnhandledException` and exceptions inside the window
@@ -76,8 +84,43 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
 
 Placeholder monochrome icon drawn in code (a crescent and a lyric line; white on a dark taskbar, near-black on a
 light one). Tooltip: "Lunalyr", the song, the status, "Wallpaper paused". Right-click menu: the song (disabled),
-Open settings, Pause wallpaper / Resume wallpaper, Quit Lunalyr. Left-click opens settings. No balloons (they make a
-sound).
+Open settings, Pause wallpaper / Resume wallpaper, Quit Lunalyr. Left-click (or Enter/Space on the focused icon) opens
+the tray flyout, and closes it again. No balloons (they make a sound).
+
+## Tray flyout
+
+The Windows counterpart of the Mac's menu-bar panel (`MenuBarView`), in `src/Lunalyr.App/Tray/TrayFlyout.xaml`; what
+it shows is worked out in `src/Lunalyr.Shell/Flyout/` (tested without a window). Previews:
+`docs/previews/tray/tray-flyout-{dark,light}.png` (as it opens) and `…-{dark,light}-changed.png` (offset nudged,
+wallpaper paused, credits off, Colour chosen).
+
+- **Window:** a WinUI window with no title bar (`OverlappedPresenter`, border kept, not resizable, always on top, not
+  in Alt+Tab or the taskbar), Desktop Acrylic (its own controller, so it stays Acrylic while open even without the
+  focus), Windows 11's rounded corners (`DWMWA_WINDOW_CORNER_PREFERENCE`) and a border in the panel's theme. Light/dark
+  follow Windows (or `--theme`); the accent colour lights the chosen tile, the toggles that are on and play/pause.
+  364 wide like the Mac's panel (455 pixels at 125%), as tall as its content, cut to the work area (it scrolls).
+- **Placement** (`FlyoutPlacement`): beside the taskbar on whichever edge it is, centred on the icon
+  (`Shell_NotifyIconGetRect`, or the click point) and kept inside the monitor's work area with a 12-pixel gap at that
+  monitor's scale; with an auto-hidden taskbar it keeps clear of the icon instead. An icon in the overflow anchors to
+  the taskbar under its column.
+- **Closing:** a click anywhere else (deactivation), Esc, Alt+F4, or another click on the icon (a click within 300 ms
+  of a deactivation is the click that caused it and doesn't reopen it).
+- **Keyboard and Narrator:** Tab goes through every enabled control in reading order; the first one has the focus when
+  it opens. Ctrl+, opens settings, Ctrl+Q quits. Every control has a Narrator name in the Mac's wording ("Pause music",
+  "Lyrics earlier", "Reset song offset", "Pause Wallpaper"…), with help text; the lyric block reads "Current lyric: …";
+  a nudge announces the Mac's note ("Lyrics 0.1 s earlier · +0.30 s for this song's lyric source").
+
+Top to bottom (the Mac's order and wording):
+
+| Part | What it does |
+|---|---|
+| Song | Cover (the controller's decoded cover), title, artist ("Live stream" without one), and the player's name. Nothing playing: "Nothing playing" / "Play a song in any music app". |
+| Transport | Previous, play/pause ("Play music" / "Pause music", shown at once on a press and confirmed by the player within 1.5 s), next: each enabled only where the player takes it from other apps (`PlayerCapabilities`), with a calm line saying which it doesn't. Every press goes through `PlaybackCommands`, which asks `PlaybackGuard` first, and the GSMTC layer asks it again; with `--no-playback` or `--demo` the buttons are off and the line says "Playback controls are off for this run (--demo)." |
+| Lyric line | The line being sung (two rows at most) with the next one under it, "♪" between lines, or "Looking for lyrics…", "No synced lyrics for this song.", "Lyrics appear here while a song plays."; the source and precision at its foot ("Apple Music · Word-by-word"), or the controller's status line when it says more ("Offline — …", "Lyric lookups are off for this run"). One height whatever it shows. On the wallpaper's own clock (both offsets), with readings shown in place of the lines when they replace them. |
+| Lyric timing | Earlier / Later (a tenth of a second for this song, saved per recording and lyric source in `songOffsets`, the Mac's keys), the offset ("+0.20 s"), and reset. "Tap to sync…" is shown disabled: "Tap to sync arrives in a later build." |
+| Search YouTube | Opens a YouTube search for "artist title" in the default browser, only from that click (`YouTubeSearch` through an `IUrlLauncher`; the app's is the shell's https handler). Off, with a note, while playback is off for the run, so `--no-playback` and `--demo` never open it. |
+| Wallpaper | "Options…" opens settings. Tiles for the wallpaper types this build draws: Gradient (`gradient`) and Colour (`colourOnly`). Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
+| Footer | Settings… (Ctrl+,) and Quit Lunalyr (Ctrl+Q). |
 
 ## Controller
 
@@ -158,8 +201,11 @@ Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
 |---|---|
 | Published folder | 74.3 MB (237 files) + `Lunalyr.pdb` 65 MB; `Lunalyr.exe` 16.3 MB. The metapackage spike was 124.6 MB. |
 | Tray ready | 55–109 ms after launch |
+| WinUI up (from launch, milestone 5; 15 runs) | 18–25 ms after "Starting WinUI", 76–117 ms after launch |
+| Idle with the wallpaper running, no window opened (`--demo`, milestone 5) | 187 MB working set, 181 MB private; Test Build 4.1 (WinUI on demand) 157 MB / 161–163 MB on the same run |
+| After the tray flyout was opened and closed (`--demo`) | 250 MB working set, 223 MB private |
 | Following now playing (GSMTC, lyric service, readings loaded) | 157–209 ms after launch |
-| Idle (tray only, no window opened yet) | 39.7–41.7 MB working set, 13.6–14.0 MB private |
+| Idle (tray only, no window opened yet; milestone 3, before the wallpaper renderer and before WinUI started at launch) | 39.7–41.7 MB working set, 13.6–14.0 MB private |
 | Settings window open | 135 MB working set, 103 MB private; WinUI up 18–176 ms after the request |
 | Settings window closed again | 130 MB working set, 104 MB private (WinUI stays loaded) |
 
