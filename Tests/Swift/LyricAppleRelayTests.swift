@@ -39,6 +39,14 @@ final class LyricAppleRelayTests: XCTestCase {
             XCTAssertFalse(LyricsFetcher.isAppleRelay(provenanceSource: other), other)
         }
         XCTAssertTrue(LyricsFetcher.isAppleRelay(relay()))
+        // lyricsplus.binimum.org names the same Apple lyrics "qApple".
+        XCTAssertTrue(LyricsFetcher.isAppleRelay(provenanceSource: "qApple via Lyrics+"))
+        XCTAssertEqual(KPoeLyricsProvider.upstreamName("qApple"), "Apple")
+        XCTAssertEqual(KPoeLyricsProvider.upstreamName("QAPPLE"), "Apple")
+        XCTAssertEqual(KPoeLyricsProvider.upstreamName("Apple"), "Apple")
+        XCTAssertEqual(KPoeLyricsProvider.upstreamName("Lyrics+ (via Apple with QQ)"), "Lyrics+")
+        XCTAssertEqual(KPoeLyricsProvider.upstreamName("Musixmatch"), "Musixmatch")
+        XCTAssertEqual(KPoeLyricsProvider.upstreamName(nil), "Lyrics+")
         // Only Lyrics+ relays: another source naming Apple is not one.
         XCTAssertFalse(LyricsFetcher.isAppleRelay(candidate(.netEase, words: true, label: "Apple via Lyrics+")))
     }
