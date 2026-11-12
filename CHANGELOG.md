@@ -12,6 +12,8 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [2.0.0] - 2026-11-13
+
 ### Added
 - A new opening title: as a song starts, its title (in your lyric font), artist and album appear low on the left like a music video's title card, beside the album cover, with a reading under Japanese, Chinese or Korean titles. It leaves before the first line is sung, is shorter or skipped when singing starts straight away, and is brief for a song joined part-way. Floating lyrics show a smaller one in the middle. Settings › Lyric style › "Show the song title at the start" and "Show the album cover" (both on by default). It replaces the old "Title - Artist" line in the background; credits now follow it.
 
@@ -613,7 +615,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.0
 [1.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v1.0.0
 [0.6.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.6.0
 [0.5.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.5.1
