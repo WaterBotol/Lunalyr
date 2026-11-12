@@ -6,6 +6,9 @@ Microsoft.Web.WebView2 1.0.3719.77 (a dependency of WinUI) — Microsoft Corpora
 C#/WinRT runtime (WinRT.Runtime) — Microsoft Corporation. MIT licence.
 Vortice.Direct2D1, Vortice.Direct3D11, Vortice.DXGI, Vortice.DirectX, Vortice.Mathematics — Amer Koleci and contributors. MIT licence.
 SharpGen.Runtime, SharpGen.Runtime.COM — SharpGenTools contributors. MIT licence.
+Synesthia visualisers (analyser, Aurora scenes, resolution ladder) — Jon Jaques. MIT licence.
+Fosfora Aurora visualiser scene — Kevin Raymond. MIT licence.
+Wavefield visualiser scenes — Niko Dellic. MIT licence.
 
 Lunalyr also uses services built into Windows (Global System Media Transport Controls, ICU, the Japanese phonetic analyzer, Extended Linguistic Services); they are part of Windows and are not redistributed.
 The full licence texts ship with each package and are available on request.

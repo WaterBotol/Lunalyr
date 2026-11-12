@@ -57,3 +57,45 @@ The remaining files of the 36 are listed in the full report.
 
 Third-party libraries and services stay under their own licences and are listed in `docs/ARCHITECTURE.md`
 ("Licence"). Microsoft's Windows App SDK licence allows closed-source apps.
+
+## Visualisers (milestone 6): what was checked and how each file went
+
+Measured at the Mac's `next/integration` `79b84db` with
+`git blame -w -M -C --line-porcelain <file> | Select-String '^[0-9a-f]{40} '`, counting lines from `a99fd65`.
+
+**Every file under `Sources/Visualizers/` blames clean** (0 lines from `a99fd65`) apart from one SwiftUI line each in
+`AudioVisualizerView.swift` and `VisualizerSceneControls.swift` (`@Environment(\.accessibilityReduceMotion) private
+var reduceMotion`, a SwiftUI idiom with nothing to translate). That includes every `.metal` file. The line above that
+says "the visualiser shaders in particular are written fresh in HLSL" was written about `Sources/UI/Shaders.metal`
+(about 72% Verso), not these files. These shaders are ported faithfully, with one exception (Spectrum Tunnel, below).
+The test files used (`VisualizerSafetyTests`, `VisualizerSpectrumTests`, `VisualizerTests`,
+`VisualizerClockAndDeviceTests`, `SoundTypeDetectorTests`, `SoundTypeFixtures`, `StarTrailsTests`,
+`StarTrailsLyricWordTests`, `AudioCaptureGateTests`, `AudioCaptureControllerTests`, `AudioPCMProcessorTests`) blame
+clean too. `AudioRecoveryTests` has 60 Verso lines: only `testHealthReportsMissingAudioOnlyWhenItShouldArrive`,
+whose lines are Lunalyr's own, is ported.
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `AudioAnalyzer.swift` (Synesthia, MIT) | 0 / 1018 | `Core/Visualisers/Audio/AudioAnalyzer.cs`, `AudioSnapshot.cs`, `RealFft.cs` | Faithful port |
+| `SoundTypes.swift`, `SoundTypeDetector.swift` | 0 / 435, 0 / 1218 | `Core/Visualisers/Sound/` | Faithful port |
+| `VisualizerAudio.swift` | 0 / 437 | `Core/Visualisers/Audio/VisualizerAudio.cs` | Faithful port |
+| `VisualizerSafety.swift` (VisualizerResponse, ExposureLimiter) | 0 / 133 | `VisualizerResponse.cs`, `ExposureLimiter.cs` | Faithful port |
+| `VisualizerTimeline.swift`, `RenderScaleLadder.swift` (Synesthia), `VisualizerUniforms.swift` (Synesthia), `VisualizerPreferences.swift` | 0 | `VisualizerTimeline.cs`, `RenderScaleLadder.cs`, `VizUniforms.cs`, `VisualizerResponse.cs` | Faithful port |
+| `AudioVisualizerView.swift` (styles, prepare, uniforms, SoundTypeUniforms, ambient spectrum) | 1 / 626 (SwiftUI line) | `VisualizerStyle.cs`, `VisualizerSceneState.cs`, `VizUniforms.cs`, `SoundTypeUniforms.cs`, `AmbientSpectrum.cs`, `Render/Visualisers/VisualiserScene.cs` | Faithful port of the logic; the Metal host is rewritten for Direct3D 11 |
+| `VisualizerGPU.swift` (ExposureProbe, ExposureMemory) | 0 / 218 | `ExposureLimiter.cs` (ExposureMemory), `VisualiserScene.cs`, `VisualiserGpu.cs` | Ported; the probe/kernel/limited-pass chain is kept, the kernel is a pixel pass |
+| `WavefieldModes.swift` (Wavefield, MIT) | 0 / 316 | `Core/Visualisers/Wavefield/` | Faithful port |
+| `StarTrailsSimulation.swift`, `StarTrailsSky.swift`, `StarTrailsLyricWord.swift` | 0 | `Core/Visualisers/StarTrails/` | Faithful port |
+| `OutputLatency.swift` | 0 / 128 | `VisualizerAudio` takes the latency Windows reports | Behaviour only (Core Audio has no Windows counterpart) |
+| `VisualizerShaderCommon.h`, `VisualizerShaderTypes.h`, `VisualizerShaders.metal` (Synesthia) | 0 | `Shaders/Common.hlsli`, `Fullscreen.hlsl` | Faithful port (minus `fbmSharp`, used only by the tunnel) |
+| `ExposureLimiter.metal` | 0 / 54 | `Shaders/ExposureMeasure.hlsl` | Faithful model, a pixel pass instead of a compute kernel |
+| `SilkAurora.metal` (Synesthia), `CurtainAurora.metal`, `FosforaAurora.metal` (Fosfora, MIT), `ColourStrata.metal`, `Overprint.metal`, `WavefieldShaders.metal` (Wavefield, MIT), `StarTrails.metal` | 0 | `Shaders/Aurora.hlsl`, `CurtainAurora.hlsl`, `FosforaAurora.hlsl`, `ColourStrata.hlsl`, `Overprint.hlsl`, `Wavefield.hlsl`, `StarTrails.hlsl` | Faithful port |
+| `SpectrumTunnel.metal` (Synesthia, MIT) | 0 / 206 | `Shaders/Tunnel.hlsl` | **Written fresh from a behaviour description, not read or translated.** Not for Verso: the Mac's tunnel adapts two Shadertoy shaders (XtdGR7 and the "Sailing Beyond" Hyper Tunnel), whose licence is unclear for a closed-source app. The porting agent did see `fbmSharp` (Common header) while porting the shared helpers; it is not used. |
+| `WallpaperPage.swift` (Visualiser and Music response sections), `VisualizerSceneControls.swift` | 1 / 382 (SwiftUI line), 1 / 62 | `App/Settings/WallpaperPage.Visualiser.cs` | Ported from the sections' behaviour, WinUI controls |
+| `AudioCaptureRecovery.swift` (AudioCaptureState, Problem, AudioPlayback, AudioCaptureHealth, AudioCaptureGate) | 8 / 294 | `Core/Visualisers/Capture/AudioCaptureRules.cs` | Faithful port of the Lunalyr lines; the 8 Verso lines are imports, braces and the `AudioCaptureRecovery` struct (tap → Screen Recording fallback), which is **not ported** (Windows has one capture method) |
+| `AudioPCMProcessor.swift` | 47 / 262 | `Core/Visualisers/Capture/CaptureFeed.cs` | **Re-implemented from a behaviour description** (decode, hop-aligned pieces, capture timestamps, levels, audibility, format label, throttled reports) in a different structure (no ring; the capture thread feeds the analyser) |
+| `AudioReactiveController.swift` | 80 / 803 | `Core/Visualisers/Capture/SystemAudioController.cs`, `Shell/Visualisers/SystemAudioService.cs` | **Re-implemented from a behaviour description** (demand, health, route changes, failures waiting for the user or playback), own structure |
+| `AudioCaptureEnvironment.swift`, `SystemAudioCapture.swift`, `ScreenAudioCapture.swift`, `AudioOutputActivity.swift` | 2, 91, 41, 0 | `Platform/Audio/WasapiLoopback.cs`, `OutputActivityMeter.cs` | Not ported (Core Audio taps, ScreenCaptureKit and process lists have no Windows counterpart); Windows' own WASAPI loopback and the endpoint peak meter, written from Microsoft's documentation |
+| `WebVisualizer*.swift` | 0 | — | Out of scope (the web scenes; stored Wavefield Original, Wavecore and Light 3D read as their native stand-ins) |
+
+Third-party code reached through these files is MIT (Synesthia, Fosfora, Wavefield); its notices are in
+`THIRD-PARTY-NOTICES.md`.

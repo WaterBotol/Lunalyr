@@ -27,6 +27,39 @@ int width = int.Parse(size[0], CultureInfo.InvariantCulture), height = int.Parse
 Directory.CreateDirectory(outDir);
 var styles = VisualizerStyles.All.Where(s => only is null || s.RawValue() == only).ToArray();
 
+if (args.Contains("--demo-live"))
+{
+    // The app's own path under --demo, in real time and without the desktop: the demo's synthetic signal through the
+    // capture feed, System audio's controller and the visualiser layer (made by the wallpaper-types hook), drawn
+    // offscreen on the GPU. Nothing is captured, played or attached to the desktop.
+    var settings = new Lunalyr.Shell.Settings.AppSettings { BackgroundMode = "visualizer", VisualizerStyle = only ?? "starTrails" };
+    Lunalyr.Shell.Visualisers.VisualiserServices.UseSettings(() => settings);
+    using var service = new Lunalyr.Shell.Visualisers.SystemAudioService(() => settings, () => (true, "Demo player"), demo: true);
+    service.Start();
+    var factory = Lunalyr.Shell.Rendering.WallpaperLayers.Backgrounds(Lunalyr.Render.Backgrounds.BackgroundOptions.Default)
+        .First(f => f.Id == "visualizer");
+    using var live = new OffscreenSurface(width, height, 1, hardware: true);
+    using var layer = factory.Create();
+    live.Prepare(layer);
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    var nextShot = 2.0;
+    while (clock.Elapsed.TotalSeconds < 6.05)
+    {
+        var t = clock.Elapsed.TotalSeconds;
+        live.Draw(layer, new SceneSnapshot { Title = "Demo", Artist = "Lunalyr" }, t, 1 / 30.0);
+        if (t >= nextShot)
+        {
+            var pixels = live.ReadPixels();
+            File.WriteAllBytes(Path.Combine(outDir, $"demo-live-{nextShot:0}s.png"), VisualiserStill.Png(pixels, width, height));
+            var a = service.Audio.Latest();
+            Console.WriteLine($"{nextShot:0}s: {service.State} — {service.Status} | packets {service.Packets}, level {a.Level:0.00}, bass {a.Bass:0.00}, kicks {a.Sound.KickOnsets}, mean luminance {Mean(pixels):0.000}");
+            nextShot += 2;
+        }
+        Thread.Sleep(33);
+    }
+    return;
+}
+
 if (args.Contains("--loopback-check"))
 {
     // A short live check of System audio: loopback of the default output for a few seconds, printing levels only.

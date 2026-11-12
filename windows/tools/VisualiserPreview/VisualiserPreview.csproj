@@ -11,5 +11,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lunalyr.Render\Lunalyr.Render.csproj" />
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
   </ItemGroup>
 </Project>

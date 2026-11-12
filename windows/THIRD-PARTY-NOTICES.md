@@ -188,3 +188,99 @@ The Windows App SDK files placed beside the app (`Microsoft.UI.*`, `Microsoft.Wi
 Microsoft's, redistributed under the Microsoft Software License Terms for the Windows App SDK. Section 3 permits
 redistributing files that its NuGet package places with the app. The terms and Microsoft's own notices are in the
 package (`license.txt`, `NOTICE.txt`); the installer (milestone 8) will ship them beside this file.
+
+## Synesthia (visualiser analyser, uniforms, Aurora and resolution ladder)
+
+- **What:** the visualisers' audio analyser (`src/Lunalyr.Core/Visualisers/Audio/`), the scenes' uniform layout and
+  builder, the render-scale ladder, the shared shader helpers (`src/Lunalyr.Render/Visualisers/Shaders/Common.hlsli`)
+  and the Silk Ribbons / Spectral Aurora scene (`Aurora.hlsl`), ported from Lunalyr for Mac, which adapted them from
+  Synesthia. Modified (C# and HLSL ports; local changes made by Lunalyr for Mac).
+- **Source:** <https://github.com/jonjaques/synesthia>, commit 05144bf0f03eea5cc4af8135e9d71553f1ac9202.
+- **Licence:** MIT.
+
+```text
+MIT License
+
+Copyright (c) 2026 Jon Jaques
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Fosfora Aurora (the Fosfora Aurora visualiser scene)
+
+- **What:** the seven frequency-curtain equations, colours and glow of `FosforaAurora.hlsl`, ported from Lunalyr for
+  Mac's adaptation of Fosfora's Aurora shader. Modified.
+- **Source:** <https://github.com/kevinraymond/fosfora>, commit 2e85d3babca5b7f27426e211e58fe3c831fb667f.
+- **Licence:** MIT.
+
+```text
+MIT License
+
+Copyright (c) 2025-2026 Kevin Raymond
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Wavefield (the Wavefield and Wavefield Sphere visualiser scenes)
+
+- **What:** the free-plate field, interference and harmonic terms, domain warp and heatmap of `Wavefield.hlsl`, and
+  the peak analysis and modal bank (`src/Lunalyr.Core/Visualisers/Wavefield/`), ported from Lunalyr for Mac's
+  adaptation of Wavefield's Default template. Modified.
+- **Source:** <https://github.com/niko-dellic/wavefield>, revision 3858a657190ebd09bee704caa094e7e1fd3c6cc2.
+- **Licence:** MIT.
+
+```text
+MIT License
+
+Copyright (c) 2026 Niko Dellic
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
