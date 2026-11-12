@@ -301,6 +301,21 @@ public sealed unsafe partial class VideoReader : IDisposable
         return ((delegate* unmanaged[Stdcall]<nint, Guid*, byte*, int>)Slot(_reader, 8))(_reader, &none, position) >= 0;
     }
 
+    /// <summary>
+    /// To <paramref name="seconds"/> (the music video's sync). Media Foundation lands on the key frame at or before it, so
+    /// the frames read next start a little earlier: the caller skips those before the time it wants.
+    /// </summary>
+    public bool Seek(double seconds)
+    {
+        if (_reader == 0 || !double.IsFinite(seconds)) return false;
+        var position = stackalloc byte[24];
+        *(ushort*)position = 20; // VT_I8
+        *(long*)(position + 8) = (long)(Math.Max(0, seconds) * 10_000_000);
+        var none = Guid.Empty;
+        // IMFSourceReader: 8 SetCurrentPosition.
+        return ((delegate* unmanaged[Stdcall]<nint, Guid*, byte*, int>)Slot(_reader, 8))(_reader, &none, position) >= 0;
+    }
+
     public void Dispose()
     {
         if (_reader != 0) Release(_reader);
