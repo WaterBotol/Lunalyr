@@ -88,6 +88,14 @@ written from them in its own structure; no Verso line was translated.
     under the line. With "Instead" they set the readings in the words' place. The constellations part an unspaced
     line into fragments first, so each fragment reads its own words.
   - **Spoken, Cascade, Cutout:** roll with them (the Mac's `rollingWindow`).
+  - **Stage layouts:** pair them by the runs the stage draws (`LyricReadingPairs.Parts` over `StageRun.Glue`, the
+    Mac's `readingPairs(byPart:)`), so each run carries only its own reading.
+  - **Filling in:** with "Below", each token keeps its share of its run's reading (`LyricReadingPairs.Shares`, or
+    `Parts` on a stage; `ReadingShares` in Core). The reading is baked whole once and each share is drawn as its token
+    is sung (`ReadingSlices` measures where each share falls): from its onset over `StageMotion.SyllableFade`, never
+    ahead of the syllable itself, at once under Reduce Motion; on a stage, with its part (`StageRun.PartOpacity`). A
+    share not yet sung keeps its room, so the reading never shifts. A reading that wraps, and line-timed lines, show
+    whole.
   - **Fallback:** a line missing from `WordReadings` (scenes made without it, or before readings are worked out) uses
     the per-line `Readings` string: under the line, or, when it has exactly one space-separated part per word run,
     each run's part under that run.
