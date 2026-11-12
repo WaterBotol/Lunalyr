@@ -33,7 +33,8 @@ public class NetEaseSourceTests
         Assert.Equal("1", handler.Query(0, "type"));
         Assert.Equal("8", handler.Query(0, "limit"));
         Assert.Equal("536622304", handler.Query(1, "id"));
-        Assert.All(["lv", "tv", "rv", "yv"], name => Assert.Equal("-1", handler.Query(1, name)));
+        // The Mac's lyric request (spec §2.4): lv=1&kv=1&tv=-1&yv=1&rv=-1.
+        Assert.Equal(["1", "1", "-1", "1", "-1"], new[] { "lv", "kv", "tv", "yv", "rv" }.Select(name => handler.Query(1, name)));
         Assert.All(handler.Requests, request =>
         {
             Assert.Equal("https://music.163.com/", request.Headers.Referrer?.ToString());

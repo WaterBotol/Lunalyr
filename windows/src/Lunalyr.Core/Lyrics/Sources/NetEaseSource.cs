@@ -150,15 +150,16 @@ public sealed class NetEaseSource : ILyricSource
             return null;
         }
         var options = _catalog.Options;
-        // -1 asks for the latest version of each kind: line LRC, translation, romanisation, karaoke, word-timed YRC.
+        // The Mac's request (spec §2.4): line LRC, karaoke and word-timed YRC (lv, kv, yv = 1), the latest translation
+        // (tv = -1) and romanised lines (rv = -1, `romalrc`).
         var uri = LyricHttpClient.BuildUri(options.LyricAddress, new Dictionary<string, string>
         {
             ["id"] = song.Id.ToString(CultureInfo.InvariantCulture),
-            ["lv"] = "-1",
-            ["kv"] = "-1",
+            ["lv"] = "1",
+            ["kv"] = "1",
             ["tv"] = "-1",
+            ["yv"] = "1",
             ["rv"] = "-1",
-            ["yv"] = "-1",
         });
         using var document = await _http.GetJsonAsync(NetEaseCatalog.Service, uri, options.RequestTimeout, options.Referer, ct).ConfigureAwait(false);
         var root = document.RootElement;
