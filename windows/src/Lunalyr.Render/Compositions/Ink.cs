@@ -272,7 +272,9 @@ internal sealed class Ink : IDisposable
         {
             _tint.Color = new Vector4(colour.X, colour.Y, colour.Z, Math.Clamp(colour.W, 0, 1));
             var rect = Clipped(new RawRectF(0, 0, PixelWidth, PixelHeight), clip, Centre, Raster);
-            if (rect.Right > rect.Left) dc.DrawImage(_tintOut!, null, rect, InterpolationMode.Linear, CompositeMode.SourceOver);
+            // The image rectangle's corner is drawn at the target offset, so a cut rectangle keeps its place.
+            if (rect.Right > rect.Left)
+                dc.DrawImage(_tintOut!, new Vector2(rect.Left, rect.Top), rect, InterpolationMode.Linear, CompositeMode.SourceOver);
             return;
         }
         for (var k = 0; k < opacities.Length; k++)
@@ -283,7 +285,7 @@ internal sealed class Ink : IDisposable
                                 clip, Centre, Raster);
             if (!(slice.Right > slice.Left)) continue;
             _tint.Color = new Vector4(colour.X, colour.Y, colour.Z, alpha);
-            dc.DrawImage(_tintOut!, null, slice, InterpolationMode.Linear, CompositeMode.SourceOver);
+            dc.DrawImage(_tintOut!, new Vector2(slice.Left, slice.Top), slice, InterpolationMode.Linear, CompositeMode.SourceOver);
         }
     }
 
