@@ -31,7 +31,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         foreach (var session in _sessions) Assert.Empty(session.Commands);
     }
 
-    private AppController Controller(AppSettings? settings = null, bool reduceMotion = false)
+    private AppController Controller(AppSettings? settings = null, bool reduceMotion = false, TimeSpan? onlineRetryDelay = null)
     {
         _controller = new AppController(_source, _lyrics, _renderer, settings ?? new AppSettings(), _offsets, ReadingServices.Basic,
             _guard, Logger.Null, _connectivity,
@@ -41,7 +41,7 @@ public sealed class AppControllerTests : IAsyncDisposable
                 TimelineWait = TimeSpan.FromMilliseconds(60),
                 TimelinePoll = TimeSpan.FromMilliseconds(10),
                 LateTimelinePoll = TimeSpan.FromMilliseconds(20),
-                OnlineRetryDelay = TimeSpan.FromMilliseconds(150),
+                OnlineRetryDelay = onlineRetryDelay ?? TimeSpan.FromMilliseconds(150),
                 ArtworkRetries = [],
                 ReduceMotion = reduceMotion,
             });
@@ -307,7 +307,8 @@ public sealed class AppControllerTests : IAsyncDisposable
         _lyrics.Answer("Song", new LyricLookupReport { Offline = true });
         var session = Playing("Song");
         _source.Add(session);
-        var controller = Controller();
+        // A long wait, so the track change always lands first; the change must cancel the pending look again.
+        var controller = Controller(onlineRetryDelay: TimeSpan.FromSeconds(5));
         controller.Start();
         await controller.WhenIdleAsync();
 

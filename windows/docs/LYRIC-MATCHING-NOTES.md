@@ -290,8 +290,10 @@ Branch `m6/lyric-fixes`. Rows 11, 13 and 17 now match the Mac; row 19 is a Windo
 **Live check, traditional script.** The same probe set-up as above (automatic lookup, every source, Accuracy first,
 storefront `au`, generic User-Agent, a fresh temp cache, genre "Mandopop"). Lengths and albums are from the iTunes
 Search API's TW storefront. "Before" is `next/windows` 10bcb62 (v17), "after" is this branch (v18). Outputs:
-`docs/measurements/lyric-parity/traditional-{before,after}-*.txt`, with the lyric text left out. On every song, Kugou's
-and QQ's searches already returned the song under its simplified names, and every hit failed the artist check.
+`docs/measurements/lyric-parity/traditional-{before,after}-*.txt`, with the lyric text left out. For 晴天,
+the raw Kugou and QQ replies to the traditional-script search (recorded) already listed the song under 周杰伦, and every
+hit failed the artist check; the replies for the other two songs were not inspected, so the probe output doesn't say
+whether the first search or the simplified retry found them.
 
 | Song (length) | Before | After |
 |---|---|---|
