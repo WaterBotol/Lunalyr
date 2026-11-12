@@ -143,7 +143,8 @@ public static class WordArrivals
 
     /// <summary>
     /// "Match the style" resolved for a composition: Editorial fades in, Spoken glides, Scattered pops, Constellation
-    /// orbits, Constellation + Editorial, Echo and Cascade float up; the stage layouts fade in.
+    /// orbits, Constellation + Editorial, Echo and Cascade float up, Cutout folds in (Cutout · Fold) and the stage
+    /// layouts fade in.
     /// </summary>
     public static WordArrival Resolved(this WordArrival arrival, CompositionKind composition) =>
         arrival != WordArrival.Automatic ? arrival : composition switch
@@ -153,8 +154,7 @@ public static class WordArrivals
             CompositionKind.ConstellationEditorial or CompositionKind.Echo => WordArrival.Lift,
             CompositionKind.Spoken => WordArrival.Glide,
             CompositionKind.Cascade => WordArrival.Lift,
-            // The Mac's Cutout · Fold is not built yet: Unfold, the nearest built entrance, stands in for it.
-            CompositionKind.Cutout => WordArrival.Unfold,
+            CompositionKind.Cutout => WordArrival.CutoutFold,
             _ => WordArrival.Fade,
         };
 

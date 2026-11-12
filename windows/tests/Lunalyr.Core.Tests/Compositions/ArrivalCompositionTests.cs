@@ -28,9 +28,9 @@ public class ArrivalCompositionTests
         Assert.Equal(RollingStyle.Fan, CompositionKind.Spoken.RollingStyle());
         Assert.Equal(RollingStyle.Column, CompositionKind.Cascade.RollingStyle());
         Assert.Equal(RollingStyle.Collage, CompositionKind.Cutout.RollingStyle());
-        // "Match the style": Cascade floats up; Cutout's own fold is not built yet, so Unfold stands in.
+        // "Match the style": Cascade floats up; Cutout folds in as a cutout (Cutout · Fold), as on the Mac.
         Assert.Equal(WordArrival.Lift, WordArrival.Automatic.Resolved(CompositionKind.Cascade));
-        Assert.Equal(WordArrival.Unfold, WordArrival.Automatic.Resolved(CompositionKind.Cutout));
+        Assert.Equal(WordArrival.CutoutFold, WordArrival.Automatic.Resolved(CompositionKind.Cutout));
         Assert.Equal(WordArrival.Glide, WordArrival.Automatic.Resolved(CompositionKind.Spoken));
         // A chosen entrance is kept.
         Assert.Equal(WordArrival.Pop, WordArrival.Pop.Resolved(CompositionKind.Cutout));

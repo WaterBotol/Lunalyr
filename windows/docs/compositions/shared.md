@@ -18,9 +18,9 @@ that both compositions rely on. Written from reading the Mac app's behaviour; th
 
 - Entrance choices and their titles: automatic ("Match the style"), fade ("Soft focus"), lift ("Float up"), pop
   ("Pop"), orbit ("Orbit"), glide ("Glide"), unfold ("Unfold"), plus Lunalyr's own cutout, highlight, swipe and mix
-  entrances (not built yet on Windows).
-- "Match the style" resolves per composition: Editorial → fade, Spoken → glide (others: Scattered → pop, the
-  constellations and Echo → lift or orbit, the stage layouts → fade).
+  entrances (see [scattered.md](scattered.md)).
+- "Match the style" resolves per composition: Editorial → fade, Spoken → glide (others: Scattered → pop, Constellation →
+  orbit, Constellation + Editorial, Echo and Cascade → lift, Cutout → cutoutFold, the stage layouts → fade).
 - How an entrance draws a word whose reveal is `progress` (0…1, monotone) and whose spring arrival is `arrival`:
   - opacity is the word's presentation opacity (preview included) or, without one, the progress;
   - a blur of `(1 − progress)` times 3.5 points for Soft focus and 2.5 points for the others (none under Reduce

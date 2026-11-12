@@ -49,27 +49,30 @@ Checked with `git blame -w -M -C` at `d63068a`:
   the ink's text-on-tile colour and its reading the same at 85%; beyond, they keep their own colours. The label, its
   word and their shadow fade and blur as one piece, inside the word's entrance.
 - **Cascade's held words**: a hero takes the ink's accent (the highlight's held colour) unless the ink sweeps.
-- **Automatic entrance**: on the Mac, Cutout's is Cutout · Fold (not built on Windows yet; see below).
+- **Automatic entrance**: Cutout's is Cutout · Fold, as on the Mac (Lunalyr's: a cutout growing from 76% and folding up
+  from −30°, unmasked from its leading edge; see [scattered.md](scattered.md)). A label is unmasked as one piece: tile,
+  word, reading and shadow.
 
 ## Differences from the Mac
 
-- **Cutout · Fold is not built yet** (it belongs with the other cutout and swipe entrances in Core's `WordEntrance`).
-  "Match the style" on Cutout gives Unfold instead, the nearest built entrance. In Cascade and Cutout an Unfold
-  entrance is drawn as a foreshortening about the unit's bottom edge; Spoken still draws Unfold without its fold
-  (unchanged, so Spoken stays pixel-identical).
+- **Folds.** In Cascade and Cutout an Unfold or Cutout · Fold entrance is drawn as a foreshortening about the unit's
+  bottom edge; Spoken still draws them without the fold (unchanged, so Spoken stays pixel-identical).
 - Colours are baked when a word is first set, at the ink of its onset: a tile does not ease to a new highlight while it
   is on stage, and a word's colour does not drift while it is shown (as for Spoken).
 - The label's shadow is drawn under the tile from the tile's own shadow and the word's, not computed from the flattened
   label, and the press-in clips the word sharply at the tile's edge (the Mac masks it).
 - Editorial typography's alternate face (the Mac's "editorial" font identity) is not in the snapshot, so it never
   applies.
-- The highlight tile "Cutout · Highlight" presses behind sung words is not built (an entrance of its own).
+- "Cutout · Highlight" tiles Cascade's rolling words as Spoken's (see [README.md](README.md)); Cutout's labels take no
+  second tile (as on the Mac), its other words do. The tile hugs the word's label (0.1 em by 0.05 em past it), where
+  the Mac draws it out to a label's padding (9 by 3 points) around the whole unit, reading included, and tints the
+  reading too.
 
 ## Previews and cost
 
-Previews are in `docs/previews/compositions/` as `cascade-*.png` and `cutout-*.png`; shots ending `-automatic` are
-rendered with `-reveal automatic` (Float up in Cascade, the Unfold stand-in in Cutout). The fixtures use the night
-palette, which has no cover colours, so the labels take the ink's own pastels and highlight.
+Previews are in `docs/previews/compositions/` as `cascade-*.png` and `cutout-*.png`; `cascade-automatic-*` and
+`cutout-automatic-*` are rendered with `-reveal automatic` (Float up in Cascade, Cutout · Fold in Cutout). The
+fixtures use the night palette, which has no cover colours, so the labels take the ink's own pastels and highlight.
 
 On the RTX 5060 at 2560×1440 a warm frame costs about 0.08–0.15 ms (Cascade) and 0.1–0.2 ms (Cutout) of render-thread
 time, against 0.07–0.14 ms for Spoken; a label not fully shown is drawn in a D2D layer at its opacity. Setting a

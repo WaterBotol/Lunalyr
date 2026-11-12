@@ -59,7 +59,7 @@ written from them in its own structure; no Verso line was translated.
   `cutoutHighlight`, `satinRibbon`, `splitInk`, `mix` and `automatic` (any case; the spelled-out `softFocus`,
   `floatUp` and `matchStyle` are accepted too; unknown ids are Soft focus). "Match the style" (`automatic`) is
   Editorial → Soft focus, Spoken → Glide, Scattered → Pop, Constellation → Orbit, Constellation + Editorial, Echo and
-  Cascade → Float up, Cutout → Unfold (standing in for Cutout · Fold), and the six stage layouts → Soft focus.
+  Cascade → Float up, Cutout → Cutout · Fold, and the six stage layouts → Soft focus.
   - *Cutouts* (`cutoutFold`, `cutoutSlide`) follow the word's reveal rather than its spring, grow from 76%, fold up
     from −30° or slide in 0.72 em with a turn, and are unmasked from their leading edge (`InkClip`). On the rolling
     stage a Cutout label is unmasked as a whole (tile, word and reading), and Cascade and Cutout draw the fold as a
