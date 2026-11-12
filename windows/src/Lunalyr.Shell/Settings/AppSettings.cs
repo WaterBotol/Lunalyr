@@ -148,6 +148,16 @@ public sealed record AppSettings
     /// </summary>
     public bool ArtistAliases { get; init; } = true;
 
+    // ---- Spotify (Windows only) ----
+
+    /// <summary>
+    /// The client ID of the owner's own Spotify developer app, for the desktop player's search, play and queue through
+    /// the Web API (docs/APP-SHELL.md, "Spotify search and queue"). Empty: Spotify search is off. Lunalyr ships none.
+    /// Anything that isn't 32 letters and digits is reset to empty. The sign-in itself is not a setting: its refresh
+    /// token is kept encrypted in <c>{data}\Spotify\account.bin</c>.
+    /// </summary>
+    public string SpotifyClientId { get; init; } = "";
+
     // ---- Derived values ----
 
     public static IReadOnlyList<string> Compositions { get; } =
@@ -187,6 +197,7 @@ public sealed record AppSettings
             LyricHighlightCustom = Core.Colour.ColourHex.ToOkLab(LyricHighlightCustom) is null ? defaults.LyricHighlightCustom : LyricHighlightCustom.Trim().ToUpperInvariant(),
             RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
+            SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
         };
     }
 

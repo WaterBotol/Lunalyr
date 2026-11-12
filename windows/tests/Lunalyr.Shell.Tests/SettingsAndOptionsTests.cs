@@ -59,6 +59,7 @@ public sealed class AppSettingsTests
             "pauseWhenCovered", "pauseOnBatterySaver", "pauseWhenFullScreen", "lyricOffset", "repairQQGaps", "songOffsets",
             "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "showInterludes",
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
+            "spotifyClientId",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

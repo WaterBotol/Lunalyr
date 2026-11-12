@@ -138,6 +138,50 @@ public sealed class LyricHttpClient
         }
     }
 
+    /// <summary>
+    /// Sends the request <paramref name="makeRequest"/> builds (any method, headers and body: the Spotify client's
+    /// token exchange, searches and player commands), with the same per-request timeout, size cap, per-host spacing and
+    /// failure mapping as <see cref="GetAsync"/>. Any status is returned; only transport failures throw. The generic
+    /// User-Agent is added unless the request has one.
+    /// </summary>
+    public async Task<LyricHttpResponse> SendAsync(string service, Func<HttpRequestMessage> makeRequest, TimeSpan timeout, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(makeRequest);
+        ct.ThrowIfCancellationRequested();
+        using var request = makeRequest();
+        ArgumentNullException.ThrowIfNull(request.RequestUri);
+        await WaitForHostAsync(request.RequestUri.Host, ct).ConfigureAwait(false);
+        using var deadline = new CancellationTokenSource(timeout, Time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
+        if (!request.Headers.Contains("User-Agent"))
+        {
+            request.Headers.TryAddWithoutValidation("User-Agent", Options.UserAgent);
+        }
+        try
+        {
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
+            var body = await ReadBodyAsync(service, response.Content, linked.Token).ConfigureAwait(false);
+            return new LyricHttpResponse((int)response.StatusCode, body, RetryAfter(response));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException exception)
+        {
+            _log.Debug($"{service}: request timed out after {timeout.TotalSeconds:0.#} s");
+            throw new LyricSourceException(LyricSourceFailure.TimedOut, $"{service}: timed out", inner: exception);
+        }
+        catch (HttpRequestException exception)
+        {
+            throw Unreachable(service, exception);
+        }
+        catch (IOException exception)
+        {
+            throw Unreachable(service, exception);
+        }
+    }
+
     /// <summary>GETs JSON. Anything but HTTP 200 with a JSON body throws <see cref="LyricSourceException"/>.</summary>
     public async Task<JsonDocument> GetJsonAsync(string service, Uri uri, TimeSpan timeout, string? referer, CancellationToken ct)
     {

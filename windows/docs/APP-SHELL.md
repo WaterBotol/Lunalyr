@@ -148,9 +148,104 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `rotateLayouts` | `true` | Match the music steps through a rotation (off: by the song's character) | `custom.rotateLayouts` |
 | `rotateLayoutCounts` | `{}` | composition → songs in a row, 0–5 (missing = 1) | `custom.rotateLayoutCounts` |
 | `rotateLayoutsCursor` | `0` | where the rotation got to (saved by the app) | `custom.rotateLayoutsCursor` |
+| `spotifyClientId` | `""` | the client ID of the owner's own Spotify developer app (32 letters and digits; anything else resets to `""`). Empty: no Spotify search. See "Spotify search and queue" | Windows only |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
+
+## Spotify search and queue
+
+The desktop player's search, play and queue go through **Spotify's Web API, signed in with the owner's own Spotify
+account and their own developer app**. Lunalyr ships no client ID and no secret (PKCE needs none). Milestone 5;
+service layer only (`src/Lunalyr.Core/Player/`), for the player card and the settings page to call.
+
+### Setting up the developer app (once)
+
+1. Sign in at <https://developer.spotify.com/dashboard> and **Create app**. Any name and description.
+2. **Redirect URI:** add exactly `http://127.0.0.1:47823/callback`. It must be the IPv4 loopback literal (Spotify
+   refuses `localhost`), `http` (allowed for loopback only), port `47823`, path `/callback`, and no trailing slash.
+3. **Which API/SDKs:** tick **Web API**. Save.
+4. Copy the app's **Client ID** (32 hexadecimal characters) and paste it into Lunalyr's settings. It is stored as
+   `spotifyClientId` in `{data}\settings.json`; until the settings page has a field, edit that file while Lunalyr isn't
+   running. Don't copy the client secret: Lunalyr never uses one.
+5. Press **Sign in** (settings page). The system browser opens Spotify's sign-in page; once it is accepted, the page
+   says "Signed in to Spotify" and can be closed.
+
+Spotify's rules for apps in **Development Mode** (since February 2026): the app's owner needs **Spotify Premium**,
+and only accounts on the app's **User Management** list (up to 5) may sign in. The owner's own account is on it
+already; another account gets "Spotify turned this account away…". Playing anything from Lunalyr needs Premium on the
+account that signs in. Search works without it.
+
+**Scopes requested:** `user-read-playback-state` and `user-read-currently-playing` (the player and its queue), and
+`user-modify-playback-state` (starting playback). Search needs no scope. Nothing about the account, its library or its
+playlists is asked for.
+
+### How it behaves
+
+- **Sign-in:** Authorization Code with PKCE (S256, a 64-character verifier, a random state). A plain socket listens on
+  `127.0.0.1:47823` only while a sign-in waits, for up to 5 minutes. Only `/callback` with that sign-in's state ends
+  the wait; the pages it serves echo nothing back. The browser opens only when the user presses Sign in, and the
+  launcher refuses any address but `https://accounts.spotify.com/authorize`. If the port is taken, the settings page is
+  told which port to free.
+- **Tokens:** the refresh token (with the client ID it belongs to) is kept in `{data}\Spotify\account.bin`, encrypted
+  with DPAPI for the current Windows user plus Lunalyr's own entropy. No other credential store is read. Access tokens
+  stay in memory and are refreshed when less than a minute is left, one refresh at a time. A rotated refresh token
+  replaces the stored one. `invalid_grant` (revoked or expired) deletes it and asks for a new sign-in; being offline or
+  a Spotify fault during a refresh keeps it. A 401 gets one refresh and one retry. A changed client ID shows as signed
+  out until the user signs in again. **Sign out** deletes the file and sends nothing to Spotify (revoking the app's
+  access is done at <https://www.spotify.com/account/apps>).
+- **Nothing at start-up:** the service is built after GSMTC but sends nothing until the user signs in or searches.
+  It isn't built at all under `--demo` or `--no-network`, and every play goes through `PlaybackGuard`, so
+  `--no-playback` sends no play command and no token refresh for one.
+- **When search is offered:** only when Windows' current media session is the **Spotify desktop app**
+  (`MediaSourceApp.Kind == Spotify`). Spotify's web player reports as its browser and gets no search, like every other
+  player (`NoPlayerSearch`: "{player} has no search Lunalyr can use.").
+- **Search:** two or more characters (fewer finds nothing and asks nobody). One request,
+  `type=track,album&limit=8` (no `market`: with a user's token Spotify answers for the account's country): up to 8
+  songs then up to 4 albums. Local files and songs Spotify marks unplayable are left out; covers are HTTPS only, the
+  smallest at least 200 px wide.
+- **Playing a result:** a song plays inside its album from that song on ("Then the rest of its album."). A song with no
+  album or a one-song single plays alone ("Plays this song only."), as does the last song of a one-disc album ("…it's
+  the last song on its album."). An album plays from its start. If Spotify refuses the album form for a reason that
+  may be the request's (400, or a 404 that doesn't say it is about the device), the song plays alone instead
+  ("Couldn't line up what comes next, so this song plays on its own.").
+- **Queue:** `GET /me/player` (shuffle, context) then `GET /me/player/queue`: the song playing (index 1) and what
+  Spotify lists after it. Nothing playing (204) is an empty queue. Spotify shares no history, so nothing before the
+  current song. Clicking the song playing sends nothing (play/pause is the transport's). Clicking a later one plays it
+  and the songs listed after it, in order (up to 50), with `uris`. Local files can't be started from another app and
+  are left out ("Some songs after it couldn't be added, so they're left out."). After those songs, Spotify's own
+  autoplay decides. If Spotify refuses the list for a reason that may be the request's (an episode among songs, say),
+  the clicked song plays alone ("Couldn't line up what comes next…").
+- **Quick clicks:** clicks run one at a time and only the latest plays; an overtaken click sends nothing.
+- **Errors** (`PlayerSearchText.Words`): not set up, not signed in, sign-in ended, no Premium, no active device
+  ("Spotify isn't playing on any device. Start it playing, then try again."), rate limited (nothing is sent until
+  Retry-After has passed, 5 s if Spotify didn't say), offline, not on the app's user list, and playback off. Anything
+  else reads "Spotify did not answer. Try again."
+- **Not verified live:** the development rules forbid signing in or playing anything, so everything above runs only
+  against hand-built fixtures of Spotify's published shapes (`tests/Lunalyr.Core.Tests/Fixtures/Spotify`).
+
+### For the player card and the settings page
+
+```csharp
+var searches = host.PlayerSearch;                        // PlayerSearches (Off under --demo / --no-network)
+var app = controller.Monitor.Session?.SourceApp;         // the GSMTC session playing
+searches.Availability(app);                              // None, NeedsSetUp, NeedsSignIn, Ready
+IPlayerSearch search = searches.For(app);                // Spotify's, or NoPlayerSearch
+await search.SearchAsync(text, ct);                      // songs, then albums
+PlayOutcome played = await search.PlayAsync(result, ct); // played.Note: show it when not null
+await search.GetQueueAsync(ct);                          // PlayerQueueSnapshot
+await search.PlayQueueItemAsync(item, ct);               // only items with IsPlayable
+PlayerSearchText.Words(exception, search.PlayerName);    // the sentence for any failure
+PlayerSearchText.EmptyQueueMessage(search.PlayerName, search.SharesQueue);
+
+SpotifyAccount? account = host.Spotify;                  // settings page; null when Spotify is off this run
+account.State; account.StateChanged;                     // NotSetUp, SignedOut, SigningIn, SignedIn
+SpotifySignInResult r = await account.SignInAsync(ct);   // r.Message for the page
+account.SignOut();
+```
+
+The client ID comes from `spotifyClientId` through the settings store (AppHost passes changes to
+`SpotifyAccount.SetClientId`).
 
 ## Measured (this PC, Release, Native AOT, `--no-playback --no-network`)
 
