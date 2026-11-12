@@ -140,6 +140,8 @@ internal static class SetupBench
                         pass += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
                         setup += ((LyricCompositionLayer)layer).Meter.TakeMilliseconds();
                     }
+                    // Paced as the desktop paces it: the GPU has finished each pass before the next begins.
+                    stage.WaitForGpu();
                     frames.Add(pass);
                     if (setup > 0) setups.Add(setup);
                     if (t < 1.5 && pass > songWorst) { songWorst = pass; songWorstSetup = setup; }

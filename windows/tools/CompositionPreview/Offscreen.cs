@@ -128,6 +128,18 @@ public sealed class Offscreen : IDisposable
         }
     }
 
+    /// <summary>
+    /// Waits until the GPU has drawn the last frame, as a desktop's present does: without it the GPU falls further and
+    /// further behind an offscreen loop, and the next call that has to wait for it (a text bake updating the glyph
+    /// cache) waits for the whole backlog.
+    /// </summary>
+    public void WaitForGpu()
+    {
+        _readback.CopyFromBitmap(_target).CheckError();
+        _readback.Map(MapOptions.Read);
+        _readback.Unmap();
+    }
+
     /// <summary>Saves the last frame as an RGB PNG.</summary>
     public void SavePng(string path) => Png.Save(path, Pixels(), Width, Height);
 
