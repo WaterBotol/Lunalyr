@@ -153,7 +153,7 @@ internal sealed class TextKit : IDisposable
             soft = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
             _shadow.SetInput(0, source, true);
             _shadow.BlurStandardDeviation = MathF.Max(0.01f, sigma * softRaster);
-            _shadow.Color = new Vector4(0, 0, 0, shadow.Alpha);
+            _shadow.Color = new Vector4(shadow.Colour, shadow.Alpha);
             _bake.Target = soft;
             _bake.BeginDraw();
             _bake.Clear(new Color4(0, 0, 0, 0));
@@ -197,7 +197,7 @@ internal sealed class TextKit : IDisposable
             soft = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
             _shadow.SetInput(0, source, true);
             _shadow.BlurStandardDeviation = MathF.Max(0.01f, sigma * softRaster);
-            _shadow.Color = new Vector4(0, 0, 0, shadow.Alpha);
+            _shadow.Color = new Vector4(shadow.Colour, shadow.Alpha);
             _bake.Target = soft;
             _bake.BeginDraw();
             _bake.Clear(new Color4(0, 0, 0, 0));
@@ -264,8 +264,8 @@ internal sealed class TextKit : IDisposable
     }
 }
 
-/// <summary>A soft drop shadow baked under text: opacity, blur (standard deviation, pixels) and drop (pixels).</summary>
-internal readonly record struct ShadowSpec(float Alpha, float Sigma, float OffsetY)
+/// <summary>A soft drop shadow baked under text: opacity, blur (standard deviation, pixels), drop (pixels) and colour (black by default).</summary>
+internal readonly record struct ShadowSpec(float Alpha, float Sigma, float OffsetY, Vector3 Colour = default)
 {
     public static ShadowSpec None => default;
 }

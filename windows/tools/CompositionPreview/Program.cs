@@ -30,6 +30,7 @@ string? reveal = null;
 var bench = false;
 var reduce = false;
 var warp = false;
+var opening = false;
 var shots = new List<(string Fixture, double Time)>();
 for (var i = 0; i < args.Length; i++)
 {
@@ -49,6 +50,7 @@ for (var i = 0; i < args.Length; i++)
                 Console.WriteLine($"{line.Start:0.00}-{line.End:0.00} wt={line.WordTimed} [{line.Text}] " + string.Join(" | ", line.Words.Select(w => $"{w.Text}@{w.Start:0.00}")));
             return;
         case "warp": warp = true; break;
+        case "opening": opening = true; break;
         case "probe":
             using (var probeStage = new Offscreen(64, 64)) Probe.Run(probeStage);
             return;
@@ -104,6 +106,31 @@ if (shots.Count == 0)
 using var stage = new Offscreen(width, height, warp);
 Console.WriteLine($"Device: {stage.AdapterName}{(stage.IsWarp ? " (WARP)" : "")}, {width}x{height} at {scale}x");
 var background = Fixtures.Night.Base;
+
+if (opening)
+{
+    // The song's opening title over the album gradient, through each card's moments (-only picks the layout; Editorial
+    // by default). Files: <song>-<moment>.png.
+    var lyricFactory = factories.FirstOrDefault(factory => factory.Id == (only ?? "editorial")) ?? factories[0];
+    foreach (var song in OpeningFixtures.Songs())
+    {
+        using var gradient = new Lunalyr.Render.Backgrounds.GradientLayerFactory().Create();
+        using var lyrics = lyricFactory.Create();
+        IRenderLayer[] layers = [gradient, lyrics];
+        foreach (var layer in layers) layer.CreateResources(stage.Dc, stage.DWrite, new System.Numerics.Vector2(width, height), scale);
+        foreach (var (label, time) in song.Moments)
+        {
+            // A few seconds leading up to the moment (from where the song was joined), as the app would draw them.
+            var from = Math.Max(song.Joined, time - 3);
+            for (var t = from; t < time; t += 1.0 / 30) stage.Render(layers, song.Scene, t, 10 + t, scale, song.Joined);
+            stage.Render(layers, song.Scene, time, 10 + time, scale, song.Joined);
+            var path = Path.Combine(output, $"{song.Name}-{label}.png");
+            stage.SavePng(path);
+            Console.WriteLine(path);
+        }
+    }
+    return;
+}
 
 foreach (var factory in factories)
 {

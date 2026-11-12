@@ -100,11 +100,18 @@ written from them in its own structure; no Verso line was translated.
     the per-line `Readings` string: under the line, or, when it has exactly one space-separated part per word run,
     each run's part under that run.
 - **Credits** (`LyricStyle.Credits`; off in the contract's default, on in the app's settings as on the Mac). Every
-  layer that derives from `LyricCompositionLayer` draws the song's opening "Title - Artist" and any production credits
-  over the lyric. They come one after another (`CreditCues`, ported from `CreditsLayer.swift`), set as the layer's
-  backing vocals are (`BackingKind`: the Scattered family's own composition, Editorial's typography otherwise), in a
-  band at the top or foot of the stage. The artist's name is pressed onto highlight tiles (the Mac's
-  `highlightFrom`). Backing vocals move to the other band (`CreditBands`).
+  layer that derives from `LyricCompositionLayer` draws the song's production credits over the lyric. They come one
+  after another (`CreditCues`, ported from `CreditsLayer.swift`), set as the layer's backing vocals are (`BackingKind`:
+  the Scattered family's own composition, Editorial's typography otherwise), in a band at the top or foot of the stage,
+  none before the opening title has gone. Backing vocals move to the other band (`CreditBands`).
+- **Opening title** (`LyricStyle.OpeningTitle` and `OpeningTitleCover`; off and on in the contract's defaults, both on
+  in the app's settings as on the Mac). Every layer draws the song's title card as it starts, over whatever else is
+  on the stage (`LyricCompositionLayer.OpeningTitle.cs`, ported from `OpeningTitle.swift`): the title in the lyric
+  family, a rule in the accent, the title's reading (`SceneSnapshot.TitleReading`), the artist in tracked capitals, the
+  album and the cover (`SceneSnapshot.Cover`), low on the left with a soft corner shade. Its timing is
+  `Core.Compositions.OpeningTitle`'s: gone a second before the first line can show, compact or none when singing
+  starts soon, brief for a song joined part-way (`FrameContext.SongJoined`, kept by the engine), longer with no
+  lyrics. Under Reduce Motion it only fades. Previews: `CompositionPreview -opening` (`docs/previews/opening/`).
 - **Highlight tiles** ("Cutout · Highlight"). One port of the Mac's `LyricHighlightTile.swift` in Core
   (`LyricHighlightTiming`, `HighlightPose`, `CutoutTile`, `HighlightMark`, and `HighlightSegment` for a run's sung
   words), drawn by one method, `LyricCompositionLayer.DrawTile`. A tile presses in behind each sung word (a 0.12 s

@@ -19,4 +19,14 @@ public static class ArtworkPalettes
         return await Task.Run(() => PaletteMapper.FromAlbum(new AlbumWallpaperPalette(AlbumColourGrid.Extract(pixels))),
             cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Decodes <paramref name="bytes"/> (any image WIC reads) on the thread pool as the opening title draws the cover:
+    /// smoothly scaled to <see cref="ArtworkDecoder.CoverMaxSide"/>, premultiplied BGRA. Null when it is not an image.
+    /// </summary>
+    public static Task<CoverArt?> CoverAsync(byte[] bytes, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        return Task.Run(() => ArtworkDecoder.DecodeCover(bytes), cancellationToken);
+    }
 }

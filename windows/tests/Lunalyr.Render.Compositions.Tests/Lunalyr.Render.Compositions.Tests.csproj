@@ -25,6 +25,7 @@
     <Compile Include="..\..\tools\CompositionPreview\Offscreen.cs" Link="Preview\Offscreen.cs" />
     <Compile Include="..\..\tools\CompositionPreview\Fixtures.cs" Link="Preview\Fixtures.cs" />
     <Compile Include="..\..\tools\CompositionPreview\ExtrasFixtures.cs" Link="Preview\ExtrasFixtures.cs" />
+    <Compile Include="..\..\tools\CompositionPreview\OpeningFixtures.cs" Link="Preview\OpeningFixtures.cs" />
     <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -97,14 +97,14 @@ public sealed class DemoTests
         var options = new AppSettings().SourceSnapshot();
         var ct = TestContext.Current.CancellationToken;
 
-        var english = Assert.IsType<LyricResult.Synced>((await lookup.LookupAsync(new LyricQuery("Neon Harbour", DemoSongs.Artist, null, 37), options, null, ct)).Result);
+        var english = Assert.IsType<LyricResult.Synced>((await lookup.LookupAsync(new LyricQuery("Neon Harbour", DemoSongs.Artist, null, DemoSongs.Songs[0].Duration), options, null, ct)).Result);
         Assert.All(english.Lines.Where(line => line.Credit != true), line => Assert.True(line.WordTimed, line.Text));
         Assert.Equal(2, english.Lines.Count(line => line.Credit == true && line.Words.Count == 0)); // credits for the credits layer
         Assert.Contains(english.Lines, line => line.Words.Any(word => word.End - word.Start > 3)); // a held note
         Assert.Contains(english.Lines, line => line.Words.Count >= 12); // a line long enough to wrap
         Assert.Contains(english.Lines, line => line.Text.Contains("(oh", StringComparison.Ordinal)); // backing vocals
 
-        var japanese = Assert.IsType<LyricResult.Synced>((await lookup.LookupAsync(new LyricQuery("Evening Road", DemoSongs.Artist, null, 30), options, null, ct)).Result);
+        var japanese = Assert.IsType<LyricResult.Synced>((await lookup.LookupAsync(new LyricQuery(DemoSongs.JapaneseTitle, DemoSongs.Artist, null, DemoSongs.Songs[1].Duration), options, null, ct)).Result);
         // Unspaced, and spaced by phrase (each phrase then reads under itself).
         Assert.Contains(japanese.Lines, line => !line.Text.Trim().Contains(' ', StringComparison.Ordinal));
         Assert.Contains(japanese.Lines, line => line.Text.Trim().Contains(' ', StringComparison.Ordinal));
@@ -132,6 +132,11 @@ public sealed class DemoTests
         var (seconds, playing) = controller.ReadClock();
         Assert.True(playing);
         Assert.InRange(seconds, 0, 10);
+        // What the opening title shows as the song starts: the album and the painted cover.
+        for (var i = 0; i < 300 && renderer.Last?.Cover is null; i++) await Task.Delay(10, TestContext.Current.CancellationToken);
+        Assert.True(renderer.Last!.Style.OpeningTitle);
+        Assert.Equal(DemoSongs.Album, renderer.Last.Album);
+        Assert.NotNull(renderer.Last.Cover);
     }
 
     [Fact]

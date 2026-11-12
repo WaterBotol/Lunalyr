@@ -46,7 +46,24 @@ public static class ArtworkDecoder
     /// Decodes <paramref name="data"/> on the calling thread: the first frame, scaled (never enlarged) so its longer side
     /// is at most <paramref name="maxSide"/>, as straight-alpha RGBA. Null when it cannot be read.
     /// </summary>
-    public static ArtworkPixels? Decode(byte[] data, int maxSide = DefaultMaxSide)
+    public static ArtworkPixels? Decode(byte[] data, int maxSide = DefaultMaxSide) =>
+        Read(data, maxSide, BitmapInterpolationMode.NearestNeighbor, PixelFormat.Format32bppRGBA,
+             (width, height, pixels) => new ArtworkPixels(width, height, pixels));
+
+    /// <summary>The longest side of a cover as the opening title draws it: about its size on a 4K screen.</summary>
+    public const int CoverMaxSide = 384;
+
+    /// <summary>
+    /// Decodes <paramref name="data"/> on the calling thread for drawing (the opening title's cover): the first frame,
+    /// scaled down smoothly (never enlarged) so its longer side is at most <paramref name="maxSide"/>, as premultiplied
+    /// BGRA, ready for a Direct2D bitmap. Null when it cannot be read.
+    /// </summary>
+    public static CoverArt? DecodeCover(byte[] data, int maxSide = CoverMaxSide) =>
+        Read(data, maxSide, BitmapInterpolationMode.Fant, PixelFormat.Format32bppPBGRA,
+             (width, height, pixels) => new CoverArt(width, height, pixels));
+
+    private static T? Read<T>(byte[] data, int maxSide, BitmapInterpolationMode interpolation, Guid format,
+                              Func<int, int, byte[], T> make) where T : class
     {
         ArgumentNullException.ThrowIfNull(data);
         if (data.Length == 0 || maxSide <= 0) return null;
@@ -65,12 +82,12 @@ public static class ArtworkDecoder
             var height = Math.Max(1, (int)Math.Round(size.Height * scale));
 
             using var scaler = factory.CreateBitmapScaler();
-            scaler.Initialize(frame, (uint)width, (uint)height, BitmapInterpolationMode.NearestNeighbor);
-            using var straight = factory.CreateFormatConverter();
-            straight.Initialize(scaler, PixelFormat.Format32bppRGBA, BitmapDitherType.None, null, 0, BitmapPaletteType.Custom);
+            scaler.Initialize(frame, (uint)width, (uint)height, interpolation);
+            using var converted = factory.CreateFormatConverter();
+            converted.Initialize(scaler, format, BitmapDitherType.None, null, 0, BitmapPaletteType.Custom);
             var pixels = new byte[width * height * 4];
-            straight.CopyPixels((uint)(width * 4), pixels);
-            return new ArtworkPixels(width, height, pixels);
+            converted.CopyPixels((uint)(width * 4), pixels);
+            return make(width, height, pixels);
         }
         catch (SharpGen.Runtime.SharpGenException)
         {

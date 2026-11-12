@@ -34,15 +34,35 @@ internal abstract partial class LyricCompositionLayer
         _creditPlans.Clear();
         _cues = [];
         _creditBands = [];
+        _cueLines = null;
     }
 
-    /// <summary>The song's credit cues, worked out once per scene (they depend on its lines, title and artist).</summary>
+    /// <summary>
+    /// The song's credit cues, worked out once per scene (they depend on its lines, title and artist) and again when
+    /// the opening title they wait for moves (<see cref="CreditsNotBefore"/>).
+    /// </summary>
     private void SyncExtras(SceneSnapshot scene, IReadOnlyList<LyricLine>? lines)
     {
+        _cueLines = null;
         if (lines is null || !scene.Style.Credits) return;
-        _cues = CreditCues.Cues(lines, scene.Title, scene.Artist, EstimatedWords.Distributor(Breaker));
+        _cueLines = lines;
+        _cues = CreditCues.Cues(lines, scene.Title, scene.Artist, EstimatedWords.Distributor(Breaker), _cuesNotBefore);
         _creditBands = CreditCues.Bands(_cues);
         _creditSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x3FFF_FFFF);
+    }
+
+    private IReadOnlyList<LyricLine>? _cueLines;
+    private double _cuesNotBefore;
+
+    /// <summary>Credits wait for the opening title to leave: none arrives before <paramref name="notBefore"/>.</summary>
+    private void CreditsNotBefore(double notBefore)
+    {
+        if (notBefore == _cuesNotBefore) return;
+        _cuesNotBefore = notBefore;
+        if (_cueLines is not { } lines || SceneShown is not { } scene) return;
+        foreach (var plan in _creditPlans.Values) plan.Dispose();
+        _creditPlans.Clear();
+        SyncExtras(scene, lines);
     }
 
     // ---- Highlight tiles ---------------------------------------------------------------------------------------------
@@ -133,7 +153,7 @@ internal abstract partial class LyricCompositionLayer
     /// <summary>
     /// The song's credits, over the lyric: each cue spelled out word by word in the backing vocals' typography
     /// (<see cref="BackingKind"/>: Editorial's, or the Scattered family's own) at most of the lead's size and its full brightness, in a thin band along the top or foot of the stage, clear of the middle
-    /// where the lyric sits; a production credit lifts away toward its edge, the opening title blooms.
+    /// where the lyric sits; each lifts away toward its edge.
     /// </summary>
     private void DrawCredits(ID2D1DeviceContext dc, double time)
     {
@@ -145,8 +165,7 @@ internal abstract partial class LyricCompositionLayer
             var level = CreditCues.Level(cue, time);
             if (!(level > 0.004)) continue;
             var plan = CreditPlan(cue, box);
-            var exit = LayerExit.Pose(cue.Title is not null ? LayerExitKind.Title : LayerExitKind.Credit,
-                                      CreditCues.ExitProgress(cue, time), box.Height, cue.Top, ReduceMotion);
+            var exit = LayerExit.Pose(LayerExitKind.Credit, CreditCues.ExitProgress(cue, time), box.Height, cue.Top, ReduceMotion);
             var scale = plan.Fit * exit.Scale;
             var centre = new Vector2(origin.X + (float)(Stage.Width * 0.5),
                                      origin.Y + (float)(Stage.Height * (cue.Top ? 0.1 : 0.9) + exit.Offset));
@@ -159,14 +178,14 @@ internal abstract partial class LyricCompositionLayer
     private LinePlan CreditPlan(CreditCue cue, SizeD box)
     {
         if (_creditPlans.TryGetValue(cue.Id, out var found)) return found;
-        // Credits are not sung: "Song (Remix)" keeps its brackets in the line rather than losing them to backing vocals.
-        // They are set as backing vocals are (the lead's composition when it sets words loose or links them, else
-        // Editorial), and the artist's words, from HighlightFrom on, are pressed onto highlight tiles.
+        // Credits are not sung: "Remix (Night Edit) by: …" keeps its brackets in the line rather than losing them to
+        // backing vocals. They are set as backing vocals are (the lead's composition when it sets words loose or links
+        // them, else Editorial).
         var glue = new bool[cue.Words.Count];
         var kind = BackingKind(Kind);
         var plan = BuildPlan(cue.Words, glue, BaseSize * 0.72, _creditSeed + cue.Id, cue.Start, wordTimed: true,
                              editorial: kind.HasEditorialTypography(), null, null, new LineFit(box, 1, 1), box.Width,
-                             kind: kind, lineEnd: cue.End, highlightFrom: cue.HighlightFrom);
+                             kind: kind, lineEnd: cue.End);
         _creditPlans[cue.Id] = plan;
         return plan;
     }

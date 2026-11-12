@@ -16,17 +16,30 @@ public class DemoExtrasTests
     private static LyricResult.Synced Presented(DemoSong song) => Assert.IsType<LyricResult.Synced>(
         LyricPresentation.Prepare(song.Lyrics, new LyricQuery(song.Title, song.Artist, song.Album, song.Duration), repairingGaps: true));
 
+    /// <summary>Both demo songs open with the full opening title, and the Japanese title reads under itself.</summary>
     [Fact]
-    public void TheEnglishSongOpensWithItsTitleThenItsTwoCredits()
+    public void EachSongOpensWithTheFullTitleCard()
+    {
+        foreach (var song in DemoSongs.Songs)
+        {
+            var schedule = OpeningTitle.Schedule(OpeningWords.Timed(OpeningTitle.FirstSung(Presented(song).Lines)));
+            Assert.Equal(OpeningSize.Full, Assert.NotNull(schedule).Size);
+            Assert.NotNull(OpeningTitle.AlbumLine(song.Album, song.Title));
+        }
+        var reading = new OpeningTitleMemory().Reading(DemoSongs.JapaneseTitle, RomanizationOptions.Default, new LyricRomanizer(Windows.Value));
+        Assert.Equal("Yuugure no Mado", reading);
+    }
+
+    [Fact]
+    public void TheEnglishSongShowsItsTwoCredits()
     {
         var song = DemoSongs.Songs[0];
         var lines = Presented(song).Lines;
         Assert.Equal(2, lines.Count(line => line.Credit == true));
         var cues = CreditCues.Cues(lines, song.Title, song.Artist);
-        Assert.Equal(3, cues.Count);
-        Assert.Equal($"{song.Title} - {song.Artist}", cues[0].Text);
-        Assert.NotNull(cues[0].HighlightFrom);
-        Assert.StartsWith("Produced by", cues[1].Text, StringComparison.Ordinal);
+        Assert.Equal(2, cues.Count);
+        Assert.StartsWith("Produced by", cues[0].Text, StringComparison.Ordinal);
+        Assert.StartsWith("Written by", cues[1].Text, StringComparison.Ordinal);
     }
 
     [Fact]
