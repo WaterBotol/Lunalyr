@@ -67,6 +67,28 @@ public sealed class GpuEffectLayerTests : IDisposable
         Assert.True(Difference(first, later) > 0.3, $"{id} did not move: {Difference(first, later):0.###}");
     }
 
+    // Windows' analogue of WallpaperEnergyTests.swift: testEveryEffectLinksIntoABackgroundPipeline. The shaders are
+    // compiled at build time, so what can fail at run time is a missing or unloadable bytecode.
+    [Fact]
+    public void EveryEffectHasItsOwnBytecodeAndEveryEmbeddedShaderLoads()
+    {
+        foreach (var effect in GpuEffectCatalog.All)
+            Assert.True(GpuShaderLibrary.Bytecode("Effects." + effect.Id) is not null, $"{effect.Id} has no shader");
+        using var d2d = _surface.Context.Device;
+        using var d2d2 = d2d.QueryInterface<Vortice.Direct2D1.ID2D1Device2>();
+        using var dxgi = d2d2.DxgiDevice;
+        using var device = dxgi.QueryInterface<Vortice.Direct3D11.ID3D11Device>();
+        var names = GpuShaderLibrary.Names.ToList();
+        Assert.Equal(GpuEffectCatalog.All.Count + 1, names.Count(n => n.StartsWith("Effects.", StringComparison.Ordinal) || n.EndsWith(".vs", StringComparison.Ordinal)));
+        foreach (var name in names)
+        {
+            var bytecode = GpuShaderLibrary.Bytecode(name)!;
+            if (name.EndsWith(".vs", StringComparison.Ordinal)) device.CreateVertexShader(bytecode).Dispose();
+            else device.CreatePixelShader(bytecode).Dispose();
+            if (name.StartsWith("Patterns.", StringComparison.Ordinal)) Assert.NotNull(LinePatternCatalog.Find(name["Patterns.".Length..]));
+        }
+    }
+
     [Fact]
     public void ResourcesComeBackAfterBeingReleased()
     {
