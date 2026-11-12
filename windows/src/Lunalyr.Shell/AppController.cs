@@ -31,6 +31,12 @@ public sealed record AppControllerOptions
     /// </summary>
     public TimeSpan LateTimelinePoll { get; init; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// After a lookup found nothing because the network looked unreachable, how long to wait once the connection
+    /// returns before looking again (name resolution can lag behind the link coming up). The Mac's 2 s.
+    /// </summary>
+    public TimeSpan OnlineRetryDelay { get; init; } = TimeSpan.FromSeconds(2);
+
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     public SongClockOptions? Clock { get; init; }
@@ -66,6 +72,12 @@ public sealed record AppControllerOptions
     /// (<c>rotateLayoutsCursor</c>), so the next launch carries on from it.
     /// </summary>
     public Action<int>? LayoutCursorChanged { get; init; }
+
+    /// <summary>
+    /// The GPU effects and line patterns "Match the music" chooses among; null takes <c>WallpaperCatalog</c>'s (tests pass
+    /// their own, as the catalogue is filled by the effect layers' own files).
+    /// </summary>
+    public Func<(IReadOnlyList<Lunalyr.Core.Compositions.WallpaperCandidate> Effects, IReadOnlyList<Lunalyr.Core.Compositions.WallpaperCandidate> Patterns)>? WallpaperStyles { get; init; }
 
     /// <summary>How often a better match waiting to replace the lyrics looks whether the line being sung has ended.</summary>
     public TimeSpan SwapPoll { get; init; } = LyricSwap.Poll;
@@ -140,6 +152,7 @@ public sealed partial class AppController : IAsyncDisposable
     private readonly CategoryLogger _app;
     private readonly CategoryLogger _player;
     private readonly CategoryLogger _lyricLog;
+    private readonly Logger _logger;
     private readonly Lock _gate = new();
     private readonly Func<(double Seconds, bool Playing)> _clockReader;
 
@@ -152,6 +165,9 @@ public sealed partial class AppController : IAsyncDisposable
     private LyricQuery? _query;
     private LyricResult? _shown;
     private bool _retryWhenOnline;
+    // The one look again this track gets when a lookup looked offline while Windows reported a connection.
+    private bool _retriedWhileOnline;
+    private CancellationTokenSource? _onlineRetryCts;
     private bool _reduceMotion;
     private bool _started;
     private bool _disposed;
@@ -190,10 +206,11 @@ public sealed partial class AppController : IAsyncDisposable
         _app = logger.App;
         _player = logger.Player;
         _lyricLog = logger.Lyrics;
+        _logger = logger;
         _settings = settings.Normalized();
         _globalOffset = _settings.LyricOffset;
         _reduceMotion = _options.ReduceMotion;
-        _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
+        _scene = new SceneSnapshot { Style = _settings.Style(), Adjustments = _settings.Adjustments(), Palette = _palette, ReduceMotion = _reduceMotion };
         _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
         // The scrub preview stands in for the player's clock on the wallpaper only (LineBeingSung keeps ReadClock).
         _clockReader = ReadRendererClock;
@@ -235,7 +252,8 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         _renderer.SetClock(_clockReader);
-        _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
+        ApplyCustomWallpaper(null, settings);
+        _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         _renderer.SetFrameRate(settings.AnimationRate);
         PublishScene();
         if (!settings.WallpaperPaused) _renderer.Start();
@@ -286,6 +304,13 @@ public sealed partial class AppController : IAsyncDisposable
                 _scene = _scene with { Style = style };
                 scene = _scene;
             }
+            // The Wallpaper page's sliders reach the backgrounds through the scene, so a drag applies at once.
+            var adjustments = settings.Adjustments();
+            if (adjustments != _scene.Adjustments)
+            {
+                _scene = _scene with { Adjustments = adjustments };
+                scene = _scene;
+            }
 
             if ((!old.SourceSnapshot().Equals(settings.SourceSnapshot()) || old.RepairQQGaps != settings.RepairQQGaps)
                 && _lookupTrack is not null)
@@ -308,9 +333,10 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         ApplyLayoutSettings(old, settings);
-        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition
+        ApplyCustomWallpaper(old, settings);
+        if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
-            _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
+            _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
         // otherwise when they arrive. Other settings changes never decide it.
         if (settings.LyricComposition == AutomaticComposition
@@ -384,6 +410,7 @@ public sealed partial class AppController : IAsyncDisposable
             _disposed = true;
             _generation++;
             _lookupCts?.Cancel();
+            CancelOnlineRetryLocked();
             CancelArtworkLocked();
         }
 
@@ -416,11 +443,12 @@ public sealed partial class AppController : IAsyncDisposable
             // A different player: whatever was being looked up belongs to the old one. Its colours stay until the new
             // player's cover arrives; with nothing playing the wallpaper goes back to the default colours.
             CancelLookupLocked();
+            _retriedWhileOnline = false;
             CancelArtworkLocked();
             _tools = LyricToolsState.Empty;
             if (session is null) _palette = PaletteMapper.Fallback;
             _cover = null;
-            _scene = new SceneSnapshot { Style = _settings.Style(), Palette = _palette, ReduceMotion = _reduceMotion };
+            _scene = new SceneSnapshot { Style = _settings.Style(), Adjustments = _settings.Adjustments(), Palette = _palette, ReduceMotion = _reduceMotion };
             _status = _status with
             {
                 Player =session?.SourceApp.DisplayName,
@@ -446,6 +474,12 @@ public sealed partial class AppController : IAsyncDisposable
         // The cover's colours load beside the lyric lookup (and even when lookups are off).
         BeginArtwork(track, Monitor.Session);
         ForgetLyricTools();
+        lock (_gate)
+        {
+            // A new track gets its own look again (the Mac's onlineRetries, reset on a track change).
+            _retriedWhileOnline = false;
+        }
+
         BeginLookup(track);
     }
 
@@ -462,19 +496,65 @@ public sealed partial class AppController : IAsyncDisposable
         RaiseStatusChanged();
     }
 
-    private void OnConnectivityRestored(object? sender, EventArgs e)
+    private void OnConnectivityRestored(object? sender, EventArgs e) => RetryWhenOnline(_options.OnlineRetryDelay, "Back online");
+
+    /// <summary>
+    /// Looks the song up again after a lookup found nothing because the network looked unreachable (ported from the
+    /// Mac's <c>LyricsViewModel.connectionRestored</c>): after <paramref name="delay"/>, if the same lookup is still the
+    /// latest and nothing is showing.
+    /// </summary>
+    private void RetryWhenOnline(TimeSpan delay, string reason)
     {
-        MediaTrackInfo? track;
+        MediaTrackInfo track;
+        long generation;
+        CancellationTokenSource cts;
         lock (_gate)
         {
-            if (_disposed || !_retryWhenOnline) return;
+            if (_disposed || !_retryWhenOnline || _lookupTrack is null) return;
             _retryWhenOnline = false;
             track = _lookupTrack;
+            generation = _generation;
+            CancelOnlineRetryLocked();
+            cts = _onlineRetryCts = new CancellationTokenSource();
         }
 
-        if (track is null) return;
-        _lyricLog.Info("Back online: looking the song up again.");
-        BeginLookup(track);
+        Track(RetryAsync());
+
+        async Task RetryAsync()
+        {
+            try
+            {
+                if (delay > TimeSpan.Zero) await Task.Delay(delay, _options.TimeProvider, cts.Token).ConfigureAwait(false);
+                else await Task.Yield(); // Off the finished lookup's flow.
+                lock (_gate)
+                {
+                    if (_disposed || generation != _generation || !ReferenceEquals(_lookupTrack, track) || _shown is not null) return;
+                }
+
+                _lyricLog.Info($"{reason}: looking the song up again.");
+                BeginLookup(track);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                // A newer track, or shutdown.
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    if (ReferenceEquals(_onlineRetryCts, cts)) _onlineRetryCts = null;
+                }
+
+                cts.Dispose();
+            }
+        }
+    }
+
+    // Must hold _gate.
+    private void CancelOnlineRetryLocked()
+    {
+        _onlineRetryCts?.Cancel();
+        _onlineRetryCts = null;
     }
 
     // ---- Lookups ----
@@ -499,6 +579,7 @@ public sealed partial class AppController : IAsyncDisposable
                 Title = track.Title,
                 Artist = track.Artist,
                 Style = _settings.Style(),
+                Adjustments = _settings.Adjustments(),
                 Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
                 NoneFound = disabled is not null,
                 ReduceMotion = _reduceMotion,
@@ -551,6 +632,7 @@ public sealed partial class AppController : IAsyncDisposable
         _query = null;
         _shown = null;
         _retryWhenOnline = false;
+        CancelOnlineRetryLocked();
         Volatile.Write(ref _recordingKey, null);
         _offsets.ActiveSource = null;
     }
@@ -681,13 +763,26 @@ public sealed partial class AppController : IAsyncDisposable
             }
             else if (report.Offline)
             {
+                // As on the Mac (foundNothingOffline): look again when the connection returns. When Windows already
+                // reports a connection (it came back before the lookup finished, or one request failed on a working
+                // link), look again at once instead, once per track.
+                var online = _connectivity?.IsOnline == true;
+                var again = false;
                 lock (_gate)
                 {
-                    if (generation == _generation) _retryWhenOnline = true;
+                    if (generation == _generation)
+                    {
+                        _retryWhenOnline = true;
+                        again = online && !_retriedWhileOnline;
+                        if (again) _retriedWhileOnline = true;
+                    }
                 }
 
-                _lyricLog.Info("No lyrics: offline. Looking again when the connection is back.");
+                _lyricLog.Info(online
+                    ? "No lyrics: the services looked unreachable, though Windows reports a connection."
+                    : "No lyrics: offline. Looking again when the connection is back.");
                 ShowStatus(generation, StatusText.Offline);
+                if (again) RetryWhenOnline(TimeSpan.Zero, "Still online");
             }
             else if (report.SkippedStream)
             {

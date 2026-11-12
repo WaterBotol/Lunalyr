@@ -117,6 +117,9 @@ internal sealed partial class AppHost
     /// <summary>The look <c>--theme</c> asked for this run (light, dark or system), or null for the App theme setting.</summary>
     public string? ThemeOverride { get; private set; }
 
+    /// <summary><c>--quiet-windows</c>: windows open unactivated, at the bottom (checks while someone works at the PC).</summary>
+    public bool QuietWindows => _options.QuietWindows;
+
     /// <summary>Windows' "Animation effects" is off (read, never changed).</summary>
     public bool ReduceMotion => _motion?.ReduceMotion ?? false;
 
@@ -179,19 +182,9 @@ internal sealed partial class AppHost
     private EngineWallpaperRenderer CreateWallpaper(ReadingServices readings)
     {
         var engine = new RenderEngine(new RenderEngineOptions { Performance = PerformanceFrom(_settings.Current) }, Log);
-        // Backgrounds: the album colour field ("gradient", the default) and the colour-only album gradient ("colour",
-        // the Mac's "colourOnly"); the backgroundMode setting picks one (EngineWallpaperRenderer.BackgroundLayerFor).
-        engine.RegisterLayer(new GradientLayerFactory(BackgroundOptions.Default, Log));
-        engine.RegisterLayer(new ColourLayerFactory(BackgroundOptions.Default, Log));
-        engine.RegisterLayer(new EditorialFactory(readings.WordBreaker, Log));
-        engine.RegisterLayer(new SpokenFactory(readings.WordBreaker, Log));
-        engine.RegisterLayer(new CascadeFactory(readings.WordBreaker, Log));
-        engine.RegisterLayer(new CutoutFactory(readings.WordBreaker, Log));
-        foreach (var stage in Lunalyr.Render.Compositions.Stage.StageFactories.All(readings.WordBreaker, Log)) engine.RegisterLayer(stage);
-        engine.RegisterLayer(new ScatteredFactory(readings.WordBreaker, Log));
-        engine.RegisterLayer(new ConstellationFactory(readings.WordBreaker, Log));
-        engine.RegisterLayer(new ConstellationEditorialFactory(readings.WordBreaker, Log));
-        engine.RegisterLayer(new EchoFactory(readings.WordBreaker, Log));
+        // Every background and composition, as the settings preview has them (WallpaperLayers); the backgroundMode
+        // setting and "Match the music" pick the background (AppController.Wallpaper.cs).
+        foreach (var factory in WallpaperLayers.Factories(readings.WordBreaker, Log)) engine.RegisterLayer(factory);
         _settings.Changed += (_, e) => engine.SetPerformance(PerformanceFrom(e.NewValue));
         _log.Info($"Wallpaper layers: {string.Join(", ", engine.LayerIds.Order())}.");
         return new EngineWallpaperRenderer(engine, Log);

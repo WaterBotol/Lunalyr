@@ -230,16 +230,17 @@ evidence rule, timing faults, leads 0–4, `outranks`, `screen` and agreement (�
 | 6 | §5.6 peers | the number of other-family *candidates* with the same words | the number of other *families* (Apple Music and its relay agreeing count once) | **Kept, read as part of the owner's "relay and its family" decision** (`RankingDecisionsTests.AppleMusicAndItsRelayAreOneSourceInAgreement`); overrule if wrong. No effect on Windows, which has no Apple Music cache. |
 | 7 | §5.1 `isPhraseTimed` | `letters/tokens > 4` (integer or real division not stated) | more than 4 letters per token on average (real division) | **Kept: owner decision 3** (phrase-token rule). Can differ only between 4 and 5 letters per token. |
 | 8 | §5.6 late demotion | outlier lead 4, `couldDemote`, refresh from `latest` | the same | **Kept: owner decision 2.** The open question above about line-only sources with a rival stands. |
-| 9 | §6.1 cache policy | v14 | v16 | **Kept: Windows numbering**, now **v17** (row 1). |
+| 9 | §6.1 cache policy | v14 | v16 | **Kept: Windows numbering**, now **v18** (rows 13 and 19; v17 was row 1). |
 | 10 | §2.2, §2.5, §2.8 hit score | `vc_match_score`: cut-offs title 0.62, artist 0.45, length 25 s; 48 / 27 / max(−22, 14 − 2Δ) / word 20, line 7 / album 4 | `LyricMatchScore`: 0.6, 0.5, 30 s; 50 / 25 / max(−25, 10 − 1.5Δ) / 20, 8 / 5 | **Open, for the owner** (kept for now under the provenance rule). `vc_match_score` is entirely Verso (blame: a99fd65), so it is not translated. It only orders one source's own hits, and every hit between the two sets of cut-offs fails the recording check anyway, so at most Windows lists a rejected near-miss that the Mac drops. **For the owner:** adopting the spec's constants would amount to translating Verso's function. |
-| 11 | §2.6 lyrics.ovh 404 | an error (`LyricHTTP.json` throws), so not remembered as a miss | lyrics.ovh's own "No lyrics found": a miss for 10 minutes | **Open, for the owner** (kept for now). What is found doesn't change (the 404 is the service's answer), only whether it is asked again within 10 minutes, and the state text. Suggest the Mac do the same. |
+| 11 | §2.6 lyrics.ovh 404 | an error (`LyricHTTP.json` throws), so not remembered as a miss | lyrics.ovh's own "No lyrics found": a miss for 10 minutes | **Fixed (follow-up, 13 Nov 2026).** As on the Mac, the 404 is an error (`HttpStatus`), so lyrics.ovh is asked again at the next lookup. State text: "lyrics.ovh: no lyrics found (HTTP 404)." What is found doesn't change. |
 | 12 | (HTTP) | no spacing between requests to one host | 150 ms between requests to one host | **Open, for the owner** (kept for now, as politeness). Timing only: NetEase and AMLL share music.163.com. |
-| 13 | §4.5, §5.1 tier 0 | a synced result whose vocal lines are all empty is a tier-0 candidate; such an LRCLIB exact match also stops the search | dropped ("credits alone are not lyrics"); LRCLIB then searches | **Open, for the owner** (kept for now; edge case). Only an LRC of nothing but ♪ marks; Windows shows "no lyrics" where the Mac shows an empty synced result. |
+| 13 | §4.5, §5.1 tier 0 | a synced result whose vocal lines are all empty is a tier-0 candidate; such an LRCLIB exact match also stops the search | dropped ("credits alone are not lyrics"); LRCLIB then searches | **Fixed (follow-up).** Kept as a synced candidate at tier 0, ranked with untimed text; LRCLIB's exact match of that kind ends its search. Credits-only lyrics are kept the same way. No owner decision covered the old drop (it came with the first pipeline commit). Re-implemented from the spec, since the Mac's LRCLIB block has Verso lines. As on the Mac, such a match can outrank lyrics.ovh's plain text, which reports no length. Cache v18. |
 | 14 | §2.1, §2.9, §3.4, §4.4 (b), §5.3, §7 Apple Music cache | lead 0, music first (0.7 s), second look (4 s), "Apple Music's own lyrics are showing", Music's lyrics set the language | ported and tested with fakes; the source is unavailable on Windows | **Can't apply:** Apple Music for Windows keeps no lyric cache Lunalyr can read (`APPLE-MUSIC-WINDOWS.md`). As §7 says, every source starts at once and the relay is the top lead. |
 | 15 | §1.3, §2.2, §2.3 User-Agents | three Mac agents (LRCLIB's names the Mac's repo) | one generic agent | **Can't apply:** the development rules ask for a generic agent. No service is known to answer differently. |
 | 16 | §1.4 storefront | `Locale.current.region` | `RegionInfo.CurrentRegion` | Platform equivalent (above). |
-| 17 | §3.5 offline | reruns 2 s after the connection returns; if already online, reruns at once, once per track | `AppController` reruns at once when the connection returns, and not at all when the network looked up | **Open: a real difference, not fixed here.** It is in the app layer (`Lunalyr.Shell/AppController`), outside this branch's scope. Recommended follow-up. |
-| 18 | §3.5 rerun reception | a non-forced rerun while lyrics show ignores updates until complete | `LyricSwap.Reception` has the rule; the app never reruns (`rerun: false`) | The same rule; nothing to change until the app reruns (row 17). |
+| 17 | §3.5 offline | reruns 2 s after the connection returns; if already online, reruns at once, once per track | `AppController` reruns at once when the connection returns, and not at all when the network looked up | **Fixed (follow-up).** Ported from `LyricsViewModel.foundNothingOffline` and `connectionRestored` (Lunalyr's own lines): 2 s after the connection returns (`OnlineRetryDelay`), only for the same track with nothing showing; when Windows already reports a connection, at once, once per track (a track or player change resets it). **One difference, as the spec and the brief say:** the Mac's checkout also sends the already-online case through the 2 s wait ("runs again shortly"); Windows reruns at once. |
+| 18 | §3.5 rerun reception | a non-forced rerun while lyrics show ignores updates until complete | `LyricSwap.Reception` has the rule; the app never reruns (`rerun: false`) | The same rule. Still nothing to change: the offline rerun (row 17) runs only while nothing shows, where the rule doesn't apply. |
+| 19 | §4.1 similarity, §1.3 aliases | 周杰倫 vs 周杰伦 has similarity 0; aliases skip an artist already in CJK script | the same | **Changed on Windows (follow-up; suggest the Mac do the same).** `Similarity` folds traditional to simplified Chinese on both sides (`ChineseScripts`, a 2,852-pair table from ICU 72.1's `Hant-Hans`); `Normalize` and the recording key do not fold. When the listed names find nothing, NetEase, QQ, Kugou and Kuwo are asked again with the title and artist in simplified script, before the MusicBrainz aliases and under the same "Search under other names" switch. Names with kana are left alone. Simplified to traditional is not tried: these catalogues list simplified, and that mapping is one-to-many. Credit headings ("晴天 - 周杰伦") match across the scripts too. Cache v18. Live results below. |
 
 Mac tests not ported:
 
@@ -277,7 +278,29 @@ API (US storefront; 晴天 from the TW one). Outputs: `docs/measurements/lyric-p
 No song chose differently after the fixes, which touch cases these songs don't hit (a node naming "Apple Music",
 LRCLIB for another version). **Worth changing on both apps:** an artist written in traditional Chinese finds nothing in
 catalogues that list it in simplified script (晴天 above). Folding traditional and simplified Han for name matching, or
-letting the alias search run for CJK artists, would fix it.
+letting the alias search run for CJK artists, would fix it. Windows now does both (row 19, follow-up below).
 
 Test runs: four full runs after the changes; the first had one failure, which the output filter didn't name, and the
 next three passed (1962 passed, 1 skipped). Probably a timing-sensitive test; not identified.
+
+### Follow-up, 13 Nov 2026: rows 11, 13, 17 and 19
+
+Branch `m6/lyric-fixes`. Rows 11, 13 and 17 now match the Mac; row 19 is a Windows addition. Cache policy **v18**.
+
+**Live check, traditional script.** The same probe set-up as above (automatic lookup, every source, Accuracy first,
+storefront `au`, generic User-Agent, a fresh temp cache, genre "Mandopop"). Lengths and albums are from the iTunes
+Search API's TW storefront. "Before" is `next/windows` 10bcb62 (v17), "after" is this branch (v18). Outputs:
+`docs/measurements/lyric-parity/traditional-{before,after}-*.txt`, with the lyric text left out. For 晴天,
+the raw Kugou and QQ replies to the traditional-script search (recorded) already listed the song under 周杰伦, and every
+hit failed the artist check; the replies for the other two songs were not inspected, so the probe output doesn't say
+whether the first search or the simplified retry found them.
+
+| Song (length) | Before | After |
+|---|---|---|
+| 晴天 — 周杰倫 (269.747 s, album 葉惠美) | QQ Music via Lyrics+ word-by-word at 1.67 s; LRCLIB line-synced second; QQ, Kugou and NetEase found nothing | QQ Music via Lyrics+ word-by-word at 1.67 s, then **Kugou word-by-word** ("晴天" / "周杰伦", 63 lines) as the final match at 2.32 s, ahead of the relay, LRCLIB and QQ's line timing. This is §9's expected outcome. NetEase still found nothing, as it didn't under 周杰伦 either. |
+| 後來 — 劉若英 (338.507 s, album 滾石三十青春音樂記事簿: 祝你幸福) | LRCLIB line-synced at 1.66 s; lyrics.ovh plain second; every catalogue found nothing | **NetEase word-by-word** ("后来" / "刘若英") at 1.67 s; Kugou word-by-word second, then QQ and LRCLIB line-synced. |
+| 愛情轉移 — 陳奕迅 (259.987 s, album 認了吧 (台灣版)) | LRCLIB line-synced at 1.68 s, nothing else found | NetEase line-synced at 1.65 s, then **Kugou word-by-word** ("爱情转移" / "陈奕迅") as the final match at 3.35 s; QQ, NetEase and LRCLIB line-synced behind it. |
+
+The chosen lyrics are now in simplified script where the player names the song in traditional script, because the
+catalogues hold simplified lyrics. Matching words across the scripts for agreement (`LyricAgreementRules`) was left
+unchanged: only names fold.

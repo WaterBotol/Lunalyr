@@ -72,9 +72,13 @@ public sealed record LyricSourceSnapshot(
     /// under their original title too; v16 ranks Apple Music's lyrics as Apple's when a Lyrics+ node names them
     /// "qApple" (13 Nov 2026); v17 also ranks them as Apple's when a node names them "Apple Music", as the Mac does
     /// (parity check of 13 Nov 2026 against the Mac's lookup spec, §2.3): choices cached while such a relay ranked as
-    /// plain Lyrics+ are looked up again.
+    /// plain Lyrics+ are looked up again; v18 compares traditional and simplified Chinese names as the same name and
+    /// searches the Chinese catalogues again in simplified script (13 Nov 2026, a Windows addition): a song named in
+    /// traditional script, such as "晴天 — 周杰倫", had its choice cached while the catalogues could not match it, and
+    /// would keep it for 14 days. v18 also keeps synced lyrics that are only instrumental breaks or credits, ranked with
+    /// untimed text, as the Mac does (§4.5; until then such a song found nothing or a sung edition).
     /// </summary>
-    public const string CachePolicy = "v17";
+    public const string CachePolicy = "v18";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =

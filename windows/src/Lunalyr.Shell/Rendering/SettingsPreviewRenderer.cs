@@ -8,28 +8,6 @@ using Lunalyr.Render.Scene;
 namespace Lunalyr.Shell.Rendering;
 
 /// <summary>
-/// The wallpaper's layers as the app registers them (the backgrounds and every lyric composition), for the settings
-/// preview. Keep in step with <c>AppHost.CreateWallpaper</c>: a layer missing here previews as Editorial.
-/// </summary>
-public static class WallpaperLayers
-{
-    public static IReadOnlyList<IRenderLayerFactory> Factories(IWordBreaker breaker, Logger? logger = null) =>
-    [
-        new GradientLayerFactory(BackgroundOptions.Default, logger),
-        new ColourLayerFactory(BackgroundOptions.Default, logger),
-        new EditorialFactory(breaker, logger),
-        new SpokenFactory(breaker, logger),
-        new CascadeFactory(breaker, logger),
-        new CutoutFactory(breaker, logger),
-        .. Lunalyr.Render.Compositions.Stage.StageFactories.All(breaker, logger),
-        new ScatteredFactory(breaker, logger),
-        new ConstellationFactory(breaker, logger),
-        new ConstellationEditorialFactory(breaker, logger),
-        new EchoFactory(breaker, logger),
-    ];
-}
-
-/// <summary>
 /// The settings window's live preview (the Mac's <c>SettingsLivePreview</c>): the scene on the wallpaper, drawn by the
 /// same layers into a small offscreen surface and read back as pixels. The surface is laid out as a 1080-line display
 /// shrunk to the preview's size, so type and spacing keep the wallpaper's proportions. Not thread-safe: one thread draws.
@@ -81,6 +59,14 @@ public sealed class SettingsPreviewRenderer : IDisposable
         _drawn[1] = Layer(composition, "editorial");
         _surface.Draw(_drawn, scene, songSeconds, playing, wallSeconds, delta);
         _surface.ReadPixels(pixels);
+    }
+
+    /// <summary>Uses <paramref name="factory"/> for its id from now on (the imported picture or video), dropping any instance made from another.</summary>
+    public void Use(IRenderLayerFactory? factory)
+    {
+        if (factory is null || (_factories.TryGetValue(factory.Id, out var known) && ReferenceEquals(known, factory))) return;
+        _factories[factory.Id] = factory;
+        if (_layers.Remove(factory.Id, out var old)) old.Dispose();
     }
 
     private IRenderLayer Layer(string id, string fallback)

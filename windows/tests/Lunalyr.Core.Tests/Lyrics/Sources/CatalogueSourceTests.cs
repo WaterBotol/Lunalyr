@@ -98,6 +98,31 @@ public class CatalogueSourceTests
         Assert.Contains("[00:00.85]Invented first line", found.Payload, StringComparison.Ordinal);
     }
 
+    // Windows addition: asked in traditional script, Kugou lists the song in simplified script (reply recorded 13 Nov
+    // 2026 for "晴天 周杰倫"). Before folding, every hit failed the artist check and nothing was fetched.
+    [Fact]
+    public async Task KugouFindsATraditionalScriptArtistUnderItsSimplifiedListing()
+    {
+        var handler = KugouRecorded().Set("mobileservice.kugou.com/api/v3/search/song", Reply.Fixture("kugou/search-qingtian-traditional.json"));
+        var found = await new KugouSource(handler.Client()).FetchAsync(new LyricQuery("晴天", "周杰倫", "葉惠美", 269.747), Ct);
+        Assert.NotNull(found);
+        Assert.Equal(LyricFormat.Krc, found.Format);
+        Assert.Equal(("晴天", "周杰伦", 269.0), (found.ReportedTitle, found.ReportedArtist, found.ReportedDuration));
+        Assert.Equal("晴天 周杰倫", handler.Query(0, "keyword"));
+        Assert.Equal("b3a52a7a958bf0aed0ebfba2e9a818b7", handler.Query(1, "hash"));
+    }
+
+    [Fact]
+    public async Task QQMusicFindsATraditionalScriptArtistUnderItsSimplifiedListing()
+    {
+        var handler = new FixtureHandler()
+            .Set("c.y.qq.com/soso/fcgi-bin/client_search_cp", Reply.Fixture("qq/search-qingtian.json"))
+            .Set("c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg", Reply.Fixture("qq/lyric.json"));
+        var found = await new QQMusicSource(handler.Client()).FetchAsync(new LyricQuery("晴天", "周杰倫", null, 269), Ct);
+        Assert.NotNull(found);
+        Assert.Equal("0039MnYb0qxYhV", handler.Query(1, "songmid"));
+    }
+
     [Fact]
     public async Task KugouWithoutAFittingSongAsksNoFurther()
     {
@@ -139,7 +164,9 @@ public class CatalogueSourceTests
     {
         var handler = new FixtureHandler { Fallback = Reply.Text(404, """{"error":"No lyrics found"}""") };
         var source = new LyricsOvhSource(handler.Client());
-        Assert.Null(await source.FetchAsync(ShapeOfYou, Ct));
+        // As on the Mac, its 404 ("No lyrics found") is an error, asked again next time, not a miss.
+        var missing = await Assert.ThrowsAsync<LyricSourceException>(() => source.FetchAsync(ShapeOfYou, Ct));
+        Assert.Equal((LyricSourceFailure.HttpStatus, 404), (missing.Failure, missing.StatusCode));
         // Without an artist there is nothing to ask.
         Assert.Null(await source.FetchAsync(new LyricQuery("Shape of You", "", null, 234), Ct));
         Assert.Single(handler.Requests);

@@ -241,7 +241,7 @@ public sealed class TrayFlyoutTests
         var defaults = TrayFlyoutState.From(Inputs(Playing()));
         Assert.Equal(("Pause", "Pause Wallpaper"), (defaults.PauseLabel, defaults.PauseTitle));
         Assert.True(defaults.ReadingsOn && defaults.CreditsOn);
-        Assert.Equal("gradient", defaults.Background);
+        Assert.Equal("auto", defaults.Background);
         Assert.Equal("Editorial", TrayFlyoutState.Layouts[defaults.LayoutIndex].Title);
     }
 
@@ -257,11 +257,14 @@ public sealed class TrayFlyoutTests
     [Fact]
     public void WallpaperTilesMapTheStoredValues()
     {
-        Assert.Equal("gradient", TrayFlyoutState.BackgroundTile("gradient"));
-        Assert.Equal("gradient", TrayFlyoutState.BackgroundTile("auto")); // the Mac's Match the music draws the gradient here
+        // Every type has a tile, in the Mac's grid order; the stored value lights its own.
+        Assert.Equal(AppSettings.BackgroundModes.Order(), TrayFlyoutState.Backgrounds.Select(b => b.Value).Order());
+        Assert.Equal("colourOnly", TrayFlyoutState.BackgroundTile("gradient")); // Windows' old value: Colour only, Album gradient off
+        Assert.Equal("auto", TrayFlyoutState.BackgroundTile("auto"));
         Assert.Equal("colourOnly", TrayFlyoutState.BackgroundTile("colourOnly"));
         Assert.Equal("colourOnly", TrayFlyoutState.BackgroundTile("colour"));
-        Assert.Null(TrayFlyoutState.BackgroundTile("visualizer")); // not drawn yet: no tile lit
+        Assert.Equal("visualizer", TrayFlyoutState.BackgroundTile("visualizer"));
+        Assert.False(TrayFlyoutState.Backgrounds.Single(b => b.Value == "musicVideo").Available);
         Assert.All(TrayFlyoutState.Backgrounds, b => Assert.EndsWith(".", b.Summary));
     }
 

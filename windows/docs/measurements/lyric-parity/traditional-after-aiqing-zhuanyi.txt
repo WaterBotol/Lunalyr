@@ -1,0 +1,57 @@
+Query: "愛情轉移" by "陳奕迅" (4:20, 259.987 s), album "認了吧 (台灣版)", genre "Mandopop", automatic lookup
+Storefront for original titles: au; cache policy v18
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.70s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.70s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.70s    Lyrics+ (KPoe): Searching…
+  0.70s    AMLL TTML DB: Searching…
+  0.70s    NetEase Cloud Music: Searching…
+  0.70s    LRCLIB: Match found
+  0.70s    QQ Music: Searching…
+  0.70s    Kugou Music: Searching…
+  0.70s    Kuwo Music: Searching…
+  0.70s    lyrics.ovh: Searching…
+  1.35s    Lyrics+ (KPoe): No usable match / unavailable
+  1.36s    NetEase Cloud Music: Match found
+  1.58s    AMLL TTML DB: No usable match / unavailable
+  1.65s    NetEase Cloud Music: Match found · showing
+  1.65s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  1.65s  showing (revision 1): Line-synced · NetEase
+  1.92s    QQ Music: Match found
+  3.35s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    Match found
+  LRCLIB                 Match found
+  QQ Music               Match found · 1 other source agrees
+  Kugou Music            Match found · 1 other source agrees · showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Word-by-word · Kugou Music                    "爱情转移" / "陈奕迅" 4:19, 70 lines, score 103.5, tier 3
+  2. Line-synced · QQ Music                        "爱情转移" / "陈奕迅" 4:15, 69 lines, score 85.5, tier 1
+  3. Line-synced · NetEase                         "爱情转移" / "陈奕迅" 4:20, 64 lines, score 93.0, tier 1
+  4. Line-synced · LRCLIB                          "愛情轉移" / "陳奕迅" 4:20, 42 lines, score 93.0, tier 1
+
+Chosen: Word-by-word · Kugou Music
+  0:23  (text omitted)  [7 timed words]
+  0:25  (text omitted)  [6 timed words]
+  0:27  (text omitted)  [11 timed words]
+  0:32  (text omitted)  [7 timed words]
+  0:34  (text omitted)  [6 timed words]
+  0:36  (text omitted)  [11 timed words]

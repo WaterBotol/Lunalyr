@@ -52,6 +52,7 @@ public sealed class ColourLayer : IRenderLayer
         _options = options;
         _log = log;
         _shade = new WallpaperShadeDrawer(options);
+        _vividness = options.Vividness;
     }
 
     /// <summary>Still under Reduce Motion (the options' or the scene's), as on the Mac, except while a fade runs.</summary>
@@ -61,6 +62,13 @@ public sealed class ColourLayer : IRenderLayer
     private bool ReduceMotion => _options.ReduceMotion || _sceneReduces;
 
     private bool _sceneReduces;
+
+    /// <summary>The tilt's clock: wall time times the speed, plus what earlier speeds left (see Render).</summary>
+    private double _flowOffset, _flowSpeed;
+    private bool _flowStarted;
+
+    /// <summary>The colour richness the brushes are made with: the options' times the scene's.</summary>
+    private double _vividness;
 
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
@@ -94,7 +102,22 @@ public sealed class ColourLayer : IRenderLayer
         {
             Observe(frame.Dc, frame.Scene.Palette, now);
             _sceneReduces = frame.Scene.ReduceMotion;
-            var turn = (float)Turn(now, _options.Speed, ReduceMotion);
+            // "Motion speed" changes how fast the ends tilt from now on, never where they are; "Colour richness" makes
+            // the brushes again.
+            var speed = _options.Speed * frame.Scene.Adjustments.Speed;
+            if (!_flowStarted || speed != _flowSpeed)
+            {
+                _flowOffset = _flowStarted ? _flowOffset + now * (_flowSpeed - speed) : 0;
+                _flowSpeed = speed;
+                _flowStarted = true;
+            }
+            var vividness = _options.Vividness * frame.Scene.Adjustments.Vividness;
+            if (vividness != _vividness)
+            {
+                _vividness = vividness;
+                RebuildBrushes(frame.Dc);
+            }
+            var turn = (float)Turn(now * speed + _flowOffset, 1, ReduceMotion);
             var start = new Vector2(0, _size.Y * (0.22f + turn));
             var end = new Vector2(_size.X, _size.Y * (0.78f - turn));
             var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);
@@ -117,7 +140,7 @@ public sealed class ColourLayer : IRenderLayer
             var brightest = 0.0;
             for (var i = 1; i < _scratch.Length; i++)
             {
-                var stop = AlbumWallpaperPalette.Saturated(new Vector3(_scratch[i].X, _scratch[i].Y, _scratch[i].Z), _options.Vividness);
+                var stop = AlbumWallpaperPalette.Saturated(new Vector3(_scratch[i].X, _scratch[i].Y, _scratch[i].Z), _vividness);
                 brightest = Math.Max(brightest, Perceptual.Luminance(Double3.From(stop)));
             }
             _shade.Draw(frame, brightest);
@@ -152,7 +175,7 @@ public sealed class ColourLayer : IRenderLayer
         for (var i = 0; i < StopCount; i++)
         {
             var c = colours[1 + i];
-            var rgb = AlbumWallpaperPalette.Saturated(new Vector3(c.X, c.Y, c.Z), _options.Vividness);
+            var rgb = AlbumWallpaperPalette.Saturated(new Vector3(c.X, c.Y, c.Z), _vividness);
             _stops[i] = new GradientStop(i / (float)(StopCount - 1), new Color4(rgb.X, rgb.Y, rgb.Z, 1));
         }
         var stops = dc.CreateGradientStopCollection(_stops, Gamma.StandardRgb, ExtendMode.Clamp);

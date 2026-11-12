@@ -29,6 +29,10 @@ internal sealed class RenderSurface(int index, SurfaceWindow window)
     // GPU side, recreated after device loss.
     public GpuDevice? Gpu;
     public IDXGISwapChain2? Swap;
+    /// <summary>The DirectComposition target and visual a composition swap chain is shown through.</summary>
+    public SurfaceComposition? Composition;
+    /// <summary>The swap chain carries alpha: a see-through background shows the desktop beneath.</summary>
+    public bool SeeThrough;
     public nint Waitable;
     public ID2D1Bitmap1? Target;
     public bool Hdr;

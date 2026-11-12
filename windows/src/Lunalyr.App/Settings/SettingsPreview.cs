@@ -130,7 +130,8 @@ internal sealed class SettingsPreview : IDisposable
                         var (seconds, playing) = controller.ReadClock();
                         var scene = controller.Scene;
                         var pixels = _buffers[buffer];
-                        renderer.Render(scene, settings.BackgroundMode, composition, seconds, playing, clock.Elapsed.TotalSeconds, pixels);
+                        renderer.Use(controller.CustomWallpaper);
+                        renderer.Render(scene, controller.BackgroundLayer, composition, seconds, playing, clock.Elapsed.TotalSeconds, pixels);
                         Show(pixels, NoteFor(scene, settings.WallpaperPaused));
                         buffer = 1 - buffer;
                     }

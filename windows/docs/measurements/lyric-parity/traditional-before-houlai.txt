@@ -1,0 +1,57 @@
+Query: "後來" by "劉若英" (5:39, 338.507 s), album "滾石三十青春音樂記事簿: 祝你幸福", genre "Mandopop", automatic lookup
+Storefront for original titles: au; cache policy v17
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.84s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.85s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.85s    Lyrics+ (KPoe): Searching…
+  0.85s    AMLL TTML DB: Searching…
+  0.85s    NetEase Cloud Music: Searching…
+  0.85s    LRCLIB: Searching…
+  0.85s    QQ Music: Searching…
+  0.85s    Kugou Music: No usable match / unavailable
+  0.85s    Kuwo Music: Searching…
+  0.85s    lyrics.ovh: Searching…
+  0.98s    AMLL TTML DB: No usable match / unavailable
+  0.99s    LRCLIB: Match found
+  1.12s    NetEase Cloud Music: No usable match / unavailable
+  1.17s    LRCLIB: Match found · 1 other source agrees
+  1.17s    lyrics.ovh: Match found · 1 other source agrees
+  1.66s    LRCLIB: Match found · 1 other source agrees · showing
+  1.66s  showing (revision 1): Line-synced · LRCLIB
+  1.71s    QQ Music: No usable match / unavailable
+  1.78s    Kuwo Music: No usable match / unavailable
+  4.69s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           No usable match / unavailable
+  NetEase Cloud Music    No usable match / unavailable
+  LRCLIB                 Match found · 1 other source agrees · showing
+  QQ Music               No usable match / unavailable
+  Kugou Music            No usable match / unavailable
+  Kuwo Music             No usable match / unavailable
+  lyrics.ovh             Match found · 1 other source agrees
+
+Ranking:
+  1. Line-synced · LRCLIB                          "後來" / "劉若英" 5:38, 40 lines, score 92.2, tier 1
+  2. Plain text · no timing · lyrics.ovh           "後來" / "劉若英" ?:??, 46 lines, score 75.0, tier 0
+
+Chosen: Line-synced · LRCLIB
+  0:13  (text omitted)
+  0:20  (text omitted)
+  0:25  (text omitted)
+  0:32  (text omitted)
+  0:40  (text omitted)
+  0:46  (text omitted)
