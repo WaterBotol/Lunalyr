@@ -64,8 +64,8 @@ final class LyricSourceOptions: ObservableObject {
     /// timing on each match and the names in the source list.
     static var ranking: String {
         let music = LyricSourceID.appleMusicCache.title, lrclib = LyricSourceID.lrclib.title
-        return "Word-by-word and Mixed timing lyrics come first: \(music), then \(lrclib), then your other sources. "
-            + "Line-synced lyrics come next, again with \(music) first."
+        return "Word-by-word and Mixed timing lyrics come first: \(music), then Apple Music’s lyrics from Lyrics+, then \(lrclib), then your other sources. "
+            + "Line-synced lyrics come next, again with \(music) first, then Apple Music’s from Lyrics+."
             + " Timed lyrics for another version of the song (Live, Remix, Acoustic, English Version…), or in another language than the song’s, come after timed lyrics for the version playing."
     }
     /// What a lookup asks and ranks by. Timing, and the lead of Music's own

@@ -467,21 +467,42 @@ final class LyricsFetcher {
     /// which rank together, 1 for line timing and 0 for plain text.
     static func rankedTiming(_ result: Result) -> Int { min(timingTier(result), 2) }
     /// Where a source stands ahead of the configured order at a ranked
-    /// timing: Music's own cache leads timed lyrics, and LRCLIB follows it
-    /// only with word-by-word or mixed timing. Every other source is 2.
+    /// timing, at best: Music's own cache leads timed lyrics, then Apple
+    /// Music's lyrics relayed by Lyrics+ (`isAppleRelay`; Music's own is the
+    /// exact track, so it wins a tie), and LRCLIB follows them only with
+    /// word-by-word or mixed timing. Every other source is 3.
     private static func lead(_ source: LyricSourceID, timing: Int) -> Int {
         switch source {
         case .appleMusicCache where timing >= 1: return 0
-        case .lrclib where timing == 2: return 1
-        default: return 2
+        case .lyricsPlus where timing >= 1: return 1
+        case .lrclib where timing == 2: return 2
+        default: return 3
         }
     }
-    /// `lead` for a match: LRCLIB's word timing loses its lead when two other
+    /// `lead` for a match. Lyrics+ leads only when it relays Apple Music's
+    /// lyrics. LRCLIB's word timing loses its lead when two other
     /// services agree on the timing and LRCLIB's disagrees with both
     /// (`LyricAgreement.timingOutlier`): its timing is made by listeners.
     private static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
-        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 2 }
+        if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 3 }
+        if candidate.source == .lyricsPlus, !isAppleRelay(candidate) { return 3 }
         return lead(candidate.source, timing: timing)
+    }
+    /// The name Lyrics+ results carry after their upstream's ("Apple via Lyrics+").
+    static let lyricsPlusSuffix = " via Lyrics+"
+    /// Lyrics+ relaying Apple Music's own lyrics (its upstream is "Apple"),
+    /// as opposed to Musixmatch's, Spotify's, QQ's or its own database's.
+    /// They rank as Apple Music's (`lead`), after Music's own cache.
+    static func isAppleRelay(_ candidate: LyricCandidate) -> Bool {
+        guard candidate.source == .lyricsPlus else { return false }
+        switch candidate.result {
+        case .synced(_, let p), .plain(_, let p): return isAppleRelay(provenanceSource: p.source)
+        }
+    }
+    static func isAppleRelay(provenanceSource source: String) -> Bool {
+        guard source.hasSuffix(lyricsPlusSuffix) else { return false }
+        let upstream = source.dropLast(lyricsPlusSuffix.count).trimmingCharacters(in: .whitespaces).lowercased()
+        return upstream == "apple" || upstream == "apple music"
     }
     private static func order(_ source: LyricSourceID, in options: LyricSourceOptions.Snapshot) -> Int {
         options.enabled.firstIndex(of: source) ?? 999
@@ -555,6 +576,7 @@ final class LyricsFetcher {
             if !other.isEmpty { found += " · other version (\(VersionTags.describe(other)))" }
             else if candidate.languageMismatch { found += " · lyrics in another language" }
             if candidate.viaOriginalTitle { found += " · found under the original title" }
+            if isAppleRelay(candidate) { found += " · Apple Music’s lyrics" }
             if let fault = LyricsFetcher.timingFault(candidate.result) { found += " · \(fault)" }
             if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
             else if candidate.agreement.peers > 0 {
@@ -664,7 +686,7 @@ final class LyricsFetcher {
     }
     private static func lyricsPlus(_ query: LyricQuery) async throws -> LyricCandidate? {
         guard let hit = try await KPoeLyricsProvider.lookup(title:query.title,artist:query.artist,album:query.album,duration:query.duration) else {return nil}
-        let provenance = Provenance(precision:precision(hit.lines),source:hit.source+" via Lyrics+")
+        let provenance = Provenance(precision:precision(hit.lines),source:hit.source+lyricsPlusSuffix)
         // Rank and label by the recording the node matched, when its names
         // can be checked. One in another script may be the same name
         // transliterated: the search used the library's names, so those
