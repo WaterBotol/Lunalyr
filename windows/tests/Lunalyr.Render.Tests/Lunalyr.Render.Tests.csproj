@@ -19,4 +19,8 @@
     <!-- Helpers shared by every test project (fake time). -->
     <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The music video sync checks read the frame number back from tools/WallpaperTestMedia's time-coded clip. -->
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\timecode.mp4" Link="Fixtures\timecode.mp4" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
