@@ -36,7 +36,7 @@ public sealed class SpotifyPlayerSearchTests
         Assert.Equal("blinding & lights", FixtureHandler.QueryOf(uri, "q"));
         Assert.Equal("track,album", FixtureHandler.QueryOf(uri, "type"));
         Assert.Equal("8", FixtureHandler.QueryOf(uri, "limit"));
-        Assert.Equal("from_token", FixtureHandler.QueryOf(uri, "market"));
+        Assert.Null(FixtureHandler.QueryOf(uri, "market")); // the account's own country
         Assert.Equal("AT-refreshed", request.Bearer);
 
         Assert.Equal(["sp-t-0VjIjW4GlUZAMYd2vXMi3b", "sp-t-4VqPOruhp5EdPBeR92t6lQ", "sp-a-4yP0hdKOZPNshxUOjY0cZj", "sp-a-a2", "sp-a-a3", "sp-a-a4"],
@@ -357,6 +357,32 @@ public sealed class SpotifyPlayerSearchTests
         var last = await kit.Search.PlayQueueItemAsync(snapshot.Items[4], Ct);
         Assert.Equal(PlayOutcome.Queued(1, 1, fromAlbum: false), last);
         Assert.Null(last.Note);
+    }
+
+    [Fact]
+    public async Task WhenALineUpIsRefusedTheClickedSongStillPlays()
+    {
+        var kit = new SpotifyKit().Refreshes();
+        kit.Fake.On("GET me/player", SpotifyFake.Json("player-state.json"));
+        kit.Fake.On("GET me/player/queue", SpotifyFake.Json("queue.json"));
+        kit.Fake.On("PUT me/player/play", SpotifyFake.Json("error-bad-offset.json", 400), SpotifyFake.Empty(204));
+        var snapshot = await kit.Search.GetQueueAsync(Ct);
+
+        var outcome = await kit.Search.PlayQueueItemAsync(snapshot.Items[1], Ct);
+        var puts = kit.Fake.SentTo("PUT me/player/play");
+        Assert.Equal(2, puts.Count);
+        Assert.Equal(["spotify:track:4VqPOruhp5EdPBeR92t6lQ"], Body(puts[1]).GetProperty("uris").EnumerateArray().Select(u => u.GetString()));
+        Assert.Equal(PlayOutcome.Alone(QueueSolo.Rescued), outcome);
+
+        // A refusal about the device or Premium isn't retried.
+        var premium = new SpotifyKit().Refreshes();
+        premium.Fake.On("GET me/player", SpotifyFake.Json("player-state.json"));
+        premium.Fake.On("GET me/player/queue", SpotifyFake.Json("queue.json"));
+        premium.Fake.On("PUT me/player/play", SpotifyFake.Json("error-premium.json", 403));
+        var items = (await premium.Search.GetQueueAsync(Ct)).Items;
+        Assert.Equal(PlayerSearchError.PremiumRequired,
+            (await Assert.ThrowsAsync<PlayerSearchException>(() => premium.Search.PlayQueueItemAsync(items[1], Ct))).Error);
+        Assert.Single(premium.Fake.SentTo("PUT me/player/play"));
     }
 
     [Fact]

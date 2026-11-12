@@ -61,7 +61,8 @@ public sealed class SpotifyPlayerSearch : IPlayerSearch
     {
         var trimmed = query?.Trim() ?? "";
         if (new StringInfo(trimmed).LengthInTextElements < 2) return [];
-        var path = $"search?q={Uri.EscapeDataString(trimmed)}&type=track%2Calbum&limit={SpotifyParsing.SongLimit}&market=from_token";
+        // No market: with a user's token Spotify answers for that account's country.
+        var path = $"search?q={Uri.EscapeDataString(trimmed)}&type=track%2Calbum&limit={SpotifyParsing.SongLimit}";
         var response = await _api.SendAsync(HttpMethod.Get, path, null, SpotifyCall.Search, cancellationToken).ConfigureAwait(false);
         var results = SpotifyParsing.Search(response.Body);
         _log.Debug($"Spotify search: {results.Count(r => r.Kind == PlayerSearchResultKind.Song)} songs, "
@@ -176,8 +177,19 @@ public sealed class SpotifyPlayerSearch : IPlayerSearch
         PlayerQueueSnapshot snapshot;
         lock (_gate) snapshot = _lastQueue;
         var (uris, wanted) = LineUp(snapshot, item, Math.Max(1, _options.QueueLineUpLimit));
-        if (!await SendPlayAsync(click, new SpotifyPlayBody { Uris = uris }, cancellationToken).ConfigureAwait(false))
-            return PlayOutcome.Superseded;
+        try
+        {
+            if (!await SendPlayAsync(click, new SpotifyPlayBody { Uris = uris }, cancellationToken).ConfigureAwait(false))
+                return PlayOutcome.Superseded;
+        }
+        catch (PlayerSearchException ex) when (uris.Count > 1 && SpotifyApiClient.MayBeTheRequest(ex))
+        {
+            // The line-up was refused (an episode among songs, say): the song still plays, on its own.
+            _log.Info($"Spotify: the line-up was refused ({PlayerSearchText.LogText(ex)}); playing the song alone.");
+            if (!await SendPlayAsync(click, new SpotifyPlayBody { Uris = [uris[0]] }, cancellationToken).ConfigureAwait(false))
+                return PlayOutcome.Superseded;
+            return PlayOutcome.Alone(QueueSolo.Rescued);
+        }
         _log.Info($"Spotify: playing a queued song and {uris.Count - 1} after it ({wanted - uris.Count} left out).");
         return PlayOutcome.Queued(uris.Count, wanted, fromAlbum: false);
     }

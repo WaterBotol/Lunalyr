@@ -201,8 +201,9 @@ playlists is asked for.
   (`MediaSourceApp.Kind == Spotify`). Spotify's web player reports as its browser and gets no search, like every other
   player (`NoPlayerSearch`: "{player} has no search Lunalyr can use.").
 - **Search:** two or more characters (fewer finds nothing and asks nobody). One request,
-  `type=track,album&limit=8&market=from_token`: up to 8 songs then up to 4 albums. Local files and songs unplayable in
-  the account's market are left out; covers are HTTPS only, the smallest at least 200 px wide.
+  `type=track,album&limit=8` (no `market`: with a user's token Spotify answers for the account's country): up to 8
+  songs then up to 4 albums. Local files and songs Spotify marks unplayable are left out; covers are HTTPS only, the
+  smallest at least 200 px wide.
 - **Playing a result:** a song plays inside its album from that song on ("Then the rest of its album."). A song with no
   album or a one-song single plays alone ("Plays this song only."), as does the last song of a one-disc album ("…it's
   the last song on its album."). An album plays from its start. If Spotify refuses the album form for a reason that
@@ -213,7 +214,8 @@ playlists is asked for.
   current song. Clicking the song playing sends nothing (play/pause is the transport's). Clicking a later one plays it
   and the songs listed after it, in order (up to 50), with `uris`. Local files can't be started from another app and
   are left out ("Some songs after it couldn't be added, so they're left out."). After those songs, Spotify's own
-  autoplay decides.
+  autoplay decides. If Spotify refuses the list for a reason that may be the request's (an episode among songs, say),
+  the clicked song plays alone ("Couldn't line up what comes next…").
 - **Quick clicks:** clicks run one at a time and only the latest plays; an overtaken click sends nothing.
 - **Errors** (`PlayerSearchText.Words`): not set up, not signed in, sign-in ended, no Premium, no active device
   ("Spotify isn't playing on any device. Start it playing, then try again."), rate limited (nothing is sent until

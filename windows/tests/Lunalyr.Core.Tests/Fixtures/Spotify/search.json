@@ -1,6 +1,6 @@
 {
   "tracks": {
-    "href": "https://api.spotify.com/v1/search?offset=0&limit=8&query=blinding&type=track&market=from_token",
+    "href": "https://api.spotify.com/v1/search?offset=0&limit=8&query=blinding&type=track",
     "limit": 8,
     "next": null,
     "offset": 0,
@@ -82,7 +82,7 @@
     ]
   },
   "albums": {
-    "href": "https://api.spotify.com/v1/search?offset=0&limit=8&query=blinding&type=album&market=from_token",
+    "href": "https://api.spotify.com/v1/search?offset=0&limit=8&query=blinding&type=album",
     "limit": 8,
     "next": null,
     "offset": 0,

@@ -6,6 +6,11 @@ using Lunalyr.Tests.Shared;
 
 namespace Lunalyr.Core.Tests.Player;
 
+// The replies in Fixtures/Spotify are hand-built, never fetched: they follow the shapes in Spotify's published Web API
+// reference (Search for Item, Get Playback State, Get the User's Queue, Start/Resume Playback, the PKCE and
+// refreshing-tokens tutorials, the error objects), read in November 2026. Ids, names, tokens and addresses are invented
+// apart from two track ids the Mac's SpotifyPlayerTests use.
+
 /// <summary>A request the fake Spotify received, read while it was being sent.</summary>
 internal sealed record SpotifyRequest(string Key, string Method, string Address, string? Bearer, string Body)
 {
@@ -76,10 +81,14 @@ internal sealed class MemoryTokenStore : ISpotifyTokenStore
 
     public int Clears { get; private set; }
 
+    /// <summary>Saving throws, as a full disk or a DPAPI failure would.</summary>
+    public bool FailSaves { get; set; }
+
     public SpotifyStoredToken? Load() => Token;
 
     public void Save(SpotifyStoredToken token)
     {
+        if (FailSaves) throw new IOException("disk full");
         Token = token;
         Saves++;
     }

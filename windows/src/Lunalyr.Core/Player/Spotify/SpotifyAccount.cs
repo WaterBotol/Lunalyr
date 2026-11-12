@@ -295,7 +295,8 @@ public sealed class SpotifyAccount
                 if (reply.Refresh is { Length: > 0 } rotated && rotated != stored.RefreshToken)
                 {
                     _stored = stored with { RefreshToken = rotated, Scope = reply.Scope ?? stored.Scope };
-                    _store.Save(_stored);
+                    // Kept in memory even if the file can't be written; the next rotation or sign-in tries again.
+                    TrySave(_stored);
                 }
             }
             _log.Debug("Spotify: access token refreshed.");
@@ -364,11 +365,21 @@ public sealed class SpotifyAccount
             {
                 if (generation != _generation || clientId != _clientId)
                     return new(SpotifySignInStatus.Cancelled, "The Spotify settings changed during the sign-in. Sign in again.");
+            }
+            if (!TrySave(stored))
+                return new(SpotifySignInStatus.Failed, "Couldn’t save the Spotify sign-in in Lunalyr’s data folder. Try again.");
+            lock (_gate)
+            {
+                if (generation != _generation || clientId != _clientId)
+                {
+                    // Signed out or changed while the file was written: don't leave this sign-in behind.
+                    _store.Clear();
+                    return new(SpotifySignInStatus.Cancelled, "The Spotify settings changed during the sign-in. Sign in again.");
+                }
                 _stored = stored;
                 _access = reply.Access;
                 _generation++;
             }
-            _store.Save(stored);
             _log.Info($"Signed in to Spotify (scopes: {(reply.Scope is { Length: > 0 } scope ? scope : "none listed")}).");
             return new(SpotifySignInStatus.SignedIn, "Signed in to Spotify.");
         }
@@ -404,6 +415,22 @@ public sealed class SpotifyAccount
         if (reply?.AccessToken is not { Length: > 0 } token) return null;
         var lifetime = TimeSpan.FromSeconds(reply.ExpiresIn is int seconds && seconds > 0 ? seconds : 3600);
         return (new AccessToken(token, Options.TimeProvider.GetUtcNow() + lifetime), reply.RefreshToken, reply.Scope);
+    }
+
+    /// <summary>Writes the token; false (logged, no token in the message) when the file or the encryption failed.</summary>
+    private bool TrySave(SpotifyStoredToken token)
+    {
+        try
+        {
+            _store.Save(token);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
+            or System.Security.Cryptography.CryptographicException)
+        {
+            _log.Warn($"Spotify: couldn't save the sign-in ({ex.GetType().Name}).");
+            return false;
+        }
     }
 
     /// <summary>The stored token, when it belongs to the client in use. Call under the lock.</summary>

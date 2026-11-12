@@ -98,6 +98,27 @@ public sealed class SpotifyAccountTests
     }
 
     [Fact]
+    public async Task ASignInThatCantBeSavedSaysSoInsteadOfThrowing()
+    {
+        var kit = new SpotifyKit(signedIn: false);
+        kit.Store.FailSaves = true;
+        kit.Fake.On("POST token", SpotifyFake.Json("token-exchange.json"));
+        Task? visit = null;
+        kit.Browser.OnOpen = authorize =>
+        {
+            var redirect = FixtureHandler.QueryOf(authorize, "redirect_uri")!;
+            var state = FixtureHandler.QueryOf(authorize, "state")!;
+            visit = Task.Run(() => LocalBrowser.GetAsync(new Uri($"{redirect}?code=CODE-1&state={Uri.EscapeDataString(state)}")));
+            return true;
+        };
+        var result = await kit.Account.SignInAsync(TestContext.Current.CancellationToken).WaitAsync(Bounded, TestContext.Current.CancellationToken);
+        await visit!.WaitAsync(Bounded, TestContext.Current.CancellationToken);
+        Assert.Equal(SpotifySignInStatus.Failed, result.Status);
+        Assert.Contains("couldn’t save", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SpotifyAccountState.SignedOut, kit.Account.State);
+    }
+
+    [Fact]
     public async Task DecliningOnSpotifysPageStoresNothing()
     {
         var kit = new SpotifyKit(signedIn: false);
