@@ -78,6 +78,34 @@ public sealed class Offscreen : IDisposable
         Dc.Target = null;
     }
 
+    /// <summary>
+    /// Draws one frame of <paramref name="layers"/>, in order (a background, then the lyrics), as the engine does: on
+    /// black, each with the frame's song time and <paramref name="joined"/> (<see cref="FrameContext.SongJoined"/>).
+    /// </summary>
+    public void Render(IReadOnlyList<IRenderLayer> layers, SceneSnapshot scene, double songSeconds, double wallSeconds, float scale,
+                       double joined = 0, bool playing = true)
+    {
+        var delta = double.IsFinite(_lastWall) ? Math.Clamp(wallSeconds - _lastWall, 0, 0.25) : 1.0 / 60;
+        _lastWall = wallSeconds;
+        Dc.Target = _target;
+        Dc.BeginDraw();
+        Dc.Transform = Matrix3x2.Identity;
+        Dc.Clear(new Color4(0, 0, 0, 1));
+        var frame = new FrameContext
+        {
+            Dc = Dc, DWrite = DWrite, D2DFactory = _factory, Size = new Vector2(Width, Height), Scale = scale,
+            WallSeconds = wallSeconds, SongSeconds = songSeconds, IsPlaying = playing, Scene = scene, DeltaSeconds = delta,
+            SongJoined = joined,
+        };
+        foreach (var layer in layers)
+        {
+            Dc.Transform = Matrix3x2.Identity;
+            layer.Render(frame);
+        }
+        Dc.EndDraw().CheckError();
+        Dc.Target = null;
+    }
+
     /// <summary>The last frame's pixels, BGRA, top row first, alpha opaque.</summary>
     public unsafe byte[] Pixels()
     {

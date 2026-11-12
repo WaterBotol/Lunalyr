@@ -139,6 +139,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     public void ReleaseResources()
     {
         Invalidate();
+        ReleaseOpening();
         _dotBrush?.Dispose();
         _dotBrush = null;
         _paint?.Dispose();
@@ -181,6 +182,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         {
             Sync(frame.Scene);
             IsAnimating = false;
+            var opening = PrepareOpening(frame);
             var time = frame.SongSeconds;
             if (Sheet is { Count: > 0 } && double.IsFinite(time))
             {
@@ -200,6 +202,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 // Nothing to say: a status shown again later eases in again.
                 _statusText = null;
             }
+            DrawOpening(dc, opening, frame);
             Trim();
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)

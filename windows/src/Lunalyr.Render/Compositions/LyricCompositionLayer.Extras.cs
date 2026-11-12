@@ -34,15 +34,35 @@ internal abstract partial class LyricCompositionLayer
         _creditPlans.Clear();
         _cues = [];
         _creditBands = [];
+        _cueLines = null;
     }
 
-    /// <summary>The song's credit cues, worked out once per scene (they depend on its lines, title and artist).</summary>
+    /// <summary>
+    /// The song's credit cues, worked out once per scene (they depend on its lines, title and artist) and again when
+    /// the opening title they wait for moves (<see cref="CreditsNotBefore"/>).
+    /// </summary>
     private void SyncExtras(SceneSnapshot scene, IReadOnlyList<LyricLine>? lines)
     {
+        _cueLines = null;
         if (lines is null || !scene.Style.Credits) return;
-        _cues = CreditCues.Cues(lines, scene.Title, scene.Artist, EstimatedWords.Distributor(Breaker));
+        _cueLines = lines;
+        _cues = CreditCues.Cues(lines, scene.Title, scene.Artist, EstimatedWords.Distributor(Breaker), _cuesNotBefore);
         _creditBands = CreditCues.Bands(_cues);
         _creditSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x3FFF_FFFF);
+    }
+
+    private IReadOnlyList<LyricLine>? _cueLines;
+    private double _cuesNotBefore;
+
+    /// <summary>Credits wait for the opening title to leave: none arrives before <paramref name="notBefore"/>.</summary>
+    private void CreditsNotBefore(double notBefore)
+    {
+        if (notBefore == _cuesNotBefore) return;
+        _cuesNotBefore = notBefore;
+        if (_cueLines is not { } lines || SceneShown is not { } scene) return;
+        foreach (var plan in _creditPlans.Values) plan.Dispose();
+        _creditPlans.Clear();
+        SyncExtras(scene, lines);
     }
 
     // ---- Highlight tiles ---------------------------------------------------------------------------------------------
