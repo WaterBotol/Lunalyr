@@ -47,6 +47,9 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
 
     public void SetScene(SceneSnapshot scene) => _engine.SetScene(scene);
 
+    /// <summary>The layers registered with the engine: new compositions join "Match the music" as they are registered.</summary>
+    public IReadOnlyCollection<string> LayerIds => _engine.LayerIds;
+
     /// <summary>
     /// The background layer for a <c>backgroundMode</c> setting: the Mac's raw values where Windows has the layer
     /// ("colourOnly" is the "colour" layer, the Mac's default "auto" the "gradient"), Windows' own ids as they are.

@@ -201,7 +201,11 @@ internal sealed class AppHost
                 saved => _settings.Update(s => s with { SongOffsets = new Dictionary<string, double>(saved) }));
             _wallpaper = CreateWallpaper(readings);
             var controller = new AppController(_sessions, lookup, _wallpaper, _settings.Current, offsets, readings,
-                PlaybackGuard.Process, Log, _connectivity);
+                PlaybackGuard.Process, Log, _connectivity, new AppControllerOptions
+                {
+                    // "Match the music" carries on from where its rotation got to.
+                    LayoutCursorChanged = cursor => _settings.Update(s => s with { RotateLayoutsCursor = cursor }),
+                });
             controller.StatusChanged += (_, _) => QueueStatusUpdate();
             _settings.Changed += (_, e) => controller.ApplySettings(e.NewValue);
             controller.Start();

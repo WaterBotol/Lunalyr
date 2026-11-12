@@ -48,6 +48,12 @@ public sealed record AppControllerOptions
     /// </summary>
     public IReadOnlyList<TimeSpan> ArtworkRetries { get; init; } =
         [TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
+
+    /// <summary>
+    /// Called (off the controller's lock) when "Match the music" moves its rotation on, with the new cursor to save
+    /// (<c>rotateLayoutsCursor</c>), so the next launch carries on from it.
+    /// </summary>
+    public Action<int>? LayoutCursorChanged { get; init; }
 }
 
 /// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>
@@ -201,7 +207,7 @@ public sealed partial class AppController : IAsyncDisposable
         }
 
         _renderer.SetClock(_clockReader);
-        _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
+        _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
         _renderer.SetFrameRate(settings.AnimationRate);
         PublishScene();
         if (!settings.WallpaperPaused) _renderer.Start();
@@ -273,8 +279,11 @@ public sealed partial class AppController : IAsyncDisposable
             if (old.WallpaperPaused != settings.WallpaperPaused) _status = _status with { WallpaperPaused = settings.WallpaperPaused };
         }
 
-        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition)
-            _renderer.SetLayers(settings.BackgroundMode, settings.LyricComposition);
+        ApplyLayoutSettings(old, settings);
+        if (old.BackgroundMode != settings.BackgroundMode || old.LyricComposition != settings.LyricComposition
+            || old.RotateLayouts != settings.RotateLayouts)
+            _renderer.SetLayers(settings.BackgroundMode, CompositionFor(settings));
+        if (settings.LyricComposition == AutomaticComposition) ChooseLayout();
         if (old.AnimationRate != settings.AnimationRate) _renderer.SetFrameRate(settings.AnimationRate);
         if (old.WallpaperPaused != settings.WallpaperPaused)
         {
@@ -453,6 +462,7 @@ public sealed partial class AppController : IAsyncDisposable
         if (disabled is not null)
         {
             _lyricLog.Info($"Not looking lyrics up: {disabled}.");
+            ChooseLayout();
             cts.Dispose();
             lock (_gate)
             {
@@ -527,6 +537,7 @@ public sealed partial class AppController : IAsyncDisposable
                 _query = query;
                 Volatile.Write(ref _recordingKey, query.RecordingKey);
                 _status = _status with { Duration = duration.TotalSeconds };
+                _scene = _scene with { Duration = duration.TotalSeconds };
                 options = _settings.SourceSnapshot();
                 repair = _settings.RepairQQGaps;
             }
@@ -623,6 +634,7 @@ public sealed partial class AppController : IAsyncDisposable
             readings = _settings.Readings();
         }
 
+        ChooseLayout(presented);
         PublishScene();
         RaiseStatusChanged();
         StartReadings(generation, presented, readings);
@@ -693,6 +705,8 @@ public sealed partial class AppController : IAsyncDisposable
             _status = _status with { Status = status, LyricSource = null };
         }
 
+        // A verdict that the song has no lyrics settles its layout too (waiting for a timeline or a lookup does not).
+        if (status != StatusText.LookingUp && status != StatusText.NoPosition) ChooseLayout();
         PublishScene();
         RaiseStatusChanged();
     }

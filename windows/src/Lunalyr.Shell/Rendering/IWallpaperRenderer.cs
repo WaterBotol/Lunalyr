@@ -30,6 +30,12 @@ public interface IWallpaperRenderer : IDisposable
 
     /// <summary>Frame-rate cap in frames a second; 0 follows the display.</summary>
     void SetFrameRate(int framesPerSecond);
+
+    /// <summary>
+    /// The layer ids the renderer has (backgrounds and lyric compositions), for "Match the music" to choose among. Empty
+    /// when it cannot say; the controller then assumes the compositions every build has ("editorial", "spoken").
+    /// </summary>
+    IReadOnlyCollection<string> LayerIds => [];
 }
 
 /// <summary>

@@ -57,7 +57,8 @@ public sealed class AppSettingsTests
             "schemaVersion", "lyricComposition", "wordArrival", "lyricScale", "fontChoice", "fontFamily", "romanizationDisplay",
             "romanizationLanguage", "romanizationTones", "romanizationSaved", "backgroundMode", "wallpaperPaused", "animationRate",
             "pauseWhenCovered", "pauseOnBatterySaver", "pauseWhenFullScreen", "lyricOffset", "repairQQGaps", "songOffsets",
-            "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder",
+            "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "creditsLayer", "showInterludes",
+            "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

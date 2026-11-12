@@ -106,6 +106,9 @@ internal sealed class FakeRenderer : IWallpaperRenderer
 
     public void SetLayers(string background, string composition) => Layers = (background, composition);
 
+    /// <summary>The layers the fake says it has (empty: the controller assumes editorial and spoken).</summary>
+    public IReadOnlyCollection<string> LayerIds { get; set; } = [];
+
     public void SetClock(Func<(double Seconds, bool Playing)> clock) => Clock = clock;
 
     public void SetFrameRate(int framesPerSecond) => FrameRate = framesPerSecond;
