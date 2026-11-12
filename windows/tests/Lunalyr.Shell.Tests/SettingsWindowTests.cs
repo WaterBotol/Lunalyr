@@ -229,14 +229,14 @@ public sealed class SettingsCopyTests
     }
 
     [Fact]
-    public void EveryMacWallpaperTypeIsOfferedAndOnlyMusicVideoWaits()
+    public void EveryMacWallpaperTypeIsOffered()
     {
         // The Mac's grid order: the five Lunalyr draws, then the three that start from something of yours.
         Assert.Equal(["auto", "visualizer", "shader", "pattern", "colourOnly", "desktop", "custom", "musicVideo"],
             SettingsCopy.WallpaperTypes.Select(t => t.Value));
         Assert.Equal(AppSettings.BackgroundModes.Order(), SettingsCopy.WallpaperTypes.Select(t => t.Value).Order());
-        Assert.Equal(["musicVideo"], SettingsCopy.WallpaperTypes.Where(t => !t.Available).Select(t => t.Value));
-        Assert.Equal(SettingsCopy.Milestone6Later, SettingsCopy.WallpaperTypes.Single(t => t.Value == "musicVideo").NotYet);
+        // Music video arrived last (milestone 6, "Music video"): every type is available now.
+        Assert.All(SettingsCopy.WallpaperTypes, t => Assert.True(t.Available, t.Value));
         Assert.All(SettingsCopy.WallpaperTypes, t => Assert.EndsWith(".", t.Summary));
         Assert.Equal("colourOnly", SettingsCopy.WallpaperTypeFor("colour"));
         Assert.Equal("colourOnly", SettingsCopy.WallpaperTypeFor("gradient"));

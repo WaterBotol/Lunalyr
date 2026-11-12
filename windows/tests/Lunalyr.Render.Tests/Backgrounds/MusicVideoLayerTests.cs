@@ -193,6 +193,9 @@ public sealed class MusicVideoLayerTests : IDisposable
         _surface.Context.EndDraw();
         DrawTransparent(layer);
         Assert.Equal(0, MaxAlpha(_surface.ReadPixels()));
+        // The settings preview (offscreen) has no player beneath: the album colours show there.
+        DrawTransparent(layer, desktop: false);
+        Assert.Equal(255, MaxAlpha(_surface.ReadPixels()));
         // Hidden (paused, buffering): the album colours cover it.
         feed.Inputs = feed.Inputs with { PlayerVisible = false };
         DrawTransparent(layer);
@@ -207,7 +210,7 @@ public sealed class MusicVideoLayerTests : IDisposable
         Assert.True(frozen[centre + 1] > 150 && frozen[centre] < 60, "the frozen frame shows");
     }
 
-    private void DrawTransparent(IRenderLayer layer)
+    private void DrawTransparent(IRenderLayer layer, bool desktop = true)
     {
         var dc = _surface.Context;
         dc.BeginDraw();
@@ -216,6 +219,7 @@ public sealed class MusicVideoLayerTests : IDisposable
         {
             Dc = dc, DWrite = _surface.DWrite, D2DFactory = _surface.Factory, Size = _surface.Size, Scale = 1, WallSeconds = 1,
             SongSeconds = double.NaN, IsPlaying = false, Scene = Scene(), DeltaSeconds = 1 / 60.0,
+            AheadWork = desktop ? new Lunalyr.Render.Pacing.AheadWork() : null,
         };
         layer.Render(frame);
         dc.EndDraw().CheckError();

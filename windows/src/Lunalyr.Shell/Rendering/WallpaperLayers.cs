@@ -36,6 +36,7 @@ public static partial class WallpaperLayers
         AddEffectLayers(list, options, logger);
         AddPatternLayers(list, options, logger);
         AddVisualiserLayers(list, options, logger);
+        AddMusicVideoLayers(list, options, logger);
         return list;
     }
 
@@ -63,4 +64,7 @@ public static partial class WallpaperLayers
 
     /// <summary>Visualisers: their factories, ids starting <c>visualizer</c> (implement in <c>WallpaperLayers.Visualisers.cs</c>).</summary>
     static partial void AddVisualiserLayers(List<IRenderLayerFactory> into, BackgroundOptions options, Logger? logger);
+
+    /// <summary>Music video: the file and YouTube layers, ids <c>musicVideo</c> and <c>musicVideo.youtube</c> (in <c>WallpaperLayers.MusicVideo.cs</c>).</summary>
+    static partial void AddMusicVideoLayers(List<IRenderLayerFactory> into, BackgroundOptions options, Logger? logger);
 }
