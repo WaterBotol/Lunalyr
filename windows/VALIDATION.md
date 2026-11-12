@@ -98,3 +98,19 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Japanese songs under English titles (language versions, original-title search) | unit (15 Mac tests) + recorded iTunes replies | `LanguageVersionTests`, `OriginalTitleTests` |
 | Live desktop frames; slow-frame cause | measured live (Extend, 60 fps): line setup on both monitors in one pass, fixed to one per pass | `AheadWorkTests`, [m4/frame-trace.md](docs/measurements/m4/frame-trace.md) |
 | Real players, Duplicate mode, battery | needs the owner | Test Build 4.1 README |
+
+## Milestone 5: desktop player, tray flyout and settings
+
+1986 tests (1985 pass, 1 skipped opt-in) at Test Build 5. Report: [docs/milestones/M5.md](docs/milestones/M5.md).
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Settings window: the Mac's pages, live apply, live preview | unit + live (UI Automation) + screenshots | `AppControllerSettingsWindowTests`, `docs/previews/settings/` |
+| Tray flyout: now playing, transport, line, nudges, quick toggles | unit (7 Mac tests) + live + screenshots | `AppControllerFlyoutTests`, `docs/previews/tray/` |
+| Desktop player: card, scrub with the wallpaper following, keys | unit (50 Mac tests) + live (debug flag) + screenshots | `ScrubMathTests`, `HoverIntentTests`, `docs/previews/player/` |
+| Search, picker and queue (Spotify Web API, own sign-in) | unit with hand-built fixtures; no Spotify request made | `SpotifyPlayerSearchTests`, `DesktopPlayerModelTests`, `docs/previews/player-search/` |
+| Tap to Sync, find and choose lyrics, import, when none are found | unit (Mac tap-sync tests) + live demo + screenshots | `TapSync*Tests`, `docs/previews/lyric-tools/` |
+| Lyric lookup parity with the Mac spec | unit (spec examples) + live lookups of the §9 hard cases | `MacSpecParityTests`, `docs/measurements/lyric-parity/` |
+| "qApple" relay ranks as Apple Music | unit + live (12 songs) | `RankingDecisionsTests`, d392a6d |
+| A held clock keeps the lyric on screen (all 14 compositions) | offscreen guard test + live captures | `HeldLyricRenderTests`, `docs/previews/held-line/` |
+| Card from a real hover; transport on a real player; Spotify sign-in; Narrator; high contrast | needs the owner | Test Build 5 README |
