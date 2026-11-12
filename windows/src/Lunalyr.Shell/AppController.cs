@@ -60,6 +60,12 @@ public sealed record AppControllerOptions
     /// (<c>rotateLayoutsCursor</c>), so the next launch carries on from it.
     /// </summary>
     public Action<int>? LayoutCursorChanged { get; init; }
+
+    /// <summary>How often a better match waiting to replace the lyrics looks whether the line being sung has ended.</summary>
+    public TimeSpan SwapPoll { get; init; } = LyricSwap.Poll;
+
+    /// <summary>The longest a better match waits for the line being sung to end before it is swapped in anyway.</summary>
+    public TimeSpan SwapLimit { get; init; } = LyricSwap.Limit;
 }
 
 /// <summary>What the controller is doing, for the tray tooltip and the diagnostics panel.</summary>
@@ -137,6 +143,7 @@ public sealed partial class AppController : IAsyncDisposable
     private bool _started;
     private bool _disposed;
     private readonly List<Task> _work = [];
+    private long _swapTicket;
 
     private static readonly IReadOnlyDictionary<int, string> NoReadings = new Dictionary<int, string>();
     private static readonly IReadOnlyDictionary<int, IReadOnlyList<LyricWord>> NoWordReadings = new Dictionary<int, IReadOnlyList<LyricWord>>();
@@ -502,6 +509,7 @@ public sealed partial class AppController : IAsyncDisposable
     private async Task RunLookupAsync(long generation, MediaTrackInfo track, CancellationTokenSource cts)
     {
         var ct = cts.Token;
+        Task? swap = null;
         try
         {
             await Task.Yield(); // Off the player's event thread.
@@ -552,13 +560,17 @@ public sealed partial class AppController : IAsyncDisposable
                 repair = _settings.RepairQQGaps;
             }
 
-            var shownRevision = 0;
+            // The first result shows at once; each later one (an upgrade, or LRCLIB demoted by a later agreement) swaps
+            // in between lines, so a line is never re-timed while it is sung (LyricSwap, as on the Mac).
+            var applied = 0;
             var report = await _lyrics.LookupAsync(query, options, update =>
             {
-                if (update.Result is not null && update.Revision != shownRevision)
+                var step = LyricSwap.Reception(update, applied, rerun: false);
+                if (update.Result is { } result && step != LyricReception.Ignore)
                 {
-                    shownRevision = update.Revision;
-                    Show(generation, query, update.Result, repair, complete: false);
+                    applied = Math.Max(update.Revision, 1);
+                    if (step == LyricReception.Show) Show(generation, query, result, repair, complete: false);
+                    else swap = SwapAtLineBoundaryAsync(generation, query, result, repair, complete: false, ct);
                 }
 
                 return ValueTask.CompletedTask;
@@ -566,7 +578,11 @@ public sealed partial class AppController : IAsyncDisposable
 
             if (report.Result is not null)
             {
-                if (report.Revision != shownRevision || shownRevision == 0) Show(generation, query, report.Result, repair, complete: true);
+                var step = LyricSwap.Reception(report, applied, rerun: false);
+                if (step == LyricReception.Show) Show(generation, query, report.Result, repair, complete: true);
+                // A swap still waiting for its line to end is replaced by the final one, which also marks the lookup done.
+                else if (step == LyricReception.SwapAtBoundary || swap is { IsCompleted: false })
+                    swap = SwapAtLineBoundaryAsync(generation, query, report.Result, repair, complete: true, ct);
                 else MarkComplete(generation);
                 _lyricLog.Info($"Showing {report.Result.Provenance.Label}{(report.Cached ? " (saved)" : "")}.");
             }
@@ -601,6 +617,19 @@ public sealed partial class AppController : IAsyncDisposable
         }
         finally
         {
+            // A better match still waiting for its line to end belongs to this lookup: the next track cancels it.
+            if (swap is not null)
+            {
+                try
+                {
+                    await swap.ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _lyricLog.Error("Swapping in the better lyrics failed.", ex);
+                }
+            }
+
             lock (_gate)
             {
                 if (ReferenceEquals(_lookupCts, cts)) _lookupCts = null;
@@ -608,6 +637,47 @@ public sealed partial class AppController : IAsyncDisposable
 
             cts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Swaps in a better result between lines, so a line is never re-timed while it is sung: at once when no line is
+    /// being sung, otherwise once the line being sung ends (or after <see cref="AppControllerOptions.SwapLimit"/>). A
+    /// later swap takes the place of one still waiting. Ported from the Mac's <c>LyricsViewModel.upgrade</c>.
+    /// </summary>
+    private async Task SwapAtLineBoundaryAsync(long generation, LyricQuery query, LyricResult result, bool repair, bool complete,
+        CancellationToken ct)
+    {
+        var ticket = Interlocked.Increment(ref _swapTicket);
+        if (LineBeingSung() is { } sung)
+        {
+            var time = _options.TimeProvider;
+            var deadline = time.GetUtcNow() + _options.SwapLimit;
+            try
+            {
+                while (time.GetUtcNow() < deadline)
+                {
+                    await Task.Delay(_options.SwapPoll, time, ct).ConfigureAwait(false);
+                    if (Interlocked.Read(ref _swapTicket) != ticket) return;
+                    if (LineBeingSung() != sung) break;
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+        }
+
+        if (Interlocked.Read(ref _swapTicket) != ticket || ct.IsCancellationRequested) return;
+        Show(generation, query, result, repair, complete);
+    }
+
+    /// <summary>The index of the line on screen being sung now, if any (<see cref="LyricSwap.LineBeingSung"/>).</summary>
+    private int? LineBeingSung()
+    {
+        LyricResult? shown;
+        lock (_gate) shown = _shown;
+        if (shown is not LyricResult.Synced synced) return null;
+        return LyricSwap.LineBeingSung(synced.Lines, new LyricLineIndex(synced.Lines), ReadClock().Seconds);
     }
 
     private async Task<SongClockReading> WaitForTimelineAsync(CancellationToken ct)

@@ -109,6 +109,48 @@ public sealed class AppControllerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ABetterMatchWaitsForTheLineBeingSungToEnd()
+    {
+        // The player is at 30 s, in the middle of the first line (28–33 s). A better match (an upgrade, or LRCLIB
+        // demoted by a later agreement) swaps in only once that line ends, never mid-line.
+        static LyricResult.Synced Lines(string source, string first, string second) => new(
+        [
+            new LyricLine { Start = 28, End = 33, Text = first, Words = [new LyricWord(first, 28, 33)] },
+            new LyricLine { Start = 36, End = 40, Text = second, Words = [new LyricWord(second, 36, 40)] },
+        ], new LyricProvenance("Line-synced", source));
+        var shown = Lines("LRCLIB", "Shown first", "Then this");
+        var better = Lines("Lyrics+", "Better first", "Better then");
+        var upgraded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _lyrics.Script("Song", async (_, update, _) =>
+        {
+            await update!(new LyricLookupReport { Result = shown, Revision = 1, IsComplete = false });
+            await update(new LyricLookupReport { Result = better, Revision = 2, IsComplete = false });
+            upgraded.SetResult();
+            await gate.Task;
+            return new LyricLookupReport { Result = better, Revision = 2 };
+        });
+        _source.Add(Playing("Song"));
+        var controller = Controller();
+        controller.Start();
+
+        await upgraded.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("LRCLIB", _renderer.Last!.Lyrics!.Provenance.Source);
+        // The lookup ends while the line is still sung: still no swap (the clock has not moved).
+        gate.SetResult();
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        Assert.Equal("LRCLIB", _renderer.Last!.Lyrics!.Provenance.Source);
+        Assert.Equal(StatusText.LookingUp, controller.Status.Status);
+
+        // The line ends at 33 s: the better lyrics take over between lines, and the lookup is done.
+        _time.AdvanceSeconds(3.5);
+        await WaitUntil(() => _renderer.Last?.Lyrics?.Provenance.Source == "Lyrics+");
+        await controller.WhenIdleAsync();
+        Assert.Equal("Better first", Assert.IsType<LyricResult.Synced>(_renderer.Last!.Lyrics).Lines[0].Text);
+        Assert.Equal(StatusText.Showing, controller.Status.Status);
+    }
+
+    [Fact]
     public async Task NothingFoundSaysSoCalmly()
     {
         _lyrics.Answer("Obscure", new LyricLookupReport());
