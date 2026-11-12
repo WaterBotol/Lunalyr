@@ -156,6 +156,12 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
 
     protected StageRect Bounds => new(0, 0, Stage.Width, Stage.Height);
 
+    /// <summary>
+    /// The entrance chosen for <paramref name="run"/> (the Mac's <c>settings.arrival(in:for:)</c> on the run as a word):
+    /// one entrance for every run, or a mix's pick by the run's visual seed.
+    /// </summary>
+    protected WordArrival ChosenFor(StageRun run) => Choice.For(Kind, TimedWordKey.SeedOf(run.Text, run.Start));
+
     protected override void Invalidate()
     {
         base.Invalidate();
@@ -325,9 +331,11 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         {
             alpha = pose.Presence * (1 - 0.5 * yield) * opacity;
             var pointSize = BaseSize * 1.06 * 0.68;
-            var entrance = EntranceTransform.Make(pose.Progress, pose.Arrival, Arrival, pointSize, row % 2 == 0 ? 1 : -1, false);
+            // A line sung as one enters as its layout has it enter: the choice for the phrase (a mix picks by its seed).
+            var motion = Choice.For(Kind, TimedWordKey.SeedOf(source.Text, source.Start)).Motion(Kind);
+            var entrance = EntranceTransform.Make(pose.Progress, pose.Arrival, motion, pointSize, row % 2 == 0 ? 1 : -1, false);
             local = Matrix3x2.CreateTranslation(-centre) * Entrance(entrance) * Matrix3x2.CreateTranslation(centre);
-            blur = Points(Arrival.Blur(pose.Progress));
+            blur = Points(motion.Blur(pose.Progress));
         }
         if (!(alpha > 0.002)) return;
         // A reading that cannot be split by run sits once under the stage; the two are fitted to the stage together.

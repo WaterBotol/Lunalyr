@@ -97,7 +97,7 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
             var scale = scales[id];
             var even = id % 2 == 0;
             // The word's own wringing, unless another word entrance has been chosen.
-            var entrance = StageShared.ChosenEntrance(Arrival, a, rest * scale, even ? 1 : -1, false);
+            var entrance = StageShared.ChosenEntrance(ChosenFor(run), a, rest * scale, even ? 1 : -1, false);
             var twist = entrance is null ? (1 - Math.Min(a, 1)) * 110 * (even ? 1 : -1) : 0;
             // Wrung and loosened again, all the while it is held.
             var breathe = Math.Sin(time * 2.1 + id * 1.7) * (5 + 6 * live);

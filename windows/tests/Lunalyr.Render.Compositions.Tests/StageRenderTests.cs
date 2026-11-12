@@ -299,6 +299,35 @@ public sealed class StageRenderTests : IDisposable
         Assert.True(Difference(plain, Frame(lifted, lift, 3.08)) > 50);
     }
 
+    // A mix gives each word its own entrance, as the Mac's chosenEntrance asks the settings per run (by the run's visual
+    // seed): while a word arrives, the mix draws exactly what its pick alone draws, and not the other entrance. (Only
+    // Torque and Fable make chosen entrances.)
+    [Theory]
+    [InlineData("torque")]
+    [InlineData("fable")]
+    public void AMixPicksTheEntranceWordByWord(string id)
+    {
+        var line = Line("Rain over the city can fly".Split(' '), 0.5);
+        SceneSnapshot With(string reveal) => Scene(line) with { Style = Scene(line).Style with { Reveal = reveal } };
+        var mix = Core.Compositions.EntranceChoice.Parse("mix:lift,pop");
+        var runs = Core.Motion.StageRun.Make(line.Words, new bool[line.Words.Count]);
+        var picks = runs.Select(run => mix.For(Core.Compositions.CompositionKind.Torque, Core.Motion.TimedWordKey.SeedOf(run.Text, run.Start))).ToList();
+        Assert.Contains(Core.Compositions.WordArrival.Lift, picks);
+        Assert.Contains(Core.Compositions.WordArrival.Pop, picks);
+        foreach (var (pick, other) in new[] { ("lift", "pop"), ("pop", "lift") })
+        {
+            // The first word with this pick, part way through its arrival (the words before it have landed).
+            var run = runs[picks.FindIndex(p => p.ToString().Equals(pick, StringComparison.OrdinalIgnoreCase))];
+            var time = run.Start - 0.04 + 0.05;
+            using var mixed = Layer(id);
+            using var alone = Layer(id);
+            using var otherwise = Layer(id);
+            var drawn = Frame(mixed, With("mix:lift,pop"), time);
+            Assert.True(Difference(drawn, Frame(alone, With(pick), time)) < 5, $"{id}: \"{run.Text}\" did not {pick} in");
+            Assert.True(Difference(drawn, Frame(otherwise, With(other), time)) > 50, $"{id}: \"{run.Text}\" made the other entrance");
+        }
+    }
+
     private static LyricLine Japanese => Line(["君", "の", "名", "前", "を", "呼", "ん", "で", "夜", "空", "に", "消", "え", "た"], 0.22, 1,
         [false, true, false, false, true, false, false, true, false, false, true, false, false, true]);
 

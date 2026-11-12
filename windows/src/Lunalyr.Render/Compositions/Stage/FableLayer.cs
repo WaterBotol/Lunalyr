@@ -112,7 +112,7 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
             var wear = rise * fall;
             var opacity = Math.Min(1, a * 1.8) * (0.8 + 0.2 * (id == current ? 1 : wear)) * whole;
             if (!(opacity > 0.002)) continue;
-            var entrance = StageShared.ChosenEntrance(Arrival, a, size, id % 2 == 0 ? 1 : -1, false);
+            var entrance = StageShared.ChosenEntrance(ChosenFor(run), a, size, id % 2 == 0 ? 1 : -1, false);
             var kind = (int)(StageShared.Chance(seed, id, 73) * 4) % 4;
             var motion = entrance is null
                 ? FableStyle.Entrance(kind, a, size, StageShared.Chance(seed, id, 74) < 0.5 ? -1 : 1)
