@@ -14,6 +14,46 @@ internal enum CardPart
     Next,
     SeekBar,
     TimeLabel,
+
+    // Search and the queue (CardParts has the rows: a picker item, a result and a queue row carry their index).
+    SearchButton,
+    QueueButton,
+    PlayerLabel,
+    PaneClose,
+    ClearSearch,
+    PromptAction,
+    SearchField,
+}
+
+/// <summary>The card's parts that come in numbered rows: the picker's players, the results and the queue.</summary>
+internal static class CardParts
+{
+    private const int PickerBase = 1000, ResultBase = 2000, QueueBase = 3000, Span = 1000;
+
+    public static CardPart Picker(int index) => (CardPart)(PickerBase + index);
+
+    public static CardPart Result(int index) => (CardPart)(ResultBase + index);
+
+    public static CardPart QueueRow(int index) => (CardPart)(QueueBase + index);
+
+    public static bool IsPicker(CardPart part, out int index) => Is(part, PickerBase, out index);
+
+    public static bool IsResult(CardPart part, out int index) => Is(part, ResultBase, out index);
+
+    public static bool IsQueueRow(CardPart part, out int index) => Is(part, QueueBase, out index);
+
+    /// <summary>A part that is a round button (the focus ring is a circle).</summary>
+    public static bool IsRound(CardPart part) =>
+        part is CardPart.PlayPause or CardPart.Previous or CardPart.Next or CardPart.SearchButton or CardPart.QueueButton or CardPart.PaneClose
+            or CardPart.ClearSearch;
+
+    private static bool Is(CardPart part, int start, out int index)
+    {
+        index = (int)part - start;
+        if (index is >= 0 and < Span) return true;
+        index = -1;
+        return false;
+    }
 }
 
 /// <summary>
@@ -50,16 +90,58 @@ internal static class CardLayout
     public static readonly RectF NextRect = new(ColumnLeft + Cell + TransportGap + Disc + TransportGap, ControlsTop + (ControlsHeight - Cell) / 2, Cell, Cell);
 
     /// <summary>
-    /// The row's right-hand end, kept clear for the search, queue and music-video buttons (a later round): nothing is
-    /// drawn there yet, and nothing takes clicks.
+    /// The row's right-hand end: search and the queue (the Mac's order; its film button for the music video is
+    /// milestone 6 and keeps its place on the right).
     /// </summary>
     public static readonly RectF ReservedRect = new(ColumnLeft + ColumnWidth - 3 * 34, ControlsTop + 7, 3 * 34, 30);
+
+    public const float IconButton = 30, IconGap = 4;
+    public static readonly RectF QueueButtonRect = new(ColumnLeft + ColumnWidth - IconButton, ControlsTop + 7, IconButton, IconButton);
+    public static readonly RectF SearchButtonRect = new(QueueButtonRect.X - IconGap - IconButton, ControlsTop + 7, IconButton, IconButton);
 
     public static readonly RectF CoverRect = new(Pad, Pad, CoverSize, CoverSize);
 
     public static RectF BarHitRect => new(ColumnLeft - BarSlop, SeekRowTop - BarSlop, ColumnWidth + 2 * BarSlop, BarBand + 2 * BarSlop);
 
     public static RectF TimesRect => new(ColumnLeft, SeekRowTop + BarBand, ColumnWidth, TimesHeight);
+
+    // ---- Search or the queue open: the song and a small transport under the cover ----
+
+    public const float CompactTitleTop = Pad + CoverSize + 12;
+    public const float SmallCell = 30, SmallDisc = 34, SmallGap = 4;
+    public const float SmallTransportTop = CompactTitleTop + 44;
+    private const float SmallLeft = Pad + (CoverSize - (SmallCell * 2 + SmallDisc + SmallGap * 2)) / 2;
+    public static readonly RectF SmallPreviousRect = new(SmallLeft, SmallTransportTop + (SmallDisc - SmallCell) / 2, SmallCell, SmallCell);
+    public static readonly RectF SmallPlayRect = new(SmallLeft + SmallCell + SmallGap, SmallTransportTop, SmallDisc, SmallDisc);
+    public static readonly RectF SmallNextRect = new(SmallLeft + SmallCell + SmallGap + SmallDisc + SmallGap, SmallTransportTop + (SmallDisc - SmallCell) / 2, SmallCell, SmallCell);
+
+    public static RectF PreviousFor(PlayerPane pane) => pane == PlayerPane.Song ? PreviousRect : SmallPreviousRect;
+
+    public static RectF PlayFor(PlayerPane pane) => pane == PlayerPane.Song ? PlayRect : SmallPlayRect;
+
+    public static RectF NextFor(PlayerPane pane) => pane == PlayerPane.Song ? NextRect : SmallNextRect;
+
+    // ---- The search column ----
+
+    public const float PickerHeight = 30;
+    public static readonly RectF PaneCloseRect = new(ColumnLeft + ColumnWidth - 26, ColumnTop + 3, 24, 24);
+    public static readonly RectF FieldRect = new(ColumnLeft, ColumnTop + PickerHeight + 10, ColumnWidth, 36);
+    public static readonly RectF ClearRect = new(FieldRect.Right - 32, FieldRect.Y + 6, 24, 24);
+
+    /// <summary>The text inside the field: after the magnifier, before the clear button; one line of 15 DIP type.</summary>
+    public const float FieldTextHeight = 21;
+    public static readonly RectF FieldTextRect = new(FieldRect.X + 34, FieldRect.Y + (36 - FieldTextHeight) / 2, FieldRect.Width - 34 - 38, FieldTextHeight);
+
+    public const float ResultsTop = ColumnTop + PickerHeight + 10 + 36 + 10;
+    public const float ResultRow = 48, RowGap = 2;
+
+    public static float ColumnBottom(PlayerPane pane, int queueRows) => ColumnTop + (float)PlayerCard.ColumnHeight(pane, queueRows);
+
+    // ---- The queue column ----
+
+    public const float QueueHeader = 24;
+    public const float QueueTop = ColumnTop + QueueHeader + 6;
+    public const float QueueRow = 38, QueueSection = 20;
 }
 
 /// <summary>A rectangle in DIPs.</summary>
@@ -127,4 +209,35 @@ internal sealed class CardModel
     /// <summary>The capsules' time and x while they show (kept as they fade out).</summary>
     public double CapsuleTime;
     public double CapsuleX;
+
+    // Search and the queue (from DesktopPlayerModel; see DesktopPlayer.Search.cs).
+
+    /// <summary>The pane the right-hand column shows; the art column is compact for search and the queue.</summary>
+    public PlayerPane Pane;
+
+    /// <summary>The queue's rows, for the card's height.</summary>
+    public int QueueRows;
+
+    /// <summary>The players the picker offers, and the one the search talks to.</summary>
+    public IReadOnlyList<string> Pickers = [];
+    public int PickerSelected;
+
+    /// <summary>Instead of the search box: what to do (set up, sign in, play in Spotify), or null when search works.</summary>
+    public PlayerSearchPrompt? Prompt;
+
+    public string Query = "";
+    public bool FieldFocused;
+    public string SearchPlaceholder = "Search";
+    public IReadOnlyList<PlayerSearchResult> Results = [];
+    public int Selection;
+    public PlayerSearchStatus Status;
+    public float ResultsScroll;
+
+    public IReadOnlyList<PlayerQueueItem> Queue = [];
+    public string? QueueMessage;
+    public bool ShuffleOn;
+    public float QueueScroll;
+
+    /// <summary>A row's cover by its address, once loaded (null while it loads, or when there is none).</summary>
+    public Func<Uri?, CoverArt?> RowCover = _ => null;
 }

@@ -119,17 +119,40 @@ internal sealed record AutomationSnapshot(
     double Duration,
     string PositionText,
     string TimeLabelName,
-    CardPart Focus);
+    CardPart Focus)
+{
+    /// <summary>The parts Narrator lists, in reading order (the same order as Tab), with what it reads for each.</summary>
+    public IReadOnlyList<AutomationItem> Items { get; init; } = [];
+
+    public AutomationItem? Item(CardPart part)
+    {
+        foreach (var item in Items)
+            if (item.Part == part) return item;
+        return null;
+    }
+
+    public int IndexOf(CardPart part)
+    {
+        for (var i = 0; i < Items.Count; i++)
+            if (Items[i].Part == part) return i;
+        return -1;
+    }
+}
+
+/// <summary>One part as UI Automation reads it.</summary>
+/// <param name="ControlType">UIA's control type id (Button 50000, Edit 50004, ListItem 50007, Slider 50015).</param>
+/// <param name="Rect">Where it is on the card, in DIPs.</param>
+/// <param name="Status">ItemStatus ("Selected", "Now playing", "Up next"…), or empty.</param>
+internal sealed record AutomationItem(CardPart Part, string Name, string Help, int ControlType, RectF Rect, bool Enabled, string Status);
 
 internal sealed unsafe partial class PlayerAutomation : IDisposable
 {
     private const int UiaRootObjectId = -25;
-    private static readonly CardPart[] Parts = [CardPart.Cover, CardPart.Previous, CardPart.PlayPause, CardPart.Next, CardPart.SeekBar, CardPart.TimeLabel];
 
     private readonly DesktopPlayer _player;
     private readonly nint _hwnd;
     private readonly RootProvider _root;
-    private readonly Dictionary<CardPart, PartProvider> _parts = [];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<CardPart, PartProvider> _parts = [];
     private volatile AutomationSnapshot _snapshot;
     private AutomationSnapshot? _announced;
 
@@ -139,8 +162,9 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
         _hwnd = hwnd;
         _snapshot = new AutomationSnapshot(false, default, 1, "Nothing playing", "Cover", false, false, false, 0, 0, "", "", CardPart.PlayPause);
         _root = new RootProvider(this);
-        foreach (var part in Parts) _parts[part] = new PartProvider(this, part);
     }
+
+    private PartProvider PartFor(CardPart part) => _parts.GetOrAdd(part, p => new PartProvider(this, p));
 
     internal AutomationSnapshot Snapshot => _snapshot;
 
@@ -165,10 +189,71 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
             position,
             m.ShowsRemaining ? $"Time remaining {ScrubMath.Timestamp(Math.Max(0, m.Duration - m.Elapsed))}" : $"Song length {ScrubMath.Timestamp(m.Duration)}",
             _snapshot.Focus);
-        if (next == _snapshot) return;
+        var items = Items(m, next);
+        if (next == _snapshot && items.SequenceEqual(_snapshot.Items)) return;
         var old = _snapshot;
-        _snapshot = next;
-        if (old.Playing != next.Playing && UiaClientsAreListening()) RaiseProperty(_parts[CardPart.PlayPause], 30005);
+        _snapshot = next with { Items = items };
+        if (!UiaClientsAreListening()) return;
+        if (old.Playing != next.Playing) RaiseProperty(PartFor(CardPart.PlayPause), 30005);
+        // Rows came or went (a search answered, the queue was read): the card's children changed.
+        if (!old.Items.Select(i => i.Part).SequenceEqual(items.Select(i => i.Part))) RaiseStructure(_root);
+    }
+
+    /// <summary>What Narrator reads for each part, in the order Tab walks them.</summary>
+    private List<AutomationItem> Items(CardModel m, AutomationSnapshot s)
+    {
+        var items = new List<AutomationItem>();
+        foreach (var part in _player.FocusOrder())
+        {
+            var rect = _player.PartRectDip(part);
+            var (name, help, type, status) = Describe(m, s, part);
+            items.Add(new AutomationItem(part, name, help, type, rect,
+                part is CardPart.PlayPause or CardPart.TimeLabel || s.HasSong || part is not (CardPart.Cover or CardPart.Previous or CardPart.Next), status));
+        }
+
+        return items;
+    }
+
+    private static (string Name, string Help, int ControlType, string Status) Describe(CardModel m, AutomationSnapshot s, CardPart part)
+    {
+        const int Button = 50000, Edit = 50004, ListItem = 50007, Slider = 50015;
+        switch (part)
+        {
+            case CardPart.Cover: return (s.CoverName, s.HasSong ? "Plays or pauses. Double-click brings the player forward" : "", Button, "");
+            case CardPart.Previous: return ("Previous track", "", Button, "");
+            case CardPart.PlayPause: return (s.Playing ? "Pause" : "Play", "", Button, "");
+            case CardPart.Next: return ("Next track", "", Button, "");
+            case CardPart.SeekBar: return ("Playback position", "", Slider, s.PositionText);
+            case CardPart.TimeLabel: return (s.TimeLabelName, "", Button, "");
+            case CardPart.SearchButton: return ("Search", "Search and play a song (Ctrl+F)", Button, m.Pane == PlayerPane.Search ? "Open" : "");
+            case CardPart.QueueButton: return ("Queue", "What played and what plays next", Button, m.Pane == PlayerPane.Queue ? "Open" : "");
+            case CardPart.PlayerLabel: return ($"Playing in {m.PlayerName}", "Opens search, where you choose the player to search", Button, "");
+            case CardPart.PaneClose: return (m.Pane == PlayerPane.Queue ? "Close queue" : "Close search", "Esc", Button, "");
+            case CardPart.ClearSearch: return ("Clear search", "", Button, "");
+            case CardPart.PromptAction: return (m.Prompt?.ActionLabel ?? "", m.Prompt?.Text ?? "", Button, "");
+            case CardPart.SearchField:
+                return (m.SearchPlaceholder, m.Status.Kind == PlayerSearchStatusKind.Idle ? "" : m.Status.Text, Edit, "");
+        }
+
+        if (CardParts.IsPicker(part, out var picker) && picker < m.Pickers.Count)
+            return ($"Search {m.Pickers[picker]}", "Chooses the player search talks to", Button, picker == m.PickerSelected ? "Selected" : "");
+        if (CardParts.IsResult(part, out var index) && index < m.Results.Count)
+        {
+            var r = m.Results[index];
+            var kind = r.Kind == PlayerSearchResultKind.Album ? "album" : "song";
+            var by = r.Artist.Length == 0 ? r.Title : $"{r.Title} by {r.Artist}";
+            return ($"{by}, {kind}", index == m.Selection ? "Selected. Enter plays it" : "", ListItem, index == m.Selection ? "Selected" : "");
+        }
+
+        if (CardParts.IsQueueRow(part, out var row) && row < m.Queue.Count)
+        {
+            var q = m.Queue[row];
+            var current = m.Queue.ToList().FindIndex(x => x.IsCurrent);
+            var place = row == current ? "Now playing" : current >= 0 && row < current ? "Played earlier" : "Up next";
+            return (q.Artist.Length == 0 ? q.Title : $"{q.Title} by {q.Artist}", row == current ? "Plays or pauses" : "Plays it, then what is listed after it", ListItem, place);
+        }
+
+        return ("", "", Button, "");
     }
 
     private static string? LineAt(CardModel m)
@@ -193,7 +278,7 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
     {
         if (_snapshot.Focus == part) return;
         _snapshot = _snapshot with { Focus = part };
-        if (UiaClientsAreListening() && _parts.TryGetValue(part, out var provider)) RaiseEvent(provider, 20005);
+        if (UiaClientsAreListening() && part != CardPart.None) RaiseEvent(PartFor(part), 20005);
     }
 
     /// <summary>A note the card shows (a refused command) is read out too.</summary>
@@ -224,8 +309,7 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
     }
 
     internal nint Provider(CardPart part) =>
-        part == CardPart.None || !_parts.TryGetValue(part, out var provider) ? 0
-            : (nint)ComInterfaceMarshaller<IRawElementProviderFragment>.ConvertToUnmanaged(provider);
+        part == CardPart.None ? 0 : (nint)ComInterfaceMarshaller<IRawElementProviderFragment>.ConvertToUnmanaged(PartFor(part));
 
     internal nint RootFragment() => (nint)ComInterfaceMarshaller<IRawElementProviderFragment>.ConvertToUnmanaged(_root);
 
@@ -277,18 +361,23 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
         }
     }
 
+    private static void RaiseStructure(RootProvider root)
+    {
+        var provider = (nint)ComInterfaceMarshaller<IRawElementProviderSimple>.ConvertToUnmanaged(root);
+        try
+        {
+            // StructureChangeType_ChildrenInvalidated, with no runtime id.
+            UiaRaiseStructureChangedEvent(provider, 1, 0, 0);
+        }
+        finally
+        {
+            Marshal.Release(provider);
+        }
+    }
+
     internal static UiaRect PartRect(AutomationSnapshot s, CardPart part)
     {
-        var r = part switch
-        {
-            CardPart.Cover => CardLayout.CoverRect,
-            CardPart.Previous => CardLayout.PreviousRect,
-            CardPart.PlayPause => CardLayout.PlayRect,
-            CardPart.Next => CardLayout.NextRect,
-            CardPart.SeekBar => new RectF(CardLayout.ColumnLeft, CardLayout.SeekRowTop, CardLayout.ColumnWidth, CardLayout.BarBand),
-            CardPart.TimeLabel => new RectF(CardLayout.TimesRect.Right - 64, CardLayout.TimesRect.Y, 64, CardLayout.TimesHeight),
-            _ => new RectF(0, 0, 0, 0),
-        };
+        var r = s.Item(part)?.Rect ?? default;
         return new UiaRect
         {
             Left = s.Card.Left + r.X * s.Scale, Top = s.Card.Top + r.Y * s.Scale, Width = r.Width * s.Scale, Height = r.Height * s.Scale,
@@ -297,6 +386,9 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
 
     [LibraryImport("uiautomationcore")]
     private static partial nint UiaReturnRawElementProvider(nint hwnd, nuint wParam, nint lParam, nint provider);
+
+    [LibraryImport("uiautomationcore")]
+    private static partial int UiaRaiseStructureChangedEvent(nint provider, int structureChangeType, nint runtimeId, int runtimeIdLength);
 
     [LibraryImport("uiautomationcore")]
     internal static partial int UiaHostProviderFromHwnd(nint hwnd, out nint provider);
@@ -350,12 +442,17 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
 
         public nint get_HostRawElementProvider() => UiaHostProviderFromHwnd(owner.Hwnd, out var host) == 0 ? host : 0;
 
-        public nint Navigate(int direction) => direction switch
+        public nint Navigate(int direction)
         {
-            3 => owner.Provider(Parts[0]), // FirstChild
-            4 => owner.Provider(Parts[^1]), // LastChild
-            _ => 0,
-        };
+            var items = owner.Snapshot.Items;
+            if (items.Count == 0) return 0;
+            return direction switch
+            {
+                3 => owner.Provider(items[0].Part), // FirstChild
+                4 => owner.Provider(items[^1].Part), // LastChild
+                _ => 0,
+            };
+        }
 
         public nint GetRuntimeId() => 0; // the host window's id stands for the card
 
@@ -385,16 +482,19 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
     {
         private bool IsBar => part == CardPart.SeekBar;
 
+        private bool IsField => part == CardPart.SearchField;
+
         public int get_ProviderOptions() => 1;
 
         public nint GetPatternProvider(int patternId)
         {
-            // Invoke for the buttons; RangeValue and Value (the spoken position) for the seek bar.
+            // Invoke for the buttons and rows; RangeValue and Value (the spoken position) for the seek bar; Value (what is
+            // typed) for the search box.
             return patternId switch
             {
-                10000 when !IsBar => (nint)ComInterfaceMarshaller<IInvokeProvider>.ConvertToUnmanaged(this),
+                10000 when !IsBar && !IsField => (nint)ComInterfaceMarshaller<IInvokeProvider>.ConvertToUnmanaged(this),
                 10003 when IsBar => (nint)ComInterfaceMarshaller<IRangeValueProvider>.ConvertToUnmanaged(this),
-                10002 when IsBar => (nint)ComInterfaceMarshaller<IValueProvider>.ConvertToUnmanaged(this),
+                10002 when IsBar || IsField => (nint)ComInterfaceMarshaller<IValueProvider>.ConvertToUnmanaged(this),
                 _ => 0,
             };
         }
@@ -402,45 +502,34 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
         public UiaVariant GetPropertyValue(int propertyId)
         {
             var s = owner.Snapshot;
+            var item = s.Item(part);
             return propertyId switch
             {
-                30003 => UiaVariant.Of(IsBar ? 50015 : 50000), // Slider or Button
-                30005 => UiaVariant.Of(Name(s)),
+                30003 => UiaVariant.Of(item?.ControlType ?? (IsBar ? 50015 : 50000)), // ControlType
+                30005 => UiaVariant.Of(item?.Name ?? ""),
                 30011 => UiaVariant.Of($"LunalyrPlayer.{part}"),
                 30009 => UiaVariant.Of(true), // IsKeyboardFocusable
                 30008 => UiaVariant.Of(s.Focus == part && owner.Player.HasKeyboard), // HasKeyboardFocus
-                30010 => UiaVariant.Of(part is CardPart.PlayPause or CardPart.TimeLabel || s.HasSong), // IsEnabled
-                30013 => UiaVariant.Of(Help(s)), // HelpText
-                30026 when IsBar => UiaVariant.Of(s.PositionText), // ItemStatus
+                30010 => UiaVariant.Of(item?.Enabled ?? false), // IsEnabled
+                30013 => UiaVariant.Of(item?.Help ?? ""), // HelpText
+                30026 => UiaVariant.Of(item?.Status ?? ""), // ItemStatus
                 30017 or 30016 => UiaVariant.Of(true), // IsContentElement, IsControlElement
-                30019 => UiaVariant.Of(!s.Shown), // IsOffscreen
+                30019 => UiaVariant.Of(!s.Shown || item is null), // IsOffscreen
                 _ => default,
             };
         }
-
-        private string Name(AutomationSnapshot s) => part switch
-        {
-            CardPart.Cover => s.CoverName,
-            CardPart.Previous => "Previous track",
-            CardPart.PlayPause => s.Playing ? "Pause" : "Play",
-            CardPart.Next => "Next track",
-            CardPart.SeekBar => "Playback position",
-            CardPart.TimeLabel => s.TimeLabelName,
-            _ => "",
-        };
-
-        private static string Help(AutomationSnapshot s) => "";
 
         public nint get_HostRawElementProvider() => 0;
 
         public nint Navigate(int direction)
         {
-            var index = Array.IndexOf(Parts, part);
+            var s = owner.Snapshot;
+            var index = s.IndexOf(part);
             return direction switch
             {
                 0 => owner.RootFragment(), // Parent
-                1 => index + 1 < Parts.Length ? owner.Provider(Parts[index + 1]) : 0, // NextSibling
-                2 => index > 0 ? owner.Provider(Parts[index - 1]) : 0, // PreviousSibling
+                1 => index >= 0 && index + 1 < s.Items.Count ? owner.Provider(s.Items[index + 1].Part) : 0, // NextSibling
+                2 => index > 0 ? owner.Provider(s.Items[index - 1].Part) : 0, // PreviousSibling
                 _ => 0,
             };
         }
@@ -483,11 +572,12 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
 
         public void SetValue(string value)
         {
-            // The spoken position is read-only.
+            // The spoken position is read-only; the search box takes what Narrator (or another client) types.
+            if (IsField) owner.Post(() => owner.Player.SetQueryFromAutomation(value ?? ""));
         }
 
-        string IValueProvider.get_Value() => owner.Snapshot.PositionText;
+        string IValueProvider.get_Value() => IsField ? owner.Player.QueryText : owner.Snapshot.PositionText;
 
-        int IValueProvider.get_IsReadOnly() => 1;
+        int IValueProvider.get_IsReadOnly() => IsField ? 0 : 1;
     }
 }

@@ -37,6 +37,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private readonly Action<Action> _post;
     private readonly IReadOnlyList<string> _debug;
     private readonly CategoryLogger _log;
+    private readonly Logger _logger;
     private readonly CardSurface _surface;
     private readonly CardPainter _painter = new();
     private readonly CardModel _model = new();
@@ -52,6 +53,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private readonly bool _debugShow;
     private readonly bool _debugTop;
     private PlayerAutomation? _automation;
+    private SearchField? _field;
 
     // Hover poll.
     private uint _pollMs;
@@ -102,6 +104,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _updateSettings = updateSettings;
         _post = post;
         _debug = debug;
+        _logger = logger;
         _log = logger.Player;
         _surface = new CardSurface($"Lunalyr.Player.{Environment.ProcessId}", logger.App);
         _scrub = new ScrubController(0, Seek, () => Elapsed(Now()), Now, _interaction, _preview);
@@ -126,6 +129,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         s_instance = this;
         _surface.CreateWindow(&WndProc);
         _automation = new PlayerAutomation(this, _surface.Hwnd);
+        StartSearch();
         _model.ShowsRemaining = _settings().DesktopPlayerTimeMode != "total";
         RefreshLook();
         SchedulePoll(_debugShow ? 100 : (uint)(HoverPolicy.Interval * 1000));
@@ -158,6 +162,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         }
 
         _controller()?.ClearScrubPreview();
+        StopSearch();
         _automation?.Dispose();
         _painter.Dispose();
         _surface.Dispose();
@@ -214,7 +219,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         {
             _hover.Reset();
             _intent.Reset();
-            Apply(null, now);
+            Apply(Pinned(null), now);
             return;
         }
 
@@ -242,7 +247,8 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             _hover.Reset();
         }
 
-        Apply(active, now);
+        // A typed search keeps the card on the display it was typed on.
+        Apply(Pinned(active), now);
     }
 
     /// <summary>Whether the desktop (or Lunalyr's own card) is under the pointer, not an app's window.</summary>
@@ -254,7 +260,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         if (root != 0 && root == _lastHit.Root && now - _lastHit.At < 2) return _lastHit.Exposed;
         bool exposed;
         if (root == 0) exposed = false;
-        else if (root == _surface.Hwnd) exposed = true;
+        else if (root == _surface.Hwnd || (_field is not null && root == _field.Hwnd)) exposed = true;
         // The desktop: the wallpaper and its icons (Lunalyr's own wallpaper is a child of Progman). Hovering an icon
         // counts as the desktop, as on the Mac.
         else exposed = PlayerNative.ClassIs(root, "Progman") || PlayerNative.ClassIs(root, "WorkerW");
@@ -285,7 +291,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             // zone: wherever the card is now (it can grow later), and a smaller margin.
             var rest = work.Centred(PlayerCard.Width * s, PlayerCard.RestHeight * s);
             var hot = rest.Inflated(56 * s, 40 * s);
-            var keep = work.Centred(PlayerCard.Width * s, CardPainter.Height * s).Inflated(28 * s, 28 * s);
+            var keep = work.Centred(PlayerCard.Width * s, _cardHeightDip * s).Inflated(28 * s, 28 * s);
             _displays.Add(new HoverDisplay(id, bounds, hot, keep));
         }
     }
@@ -324,6 +330,8 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _work = work;
         RefreshLook();
         ReadSong(now, force: true);
+        SearchShown(now);
+        UpdateSearch(now);
         var reduce = _model.Look.ReduceMotion;
         if (!_visible || moving)
         {
@@ -362,13 +370,14 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         ApplyLyricFocus();
         _automation?.Shown(false);
         ReleaseKeyboard();
+        SearchHidden();
         StartFrames(16);
     }
 
     /// <summary>Where the card sits: centred in the work area of its display, rising into place as it appears.</summary>
     private void Place(double now)
     {
-        var height = CardPainter.Height;
+        var height = _cardHeightDip;
         _cardW = (int)Math.Round(PlayerCard.Width * _scale);
         _cardH = (int)Math.Round(height * _scale);
         var top = _work.Top + (int)Math.Round(PlayerCard.CardTop(_work.Height / _scale, height) * _scale);
@@ -431,6 +440,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         ReadSong(now, force: false);
         ApplyLyricFocus();
         if (!double.IsNaN(_debugScrub) && _shownOn is not null && !_scrub.IsDragging && _scrub.Current.CanSeek) StartDebugScrub();
+        UpdateSearch(now);
         UpdateModel(now);
         if (_rise.Moving(now) || _rise.Value(now) != 0) Place(now);
         var animating = _reveal.Moving(now) || _rise.Moving(now) || _record.Moving(now) || _thickness.Moving(now) || _active.Moving(now)
@@ -444,7 +454,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private Action<Vortice.Direct2D1.ID2D1DeviceContext>? _paint;
 
     private void PaintCard(Vortice.Direct2D1.ID2D1DeviceContext dc) =>
-        _painter.Paint(dc, _surface.Factory, _model, (float)PlayerCard.Width, CardPainter.Height);
+        _painter.Paint(dc, _surface.Factory, _model, (float)PlayerCard.Width, _cardHeightDip);
 
     private void Draw()
     {
@@ -508,6 +518,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
 
         UpdatePalette(song);
         UpdateContext(song);
+        SearchTrackChanged(song, now);
     }
 
     private void UpdatePalette(PlayerNow song)
