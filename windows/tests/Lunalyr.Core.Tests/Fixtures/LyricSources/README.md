@@ -5,7 +5,10 @@ holds an invented KRC, encrypted the way Kugou serves it.
 
 - LRCLIB: Ed Sheeran, "Shape of You" (`/api/get`, `/api/search`)
 - lyrics.ovh: the same song
-- Lyrics+: the same song (`lyricsplus.binimum.org`); `dead-node.txt` is what `lyricsplus.prjktla.workers.dev` answered (HTTP 404)
+- Lyrics+: the same song (`lyricsplus.binimum.org`); `dead-node.txt` is what `lyricsplus.prjktla.workers.dev` answered (HTTP 404).
+  `pleaser-line.json`: Wallows, "Pleaser" from `lyricsplus.binimum.org`, recorded 13 Nov 2026 with the same agent: a
+  `"type":"Line"` reply (upstream `qApple`, empty `syllabus`), its first 8 entries kept with their times and the text
+  invented, the metadata trimmed.
 - NetEase: 米津玄師, "Lemon" (search, lyric; NetEase has no YRC for it) and 周杰伦, "晴天" (search). `lyric-yrc.json`
   follows the reply for 陈奕迅, "孤勇者" (id 1901371647), which carries YRC with `yv=-1` as well as `yv=1`.
 - AMLL TTML DB: NetEase id 536622304 ("Lemon")
@@ -14,10 +17,14 @@ holds an invented KRC, encrypted the way Kugou serves it.
   script), recorded 13 Nov 2026 with the same agent and trimmed to the fields the source reads: Kugou lists the song
   as 周杰伦 (simplified).
 - MusicBrainz: artist searches for "Kenshi Yonezu" and "Jay Chou" (`/ws/2/artist?query="…"&limit=5&fmt=json`), recorded
-  12 Nov 2026 with the same generic agent and kept whole (no lyrics in them).
+  12 Nov 2026 with the same generic agent and kept whole (no lyrics in them); `artist-yoasobi.json` the same for
+  "YOASOBI", recorded 13 Nov 2026 (country JP).
 - Apple's catalogue (iTunes Search API), recorded 12 Nov 2026 with the same generic agent and trimmed to the song fields
   (no lyrics, no account): `search-au-yoasobi-idol.json` (`/search?country=au&entity=song&limit=15&term=YOASOBI Idol`)
   and the Japanese storefront's entries for its two "Idol" singles (`lookup-jp-<id>.json`, `/lookup?country=jp&id=…&lang=ja_jp`).
+  Recorded 13 Nov 2026 the same way: `search-au-yoasobi-racing-into-the-night.json`
+  (`/search?country=au&entity=song&limit=15&term=YOASOBI Racing into the Night`) and
+  `search-jp-racing-into-the-night.json` (`/search?country=jp&entity=song&limit=15&term=Racing into the Night`).
   The `mac-*.json` files are the Mac test's invented catalogue replies (ids 1001–1003, "Racing into the Night"), kept
   as the Mac wrote them so the ported tests use its inputs.
 

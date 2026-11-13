@@ -1,0 +1,55 @@
+Query: "Pleaser" by "Wallows" (3:08, 187.896 s), genre "Alternative", automatic lookup
+Storefront for original titles: au; cache policy v18
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.74s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.74s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.74s    Lyrics+ (KPoe): Searching…
+  0.74s    AMLL TTML DB: Searching…
+  0.74s    NetEase Cloud Music: Searching…
+  0.74s    LRCLIB: Match found
+  0.74s    QQ Music: Searching…
+  0.74s    Kugou Music: Searching…
+  0.74s    Kuwo Music: Searching…
+  0.74s    lyrics.ovh: Searching…
+  1.10s    LRCLIB: Match found · 1 other source agrees
+  1.10s    lyrics.ovh: Match found · 1 other source agrees
+  1.28s    NetEase Cloud Music: Match found · 2 other sources agree
+  1.28s    LRCLIB: Match found · 2 other sources agree
+  1.28s    lyrics.ovh: Match found · 2 other sources agree
+  1.69s    AMLL TTML DB: Not needed: it couldn’t beat the match showing
+  1.69s    LRCLIB: Match found · 2 other sources agree · showing
+  1.69s    QQ Music: Not needed: it couldn’t beat the match showing
+  1.69s    Kugou Music: Not needed: it couldn’t beat the match showing
+  1.69s    Kuwo Music: Not needed: it couldn’t beat the match showing
+  1.69s  showing (revision 1): Mixed timing · LRCLIB
+  3.05s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         No usable match / unavailable
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Match found · 2 other sources agree
+  LRCLIB                 Match found · 2 other sources agree · showing
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Match found · 2 other sources agree
+
+Ranking:
+  1. Mixed timing · LRCLIB                         "Pleaser" / "Wallows" 3:08, 47 lines, score 104.8, tier 2
+  2. Word-by-word · NetEase                        "Pleaser" / "Wallows" 3:08, 49 lines, score 105.0, tier 3
+  3. Plain text · no timing · lyrics.ovh           "Pleaser" / "Wallows" ?:??, 53 lines, score 75.0, tier 0
+
+Chosen: Mixed timing · LRCLIB
+  (lyric lines left out)

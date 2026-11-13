@@ -25,13 +25,14 @@ English normally carries an "English version" (or similar) tag in its title.
   lyrics and local files are never marked. The mark is worked out afresh at every screening.
 - **Search under the original title** (`OriginalTitles`, `ItunesCatalogue`). When LRCLIB, NetEase, QQ, Kugou, Kuwo,
   Lyrics+ or AMLL find nothing usable under an English title (no match, a language version the title doesn't name, or
-  Latin-only lyrics for an East Asian genre), the song is found in this PC's storefront on the iTunes Search API by
-  primary artist + title (same title, version tags and artist, length within 3 s, nearest first), and the same entry is
-  read from the `jp` storefront in Japanese. A different, native-script name there is searched under, around the
-  artist-name search. A Japanese-script match found that way is recorded under the listed title and marked
-  `ViaOriginalTitle`. Only the title, artist and storefront are sent; answers ("none" too) are kept 30 days in
-  `OriginalTitles.json` beside `ArtistAliases.json`; failures are asked again; requests are a second apart and shared
-  between sources.
+  Latin-only lyrics for an East Asian artist: see "Mac lookup fixes" below for who counts), the song is found in this
+  PC's storefront on the iTunes Search API by primary artist + title (same title, version tags and artist, length
+  within 3 s, nearest first), and the same entry is read from the `jp` storefront in Japanese. Since the Mac's 1cdde21
+  (below), when that storefront has no such entry, the artist's native-script entry there, or in Japan's storefront
+  searched by title, is used. A different, native-script name is searched under, around the artist-name search. A
+  Japanese-script match found that way is recorded under the listed title and marked `ViaOriginalTitle`. Only the
+  title, artist and storefront are sent; answers ("none" too) are kept 30 days in `OriginalTitles.json` beside
+  `ArtistAliases.json`; failures are asked again; requests are a second apart and shared between sources.
 - **Source list.** "Match found · lyrics in another language" (only when no version note applies) and
   "· found under the original title", after the version note and before " · Apple Music’s lyrics", the timing fault,
   agreement and " · showing" (the Mac's wording and order).
@@ -61,7 +62,7 @@ Where Windows may differ from the Mac:
   votes, and is marked when it is in the other script. (Apple Music's cache can't be read on Windows, so in practice no
   lyrics decide the language on their own here.)
 - **Storefront.** The Mac uses the Mac's region; Windows uses the Windows region (`RegionInfo.CurrentRegion`), "us"
-  when it names none. In Japan (`jp`) nothing is asked.
+  when it names none. In Japan (`jp`) only Japan's title search is asked (until the Mac's 1cdde21, nothing was).
 - **Primary artist.** The Mac's step comes from the Verso import, so Windows re-implements it from its behaviour: the
   credit up to the first "&" or comma, trimmed, or the whole credit when that leaves nothing.
 - **Ported tests' word timing.** The Mac's fixture times each line as one token, which Windows' phrase-token rule
@@ -230,7 +231,7 @@ evidence rule, timing faults, leads 0–4, `outranks`, `screen` and agreement (�
 | 6 | §5.6 peers | the number of other-family *candidates* with the same words | the number of other *families* (Apple Music and its relay agreeing count once) | **Kept, read as part of the owner's "relay and its family" decision** (`RankingDecisionsTests.AppleMusicAndItsRelayAreOneSourceInAgreement`); overrule if wrong. No effect on Windows, which has no Apple Music cache. |
 | 7 | §5.1 `isPhraseTimed` | `letters/tokens > 4` (integer or real division not stated) | more than 4 letters per token on average (real division) | **Kept: owner decision 3** (phrase-token rule). Can differ only between 4 and 5 letters per token. |
 | 8 | §5.6 late demotion | outlier lead 4, `couldDemote`, refresh from `latest` | the same | **Kept: owner decision 2.** The open question above about line-only sources with a rival stands. |
-| 9 | §6.1 cache policy | v14 | v16 | **Kept: Windows numbering**, now **v18** (rows 13 and 19; v17 was row 1). |
+| 9 | §6.1 cache policy | v14 | v16 | **Kept: Windows numbering**, now **v18** (rows 13 and 19; v17 was row 1); **v19** for the Mac's 1cdde21 (its v16, rows 20–23 below). |
 | 10 | §2.2, §2.5, §2.8 hit score | `vc_match_score`: cut-offs title 0.62, artist 0.45, length 25 s; 48 / 27 / max(−22, 14 − 2Δ) / word 20, line 7 / album 4 | `LyricMatchScore`: 0.6, 0.5, 30 s; 50 / 25 / max(−25, 10 − 1.5Δ) / 20, 8 / 5 | **Open, for the owner** (kept for now under the provenance rule). `vc_match_score` is entirely Verso (blame: a99fd65), so it is not translated. It only orders one source's own hits, and every hit between the two sets of cut-offs fails the recording check anyway, so at most Windows lists a rejected near-miss that the Mac drops. **For the owner:** adopting the spec's constants would amount to translating Verso's function. |
 | 11 | §2.6 lyrics.ovh 404 | an error (`LyricHTTP.json` throws), so not remembered as a miss | lyrics.ovh's own "No lyrics found": a miss for 10 minutes | **Fixed (follow-up, 13 Nov 2026).** As on the Mac, the 404 is an error (`HttpStatus`), so lyrics.ovh is asked again at the next lookup. State text: "lyrics.ovh: no lyrics found (HTTP 404)." What is found doesn't change. |
 | 12 | (HTTP) | no spacing between requests to one host | 150 ms between requests to one host | **Open, for the owner** (kept for now, as politeness). Timing only: NetEase and AMLL share music.163.com. |
@@ -304,3 +305,61 @@ whether the first search or the simplified retry found them.
 The chosen lyrics are now in simplified script where the player names the song in traditional script, because the
 catalogues hold simplified lyrics. Matching words across the scripts for agreement (`LyricAgreementRules`) was left
 unchanged: only names fold.
+
+### Mac lookup fixes (next/integration 1cdde21), 13 Nov 2026
+
+Branch `m6/mac-lookup-fixes`. The Mac landed four lookup fixes on `next/integration` 1cdde21 (its cache policy v16).
+That code is not in the read-only checkout (79b84db), so they were ported from the Mac session's description, in
+Windows' own structure; no Verso lines were involved. Cache policy **v19**. Every owner decision above is kept.
+
+| # | Spec (§) | Mac (1cdde21) | Windows before | Verdict |
+|---|---|---|---|---|
+| 20 | §2.3 Lyrics+ conversion | a `"type":"Line"` reply (entries with time, duration and text, no `syllabus`) is kept as line timing; from Apple it still ranks as Apple via Lyrics+; a missing duration ends the line at the next entry; a word reply with an unsyllabled line is mixed timing | dropped: `LyricsPlusSource` counted it as "not found" and `KPoeJsonParser` dropped lines without syllables (spec §2.3's "(inferred)") | **Fixed.** Lines get estimated words (`LyricLines.MakeLine`). A last line with no duration ends with the track, or 4 s after it starts (the LRC parser's rule; the description doesn't say). A line-timed relay ranks as Apple (lead 1) at line timing: it beats other line timing, LRCLIB's word timing still beats it, and sources that can give word timing keep running. |
+| 21 | §1.4 original titles | (a) this storefront's entry with the listed title, read again in `jp` by id, is final; (b) else the artist's first native-script entry for the playing version within max(3 s, 2%); (c) else `jp` searched by title, same rule; a `jp` storefront goes straight to (c). Also asked when the listed title found only Latin-script lyrics and the artist is East Asian: an East Asian genre, a native-script artist or album, or MusicBrainz country JP/KR/CN/TW/HK/MO (kept 30 days with the alias lookup). A native-script match found this way makes Latin lyrics rank as another language | (a) only, nothing in `jp`; East Asian meant the genre only | **Fixed** (`OriginalTitles.NativeEntry`, `IsEastAsianAsync`, `ArtistAliases.CountryAsync`). Readings: (b) runs over the reply (a) already has; (c) searches the title alone (the recordings below show why: Japan's artist + title search lacks the single). The "makes Latin lyrics another language" part was already there (`LyricLanguage.Expected`). A "none" stored by the earlier rule is asked again (`OriginalTitles.CurrentRule`); alias entries without a country are asked again for it. |
+| 22 | §4.5, §5.6 credits | "role：names" lines count in opening and closing credit blocks (CN/JP/KR/EN roles; names may mix CJK and Latin, "吉他：蔡科俊Again"); a first line of only the artist, or only a title not sung again, is a header; agreement compares sung lines only; traditional and simplified count as the same name | everyday labels ("吉他", "鼓") only counted among other credits; mixed-script names failed; a lone title or artist line counted only right above credits; plain text's credits counted in agreement | **Fixed** (`LyricCredits.Flagging`, `IsRoleLine`, `SungLines`, `TrackNames.IsHeader`; `LyricAgreementRules.Text`). Japanese and Korean role words added. Names already folded traditional to simplified (row 19). |
+| 23 | (HTTP) cookies | NetEase answers unrelated songs once its NMTID cookie is sent back, so cookies are never kept | `UseCookies = false` already | **Pinned by a test** on the app's real handler (`LyricHttpCookieTests`), its connections answered in memory. |
+
+**Readings chosen where the description is silent (open questions for the Mac):**
+
+- **Where a line with no duration ends** when it is the last: the track's end, else start + 4 s.
+- **"Sung again"** for a title-only first line: any later line containing the title as whole words. This is the
+  conservative reading: fewer headers.
+- **Closing block**: the run of lines ending the song (instrumental breaks skipped) that are each "label：names" with
+  a colon. A label followed by sung words ("鼓：咚咚", "Music: it's all I need") is not part of it.
+- **The header rule applies before the first sung line**, also after opening credits, and to plain text's first line
+  (`DroppingLeadingCredits`).
+- **Step (b)** reads the reply step (a) already has; **step (c)** searches the title alone; an entry with no length
+  doesn't count in (b) or (c); the artist must match by whole names, so a Japanese storefront that lists the artist
+  in native script (米津玄師 for "Kenshi Yonezu") finds nothing in (c).
+- **The MusicBrainz country** is read for the playing artist credit as the alias lookup reads it (the whole credit),
+  and only when the cheaper signs (genre, native script) say nothing. It costs one request per artist the first time a
+  source's answer is Latin-only; a failed request counts as "not East Asian" and is asked again next time.
+
+**Live check.** The same probe set-up as above (automatic lookup, every source, Accuracy first, storefront `au`, the
+generic User-Agent, a fresh temp cache per run). "Before" is `next/windows` 98aa9f4 (v18), "after" is this branch
+(v19). Outputs: `docs/measurements/lyric-parity/mac-lookup-{before,after}-*.txt`, lyric text left out. One run per song
+per pass is a sample.
+
+| Song (length) | Before | After |
+|---|---|---|
+| Racing into the Night — YOASOBI (261.013 s, J-Pop) | LRCLIB mixed timing, English ("Racing Into The Night"), the only match | **AMLL word-by-word, Japanese** (found under 夜に駆ける), then the Apple relay's line timing and LRCLIB's Japanese line timing, both found under the original title. LRCLIB's line timing showed first at 2.14 s. |
+| the same, no genre | LRCLIB mixed timing, English | First run: AMLL word-by-word, Japanese; LRCLIB's English stayed (MusicBrainz probably refused the back-to-back request, so its country was unknown) and ranked as "lyrics in another language". Rerun (`mac-lookup-after-rerun-…-no-genre.txt`): LRCLIB found Japanese under 夜に駆ける too; AMLL word-by-word chosen. |
+| 晴天 — 周杰伦 (269.747 s, Mandopop) | Kugou word-by-word (final; the relay showed first) | Kugou word-by-word, shown first at 1.67 s. The same choice. |
+| Pleaser — Wallows (187.896 s, Alternative) | LRCLIB mixed timing; NetEase word-by-word second; Lyrics+ "no usable match" (its reply is line-only) | LRCLIB mixed timing; **Apple via Lyrics+ line-synced second** (the line-only reply now read). LRCLIB agrees with the relay, so it can't become an outlier and NetEase was stopped as not needed (owner decision 2). The same choice. |
+
+Pleaser is the line-only example: lyricsplus.binimum.org answers `"type":"Line"`, upstream `qApple`, empty `syllabus`
+(recorded as `Fixtures/LyricSources/lyricsplus/pleaser-line.json`, text invented). Racing into the Night's catalogue
+replies are recorded too (`itunes/search-au-yoasobi-racing-into-the-night.json`, `itunes/search-jp-racing-into-the-night.json`):
+Australia's storefront now lists the song only through other artists' covers and YOASOBI's "Into The Night"
+recordings, and Japan's title search has 夜に駆ける (YOASOBI, 261.013 s). YOASOBI's MusicBrainz entry
+(`musicbrainz/artist-yoasobi.json`) says JP.
+
+New tests: `MacLookupFixesTests` (the line-timed relay's rank and early stop, agreement without credits),
+`KPoeParsingTests` (line replies, missing durations, mixed timing), `LyricsPlusSourceTests.ALineReplyIsAnAnswer`,
+`OriginalTitleTests` (the recorded Racing into the Night lookup, steps (b) and (c), the `jp` storefront, stale
+"none" answers, East Asian artists, alias entries without a country), `CreditsTests` (headers, closing blocks,
+mixed-script names, Japanese and Korean roles, plain text's sung lines), `LyricHttpCookieTests` and
+`LyricServiceEndToEndTests.RacingIntoTheNightEndsOnJapaneseWordTimingInAustralia`. Changed: the Mac-ported
+`ASongWithoutAnotherTitleIsRememberedAsNone` (four requests, not three: Japan's title search now runs too),
+`ALoneTitleOnlyCountsAheadOfCredits` (a lone title never sung again is now a header), `AFailedRequestIsAskedAgain`
+(the `jp` storefront now asks) and the cache-policy pin (v19).

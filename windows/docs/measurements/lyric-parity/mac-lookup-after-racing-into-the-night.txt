@@ -1,0 +1,53 @@
+Query: "Racing into the Night" by "YOASOBI" (4:21, 261.013 s), genre "J-Pop", automatic lookup
+Storefront for original titles: au; cache policy v19
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  1.66s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  1.66s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  1.66s    Lyrics+ (KPoe): Searching…
+  1.66s    AMLL TTML DB: Searching…
+  1.66s    NetEase Cloud Music: Searching…
+  1.66s    LRCLIB: Searching…
+  1.66s    QQ Music: Searching…
+  1.66s    Kugou Music: Searching…
+  1.66s    Kuwo Music: Searching…
+  1.66s    lyrics.ovh: Searching…
+  2.14s    LRCLIB: Match found · found under the original title · showing
+  2.14s    lyrics.ovh: Not needed: it couldn’t beat the match showing
+  2.14s  showing (revision 1): Line-synced · LRCLIB
+  2.48s    AMLL TTML DB: Match found · found under the original title · 1 other source agrees
+  2.48s    NetEase Cloud Music: Not needed: it couldn’t beat the match showing
+  2.48s    LRCLIB: Match found · found under the original title · 1 other source agrees · showing
+  2.48s    QQ Music: Not needed: it couldn’t beat the match showing
+  2.48s    Kugou Music: Not needed: it couldn’t beat the match showing
+  2.48s    Kuwo Music: Not needed: it couldn’t beat the match showing
+  2.81s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · found under the original title · Apple Music’s lyrics · timing differs from other sources
+  AMLL TTML DB           Match found · found under the original title · 2 other sources agree · showing
+  NetEase Cloud Music    Not needed: it couldn’t beat the match showing
+  LRCLIB                 Match found · found under the original title · 2 other sources agree
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Word-by-word · AMLL TTML DB                   "Racing into the Night" / "YOASOBI" 4:21, 56 lines, score 105.0, tier 3
+  2. Line-synced · Apple via Lyrics+               "Racing into the Night" / "YOASOBI" ?:??, 58 lines, score 75.5, tier 1
+  3. Line-synced · LRCLIB                          "Racing into the Night" / "YOASOBI" 4:21, 61 lines, score 93.0, tier 1
+
+Chosen: Word-by-word · AMLL TTML DB
+  (lyric lines left out)

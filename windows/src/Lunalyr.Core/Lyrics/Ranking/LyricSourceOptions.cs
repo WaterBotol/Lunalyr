@@ -76,9 +76,14 @@ public sealed record LyricSourceSnapshot(
     /// searches the Chinese catalogues again in simplified script (13 Nov 2026, a Windows addition): a song named in
     /// traditional script, such as "晴天 — 周杰倫", had its choice cached while the catalogues could not match it, and
     /// would keep it for 14 days. v18 also keeps synced lyrics that are only instrumental breaks or credits, ranked with
-    /// untimed text, as the Mac does (§4.5; until then such a song found nothing or a sung edition).
+    /// untimed text, as the Mac does (§4.5; until then such a song found nothing or a sung edition). v19 (the Mac's v16,
+    /// next/integration 1cdde21, 13 Nov 2026) keeps Lyrics+ "type":"Line" replies as line timing (until then dropped, so
+    /// Apple's line-timed lyrics relayed by Lyrics+ were never found), searches an East Asian artist's song under its
+    /// original title when the listed one found only Latin-script lyrics (genre, native-script artist or album, or
+    /// MusicBrainz country) and looks that title up in more places, treats closing "role：names" lines and a lone
+    /// artist or title header as credits, and leaves credits and headers out of agreement.
     /// </summary>
-    public const string CachePolicy = "v18";
+    public const string CachePolicy = "v19";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =
