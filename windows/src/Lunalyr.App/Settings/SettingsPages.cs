@@ -57,6 +57,10 @@ internal static class ReadingsPage
     {
         var page = Page();
         Section(page, "Romanisation");
+        // Display belongs to a lyric style (LyricStyleProfiles): say which one while the lyrics float.
+        var styleNote = Caption("");
+        ctx.OnRefresh(s => styleNote.Text = FloatingCopy.EditingNote(s.Surface) ?? "");
+        page.Children.Add(styleNote.ShowWhen(ctx, s => s.IsFloating));
         page.Children.Add(Card("Display", "Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.", "",
             Combo(ctx, SettingsCopy.ReadingDisplays, s => s.RomanizationDisplay, (s, v) => s with { RomanizationDisplay = v }, width: 200)));
         page.Children.Add(Card("Language",
@@ -75,35 +79,6 @@ internal static class ReadingsPage
         Section(page, "Translations");
         page.Children.Add(Card("Show translations under lyrics", "Shown when the lyric source has a translation. Lyrics are never sent anywhere to be translated.",
             "", FixedToggle(false), notYet: SettingsCopy.LaterBuild));
-        return page;
-    }
-}
-
-/// <summary>
-/// Covers (the Mac's "Animated covers", CoversPage.swift): Apple Music's motion artwork behind the lyrics, with Match the
-/// music. Windows doesn't fetch animated covers yet, so the switch and the framing wait, with why; Softening is still
-/// saved (Reset Adjustments puts it back, as on the Mac).
-/// </summary>
-internal static class CoversPage
-{
-    public static StackPanel Build(SettingsContext ctx)
-    {
-        var page = Page();
-        Section(page, "Animated covers");
-        page.Children.Add(Card("Use animated covers", "Apple Music’s moving album artwork behind the lyrics, with Match the music.", "",
-            FixedToggle(false), notYet: SettingsCopy.AnimatedCoversNotYet));
-        Section(page, "Framing");
-        // Saved values, shown but not changeable until animated covers are drawn.
-        var placementMenu = Combo(ctx, SettingsCopy.Placements, s => s.MotionPlacement, (s, v) => s with { MotionPlacement = v }, width: 200);
-        placementMenu.IsEnabled = false;
-        var placement = Card("Placement", null, "", placementMenu, notYet: SettingsCopy.CoverFramingNote);
-        ctx.OnRefresh(s => placement.Description = SettingsCopy.Placements.FirstOrDefault(p => p.Value == s.MotionPlacement)?.Detail ?? "");
-        page.Children.Add(placement);
-        var softening = Slider(ctx, 0, AppSettings.MotionBlurMax, 0.5, v => v <= 0 ? "None" : SettingsCopy.Percent(v / AppSettings.MotionBlurMax),
-            s => s.MotionBlur, (s, v) => s with { MotionBlur = v });
-        foreach (var slider in ((Panel)softening).Children.OfType<Slider>()) slider.IsEnabled = false;
-        page.Children.Add(Card("Softening", "A soft blur over the cover.", "", softening, notYet: SettingsCopy.CoverFramingNote));
-        page.Children.Add(Caption("The album cover beside the song’s title at the start is under Lyric style › Layout."));
         return page;
     }
 }

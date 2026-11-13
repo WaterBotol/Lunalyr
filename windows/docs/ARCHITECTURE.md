@@ -175,6 +175,10 @@ user's wallpaper.**
   per surface reads ahead two frames and then waits; the layer's clock advances only while it is drawn, so a paused,
   hidden or covered wallpaper costs nothing and resumes where it was. It loops by seeking to the start. Under Reduce
   Motion (Windows' Animation effects off) it holds its first frame. A device without video support decodes in memory.
+- **Animated covers** (Apple Music's motion artwork) use the same reader from a downloaded MP4 in
+  `{data}\AnimatedCovers`: the Source Reader has no HLS source on Windows (`MF_E_UNSUPPORTED_BYTESTREAM_TYPE` for a
+  `.m3u8`). A loop is measured from a pass's first frame, since fragmented MP4s state no duration and may start late
+  (docs/milestones/M6.md, "Animated covers").
 - **First frames.** A background implementing `IFirstFrameLayer` holds its crossfade until it can draw (or 3 s pass,
   the Mac's `firstFrameWait`), so a picture or video never fades in from black. `RenderEngine.ReplaceLayer` renews the
   `custom` layer when the file or placement changes.

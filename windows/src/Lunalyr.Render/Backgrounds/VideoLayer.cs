@@ -19,7 +19,7 @@ namespace Lunalyr.Render.Backgrounds;
 /// cost. Under Reduce Motion it holds on its first frame. Each frame shown is copied into a texture of the layer's own
 /// and drawn placed as the page says.
 /// </summary>
-public sealed class VideoLayer : PlacedLayer
+public class VideoLayer : PlacedLayer
 {
     /// <summary>Frames decoded ahead of the one shown.</summary>
     private const int QueueLength = 2;
@@ -66,7 +66,7 @@ public sealed class VideoLayer : PlacedLayer
         if (_error is { } error)
         {
             _failed = true;
-            Log.Render.Warn($"Imported video \"{System.IO.Path.GetFileName(Path)}\" can't be shown: {error}");
+            Log.Render.Warn($"{What} \"{System.IO.Path.GetFileName(Path)}\" can't be shown: {error}");
             return;
         }
         _reduceMotion = frame.Scene.ReduceMotion;
@@ -77,10 +77,29 @@ public sealed class VideoLayer : PlacedLayer
         {
             using (due) Show(frame.Dc, due);
         }
-        if (_bitmap is not null)
-            frame.Dc.DrawBitmap(_bitmap, Destination(_width, _height), 1, InterpolationMode.Linear,
-                new Vortice.RawRectF(0, 0, _width, _height), null);
+        if (_bitmap is not null) DrawFrame(frame, _bitmap, _width, _height);
     }
+
+    /// <summary>What the log calls this video ("Imported video").</summary>
+    private protected virtual string What => "Imported video";
+
+    /// <summary>Whether the video can't be shown (it failed to open, decode or draw).</summary>
+    private protected bool VideoFailed => _failed || _error is not null;
+
+    /// <summary>Whether a frame of the video is ready to draw.</summary>
+    private protected bool HasVideoFrame => _bitmap is not null && !VideoFailed;
+
+    /// <summary>Draws the frame on screen, placed (a subclass may soften it).</summary>
+    private protected virtual void DrawFrame(in FrameContext frame, ID2D1Bitmap1 bitmap, int width, int height) =>
+        frame.Dc.DrawBitmap(bitmap, Destination(width, height), 1, InterpolationMode.Linear, new Vortice.RawRectF(0, 0, width, height), null);
+
+    /// <summary>
+    /// How far one pass through a video moves its clock: the file's duration when it states one, else from its first
+    /// frame's time to its last plus one frame. A fragmented MP4 (Apple's animated covers) states no duration and may
+    /// start well after zero (10 s for some), so measuring from zero would hold the last frame that long at each loop.
+    /// </summary>
+    internal static double PassLength(double duration, double first, double last, double step) =>
+        duration > 0 ? duration : (last - first > 0 ? last - first : 0) + (step > 0 && step < 1 ? step : 1.0 / 30);
 
     /// <summary>The newest decoded frame that is due by the video's clock (older due ones are dropped).</summary>
     private bool TakeDue(out VideoFrame due)
@@ -168,8 +187,8 @@ public sealed class VideoLayer : PlacedLayer
         _width = reader.Width;
         _height = reader.Height;
         DecodedOn = reader.Hardware ? "GPU" : "memory";
-        Log.Render.Info($"Imported video: {_width}x{_height}, {reader.Duration:0.0} s, decoded in {DecodedOn}, no audio stream read.");
-        double offset = 0, last = 0;
+        Log.Render.Info($"{What}: {_width}x{_height}, {reader.Duration:0.0} s, decoded in {DecodedOn}, no audio stream read.");
+        double offset = 0, last = 0, previous = 0, first = double.NaN;
         var empty = 0;
         while (!_stopping)
         {
@@ -177,14 +196,16 @@ public sealed class VideoLayer : PlacedLayer
             {
                 case VideoRead.Frame:
                     empty = 0;
+                    if (double.IsNaN(first)) first = frame.Time;
+                    previous = last;
                     last = frame.Time;
                     frame.Time += offset;
                     if (!Enqueue(frame)) return;
                     break;
                 case VideoRead.EndOfStream:
                     // Loop: the next pass's frames follow on from this one's end.
-
-                    offset += reader.Duration > 0 ? reader.Duration : last + 1.0 / 30;
+                    offset += PassLength(reader.Duration, first, last, last - previous);
+                    first = double.NaN;
                     if (!reader.Rewind() || ++empty > 3)
                     {
                         _error = "It couldn't be played again from its start.";
@@ -225,7 +246,7 @@ public sealed class VideoLayer : PlacedLayer
     private protected override void Fail(Exception ex)
     {
         _failed = true;
-        Log.Render.Warn("Imported video: drawing failed; waiting for new resources.", ex);
+        Log.Render.Warn($"{What}: drawing failed; waiting for new resources.", ex);
     }
 
     private void Stop()

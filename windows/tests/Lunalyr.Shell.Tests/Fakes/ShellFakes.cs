@@ -106,6 +106,19 @@ internal sealed class FakeRenderer : IWallpaperRenderer
 
     public void SetLayers(string background, string composition) => Layers = (background, composition);
 
+    private Lunalyr.Platform.Desktop.FloatingLyricsOptions _floating = Lunalyr.Platform.Desktop.FloatingLyricsOptions.Off;
+
+    /// <summary>The floating lyrics' options last handed over.</summary>
+    public Lunalyr.Platform.Desktop.FloatingLyricsOptions Floating
+    {
+        get { lock (_gate) return _floating; }
+    }
+
+    public void SetFloating(Lunalyr.Platform.Desktop.FloatingLyricsOptions options)
+    {
+        lock (_gate) _floating = options;
+    }
+
     /// <summary>The layers the fake says it has (empty: the controller assumes editorial and spoken).</summary>
     public IReadOnlyCollection<string> LayerIds { get; set; } = [];
 

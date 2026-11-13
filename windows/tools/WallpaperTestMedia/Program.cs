@@ -1,6 +1,9 @@
 // WallpaperTestMedia <folder>: writes gradient.mp4 (1280x720, 30 fps, 6 s, H.264, no audio track), landscape.png,
 // portrait.jpg (taller than wide) and turned.jpg (stored sideways, EXIF orientation 6 = shown upright) into <folder>.
 // "WallpaperTestMedia <folder> clip" writes only clip.mp4 (160x96, 15 fps, 1 s), the unit tests' fixture.
+// "WallpaperTestMedia <folder> timecode [width height fps seconds]" writes timecode.mp4: every frame carries its own frame
+// number in a row of black and white blocks (bit 0 on the left), with a bar sweeping across under it, so a render can be
+// read back to the exact frame (the music video sync checks). Defaults: 160x96, 15 fps, 8 s (the unit tests' fixture).
 // Everything is drawn in code.
 
 using System.Runtime.InteropServices;
@@ -14,6 +17,14 @@ if (args.Length > 1 && args[1] == "clip")
     // The unit tests' fixture: small and short, checked in under tests/Lunalyr.Platform.Windows.Tests/Fixtures/Wallpaper.
     Video.Write(Path.Combine(folder, "clip.mp4"), 160, 96, 15, 1);
     Console.WriteLine($"Wrote clip.mp4 to {folder}");
+    return;
+}
+if (args.Length > 1 && args[1] == "timecode")
+{
+    int Arg(int i, int fallback) => args.Length > i && int.TryParse(args[i], out var v) ? v : fallback;
+    int tw = Arg(2, 160), th = Arg(3, 96), tfps = Arg(4, 15), tseconds = Arg(5, 8);
+    Video.Write(Path.Combine(folder, "timecode.mp4"), tw, th, tfps, tseconds, timecode: true);
+    Console.WriteLine($"Wrote timecode.mp4 ({tw}x{th}, {tfps} fps, {tseconds} s) to {folder}");
     return;
 }
 Video.Write(Path.Combine(folder, "gradient.mp4"), 1280, 720, 30, 6);
@@ -83,7 +94,7 @@ internal static unsafe partial class Video
         VideoType = new("73646976-0000-0010-8000-00AA00389B71"), H264 = new("34363248-0000-0010-8000-00AA00389B71"),
         Rgb32 = new("00000016-0000-0010-8000-00AA00389B71");
 
-    public static void Write(string path, int w, int h, int fps, int seconds)
+    public static void Write(string path, int w, int h, int fps, int seconds, bool timecode = false)
     {
         Check(MFStartup(0x00020070, 0));
         if (File.Exists(path)) File.Delete(path);
@@ -104,7 +115,8 @@ internal static unsafe partial class Video
             byte* data;
             // IMFMediaBuffer: 3 Lock, 4 Unlock, 6 SetCurrentLength.
             Check(((delegate* unmanaged[Stdcall]<nint, byte**, uint*, uint*, int>)Slot(buffer, 3))(buffer, &data, null, null));
-            Paint(data, w, h, f / (double)frames);
+            if (timecode) PaintTimecode(data, w, h, f, frames);
+            else Paint(data, w, h, f / (double)frames);
             ((delegate* unmanaged[Stdcall]<nint, int>)Slot(buffer, 4))(buffer);
             Check(((delegate* unmanaged[Stdcall]<nint, uint, int>)Slot(buffer, 6))(buffer, (uint)(w * h * 4)));
             Check(MFCreateSample(&sample));
@@ -137,6 +149,33 @@ internal static unsafe partial class Video
                 p[0] = (byte)(255 * Math.Min(1, b * 0.7 + disc));
                 p[1] = (byte)(255 * Math.Min(1, g * 0.7 + disc));
                 p[2] = (byte)(255 * Math.Min(1, r * 0.7 + disc));
+                p[3] = 255;
+            }
+    }
+
+    /// <summary>Bits of the frame number shown (up to 4095 frames).</summary>
+    public const int TimecodeBits = 12;
+
+    // Dark grey; the top third a row of TimecodeBits blocks, white for a 1 bit (bit 0 on the left); under it a white bar
+    // sweeping from left to right over the clip's length.
+    private static void PaintTimecode(byte* data, int w, int h, int frame, int frames)
+    {
+        var bar = (int)((w - 4) * (frame / (double)Math.Max(1, frames - 1)));
+        for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                byte v = 40;
+                if (y < h / 3)
+                {
+                    var bit = x * TimecodeBits / w;
+                    v = ((frame >> bit) & 1) == 1 ? (byte)255 : (byte)0;
+                }
+                else if (y > h / 2 && x >= bar && x < bar + 4)
+                {
+                    v = 255;
+                }
+                var p = data + (y * w + x) * 4;
+                p[0] = p[1] = p[2] = v;
                 p[3] = 255;
             }
     }

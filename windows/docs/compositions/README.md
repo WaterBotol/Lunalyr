@@ -124,6 +124,11 @@ written from them in its own structure; no Verso line was translated.
   opacity), as the Mac's `RollingUnit` does. A rolling word missing from the window's line ends releases with the
   line on stage (the Mac's `defaultEnd`). The stage layouts only move. The colour follows `LyricStyle.HighlightMode` ("complement",
   "album", "custom") and `HighlightCustom` through the ink director.
+- **Floating lyrics** (milestone 7). On the floating window's scene `LyricStyle.FloatingTextSize` is set (points): the
+  base size is that text size and the stage 94% × 88% of the window (`ViewportMetrics.ForText`, the Mac's
+  `LyricViewportMetrics(size:textSize:)`), the palette's `TextBackdrop` is the floating shade's, the opening title is
+  compact and centred with no corner shade, and the interlude dots wait for it. Null everywhere else, so the wallpaper
+  and the settings preview are unchanged. See docs/APP-SHELL.md, "Floating lyrics".
 - **Interludes.** `LyricStyle.Interludes` turns the dots off. `SceneSnapshot.Duration` (the track length) gives a
   break after the last line its progress. A lit dot has the Mac's faint white ring.
 - **Reduce Motion** (`SceneSnapshot.ReduceMotion`, false by default). The app fills it from Windows' "Animation

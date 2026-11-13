@@ -136,7 +136,9 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "custom" })); // nothing imported
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "custom", WallpaperPath = Path.Combine(_folder, "gone.png") }));
         Assert.Equal("custom", Draws(new AppSettings { BackgroundMode = "custom", WallpaperPath = picture }));
-        Assert.True(TestBackgrounds.IsGpu(Draws(new AppSettings { BackgroundMode = "musicVideo" }))); // not in this build: read as Match the music
+        // Without a music video controller (or a video), Music video draws its fallback, Match the music by default.
+        Assert.True(TestBackgrounds.IsGpu(Draws(new AppSettings { BackgroundMode = "musicVideo" })));
+        Assert.Equal("colour", Draws(new AppSettings { BackgroundMode = "musicVideo", MusicVideoFallback = "colourOnly" }));
     }
 
     [Fact]

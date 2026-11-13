@@ -203,7 +203,7 @@ public static class SettingsCopy
         new("desktop", "Your wallpaper", "Your wallpaper", "", "Keep your own wallpaper and show lyrics and instrumental cues over it."),
         new("custom", "Imported image or video", "Image or video", "", "A picture or video of your own behind the lyrics."),
         new("musicVideo", "Music video", "Music video", "",
-            "The song’s music video behind the lyrics, muted and in time with the song.", Milestone6Later),
+            "The song’s music video behind the lyrics, muted and in time with the song."),
     ];
 
     /// <summary>The type the Wallpaper page shows as chosen for a stored <c>backgroundMode</c> (normalised first).</summary>
@@ -261,16 +261,38 @@ public static class SettingsCopy
 
     // ---- Covers ----
 
-    /// <summary>
-    /// Why animated covers don't play on Windows yet. The Mac finds them without any Apple developer key (the public
-    /// iTunes search, the album's public Apple Music page and Apple's video playlists), so Windows could too; it isn't
-    /// built in this milestone.
-    /// </summary>
-    public const string AnimatedCoversNotYet =
-        "Apple Music’s animated covers can be found the way the Mac app finds them, from Apple’s public album pages; Windows doesn’t fetch them yet. Arrives in a later build.";
+    public const string UseAnimatedCovers = "Apple Music’s moving album artwork behind the lyrics, with Match the music. Played muted.";
 
-    public const string CoverFramingNote =
-        "Framing applies to animated covers, so it waits with them. Imported pictures and videos have their own Placement under Wallpaper.";
+    /// <summary>What covers are doing for the playing song, or why they aren't (the Mac's CoversPage.coverStatus).</summary>
+    public static string CoverStatus(MotionCoverStatus status, string? offReason = null)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        return status.State switch
+        {
+            MotionCoverState.Off => "Animated covers are off.",
+            MotionCoverState.NotMatchTheMusic => "Animated covers play in Match the music wallpaper mode.",
+            MotionCoverState.PausedForPower => $"{status.Power ?? "Power saving is on"}, so animated covers are paused.",
+            MotionCoverState.Unavailable => $"Animated covers aren’t looked up in this run ({offReason ?? "lookups are off"}).",
+            MotionCoverState.NothingPlaying => "Play an album in Apple Music to check its cover.",
+            MotionCoverState.NotAppleMusic => "Animated covers come from Apple Music, so they play only for songs playing in Apple Music.",
+            MotionCoverState.Stream => "Radio streams have no animated cover.",
+            MotionCoverState.Excluded => "This album is excluded.",
+            MotionCoverState.LookingUp => "Checking Apple Music for an animated cover…",
+            MotionCoverState.Unreachable => "Apple Music couldn’t be reached for this album’s cover. It’s tried again with the next album.",
+            MotionCoverState.Available => "Animated cover available.",
+            _ => "No animated cover found for this album.",
+        };
+    }
+
+    public const string CoversWithMatchTitle = "Covers play with Match the music";
+
+    /// <summary>The banner while another wallpaper type is chosen.</summary>
+    public static string CoversWithMatch(string? backgroundMode) =>
+        $"The wallpaper is {WallpaperTypeOf(backgroundMode).Title} now, so animated covers don’t show.";
+
+    public const string ReduceMotionCovers = "Animation effects are off in Windows, so animated covers hold their first frame.";
+
+    public const string SofteningHelp = "A soft blur over the cover, so fine detail doesn’t fight the lyrics.";
 
     /// <summary>The type's entry, or Match the music's.</summary>
     public static WallpaperType WallpaperTypeOf(string? backgroundMode)

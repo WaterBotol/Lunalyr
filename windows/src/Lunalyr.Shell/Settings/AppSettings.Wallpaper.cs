@@ -91,6 +91,7 @@ public sealed partial record AppSettings
         Darkening = ScrimStrength,
         ManualBacking = TextBackingAutomatic ? null : TextBacking,
         PatternOpacity = PatternOpacity,
+        Softening = MotionBlur,
     };
 
     /// <summary>
@@ -135,6 +136,7 @@ public sealed partial record AppSettings
         };
         NormalizeEffects(ref settings);
         NormalizeVisualiser(ref settings);
+        NormalizeMusicVideo(ref settings);
         return settings;
     }
 
@@ -148,4 +150,7 @@ public sealed partial record AppSettings
 
     /// <summary>Visualisers: put their own keys in range (implement in <c>AppSettings.Visualiser.cs</c>).</summary>
     static partial void NormalizeVisualiser(ref AppSettings settings);
+
+    /// <summary>Music video: put its own keys in range (implemented in <c>AppSettings.MusicVideo.cs</c>).</summary>
+    static partial void NormalizeMusicVideo(ref AppSettings settings);
 }

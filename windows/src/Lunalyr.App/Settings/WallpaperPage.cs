@@ -39,7 +39,7 @@ internal static partial class WallpaperPage
         page.Children.Add(importNote);
 
         // ---- The type's own section ----
-        page.Children.Add(MatchSection(ctx).ShowWhen(ctx, s => s.BackgroundMode is "auto" or "musicVideo"));
+        page.Children.Add(MatchSection(ctx).ShowWhen(ctx, s => s.BackgroundMode == "auto"));
         page.Children.Add(EffectsSection(ctx, "GPU effects").ShowWhen(ctx, s => s.BackgroundMode == "shader"));
         page.Children.Add(PatternsSection(ctx, "Line patterns").ShowWhen(ctx, s => s.BackgroundMode == "pattern"));
         var visualiser = new StackPanel { Spacing = 4 }.ShowWhen(ctx, s => s.BackgroundMode == "visualizer");
@@ -53,6 +53,10 @@ internal static partial class WallpaperPage
             visualiser.Children.Add(Caption(SettingsCopy.VisualisersNotYet));
         }
         page.Children.Add(visualiser);
+        var musicVideo = new StackPanel { Spacing = 4 }.ShowWhen(ctx, s => s.BackgroundMode == "musicVideo");
+        var musicVideoAdded = false;
+        AddMusicVideoSections(musicVideo, ctx, ref musicVideoAdded);
+        page.Children.Add(musicVideo);
         page.Children.Add(DesktopSection().ShowWhen(ctx, s => s.BackgroundMode == "desktop"));
         page.Children.Add(ImportedSection(ctx, importer, Import, reduceMotion).ShowWhen(ctx, s => s.BackgroundMode == "custom"));
         page.Children.Add(ColourOnlySection(ctx).ShowWhen(ctx, s => s.BackgroundMode == "colourOnly"));
@@ -288,4 +292,10 @@ internal static partial class WallpaperPage
     /// placeholder goes. Implement in <c>WallpaperPage.Visualiser.cs</c>.
     /// </summary>
     static partial void AddVisualiserSections(StackPanel sections, SettingsContext ctx, ref bool added);
+
+    /// <summary>
+    /// Music video: its whole section (what shows, YouTube search and its key, the fallback, this song's file, link and
+    /// timing, dimming and blur), shown only while Music video is the type. Implemented in <c>WallpaperPage.MusicVideo.cs</c>.
+    /// </summary>
+    static partial void AddMusicVideoSections(StackPanel sections, SettingsContext ctx, ref bool added);
 }

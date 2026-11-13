@@ -210,7 +210,7 @@ public sealed partial record AppSettings
             RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
-        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper();
+        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating();
     }
 
     /// <summary>What the lyric lookup asks: the configured order (unknown names dropped, new sources appended) and the switched-on set.</summary>
@@ -275,4 +275,8 @@ public sealed partial record AppSettings
 /// <summary>Source-generated JSON metadata for <see cref="AppSettings"/> (Native AOT safe).</summary>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]
 [JsonSerializable(typeof(AppSettings))]
+// The lyric style profiles (AppSettings.Floating.cs) move values through these.
+[JsonSerializable(typeof(System.Text.Json.Nodes.JsonNode))]
+[JsonSerializable(typeof(System.Text.Json.JsonElement))]
+[JsonSerializable(typeof(double))]
 public sealed partial class AppSettingsJsonContext : JsonSerializerContext;

@@ -23,6 +23,13 @@ internal enum CardPart
     ClearSearch,
     PromptAction,
     SearchField,
+
+    // The music video's Align (the Mac's VideoAlignRow): the film button, and in align mode the video's bar and its row.
+    AlignButton,
+    AlignBar,
+    AlignReset,
+    AlignCancel,
+    AlignDone,
 }
 
 /// <summary>The card's parts that come in numbered rows: the picker's players, the results and the queue.</summary>
@@ -98,6 +105,14 @@ internal static class CardLayout
     public const float IconButton = 30, IconGap = 4;
     public static readonly RectF QueueButtonRect = new(ColumnLeft + ColumnWidth - IconButton, ControlsTop + 7, IconButton, IconButton);
     public static readonly RectF SearchButtonRect = new(QueueButtonRect.X - IconGap - IconButton, ControlsTop + 7, IconButton, IconButton);
+
+    /// <summary>The film button (Align video), left of search: the place the row kept for it.</summary>
+    public static readonly RectF AlignButtonRect = new(SearchButtonRect.X - IconGap - IconButton, ControlsTop + 7, IconButton, IconButton);
+
+    /// <summary>Align mode's row in place of the transport: Reset on the left, Cancel and Done on the right.</summary>
+    public static readonly RectF AlignResetRect = new(ColumnLeft, ControlsTop + 7, 76, 30);
+    public static readonly RectF AlignDoneRect = new(ColumnLeft + ColumnWidth - 72, ControlsTop + 6, 72, 32);
+    public static readonly RectF AlignCancelRect = new(AlignDoneRect.X - 14 - 64, ControlsTop + 6, 64, 32);
 
     public static readonly RectF CoverRect = new(Pad, Pad, CoverSize, CoverSize);
 
@@ -240,4 +255,15 @@ internal sealed class CardModel
 
     /// <summary>A row's cover by its address, once loaded (null while it loads, or when there is none).</summary>
     public Func<Uri?, CoverArt?> RowCover = _ => null;
+
+    // The music video (CardPainter.Align.cs, DesktopPlayer.Align.cs).
+
+    /// <summary>The film button shows: Music video is the wallpaper and the song could have a video.</summary>
+    public bool MusicVideoOffered;
+
+    /// <summary>Why the video can't be lined up now (the button is dimmed), or null.</summary>
+    public string? AlignReason;
+
+    /// <summary>Align mode's bar, or null outside it: the seek row and transport give way to it.</summary>
+    public Lunalyr.Core.MusicVideo.MusicVideoAlignDisplay? Align;
 }

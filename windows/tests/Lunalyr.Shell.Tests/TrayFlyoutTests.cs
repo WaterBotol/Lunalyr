@@ -264,7 +264,7 @@ public sealed class TrayFlyoutTests
         Assert.Equal("colourOnly", TrayFlyoutState.BackgroundTile("colourOnly"));
         Assert.Equal("colourOnly", TrayFlyoutState.BackgroundTile("colour"));
         Assert.Equal("visualizer", TrayFlyoutState.BackgroundTile("visualizer"));
-        Assert.False(TrayFlyoutState.Backgrounds.Single(b => b.Value == "musicVideo").Available);
+        Assert.True(TrayFlyoutState.Backgrounds.Single(b => b.Value == "musicVideo").Available);
         Assert.All(TrayFlyoutState.Backgrounds, b => Assert.EndsWith(".", b.Summary));
     }
 

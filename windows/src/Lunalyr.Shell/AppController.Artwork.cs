@@ -39,6 +39,8 @@ public sealed partial class AppController
             lock (_gate) scene = _scene;
             _renderer.SetScene(scene);
         }
+        // Lyrics arriving, a song changing or none found decide whether the floating window shows.
+        UpdateFloating();
     }
 
     private void BeginArtwork(MediaTrackInfo track, IMediaSession? session)

@@ -131,6 +131,7 @@ internal sealed class SettingsPreview : IDisposable
                         var scene = controller.Scene;
                         var pixels = _buffers[buffer];
                         renderer.Use(controller.CustomWallpaper);
+                        renderer.Use(controller.MotionCover);
                         renderer.Render(scene, controller.BackgroundLayer, composition, seconds, playing, clock.Elapsed.TotalSeconds, pixels);
                         Show(pixels, NoteFor(scene, settings.WallpaperPaused));
                         buffer = 1 - buffer;

@@ -190,6 +190,8 @@
                         <Grid x:Name="ModeTiles" ColumnSpacing="6" AutomationProperties.Name="Wallpaper type">
                             <!-- Filled from code: every wallpaper type as a tile (TrayFlyout.BuildModeTiles). -->
                         </Grid>
+                        <!-- Music video: the video's timing, Tap to sync and Align (TrayFlyout.MusicVideo.cs), while it is the type. -->
+                        <StackPanel x:Name="MusicVideoPanel" Spacing="6" Visibility="Collapsed" />
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

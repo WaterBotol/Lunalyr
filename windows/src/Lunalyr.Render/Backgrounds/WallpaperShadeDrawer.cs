@@ -126,8 +126,9 @@ internal sealed class WallpaperShadeDrawer : IDisposable
     /// ("Darkening", a hand-set "Text backing") apply at once: the scrim's brush and the backing's shape are made again
     /// only when they change. <paramref name="scrim"/> and <paramref name="grain"/> off draw the backing alone (over
     /// the user's own wallpaper).
+    /// <paramref name="stageShade"/> replaces the scrim's darkness at the stage when a layer lays its own shade there.
     /// </summary>
-    public void Draw(in FrameContext frame, double fieldLuminance, bool scrim = true, bool grain = true)
+    public void Draw(in FrameContext frame, double fieldLuminance, bool scrim = true, bool grain = true, double? stageShade = null)
     {
         if (_scrim is null || _backing is null || _dc is null) return;
         var dc = frame.Dc;
@@ -138,8 +139,9 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         if ((manual is not null) != _backingManual) BuildBacking(_dc, manual is not null);
         if (scrim && strength > 0) dc.FillRectangle(whole, _scrim!);
 
-        var presence = Presence(StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
-        var amount = BackingAmount(frame, fieldLuminance, scrim ? strength : 0, manual) * presence;
+        // Lyrics floating over the apps leave nothing on this stage to back.
+        var presence = Presence(frame.LyricsElsewhere ? 0 : StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
+        var amount = BackingAmount(frame, fieldLuminance, scrim ? strength : 0, manual, stageShade) * presence;
         if (amount > WallpaperShade.MinimumBacking)
             dc.DrawBitmap(_backing!, whole, (float)Math.Min(1, amount), InterpolationMode.Linear, null, null);
 
@@ -171,8 +173,9 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         return Core.Motion.LyricStagePresence.Presence(inputs, now, Core.Motion.NoticeTiming.Default) > 0.5 ? 1 : 0;
     }
 
-    /// <summary>True while the backing is still fading in or out.</summary>
-    public bool IsEasing(double now) => _presenceTarget >= 0 && now - _presenceChangedAt < WallpaperShade.BackingFade;
+    /// <summary>True while the backing is still fading in or out (the first frame takes the stage as it is: no fade).</summary>
+    public bool IsEasing(double now) =>
+        _presenceTarget >= 0 && _presenceFrom != _presenceTarget && now - _presenceChangedAt < WallpaperShade.BackingFade;
 
     private double Presence(double target, double now)
     {
@@ -189,7 +192,7 @@ internal sealed class WallpaperShadeDrawer : IDisposable
     }
 
     /// <summary>The backing the stage needs over a backdrop of <paramref name="luminance"/> (the Mac's textBackingAmount).</summary>
-    private double BackingAmount(in FrameContext frame, double luminance, double darkening, double? manual)
+    private double BackingAmount(in FrameContext frame, double luminance, double darkening, double? manual, double? stageShade = null)
     {
         if (manual is { } amount) return Math.Clamp(amount, 0, 1);
         var playing = frame.Scene.Title is not null || frame.Scene.Lyrics is not null;
@@ -197,7 +200,7 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         var points = frame.Size / _scale;
         var baseSize = Math.Min(124, Math.Max(24, Math.Min(points.X, points.Y * 16 / 9) * 0.046));
         var target = playing ? LyricLegibility.PastelBackingTarget(_options.IncreaseContrast) : LyricLegibility.TargetContrast(baseSize);
-        var scrim = WallpaperShade.ScrimAtStage(darkening);
+        var scrim = stageShade ?? WallpaperShade.ScrimAtStage(darkening);
         return LyricLegibility.StageBacking(luminance, scrim, target);
     }
 

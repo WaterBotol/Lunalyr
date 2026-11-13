@@ -292,7 +292,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Invalidate();
         SceneShown = scene;
         Kit!.SetFamily(scene.Style.FontFamily);
-        Metrics = ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
+        Metrics = scene.Style.FloatingTextSize is { } textSize
+            ? ViewportMetrics.ForText(SurfaceSize.X, SurfaceSize.Y, Scale, textSize, scene.Style.SizeFraction)
+            : ViewportMetrics.For(SurfaceSize.X, SurfaceSize.Y, Scale, scene.Style.SizeFraction);
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.
         Choice = scene.Style.EntranceFor(Kind);
@@ -462,7 +464,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             DrawLine(dc, line, time, _offsets[k]);
         }
         DrawCredits(dc, time);
-        if (SceneShown?.Style.Interludes != false && gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue);
+        if (SceneShown?.Style.Interludes != false && gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue, InterludeYield(time));
         // The next line is set a little ahead of time, not on the frame it first appears: laid out now, within the
         // pass's allowance, and baked a slice at a time over the next frames. The next line is the first one with words
         // after the one being sung (before anything is sung, the song's first). Setting each line whole, as before, it
@@ -1299,10 +1301,10 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     // ---- Instrumental breaks, plain lyrics, status -----------------------------------------------------------------
 
     /// <summary>The three interlude dots of an instrumental break, in the album's accent.</summary>
-    private void DrawCue(ID2D1DeviceContext dc, InstrumentalCue cue)
+    private void DrawCue(ID2D1DeviceContext dc, InstrumentalCue cue, double yield = 1)
     {
         // Dots not there yet draw nothing (and need no ink: a song's opening frames do not wait for it).
-        if (_dotBrush is null || SceneShown is null || !(cue.Opacity > 0)) return;
+        if (_dotBrush is null || SceneShown is null || yield <= 0.002 || !(cue.Opacity > 0)) return;
         // The ink's dot colour (made readable against the backdrop), as the Mac colours its interlude dots.
         var accent = SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour;
         var diameter = (float)(Math.Min(40, Math.Max(15, BaseSize / Scale * 0.3)) * Scale);
@@ -1317,13 +1319,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             var radius = diameter / 2 * (float)(1 + wander * cue.Breath(i) * 0.09);
             var x = StageCentre.X - width / 2 + diameter / 2 + i * (diameter + spacing);
             var y = StageCentre.Y + (float)(wander * cue.Bob(i)) * diameter * 0.42f;
-            _dotBrush.Color = new Color4(accent.X, accent.Y, accent.Z, (float)(cue.Opacity * (0.32 + highlight * 0.62)));
+            _dotBrush.Color = new Color4(accent.X, accent.Y, accent.Z, (float)(yield * cue.Opacity * (0.32 + highlight * 0.62)));
             dc.FillEllipse(new Ellipse(new Vector2(x, y), radius, radius), _dotBrush);
             // A lit dot carries a faint white ring (the Mac's strokeBorder, 1 point inside the edge).
             if (highlight > 0.01)
             {
                 var stroke = Points(1);
-                _dotBrush.Color = new Color4(1, 1, 1, (float)(cue.Opacity * highlight * 0.22));
+                _dotBrush.Color = new Color4(1, 1, 1, (float)(yield * cue.Opacity * highlight * 0.22));
                 dc.DrawEllipse(new Ellipse(new Vector2(x, y), radius - stroke / 2, radius - stroke / 2), _dotBrush, stroke);
             }
         }

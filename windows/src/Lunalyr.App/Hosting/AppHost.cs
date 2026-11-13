@@ -271,10 +271,13 @@ internal sealed partial class AppHost
             motion.Changed += (_, reduce) => controller.SetReduceMotion(reduce);
             if (motion.ReduceMotion) _log.Info("Animation effects are off: the wallpaper moves less (Reduce Motion).");
             controller.StatusChanged += (_, _) => QueueStatusUpdate();
+            WireFloating(_wallpaper, controller);
             _settings.Changed += (_, e) => controller.ApplySettings(e.NewValue);
             controller.Start();
             controller.ApplySettings(_settings.Current); // anything changed while starting
             StartVisualisers(controller);
+            StartMusicVideo(controller);
+            StartMotionCovers(controller);
             _controller = controller;
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
@@ -338,6 +341,7 @@ internal sealed partial class AppHost
         Microsoft.UI.Xaml.Application.Start(_ =>
         {
             var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            _uiDispatcher = dispatcher;
             SynchronizationContext.SetSynchronizationContext(new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(dispatcher));
             _app = new App(this);
             _log.Info($"WinUI started in {started.ElapsedMilliseconds} ms ({SinceLaunch():0} ms after launch).");
@@ -506,7 +510,9 @@ internal sealed partial class AppHost
             _motion?.Dispose();
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
+            if (_options.FloatingCapturePath is { } capturePath) WriteFloatingCapture(capturePath);
             StopVisualisers();
+            StopMusicVideo();
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);
             _wallpaper?.Dispose(); // detaches from the desktop, leaving the system wallpaper
             _sessions?.Dispose();
