@@ -401,6 +401,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `audioSensitivity` | `1` | 0.3–3, Music response › Sensitivity | `custom.audioSensitivity` |
 | `visualizerPunch` | `1` | 0–2, Visualiser › Beat punch (off while Animation effects are off) | `custom.visualizerPunch` |
 | `starTrailsColours` | `"album"` | `album` or `original`, Visualiser › Colours (Star Trails) | `custom.starTrailsColours` |
+| `wavefieldColours` | `"album"` | `album` or `original` (anything else reads as `album`), Visualiser › Colours (Wavefield and Wavefield Sphere): `original` draws them with no album palette, in Wavefield's own heatmap | `custom.wavefieldColours` |
+| `wavecoreColours` | `"album"` | `album` or `original` (anything else reads as `album`), Visualiser › Colours (Fosfora Aurora): `original` draws it with no album palette, in its own rainbow | `custom.wavecoreColours` |
 | `musicVideoFallback` | `"auto"` | "Without a video": any type but `musicVideo` (anything else reads as `auto`); choosing Music video stores the type it replaced here | `custom.musicVideoFallback` |
 | `musicVideoOnline` | `false` | "Search YouTube for videos" (sends the title and artist to YouTube: its results page, or the Data API with the owner's key) | `custom.musicVideoOnline` |
 | `musicVideoSearch` | `"site"` | "Search YouTube with": `site`, "Search YouTube’s site (no key)", the results page as on the Mac, with the owner's key (if any) as the fallback; or `apiKey`, "Use my API key", the Data API only. Anything else reads as `site` | Windows only |
@@ -409,7 +411,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
 | `animationRate` | `60` | `15`, `30`, `60`, `0` = follow the display | `custom.animationRate` (Mac default 30) |
 | `pauseWhenCovered` | `true` | | `custom.pauseWhenCovered` |
-| `pauseOnBatterySaver` | `true` | | nearest: `respectLowPower` |
+| `pauseOnBatterySaver` | `true` | Performance › Follow energy saver: while Windows’ energy saver is on, power saving applies as for Low power visuals (the key keeps its old name) | nearest: `respectLowPower` |
+| `lowPowerVisuals` | `false` | Performance › Low power visuals: every type but Your wallpaper and Colour only shows Line patterns, at no more than 30 fps (see "Power saving") | `custom.lowPowerVisuals` |
 | `pauseWhenFullScreen` | `true` | | Windows only |
 | `lyricOffset` | `0` | seconds, ±3; positive shows lyrics earlier | `custom.lyricOffset` |
 | `repairQQGaps` | `true` | "Treat long pauses as instrumental" | `custom.repairQQGaps` |
@@ -601,6 +604,18 @@ theme. The window opens at Lyric style (or `--settings-page`).
 - **Settings that couldn't be read.** When `settings.json` is damaged and the backup (or the defaults) is used, the
   action HUD says "Lunalyr couldn’t read its settings" once at start-up and General shows a warning bar with the
   store's message, naming the kept `settings.json.corrupt-…` file (milestone 8; before, only the log said so).
+- **Power saving** (Performance › Low power visuals and Follow energy saver; the battery rule, inexpensive effects
+  only, has no row yet and keeps the Mac's default). The renderer works out the rule in force (`PowerPolicy`) and holds
+  the frame rate at 30 fps at most; the controller draws what that rule allows (`WallpaperPower.EffectiveMode`,
+  re-implemented from the Mac's `effectiveMode(_:under:)`, which is Verso-attributed): Line patterns for every type but
+  Your wallpaper and Colour only (Low power visuals, Energy saver), Colour only for all but Your wallpaper (a "Colour
+  only" battery rule), and the chosen type otherwise, with a pinned or matched heavy GPU effect swapped for a light one.
+  The chosen type is kept and returns when power saving ends; YouTube's player closes while power saving shows another
+  type; animated covers and System audio pause as before. Under Performance a caption says what power saving is doing
+  (the frame rate held, or a rule other than Low power visuals in force); it reads the Low power visuals switch from
+  the settings, as the Mac does, so it shows from the moment the switch is on, also while the wallpaper is paused and
+  the renderer reports nothing (`PowerCopy.Current`). Until 14 Nov 2026 Energy saver only held the
+  frame rate (the row said it paused the wallpaper, which it never did) and the visualiser showed the album colours.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
   (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.
@@ -1066,12 +1081,28 @@ per track for the session. See [compositions/matching.md](compositions/matching.
   catalogue has entries), Visualiser (the hook, or a placeholder), Your wallpaper (what it does, and that the preview
   can't show it), Image or video (File with "Choose…", the file's name or "missing, choose it again", Placement with
   the Mac's four placements and captions, the note on videos), Colour only (Album gradient).
+- **Visualiser** (`WallpaperPage.Visualiser.cs`): Scene; Colours, "Album cover" or "Original <scene>", for Star Trails
+  (`starTrailsColours`), Wavefield and Wavefield Sphere (`wavefieldColours`) and Fosfora Aurora (`wavecoreColours`);
+  Beat punch with the calm caption. On the Mac the last two keys colour its web scenes Wavefield Original and Wavecore
+  and the native scenes standing in for them (`WebVisualizerView.scenePalette`: "original" passes no album palette);
+  Windows' Wavefield, Wavefield Sphere and Fosfora Aurora are those stand-ins, so the choice is offered on them and
+  works the same way (no palette: the shaders' own colours, as with no cover). One difference: Colour richness
+  doesn't change the Original colours on Windows (the shaders apply it with the album palette only, as with no cover),
+  while the Mac's web layer, stand-in included, is saturated by it as a whole. The scene's other options belong to
+  the Mac's web scenes, which Windows doesn't have, and aren't offered: Wavefield preset (`custom.wavefieldPreset`, the
+  web engine's preset list; the native Wavefield has none), Projection (`custom.wavefieldProjection`: the Mac's stand-in
+  for "Sphere" is Wavefield Sphere, which is its own scene in Windows' menu), Light 3D's Colours
+  (`custom.light3DColours`; Light 3D reads as Star Trails, whose own Colours row applies) and "Heavy scenes on main
+  display only" (`custom.visualizerHeavyScenesOnMainDisplay`: it keeps a web scene's WebKit process to one display;
+  Windows draws every scene natively, one renderer for every display). Previews of each Colours choice:
+  `docs/previews/visualisers/<scene>-colours.png` (`tools/VisualiserPreview --colours`).
 - **Legibility:** Automatic text backing (caption by type, as the Mac's), and "Text backing" 0–100% when it is off.
   The Mac's "Shade under the menu bar" has no Windows counterpart (the taskbar draws its own material) and isn't offered.
 - **Adjustments** (hidden for Your wallpaper): Motion speed 0.2–2× and Colour richness 40–180% (not for Image or video),
   Darkening 0–200%, Pattern visibility 0–100% (Line patterns), Reset Adjustments (also resets Covers › Softening, as on
   the Mac; disabled while all are as Lunalyr comes). Everything applies at once on the wallpaper and the preview.
-  The Mac's Increase Contrast floor under Darkening and its power-saving banner have no Windows setting behind them yet.
+  The Mac's Increase Contrast floor under Darkening has no Windows setting behind it yet. Its power-saving banner isn't
+  on this page: Performance says what power saving is doing (see "Power saving").
 
 ### Your wallpaper
 
@@ -1154,9 +1185,21 @@ API changes and on each load or play (`YouTubeEmbed`, test `CaptionsAreForcedOff
 `testCaptionsAreForcedOff`).
 
 **What isn't ported, because the Mac's means aren't official:** the still-image check (it reads YouTube's undocumented
-numbered stills, `1.jpg`–`3.jpg`, for up to three candidates of each automatic lookup), so a found video is used
-without it, and the Mac's note for a pasted still-image upload is dropped; the Mac's `YouTubeThumbnail` (the large still for the settings preview and Reduce Motion,
-which isn't part of search).
+numbered stills, `1.jpg`–`3.jpg`, for up to three candidates of each automatic lookup, and keeps its verdicts under
+`custom.musicVideoStill`), so a found video is used without it, and the Mac's note for a pasted still-image upload is
+dropped.
+
+**The video's still** (the Mac's `YouTubeThumbnail`, ported 14 Nov 2026; no setting): once a YouTube video is the one on
+screen, `AppController.MusicVideoStill.cs` fetches its still from YouTube's image host (`i.ytimg.com`, the host the
+Search YouTube window's rows already load from; `maxresdefault.jpg`, then `hqdefault.jpg`, the stills the Data API lists
+as a video's thumbnails), through the same client (`MusicVideoHttpClient`: no cookies, nothing cached, allowed hosts
+only), decodes it to at most 1280 px and hands it to the `musicVideo.youtube` layer through the feed. The layer draws
+it, filled and softened by Video blur, wherever the player isn't on screen: under Reduce Motion (Windows' Animation
+effects off; the player is then never opened, as on the Mac), in the settings preview, on the other displays, and
+while the player loads or after it has closed. It fades in over the album colours in 0.4 s; dimming, scrim and backing
+go over it as over the player. Nothing is fetched where no player could be shown (`--demo`, `--no-network`,
+`--no-playback`). Not seen live: the development rules allow no request to YouTube's hosts, so the fetch is tested with
+a fake image host and the drawing offscreen (`YouTubeThumbnailTests`, `MusicVideoStillTests`, `YouTubeStillLayerTests`).
 
 **Not kept for YouTube, because YouTube's API policies don't allow obscuring, cropping or covering the embedded player's
 interface:** the Mac's 1.25× overscan (it draws the player larger and clips it, to push YouTube's title bar and logo off
@@ -1182,8 +1225,8 @@ isn't retried until it changes.
   display's wallpaper surface and just beneath it. The player fills that window as YouTube draws it, fitted
   (letterboxed) without cropping, and is on screen in every state once it is ready: playing, paused (the song or the
   wallpaper), buffering or ended, with YouTube's own interface when YouTube draws it. The surface draws
-  `musicVideo.youtube`, see-through while the player is on screen (dimming, scrim and backing over it), and the album
-  colours while there is no player (loading, failed, closed). The browser runs with `--mute-audio`, the WebView2 is muted
+  `musicVideo.youtube`, see-through while the player is on screen (dimming, scrim and backing over it), and the video's
+  still (the album colours until it loads) while there is no player (loading, failed, closed, Reduce Motion). The browser runs with `--mute-audio`, the WebView2 is muted
   (`CoreWebView2.IsMuted`) before it loads anything, and the page mutes the player before every play, seek and sample.
   InPrivate profile under `{data}\MusicVideo\WebView2`, the page served from a virtual https host, no other
   navigation, no new windows, every permission denied. Steered by the ported sync loop (led seeks with hysteresis,

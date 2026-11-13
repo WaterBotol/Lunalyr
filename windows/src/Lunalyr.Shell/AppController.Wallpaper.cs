@@ -29,7 +29,7 @@ public sealed partial class AppController
     {
         get
         {
-            lock (_gate) return _wallpaperCharacter is { } song ? Pick(_settings, song) : null;
+            lock (_gate) return _wallpaperCharacter is { } song ? Pick(_settings, song, WallpaperPower.SparesGpu(_power)) : null;
         }
     }
 
@@ -62,6 +62,10 @@ public sealed partial class AppController
     /// <summary>The background layer id <paramref name="settings"/> draw for the song on screen.</summary>
     private string BackgroundLayerFor(AppSettings settings)
     {
+        // Power saving may draw a lighter type than the one chosen (WallpaperPower); "Without a video" goes through it too.
+        var power = Power;
+        var drawn = WallpaperPower.EffectiveMode(settings.BackgroundMode, power);
+        if (drawn != settings.BackgroundMode) settings = settings with { BackgroundMode = drawn };
         switch (settings.BackgroundMode)
         {
             case "colourOnly":
@@ -85,15 +89,16 @@ public sealed partial class AppController
         // Match the music, GPU effects, Line patterns.
         TrackCharacter? song;
         lock (_gate) song = _wallpaperCharacter;
-        return Pick(settings, song ?? TrackCharacter.Neutral).LayerId ?? FallbackBackground;
+        return Pick(settings, song ?? TrackCharacter.Neutral, WallpaperPower.SparesGpu(power)).LayerId ?? FallbackBackground;
     }
 
-    private WallpaperPick Pick(AppSettings settings, TrackCharacter song)
+    /// <summary>The song's effect or pattern; while power is being saved, heavy GPU effects give way to light ones.</summary>
+    private WallpaperPick Pick(AppSettings settings, TrackCharacter song, bool savingPower)
     {
         var (effects, patterns) = _options.WallpaperStyles?.Invoke()
             ?? ([.. WallpaperCatalog.Effects.Select(s => s.Candidate)], [.. WallpaperCatalog.Patterns.Select(s => s.Candidate)]);
         return WallpaperMatch.Pick(settings.BackgroundMode is "shader" or "pattern" ? settings.BackgroundMode : "auto", song,
-            settings.ShaderStyle, settings.PatternStyle, effects, patterns);
+            settings.ShaderStyle, settings.PatternStyle, effects, patterns, savingPower);
     }
 
     /// <summary>
@@ -119,10 +124,11 @@ public sealed partial class AppController
                 while (_characterOrder.Count > RememberedCharacters) _characters.Remove(_characterOrder.Dequeue());
             }
             if (_wallpaperCharacter == character) return;
-            settings = _settings;
-            before = _wallpaperCharacter is { } old ? Pick(settings, old).LayerId ?? FallbackBackground : FallbackBackground;
+            var saving = WallpaperPower.SparesGpu(_power);
+            settings = _settings with { BackgroundMode = WallpaperPower.EffectiveMode(_settings.BackgroundMode, _power) };
+            before = _wallpaperCharacter is { } old ? Pick(settings, old, saving).LayerId ?? FallbackBackground : FallbackBackground;
             _wallpaperCharacter = character;
-            after = Pick(settings, character).LayerId ?? FallbackBackground;
+            after = Pick(settings, character, saving).LayerId ?? FallbackBackground;
             title = track.Title;
         }
         if (settings.BackgroundMode is not ("auto" or "shader" or "pattern" or "musicVideo") || before == after) return;

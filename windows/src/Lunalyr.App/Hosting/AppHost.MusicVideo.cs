@@ -58,6 +58,9 @@ internal sealed partial class AppHost
                 () => _settings.Current, Log);
         }
         controller.UseMusicVideo(video, MusicVideoFeed.Shared, _youTubeHost is not null);
+        // The video's still (Reduce Motion, the settings preview, the other displays) comes from YouTube's image host, only
+        // when a player could be shown at all.
+        controller.UseMusicVideoStills(_youTubeHost is not null ? _musicVideoHttp : null);
         // Choosing Music video keeps the type it replaced as "Without a video" (the Mac's rule).
         _settings.Changed += (_, e) =>
         {

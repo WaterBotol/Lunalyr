@@ -40,10 +40,19 @@ public static class VisualiserServices
     }
 
     /// <summary>Power saving replaced the visualiser (its fallback is line patterns or colour only).</summary>
-    internal static void SetPower(PowerConstraint? power) =>
-        _replaced = power is { Fallback: PowerFallback.Patterns or PowerFallback.ColourOnly };
+    internal static void SetPower(PowerConstraint? power)
+    {
+        var shown = Wallpaper.WallpaperPower.EffectiveMode("visualizer", power);
+        _shownForPower = Wallpaper.WallpaperPower.Title(shown);
+        _replaced = shown != "visualizer";
+    }
+
+    private static volatile string _shownForPower = "Line patterns";
 
     public static bool ReplacedForPower => _replaced;
+
+    /// <summary>What power saving shows instead of the visualiser ("Line patterns", "Colour only").</summary>
+    public static string ShownForPower => _shownForPower;
 
     /// <summary>A host for one factory's layers (the desktop's, or the settings preview's).</summary>
     public static VisualiserHost CreateHost(bool preview = false) => new(Settings, targetFps: () => Volatile.Read(ref _targetFps), preview: preview)
@@ -70,5 +79,7 @@ public static class VisualiserServices
         Sensitivity = app.AudioSensitivity,
         Punch = app.VisualizerPunch,
         StarTrailsAlbumColours = app.StarTrailsColours != "original",
+        WavefieldAlbumColours = app.WavefieldColours != "original",
+        FosforaAlbumColours = app.WavecoreColours != "original",
     };
 }

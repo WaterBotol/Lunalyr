@@ -433,6 +433,7 @@ public sealed partial class AppController : IAsyncDisposable
             CancelOnlineRetryLocked();
             CancelArtworkLocked();
             CancelMotionLookupLocked();
+            CancelMusicVideoStillLocked();
         }
 
         Monitor.SessionChanged -= OnSessionChanged;

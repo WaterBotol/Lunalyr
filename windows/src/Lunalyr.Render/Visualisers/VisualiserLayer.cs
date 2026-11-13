@@ -154,8 +154,8 @@ public sealed class VisualiserLayer : IRenderLayer
             Response = new VisualizerResponse(frame.Scene.ReduceMotion || _options.ReduceMotion, settings.DimFlashingLights, settings.Punch),
             Sensitivity = settings.Sensitivity,
             Vividness = _options.Vividness * adjustments.Vividness,
-            PaletteKey = _hasCover ? _palette : null,
-            CoverStops = _coverStops,
+            PaletteKey = _hasCover && settings.AlbumColours(_scene.Style) ? _palette : null,
+            CoverStops = settings.AlbumColours(_scene.Style) ? _coverStops : [],
             StarTrailsPalette = settings.StarTrailsAlbumColours && _hasCover ? _cover : null,
             Word = _scene.Style == VisualizerStyle.StarTrails ? Word(frame) : null,
             NativeWidth = _size.X,
@@ -170,7 +170,12 @@ public sealed class VisualiserLayer : IRenderLayer
             _outgoing.Dispose();
             _outgoing = null;
         }
-        _outgoing?.Draw(gpu, dc, input, audio);
+        // The outgoing scene keeps its own colour choice while it fades.
+        if (_outgoing is not null)
+        {
+            var own = settings.AlbumColours(_outgoing.Style);
+            _outgoing.Draw(gpu, dc, input with { PaletteKey = _hasCover && own ? _palette : null, CoverStops = own ? _coverStops : [] }, audio);
+        }
         _scene.Draw(gpu, dc, input, audio);
 
         var whole = new Vortice.RawRectF(0, 0, _size.X, _size.Y);

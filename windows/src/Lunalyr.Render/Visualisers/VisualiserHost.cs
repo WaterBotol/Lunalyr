@@ -22,6 +22,24 @@ public sealed record VisualiserSettings
     /// <summary>Star Trails' sky takes the album cover's colours (true, the Mac's default) or keeps the original nebula.</summary>
     public bool StarTrailsAlbumColours { get; init; } = true;
 
+    /// <summary>Wavefield and Wavefield Sphere take the album cover's colours (true) or keep their own heatmap (the Mac's <c>custom.wavefieldColours</c>).</summary>
+    public bool WavefieldAlbumColours { get; init; } = true;
+
+    /// <summary>Fosfora Aurora takes the album cover's colours (true) or keeps its own rainbow (the Mac's <c>custom.wavecoreColours</c>).</summary>
+    public bool FosforaAlbumColours { get; init; } = true;
+
+    /// <summary>
+    /// Whether <paramref name="style"/> is drawn in the album cover's colours. With "original" the scene gets no album
+    /// palette, as the Mac's stand-in for a web scene does (<c>WebVisualizerView.scenePalette</c>). Star Trails keeps its
+    /// own path (<see cref="StarTrailsAlbumColours"/>: its sky, not the palette uniforms).
+    /// </summary>
+    public bool AlbumColours(VisualizerStyle style) => style switch
+    {
+        VisualizerStyle.Wavefield or VisualizerStyle.WavefieldSphere => WavefieldAlbumColours,
+        VisualizerStyle.FosforaAurora => FosforaAlbumColours,
+        _ => true,
+    };
+
     /// <summary>
     /// A "dim flashing lights" preference. Windows has no system setting for it (the Mac reads Accessibility › Display),
     /// so it is false unless the app sets it; Reduce Motion (Windows' Animation effects off) already makes scenes calm.
