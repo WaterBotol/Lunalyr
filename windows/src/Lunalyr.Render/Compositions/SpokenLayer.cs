@@ -6,6 +6,7 @@
 // from docs/compositions/spoken.md and cascade-cutout.md.
 
 using System.Numerics;
+using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Logging;
 using Lunalyr.Core.Lyrics;
@@ -22,6 +23,8 @@ namespace Lunalyr.Render.Compositions;
 internal sealed class SpokenUnit : IDisposable
 {
     public required Ink Label { get; init; }
+    /// <summary>The word in the colour "Sung sweep" fills it with as it is sung; null when the ink doesn't sweep.</summary>
+    public Ink? Sung { get; init; }
     public Ink? Reading { get; init; }
     /// <summary>Where each token's share of a glued word's reading falls along it, so it fills in as the word is
     /// sung; null when the reading shows whole.</summary>
@@ -38,6 +41,7 @@ internal sealed class SpokenUnit : IDisposable
     public void Dispose()
     {
         Label.Dispose();
+        Sung?.Dispose();
         Reading?.Dispose();
         Tile?.Dispose();
         LabelOnTile?.Dispose();
@@ -221,6 +225,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 if (tile.IsVisible) DrawTileRect(dc, world, tileRect, tile, token.RightToLeft, opacity);
                 unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
                                 GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
+                // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's RollingUnit tint).
+                if (unit.Sung is { } sung && !tile.IsVisible && !clip.IsSet && SungSweep.Progress(token, time) is var tint and > 0)
+                {
+                    var (from, to) = SungSweep.Span(unit.Label.Box.X, tint, token.RightToLeft);
+                    sung.DrawBetween(dc, labelWorld, scale, (float)opacity, blur, (float)from, (float)to,
+                                     reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
+                }
                 var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
                 var reading = state.Presentation.Preview ? null : unit.Reading;
                 reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, readingBoundaries, readingShares, clip: clip);
@@ -400,6 +411,9 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         // Cascade's held words take the highlight's hue as type of their own.
         if (Kind == CompositionKind.Cascade && token.Hero && !colours.Sweeps && ink.Accent is { } accent) rest = accent;
         var labelInk = kit.Bake(label, LyricInks.Vector(rest), raster, shadow);
+        // "Sung sweep" (not on Cascade's held words, which keep the highlight's hue, nor on Cutout's labels).
+        var sungInk = colours.Sweeps && !token.Tile && !(Kind == CompositionKind.Cascade && token.Hero)
+            ? kit.Bake(label, LyricInks.Vector(colours.Sung), raster, ShadowSpec.None) : null;
         var readingInk = reading is null ? null : kit.Bake(reading, LyricInks.Vector(colours.Reading), raster, shadow);
         var slices = reading is null ? null : ReadingSlices.Measure(reading, token.Reading, token.Shares);
         Ink? tile = null, labelOnTile = null, readingOnTile = null;
@@ -417,6 +431,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         return new SpokenUnit
         {
             Label = labelInk,
+            Sung = sungInk,
             Reading = readingInk,
             ReadingSlices = slices,
             LabelOffset = new Vector2(0, (float)(-content / 2 + labelBox.Height / 2)),

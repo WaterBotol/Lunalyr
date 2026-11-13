@@ -12,6 +12,8 @@ namespace Lunalyr.Render.Compositions;
 internal sealed class RunInk : IDisposable
 {
     public required Ink Label { get; init; }
+    /// <summary>The label in the colour a sweep fills it with as it is sung ("Sung sweep"); null when the ink doesn't sweep.</summary>
+    public Ink? Sung { get; init; }
     public Ink? Reading { get; init; }
     /// <summary>Where each token's share of the reading falls along it, so it fills in as the run is sung; null when
     /// the reading shows whole.</summary>
@@ -29,6 +31,7 @@ internal sealed class RunInk : IDisposable
     public void Dispose()
     {
         Label.Dispose();
+        Sung?.Dispose();
         Reading?.Dispose();
     }
 }
@@ -180,12 +183,15 @@ internal static class LinePlans
                 var colour = sample is { } rest ? LyricInks.Vector(rest.Rest) : spec.Colour;
                 var readingColour = sample is { } read ? LyricInks.Vector(read.Reading) : spec.ReadingColour;
                 var label = kit.Bake(labels[r], colour, raster, spec.Shadow);
+                // "Sung sweep": the same label in the colour the word fills with as it is sung.
+                Ink? sung = sample is { Sweeps: true } sweep ? kit.Bake(labels[r], LyricInks.Vector(sweep.Sung), raster, ShadowSpec.None) : null;
                 Ink? reading = readings[r] is { } layout ? kit.Bake(layout, readingColour, raster, spec.Shadow) : null;
                 var unit = units[r];
                 var labelHeight = labels[r].Metrics.Height;
                 runs[r] = new RunInk
                 {
                     Label = label,
+                    Sung = sung,
                     Reading = reading,
                     ReadingSlices = reading is null ? null : slices[r],
                     LabelOffset = new Vector2(0, (float)(-unit.Height / 2 + labelHeight / 2)),

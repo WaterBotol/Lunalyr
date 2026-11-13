@@ -3,6 +3,7 @@
 //   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken|scattered|...]
 //                      [-reveal automatic|fade|lift|pop|orbit|glide|unfold|cutoutFold|cutoutSlide|cutoutHighlight|satinRibbon|splitInk|mix]
 //                      [-shot fixture@seconds ...] [-reduce] [-bench] [-warp] [-floating [-screen 2560|3200]]
+//                      [-style name=value ...] [-tag text]
 //   CompositionPreview -setup [-runs 5] [-surfaces 1|2] [-only id] [-width 2560 -height 1440 -scale 1.25]
 //   CompositionPreview -hashes FILE [-only id] [-width 1280 -height 720 -scale 1]
 //
@@ -14,6 +15,10 @@
 // and the file names carry it (<composition>-<reveal>-<fixture>-<seconds>.png). With -reduce, every scene asks for
 // Reduce Motion (SceneSnapshot.ReduceMotion, as with Windows' "Animation effects" off) and the names carry "-reduced"
 // after the composition and reveal; the tool never reads the system's own setting.
+//
+// With -style, every scene takes the Lyric style extras given (backing=off, backingStyle=echo, editorial=0.5,
+// fonts=random, colour=sungSweep|musicReactive|customGradient|albumDrift, strength=1.6, speed=2, custom=#RRGGBB,#RRGGBB,
+// reveal=off, preview=off, lead=1.0); -tag adds a word to the file names so the variants sit side by side.
 //
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics; extras: japanesewords, japaneseinstead,
 // japanesesyllables, credits, highlight.
@@ -43,6 +48,8 @@ var runs = 5;
 var surfaces = 1;
 string? hashes = null;
 var shots = new List<(string Fixture, double Time)>();
+var extras = new List<(string Name, string Value)>();
+string? tag = null;
 for (var i = 0; i < args.Length; i++)
 {
     string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value");
@@ -60,6 +67,11 @@ for (var i = 0; i < args.Length; i++)
         case "surfaces": surfaces = int.Parse(Next(), CultureInfo.InvariantCulture); break;
         case "hashes": hashes = Next(); break;
         case "reduce": reduce = true; break;
+        case "style":
+            var pair = Next().Split('=', 2);
+            extras.Add((pair[0], pair.Length > 1 ? pair[1] : ""));
+            break;
+        case "tag": tag = Next(); break;
         case "dump":
             foreach (var line in ((Lunalyr.Core.Lyrics.LyricResult.Synced)Fixtures.English().Lyrics!).Lines)
                 Console.WriteLine($"{line.Start:0.00}-{line.End:0.00} wt={line.WordTimed} [{line.Text}] " + string.Join(" | ", line.Words.Select(w => $"{w.Text}@{w.Start:0.00}")));
@@ -192,12 +204,13 @@ foreach (var factory in factories)
             scene = make();
             if (reveal is not null) scene = scene with { Style = scene.Style with { Reveal = reveal } };
             if (reduce) scene = scene with { ReduceMotion = true };
+            if (extras.Count > 0) scene = scene with { Style = StyleExtras.Apply(scene.Style, extras) };
             scenes[name] = scene;
         }
         // A few frames leading up to the shot, as the app would draw them.
         for (var t = time - 0.2; t < time; t += 1.0 / 60) stage.Render(layer, scene, t, 10 + t, scale, background);
         stage.Render(layer, scene, time, 10 + time, scale, background);
-        var path = Path.Combine(output, $"{factory.Id}{(reveal is null ? "" : "-" + reveal)}{(reduce ? "-reduced" : "")}-{name}-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png");
+        var path = Path.Combine(output, $"{factory.Id}{(reveal is null ? "" : "-" + reveal)}{(reduce ? "-reduced" : "")}{(tag is null ? "" : "-" + tag)}-{name}-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png");
         stage.SavePng(path);
         Console.WriteLine(path);
     }
