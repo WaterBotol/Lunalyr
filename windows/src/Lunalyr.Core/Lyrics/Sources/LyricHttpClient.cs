@@ -66,17 +66,19 @@ public sealed class LyricHttpClient
     /// An <see cref="HttpClient"/> suited to the sources: no client-wide timeout (each request has its own),
     /// compressed replies inflated, connections recycled so DNS changes are seen.
     /// </summary>
-    public static HttpClient CreateDefaultHttpClient()
+    public static HttpClient CreateDefaultHttpClient() => new(CreateDefaultHandler()) { Timeout = Timeout.InfiniteTimeSpan };
+
+    /// <summary>
+    /// The handler behind <see cref="CreateDefaultHttpClient"/>. Cookies are never kept or sent back: NetEase answers
+    /// with unrelated songs once its NMTID cookie is returned (found on the Mac, next/integration 1cdde21).
+    /// </summary>
+    internal static SocketsHttpHandler CreateDefaultHandler() => new()
     {
-        var handler = new SocketsHttpHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-            ConnectTimeout = TimeSpan.FromSeconds(10),
-            UseCookies = false,
-        };
-        return new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-    }
+        AutomaticDecompression = DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        ConnectTimeout = TimeSpan.FromSeconds(10),
+        UseCookies = false,
+    };
 
     /// <summary>
     /// <paramref name="address"/> with <paramref name="query"/> appended, percent-encoded. Parameters are sorted by name
