@@ -8,6 +8,21 @@ with `ytInitialData`. No player, embed or video was loaded.
 - `results-the-weeknd-blinding-lights-official-music-video.html`: the automatic lookup's query for "Blinding Lights" by
   The Weeknd (18 videos)
 
+Five more were recorded the same way later on 13 Nov 2026, for the songs that missed their videos in the owner's
+listening (Apple Music for Windows; see docs/milestones/M6.md, "Songs from Apple Music for Windows missed their videos").
+One request per page, five in all, each 200 with `ytInitialData`:
+
+- `results-tame-impala-lost-in-yesterday-official-music-video.html`: the automatic query for "Lost in Yesterday" by
+  Tame Impala (19 videos)
+- `results-tame-impala-the-slow-rush-lost-in-yesterday-official-music-video.html`: the query the lookup sent before the
+  fix, with Apple Music's joined "Tame Impala — The Slow Rush" as the artist (13 videos; its six playlist
+  `lockupViewModel`s are not videos)
+- `results-dayglow-hot-rod-official-music-video.html`: the automatic query for "Hot Rod" by Dayglow (18 videos)
+- `results-wallows-pleaser-official-music-video.html`: the automatic query for "Pleaser" by Wallows (18 videos)
+- `results-hers-what-once-was-official-music-video.html`: the automatic query for "What Once Was" by Her's (18 videos)
+
+The served pages had no `<title>`; each fixture's `<title>` is written from its query.
+
 Each is trimmed to what the parser reads: the JSON path to every `videoRenderer`, and in each only `videoId`, the text of
 `title`, `ownerText`, `longBylineText`, `lengthText`, `shortViewCountText`, `viewCountText` and `publishedTimeText`, and
 the `style` of `ownerBadges`. Everything else (scripts, links, thumbnails, tracking and session values) is dropped. The

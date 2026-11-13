@@ -25,8 +25,13 @@ public static class AppleMusicWindowsMetadata
         return track with { Artist = joined.Artist, AlbumTitle = joined.Album, AlbumArtist = albumArtist };
     }
 
-    private static (string Artist, string Album)? Split(string text)
+    /// <summary>
+    /// "Wallows — Nothing Happens" as ("Wallows", "Nothing Happens"), split at the first <see cref="Separator"/>; null when
+    /// the text has no separator or either side is empty. Whatever app it came from: callers decide when it applies.
+    /// </summary>
+    public static (string Artist, string Album)? Split(string text)
     {
+        ArgumentNullException.ThrowIfNull(text);
         var at = text.IndexOf(Separator, StringComparison.Ordinal);
         if (at <= 0) return null;
         var artist = text[..at].Trim();
