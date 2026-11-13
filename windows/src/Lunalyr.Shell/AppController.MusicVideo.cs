@@ -201,6 +201,7 @@ public sealed partial class AppController
         MusicVideoTrack? track;
         lock (_gate) track = _musicVideoTrack;
         _musicVideoShowing = controller.SourceFor(track);
+        FollowMusicVideoStill();
         RefreshMusicVideoLayers();
         RaiseStatusChanged();
     }
@@ -268,7 +269,8 @@ public sealed partial class AppController
         var (time, playing) = ReadSongPosition();
         var settings = _settings;
         var path = _musicVideoShowing is MusicVideoSource.Local local ? local.Path : null;
-        return new MusicVideoInputs(path, time, playing, _musicVideo?.CurrentOffset ?? 0, settings.MusicVideoDim, settings.MusicVideoBlur);
+        return new MusicVideoInputs(path, time, playing, _musicVideo?.CurrentOffset ?? 0, settings.MusicVideoDim, settings.MusicVideoBlur,
+            Still: _musicVideoStill);
     }
 
     private void ReportMusicVideo(string path, double? duration, double videoTime, bool playing)

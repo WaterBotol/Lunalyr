@@ -1165,9 +1165,21 @@ API changes and on each load or play (`YouTubeEmbed`, test `CaptionsAreForcedOff
 `testCaptionsAreForcedOff`).
 
 **What isn't ported, because the Mac's means aren't official:** the still-image check (it reads YouTube's undocumented
-numbered stills, `1.jpg`–`3.jpg`, for up to three candidates of each automatic lookup), so a found video is used
-without it, and the Mac's note for a pasted still-image upload is dropped; the Mac's `YouTubeThumbnail` (the large still for the settings preview and Reduce Motion,
-which isn't part of search).
+numbered stills, `1.jpg`–`3.jpg`, for up to three candidates of each automatic lookup, and keeps its verdicts under
+`custom.musicVideoStill`), so a found video is used without it, and the Mac's note for a pasted still-image upload is
+dropped.
+
+**The video's still** (the Mac's `YouTubeThumbnail`, ported 14 Nov 2026; no setting): once a YouTube video is the one on
+screen, `AppController.MusicVideoStill.cs` fetches its still from YouTube's image host (`i.ytimg.com`, the host the
+Search YouTube window's rows already load from; `maxresdefault.jpg`, then `hqdefault.jpg`, the stills the Data API lists
+as a video's thumbnails), through the same client (`MusicVideoHttpClient`: no cookies, nothing cached, allowed hosts
+only), decodes it to at most 1280 px and hands it to the `musicVideo.youtube` layer through the feed. The layer draws
+it, filled and softened by Video blur, wherever the player isn't on screen: under Reduce Motion (Windows' Animation
+effects off; the player is then never opened, as on the Mac), in the settings preview, on the other displays, and
+while the player loads or after it has closed. It fades in over the album colours in 0.4 s; dimming, scrim and backing
+go over it as over the player. Nothing is fetched where no player could be shown (`--demo`, `--no-network`,
+`--no-playback`). Not seen live: the development rules allow no request to YouTube's hosts, so the fetch is tested with
+a fake image host and the drawing offscreen (`YouTubeThumbnailTests`, `MusicVideoStillTests`, `YouTubeStillLayerTests`).
 
 **Not kept for YouTube, because YouTube's API policies don't allow obscuring, cropping or covering the embedded player's
 interface:** the Mac's 1.25× overscan (it draws the player larger and clips it, to push YouTube's title bar and logo off
@@ -1193,8 +1205,8 @@ isn't retried until it changes.
   display's wallpaper surface and just beneath it. The player fills that window as YouTube draws it, fitted
   (letterboxed) without cropping, and is on screen in every state once it is ready: playing, paused (the song or the
   wallpaper), buffering or ended, with YouTube's own interface when YouTube draws it. The surface draws
-  `musicVideo.youtube`, see-through while the player is on screen (dimming, scrim and backing over it), and the album
-  colours while there is no player (loading, failed, closed). The browser runs with `--mute-audio`, the WebView2 is muted
+  `musicVideo.youtube`, see-through while the player is on screen (dimming, scrim and backing over it), and the video's
+  still (the album colours until it loads) while there is no player (loading, failed, closed, Reduce Motion). The browser runs with `--mute-audio`, the WebView2 is muted
   (`CoreWebView2.IsMuted`) before it loads anything, and the page mutes the player before every play, seek and sample.
   InPrivate profile under `{data}\MusicVideo\WebView2`, the page served from a virtual https host, no other
   navigation, no new windows, every permission denied. Steered by the ported sync loop (led seeks with hysteresis,

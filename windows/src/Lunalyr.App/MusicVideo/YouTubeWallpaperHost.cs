@@ -90,6 +90,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         };
         _session.OnEffect = effect => _ui.TryEnqueue(() => Perform(effect));
         video.Changed += () => _ui.TryEnqueue(Follow);
+        // Reduce Motion (Animation effects) turning on or off.
+        app.StatusChanged += (_, _) => _ui.TryEnqueue(Follow);
         // The loop rests once a paused, covered or hidden wallpaper has paused the video; these wake it again. Power
         // saving arrives the same way, and may draw another type instead of the video.
         engine.StatusChanged += (_, _) => _ui.TryEnqueue(() =>
@@ -121,8 +123,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private void Follow()
     {
         if (_disposed) return;
-        // The type drawn, not the one chosen: power saving can show Line patterns or Colour only instead of the video.
-        var wanted = WallpaperPower.EffectiveMode(_settings().BackgroundMode, _app.Power) == "musicVideo" ? _video.ShowingYouTubeId : null;
+        // The type drawn, not the one chosen: power saving can show Line patterns or Colour only instead of the video. Under
+        // Reduce Motion (Animation effects off) no player is opened: the wallpaper shows the video's still, as on the Mac.
+        var wanted = WallpaperPower.EffectiveMode(_settings().BackgroundMode, _app.Power) == "musicVideo" && !_app.Scene.ReduceMotion
+            ? _video.ShowingYouTubeId : null;
         if (wanted == _videoId) return;
         if (wanted is null)
         {
