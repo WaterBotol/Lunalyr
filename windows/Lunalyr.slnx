@@ -4,6 +4,7 @@
       <Platform Project="x64" />
     </Project>
     <Project Path="src/Lunalyr.Core/Lunalyr.Core.csproj" />
+    <Project Path="src/Lunalyr.Install/Lunalyr.Install.csproj" />
     <Project Path="src/Lunalyr.Platform.Windows/Lunalyr.Platform.Windows.csproj" />
     <Project Path="src/Lunalyr.Render/Lunalyr.Render.csproj">
       <Platform Project="x64" />
@@ -14,6 +15,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Lunalyr.Core.Tests/Lunalyr.Core.Tests.csproj" />
+    <Project Path="tests/Lunalyr.Install.Tests/Lunalyr.Install.Tests.csproj" />
     <Project Path="tests/Lunalyr.Platform.Windows.Tests/Lunalyr.Platform.Windows.Tests.csproj" />
     <Project Path="tests/Lunalyr.Render.Compositions.Tests/Lunalyr.Render.Compositions.Tests.csproj">
       <Platform Project="x64" />
