@@ -344,6 +344,79 @@ public sealed class LyricToolsTests : IAsyncDisposable
         Assert.Empty(_lyrics.Pins);
     }
 
+    // ---- Importing readings (Settings › Readings › Import reading LRC) ----
+    // The Mac has no test of LyricsViewModel.importRomanization (and its lines are Verso-attributed: re-implemented from
+    // behaviour); these pin the behaviour: readings join the lines showing by time, the source and its offset stay, the
+    // result is saved for the recording, and nothing changes when no timestamp falls on a line.
+
+    [Fact]
+    public async Task AReadingLrcAddsReadingsToTheLyricsShowingAndIsSaved()
+    {
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("NetEase", "First line", "Second line", "Third line")));
+        var controller = Controller();
+        controller.Start();
+        Assert.Equal(new ReadingImport(LyricToolsText.ReadingsNeedLyrics, false), controller.ImportReadings("[00:10.00]faasuto")); // nothing playing
+        Assert.False(controller.HasSyncedLyrics);
+        Play("Song");
+        await controller.WhenIdleAsync();
+        Assert.True(controller.HasSyncedLyrics);
+
+        var path = Path.Combine(_folder.Path, "song.roma.lrc");
+        File.WriteAllText(path, "[00:10.05]faasuto rain\n[00:18.00]saado rain\n[01:30.00]nowhere\n", Encoding.UTF8);
+        var result = controller.ImportReadingsFile(path);
+        Assert.Equal(new ReadingImport(LyricToolsText.ReadingsAdded(2, true), false), result);
+        Assert.Equal("Readings added to 2 lines. Saved for this recording.", result.Message);
+
+        var shown = Assert.IsType<LyricResult.Synced>(controller.Scene.Lyrics);
+        Assert.Equal("NetEase", shown.Provenance.Source); // the source (and its per-source offset) stays
+        Assert.Equal(["faasuto rain", null, "saado rain"], shown.Lines.Where(line => !line.IsInstrumental).Select(line => line.Romanization));
+        var pin = Assert.Single(_lyrics.Pins);
+        Assert.Equal(controller.CurrentQuery!.RecordingKey, pin.Query.RecordingKey);
+        Assert.Equal("faasuto rain", ((LyricResult.Synced)pin.Result).Lines[0].Romanization);
+        Assert.True(controller.LyricTools.Pinned);
+        Assert.Null(controller.LyricTools.Note); // Timing's own note is left alone
+    }
+
+    [Fact]
+    public async Task AReadingLrcThatMatchesNoLineChangesNothing()
+    {
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("NetEase", "First line", "Second line")));
+        var controller = Controller();
+        controller.Start();
+        Play("Song");
+        await controller.WhenIdleAsync();
+        var before = controller.Scene.Lyrics;
+
+        Assert.Equal(new ReadingImport(LyricToolsText.NoReadingsMatched, false), controller.ImportReadings("[00:11.00]off by a second\n[00:20.00]and more"));
+        Assert.Same(before, controller.Scene.Lyrics);
+        Assert.Empty(_lyrics.Pins);
+
+        var words = Path.Combine(_folder.Path, "words.txt");
+        File.WriteAllText(words, "Just words, no timing");
+        var failed = controller.ImportReadingsFile(words);
+        Assert.True(failed.Failed);
+        Assert.Equal(Core.Lyrics.Parsing.LyricDecodeResult.Message(Core.Lyrics.Parsing.LyricDecodeFailure.NoTimestamps), failed.Message);
+        Assert.True(controller.ImportReadingsFile(Path.Combine(_folder.Path, "missing.lrc")).Failed);
+        Assert.Same(before, controller.Scene.Lyrics);
+    }
+
+    [Fact]
+    public async Task ReadingsAttachToTheLyricsAsFoundNotAsPresented()
+    {
+        // Each import starts from the lyrics the lookup (or the last choice) gave, so a second file replaces the first's
+        // readings line for line rather than stacking on a presented copy.
+        _lyrics.Answer("Song", TestLyrics.Found(TestLyrics.Synced("NetEase", "First line", "Second line")));
+        var controller = Controller();
+        controller.Start();
+        Play("Song");
+        await controller.WhenIdleAsync();
+        Assert.False(controller.ImportReadings("[00:10.00]one\n[00:14.00]two").Failed);
+        // As on the Mac, the count is of the lines that now have a reading.
+        Assert.Equal(LyricToolsText.ReadingsAdded(2, true), controller.ImportReadings("[00:14.00]deux").Message);
+        var shown = Assert.IsType<LyricResult.Synced>(controller.Scene.Lyrics);
+        Assert.Equal(["one", "deux"], shown.Lines.Where(line => !line.IsInstrumental).Select(line => line.Romanization));
+    }
+
     // ---- When none are found ----
 
     [Fact]

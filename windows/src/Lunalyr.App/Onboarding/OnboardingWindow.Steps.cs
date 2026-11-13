@@ -96,9 +96,8 @@ internal sealed partial class OnboardingWindow
         followTexts.Children.Add(Caption(OnboardingCopy.FollowCaption));
         AutomationProperties.SetAccessibilityView(followTexts, AccessibilityView.Raw);
         follow.Children.Add(followTexts);
-        // Settings › Music players' choice, which this build can't change yet: shown as it is, not offered.
-        var combo = FixedCombo("Automatic");
-        combo.MinWidth = 140;
+        // Settings › Music players' Player, the same setting: the list above marks the player it follows.
+        var combo = PlayerChoiceCombo.Build(ctx, _host.SharingPlayers, width: 140);
         combo.VerticalAlignment = VerticalAlignment.Center;
         AutomationProperties.SetName(combo, OnboardingCopy.Follow);
         AutomationProperties.SetHelpText(combo, OnboardingCopy.FollowCaption);
@@ -118,12 +117,12 @@ internal sealed partial class OnboardingWindow
         list.Children.Add(title);
         var rows = new StackPanel { Spacing = 8 };
         list.Children.Add(rows);
-        ctx.OnRefresh(_ =>
+        ctx.OnRefresh(s =>
         {
             WatchPlayers();
             rows.Children.Clear();
             var sessions = _host.MediaSessions;
-            var found = OnboardingPlayers.Rows(sessions);
+            var found = OnboardingPlayers.Rows(sessions, s.Player);
             if (found.Count == 0)
             {
                 rows.Children.Add(Caption(sessions is null ? OnboardingCopy.StartingPlayers : OnboardingCopy.NoPlayers));
@@ -288,19 +287,8 @@ internal sealed partial class OnboardingWindow
             Combo(ctx, SettingsCopy.ReadingLanguages, s => s.RomanizationLanguage, (s, v) => s with { RomanizationLanguage = v }, width: 220));
         var accessory = new StackPanel { Spacing = 8 };
         accessory.Children.Add(readings);
-        var translations = new Grid { ColumnSpacing = 6 };
-        translations.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        translations.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var info = Icon("", 12);
-        info.Style = Resource<Style>("SettingsNoteIcon");
-        info.VerticalAlignment = VerticalAlignment.Top;
-        info.Margin = new Thickness(0, 2, 0, 0);
-        AutomationProperties.SetAccessibilityView(info, AccessibilityView.Raw);
-        translations.Children.Add(info);
-        var translationText = Caption(OnboardingCopy.Translations);
-        Grid.SetColumn(translationText, 1);
-        translations.Children.Add(translationText);
-        accessory.Children.Add(translations);
+        // The Mac's checkbox under the readings menus: Settings › Readings' Show translations under lyrics.
+        accessory.Children.Add(TranslationsCheckBox(ctx));
         card.Children.Add(FeatureRow("", OnboardingCopy.ReadingsTitle, OnboardingCopy.Readings, accessory));
         panel.Children.Add(Wrap(card));
         return panel;
@@ -503,6 +491,24 @@ internal sealed partial class OnboardingWindow
         Grid.SetColumn(texts, 1);
         grid.Children.Add(texts);
         return grid;
+    }
+
+    /// <summary>
+    /// "Show translations under lyrics" as the Mac's welcome has it: a checkbox with its caption, on the same setting as
+    /// Settings › Readings. To Narrator, the checkbox named by its title, with the caption as help text.
+    /// </summary>
+    private static CheckBox TranslationsCheckBox(SettingsContext ctx)
+    {
+        var texts = new StackPanel { Spacing = 2 };
+        texts.Children.Add(new TextBlock { Text = TranslationsCopy.Title, TextWrapping = TextWrapping.Wrap });
+        texts.Children.Add(Caption(OnboardingCopy.Translations));
+        AutomationProperties.SetAccessibilityView(texts, AccessibilityView.Raw);
+        var box = new CheckBox { Content = texts };
+        AutomationProperties.SetName(box, TranslationsCopy.Title);
+        AutomationProperties.SetHelpText(box, OnboardingCopy.Translations);
+        ctx.OnRefresh(s => box.IsChecked = s.ShowTranslations);
+        box.Click += (_, _) => ctx.Update(s => s with { ShowTranslations = box.IsChecked == true });
+        return box;
     }
 
     /// <summary>A switch at the trailing edge; to Narrator, the switch named by its title, with the caption as help text.</summary>

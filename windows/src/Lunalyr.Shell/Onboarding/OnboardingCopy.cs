@@ -43,9 +43,9 @@ public static class OnboardingCopy
 
     public const string Follow = "Follow";
 
-    /// <summary>Settings › Music players' caption for the same choice, which this build can't change yet.</summary>
+    /// <summary>Under the Follow menu (the Mac's followCaption, in Settings › Music players' words).</summary>
     public const string FollowCaption =
-        "Automatic follows whichever player is playing. Choosing one player arrives in a later build.";
+        "Automatic follows whichever player is playing. Choosing one means Lunalyr never reads the others.";
 
     /// <summary>How a player sharing with Windows reads in the list.</summary>
     public static string PlayerStatus(PlaybackStatus status, bool followed)
@@ -60,6 +60,9 @@ public static class OnboardingCopy
         };
         return followed ? $"{state} · Lunalyr follows this one now" : state;
     }
+
+    /// <summary>A player sharing with Windows that the player chosen leaves alone (what it plays isn't read).</summary>
+    public static string NotFollowed(string chosen) => $"Not followed: Lunalyr follows {chosen} only";
 
     /// <summary>"A", "A and B", "A, B and C".</summary>
     public static string List(IReadOnlyList<string> names)
@@ -116,9 +119,8 @@ public static class OnboardingCopy
 
     public const string ReadingsLanguage = "Language";
 
-    /// <summary>Translations: the Mac's promise, and that Windows doesn't show them yet.</summary>
-    public const string Translations =
-        "Translations under the lyrics arrive in a later build. Lyrics are never sent anywhere to be translated.";
+    /// <summary>Under Show translations under lyrics (the Mac's OnboardingCopy.translations, without its sentence about translating on the Mac).</summary>
+    public const string Translations = Lunalyr.Shell.Settings.TranslationsCopy.Onboarding;
 
     // ---- 5. The tray ----
 

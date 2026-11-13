@@ -39,8 +39,8 @@ public sealed class LunalyrExtrasTests
         Assert.True(LunalyrExtras.ShowsInHud(NoteOrigin.Window, wallpaperPaused: false, wallpaperCovered: true));
     }
 
-    // Ported from ActionHUDTests.swift: testShortcutsAndLinksPostToTheHUDAndMarkTheNote. Windows has no mirroring, so
-    // "Lyrics shown" is never "shown while mirroring".
+    // Ported from ActionHUDTests.swift: testShortcutsAndLinksPostToTheHUDAndMarkTheNote. No display is mirrored here, so
+    // "Lyrics shown" is not "shown while mirroring" (MirroringTests has that).
     [Fact]
     public void TestShortcutsAndLinksPostToTheHUDAndMarkTheNote()
     {

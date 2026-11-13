@@ -118,7 +118,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                            double lineBase, double defaultEnd)
     {
         var prepared = _prepared;
-        var stage = Stage;
+        // With translations, the words keep clear of the band at the stage's foot where they sit.
+        var stage = FreeStage(Stage, TranslationBand);
         var reduce = ReduceMotion;
         var count = 0;
         for (var k = 0; k < prepared.Length; k++)
@@ -447,6 +448,12 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         var padding = Padding(token, scale);
         return (label, reading, width + 2 * padding.X, height + 2 * padding.Y);
     }
+
+    /// <summary>
+    /// The part of the stage the rolling words are placed and fitted in: all of it, less a translation band at its foot
+    /// (the Mac's <c>bottomInset</c>), whose top is then the stage's bottom edge for the words.
+    /// </summary>
+    internal static SizeD FreeStage(SizeD stage, double band) => new(stage.Width, Math.Max(0, stage.Height - band));
 
     /// <summary>The padding round a unit, in pixels: 2 points at each side, or 11 by 3 round a Cutout label.</summary>
     internal static (double X, double Y) Padding(RollingWord token, float scale) => token.Tile

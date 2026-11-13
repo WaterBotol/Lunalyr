@@ -72,6 +72,9 @@ internal sealed unsafe class TrayHost : IDisposable
     /// <summary>A system setting changed (<c>WM_SETTINGCHANGE</c>, broadcast to top-level windows): read what matters again.</summary>
     public Action? SettingChanged { get; set; }
 
+    /// <summary>The displays changed (<c>WM_DISPLAYCHANGE</c>, sent to top-level windows): a display may be mirrored now.</summary>
+    public Action? DisplaysChanged { get; set; }
+
     /// <summary>A global shortcut registered on this window was pressed (<c>WM_HOTKEY</c>'s id).</summary>
     public Action<nuint>? Hotkey { get; set; }
 
@@ -276,6 +279,10 @@ internal sealed unsafe class TrayHost : IDisposable
             case 0x0312: // WM_HOTKEY
                 Hotkey?.Invoke(wParam);
                 return 0;
+
+            case 0x007E: // WM_DISPLAYCHANGE
+                DisplaysChanged?.Invoke();
+                break;
 
             case WM_APP_INVOKE:
                 while (_posted.TryDequeue(out var action)) action();

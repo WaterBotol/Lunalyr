@@ -223,6 +223,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         SceneShown = null;
         Sheet = null;
         InvalidateExtras();
+        InvalidateTranslations();
     }
 
     public void Render(in FrameContext frame)
@@ -559,6 +560,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (rolls)
         {
             DrawRolling(dc, row, time, stagePresence * opacity);
+            DrawRollingTranslation(dc, row, pose.Progress * (1 - pose.Exit) * opacity);
             return;
         }
         if (Rules.FillsStage)
@@ -673,7 +675,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // "Cutout · Highlight": each sung word gets a tile, held until the line ends (see Decorate).
         return BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
                          runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
-                         runShares: runShares);
+                         runShares: runShares, translation: TranslationOf(row));
     }
 
     /// <summary>A line's reading, split over its runs when it has one part per run, otherwise for the whole line.</summary>
@@ -707,13 +709,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                                  double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
                                  LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
                                  bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN,
-                                 IReadOnlyList<ReadingShares?>? runShares = null)
+                                 IReadOnlyList<ReadingShares?>? runShares = null, string? translation = null)
     {
         Meter.Enter();
         try
         {
             return SetLine(words, glue, baseSize, lineIndex, inkTime, wordTimed, editorial, runReadings, lineReading, fit, maxWidth,
-                           groups, backingSeed, heavy, kind, lineEnd, runShares);
+                           groups, backingSeed, heavy, kind, lineEnd, runShares, translation);
         }
         finally
         {
@@ -724,7 +726,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     private LinePlan SetLine(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize, int lineIndex,
                              double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
                              LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups, int backingSeed,
-                             bool heavy, CompositionKind? kind, double lineEnd, IReadOnlyList<ReadingShares?>? runShares)
+                             bool heavy, CompositionKind? kind, double lineEnd, IReadOnlyList<ReadingShares?>? runShares,
+                             string? translation)
     {
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
@@ -738,8 +741,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: baseSize * 0.38,
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
             Connections: connections, Spread: StyleShown.ConstellationSpread,
-            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial);
-        var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares);
+            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial,
+            TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale);
+        var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
         {
@@ -1183,11 +1187,20 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     }
 
 
-    private void DrawLineReading(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 content, double scale, double opacity)
+    /// <summary>The line's reading and its translation under it, arriving and leaving with the line.</summary>
+    private static void DrawLineReading(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 content, double scale, double opacity)
     {
-        if (plan.LineReading is not { } reading || !(opacity > 0.002)) return;
-        var world = Matrix3x2.CreateTranslation((float)plan.ReadingCentre.X, (float)plan.ReadingCentre.Y) * content;
-        reading.Draw(dc, world, (float)scale, (float)opacity, 0, GlowSpec.None, 1);
+        if (!(opacity > 0.002)) return;
+        if (plan.LineReading is { } reading)
+        {
+            var world = Matrix3x2.CreateTranslation((float)plan.ReadingCentre.X, (float)plan.ReadingCentre.Y) * content;
+            reading.Draw(dc, world, (float)scale, (float)opacity, 0, GlowSpec.None, 1);
+        }
+        if (plan.Translation is { } translation)
+        {
+            var world = Matrix3x2.CreateTranslation((float)plan.TranslationCentre.X, (float)plan.TranslationCentre.Y) * content;
+            translation.Draw(dc, world, (float)scale, (float)opacity, 0, GlowSpec.None, 1);
+        }
     }
 
     private void DrawBacking(ID2D1DeviceContext dc, LinePlan plan, double time, double opacity, int seed)
@@ -1230,7 +1243,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
             var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
             var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
-                                 FitFor(row), Stage.Width);
+                                 FitFor(row), Stage.Width, translation: TranslationOf(row));
             plan.LastUsed = Frame;
             _phrases[row] = plan;
             return plan;

@@ -1,4 +1,5 @@
 using Lunalyr.Shell;
+using Lunalyr.Shell.LyricTools;
 using Lunalyr.Shell.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -12,7 +13,7 @@ internal static class GeneralPage
 {
     public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
                                    Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null,
-                                   Lunalyr.App.Hosting.PackagingHooks? packaging = null)
+                                   Lunalyr.App.Hosting.PackagingHooks? packaging = null, MirroringHooks? mirroring = null)
     {
         var page = Page();
         if (packaging?.SettingsProblem is { } problem)
@@ -41,7 +42,7 @@ internal static class GeneralPage
 
         Section(page, "Tray & shortcuts");
         ExtrasSections.AddTrayLyric(page, ctx);
-        ShortcutsSection.Add(page, ctx, hotkeys);
+        ShortcutsSection.Add(page, ctx, hotkeys, mirroring);
 
         Section(page, "Discord & lyric card");
         ExtrasSections.AddDiscord(page, ctx, discord);
@@ -53,7 +54,7 @@ internal static class GeneralPage
 /// <summary>Readings (the Mac's "Romanisation"): readings under the lyrics or instead of them, the language and saved readings.</summary>
 internal static class ReadingsPage
 {
-    public static StackPanel Build(SettingsContext ctx)
+    public static StackPanel Build(SettingsContext ctx, Func<AppController?>? controller = null, Func<Task<string?>>? chooseReadingFile = null)
     {
         var page = Page();
         Section(page, "Romanisation");
@@ -72,13 +73,43 @@ internal static class ReadingsPage
             Toggle(ctx, s => s.RomanizationSaved, (s, v) => s with { RomanizationSaved = v })));
 
         Section(page, "Saved readings");
-        page.Children.Add(Card("Import reading LRC", "Use readings from an LRC file for the lyrics showing.", "",
-            Button("Import…", () => { }), notYet: SettingsCopy.LaterBuild));
+        // The Mac's Import Reading LRC…: readings matched to the lines showing by time, then saved with the recording.
+        var import = new Button { Content = "Import…" };
+        AutomationProperties.SetName(import, "Import reading LRC");
+        page.Children.Add(Card("Import reading LRC", "Use readings from an LRC file for the lyrics showing.", "", import));
+        var needsLyrics = Caption(LyricToolsText.ReadingsNeedLyrics);
+        page.Children.Add(needsLyrics);
+        var warning = new InfoBar { Severity = InfoBarSeverity.Warning, IsClosable = false, IsOpen = false };
+        var note = Caption("");
+        note.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetLiveSetting(note, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        AutomationProperties.SetLiveSetting(warning, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Assertive);
+        page.Children.Add(warning);
+        page.Children.Add(note);
+        import.Click += async (_, _) =>
+        {
+            if (chooseReadingFile is null || await chooseReadingFile() is not { Length: > 0 } path) return;
+            if (controller?.Invoke() is not { } c) return;
+            var result = c.ImportReadingsFile(path);
+            warning.Message = result.Failed ? result.Message : "";
+            warning.IsOpen = result.Failed;
+            note.Text = result.Failed ? "" : result.Message;
+            note.Visibility = result.Failed ? Visibility.Collapsed : Visibility.Visible;
+            ctx.QueueRefresh();
+        };
+        ctx.OnRefresh(_ =>
+        {
+            var showing = controller?.Invoke()?.HasSyncedLyrics == true;
+            import.IsEnabled = showing && chooseReadingFile is not null;
+            needsLyrics.Visibility = showing ? Visibility.Collapsed : Visibility.Visible;
+        });
         page.Children.Add(Caption("Saved readings are pronunciation guides. Japanese readings are matched to the lyric’s kana, however they’re spaced; a reading written for other words isn’t shown, and Lunalyr’s own reading is used for that line."));
 
         Section(page, "Translations");
-        page.Children.Add(Card("Show translations under lyrics", "Shown when the lyric source has a translation. Lyrics are never sent anywhere to be translated.",
-            "", FixedToggle(false), notYet: SettingsCopy.LaterBuild));
+        // The Mac's TranslationSection: translations that came with the lyrics. Windows has no on-device translator, so the
+        // Mac's controls for translating on the Mac have no counterpart (docs/READINGS-WINDOWS.md).
+        page.Children.Add(Card(TranslationsCopy.Title, TranslationsCopy.Description, "",
+            Toggle(ctx, s => s.ShowTranslations, (s, v) => s with { ShowTranslations = v })));
         return page;
     }
 }
@@ -87,7 +118,8 @@ internal static class ReadingsPage
 internal static class PlayersPage
 {
     public static StackPanel Build(SettingsContext ctx, Func<AppController?> controller,
-        Func<Lunalyr.Core.Player.Spotify.SpotifyAccount?>? spotify = null, Func<string?>? spotifyOff = null)
+        Func<Lunalyr.Core.Player.Spotify.SpotifyAccount?>? spotify = null, Func<string?>? spotifyOff = null,
+        Func<IReadOnlyList<Lunalyr.Core.NowPlaying.MediaSourceApp>>? sharing = null)
     {
         var page = Page();
         var following = Card("Following", null, "");
@@ -99,8 +131,9 @@ internal static class PlayersPage
                 : "No player is sharing what it plays right now.";
         });
         page.Children.Add(following);
+        // The Mac's custom.player: a chosen player's session is the only one followed (FollowedSessionSource).
         page.Children.Add(Card("Player", "Automatic follows whichever player is playing. Choosing one means Lunalyr never reads the others.", "",
-            FixedCombo("Automatic"), notYet: SettingsCopy.LaterBuild));
+            PlayerChoiceCombo.Build(ctx, sharing ?? (() => []))));
         page.Children.Add(Card("Players Windows knows about",
             "Lunalyr follows any app that shares what it plays with Windows (the media controls by the volume flyout): Spotify, Apple Music, browsers playing YouTube Music or SoundCloud, and more.",
             ""));

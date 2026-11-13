@@ -112,6 +112,8 @@ internal class StageLine : IDisposable
     public bool HasReadings => Array.Exists(Readings, r => r is not null);
     public StageWord[] Words { get; set; } = [];
     public Ink? LineReading { get; set; }
+    /// <summary>The line's translation (Show translations under lyrics), under the stage and its reading.</summary>
+    public Ink? Translation { get; set; }
     public BackingPlan[] Backing { get; set; } = [];
     public long LastUsed { get; set; }
 
@@ -145,6 +147,7 @@ internal class StageLine : IDisposable
     {
         foreach (var word in Words) word.Dispose();
         LineReading?.Dispose();
+        Translation?.Dispose();
         foreach (var plan in Backing) plan.Dispose();
     }
 }
@@ -269,6 +272,14 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             using var layout = Kit!.Layout(lineReading, Face.Quiet, (float)(BaseSize * 0.38), TextKit.LocaleFor(lineReading),
                                            ScriptDirection.IsRightToLeft(lineReading), (float)(Stage.Width * 0.8));
             line.LineReading = Kit.Bake(layout, LyricInks.Vector(InkAt(source.Start).Base.Reading), 1,
+                                        new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)));
+        }
+        if (TranslationOf(row) is { } translation)
+        {
+            using var layout = Kit!.Layout(translation, Face.Quiet, (float)(BaseSize * LineTranslations.LineSize * Metrics.UserScale),
+                                           TextKit.LocaleFor(translation), ScriptDirection.IsRightToLeft(translation),
+                                           (float)(Stage.Width * LineTranslations.Width));
+            line.Translation = Kit.Bake(layout, LyricInks.Vector(InkAt(source.Start).Base.Reading), 1,
                                         new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)));
         }
         if (groups.Count > 0)
@@ -415,15 +426,17 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             blur = Points(motion.Blur(pose.Progress, reduce));
         }
         if (!(alpha > 0.002)) return;
-        // A reading that cannot be split by run sits once under the stage; the two are fitted to the stage together.
+        // A reading that cannot be split by run sits once under the stage, and the line's translation under that; they are
+        // fitted to the stage together.
         var fit = 1.0;
         var lift = 0.0;
-        if (line.LineReading is { } reading)
+        var gap = BaseSize * 0.2;
+        var below = (line.LineReading is { } reading ? gap + reading.Box.Y : 0) + (line.Translation is { } translated ? gap + translated.Box.Y : 0);
+        if (below > 0)
         {
-            var gap = BaseSize * 0.2;
-            var total = Stage.Height + gap + reading.Box.Y;
+            var total = Stage.Height + below;
             fit = Math.Min(1, Stage.Height / total);
-            lift = -(gap + reading.Box.Y) / 2 * fit;
+            lift = -below / 2 * fit;
         }
         var origin = StageOrigin;
         var toDevice = local
@@ -442,12 +455,19 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         {
             DrawLine(dc, line, time, exitStart, stage, alpha, blur, shown);
         }
+        // Below the stage, in the stack they are fitted as (the Mac's VStack of the stage, its reading and translation).
+        var top = Stage.Height;
+        var underOpacity = (float)(pose.Progress * (1 - pose.Exit) * opacity);
         if (line.LineReading is { } under)
         {
-            // Below the stage, in the stack the two are fitted as (the Mac's VStack of the stage and its reading).
-            var y = Stage.Height + BaseSize * 0.2 + under.Box.Y / 2;
-            var world = Matrix3x2.CreateTranslation(centre.X, (float)y) * toDevice;
-            under.Draw(dc, world, (float)fit, (float)(pose.Progress * (1 - pose.Exit) * opacity), 0, GlowSpec.None, 1);
+            var world = Matrix3x2.CreateTranslation(centre.X, (float)(top + gap + under.Box.Y / 2)) * toDevice;
+            under.Draw(dc, world, (float)fit, underOpacity, 0, GlowSpec.None, 1);
+            top += gap + under.Box.Y;
+        }
+        if (line.Translation is { } translation)
+        {
+            var world = Matrix3x2.CreateTranslation(centre.X, (float)(top + gap + translation.Box.Y / 2)) * toDevice;
+            translation.Draw(dc, world, (float)fit, underOpacity, 0, GlowSpec.None, 1);
         }
     }
 

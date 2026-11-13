@@ -156,14 +156,16 @@ public sealed partial class SettingsWindow : Window
     private UIElement BuildPage(string page) =>
         page switch
         {
-            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, _host.Hotkeys, _host.DiscordHooks, _host.Packaging),
+            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, _host.Hotkeys, _host.DiscordHooks, _host.Packaging,
+                _host.Mirroring),
             "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
                 new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing)),
-            "Readings" => ReadingsPage.Build(_ctx),
+            "Readings" => ReadingsPage.Build(_ctx, () => _host.Controller, ChooseReadingFileAsync),
             "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
             "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion),
             "Covers" => CoversPage.Build(_ctx, () => _host.Controller, () => _host.ReduceMotion),
-            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.Spotify, () => _host.SpotifyOffReason),
+            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.Spotify, () => _host.SpotifyOffReason,
+                () => _host.SharingPlayers()),
             "Performance" => PerformancePage.Build(_ctx, () => _host.Controller),
             _ => new TextBlock { Text = page },
         };

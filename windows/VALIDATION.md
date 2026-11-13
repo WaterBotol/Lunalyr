@@ -180,3 +180,18 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Energy saver and battery switching on a real laptop; the "On battery" choice (no row yet, the Mac's default) | needs the owner | — |
 | Music video: the YouTube video's still (Reduce Motion, settings preview, other displays), only `i.ytimg.com`, nothing fetched under `--demo`/`--no-network`/`--no-playback`, given up at shutdown | unit (2 Mac tests) + offscreen layer + fake image host; never fetched for real (no requests to YouTube's hosts while developing) | `YouTubeThumbnailTests`, `MusicVideoStillTests`, `YouTubeStillLayerTests` |
 | The still over a real YouTube video under Reduce Motion | needs the owner | — |
+
+## Readings, Music players and Timing: the last rows (`port/lyrics-players-gaps`)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Import reading LRC: readings join the lines showing by time, saved as the recording's pin, source and offset kept; unreadable or unmatched files change nothing | unit | `tests/Lunalyr.Shell.Tests/LyricToolsTests.cs` (three tests) |
+| Player: Automatic, or one chosen player followed alone; other players' sessions never handed on or read; a new choice moves the monitor at once; the welcome's Follow is the same setting | unit (silent fake sessions) | `PlayerChoiceTests`, `FollowedSessionSourceTests`, `AppControllerTests.AChosenPlayerIsFollowedAndTheOthersAreLeftAlone`, `WelcomeTests.ThePlayersStepMarksTheChosenPlayerAndLeavesTheOthersUnread` |
+| Player with real players (Spotify, a browser, Apple Music) | live: needs the owner's players | — |
+| Hide lyrics while a display is mirrored: the Mac's state machine, the controller's fade, the floating window | unit | `tests/Lunalyr.Shell.Tests/Extras/MirroringTests.cs`, `AppControllerHideLyricsTests` |
+| Mirroring read from a real duplicated display (Win+P › Duplicate) | live: duplicating a display would change Windows' settings on the development PC | — |
+| Show translations under lyrics: drawn in every layout only while shown; rolling stages keep the band clear; a song without translations draws as before; no allocation per frame | unit (offscreen, Direct2D) | `tests/Lunalyr.Render.Compositions.Tests/TranslationRenderTests.cs`, `ArrivalStackTests.RollingWordsKeepClearOfTheTranslationBand`, `AppSettingsTests.TranslationsAreOnByDefaultAndPersist` |
+| Translations as drawn (Editorial, Spoken, Hinge, a line-timed line) | PC, offscreen PNGs (`LUNALYR_TRANSLATION_SHOTS`); not kept in the repo | `TranslationRenderTests.ShotsForAPersonToLookAt` |
+| Settings › Readings, Music players and Timing in light and dark | PC (the Release publish, `--demo --data <temp> --quiet-windows --settings-page … --theme …`, PrintWindow; Smart App Control blocks the Debug apphost, so captures use the published exe) | `docs/previews/lyrics-players-gaps/*.png` |
+| Card scenes never carry Show translations (the Mac's cards have none) | unit | `LyricCardExportTests.ACardNeverDrawsATranslation` |
+| Prefer word timing, Prefer word-timed LRCLIB | not applicable: retired on the Mac (its keys are no longer read); Timing › Ranking carries the Mac's ranking text | `docs/APP-SHELL.md` "Settings window" |

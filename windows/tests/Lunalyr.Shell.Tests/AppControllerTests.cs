@@ -48,6 +48,32 @@ public sealed class AppControllerTests : IAsyncDisposable
         return _controller;
     }
 
+    // The Mac's PlayerOptions.playersPublisher: a new choice moves now playing to that player at once (Settings › Music
+    // players › Player); the other players are never read.
+    [Fact]
+    public async Task AChosenPlayerIsFollowedAndTheOthersAreLeftAlone()
+    {
+        _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from A")));
+        _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from B")));
+        var spotify = _source.Add(Playing("Song A"));
+        var other = new FakeMediaSession("foobar2000.exe", _time);
+        _sessions.Add(other);
+        other.SetTrack("Song B").SetPlayback(PlaybackStatus.Playing).SetTimeline(5, 200);
+        _source.Add(other);
+        var controller = Controller(new AppSettings { Player = "spotify" });
+        controller.Start();
+        await controller.WhenIdleAsync();
+        Assert.Equal("spotify", controller.FollowedPlayer);
+        Assert.Same(spotify, controller.Monitor.Session);
+        Assert.Equal("Line from A", Assert.IsType<LyricResult.Synced>(_renderer.Last!.Lyrics).Lines[0].Text);
+        Assert.Equal(0, other.Reads);
+
+        controller.ApplySettings(controller.Settings with { Player = "automatic" });
+        await controller.WhenIdleAsync();
+        Assert.Same(other, controller.Monitor.Session); // Windows calls foobar2000 current
+        Assert.Equal("Line from B", Assert.IsType<LyricResult.Synced>(_renderer.Last!.Lyrics).Lines[0].Text);
+    }
+
     [Fact]
     public async Task ReduceMotionTravelsWithEveryScene()
     {

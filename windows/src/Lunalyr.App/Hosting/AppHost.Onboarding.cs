@@ -1,3 +1,4 @@
+using Lunalyr.Core.NowPlaying;
 using Lunalyr.Platform.NowPlaying;
 using Lunalyr.Shell.Onboarding;
 
@@ -14,6 +15,9 @@ internal sealed partial class AppHost
 
     /// <summary>The players Windows' media controls know about (null until start-up has opened them), read only.</summary>
     internal IMediaSessionSource? MediaSessions => _sessions;
+
+    /// <summary>The apps sharing with Windows now, for the player pickers (only their ids are read).</summary>
+    internal IReadOnlyList<MediaSourceApp> SharingPlayers() => _sessions?.Sessions.Select(s => s.SourceApp).ToList() ?? [];
 
     /// <summary>Whether Lunalyr starts when the user signs in to Windows (the same switch as Settings › General).</summary>
     internal Func<bool> IsLaunchAtLoginOn => () => _launchAtLogin?.Status.IsOn ?? false;

@@ -225,3 +225,15 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C --line-porcelai
 every `LyricCard*Tests.swift`, and the card rows' wording in `LyricExtrasInspector.swift` (lines 413–430) and
 `MenuBarWallpaperControls.swift` (lines 105–109) have none. Everything was ported faithfully; nothing was re-implemented from behaviour.
 Details: docs/milestones/M7.md, "Lyric cards".
+
+## Readings, Music players and Timing: the last rows (`port/lyrics-players-gaps`)
+
+Checked at `next/integration` `79b84db` with `git blame -w -M -C --line-porcelain`:
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/NowPlaying/PlayerOptions.swift`, `MorePlayersTests.swift`, `SpotifyPlayerTests.swift` | 0 | `Core/NowPlaying/PlayerChoice.cs`, `Platform/NowPlaying/FollowedSessionSource.cs` | Faithful port, in Windows' terms (GSMTC sessions for the Mac's scripted apps) |
+| `Sources/Lyrics/LyricsViewModel.swift` (`importRomanization`) | 18 of its lines | `AppController.ImportReadings` | **Re-implemented from behaviour**; its messages are worded afresh |
+| `Sources/Extras/LunalyrExtras.swift` (mirroring) | 2: the screen observer that re-reads mirroring on a display change | `LunalyrExtras` (state machine, faithful), `Platform/Desktop/DisplayMirroring.cs`, the tray's `WM_DISPLAYCHANGE` | The observer **re-implemented from behaviour**; the rest faithful |
+| `Sources/UI/LyricLayerView.swift` (translations), `LyricExtrasInspector.swift` (`TranslationSection`), `OnboardingSteps.swift` (the checkbox) | 0 in the lines used (the nearby constellation density scale is Verso and isn't used) | `Core/Compositions/LineTranslations.cs`, `Render/Compositions/LyricCompositionLayer.Translations.cs`, `LinePlan`, `StageLayer`, `SpokenLayer` | Faithful port |
+| `LyricExtrasTests.swift`, `RollingStackTests.swift`, `LyricReviewFixesTests.swift` | 4 each, imports only | the tests named in the commits | Ported tests keep the Mac's inputs |

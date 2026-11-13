@@ -15,6 +15,14 @@ internal sealed partial class AppHost
     private Win32HotkeyRegistrar? _registrar;
     private ActionHudWindow? _hud;
     private Timer? _hotkeyRetry;
+    private Timer? _mirroringRecheck;
+    private bool _mirroringRead;
+
+    /// <summary>Hide lyrics while a display is mirrored, for Settings › General: the extras and their thread.</summary>
+    internal Lunalyr.App.Settings.MirroringHooks Mirroring => new(() => _extras, action => _tray.Post(() =>
+    {
+        if (!_quitting && _extras is { } extras) action(extras);
+    }));
 
     /// <summary>The global shortcuts, for the settings page (null until the tray window exists).</summary>
     public GlobalHotkeys? Hotkeys => _hotkeys;
@@ -42,9 +50,20 @@ internal sealed partial class AppHost
                 UpdateStatus();
             },
             Log = message => _log.Info($"Note: {message}"),
+            // A mirrored display hides the lyrics, or no longer does (Hide lyrics while a display is mirrored).
+            HiddenByMirroringChanged = hidden => _controller?.SetHiddenByMirroring(hidden),
         });
         extras.PresentHud = ShowHud;
         _extras = extras;
+        // The Mac's screen observer, re-implemented: each display change reads whether a display is duplicated now, and
+        // again a moment later, as Windows reports a new topology in steps.
+        _tray.DisplaysChanged = () =>
+        {
+            CheckMirroring();
+            _mirroringRecheck ??= new Timer(_ => _tray.Post(CheckMirroring), null, Timeout.Infinite, Timeout.Infinite);
+            _mirroringRecheck.Change(TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+        };
+        CheckMirroring();
         _links = new LunalyrLinkRouter(new LunalyrLinkRouter.Actions(
             // Windows has no listen-along: a join link is checked, then answered with a note. Nothing connects.
             Join: _ => false,
@@ -70,10 +89,30 @@ internal sealed partial class AppHost
         // "Use global shortcuts" is on).
         _settings.Changed += (_, e) => _tray.Post(() =>
         {
-            if (!_quitting) hotkeys.Sync(e.NewValue);
+            if (_quitting) return;
+            hotkeys.Sync(e.NewValue);
+            extras.SettingsChanged();
         });
         hotkeys.Sync(_settings.Current);
         if (_options.Links.Count > 0) _links.Open(_options.Links);
+    }
+
+    /// <summary>Reads whether a display is mirrored and tells the extras (on the tray's thread).</summary>
+    private void CheckMirroring()
+    {
+        if (_quitting || _extras is not { } extras) return;
+        var mirrored = Lunalyr.Platform.Desktop.DisplayMirroring.Now();
+        if (!_mirroringRead)
+        {
+            _mirroringRead = true;
+            _log.Info(mirrored switch
+            {
+                true => "Displays: one is mirrored (duplicated) now.",
+                false => "Displays: none mirrored.",
+                null => "Displays: couldn't read whether one is mirrored.",
+            });
+        }
+        if (mirrored is { } now) extras.UpdateMirroring(now);
     }
 
     /// <summary>Start-up has finished (or failed): links that came with the launch run now.</summary>
@@ -115,6 +154,9 @@ internal sealed partial class AppHost
     {
         _hotkeyRetry?.Dispose();
         _hotkeyRetry = null;
+        _mirroringRecheck?.Dispose();
+        _mirroringRecheck = null;
+        _tray.DisplaysChanged = null;
         _registrar?.UnregisterAll();
         _hud?.Dispose();
         _hud = null;

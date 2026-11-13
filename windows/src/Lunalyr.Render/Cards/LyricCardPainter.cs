@@ -117,7 +117,8 @@ public sealed class CardPageScene
             WordReadings = wordReadings is { Count: > 0 } ? new Dictionary<int, IReadOnlyList<LyricWord>> { [0] = wordReadings } : new Dictionary<int, IReadOnlyList<LyricWord>>(),
             Readings = reading is { Length: > 0 } ? new Dictionary<int, string> { [0] = reading } : new Dictionary<int, string>(),
             Palette = look.Palette,
-            Style = look.Style with { FloatingTextSize = size },
+            // A card draws the line and its reading, never a translation (the Mac's cards have none).
+            Style = look.Style with { FloatingTextSize = size, Translations = false },
             ReduceMotion = content.ReduceMotion,
             TrackKey = "card",
         };

@@ -270,6 +270,11 @@ internal sealed partial class AppHost
             StartMotionCovers(controller);
             StartDiscordAndTicker(controller);
             _controller = controller;
+            // A display mirrored before the controller existed: its lyrics start hidden as the extras decided.
+            _tray.Post(() =>
+            {
+                if (_extras is { HiddenByMirroring: true }) controller.SetHiddenByMirroring(true);
+            });
             QueueStatusUpdate();
             ExtrasReady();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
