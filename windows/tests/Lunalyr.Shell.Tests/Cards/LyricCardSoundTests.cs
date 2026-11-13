@@ -181,6 +181,20 @@ public class LyricCardSoundTests
         Assert.True(MediaProbe.Read(files[0].Path)!.IsAac);
     }
 
+    // Ported from LyricCardBackgroundTests.swift: testTwoSoundsAtDifferentLevelsMixIntoOneTrack
+    [Fact]
+    public async Task TwoSoundsAtDifferentLevelsMixIntoOneTrack()
+    {
+        using var media = new CardMedia();
+        var exporter = CardMedia.Exporter();
+        var video = media.File("mixed.mp4");
+        Assert.True(exporter.Video(CardMedia.Job(CardProbe.SpacedContent()), video, cancellationToken: Token));
+        var first = LyricCardSound.FromFile(exporter.Decoder, media.Tone("a.wav", 440, 0.3, 0.5), 1.0f);
+        var second = LyricCardSound.FromFile(exporter.Decoder, media.Tone("b.wav", 440, 0.3, 0.5), 0.3f);
+        Assert.True(await exporter.MuxAsync(video, MediaProbe.Read(video)!.Duration, [first!, second!], cancellationToken: Token));
+        Assert.True(MediaProbe.Read(video)!.IsAac);
+    }
+
     // Ported from LyricCardBackgroundTests.swift: testAnyAudioFileCanBeLaidUnderTheMP4EvenWhenItNeedsEncoding
     [Fact]
     public async Task AnyAudioFileCanBeLaidUnderTheMp4EvenWhenItNeedsEncoding()

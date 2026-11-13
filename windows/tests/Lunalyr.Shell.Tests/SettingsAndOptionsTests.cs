@@ -70,6 +70,8 @@ public sealed class AppSettingsTests
             "musicVideoFallback", "musicVideoOnline", "musicVideoSearch", "musicVideoDim", "musicVideoBlur",
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
+            "lyricCardComposition", "lyricCardLinesBefore", "lyricCardLinesAfter", "lyricCardAspect", "lyricCardFormats",
+            "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

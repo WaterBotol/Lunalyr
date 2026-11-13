@@ -29,6 +29,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--settings-page <page>` | Open settings at a page: `general`, `lyric-style`, `readings`, `timing`, `wallpaper`, `covers`, `players`, `performance` or `about` (any part of the page's name); `floating` opens Lyric style at its Floating lyrics section. Implies `--settings`; a second launch forwards it, so checks (and other surfaces) can open a page. |
 | `--theme <light\|dark\|system>` | How Lunalyr's own windows look for this run only (for screenshots). Nothing is saved and Windows' setting is never touched; a second launch can change it in the running instance. |
 | `--quiet-windows` | For checks while someone works at the PC: the settings window opens without being activated and at the bottom of the z-order, so it never takes the foreground or the keyboard. Capture it with `tools/capture-window.ps1` (PrintWindow). Not forwarded to a running instance. |
+| `--lyric-card` | Open the lyric card window once Lunalyr is up (checks; with `--quiet-windows` it opens unactivated at the bottom of the z-order, as the settings window does). Not forwarded to a running instance. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `--floating-capture <file>` | On quitting, write the floating lyrics window's back buffer as a PNG (the engine draws a frame for it even while hidden or with the displays off) and log the window's style and extended style, and whether it is the foreground window. For checks. |
 | `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). `align`: the music video's align mode drawn as it looks mid-song (film button lit, the video's bar, Reset/Cancel/Done), for captures; nothing is changed. |
@@ -125,6 +126,7 @@ Top to bottom (the Mac's order and wording):
 | Lyric line | The line being sung (two rows at most) with the next one under it, "♪" between lines, or "Looking for lyrics…", "No synced lyrics for this song.", "Lyrics appear here while a song plays."; the source and precision at its foot ("Apple Music · Word-by-word"), or the controller's status line when it says more ("Offline — …", "Lyric lookups are off for this run"). One height whatever it shows. On the wallpaper's own clock (both offsets), with readings shown in place of the lines when they replace them. |
 | Lyric timing | Earlier / Later (a tenth of a second for this song, saved per recording and lyric source in `songOffsets`, the Mac's keys), the offset ("+0.20 s"), and reset. "Tap to sync…" (the flyout steps aside and the Tap to sync panel takes the keyboard; "Stop tap to sync" while it listens) and, while the last tap sync's offset is in force for the song playing, "Undo tap sync". Off with nothing playing. See "Lyric tools". |
 | Search YouTube | Opens a YouTube search for "artist title" in the default browser, only from that click (`YouTubeSearch` through an `IUrlLauncher`; the app's is the shell's https handler). Off, with a note, while playback is off for the run, so `--no-playback` and `--demo` never open it. |
+| Lyric card | A fourth quick tile beside Pause, Readings and Credits (the Mac's menu-bar "Lyric card" tile): it closes the flyout and opens the lyric card window; off while nothing plays ("Available while a song plays"). See "Lyric cards". |
 | Wallpaper | "Options…" opens settings. Every wallpaper type as a tile, the Mac's menu-bar grid: Match, Visualiser, Effects, Patterns, Colour, then Your wallpaper, Image or video and Music video; Image or video with nothing imported opens Settings › Wallpaper instead. Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
 | Music video | While Music video is the type and a song plays (`TrayFlyout.MusicVideo.cs`, the Mac's `MenuBarWallpaperControls` rows): Open video on YouTube (a YouTube video only; the browser, only from that click, never under `--no-playback`), Search YouTube… (opens Settings › Wallpaper, where the picker is), Tap to sync, Align…, Earlier / Later (the video a quarter second sooner or later, kept for that video), "Video timing: +x s" and the tap's note. Align… opens the video's bar right here (the Mac sends it to the desktop player's card): drag it, ← → (Shift: a second) once it has the focus, Enter keeps, Esc cancels, Reset / Cancel / Done. See "Music video". |
 | Footer | Settings… (Ctrl+,) and Quit Lunalyr (Ctrl+Q). |
@@ -428,6 +430,13 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `floatingPlacement` | `"bottom"` | `topLeft`, `top`, `topRight`, `centre`, `bottomLeft`, `bottom`, `bottomRight`, `custom` | `custom.floating.placement` |
 | `floatingDisplay` | `""` | a display's lasting key (its DisplayConfig device path), `""` = the main display; a display not connected falls back to the main one | `custom.floating.display` |
 | `floatingFrames`, `floatingSizes` | `{}` | display key → `[x, y, width, height]` in points, relative to the display, y up (the Mac's convention): the frame dragged into place, and the size the presets keep | `custom.floating.frames`, `custom.floating.sizes` |
+| `lyricCardComposition` | `""` | the card's layout: a composition id, `""` follows the wallpaper (Settings › General › Card layout, and the card window) | `custom.lyricCardComposition` |
+| `lyricCardLinesBefore`, `lyricCardLinesAfter` | `0` | 0–5, the lines on each side of the one sung a quick card takes (kept for the Mac's parity; no window sets them yet) | `custom.lyricCardLinesBefore/After` |
+| `lyricCardAspect` | `"portrait"` | `portrait` (4:5), `square`, `story` (9:16), `landscape` (16:9) | `custom.lyricCardAspect` |
+| `lyricCardFormats` | `["mp4","png"]` | any of `mp4`, `gif`, `png` (empty reads as MP4 and PNG) | `custom.lyricCardFormats` |
+| `lyricCardBackgroundPath` | `""` | the picture, GIF or video last chosen to sit behind a card | `custom.lyricCardBackgroundPath` |
+| `lyricCardUseSong` | `false` | the song's own sound goes under the MP4 | `custom.lyricCardUseSong` |
+| `lyricCardTextScale` | `0.85` | 0.5–1.1, the card's text size | `custom.lyricCardTextScale` |
 | `lyricStyleDesktop`, `lyricStyleFloating` | absent | the other surface's lyric style while one is in use: the style keys below, as stored (written once the surface has been switched) | `custom.lyricStyle.desktop`, `custom.lyricStyle.floating` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
@@ -561,8 +570,8 @@ theme. The window opens at Lyric style (or `--settings-page`).
   style, frame rate, pauses, readings, and a new lookup when the sources change. The window logs which keys it changed
   ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
 - **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
-  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, shortcuts, Discord, lyric cards; floating
-  lyrics are live since milestone 7, see "Floating lyrics"), "…milestone 8" (launch at login, updates), "Arrives in a
+  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, shortcuts, Discord; floating lyrics and
+  lyric cards are live since milestone 7, see "Floating lyrics" and "Lyric cards"), "…milestone 8" (launch at login, updates), "Arrives in a
   later build" for the rest. Launch at login writes nothing anywhere.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
@@ -635,6 +644,46 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
 - **Not built:** the Mac's menu-bar "Floating" toggle, `lunalyr://floating` and the Shortcuts action (links aren't
   handled on Windows yet; the tray flyout has no such tile), and the Hide lyrics / mirroring input
   (`lyricsVisible` is always true).
+
+## Lyric cards (milestone 7)
+
+The Mac's lyric cards (`LyricCard*.swift`, `SongAudioRecorder.swift`): a shareable picture or short video of lines of the
+song playing, made in a window of its own. Details, what was ported and what was checked: [milestones/M7.md](milestones/M7.md),
+"Lyric cards". Previews: `docs/previews/lyric-cards/` (made by `tools/LyricCardPreview`, the app's own exporter).
+
+- **Where it opens:** the tray flyout's "Lyric card" tile and Settings › General › "Open Lyric Card…" (both off while nothing
+  plays), as on the Mac (its menu-bar tile and Settings › Share). The Mac has no card button on its desktop player, so
+  neither has Windows. `AppHost.OpenLyricCard()` is there for the shortcut and `lunalyr://card` (other branches), and
+  `--lyric-card` opens it for checks.
+- **The window** (`App/LyricCards/LyricCardWindow.cs`, over `Shell/Cards/LyricCardWindowModel.cs`, the Mac's
+  `LyricCardPopoutModel`): the song's vocal lines on the left (click, Shift-click, Ctrl-click; "Whole song"), the line being
+  sung picked when it opens; on the right the preview (drop a picture, GIF, video or audio file on it), Layout ("Follow
+  wallpaper" or any layout), Background (album colours, or a picture, GIF or video), Clip length (Match background / Match
+  lyrics for a video over 2 s, Max 60 s, and what the MP4 will do), Sound (the song, a background video's own sound and audio
+  files, each with a level in dB), Text size, Shape (4:5, 1:1, 9:16, 16:9) and Make (MP4, GIF, PNG). **Save…** asks for a
+  folder with the Windows App SDK's folder picker (several files are made at once; a folder that holds a card already gets
+  "Lunalyr Lyric Card 2.mp4"…) and shows them in Explorer; **Copy** puts them on the clipboard as files (a PNG also as a
+  picture), from a folder under `%TEMP%\Lunalyr Lyric Cards` kept a week. A bar with Cancel while a card is made, then what
+  was made, Details for any notes and Show in Explorer. The window keeps its work while it is closed for the same song.
+- **Drawing** (`Render/Cards/LyricCardPainter.cs`): offscreen on its own Direct2D device (`OffscreenSurface`), in the Mac's
+  card points (1080 on the short side). The backdrop is the album gradient, the cover blurred over it and a scrim, or the
+  chosen picture/frame with two veils; the chrome is the cover tile, title, artist and the Lunalyr mark. A timed line is drawn
+  by **the wallpaper's own composition layer** into the lyric stage (a scene holding only that line, no opening title,
+  credits or interlude dots), so a card looks like the wallpaper; the still (PNG, preview, lines without timing) is the Mac's
+  one shaped paragraph of up to three lines, each word in the album ink.
+- **Files:** PNG at twice the card's size (2160 × 2700 for 4:5) through WIC; GIF at the card's size, 0.08 s frames at most 90
+  (one line) or 120, a palette per frame, looping (WIC, with the GIF's metadata set through the query writer's vtable); MP4
+  through Media Foundation's Sink Writer: H.264 High profile at 4 Mbit/s, BT.709, two thirds of the card (720 × 900 for 4:5),
+  30 frames a second, with AAC sound (48 kHz stereo, 192 kbit/s) laid under the finished video by a passthrough copy, as the
+  Mac's `mux` does. The sound is mixed in Core (`LyricCardMix`): every strand matched to −16 LUFS, its slider level as real
+  gain, the song ducked under a background's sound if asked, a 0.3 s end fade and a −1 dBFS limiter.
+- **The song's sound:** "The song", then "Get the song's sound": Lunalyr records the selected lines from what the PC plays
+  (WASAPI loopback of the default output, in memory, then `{data}\LyricCards\Recordings\Lunalyr song {guid}.wav`) **while
+  the person plays them in their music app**. Unlike the Mac, Lunalyr never seeks, plays or pauses the player for it (the
+  Windows brief: never play anything); it waits up to two minutes for the song to reach a moment before the lines and stops
+  if it pauses or jumps. Off under `--demo` and `--no-playback`. Recordings left by an earlier run are deleted when the window
+  opens (only Lunalyr's own, in that folder). **Not verified live** (the rules forbid recording real sound); the path from the
+  capture on is checked with a synthetic capture.
 
 ## Wallpaper types (milestone 6)
 
