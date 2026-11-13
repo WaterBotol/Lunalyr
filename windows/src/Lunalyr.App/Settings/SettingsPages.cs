@@ -90,7 +90,6 @@ internal static class PlayersPage
         Func<Lunalyr.Core.Player.Spotify.SpotifyAccount?>? spotify = null, Func<string?>? spotifyOff = null)
     {
         var page = Page();
-        Section(page, "Music players");
         var following = Card("Following", null, "");
         ctx.OnRefresh(_ =>
         {

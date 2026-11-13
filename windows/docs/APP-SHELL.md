@@ -1216,6 +1216,13 @@ first back. Footer: Back to automatic (while a pick is in use) or "The video you
 with the API key as a way round), a missing or refused key, nothing playing, and YouTube off for the run. Nothing plays
 in it. Windows' difference: the Mac's capsule behind each hint is left out (plain accent text).
 
+**Design pass (14 Nov, after milestone 8),** against Microsoft's winui-design guidance and the owner's list of "AI
+design" don'ts: no heading repeats the page title or the single row under it (Wallpaper, Music players, Show lyrics);
+a heading that starts a group nested in a page gets the same 22-point gap as any other, so sections are evenly spaced;
+About shows "Version 0.8.1 (513d709)" rather than the 40-character commit; the desktop player names the player as it
+names itself (no tracked capitals). The lyric layouts and the opening title card wait for the Mac's rework.
+Before/after: `docs/previews/design-pass/`.
+
 ### Covers
 
 Apple Music's animated album covers play behind the lyrics in Match the music, as on the Mac (milestone 6, branch

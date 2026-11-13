@@ -300,7 +300,8 @@ internal sealed partial class CardPainter : IDisposable
         // The player, small, over the song (or the note about a command, while it shows).
         if (m.PlayerName.Length > 0 && m.NoteAlpha < 0.999f)
         {
-            var label = Layout(Upper(m.PlayerName), TextStyle.Label, (int)width - 34);
+            // As the player names itself, not tracked capitals (the design pass's "no ALL CAPS subtitles").
+            var label = Layout(m.PlayerName, TextStyle.Label, (int)width - 34);
             var alpha = secondary * (1 - m.NoteAlpha);
             if (m.HoverPart == CardPart.PlayerLabel) alpha = Math.Min(1, alpha + 0.25f);
             Fill(dc, new Ellipse(new Vector2(left + 3, CardLayout.ColumnTop + 8), 3, 3), WithAlpha(t.HighContrast ? t.Ink : t.Accent, alpha));
@@ -686,7 +687,6 @@ internal sealed partial class CardPainter : IDisposable
     // The strings that change with the clock, made again only when the second (or the label) changes.
     private (long Key, string Text) _elapsed = (long.MinValue, ""), _capsuleTime = (long.MinValue, "");
     private ((long, long, bool) Key, string Text) _trailing = ((long.MinValue, 0, false), "");
-    private (string Source, string Upper) _upper = ("", "");
 
     private string Elapsed(double seconds)
     {
@@ -710,11 +710,6 @@ internal sealed partial class CardPainter : IDisposable
         return _trailing.Text;
     }
 
-    private string Upper(string text)
-    {
-        if (!ReferenceEquals(text, _upper.Source)) _upper = (text, text.ToUpperInvariant());
-        return _upper.Upper;
-    }
 
     private IDWriteTextLayout Layout(string text, TextStyle style, int maxWidth)
     {
@@ -745,12 +740,6 @@ internal sealed partial class CardPainter : IDisposable
             layout.SetTypography(_tabular, new TextRange(0, (uint)text.Length));
         }
 
-        if (style == TextStyle.Label)
-        {
-            using var spaced = layout.QueryInterface<IDWriteTextLayout1>();
-            spaced.SetCharacterSpacing(0, 1.2f, 0, new TextRange(0, (uint)text.Length));
-        }
-
         _layouts[(text, style, maxWidth)] = layout;
         return layout;
     }
@@ -767,7 +756,7 @@ internal sealed partial class CardPainter : IDisposable
         if (_formats.TryGetValue(style, out var format)) return format;
         var (family, weight, size) = style switch
         {
-            TextStyle.Label => (Text, FontWeight.Bold, 10f),
+            TextStyle.Label => (Text, FontWeight.SemiBold, 12f),
             TextStyle.Title => (Display, FontWeight.Bold, 25f),
             TextStyle.TitleSmall => (Display, FontWeight.Bold, 25f * 0.75f),
             TextStyle.Artist => (Text, FontWeight.Medium, 15f),

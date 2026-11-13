@@ -120,7 +120,9 @@ internal static class SettingsKit
 {
     public static T Resource<T>(string key) => (T)Application.Current.Resources[key];
 
-    public static StackPanel Page() => new() { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private const string PageRoot = "LunalyrSettingsPage";
+
+    public static StackPanel Page() => new() { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch, Tag = PageRoot };
 
     /// <summary>A section's heading (a level-2 heading for Narrator).</summary>
     public static TextBlock Section(StackPanel page, string title)
@@ -129,7 +131,9 @@ internal static class SettingsKit
         {
             Text = title,
             Style = Resource<Style>("BodyStrongTextBlockStyle"),
-            Margin = new Thickness(1, page.Children.Count == 0 ? 0 : 22, 0, 6),
+            // No gap only at the very top of a page: a heading that starts a group nested in the page gets the same gap
+            // as any other, so sections are evenly spaced.
+            Margin = new Thickness(1, page.Children.Count == 0 && Equals(page.Tag, PageRoot) ? 0 : 22, 0, 6),
         };
         AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level2);
         page.Children.Add(heading);

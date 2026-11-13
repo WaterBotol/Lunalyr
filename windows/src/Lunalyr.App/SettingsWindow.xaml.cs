@@ -30,7 +30,9 @@ public sealed partial class SettingsWindow : Window
 
         _ctx = new SettingsContext(host.Settings, DispatcherQueue, message => host.Log.App.Info(message));
         _ctx.OnRefresh(_ => ApplyTheme());
-        VersionText.Text = $"Version {host.Version}";
+        // "0.8.1+<40-hex commit>" reads as "Version 0.8.1 (513d709)"; the full text stays selectable in the log.
+        var parts = host.Version.Split('+', 2);
+        VersionText.Text = parts.Length == 2 && parts[1].Length >= 7 ? $"Version {parts[0]} ({parts[1][..7]})" : $"Version {host.Version}";
         NoticesText.Text = ReadNotices();
         DataText.Text = host.DataRoot;
         Closed += (_, _) =>

@@ -26,7 +26,7 @@ internal static class FloatingLyricsSection
     /// <summary>"Show lyrics": on the desktop or floating over the apps; the style controls below edit the chosen one's.</summary>
     public static void AddSurface(StackPanel page, SettingsContext ctx)
     {
-        Section(page, "Show lyrics");
+        // The row is its own heading (a "Show lyrics" heading over a "Show lyrics" row said it twice).
         var choice = new RadioButtons { MaxColumns = 2 };
         foreach (var surface in LyricsSurfaces.All) choice.Items.Add(new RadioButton { Content = surface.Title(), Tag = surface.Raw() });
         ctx.OnRefresh(s => choice.SelectedIndex = s.IsFloating ? 1 : 0);
