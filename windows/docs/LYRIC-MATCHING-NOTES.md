@@ -309,13 +309,15 @@ unchanged: only names fold.
 ### Mac lookup fixes (next/integration 1cdde21), 13 Nov 2026
 
 Branch `m6/mac-lookup-fixes`. The Mac landed four lookup fixes on `next/integration` 1cdde21 (its cache policy v16).
-That code is not in the read-only checkout (79b84db), so they were ported from the Mac session's description, in
-Windows' own structure; no Verso lines were involved. Cache policy **v19**. Every owner decision above is kept.
+That code is not in the read-only checkout (79b84db), so nothing was translated from Swift: everything was written
+from the Mac session's description, in Windows' own structure (its blame could not be checked). Cache policy
+**v19**. Every owner decision above is kept. No Mac tests were ported, since 1cdde21's tests aren't in the checkout
+either.
 
 | # | Spec (§) | Mac (1cdde21) | Windows before | Verdict |
 |---|---|---|---|---|
 | 20 | §2.3 Lyrics+ conversion | a `"type":"Line"` reply (entries with time, duration and text, no `syllabus`) is kept as line timing; from Apple it still ranks as Apple via Lyrics+; a missing duration ends the line at the next entry; a word reply with an unsyllabled line is mixed timing | dropped: `LyricsPlusSource` counted it as "not found" and `KPoeJsonParser` dropped lines without syllables (spec §2.3's "(inferred)") | **Fixed.** Lines get estimated words (`LyricLines.MakeLine`). A last line with no duration ends with the track, or 4 s after it starts (the LRC parser's rule; the description doesn't say). A line-timed relay ranks as Apple (lead 1) at line timing: it beats other line timing, LRCLIB's word timing still beats it, and sources that can give word timing keep running. |
-| 21 | §1.4 original titles | (a) this storefront's entry with the listed title, read again in `jp` by id, is final; (b) else the artist's first native-script entry for the playing version within max(3 s, 2%); (c) else `jp` searched by title, same rule; a `jp` storefront goes straight to (c). Also asked when the listed title found only Latin-script lyrics and the artist is East Asian: an East Asian genre, a native-script artist or album, or MusicBrainz country JP/KR/CN/TW/HK/MO (kept 30 days with the alias lookup). A native-script match found this way makes Latin lyrics rank as another language | (a) only, nothing in `jp`; East Asian meant the genre only | **Fixed** (`OriginalTitles.NativeEntry`, `IsEastAsianAsync`, `ArtistAliases.CountryAsync`). Readings: (b) runs over the reply (a) already has; (c) searches the title alone (the recordings below show why: Japan's artist + title search lacks the single). The "makes Latin lyrics another language" part was already there (`LyricLanguage.Expected`). A "none" stored by the earlier rule is asked again (`OriginalTitles.CurrentRule`); alias entries without a country are asked again for it. |
+| 21 | §1.4 original titles | (a) this storefront's entry with the listed title, read again in `jp` by id, is final; (b) else the artist's first native-script entry for the playing version within max(3 s, 2%); (c) else `jp` searched by title, same rule; a `jp` storefront goes straight to (c). Also asked when the listed title found only Latin-script lyrics and the artist is East Asian: an East Asian genre, a native-script artist or album, or MusicBrainz country JP/KR/CN/TW/HK/MO (kept 30 days with the alias lookup). A native-script match found this way makes Latin lyrics rank as another language | (a) only, nothing in `jp`; East Asian meant the genre only | **Fixed** (`OriginalTitles.NativeEntry`, `IsEastAsianAsync`, `ArtistAliases.CountryAsync`). Readings: (b) runs over the reply (a) already has; (c) searches the title alone (the recordings below show why: Japan's artist + title search, recorded as `itunes/search-jp-yoasobi-racing-into-the-night.json`, lacks the single). The "makes Latin lyrics another language" part was already there (`LyricLanguage.Expected`). A "none" stored by the earlier rule is asked again (`OriginalTitles.CurrentRule`); alias entries without a country are asked again for it. |
 | 22 | §4.5, §5.6 credits | "role：names" lines count in opening and closing credit blocks (CN/JP/KR/EN roles; names may mix CJK and Latin, "吉他：蔡科俊Again"); a first line of only the artist, or only a title not sung again, is a header; agreement compares sung lines only; traditional and simplified count as the same name | everyday labels ("吉他", "鼓") only counted among other credits; mixed-script names failed; a lone title or artist line counted only right above credits; plain text's credits counted in agreement | **Fixed** (`LyricCredits.Flagging`, `IsRoleLine`, `SungLines`, `TrackNames.IsHeader`; `LyricAgreementRules.Text`). Japanese and Korean role words added. Names already folded traditional to simplified (row 19). |
 | 23 | (HTTP) cookies | NetEase answers unrelated songs once its NMTID cookie is sent back, so cookies are never kept | `UseCookies = false` already | **Pinned by a test** on the app's real handler (`LyricHttpCookieTests`), its connections answered in memory. |
 
@@ -334,6 +336,14 @@ Windows' own structure; no Verso lines were involved. Cache policy **v19**. Ever
 - **The MusicBrainz country** is read for the playing artist credit as the alias lookup reads it (the whole credit),
   and only when the cheaper signs (genre, native script) say nothing. It costs one request per artist the first time a
   source's answer is Latin-only; a failed request counts as "not East Asian" and is asked again next time.
+- **Latency.** A source's Latin-only answer under the listed title is held until MusicBrainz replies (up to its 4 s
+  timeout, paced 1.1 s apart), on the first lookup of each artist and again on every lookup while the request fails.
+  For an English song that is a new wait before LRCLIB's or NetEase's answer can show (Pleaser's after-run: nothing
+  had answered before 1.50 s, where NetEase answered at 1.28 s before; one sample, the grace period hid it).
+- **The Japanese and Korean role words** (ボーカル, ギター, ベース, ドラム, キーボード, コーラス, プロデューサー, ミックス,
+  マスタリング, レコーディング, エンジニア, ディレクター…; 보컬, 기타, 베이스, 드럼, 키보드, 코러스, 믹싱, 마스터링, 녹음,
+  엔지니어, 디렉터…) are Windows' own selection; the Mac's list wasn't visible. Instruments and vocal parts are
+  everyday labels that need names (and a credit block) to count.
 
 **Live check.** The same probe set-up as above (automatic lookup, every source, Accuracy first, storefront `au`, the
 generic User-Agent, a fresh temp cache per run). "Before" is `next/windows` 98aa9f4 (v18), "after" is this branch

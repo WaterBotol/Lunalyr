@@ -225,8 +225,10 @@ public sealed class OriginalTitleTests : IDisposable
         Assert.Equal(["itunes.apple.com/search", "itunes.apple.com/search"], _catalogue.Addresses);
         Assert.Equal(("au", "YOASOBI Racing into the Night"), (_catalogue.Query(0, "country"), _catalogue.Query(0, "term")));
         Assert.Equal(("jp", "Racing into the Night"), (_catalogue.Query(1, "country"), _catalogue.Query(1, "term")));
-        // Australia's reply (romanised and translated names) has no native-script YOASOBI entry of that length.
+        // Australia's reply (romanised and translated names) has no native-script YOASOBI entry of that length, and
+        // neither has Japan's reply to the artist + title search (also recorded): only the title alone finds the single.
         Assert.Null(OriginalTitles.NativeEntry(ItunesCatalogue.Parse(Fixtures.Bytes("itunes/search-au-yoasobi-racing-into-the-night.json"))!, playing));
+        Assert.Null(OriginalTitles.NativeEntry(ItunesCatalogue.Parse(Fixtures.Bytes("itunes/search-jp-yoasobi-racing-into-the-night.json"))!, playing));
     }
 
     private void UseRecordedRacingIntoTheNight() =>

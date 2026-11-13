@@ -24,7 +24,8 @@ holds an invented KRC, encrypted the way Kugou serves it.
   and the Japanese storefront's entries for its two "Idol" singles (`lookup-jp-<id>.json`, `/lookup?country=jp&id=…&lang=ja_jp`).
   Recorded 13 Nov 2026 the same way: `search-au-yoasobi-racing-into-the-night.json`
   (`/search?country=au&entity=song&limit=15&term=YOASOBI Racing into the Night`) and
-  `search-jp-racing-into-the-night.json` (`/search?country=jp&entity=song&limit=15&term=Racing into the Night`).
+  `search-jp-racing-into-the-night.json` (`/search?country=jp&entity=song&limit=15&term=Racing into the Night`) and
+  `search-jp-yoasobi-racing-into-the-night.json` (`…&country=jp&term=YOASOBI Racing into the Night`, which lacks the single).
   The `mac-*.json` files are the Mac test's invented catalogue replies (ids 1001–1003, "Racing into the Night"), kept
   as the Mac wrote them so the ported tests use its inputs.
 

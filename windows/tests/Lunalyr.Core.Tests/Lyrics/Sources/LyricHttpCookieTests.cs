@@ -35,6 +35,8 @@ public sealed class LyricHttpCookieTests
         var server = new CookieSettingServer();
         var handler = LyricHttpClient.CreateDefaultHandler();
         Assert.False(handler.UseCookies);
+        // No system proxy (no WPAD or PAC lookup): every connection goes to the in-memory server.
+        handler.UseProxy = false;
         handler.ConnectCallback = server.ConnectAsync;
         var found = await Ask(handler);
         Assert.NotNull(found);
@@ -49,6 +51,8 @@ public sealed class LyricHttpCookieTests
         var server = new CookieSettingServer();
         var handler = LyricHttpClient.CreateDefaultHandler();
         handler.UseCookies = true;
+        // No system proxy (no WPAD or PAC lookup): every connection goes to the in-memory server.
+        handler.UseProxy = false;
         handler.ConnectCallback = server.ConnectAsync;
         _ = await Ask(handler);
         Assert.Contains("NMTID=00Otest", server.Requests[^1], StringComparison.Ordinal);
