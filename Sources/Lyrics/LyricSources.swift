@@ -290,6 +290,11 @@ struct LyricCandidate: Identifiable {
     /// Found by searching under the song's original title
     /// (`OriginalTitles`), which shows the song is sung in that language.
     var viaOriginalTitle = false
+    /// Latin-script lyrics kept without the original-title search because
+    /// whether the artist sings in Chinese, Japanese or Korean was not known
+    /// yet (MusicBrainz is being asked in the background). Shown, but not
+    /// saved as the song's choice, so the next lookup asks again.
+    var languageUnchecked = false
     var id: String { source.rawValue }
     var hasReadings: Bool {
         if case .synced(let lines, _) = result { return lines.contains { $0.romanization?.isEmpty == false } }

@@ -13,7 +13,9 @@ import XCTest
 /// the prefix. `songs.json`: `[{"title", "artist", "album"?, "duration", "player"?, "genre"?}]`.
 /// Optional: `…_ALL_SOURCES=1` runs each as a search (every source asked,
 /// none stopped early); `…_STOREFRONT=xx` sets the iTunes storefront the
-/// original-title lookup starts from (default: this Mac's region).
+/// original-title lookup starts from (default: this Mac's region);
+/// `…_SKIP=lyricsPlus,amll` leaves those sources out (to see the lookup
+/// when one is slow or down).
 /// See docs/LOOKUP-TRACE.md.
 final class LyricLookupTraceTests: XCTestCase {
     private func setting(_ name: String) -> String? {
@@ -42,7 +44,9 @@ final class LyricLookupTraceTests: XCTestCase {
         let aliases = ArtistAliases(folder: scratch)
         let titles = OriginalTitles(folder: scratch, storefront: storefront)
         // The app's default sources, in its recommended order, Accuracy first.
-        let defaults = LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache }
+        let skipped = Set((setting("LUNALYR_LOOKUP_TRACE_SKIP") ?? "").split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces) })
+        let defaults = LyricSourceID.allCases.filter { $0 != .lyrimuse && $0 != .appleMusicCache && !skipped.contains($0.rawValue) }
         let options = LyricSourceOptions.Snapshot(enabled: LyricSourceOptions.recommendedOrder.filter(defaults.contains),
                                                   mode: .smart, localFolder: "", localVersion: "")
 

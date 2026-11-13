@@ -296,6 +296,8 @@ final class LanguageVersionTests: XCTestCase {
         nonisolated(unsafe) var asked: [String] = []
         let playing = query("Racing into the Night")
         let japanese = candidate(.lrclib, Self.japanese, title: "夜に駆ける", words: true)
+        // MusicBrainz places the artist in Japan (stored from an earlier song).
+        _ = await aliases.isEastAsian("YOASOBI")
         let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: playing, titles: titles, aliases: aliases, enabled: true) { q in
             asked.append(q.title)
             return q.title == "夜に駆ける" ? japanese : nil
@@ -430,10 +432,13 @@ final class LanguageVersionTests: XCTestCase {
         let english = candidate(.lrclib, Self.english, title: "Racing into the Night", words: true)
         let japanese = candidate(.lrclib, Self.japanese, title: "夜に駆ける", words: true)
         let playing = query("Racing into the Night")
+        // MusicBrainz's answer for the artist, already stored (from an earlier song).
+        _ = await aliases.isEastAsian("YOASOBI")
         let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: playing, titles: titles, aliases: aliases, enabled: true) { q in
             q.title == "夜に駆ける" ? japanese : english
         }
         XCTAssertEqual(Catalogue.brainzAsked, 1)
+        XCTAssertFalse(found?.languageUnchecked == true)
         XCTAssertTrue(found?.viaOriginalTitle == true)
         XCTAssertEqual(LyricLanguage.script(of: try XCTUnwrap(found)), .native)
         // Another source's English lyrics now rank as another language's.
@@ -452,6 +457,7 @@ final class LanguageVersionTests: XCTestCase {
         _ = try await LyricsFetcher.withOriginalTitle(.lyricsPlus, query: query("Racing into the Night"), titles: titles,
                                                       aliases: aliases, enabled: true) { _ in relay }
         XCTAssertEqual(Catalogue.brainzAsked, 0)
+        _ = await aliases.isEastAsian("YOASOBI")
         // Latin-script lyrics, or none, for an artist MusicBrainz places elsewhere: no catalogue search.
         let kept = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Racing into the Night"), titles: titles,
                                                              aliases: aliases, enabled: true) { _ in english }
@@ -461,6 +467,84 @@ final class LanguageVersionTests: XCTestCase {
         XCTAssertNil(none)
         XCTAssertEqual(Catalogue.asked.count, 0, "no iTunes request")
         XCTAssertEqual(Catalogue.brainzAsked, 1, "one MusicBrainz request for the artist, kept")
+    }
+
+    /// MusicBrainz that answers only when a test lets it.
+    private final class Stalled: URLProtocol {
+        nonisolated(unsafe) static var waiting: [Stalled] = []
+        nonisolated(unsafe) static var asked = 0
+        static let lock = NSLock()
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        override func startLoading() { Self.lock.withLock { Self.asked += 1; Self.waiting.append(self) } }
+        override func stopLoading() {}
+        static func release(_ body: Data) {
+            let held = lock.withLock { () -> [Stalled] in defer { waiting = [] }; return waiting }
+            for request in held {
+                request.client?.urlProtocol(request, didReceive: HTTPURLResponse(url: request.request.url!, statusCode: 200, httpVersion: nil,
+                                                                                 headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+                request.client?.urlProtocol(request, didLoad: body)
+                request.client?.urlProtocolDidFinishLoading(request)
+            }
+        }
+    }
+
+    func testLatinLyricsNeverWaitForMusicBrainzAndTheCountryIsLearntForNextTime() async throws {
+        Stalled.waiting = []
+        Stalled.asked = 0
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [Stalled.self]
+        let slow = ArtistAliases(folder: folder, session: URLSession(configuration: config))
+        let english = candidate(.lrclib, Self.english, title: "Racing into the Night", words: true)
+        let japanese = candidate(.lrclib, Self.japanese, title: "夜に駆ける", words: true)
+        let playing = query("Racing into the Night")
+        func look() async throws -> LyricCandidate? {
+            try await LyricsFetcher.withOriginalTitle(.lrclib, query: playing, titles: titles, aliases: slow, enabled: true) { q in
+                q.title == "夜に駆ける" ? japanese : english
+            }
+        }
+        // MusicBrainz never answers: the English lyrics come back at once,
+        // marked so they are not saved, and nothing else is asked.
+        let began = Date()
+        let first = try await look()
+        XCTAssertLessThan(Date().timeIntervalSince(began), 0.5)
+        XCTAssertEqual(first?.title, "Racing into the Night")
+        XCTAssertTrue(first?.languageUnchecked == true)
+        XCTAssertFalse(first?.viaOriginalTitle == true)
+        XCTAssertEqual(Catalogue.asked.count, 0)
+        // Nothing found, with the country still unknown: no wait either, and one request in all.
+        let none = try await LyricsFetcher.withOriginalTitle(.netEase, query: playing, titles: titles, aliases: slow, enabled: true) { _ in nil }
+        XCTAssertNil(none)
+        for _ in 0..<100 where Stalled.lock.withLock({ Stalled.waiting.isEmpty }) { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(Stalled.lock.withLock { Stalled.asked }, 1)
+        // MusicBrainz answers in the background; the next lookup knows the artist.
+        Stalled.release(Self.japaneseArtist)
+        var known: Bool?
+        for _ in 0..<200 {
+            known = await slow.knownEastAsian("YOASOBI")
+            if known != nil { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(known, true)
+        let next = try await look()
+        XCTAssertTrue(next?.viaOriginalTitle == true)
+        XCTAssertFalse(next?.languageUnchecked == true)
+        XCTAssertEqual(Stalled.lock.withLock { Stalled.asked }, 1, "asked once, kept")
+    }
+
+    func testAChoiceWhoseArtistsLanguageIsUnknownIsShownButNotSaved() async throws {
+        var unchecked = candidate(.lrclib, Self.english, title: "Racing into the Night", words: true)
+        unchecked.languageUnchecked = true
+        let cache = folder.appendingPathComponent("cache")
+        let timing = LyricsFetcher.Timing(grace: 0.2, upgradeSettle: 0.1, appleRetry: 0.3, lrclibLimit: 2, sourceLimit: 2)
+        let only = LyricSourceOptions.Snapshot(enabled: [.lrclib], mode: .smart, localFolder: "", localVersion: "")
+        let shown = await LyricsFetcher(cacheFolder: cache, timing: timing, isOnline: { true }) { _, _, _ in unchecked }
+            .lookup(query("Racing into the Night"), options: only)
+        XCTAssertNotNil(shown.result)
+        let again = await LyricsFetcher(cacheFolder: cache, timing: timing, isOnline: { true }) { _, _, _ in nil }
+            .lookup(query("Racing into the Night"), options: only)
+        XCTAssertFalse(again.cached)
+        XCTAssertNil(again.result, "not replayed from the cache")
     }
 }
 

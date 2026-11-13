@@ -368,16 +368,24 @@ extension LyricsFetcher {
             guard let first, LyricLanguage.script(of: first) == .latin, !isAppleRelay(first) else {
                 return keep("listed-title answer is usable")
             }
-            guard await eastAsianArtist(query, aliases: aliases) else {
-                return keep("listed-title answer is usable (no sign the artist sings in Chinese, Japanese or Korean)")
+            switch await eastAsianArtist(query, aliases: aliases) {
+            case true?: break
+            case false?: return keep("listed-title answer is usable (no sign the artist sings in Chinese, Japanese or Korean)")
+            case nil:
+                // Not known yet: shown at once, not saved, and MusicBrainz is asked in the background.
+                var kept = first
+                kept.languageUnchecked = true
+                if LyricTrace.isOn {
+                    LyricTrace.candidate(kept, query: query, kind: .variantResult, message: "kept; no original-title search: "
+                        + "the artist's country is not known yet (asked in the background); not saved as the song's choice")
+                }
+                return kept
             }
-            try Task.checkCancellation()
             reason = "Latin-script lyrics, for an East Asian artist: looking up the original title"
         } else if first == nil {
-            guard await eastAsianArtist(query, aliases: aliases) else {
-                return keep("nothing under the listed title, and no sign the artist sings in Chinese, Japanese or Korean")
+            guard await eastAsianArtist(query, aliases: aliases) == true else {
+                return keep("nothing under the listed title, and no sign (yet) the artist sings in Chinese, Japanese or Korean")
             }
-            try Task.checkCancellation()
             reason = "nothing under the listed title: looking up the original title"
         } else {
             reason = "not usable (language version or Latin-only lyrics): looking up the original title"
@@ -418,13 +426,17 @@ extension LyricsFetcher {
     /// Whether the artist sings in Chinese, Japanese or Korean, as far as
     /// the song or MusicBrainz says: an East Asian genre, an artist or album
     /// name in native script, or an artist MusicBrainz places in Japan,
-    /// Korea, China, Taiwan or Hong Kong (`ArtistAliases.isEastAsian`, one
-    /// request per artist, shared with the alias search and kept 30 days).
-    static func eastAsianArtist(_ query: LyricQuery, aliases: ArtistAliases) async -> Bool {
+    /// Korea, China, Taiwan or Hong Kong. MusicBrainz counts only when its
+    /// answer is already stored (`ArtistAliases.knownEastAsian`): nil when
+    /// it is not, and it is then asked in the background for the next song,
+    /// so no lookup waits for MusicBrainz (one request per artist, shared
+    /// with the alias search and kept 30 days).
+    static func eastAsianArtist(_ query: LyricQuery, aliases: ArtistAliases) async -> Bool? {
         if LyricLanguage.eastAsianGenre(query.genre) || LyricLanguage.hasNative(query.artist)
             || LyricLanguage.hasNative(query.album ?? "") { return true }
-        let found = await aliases.isEastAsian(query.artist)
-        LyricTrace.note("MusicBrainz: “\(query.artist)” " + (found ? "is an East Asian artist" : "is not known as an East Asian artist"))
+        let found = await aliases.knownEastAsian(query.artist)
+        LyricTrace.note("MusicBrainz: “\(query.artist)” " + (found == true ? "is an East Asian artist"
+            : found == false ? "is not known as an East Asian artist" : "not known yet; asked in the background"))
         return found
     }
 

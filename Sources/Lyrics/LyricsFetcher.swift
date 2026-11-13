@@ -169,7 +169,11 @@ final class LyricsFetcher {
         // every time, so editing or adding a file needs no network lookup.
         if let best = Self.choose(report.candidates.filter { !$0.source.isLocal }, query: query, options: options) {
             // A choice that a source stopped early might have beaten is not kept.
-            if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options) {
+            if best.languageUnchecked {
+                // Its artist's language is being learnt in the background; the next lookup decides.
+                LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue,
+                                                message: "online choice not saved: the artist's language is not known yet"))
+            } else if Self.isSettled(best, pending: collected.stopped.filter { !$0.isLocal }, query: query, options: options) {
                 SavedLyrics.save(best, key: key, in: cacheFolder)
                 misses.remove(key)
                 LyricTrace.emit(LyricTraceEvent(kind: .cache, source: best.source.rawValue, message: "online choice saved to the cache"))

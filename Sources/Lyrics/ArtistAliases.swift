@@ -61,6 +61,36 @@ actor ArtistAliases {
         return Self.eastAsianCountries.contains(country.uppercased())
     }
 
+    /// `isEastAsian` from the stored answer only, never waiting: nil when
+    /// the artist's country has not been asked yet (or the answer is older
+    /// than 30 days). It is then asked in the background (`learnCountry`),
+    /// so the next song by the artist knows it.
+    func knownEastAsian(_ artist: String) -> Bool? {
+        let key = LyricQuery.normalize(artist)
+        guard !key.isEmpty else { return false }
+        if let entry = load()[key], clock().timeIntervalSince(entry.storedAt) < Self.lifetime, entry.hasCountry == true {
+            return entry.country.map { Self.eastAsianCountries.contains($0.uppercased()) } ?? false
+        }
+        learnCountry(artist)
+        return nil
+    }
+
+    /// Asks MusicBrainz for the artist in the background, once at a time
+    /// (`inFlight`), and stores the answer for 30 days. Nothing waits for it.
+    func learnCountry(_ artist: String) {
+        let key = LyricQuery.normalize(artist)
+        guard !key.isEmpty, inFlight[key] == nil, !learning.contains(key) else { return }
+        learning.insert(key)
+        // Detached: not part of the lookup that started it, so neither its
+        // cancellation nor its trace reaches this request.
+        Task.detached { [self] in
+            _ = await self.entry(for: artist, needsCountry: true)
+            await self.learned(key)
+        }
+    }
+    private var learning: Set<String> = []
+    private func learned(_ key: String) { learning.remove(key) }
+
     private func entry(for artist: String, needsCountry: Bool) async -> Entry? {
         let key = LyricQuery.normalize(artist)
         guard !key.isEmpty else { return nil }

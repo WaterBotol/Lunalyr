@@ -41,6 +41,7 @@ suite stays offline.
 | `LUNALYR_LOOKUP_TRACE` | The songs file. Required. |
 | `LUNALYR_LOOKUP_TRACE_OUT` | Output folder. Default: the songs file's folder. |
 | `LUNALYR_LOOKUP_TRACE_ALL_SOURCES=1` | Run each song as a search: every source is asked and none is stopped early. The default is the app's automatic lookup, which stops sources once they can no longer change the pick. |
+| `LUNALYR_LOOKUP_TRACE_SKIP=lyricsPlus,…` | Leave these sources out (by id), for example to see what shows when Lyrics+ is slow or down. |
 | `LUNALYR_LOOKUP_TRACE_STOREFRONT=xx` | The iTunes storefront the original-title lookup starts from. Default: this Mac's region. |
 
 Each run uses the real network and the app's default sources in its
