@@ -35,7 +35,8 @@ targets:
         NSAudioCaptureUsageDescription: Optional live wallpaper response analyses system output locally. No audio is recorded or uploaded.
         SUFeedURL: "https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml"
         SUPublicEDKey: "7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY="
-        SUEnableAutomaticChecks: false
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
         SUAutomaticallyUpdate: false
         SUSendProfileInfo: false
         SUVerifyUpdateBeforeExtraction: true

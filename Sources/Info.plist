@@ -46,11 +46,13 @@
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
-	<false/>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>7jKIfrh09CHJcYReGfz14ICbU1+cqaveBRzn16fCwpY=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUVerifyUpdateBeforeExtraction</key>
