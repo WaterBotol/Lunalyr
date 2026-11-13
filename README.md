@@ -177,7 +177,7 @@ Rest the pointer on an empty part of the desktop and **Sleeve**, the desktop pla
 
 ### Lyric cards
 
-![The lyric card window: a portrait card of the current line over the album's colours, with its layout, background, clip length and sound options](docs/media/lyric-card.png)
+<p align="center"><img src="docs/media/lyric-card.png" width="340" alt="The lyric card window: a portrait card of the current line over the album's colours, with its layout, background, clip length and sound options"></p>
 
 Pick lines from the playing song and make a card to share, as an MP4, GIF or PNG in 4:5, 1:1, 9:16 or 16:9. Put your own picture, GIF or video behind the words, and add sound: the song itself, the background video's sound or any audio file, each with its own level.
 
