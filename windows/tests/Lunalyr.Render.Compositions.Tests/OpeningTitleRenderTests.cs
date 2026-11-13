@@ -168,6 +168,8 @@ public sealed class OpeningTitleRenderTests : IDisposable
         foreach (var from in new[] { 0.5, 8.4 })
         {
             for (var t = from; t < from + 1; t += 1.0 / 60) _stage.Render(layers, scene, t, 100 + t, Scale);
+            // Line setup is spread over frames: let it finish, so what follows only draws.
+            _stage.Settle(layers, scene, from, 100 + from, Scale);
             var before = GC.GetAllocatedBytesForCurrentThread();
             for (var t = from; t < from + 1; t += 1.0 / 60) _stage.Render(layers, scene, t, 100 + t, Scale);
             allocated += GC.GetAllocatedBytesForCurrentThread() - before;

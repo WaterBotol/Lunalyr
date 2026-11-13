@@ -60,9 +60,12 @@ public sealed class Offscreen : IDisposable
     public ID2D1Bitmap1 Target => _target;
     public ID2D1Factory1 Factory => _factory;
 
-    /// <summary>Draws one frame of <paramref name="layer"/> over a plain background.</summary>
+    /// <summary>
+    /// Draws one frame of <paramref name="layer"/> over a plain background. <paramref name="ahead"/> is the engine's
+    /// ahead-of-time allowance shared by the surfaces of one render pass (none: the layer works as it likes).
+    /// </summary>
     public void Render(IRenderLayer layer, SceneSnapshot scene, double songSeconds, double wallSeconds, float scale,
-                       Vector4 background, bool playing = true)
+                       Vector4 background, bool playing = true, Lunalyr.Render.Pacing.AheadWork? ahead = null)
     {
         var delta = double.IsFinite(_lastWall) ? Math.Clamp(wallSeconds - _lastWall, 0, 0.25) : 1.0 / 60;
         _lastWall = wallSeconds;
@@ -74,6 +77,7 @@ public sealed class Offscreen : IDisposable
         {
             Dc = Dc, DWrite = DWrite, D2DFactory = _factory, Size = new Vector2(Width, Height), Scale = scale,
             WallSeconds = wallSeconds, SongSeconds = songSeconds, IsPlaying = playing, Scene = scene, DeltaSeconds = delta,
+            AheadWork = ahead,
         };
         layer.Render(frame);
         Dc.EndDraw().CheckError();
@@ -108,6 +112,24 @@ public sealed class Offscreen : IDisposable
         Dc.Target = null;
     }
 
+    /// <summary>
+    /// Draws <paramref name="layers"/> at <paramref name="songSeconds"/> again until every lyric layer among them has
+    /// baked what it set up ahead (line setup is spread over frames), so the frames after it only draw: what a test of
+    /// settled frames waits for.
+    /// </summary>
+    public void Settle(IReadOnlyList<IRenderLayer> layers, SceneSnapshot scene, double songSeconds, double wallSeconds, float scale)
+    {
+        for (var i = 0; i < 1000 && layers.Any(layer => layer is Lunalyr.Render.Compositions.LyricCompositionLayer { SetupPending: true }); i++)
+            Render(layers, scene, songSeconds, wallSeconds, scale);
+    }
+
+    /// <summary>As <see cref="Settle(IReadOnlyList{IRenderLayer}, SceneSnapshot, double, double, float)"/>, for one layer over a plain background.</summary>
+    public void Settle(IRenderLayer layer, SceneSnapshot scene, double songSeconds, float scale, Vector4 background)
+    {
+        for (var i = 0; i < 1000 && layer is Lunalyr.Render.Compositions.LyricCompositionLayer { SetupPending: true }; i++)
+            Render(layer, scene, songSeconds, songSeconds, scale, background);
+    }
+
     /// <summary>The last frame's pixels, BGRA, top row first, alpha opaque.</summary>
     public unsafe byte[] Pixels()
     {
@@ -124,6 +146,18 @@ public sealed class Offscreen : IDisposable
         {
             _readback.Unmap();
         }
+    }
+
+    /// <summary>
+    /// Waits until the GPU has drawn the last frame, as a desktop's present does: without it the GPU falls further and
+    /// further behind an offscreen loop, and the next call that has to wait for it (a text bake updating the glyph
+    /// cache) waits for the whole backlog.
+    /// </summary>
+    public void WaitForGpu()
+    {
+        _readback.CopyFromBitmap(_target).CheckError();
+        _readback.Map(MapOptions.Read);
+        _readback.Unmap();
     }
 
     /// <summary>Saves the last frame as an RGB PNG.</summary>

@@ -244,6 +244,8 @@ public sealed class ArrivalRenderTests : IDisposable
         var scene = Fixtures.English();
         // From 14.6 to 15.7 no word joins the rolling window ("night" joins at 14.5, "I" at 15.8).
         for (var t = 13.5; t < 15.7; t += 1.0 / 30) Frame(layer, scene, t);
+        // Line setup is spread over frames: let it finish, so what follows only draws.
+        _stage.Settle(layer, scene, 14.6, Scale, Background);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var t = 14.6; t < 15.7; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
@@ -257,6 +259,8 @@ public sealed class ArrivalRenderTests : IDisposable
         long Allocated(IRenderLayer layer, SceneSnapshot scene)
         {
             for (var t = 9.5; t < 20; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
+            // Line setup is spread over frames: let it finish, so what follows only draws.
+            _stage.Settle(layer, scene, 9.5, Scale, Background);
             var before = GC.GetAllocatedBytesForCurrentThread();
             for (var t = 9.5; t < 20; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
             return GC.GetAllocatedBytesForCurrentThread() - before;

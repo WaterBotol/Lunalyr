@@ -364,6 +364,21 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private SpokenUnit Unit(RollingWord token)
     {
         if (_units.TryGetValue(token.Source, out var found)) return found;
+        Meter.Enter();
+        try
+        {
+            var unit = SetUnit(token);
+            _units[token.Source] = unit;
+            return unit;
+        }
+        finally
+        {
+            Meter.Exit();
+        }
+    }
+
+    private SpokenUnit SetUnit(RollingWord token)
+    {
         var kit = Kit!;
         var (label, reading, width, height) = Layout(kit, token, Stage.Width, Scale);
         using var _ = label;
@@ -393,7 +408,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         }
         // The word and its reading sit in the middle of the unit's padding.
         var content = height - 2 * Padding(token, Scale).Y;
-        var unit = new SpokenUnit
+        return new SpokenUnit
         {
             Label = labelInk,
             Reading = readingInk,
@@ -406,8 +421,6 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             LabelOnTile = labelOnTile,
             ReadingOnTile = readingOnTile,
         };
-        _units[token.Source] = unit;
-        return unit;
     }
 
     /// <summary>

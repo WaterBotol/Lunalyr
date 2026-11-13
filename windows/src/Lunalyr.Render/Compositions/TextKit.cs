@@ -23,9 +23,16 @@ internal enum Face
 /// <summary>
 /// Fonts, text layouts and baked text for one surface. Text is rasterised once per line into bitmaps (grayscale
 /// antialiasing, colour fonts on) on a device context of its own, never the engine's, so a frame only draws bitmaps.
+/// <para>
+/// With <see cref="Defers"/>, a bake only measures (what the layouts place by is known at once) and leaves the GPU work
+/// queued: <see cref="RunPending"/> works through it a slice at a time (the text, then its shadow) within a frame's
+/// allowance, and an ink drawn before its turn is baked there and then (<see cref="Ink.Bake"/>). The same calls make the
+/// same bitmaps either way; only when they run changes.
+/// </para>
 /// </summary>
 internal sealed class TextKit : IDisposable
 {
+    private readonly Queue<Ink> _pending = new();
     private readonly IDWriteFactory _dwrite;
     private readonly ID2D1DeviceContext _bake;
     private readonly ID2D1DeviceContext _draw;
@@ -53,6 +60,15 @@ internal sealed class TextKit : IDisposable
 
     /// <summary>The device context words are drawn on (the engine's): their effects are created on it.</summary>
     public ID2D1DeviceContext Draw => _draw;
+
+    /// <summary>Bakes are queued rather than made at once (see the class summary). Off by default.</summary>
+    public bool Defers { get; set; }
+
+    /// <summary>Where the time spent baking queued inks is counted (the layer's setup meter), if anywhere.</summary>
+    public Diagnostics.SetupMeter? Meter { get; set; }
+
+    /// <summary>True while queued bakes are waiting.</summary>
+    public bool HasPending => _pending.Count > 0;
 
     /// <summary>Uses <paramref name="family"/> for lyrics when it is installed (Segoe UI otherwise).</summary>
     public void SetFamily(string family)
@@ -120,7 +136,8 @@ internal sealed class TextKit : IDisposable
 
     /// <summary>
     /// Bakes a layout into an <see cref="Ink"/>: the text in <paramref name="colour"/> at <paramref name="raster"/>
-    /// bitmap pixels per layout pixel, and its soft shadow at half that resolution.
+    /// bitmap pixels per layout pixel, and its soft shadow at half that resolution. With <see cref="Defers"/> the ink is
+    /// measured now and baked later (the kit keeps its own reference to the layout, so the caller may dispose it).
     /// </summary>
     public Ink Bake(IDWriteTextLayout layout, Vector4 colour, float raster, ShadowSpec shadow)
     {
@@ -130,41 +147,17 @@ internal sealed class TextKit : IDisposable
         var reach = MathF.Max(MathF.Max(overhang.Left, overhang.Right), MathF.Max(overhang.Top, overhang.Bottom));
         var pad = MathF.Ceiling(MathF.Max(0, reach) + 2);
         raster = Math.Clamp(raster, 0.1f, 4f);
-        var width = (int)MathF.Ceiling((box.X + 2 * pad) * raster);
-        var height = (int)MathF.Ceiling((box.Y + 2 * pad) * raster);
-        var properties = new BitmapProperties1(new PixelFormat(Vortice.DXGI.Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied), 96, 96, BitmapOptions.Target);
-        var text = _bake.CreateBitmap(new SizeI(Math.Max(1, width), Math.Max(1, height)), IntPtr.Zero, 0, properties);
-        _brush.Color = new Color4(colour.X, colour.Y, colour.Z, colour.W);
-        var origin = new Vector2(pad - metrics.Left, pad - metrics.Top);
-        Render(text, Matrix3x2.CreateScale(raster), layout, origin);
-
-        ID2D1Bitmap1? soft = null;
-        float softRaster = raster / 2, softPad = 0;
-        if (shadow.Alpha > 0)
+        var job = new PendingBake
         {
-            // The shadow is a blur: half resolution is plenty.
-            var sigma = shadow.Sigma;
-            softPad = MathF.Ceiling(pad + 3 * sigma + MathF.Abs(shadow.OffsetY) + 2);
-            var sw = (int)MathF.Ceiling((box.X + 2 * softPad) * softRaster);
-            var sh = (int)MathF.Ceiling((box.Y + 2 * softPad) * softRaster);
-            using var source = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
-            _brush.Color = new Color4(0, 0, 0, 1);
-            Render(source, Matrix3x2.CreateScale(softRaster), layout, new Vector2(softPad - metrics.Left, softPad - metrics.Top + shadow.OffsetY));
-            soft = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
-            _shadow.SetInput(0, source, true);
-            _shadow.BlurStandardDeviation = MathF.Max(0.01f, sigma * softRaster);
-            _shadow.Color = new Vector4(shadow.Colour, shadow.Alpha);
-            _bake.Target = soft;
-            _bake.BeginDraw();
-            _bake.Clear(new Color4(0, 0, 0, 0));
-            _bake.Transform = Matrix3x2.Identity;
-            _bake.DrawImage(_shadowOut, InterpolationMode.Linear, CompositeMode.SourceOver);
-            _bake.EndDraw();
-            _bake.Target = null;
-            _shadow.SetInput(0, null!, true);
-        }
-        return new Ink(_draw, text, raster, new Vector2(pad + box.X / 2, pad + box.Y / 2) * raster, box, soft, softRaster,
-                       new Vector2(softPad + box.X / 2, softPad + box.Y / 2) * softRaster);
+            Layout = Defers ? layout.QueryInterface<IDWriteTextLayout>() : layout,
+            OwnsLayout = Defers,
+            Colour = colour,
+            Raster = raster,
+            Shadow = shadow,
+            Origin = new Vector2(pad - metrics.Left, pad - metrics.Top),
+            SoftShift = new Vector2(-metrics.Left, -metrics.Top),
+        };
+        return Queue(job, box, pad);
     }
 
     /// <summary>
@@ -176,27 +169,149 @@ internal sealed class TextKit : IDisposable
         var box = new Vector2(MathF.Max(1, size.X), MathF.Max(1, size.Y));
         const float pad = 2;
         raster = Math.Clamp(raster, 0.1f, 4f);
-        var properties = new BitmapProperties1(new PixelFormat(Vortice.DXGI.Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied), 96, 96, BitmapOptions.Target);
-        var width = (int)MathF.Ceiling((box.X + 2 * pad) * raster);
-        var height = (int)MathF.Ceiling((box.Y + 2 * pad) * raster);
-        var tile = _bake.CreateBitmap(new SizeI(Math.Max(1, width), Math.Max(1, height)), IntPtr.Zero, 0, properties);
-        _brush.Color = new Color4(colour.X, colour.Y, colour.Z, colour.W);
-        FillRounded(tile, raster, new Vector2(pad, pad), box, radius);
+        var job = new PendingBake
+        {
+            Colour = colour, Raster = raster, Shadow = shadow, Radius = radius, Box = box, Origin = new Vector2(pad, pad),
+        };
+        return Queue(job, box, pad);
+    }
 
-        ID2D1Bitmap1? soft = null;
+    /// <summary>Sizes the ink's bitmaps and either bakes it now or queues it.</summary>
+    private Ink Queue(PendingBake job, Vector2 box, float pad)
+    {
+        var raster = job.Raster;
+        job.Width = Math.Max(1, (int)MathF.Ceiling((box.X + 2 * pad) * raster));
+        job.Height = Math.Max(1, (int)MathF.Ceiling((box.Y + 2 * pad) * raster));
         float softRaster = raster / 2, softPad = 0;
+        var hasSoft = job.Shadow.Alpha > 0;
+        if (hasSoft)
+        {
+            // The shadow is a blur: half resolution is plenty.
+            softPad = MathF.Ceiling(pad + 3 * job.Shadow.Sigma + MathF.Abs(job.Shadow.OffsetY) + 2);
+            job.SoftWidth = Math.Max(1, (int)MathF.Ceiling((box.X + 2 * softPad) * softRaster));
+            job.SoftHeight = Math.Max(1, (int)MathF.Ceiling((box.Y + 2 * softPad) * softRaster));
+            job.SoftPad = softPad;
+        }
+        var ink = new Ink(_draw, this, raster, new Vector2(pad + box.X / 2, pad + box.Y / 2) * raster, box, (job.Width, job.Height),
+                          hasSoft, softRaster, new Vector2(softPad + box.X / 2, softPad + box.Y / 2) * softRaster,
+                          (job.SoftWidth, job.SoftHeight))
+        {
+            Pending = job,
+        };
+        if (Defers)
+        {
+            _pending.Enqueue(ink);
+        }
+        else
+        {
+            while (ink.Pending is not null) Step(ink, job);
+        }
+        return ink;
+    }
+
+    /// <summary>
+    /// Works through the queued bakes, a slice at a time, until <paramref name="deadline"/> (a
+    /// <see cref="System.Diagnostics.Stopwatch"/> timestamp) has passed; at least one slice when any is waiting.
+    /// </summary>
+    public void RunPending(long deadline)
+    {
+        if (_pending.Count == 0) return;
+        Meter?.Enter();
+        try
+        {
+            while (_pending.TryPeek(out var ink))
+            {
+                if (ink.Pending is not PendingBake job)
+                {
+                    _pending.Dequeue();
+                    continue;
+                }
+                Step(ink, job);
+                if (ink.Pending is null) _pending.Dequeue();
+                if (System.Diagnostics.Stopwatch.GetTimestamp() >= deadline) break;
+            }
+        }
+        finally
+        {
+            Meter?.Exit();
+        }
+    }
+
+    /// <summary>
+    /// Bakes <paramref name="ink"/> now, if it is still waiting (it is about to be drawn), with every bake queued before
+    /// it: bakes always run in the order they were asked for, as they did when each was made at once. A precaution:
+    /// Direct2D keeps state across bakes on a device (its glyph cache among it), and two layers baking into one device
+    /// were seen to move each other's pixels by a step; on a device of its own, a layer baking out of order was not.
+    /// </summary>
+    internal void Complete(Ink ink)
+    {
+        if (ink.Pending is not PendingBake) return;
+        Meter?.Enter();
+        try
+        {
+            while (ink.Pending is not null && _pending.TryPeek(out var head))
+            {
+                if (head.Pending is not PendingBake job)
+                {
+                    _pending.Dequeue();
+                    continue;
+                }
+                Step(head, job);
+                if (head.Pending is null) _pending.Dequeue();
+            }
+            // Not queued (made while the kit was not deferring): baked on its own.
+            while (ink.Pending is PendingBake own) Step(ink, own);
+        }
+        finally
+        {
+            Meter?.Exit();
+        }
+    }
+
+    /// <summary>Lets go of a bake still waiting (its ink was disposed).</summary>
+    internal void Cancel(Ink ink)
+    {
+        if (ink.Pending is PendingBake job) job.Release();
+        ink.Pending = null;
+    }
+
+    /// <summary>
+    /// One slice of a bake: first the text (or tile) bitmap, then its soft shadow, after which the ink takes its
+    /// bitmaps. The GPU calls are the ones an immediate bake makes, in the same order.
+    /// </summary>
+    private void Step(Ink ink, PendingBake job)
+    {
+        var properties = new BitmapProperties1(new PixelFormat(Vortice.DXGI.Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied), 96, 96, BitmapOptions.Target);
+        if (job.Text is null)
+        {
+            job.Text = _bake.CreateBitmap(new SizeI(job.Width, job.Height), IntPtr.Zero, 0, properties);
+            _brush.Color = new Color4(job.Colour.X, job.Colour.Y, job.Colour.Z, job.Colour.W);
+            if (job.Layout is { } layout) Render(job.Text, Matrix3x2.CreateScale(job.Raster), layout, job.Origin);
+            else FillRounded(job.Text, job.Raster, job.Origin, job.Box, job.Radius);
+            // A deferred bake leaves its shadow for the next slice; an immediate one goes straight on.
+            if (job.Shadow.Alpha > 0 && Defers) return;
+        }
+        ID2D1Bitmap1? soft = null;
+        var shadow = job.Shadow;
         if (shadow.Alpha > 0)
         {
-            var sigma = shadow.Sigma;
-            softPad = MathF.Ceiling(pad + 3 * sigma + MathF.Abs(shadow.OffsetY) + 2);
-            var sw = (int)MathF.Ceiling((box.X + 2 * softPad) * softRaster);
-            var sh = (int)MathF.Ceiling((box.Y + 2 * softPad) * softRaster);
-            using var source = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
+            var softRaster = job.Raster / 2;
+            var softPad = job.SoftPad;
+            var size = new SizeI(job.SoftWidth, job.SoftHeight);
+            using var source = _bake.CreateBitmap(size, IntPtr.Zero, 0, properties);
             _brush.Color = new Color4(0, 0, 0, 1);
-            FillRounded(source, softRaster, new Vector2(softPad, softPad + shadow.OffsetY), box, radius);
-            soft = _bake.CreateBitmap(new SizeI(Math.Max(1, sw), Math.Max(1, sh)), IntPtr.Zero, 0, properties);
+            if (job.Layout is { } layout)
+            {
+                Render(source, Matrix3x2.CreateScale(softRaster), layout,
+                       new Vector2(softPad + job.SoftShift.X, softPad + job.SoftShift.Y + shadow.OffsetY));
+            }
+            else
+            {
+                FillRounded(source, softRaster, new Vector2(softPad, softPad + shadow.OffsetY), job.Box, job.Radius);
+            }
+            soft = _bake.CreateBitmap(size, IntPtr.Zero, 0, properties);
             _shadow.SetInput(0, source, true);
-            _shadow.BlurStandardDeviation = MathF.Max(0.01f, sigma * softRaster);
+            _shadow.BlurStandardDeviation = MathF.Max(0.01f, shadow.Sigma * softRaster);
             _shadow.Color = new Vector4(shadow.Colour, shadow.Alpha);
             _bake.Target = soft;
             _bake.BeginDraw();
@@ -207,8 +322,40 @@ internal sealed class TextKit : IDisposable
             _bake.Target = null;
             _shadow.SetInput(0, null!, true);
         }
-        return new Ink(_draw, tile, raster, new Vector2(pad + box.X / 2, pad + box.Y / 2) * raster, box, soft, softRaster,
-                       new Vector2(softPad + box.X / 2, softPad + box.Y / 2) * softRaster);
+        var text = job.Text;
+        job.Text = null;
+        job.Release();
+        ink.Finish(text, soft);
+    }
+
+    /// <summary>A bake waiting in the queue, or part done: what it draws and where.</summary>
+    private sealed class PendingBake
+    {
+        /// <summary>The text to render (null for a tile).</summary>
+        public IDWriteTextLayout? Layout;
+        /// <summary>The layout is the kit's own reference (released when the bake is done or let go).</summary>
+        public bool OwnsLayout;
+        public Vector4 Colour;
+        public float Raster;
+        public ShadowSpec Shadow;
+        /// <summary>Where the text's (or tile's) origin goes in the bitmap, in layout pixels.</summary>
+        public Vector2 Origin;
+        /// <summary>The layout's own offset (its metrics' left and top, negated), for the shadow's origin.</summary>
+        public Vector2 SoftShift;
+        public float SoftPad;
+        public float Radius;
+        public Vector2 Box;
+        public int Width, Height, SoftWidth, SoftHeight;
+        /// <summary>The text bitmap, once its slice is done.</summary>
+        public ID2D1Bitmap1? Text;
+
+        public void Release()
+        {
+            Text?.Dispose();
+            Text = null;
+            if (OwnsLayout) Layout?.Dispose();
+            Layout = null;
+        }
     }
 
     private void FillRounded(ID2D1Bitmap1 target, float raster, Vector2 origin, Vector2 box, float radius)
@@ -254,6 +401,8 @@ internal sealed class TextKit : IDisposable
 
     public void Dispose()
     {
+        // Bakes still waiting are let go; their inks are never drawn once the kit is gone.
+        while (_pending.TryDequeue(out var ink)) Cancel(ink);
         foreach (var format in _formats.Values) format.Dispose();
         _formats.Clear();
         _shadowOut.Dispose();

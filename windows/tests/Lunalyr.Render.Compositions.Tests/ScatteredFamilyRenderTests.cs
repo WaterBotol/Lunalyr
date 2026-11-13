@@ -220,6 +220,8 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
             var scene = Fixtures.English(Style(style));
             // Every frame drawn once, so lines are set, effects made and the JIT done.
             for (var t = 10.0; t < 12.6; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
+            // Line setup is spread over frames: let it finish, so what follows only draws.
+            _stage.Settle(layer, scene, 10.0, Scale, Background);
             var before = GC.GetAllocatedBytesForCurrentThread();
             for (var t = 10.0; t < 12.6; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
             return GC.GetAllocatedBytesForCurrentThread() - before;

@@ -96,7 +96,7 @@ internal abstract partial class LyricCompositionLayer
         if (!overlay)
         {
             var rect = mark.Rect(width, height, pointSize, rightToLeft);
-            var tile = _ink.TileColour;
+            var tile = SettledInk.TileColour;
             _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * mark.Pose.Opacity * visibility));
             float w = (float)rect.Width, h = (float)rect.Height;
             dc.Transform = Matrix3x2.CreateScale((float)mark.Pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
@@ -107,10 +107,10 @@ internal abstract partial class LyricCompositionLayer
             dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(0, 0, w, h), radius, radius), _paint);
             return;
         }
-        var shown = LyricHighlightTiming.TextOpacity(mark.Pose.Opacity, _ink.TileTextSwitch) * visibility;
+        var shown = LyricHighlightTiming.TextOpacity(mark.Pose.Opacity, SettledInk.TileTextSwitch) * visibility;
         if (!(shown > 0.002)) return;
         var pressed = mark.Pressed(width, height, pointSize, rightToLeft);
-        var colour = _ink.TileText;
+        var colour = SettledInk.TileText;
         label.DrawTinted(dc, labelWorld, new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown)),
                          new InkClip((float)(pressed.X - width / 2), (float)(pressed.X + pressed.Width - width / 2)));
     }
@@ -125,7 +125,7 @@ internal abstract partial class LyricCompositionLayer
                                 double visibility)
     {
         if (_paint is null || !pose.IsVisible || !(visibility > 0.002) || !(rect.Width > 0) || !(rect.Height > 0)) return;
-        var tile = _ink.TileColour;
+        var tile = SettledInk.TileColour;
         _paint.Color = new Color4((float)tile.R, (float)tile.G, (float)tile.B, (float)(tile.A * pose.Opacity * visibility));
         float w = (float)rect.Width, h = (float)rect.Height;
         dc.Transform = Matrix3x2.CreateScale((float)pose.Width, 1, new Vector2(rightToLeft ? w : 0, 0))
@@ -143,8 +143,8 @@ internal abstract partial class LyricCompositionLayer
     /// </summary>
     protected Vector4 TileTextColour(HighlightPose pose, double visibility, double share = 1)
     {
-        var shown = LyricHighlightTiming.TextOpacity(pose.Opacity, _ink.TileTextSwitch) * visibility * share;
-        var colour = _ink.TileText;
+        var shown = LyricHighlightTiming.TextOpacity(pose.Opacity, SettledInk.TileTextSwitch) * visibility * share;
+        var colour = SettledInk.TileText;
         return new Vector4((float)colour.R, (float)colour.G, (float)colour.B, (float)(colour.A * shown));
     }
 
@@ -163,7 +163,16 @@ internal abstract partial class LyricCompositionLayer
         foreach (var cue in _cues)
         {
             var level = CreditCues.Level(cue, time);
-            if (!(level > 0.004)) continue;
+            if (!(level > 0.004))
+            {
+                // Spreading setup, a credit is set up to 1.5 s before it arrives, as the lines are.
+                if (SpreadsSetup && time < cue.Start && time > cue.Start - 1.5 && !_creditPlans.ContainsKey(cue.Id) && BeginAhead())
+                {
+                    CreditPlan(cue, box);
+                    _laidOutAhead = true;
+                }
+                continue;
+            }
             var plan = CreditPlan(cue, box);
             var exit = LayerExit.Pose(LayerExitKind.Credit, CreditCues.ExitProgress(cue, time), box.Height, cue.Top, ReduceMotion);
             var scale = plan.Fit * exit.Scale;

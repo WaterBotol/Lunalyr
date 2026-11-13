@@ -40,11 +40,22 @@ need repeating on a quiet PC.
 
 ## Left
 
-- One line setup can still take 18–23 ms (Hinge) on its own, longer than a 60 fps frame. To hide it completely, the
-  setup needs to be split by word over several frames, or baked on another thread (TextKit bakes on its own device
-  context, so this is possible).
-- A new song's first frame (17–30 ms) is one stutter per song.
-- Repeat these runs on a quiet PC and in Duplicate mode.
+- ~~One line setup can still take 18–23 ms (Hinge) on its own.~~ Done on `perf/line-setup`
+  (`../line-setup/README.md`): the time was the GPU bake (the shadow most of it), not the layout, so a line is now laid
+  out ahead and baked a slice at a time within a 2.5 ms per-pass allowance (`AheadWork`, split between the monitors);
+  an ink drawn before its turn is baked there and then. Offscreen (Intel adapter, JIT, not live), the worst setup in a
+  frame fell from 10.3 ms (Hinge), 13.0 (Torque) and 20.4 (Mosaic) to 3.0–3.4 ms, and to at most 3.4 ms for all 14
+  layouts; no frame of the demo songs over 4 ms in the median run (the worst frame of any run: 4.6 ms). Not yet
+  measured live on the desktop.
+- ~~A new song's first frame (17–30 ms).~~ Most of its own cost was settling the lyric ink for the new cover (3 ms on a
+  quiet CPU, 9–15 ms under load); that now runs on the thread pool, and a new song's first line is set when due rather
+  than on its first frame. Offscreen the worst frame of a new song's first 1.5 s is 1.5–3.8 ms (was 3.2–8.1). The
+  background layers' share of a new song (the cover's crossfade) is not part of this.
+- Still left: a line needed at once (a seek, joining mid-line, readings or the cover arriving while a line is on stage)
+  is set whole on that frame, as before; one slice can still stall inside Direct2D (seen once at 15–20 ms, Mosaic, two
+  layers on one device); a frame that lays out one of Mosaic's per-letter lines takes about 4 ms.
+- Repeat these runs on a quiet PC and in Duplicate mode, now also with the RTX and AOT build, both monitors, and the 30
+  and 15 fps caps.
 
 ## On a quiet PC (Test Build 4.1, 1983ecb)
 

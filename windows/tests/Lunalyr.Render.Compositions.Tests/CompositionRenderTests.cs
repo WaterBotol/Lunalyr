@@ -176,6 +176,8 @@ public sealed class CompositionRenderTests : IDisposable
         using var layer = Layer("editorial");
         var scene = Fixtures.English();
         for (var t = 10.0; t < 12.0; t += 1.0 / 30) Frame(layer, scene, t);
+        // Line setup is spread over frames: let it finish, so what follows only draws.
+        _stage.Settle(layer, scene, 10.0, Scale, Background);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var t = 10.0; t < 12.0; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);

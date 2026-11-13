@@ -63,6 +63,21 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     private Palette? _inkPalette;
     private (string Mode, string Custom) _inkHighlight;
     private LyricInk _ink = LyricInk.White;
+    private InkSettling? _settling;
+
+    /// <summary>The scene's settled ink (see <see cref="InkSettling"/>), waited for here the first time it is needed.</summary>
+    private LyricInk SettledInk
+    {
+        get
+        {
+            if (_settling is { } settling)
+            {
+                _ink = settling.Ink;
+                _settling = null;
+            }
+            return _ink;
+        }
+    }
 
     /// <summary>
     /// The ink for words sung around <paramref name="songSeconds"/>. The Mac drifts its ink through the album's
@@ -72,7 +87,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// </summary>
     protected LyricInk InkAt(double songSeconds)
     {
-        var ink = _ink;
+        var ink = SettledInk;
         ink.Phase = LyricInks.DriftPhase(songSeconds, ReduceMotion);
         return ink;
     }
@@ -117,10 +132,42 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     public bool IsAnimating { get; private set; }
 
+    /// <summary>The render-thread time spent setting lines up (for the line-setup benchmark).</summary>
+    internal Diagnostics.SetupMeter Meter { get; } = new();
+
+    // Setting lines up a slice at a time: a line is laid out when it is needed (or 1.5 s ahead) and its text baked
+    // within the pass's allowance (AheadWork) over the next frames, or at the latest when it is first drawn.
+    private bool _spreads = true;
+
+    /// <summary>A line (or credit) was laid out ahead this frame.</summary>
+    private bool _laidOutAhead;
+    private bool _aheadOpen;
+    private long _aheadStart;
+    private long _aheadDeadline;
+
+    /// <summary>
+    /// Whether line setup is spread over frames (the default). Off, lines are set exactly as before this was added: each
+    /// laid out and baked whole on the frame that first needs it (or 1.5 s ahead, the line after the one being sung),
+    /// and every line on the stage measured each frame. What is drawn is the same either way (the frame-identity tests
+    /// compare the two). Set it before <see cref="CreateResources"/>.
+    /// </summary>
+    internal bool SpreadsSetup
+    {
+        get => _spreads;
+        set
+        {
+            _spreads = value;
+            if (Kit is { } kit) kit.Defers = value;
+        }
+    }
+
+    /// <summary>True while text laid out ahead is still waiting to be baked.</summary>
+    internal bool SetupPending => Kit?.HasPending == true;
+
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
         ReleaseResources();
-        Kit = new TextKit(dc, dwrite);
+        Kit = new TextKit(dc, dwrite) { Defers = _spreads, Meter = Meter };
         _dotBrush = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
         _paint = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
         using (var factory = dc.Factory)
@@ -183,6 +230,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (Kit is null) return;
         Frame++;
         _aheadWork = frame.AheadWork;
+        _aheadOpen = false;
+        _laidOutAhead = false;
         var dc = frame.Dc;
         var saved = dc.Transform;
         try
@@ -212,6 +261,10 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 _statusText = null;
             }
             DrawOpening(dc, opening, frame);
+            // What is left of the pass's allowance bakes what has been laid out ahead; a frame that laid a line out
+            // leaves its baking to the next (a slice begun near the end of the allowance would run past it).
+            if (Kit is { HasPending: true } kit && !_laidOutAhead && BeginAhead()) kit.RunPending(_aheadDeadline);
+            EndAhead();
             Trim();
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
@@ -250,7 +303,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if ((!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
             || highlight != _inkHighlight)
         {
-            _ink = LyricInks.Settled(scene.Palette, scene.Style);
+            // Worked out off the render thread; it is waited for only when first needed.
+            _settling = new InkSettling(scene.Palette, scene.Style);
             _inkHighlight = highlight;
             _inkPalette = scene.Palette;
             var stops = new Double3[scene.Palette.ArtworkStops.Count];
@@ -396,13 +450,12 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             _drawn[count++] = new DrawnLine { Row = preview, Previewing = true, PreviewSince = since, Opacity = 1 };
 
         // Held duet lines rise clear of the lines in the middle, by their measured, fitted size.
+        // Spreading setup, the lines are measured only then: a line not drawn yet (a new song's first, before it is
+        // sung) is set when it is due, not on the song's first frame.
         var anyHeld = false;
-        for (var k = 0; k < count; k++)
-        {
-            ref var line = ref _drawn[k];
-            _stacked[k] = Stacked(line, time);
-            anyHeld |= line.Held is > 0;
-        }
+        for (var k = 0; k < count; k++) anyHeld |= _drawn[k].Held is > 0;
+        if (anyHeld || !_spreads)
+            for (var k = 0; k < count; k++) _stacked[k] = Stacked(_drawn[k], time);
         if (anyHeld) LineStack.Offsets(_stacked.AsSpan(0, count), Stage.Height, BaseSize * 0.3, _offsets);
         else Array.Clear(_offsets);
         for (var k = 0; k < count; k++)
@@ -412,15 +465,44 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         }
         DrawCredits(dc, time);
         if (SceneShown?.Style.Interludes != false && gap is { } found && found.InterludeCue(time, Options.PreviewLead) is { } cue) DrawCue(dc, cue, InterludeYield(time));
-        // The next line is set (laid out and baked) a little ahead of time, not on the frame it first appears.
-        var upcoming = index + 1;
+        // The next line is set a little ahead of time, not on the frame it first appears: laid out now, within the
+        // pass's allowance, and baked a slice at a time over the next frames. The next line is the first one with words
+        // after the one being sung (before anything is sung, the song's first). Setting each line whole, as before, it
+        // is the line after the one being sung.
+        var upcoming = active is null && _spreads ? index : index + 1;
+        while (_spreads && upcoming < lines.Count && lines[upcoming].Words.Count == 0 && upcoming < index + 4) upcoming++;
         if (upcoming < lines.Count && lines[upcoming].Words.Count > 0 && !Rolls(upcoming)
             && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming)
-            && !StagePrepared(upcoming) && _aheadWork?.TryTake() != false)
+            && !StagePrepared(upcoming) && BeginAhead())
         {
+            _laidOutAhead = true;
             if (Rules.FillsStage) { PrepareStage(upcoming); return; }
             _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
         }
+    }
+
+    /// <summary>
+    /// Opens this frame's work ahead of time when the pass has allowance left (shared by every surface through
+    /// <see cref="AheadWork"/>; a frame's own allowance without one); true while it lasts.
+    /// </summary>
+    private bool BeginAhead()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (_aheadOpen) return now < _aheadDeadline;
+        var remaining = _aheadWork?.Open() ?? AheadWork.AllowanceTicks;
+        if (remaining <= 0) return false;
+        _aheadOpen = true;
+        _aheadStart = now;
+        _aheadDeadline = now + remaining;
+        return true;
+    }
+
+    /// <summary>Counts this frame's work ahead of time against the pass.</summary>
+    private void EndAhead()
+    {
+        if (!_aheadOpen) return;
+        _aheadOpen = false;
+        _aheadWork?.Spend(System.Diagnostics.Stopwatch.GetTimestamp() - _aheadStart);
     }
 
     private StackedLine Stacked(in DrawnLine line, double time)
@@ -533,6 +615,22 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     protected LinePlan? Plan(int row)
     {
         if (_plans.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
+        Meter.Enter();
+        try
+        {
+            var plan = SetPlan(row);
+            plan.LastUsed = Frame;
+            _plans[row] = plan;
+            return plan;
+        }
+        finally
+        {
+            Meter.Exit();
+        }
+    }
+
+    private LinePlan SetPlan(int row)
+    {
         var line = Sheet!.Lines[row];
         IReadOnlyList<bool> lineGlue = Sheet.Glue[row];
         var connections = Kind.HasConnections() && line.WordTimed;
@@ -563,12 +661,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Dense web layouts set long lines smaller.
         var lineBase = connections ? BaseSize * ConstellationLayout.DensityScale(line.Words) : BaseSize;
         // "Cutout · Highlight": each sung word gets a tile, held until the line ends (see Decorate).
-        var plan = BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
-                             runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
-                             runShares: runShares);
-        plan.LastUsed = Frame;
-        _plans[row] = plan;
-        return plan;
+        return BuildPlan(words, mainGlue, lineBase, row, line.Start, wordTimed: true, editorial: Kind.HasEditorialTypography(),
+                         runReadings, lineReading, FitFor(row), Stage.Width, groups, row, kind: Kind, lineEnd: line.End,
+                         runShares: runShares);
     }
 
     /// <summary>A line's reading, split over its runs when it has one part per run, otherwise for the whole line.</summary>
@@ -603,6 +698,23 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                                  LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups = null, int backingSeed = 0,
                                  bool heavy = false, CompositionKind? kind = null, double lineEnd = double.NaN,
                                  IReadOnlyList<ReadingShares?>? runShares = null)
+    {
+        Meter.Enter();
+        try
+        {
+            return SetLine(words, glue, baseSize, lineIndex, inkTime, wordTimed, editorial, runReadings, lineReading, fit, maxWidth,
+                           groups, backingSeed, heavy, kind, lineEnd, runShares);
+        }
+        finally
+        {
+            Meter.Exit();
+        }
+    }
+
+    private LinePlan SetLine(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize, int lineIndex,
+                             double inkTime, bool wordTimed, bool editorial, string?[]? runReadings, string? lineReading,
+                             LineFit fit, double maxWidth, IReadOnlyList<BackingGroup>? groups, int backingSeed,
+                             bool heavy, CompositionKind? kind, double lineEnd, IReadOnlyList<ReadingShares?>? runShares)
     {
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
@@ -929,7 +1041,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         var links = StyleShown.ConstellationLinkOpacity;
         if (_paint is null || !(links > 0)) return;
-        var link = _ink.Link;
+        var link = SettledInk.Link;
         dc.Transform = blockToDevice;
         var width = Points(ConstellationLayout.LinkWidth);
         var dot = Points(ConstellationLayout.DotRadius);
@@ -1098,17 +1210,25 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     private LinePlan? Phrase(int row)
     {
         if (_phrases.TryGetValue(row, out var found)) { found.LastUsed = Frame; return found; }
-        var line = Sheet!.Lines[row];
-        var set = WordReadingsOf(row);
-        var glue = set?.Glue ?? Sheet.Glue[row];
-        var words = set?.Words ?? line.Words;
-        var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
-        var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
-        var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
-                             FitFor(row), Stage.Width);
-        plan.LastUsed = Frame;
-        _phrases[row] = plan;
-        return plan;
+        Meter.Enter();
+        try
+        {
+            var line = Sheet!.Lines[row];
+            var set = WordReadingsOf(row);
+            var glue = set?.Glue ?? Sheet.Glue[row];
+            var words = set?.Words ?? line.Words;
+            var (runReadings, lineReading) = set is not null ? (set.RunReadings(words, glue), set.LineReading) : Readings(row, words, glue);
+            var phraseBase = BaseSize * (Kind == CompositionKind.Spoken ? 1.26 : 1.06);
+            var plan = BuildPlan(words, glue, phraseBase, row, line.Start, wordTimed: false, editorial: false, runReadings, lineReading,
+                                 FitFor(row), Stage.Width);
+            plan.LastUsed = Frame;
+            _phrases[row] = plan;
+            return plan;
+        }
+        finally
+        {
+            Meter.Exit();
+        }
     }
 
     private void DrawPhrase(ID2D1DeviceContext dc, LinePlan plan, LyricLine line, int row, double time, LyricPhraseTiming pose,
@@ -1183,9 +1303,10 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// <summary>The three interlude dots of an instrumental break, in the album's accent.</summary>
     private void DrawCue(ID2D1DeviceContext dc, InstrumentalCue cue, double yield = 1)
     {
-        if (_dotBrush is null || SceneShown is null || yield <= 0.002) return;
+        // Dots not there yet draw nothing (and need no ink: a song's opening frames do not wait for it).
+        if (_dotBrush is null || SceneShown is null || yield <= 0.002 || !(cue.Opacity > 0)) return;
         // The ink's dot colour (made readable against the backdrop), as the Mac colours its interlude dots.
-        var accent = _ink.Dot is { } dot ? LyricInks.Vector(dot) : TextColour;
+        var accent = SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour;
         var diameter = (float)(Math.Min(40, Math.Max(15, BaseSize / Scale * 0.3)) * Scale);
         var spacing = diameter * 0.65f;
         var width = diameter * 3 + spacing * 2;

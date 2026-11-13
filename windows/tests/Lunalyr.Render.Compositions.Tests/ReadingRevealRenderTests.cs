@@ -143,6 +143,8 @@ public sealed class ReadingRevealRenderTests : IDisposable
         var scene = ExtrasFixtures.JapaneseSyllables();
         scene = scene with { Style = scene.Style with { Reveal = "cutoutHighlight" } };
         for (var t = 19.0; t < 21.0; t += 1.0 / 30) _stage.Render(layer, scene, t, t, Scale, Background);
+        // Line setup is spread over frames: let it finish, so what follows only draws.
+        _stage.Settle(layer, scene, 19.0, Scale, Background);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var t = 19.0; t < 21.0; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
@@ -156,6 +158,8 @@ public sealed class ReadingRevealRenderTests : IDisposable
         var scene = ExtrasFixtures.JapaneseSyllables();
         // 思, い, 出 and す sung one after another; the rolling stages' window holds the same words throughout.
         for (var t = 19.0; t < 21.0; t += 1.0 / 30) _stage.Render(layer, scene, t, t, Scale, Background);
+        // Line setup is spread over frames: let it finish, so what follows only draws.
+        _stage.Settle(layer, scene, 19.0, Scale, Background);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var t = 19.0; t < 21.0; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
