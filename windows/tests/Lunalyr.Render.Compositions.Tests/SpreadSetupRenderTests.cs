@@ -19,11 +19,15 @@ public sealed class SpreadSetupRenderTests : IDisposable
 {
     private const int Width = 960, Height = 540;
     private const float Scale = 1;
-    private readonly Offscreen _stage = new(Width, Height);
+    // Both on WARP, Direct2D's software rasteriser: the comparison is of Lunalyr's own logic (spread setup draws what
+    // whole setup draws), and a hardware GPU shared with other processes now and then rasterises a pixel differently
+    // between two devices (seen: 1 pixel 126/255 off, 6 pixels on mosaic, about 1 run in 20-50 under load). WARP
+    // draws the same input the same way every time.
+    private readonly Offscreen _stage = new(Width, Height, warp: true);
     // A device of its own for the layer compared: two layers baking on one device move a few of each other's pixels by a
     // step (Direct2D keeps state across bakes on a device), whichever way their lines are set. On two devices, two
     // layers setting lines the old way draw exactly the same frames here.
-    private readonly Offscreen _other = new(Width, Height);
+    private readonly Offscreen _other = new(Width, Height, warp: true);
     private readonly Sink _sink = new();
     private readonly Logger _logger;
     private static readonly Vector4 Background = Fixtures.Night.Base;
