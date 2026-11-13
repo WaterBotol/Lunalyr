@@ -63,32 +63,42 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 
 Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Match the music** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
 
+<details>
+<summary><b>See all 14 layouts</b></summary>
+<br>
+
 <table>
   <tr>
-    <td width="25%" align="center"><img src="docs/media/layout-scattered.gif" alt="Scattered layout"><br><b>Scattered</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-constellation.gif" alt="Constellation layout"><br><b>Constellation</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-constellationEditorial.gif" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm</td>
-    <td width="25%" align="center"><img src="docs/media/layout-editorial.gif" alt="Editorial layout"><br><b>Editorial</b> · Calm</td>
+    <td width="50%" align="center"><img src="docs/media/layout-scattered.gif" alt="Scattered layout"><br><b>Scattered</b> · Calm<br><sub>Words set loose across the line</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-constellation.gif" alt="Constellation layout"><br><b>Constellation</b> · Calm<br><sub>Fragments linked by hairlines, like a star chart</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-spoken.gif" alt="Spoken layout"><br><b>Spoken</b> · Calm</td>
-    <td align="center"><img src="docs/media/layout-echo.gif" alt="Echo layout"><br><b>Echo</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-cascade.gif" alt="Cascade layout"><br><b>Cascade</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-hinge.gif" alt="Hinge layout"><br><b>Hinge</b> · Bold</td>
+    <td width="50%" align="center"><img src="docs/media/layout-constellationEditorial.gif" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm<br><sub>Linked fragments in two contrasting typefaces</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-editorial.gif" alt="Editorial layout"><br><b>Editorial</b> · Calm<br><sub>Two typefaces in one line, set like a magazine spread</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-broadside.gif" alt="Broadside layout"><br><b>Broadside</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-torque.gif" alt="Torque layout"><br><b>Torque</b> · Bold</td>
-    <td align="center"><img src="docs/media/layout-cutout.gif" alt="Cutout layout"><br><b>Cutout</b> · Playful</td>
-    <td align="center"><img src="docs/media/layout-portal.gif" alt="Portal layout"><br><b>Portal</b> · Playful</td>
+    <td width="50%" align="center"><img src="docs/media/layout-spoken.gif" alt="Spoken layout"><br><b>Spoken</b> · Calm<br><sub>Each sung word takes focus, recent words settle around it</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-echo.gif" alt="Echo layout"><br><b>Echo</b> · Bold<br><sub>The line repeated at many sizes, some inverted</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/layout-mosaic.gif" alt="Mosaic layout"><br><b>Mosaic</b> · Playful</td>
-    <td align="center"><img src="docs/media/layout-fable.gif" alt="Fable layout"><br><b>Fable</b> · Playful</td>
-    <td></td>
-    <td></td>
+    <td width="50%" align="center"><img src="docs/media/layout-cascade.gif" alt="Cascade layout"><br><b>Cascade</b> · Bold<br><sub>A moving column of words, arriving with the voice</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-hinge.gif" alt="Hinge layout"><br><b>Hinge</b> · Bold<br><sub>Heavy words swing in on a hinge and fold into a stack</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/media/layout-broadside.gif" alt="Broadside layout"><br><b>Broadside</b> · Bold<br><sub>One strip of big type that slides along</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-torque.gif" alt="Torque layout"><br><b>Torque</b> · Bold<br><sub>Words wrung into place with a thick edge, stacking upwards</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/media/layout-cutout.gif" alt="Cutout layout"><br><b>Cutout</b> · Playful<br><sub>Uneven type and album-colour labels, built word by word</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-portal.gif" alt="Portal layout"><br><b>Portal</b> · Playful<br><sub>The sung word in a pill, earlier words drifting away</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/media/layout-mosaic.gif" alt="Mosaic layout"><br><b>Mosaic</b> · Playful<br><sub>A collage of huge words, colour bars and single letters</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-fable.gif" alt="Fable layout"><br><b>Fable</b> · Playful<br><sub>A new shape and accent every line</sub></td>
   </tr>
 </table>
+
+</details>
 
 ![The Lyric style page in Lunalyr's Settings: where lyrics show, the layout, the opening title, credits and backing vocals](docs/media/settings-lyrics.png)
 
