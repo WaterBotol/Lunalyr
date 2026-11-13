@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+- Hinge, Broadside and Portal layouts reworked: Hinge's leading words stay readable in the corner and its exit folds without squashing; Broadside builds its line centred, keeps little words as labels between the big ones and fades words out whole inside a 5% margin instead of cutting them at the edge; Portal's earlier words climb above the live pill as a still, evenly spaced trail of plain type instead of piling up.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed
