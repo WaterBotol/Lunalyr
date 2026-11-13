@@ -2,26 +2,16 @@ using Lunalyr.Core.MusicVideo;
 
 namespace Lunalyr.Core.Tests.MusicVideo;
 
-// Ported from MusicVideoPauseTests.swift: a paused song holds the music video's frame. Every seam is faked: no web view,
-// no player, no network, no settings.
+// Ported from MusicVideoPauseTests.swift: why the music video stopped, and a long pause closing YouTube's player. Every seam
+// is faked: no web view, no player, no network, no settings. The Mac's frozen-frame tests are not ported: Windows keeps
+// no frozen frame for YouTube, because YouTube's API policies don't allow covering the embedded player's interface (a
+// paused player stays on screen as YouTube draws it).
 public sealed class MusicVideoPauseTests
 {
-    private sealed class FakeFreezeHost : IMusicVideoFreezeHost
+    private sealed class FakeIdleHost : IMusicVideoIdleHost
     {
         public List<string> Events = [];
-        public object? Picture = new object();
-        public bool DeferCapture;
-        public Action<object?>? PendingCapture;
 
-        public void CaptureFrame(Action<object?> done)
-        {
-            Events.Add("capture");
-            if (DeferCapture) PendingCapture = done;
-            else done(Picture);
-        }
-
-        public void ShowFrozenFrame(object image) => Events.Add("show");
-        public void HideFrozenFrame(bool handOver) => Events.Add(handOver ? "handOver" : "hide");
         public void SendPause() => Events.Add("pause");
         public void ReleasePlayer() => Events.Add("release");
         public void RecreatePlayer() => Events.Add("recreate");
@@ -46,31 +36,27 @@ public sealed class MusicVideoPauseTests
             _pending.RemoveAll(p => p.Delay == delay);
             foreach (var p in due) p.Work();
         }
-
-        public int Count(double delay) => _pending.Count(p => p.Delay == delay);
     }
 
-    private static (MusicVideoFrozenFrame Freeze, FakeFreezeHost Host, Timers Timers) MakeFreeze()
+    private static (MusicVideoIdlePlayer Idle, FakeIdleHost Host, Timers Timers) MakeIdle()
     {
         var timers = new Timers();
-        var freeze = new MusicVideoFrozenFrame(600, (delay, work) =>
+        var idle = new MusicVideoIdlePlayer(600, (delay, work) =>
         {
-            Assert.True(delay is 600 or MusicVideoFrozenFrame.SeekHold, delay.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Equal(600, delay);
             return timers.Add(delay, work);
         });
-        var host = new FakeFreezeHost();
-        freeze.Host = host;
-        return (freeze, host, timers);
+        var host = new FakeIdleHost();
+        idle.Host = host;
+        return (idle, host, timers);
     }
 
-    /// <summary>Playing, then the user pauses the song: the loop asks for a pause; YouTube's state 2 hides the player.</summary>
-    private static void UserPause(MusicVideoFrozenFrame freeze)
+    /// <summary>Playing, then the user pauses the song: the loop asks for a pause.</summary>
+    private static void UserPause(MusicVideoIdlePlayer idle)
     {
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        freeze.Pause();
-        freeze.NotePlayer(false);
+        idle.NoteHold(MusicVideoHold.Live);
+        idle.NoteHold(MusicVideoHold.UserPaused);
+        idle.Pause();
     }
 
     // Ported from MusicVideoPauseTests.swift: testHoldFollowsWhyTheVideoStopped
@@ -85,21 +71,6 @@ public sealed class MusicVideoPauseTests
         Assert.Equal(MusicVideoHold.Other, MusicVideoHolds.Of(true, true, null));
         Assert.Equal([MusicVideoHold.UserPaused, MusicVideoHold.WallpaperPaused, MusicVideoHold.Outgoing],
             Enum.GetValues<MusicVideoHold>().Where(h => h.KeepsFrame()));
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testFrozenFrameShowsForHoldsThatKeepIt
-    [Fact]
-    public void FrozenFrameShowsForHoldsThatKeepIt()
-    {
-        Assert.True(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.UserPaused, false, true));
-        Assert.True(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.UserPaused, true, true));
-        Assert.True(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.WallpaperPaused, false, true));
-        Assert.True(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.Outgoing, false, true));
-        Assert.False(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.Other, false, true));
-        Assert.True(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.Live, false, true));
-        Assert.False(MusicVideoFrozenFrame.ShowsFrame(MusicVideoHold.Live, true, true));
-        foreach (var hold in Enum.GetValues<MusicVideoHold>()) Assert.False(MusicVideoFrozenFrame.ShowsFrame(hold, false, false));
-        Assert.Equal([1], new[] { -1, 0, 1, 2, 3, 5 }.Where(YouTubeEmbed.ShowsVideo));
     }
 
     private sealed class HoldSurface : IMusicVideoPlaybackSurface
@@ -177,312 +148,105 @@ public sealed class MusicVideoPauseTests
         loop.Stop();
     }
 
-    // Ported from MusicVideoPauseTests.swift: testUserPauseTakesThePictureThenPauses
+    // Windows' own, in place of testUserPauseTakesThePictureThenPauses (not ported): a pause just pauses. No picture is
+    // taken or shown; the paused player stays on screen as YouTube draws it.
     [Fact]
-    public void UserPauseTakesThePictureThenPauses()
+    public void APauseJustPauses()
     {
-        var (freeze, host, _) = MakeFreeze();
-        UserPause(freeze);
-        Assert.Equal(["capture", "show", "pause"], host.Events);
-        Assert.True(freeze.FrameShown);
-        freeze.NotePlayer(true);
-        freeze.Pause();
-        Assert.Equal(["capture", "show", "pause", "pause"], host.Events);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testOtherPausesKeepTheFallback
-    [Fact]
-    public void OtherPausesKeepTheFallback()
-    {
-        var (outside, outsideHost, _) = MakeFreeze();
-        outside.NotePlayer(true);
-        outside.NoteHold(MusicVideoHold.Other);
-        outside.Pause();
-        Assert.Equal(["pause"], outsideHost.Events);
-        var (freeze, host, _) = MakeFreeze();
-        freeze.NotePlayer(false);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        freeze.Pause();
+        var (idle, host, _) = MakeIdle();
+        UserPause(idle);
         Assert.Equal(["pause"], host.Events);
-        Assert.False(freeze.FrameShown);
+        idle.NoteHold(MusicVideoHold.WallpaperPaused);
+        idle.Pause();
+        Assert.Equal(["pause", "pause"], host.Events);
     }
 
-    // Ported from MusicVideoPauseTests.swift: testCoveringKeepsTheFrameAndLeavingTheVideoHidesIt
-    [Fact]
-    public void CoveringKeepsTheFrameAndLeavingTheVideoHidesIt()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        UserPause(freeze);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
-        Assert.Equal("pause", host.Events[^1]);
-        Assert.True(freeze.FrameShown);
-        freeze.NoteHold(MusicVideoHold.Other);
-        Assert.Equal("hide", host.Events[^1]);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        Assert.Equal("show", host.Events[^1]);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testPausingTheWallpaperTakesTheFrame
-    [Fact]
-    public void PausingTheWallpaperTakesTheFrame()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
-        freeze.Pause();
-        freeze.NotePlayer(false);
-        Assert.Equal(["capture", "show", "pause"], host.Events);
-        Assert.True(freeze.FrameShown);
-        freeze.NoteHold(MusicVideoHold.Live);
-        Assert.True(freeze.FrameShown);
-        freeze.NotePlayer(true);
-        Assert.Equal("handOver", host.Events[^1]);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testOutgoingVideoHoldsItsFrameThroughTheSongChange
-    [Fact]
-    public void OutgoingVideoHoldsItsFrameThroughTheSongChange()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteHold(MusicVideoHold.Outgoing);
-        freeze.Pause();
-        freeze.NotePlayer(false);
-        Assert.Equal(["capture", "show", "pause"], host.Events);
-        Assert.True(freeze.FrameShown);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testResumeHandsOverOnlyOncePlaying
-    [Fact]
-    public void ResumeHandsOverOnlyOncePlaying()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        UserPause(freeze);
-        host.Events = [];
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(false);
-        Assert.Empty(host.Events);
-        Assert.True(freeze.FrameShown);
-        freeze.NotePlayer(true);
-        Assert.Equal(["handOver"], host.Events);
-        Assert.Null(freeze.Image);
-        host.Events = [];
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        freeze.Pause();
-        Assert.Equal(["capture", "show", "pause"], host.Events);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testFailedSnapshotFallsBackToTheGradient
-    [Fact]
-    public void FailedSnapshotFallsBackToTheGradient()
-    {
-        var (freeze, host, timers) = MakeFreeze();
-        host.Picture = null;
-        UserPause(freeze);
-        Assert.Equal(["capture", "pause"], host.Events);
-        Assert.False(freeze.FrameShown);
-        timers.Fire(600);
-        Assert.Equal("release", host.Events[^1]);
-        Assert.False(freeze.FrameShown);
-        var black = new byte[4 * 4 * 4];
-        Assert.True(MusicVideoFrozenFrame.LooksBlank(black, 4, 4));
-        var grey = Enumerable.Repeat((byte)77, 4 * 4 * 4).ToArray();
-        Assert.False(MusicVideoFrozenFrame.LooksBlank(grey, 4, 4));
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testResumeDuringTheSnapshotDoesNotPause
-    [Fact]
-    public void ResumeDuringTheSnapshotDoesNotPause()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        host.DeferCapture = true;
-        freeze.NotePlayer(true);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        freeze.Pause();
-        freeze.Pause();
-        Assert.Equal(["capture"], host.Events);
-        freeze.NoteHold(MusicVideoHold.Live);
-        host.PendingCapture!(new object());
-        Assert.Equal(["capture"], host.Events);
-        Assert.False(freeze.FrameShown);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testNewVideoDropsTheFrame
-    [Fact]
-    public void NewVideoDropsTheFrame()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        UserPause(freeze);
-        freeze.Reset();
-        Assert.Equal("hide", host.Events[^1]);
-        Assert.Null(freeze.Image);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        Assert.Equal("hide", host.Events[^1]);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testLongPauseClosesThePlayerAndResumeReopensIt
+    // Adapted from MusicVideoPauseTests.swift: testLongPauseClosesThePlayerAndResumeReopensIt (no frozen frame)
     [Fact]
     public void LongPauseClosesThePlayerAndResumeReopensIt()
     {
-        var (freeze, host, timers) = MakeFreeze();
-        UserPause(freeze);
+        var (idle, host, timers) = MakeIdle();
+        UserPause(idle);
         host.Events = [];
         timers.Fire(600);
         Assert.Equal(["release"], host.Events);
-        Assert.True(freeze.FrameShown);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
+        Assert.True(idle.Released);
+        idle.NoteHold(MusicVideoHold.UserPaused);
+        idle.Pause();
         Assert.Equal(["release"], host.Events);
-        freeze.NoteHold(MusicVideoHold.Live);
+        idle.NoteHold(MusicVideoHold.Live);
         Assert.Equal(["release", "recreate"], host.Events);
-        Assert.True(freeze.FrameShown);
-        freeze.NoteHold(MusicVideoHold.Live);
+        idle.NoteHold(MusicVideoHold.Live);
         Assert.Single(host.Events, e => e == "recreate");
-        freeze.NotePlayer(true);
-        Assert.Equal("handOver", host.Events[^1]);
+        Assert.False(idle.Released);
     }
 
-    // Ported from MusicVideoPauseTests.swift: testResumeBeforeTheLongPauseKeepsThePlayer
+    // Adapted from MusicVideoPauseTests.swift: testResumeBeforeTheLongPauseKeepsThePlayer (no frozen frame)
     [Fact]
     public void ResumeBeforeTheLongPauseKeepsThePlayer()
     {
-        var (freeze, host, timers) = MakeFreeze();
-        UserPause(freeze);
-        freeze.NoteHold(MusicVideoHold.Live);
+        var (idle, host, timers) = MakeIdle();
+        UserPause(idle);
+        idle.NoteHold(MusicVideoHold.Live);
         timers.Fire(600);
         Assert.DoesNotContain("release", host.Events);
     }
 
-    // Ported from MusicVideoPauseTests.swift: testCoveredForALongTimeClosesThePlayerAndShowingReopensIt
+    // Adapted from MusicVideoPauseTests.swift: testCoveredForALongTimeClosesThePlayerAndShowingReopensIt (no frozen frame)
     [Fact]
     public void CoveredForALongTimeClosesThePlayerAndShowingReopensIt()
     {
-        var (freeze, host, timers) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
-        freeze.Pause();
-        freeze.NotePlayer(false);
-        Assert.Equal(["capture", "show", "pause"], host.Events);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
+        var (idle, host, timers) = MakeIdle();
+        idle.NoteHold(MusicVideoHold.Live);
+        idle.NoteHold(MusicVideoHold.WallpaperPaused);
+        idle.Pause();
+        Assert.Equal(["pause"], host.Events);
+        idle.NoteHold(MusicVideoHold.WallpaperPaused);
         timers.Fire(600);
-        Assert.Equal(["capture", "show", "pause", "release"], host.Events);
-        Assert.True(freeze.FrameShown);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
+        Assert.Equal(["pause", "release"], host.Events);
+        idle.NoteHold(MusicVideoHold.WallpaperPaused);
         Assert.Equal("release", host.Events[^1]);
         timers.Fire(600);
         Assert.Single(host.Events, e => e == "release");
-        freeze.NoteHold(MusicVideoHold.Live);
+        idle.NoteHold(MusicVideoHold.Live);
         Assert.Equal("recreate", host.Events[^1]);
     }
 
-    // Ported from MusicVideoPauseTests.swift: testCoveredAfterAUserPauseClosesAtTheLongPauseToo
+    // Adapted from MusicVideoPauseTests.swift: testCoveredAfterAUserPauseClosesAtTheLongPauseToo (no frozen frame)
     [Fact]
     public void CoveredAfterAUserPauseClosesAtTheLongPauseToo()
     {
-        var (freeze, host, timers) = MakeFreeze();
-        UserPause(freeze);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
+        var (idle, host, timers) = MakeIdle();
+        UserPause(idle);
+        idle.NoteHold(MusicVideoHold.WallpaperPaused);
         timers.Fire(600);
         Assert.Equal("release", host.Events[^1]);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        Assert.True(freeze.FrameShown);
+        idle.NoteHold(MusicVideoHold.UserPaused);
         Assert.DoesNotContain("recreate", host.Events);
     }
 
-    // Ported from MusicVideoPauseTests.swift: testCoveredBrieflyKeepsThePlayer
+    // Adapted from MusicVideoPauseTests.swift: testCoveredBrieflyKeepsThePlayer (no frozen frame)
     [Fact]
     public void CoveredBrieflyKeepsThePlayer()
     {
-        var (freeze, host, timers) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NoteHold(MusicVideoHold.WallpaperPaused);
-        freeze.NoteHold(MusicVideoHold.Live);
+        var (idle, host, timers) = MakeIdle();
+        idle.NoteHold(MusicVideoHold.Live);
+        idle.NoteHold(MusicVideoHold.WallpaperPaused);
+        idle.NoteHold(MusicVideoHold.Live);
         timers.Fire(600);
         Assert.DoesNotContain("release", host.Events);
     }
 
-    // Ported from MusicVideoPauseTests.swift: testASeekThatBuffersShowsThePictureTakenBeforeIt
+    // Windows' own: a new video, a failure or a closed player forgets the long pause.
     [Fact]
-    public void ASeekThatBuffersShowsThePictureTakenBeforeIt()
+    public void ResetForgetsTheLongPause()
     {
-        var (freeze, host, timers) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteSeek();
-        Assert.Equal(["capture"], host.Events);
-        Assert.False(freeze.FrameShown);
-        freeze.NotePlayer(false);
-        Assert.Equal(["capture", "show"], host.Events);
-        Assert.Equal(0, timers.Count(MusicVideoFrozenFrame.SeekHold));
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        Assert.Equal("handOver", host.Events[^1]);
-        Assert.Null(freeze.Image);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testASeekThatLandsAtOnceShowsNothingAndDropsThePicture
-    [Fact]
-    public void ASeekThatLandsAtOnceShowsNothingAndDropsThePicture()
-    {
-        var (freeze, host, timers) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteSeek();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        Assert.NotNull(freeze.Image);
-        timers.Fire(MusicVideoFrozenFrame.SeekHold);
-        Assert.Null(freeze.Image);
-        Assert.Equal(["capture"], host.Events);
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        freeze.Pause();
-        Assert.Equal(["capture", "capture", "show", "pause"], host.Events);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testAPauseRightAfterASeekTakesAFreshPicture
-    [Fact]
-    public void APauseRightAfterASeekTakesAFreshPicture()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(true);
-        freeze.NoteSeek();
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        Assert.Null(freeze.Image);
-        freeze.Pause();
-        Assert.Equal(["capture", "capture", "show", "pause"], host.Events);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testNoSeekPictureUnlessPlaying
-    [Fact]
-    public void NoSeekPictureUnlessPlaying()
-    {
-        var (freeze, host, _) = MakeFreeze();
-        freeze.NoteHold(MusicVideoHold.Live);
-        freeze.NotePlayer(false);
-        freeze.NoteSeek();
-        freeze.NoteHold(MusicVideoHold.UserPaused);
-        freeze.NotePlayer(true);
-        freeze.NoteSeek();
-        Assert.Empty(host.Events);
-    }
-
-    // Ported from MusicVideoPauseTests.swift: testBufferingHidesThePlayerOnlyAfterAGrace
-    [Fact]
-    public void BufferingHidesThePlayerOnlyAfterAGrace()
-    {
-        var grace = YouTubeEmbed.BufferingGrace;
-        Assert.Equal(grace, YouTubeEmbed.HideDelay(true, MusicVideoHold.Live, false));
-        Assert.InRange(grace, 0.1001, 0.5);
-        Assert.Equal(0, YouTubeEmbed.HideDelay(true, MusicVideoHold.Live, true));
-        Assert.Equal(0, YouTubeEmbed.HideDelay(false, MusicVideoHold.Live, false));
-        foreach (var hold in new[] { MusicVideoHold.UserPaused, MusicVideoHold.WallpaperPaused, MusicVideoHold.Outgoing, MusicVideoHold.Other })
-            Assert.Equal(0, YouTubeEmbed.HideDelay(true, hold, false));
-        var html = YouTubeEmbed.Html("4NRXx6U8ABQ", 0);
-        Assert.Contains("if (state === 3) return;", html);
-        Assert.DoesNotContain("transition:opacity .5s}", html);
+        var (idle, host, timers) = MakeIdle();
+        UserPause(idle);
+        idle.Reset();
+        timers.Fire(600);
+        Assert.DoesNotContain("release", host.Events);
+        Assert.False(idle.Released);
     }
 
     // Ported from MusicVideoPauseTests.swift: testAVideoFadingOutAfterASongChangeIsHeldNotSought

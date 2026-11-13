@@ -121,20 +121,22 @@ public sealed class MusicVideoMatchTests
         Assert.Null(new MusicVideoCache(storage).Lookup("song", now));
     }
 
-    // Ported from MusicVideoMatchTests.swift: testEmbedShowsOnlyTheVideo (the documented parameters, in the embed's address)
+    // Adapted from MusicVideoMatchTests.swift: testEmbedShowsOnlyTheVideo. The documented parameters, in the embed's address;
+    // unlike the Mac, the player is not enlarged, cropped or hidden (YouTube's API policies don't allow obscuring, cropping
+    // or covering its interface): it fills the page as YouTube draws it, fitted without cropping.
     [Fact]
-    public void EmbedShowsOnlyTheVideo()
+    public void EmbedShowsThePlayerAsYouTubeDrawsIt()
     {
         var html = YouTubeEmbed.Html("4NRXx6U8ABQ", 0, page: 1, language: "fr");
         foreach (var needle in new[]
                  {
                      "controls=0", "disablekb=1", "fs=0", "iv_load_policy=3", "rel=0", "playsinline=1", "cc_load_policy=0", "hl=fr",
-                     "mute=1", "pointer-events:none", "opacity:0", $"scale({YouTubeEmbed.Overscan.ToString(System.Globalization.CultureInfo.InvariantCulture)})",
-                     "overflow:hidden",
+                     "mute=1", "pointer-events:none", "overflow:hidden",
+                     "#frame{position:absolute;left:0;top:0;width:100%;height:100%;", "#frame iframe{width:100%;height:100%;",
                  })
             Assert.Contains(needle, html);
-        Assert.True(YouTubeEmbed.Overscan >= 1.2);
-        Assert.Contains("function visibleFor(state) { return state === 1; }", html);
+        foreach (var hiding in new[] { "scale(", "transform", "max(100vw", "177.78vh", "opacity", "visibility", "display:none" })
+            Assert.DoesNotContain(hiding, html);
         Assert.Contains("post('state', state)", html);
         Assert.DoesNotContain("cc_lang_pref", html);
         Assert.DoesNotContain("alert", YouTubeEmbed.Html("4NRXx6U8ABQ", 0, language: "x'); alert(1"));
@@ -154,23 +156,32 @@ public sealed class MusicVideoMatchTests
         Assert.Equal("en", YouTubeEmbed.PlayerLanguage(new System.Globalization.CultureInfo("en-AU")));
     }
 
-    // Ported from MusicVideoMatchTests.swift: testPlayerIsVisibleOnlyWhilePlaying
+    // Windows' own, in place of testPlayerIsVisibleOnlyWhilePlaying (not ported: the Mac hides a paused, buffering or ended
+    // player because YouTube draws its interface over it; YouTube's API policies don't allow covering that interface). The
+    // player is on screen from ready, in every state, until it fails.
     [Fact]
-    public void PlayerIsVisibleOnlyWhilePlaying()
+    public void PlayerIsOnScreenInEveryStateOnceReady()
     {
-        Assert.Equal([1], new[] { -1, 0, 1, 2, 3, 5 }.Where(YouTubeEmbed.ShowsVideo));
-        Assert.True(YouTubeEmbed.ShowsVideo(new MusicVideoDrift.Sample(3, true)));
-        Assert.False(YouTubeEmbed.ShowsVideo(new MusicVideoDrift.Sample(3, false)));
-        Assert.False(YouTubeEmbed.ShowsVideo(new MusicVideoDrift.Sample(3, true, true)));
+        Assert.True(YouTubeEmbed.ShowsPlayer(ready: true, failed: false));
+        Assert.False(YouTubeEmbed.ShowsPlayer(ready: false, failed: false));
+        Assert.False(YouTubeEmbed.ShowsPlayer(ready: true, failed: true));
+        Assert.True(YouTubeEmbed.IsPlaying(new MusicVideoDrift.Sample(3, true)));
+        Assert.False(YouTubeEmbed.IsPlaying(new MusicVideoDrift.Sample(3, false)));
+        Assert.False(YouTubeEmbed.IsPlaying(new MusicVideoDrift.Sample(3, true, true)));
 
         var session = new YouTubeEmbedSession(sleep: (_, ct) => Task.Delay(Timeout.Infinite, ct));
         var page = session.Attach("4NRXx6U8ABQ").Page;
         YouTubeEmbedSession.Effect State(int value, bool trusted = true) =>
             session.Receive(new(YouTubeEmbedSession.MessageKind.State, value, "4NRXx6U8ABQ", page), trusted);
-        Assert.Equal(YouTubeEmbedSession.Effect.Show(true), State(1));
-        Assert.Equal(YouTubeEmbedSession.Effect.Show(false), State(2));
-        Assert.Equal(YouTubeEmbedSession.Effect.Show(false), State(0));
-        Assert.Equal(YouTubeEmbedSession.Effect.Show(false), State(3));
+        // Before ready: there is no player to show yet.
+        Assert.Equal(YouTubeEmbedSession.Effect.Show(false), State(-1));
+        Assert.False(session.ShowsPlayer);
+        Assert.Equal(YouTubeEmbedSession.Effect.Ready,
+            session.Receive(new(YouTubeEmbedSession.MessageKind.Ready, 0, "4NRXx6U8ABQ", page), true));
+        Assert.True(session.ShowsPlayer);
+        // Playing, paused, ended, buffering, cued: all on screen, as YouTube draws them.
+        foreach (var state in new[] { 1, 2, 0, 3, 5, -1 })
+            Assert.Equal(YouTubeEmbedSession.Effect.Show(true), State(state));
         Assert.Equal(YouTubeEmbedSession.Effect.None, State(1, trusted: false));
         Assert.Equal(new YouTubeEmbedSession.Message(YouTubeEmbedSession.MessageKind.State, 1, "4NRXx6U8ABQ", page),
             YouTubeEmbedSession.Message.Parse("{\"type\":\"state\",\"value\":1,\"video\":\"4NRXx6U8ABQ\",\"page\":" + page + "}"));

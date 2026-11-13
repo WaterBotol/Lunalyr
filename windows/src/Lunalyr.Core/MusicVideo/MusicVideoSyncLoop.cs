@@ -1,7 +1,8 @@
 // Ported from the Mac's MusicVideoView.swift (MusicVideoPlaybackSurface, MusicVideoSyncLoop) and MusicVideoFreeze.swift
-// (MusicVideoHold, MusicVideoFrozenFrame's rules), Lunalyr's own code. The views and players around them are platform code
-// and are not translated: Windows' YouTube player is a WebView2 host (Lunalyr.App), and a local file needs no loop (its
-// frames are chosen by the song's clock, MusicVideoFrameSync). Timers are a seam, so the tests drive every check by hand.
+// (MusicVideoHold, and the long-pause rule of MusicVideoFrozenFrame), Lunalyr's own code. The frozen frame itself is not
+// kept for YouTube (see MusicVideoIdlePlayer). The views and players around them are platform code and are not
+// translated: Windows' YouTube player is a WebView2 host (Lunalyr.App), and a local file needs no loop (its frames are
+// chosen by the song's clock, MusicVideoFrameSync). Timers are a seam, so the tests drive every check by hand.
 
 namespace Lunalyr.Core.MusicVideo;
 
@@ -266,18 +267,9 @@ public sealed class MusicVideoSyncLoop
     }
 }
 
-/// <summary>What the frozen frame needs from the YouTube player around it.</summary>
-public interface IMusicVideoFreezeHost
+/// <summary>What the idle rule needs from the YouTube player around it.</summary>
+public interface IMusicVideoIdleHost
 {
-    /// <summary>A picture of the player as drawn now; null when none could be taken.</summary>
-    void CaptureFrame(Action<object?> done);
-
-    /// <summary>Shows the picture over the (hidden) player, at once.</summary>
-    void ShowFrozenFrame(object image);
-
-    /// <summary>Hides it. <paramref name="handOver"/>: the player is playing again; fade only once it has faded in.</summary>
-    void HideFrozenFrame(bool handOver);
-
     void SendPause();
 
     /// <summary>A long pause: the player is closed to save power.</summary>
@@ -288,40 +280,29 @@ public interface IMusicVideoFreezeHost
 }
 
 /// <summary>
-/// A paused YouTube video's last frame. YouTube draws a pause button and its title bar over a paused player, so the player
-/// is hidden whenever it is not playing. When the video is paused for a hold that keeps its frame, a picture of the player
-/// is taken just before it is paused and shown in its place. A drift seek takes a picture too, shown only if the seek
-/// buffers. After a long pause the player is closed; the picture stays until a new one plays.
+/// A YouTube player that has not played for a long while is closed, and opened again when the song plays. Windows keeps
+/// only this part of the Mac's MusicVideoFrozenFrame: YouTube's API policies don't allow covering or hiding the embedded
+/// player's interface, so a paused player stays on screen as YouTube draws it, with no picture taken of it or laid over it.
+/// Closing an idle player hides nothing: there is no player then, and the wallpaper shows the album colours.
 /// </summary>
-public sealed class MusicVideoFrozenFrame
+public sealed class MusicVideoIdlePlayer
 {
     /// <summary>After this long not playing, the player is closed (about 10 minutes).</summary>
     public const double DefaultLongPause = 600;
 
-    /// <summary>A seek's picture waits this long for the player to hide; a seek that lands at once drops it.</summary>
-    public const double SeekHold = 2;
-
     private readonly double _longPause;
     private readonly Func<double, Action, Action> _schedule;
-    private bool _seekCapturing;
-    private int _generation;
     private Action? _cancelLongPause;
-    private Action? _cancelSeekHold;
 
     /// <param name="schedule">Runs the work after a delay and returns a cancel; a seam for tests.</param>
-    public MusicVideoFrozenFrame(double longPause = DefaultLongPause, Func<double, Action, Action>? schedule = null)
+    public MusicVideoIdlePlayer(double longPause = DefaultLongPause, Func<double, Action, Action>? schedule = null)
     {
         _longPause = longPause;
         _schedule = schedule ?? After;
     }
 
-    public IMusicVideoFreezeHost? Host { get; set; }
+    public IMusicVideoIdleHost? Host { get; set; }
     public MusicVideoHold Hold { get; private set; } = MusicVideoHold.Live;
-    public bool PlayerShowing { get; private set; }
-    public object? Image { get; private set; }
-    public bool FrameShown { get; private set; }
-    public bool Capturing { get; private set; }
-    public bool SeekFrame { get; private set; }
     public bool Released { get; private set; }
 
     private static Action After(double delay, Action work)
@@ -334,27 +315,10 @@ public sealed class MusicVideoFrozenFrame
         return () => cts.Cancel();
     }
 
-    /// <summary>
-    /// The visibility rule. The frozen frame shows while a hold keeps it, and while live until the player plays again (a
-    /// resume, a seek that buffers); never outside the video's span.
-    /// </summary>
-    public static bool ShowsFrame(MusicVideoHold hold, bool playerShowing, bool hasImage)
-    {
-        if (!hasImage) return false;
-        return hold switch
-        {
-            MusicVideoHold.UserPaused or MusicVideoHold.WallpaperPaused or MusicVideoHold.Outgoing => true,
-            MusicVideoHold.Live => !playerShowing,
-            _ => false,
-        };
-    }
-
     /// <summary>From each check of the sync loop.</summary>
     public void NoteHold(MusicVideoHold hold)
     {
         Hold = hold;
-        // Paused for another reason: a pause takes its own, newer picture.
-        if (hold != MusicVideoHold.Live && SeekFrame) DropSeekFrame();
         if (hold == MusicVideoHold.Live)
         {
             StopLongPause();
@@ -368,135 +332,19 @@ public sealed class MusicVideoFrozenFrame
         {
             StartLongPause();
         }
-        Refresh();
     }
 
-    /// <summary>The player's state: visible (playing) or hidden.</summary>
-    public void NotePlayer(bool showing)
-    {
-        PlayerShowing = showing;
-        Refresh();
-    }
-
-    /// <summary>
-    /// The sync loop pauses the video. Paused for a hold that keeps its frame, a playing video's picture is taken first and
-    /// shown, then it is paused; anything else just pauses.
-    /// </summary>
+    /// <summary>The sync loop pauses the video: it just pauses (a closed player has nothing to pause).</summary>
     public void Pause()
     {
-        if (Capturing) return;
-        if (!Hold.KeepsFrame() || !PlayerShowing || Released || Image is not null || Host is not { } host)
-        {
-            Host?.SendPause();
-            return;
-        }
-        Capturing = true;
-        var mine = _generation;
-        host.CaptureFrame(picture =>
-        {
-            if (_generation != mine) return;
-            Capturing = false;
-            switch (Hold)
-            {
-                case MusicVideoHold.Live:
-                    // Resumed meanwhile: nothing to pause.
-                    return;
-                case MusicVideoHold.UserPaused or MusicVideoHold.WallpaperPaused or MusicVideoHold.Outgoing:
-                    if (picture is not null && Image is null) Image = picture;
-                    // Shown before the pause, so YouTube's pause button is never seen.
-                    Refresh();
-                    break;
-            }
-            Host?.SendPause();
-        });
+        if (!Released) Host?.SendPause();
     }
 
-    /// <summary>
-    /// The sync loop is about to seek the playing video. Its picture is taken now and shown only if the player hides to
-    /// buffer the seek. The seek itself is never held up for it.
-    /// </summary>
-    public void NoteSeek()
-    {
-        if (Hold != MusicVideoHold.Live || !PlayerShowing || Released || Capturing || _seekCapturing || Image is not null
-            || Host is not { } host) return;
-        _seekCapturing = true;
-        var mine = _generation;
-        host.CaptureFrame(picture =>
-        {
-            if (_generation != mine) return;
-            _seekCapturing = false;
-            if (Hold != MusicVideoHold.Live || Image is not null || picture is null) return;
-            Image = picture;
-            SeekFrame = true;
-            _cancelSeekHold?.Invoke();
-            _cancelSeekHold = _schedule(SeekHold, () =>
-            {
-                _cancelSeekHold = null;
-                if (!SeekFrame) return;
-                SeekFrame = false;
-                Refresh();
-            });
-            Refresh();
-        });
-    }
-
-    /// <summary>A new video, a failure, or the player gone: no frame.</summary>
+    /// <summary>A new video, a failure, or the player gone.</summary>
     public void Reset()
     {
-        _generation++;
-        Capturing = false;
-        _seekCapturing = false;
         StopLongPause();
-        StopSeekHold();
-        SeekFrame = false;
         Released = false;
-        Image = null;
-        PlayerShowing = false;
-        if (FrameShown)
-        {
-            FrameShown = false;
-            Host?.HideFrozenFrame(false);
-        }
-    }
-
-    private void Refresh()
-    {
-        var show = ShowsFrame(Hold, PlayerShowing, Image is not null);
-        if (show && !FrameShown && Image is { } image)
-        {
-            FrameShown = true;
-            // In use now: from here it is an ordinary frame, kept until the player plays again.
-            if (SeekFrame)
-            {
-                SeekFrame = false;
-                StopSeekHold();
-            }
-            Host?.ShowFrozenFrame(image);
-        }
-        else if (!show && FrameShown)
-        {
-            FrameShown = false;
-            Host?.HideFrozenFrame(Hold == MusicVideoHold.Live && PlayerShowing);
-        }
-        // Playing again: the picture is out of date (a seek's picture still waiting to be needed is kept for its while).
-        if (Hold == MusicVideoHold.Live && PlayerShowing && Image is not null && !SeekFrame)
-        {
-            Image = null;
-            StopLongPause();
-        }
-    }
-
-    private void DropSeekFrame()
-    {
-        SeekFrame = false;
-        StopSeekHold();
-        Image = null;
-    }
-
-    private void StopSeekHold()
-    {
-        _cancelSeekHold?.Invoke();
-        _cancelSeekHold = null;
     }
 
     private void StartLongPause()
@@ -507,7 +355,6 @@ public sealed class MusicVideoFrozenFrame
             _cancelLongPause = null;
             if (Hold == MusicVideoHold.Live || Released) return;
             Released = true;
-            PlayerShowing = false;
             Host?.ReleasePlayer();
         });
     }
@@ -516,25 +363,5 @@ public sealed class MusicVideoFrozenFrame
     {
         _cancelLongPause?.Invoke();
         _cancelLongPause = null;
-    }
-
-    /// <summary>
-    /// Whether a picture is all but black (a capture that left the video out): read on an 8 × 8 grid of BGRA pixels. Such a
-    /// picture counts as none.
-    /// </summary>
-    public static bool LooksBlank(ReadOnlySpan<byte> bgra, int width, int height, byte threshold = 6)
-    {
-        if (width <= 0 || height <= 0 || bgra.Length < width * height * 4) return false;
-        for (var gy = 0; gy < 8; gy++)
-        {
-            for (var gx = 0; gx < 8; gx++)
-            {
-                var x = Math.Min(width - 1, (int)((gx + 0.5) * width / 8));
-                var y = Math.Min(height - 1, (int)((gy + 0.5) * height / 8));
-                var i = (y * width + x) * 4;
-                if (Math.Max(bgra[i], Math.Max(bgra[i + 1], bgra[i + 2])) > threshold) return false;
-            }
-        }
-        return true;
     }
 }

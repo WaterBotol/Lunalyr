@@ -23,15 +23,12 @@ public sealed class MusicVideoLayerTests : IDisposable
         public MusicVideoInputs Inputs;
         public readonly List<(double? Duration, double Time, bool Playing)> Reports = [];
         public string? Failure;
-        public CoverArt? Frozen;
 
         public MusicVideoInputs Read() => Inputs;
 
         public void Report(string path, double? duration, double videoTime, bool playing) => Reports.Add((duration, videoTime, playing));
 
         public void Failed(string path, string reason) => Failure = reason;
-
-        public CoverArt? FrozenFrame => Frozen;
     }
 
     private static SceneSnapshot Scene(bool reduceMotion = false) => new() { Palette = Palette.Default, ReduceMotion = reduceMotion };
@@ -182,7 +179,7 @@ public sealed class MusicVideoLayerTests : IDisposable
     }
 
     [Fact]
-    public void TheYouTubeLayerIsSeeThroughWhileThePlayerPlays()
+    public void TheYouTubeLayerIsSeeThroughWhileThePlayerIsOnScreen()
     {
         var feed = new Feed { Inputs = new MusicVideoInputs(null, 3, true, 0, 0, 0, PlayerVisible: true) };
         using var layer = new YouTubeVideoLayerFactory(feed, Plain).Create();
@@ -199,18 +196,14 @@ public sealed class MusicVideoLayerTests : IDisposable
         // Nor has the settings preview (offscreen).
         DrawTransparent(layer, desktop: false);
         Assert.Equal(255, MaxAlpha(_surface.ReadPixels()));
-        // Hidden (paused, buffering): the album colours cover it.
+        // The song or the wallpaper paused: the paused player stays on screen as YouTube draws it, nothing laid over it.
+        feed.Inputs = feed.Inputs with { Playing = false };
+        DrawTransparent(layer);
+        Assert.Equal(0, MaxAlpha(_surface.ReadPixels()));
+        // No player (not ready yet, failed or closed after a long pause): the album colours.
         feed.Inputs = feed.Inputs with { PlayerVisible = false };
         DrawTransparent(layer);
         Assert.Equal(255, MaxAlpha(_surface.ReadPixels()));
-        // With a frozen frame: that picture instead.
-        var pixels = new byte[4 * 4 * 4];
-        for (var i = 0; i < pixels.Length; i += 4) (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = (10, 200, 10, 255);
-        feed.Frozen = new CoverArt(4, 4, pixels);
-        DrawTransparent(layer);
-        var frozen = _surface.ReadPixels();
-        var centre = (Height / 2 * Width + Width / 2) * 4;
-        Assert.True(frozen[centre + 1] > 150 && frozen[centre] < 60, "the frozen frame shows");
     }
 
     private void DrawTransparent(IRenderLayer layer, bool desktop = true, bool main = true)

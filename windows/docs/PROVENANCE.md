@@ -188,4 +188,6 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C`:
 
 The rules and tests are ported faithfully (`src/Lunalyr.Core/MusicVideo/`). The SwiftUI, AVPlayer and WKWebView views are
 platform code, written fresh for Direct2D and WebView2. Left out on purpose because they aren't official YouTube means:
-the results-page reader, the still-image check and the undocumented caption calls (docs/milestones/M6.md, "Music video").
+the results-page reader, the still-image check (and its pasted-still note) and the undocumented caption calls. Not kept
+for YouTube because its API policies don't allow covering the player's interface: the 1.25× overscan and the frozen
+frame (`MusicVideoFreeze.swift`'s long-pause rule alone is ported, as `MusicVideoIdlePlayer`). See docs/milestones/M6.md, "Music video".

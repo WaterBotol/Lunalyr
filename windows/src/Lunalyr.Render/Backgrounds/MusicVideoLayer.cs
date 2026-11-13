@@ -36,7 +36,7 @@ namespace Lunalyr.Render.Backgrounds;
 /// <param name="Offset">How far into the video the song starts (<see cref="MusicVideoController.CurrentOffset"/>).</param>
 /// <param name="Dim">"Video dimming", 0…0.85.</param>
 /// <param name="Blur">"Video blur", in points, 0…24.</param>
-/// <param name="PlayerVisible">YouTube's player is playing (shown); false while it is hidden.</param>
+/// <param name="PlayerVisible">YouTube's player is on screen (ready, in any state); false before that, or with no player.</param>
 public readonly record struct MusicVideoInputs(string? LocalPath, double SongTime, bool Playing, double Offset, double Dim, double Blur,
     bool PlayerVisible = false);
 
@@ -50,9 +50,6 @@ public interface IMusicVideoFeed
 
     /// <summary>The file could not be shown.</summary>
     void Failed(string path, string reason);
-
-    /// <summary>The YouTube player's last frame while it is paused (BGRA), or null.</summary>
-    CoverArt? FrozenFrame { get; }
 }
 
 /// <summary>The local file's layer, id <c>"musicVideo"</c> (the stand-in while there is no file to show).</summary>
@@ -528,8 +525,9 @@ public sealed class MusicVideoLayer : PlacedLayer
 }
 
 /// <summary>
-/// Over YouTube's player window: see-through while it plays, with the dimming, scrim and text backing on top; the frozen
-/// frame or the album's colours while it is hidden.
+/// Over YouTube's player window: see-through while the player is on screen (playing or paused, as YouTube draws it), with
+/// the dimming, scrim and text backing on top; the album's colours while there is no player. Nothing is drawn in place of
+/// a paused player: YouTube's API policies don't allow covering its interface.
 /// </summary>
 public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
 {
@@ -539,14 +537,10 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
     private readonly IMusicVideoFeed _feed;
     private readonly WallpaperShadeDrawer _shade;
     private readonly MusicVideoStandIn _standIn = new();
-    private readonly MusicVideoPicture _picture = new();
     private readonly Logger _log;
     private Vector2 _size;
-    private float _scale = 1;
     private bool _ready, _failed;
     private double _lastNow;
-    private CoverArt? _frozen;
-    private ID2D1Bitmap1? _frozenBitmap;
 
     internal YouTubeVideoLayer(IMusicVideoFeed feed, BackgroundOptions options, Logger log)
     {
@@ -561,7 +555,6 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
         _size = size;
-        _scale = scale;
         _shade.CreateResources(dc, size, scale);
         _ready = true;
         _failed = false;
@@ -570,7 +563,6 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
     public void Resize(Vector2 size, float scale)
     {
         _size = size;
-        _scale = scale;
         _shade.Resize(size, scale);
     }
 
@@ -583,14 +575,8 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         {
             var inputs = _feed.Read();
             // Only the main display's desktop surface has the player's window beneath it (the engine passes AheadWork and
-            // IsMainDisplay there): other displays and the offscreen settings preview show the album colours or the frozen frame.
-            if (!inputs.PlayerVisible || frame.AheadWork is null || !frame.IsMainDisplay)
-            {
-                var frozen = _feed.FrozenFrame;
-                if (frozen is not null && !ReferenceEquals(frozen, _frozen)) Upload(dc, frozen);
-                if (frozen is not null && _frozenBitmap is not null) _picture.Draw(dc, _frozenBitmap, frozen.Width, frozen.Height, _size, 0, _scale);
-                else _standIn.Draw(dc, frame.Scene.Palette, _size);
-            }
+            // IsMainDisplay there): other displays and the offscreen settings preview show the album colours.
+            if (!inputs.PlayerVisible || frame.AheadWork is null || !frame.IsMainDisplay) _standIn.Draw(dc, frame.Scene.Palette, _size);
             _standIn.Dim(dc, inputs.Dim, _size);
             _shade.Draw(frame, AssumedLuminance, scrim: true, grain: false);
         }
@@ -601,23 +587,8 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         }
     }
 
-    private unsafe void Upload(ID2D1DeviceContext dc, CoverArt picture)
-    {
-        _frozenBitmap?.Dispose();
-        _frozen = picture;
-        fixed (byte* pixels = picture.Pixels)
-        {
-            _frozenBitmap = dc.CreateBitmap(new SizeI(picture.Width, picture.Height), (IntPtr)pixels, (uint)(picture.Width * 4),
-                new BitmapProperties1(new PixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Ignore), 96, 96, BitmapOptions.None));
-        }
-    }
-
     public void ReleaseResources()
     {
-        _frozenBitmap?.Dispose();
-        _frozenBitmap = null;
-        _frozen = null;
-        _picture.Release();
         _standIn.Release();
         _shade.ReleaseResources();
         _ready = false;

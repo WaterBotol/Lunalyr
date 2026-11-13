@@ -3,7 +3,7 @@
 // - YouTube is searched through the YouTube Data API with the owner's key (YouTubeDataApi), not youtube.com's page;
 //   without a key Search YouTube reports NoApiKey, a refused key KeyRejected and a used-up quota QuotaExceeded.
 // - The Mac's still-image check (it fetches YouTube's numbered stills, an undocumented address) is not ported: the best
-//   official candidate is used as it is.
+//   official candidate is used as it is, and a pasted still-image upload gets no note (the Mac's pastedStillNote).
 // - The library is a file the user chose for the song (MusicVideoFiles), not Apple Music's AppleScript library.
 
 namespace Lunalyr.Core.MusicVideo;

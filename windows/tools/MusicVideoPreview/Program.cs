@@ -116,5 +116,4 @@ internal sealed class Feed : IMusicVideoFeed
 
     public void Failed(string path, string reason) => Console.Error.WriteLine($"failed: {reason}");
 
-    public CoverArt? FrozenFrame => null;
 }

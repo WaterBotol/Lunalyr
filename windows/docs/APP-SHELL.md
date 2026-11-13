@@ -769,8 +769,13 @@ WallpaperPage.MusicVideo.cs`, `App/Player/*Align*.cs`, `App/Tray/TrayFlyout.Musi
 **What isn't ported, because the Mac's means aren't official:** reading youtube.com's results page (`ytInitialData`)
 with a browser's User-Agent; the "verified artist" badge (only that page shows it, so a label's channel never counts on
 Windows); the still-image check (it reads YouTube's undocumented numbered stills, `1.jpg`–`3.jpg`), so a found video is
-used without it and a pasted still isn't flagged; the player's undocumented caption calls (`unloadModule`, `setOption`);
-building thumbnail addresses by hand (only stills the API returned are shown).
+used without it, and the Mac's note for a pasted still-image upload is dropped; the player's undocumented caption calls
+(`unloadModule`, `setOption`); building thumbnail addresses by hand (only stills the API returned are shown).
+
+**Not kept for YouTube, because YouTube's API policies don't allow obscuring, cropping or covering the embedded player's
+interface:** the Mac's 1.25× overscan (it draws the player larger and clips it, to push YouTube's title bar and logo off
+screen) and its frozen frame (it hides a paused player and lays a picture of its last frame in its place). Video files
+keep both: they fill the screen (cropping the edges, with the blur's small overscan) and hold their frame when paused.
 
 **The YouTube Data API key** is the owner's own: Google Cloud Console › a project › enable "YouTube Data API v3" ›
 Credentials › API key (restricted to that API). Pasted in Settings › Wallpaper › Music video › YouTube Data API key; kept
@@ -787,15 +792,17 @@ refused key says so and isn't retried until it changes.
   fidelity only). Paused, covered or hidden wallpapers hold it; under Reduce Motion it holds its first frame. Every
   display decodes its own copy.
 - **YouTube (not verified live):** a WebView2 in a disabled `WS_CHILD` window under `Progman`, the size of the main
-  display's wallpaper surface and just beneath it; that surface draws `musicVideo.youtube`, see-through while the
-  player plays (dimming, scrim and backing over it), the album colours or the frozen last frame while it is hidden
-  (YouTube draws its controls over a paused player). The browser runs with `--mute-audio`, the WebView2 is muted
+  display's wallpaper surface and just beneath it. The player fills that window as YouTube draws it, fitted
+  (letterboxed) without cropping, and is on screen in every state once it is ready: playing, paused (the song or the
+  wallpaper), buffering or ended, with YouTube's own interface when YouTube draws it. The surface draws
+  `musicVideo.youtube`, see-through while the player is on screen (dimming, scrim and backing over it), and the album
+  colours while there is no player (loading, failed, closed). The browser runs with `--mute-audio`, the WebView2 is muted
   (`CoreWebView2.IsMuted`) before it loads anything, and the page mutes the player before every play, seek and sample.
   InPrivate profile under `{data}\MusicVideo\WebView2`, the page served from a virtual https host, no other
   navigation, no new windows, every permission denied. Steered by the ported sync loop (led seeks with hysteresis,
   `MusicVideoCorrector`), embed session (ready timeout, error codes, crash reloads, a stuck player falls back) and
-  frozen frame (`CapturePreviewAsync`; the player closes after ten minutes not playing). Other displays show the album
-  colours. Never built under `--demo`, `--no-network` or `--no-playback`.
+  idle rule (`MusicVideoIdlePlayer`: after ten minutes not playing the player is closed, and opened again when the song
+  plays). Other displays show the album colours. Never built under `--demo`, `--no-network` or `--no-playback`.
 - **The settings preview** draws the file, or for YouTube the album colours (it never starts a second player).
 
 **Timing** (`MusicVideoOffsets`, per recording and per video, in `{data}\music-video.json`): the user's offset wins

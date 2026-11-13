@@ -1,11 +1,10 @@
-using Lunalyr.Core.Colour;
 using Lunalyr.Render.Backgrounds;
 
 namespace Lunalyr.Shell.MusicVideo;
 
 /// <summary>
 /// What the music video layers read every frame, filled by the app controller (<c>AppController.MusicVideo.cs</c>) and
-/// by YouTube's player host (whether it is playing, its frozen frame). The layers are registered before the controller
+/// by YouTube's player host (whether its player is on screen). The layers are registered before the controller
 /// exists (<c>WallpaperLayers</c>), so they hold this and the controller attaches itself; until then they draw the album
 /// colours with nothing playing.
 /// </summary>
@@ -16,7 +15,6 @@ public sealed class MusicVideoFeed : IMusicVideoFeed
 
     private volatile Reader? _reader;
     private volatile bool _playerVisible;
-    private volatile CoverArt? _frozen;
 
     private sealed record Reader(Func<MusicVideoInputs> Read, Action<string, double?, double, bool> Report, Action<string, string> Failed);
 
@@ -25,18 +23,11 @@ public sealed class MusicVideoFeed : IMusicVideoFeed
 
     public void Detach() => _reader = null;
 
-    /// <summary>YouTube's player is playing and shown (set by its host).</summary>
+    /// <summary>YouTube's player is on screen, in any state (set by its host).</summary>
     public bool PlayerVisible
     {
         get => _playerVisible;
         set => _playerVisible = value;
-    }
-
-    /// <summary>YouTube's last frame while it is paused, or null (set by its host).</summary>
-    public CoverArt? FrozenFrame
-    {
-        get => _frozen;
-        set => _frozen = value;
     }
 
     public MusicVideoInputs Read()

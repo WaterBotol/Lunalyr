@@ -1,11 +1,15 @@
 // YouTube's player for the Music video wallpaper: the Windows counterpart of the Mac's YouTubeMusicVideoCoordinator
 // (MusicVideoView.swift, Lunalyr's own code), re-implemented for WebView2. NOT VERIFIED LIVE: the development rules forbid
 // loading YouTube, so this has only been compiled; its decisions (YouTubeEmbedSession, MusicVideoSyncLoop,
-// MusicVideoFrozenFrame, YouTubeEmbed) are the tested Core types.
+// MusicVideoIdlePlayer, YouTubeEmbed) are the tested Core types.
 //
 // - Where: a disabled WS_CHILD window under Progman, the size of the main display's wallpaper surface and just beneath it
 //   in z-order (above Windows' own wallpaper). The surface draws the "musicVideo.youtube" layer, which is see-through
-//   while the player plays, so the video shows through it under the lyrics. Disabled: it takes no clicks or keys.
+//   while the player is on screen, so the video shows through it under the lyrics. Disabled: it takes no clicks or keys.
+// - As YouTube draws it: the player fills the window, fitted without cropping, and is on screen in every state once it is
+//   ready (paused included, with YouTube's own interface). Nothing is laid over it to hide that interface: YouTube's API
+//   policies don't allow obscuring, cropping or covering the embedded player's interface (the Mac's overscan and frozen
+//   frame are not kept for YouTube). After ten minutes not playing, the player is closed and the album colours show.
 // - Silence does not rest on YouTube: the browser runs with Chromium's --mute-audio, the WebView2 is muted
 //   (CoreWebView2.IsMuted) before anything is loaded, and the page mutes the player again before every play, seek and
 //   sample. The profile is InPrivate (no cookies kept), the page is served from a virtual https host, it may not navigate
@@ -14,10 +18,8 @@
 
 using System.Runtime.InteropServices;
 using System.Text;
-using Lunalyr.Core.Colour;
 using Lunalyr.Core.Logging;
 using Lunalyr.Core.MusicVideo;
-using Lunalyr.Platform.Imaging;
 using Lunalyr.Render;
 using Lunalyr.Render.Pacing;
 using Lunalyr.Shell;
@@ -29,7 +31,7 @@ using Windows.Storage.Streams;
 
 namespace Lunalyr.App.MusicVideo;
 
-internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface, IMusicVideoFreezeHost, IDisposable
+internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface, IMusicVideoIdleHost, IDisposable
 {
     private const string WindowClass = "LunalyrYouTubeHost";
 
@@ -42,7 +44,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private readonly Func<AppSettings> _settings;
     private readonly CategoryLogger _log;
     private readonly YouTubeEmbedSession _session = new();
-    private readonly MusicVideoFrozenFrame _freeze;
+    private readonly MusicVideoIdlePlayer _idle;
     private readonly MusicVideoSyncLoop _loop;
 
     private nint _hwnd;
@@ -55,8 +57,6 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private int _pageNumber;
     private double _pageStart;
     private MusicVideoHold _hold = MusicVideoHold.Other;
-    private bool _playerVisible;
-    private DispatcherQueueTimer? _pendingHide;
     private DispatcherQueueTimer? _placement;
     private bool _disposed;
 
@@ -71,7 +71,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         _userData = userDataFolder;
         _settings = settings;
         _log = log.App;
-        _freeze = new MusicVideoFrozenFrame(schedule: (delay, work) =>
+        _idle = new MusicVideoIdlePlayer(schedule: (delay, work) =>
         {
             var timer = ui.CreateTimer();
             timer.Interval = TimeSpan.FromSeconds(delay);
@@ -121,7 +121,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
             Close();
             return;
         }
-        if (wanted != _videoId) _freeze.Reset();
+        if (wanted != _videoId) _idle.Reset();
         _videoId = wanted;
         _loop.IsCurrent = () => _video.IsShowing(new MusicVideoSource.YouTube(wanted));
         _loop.OnDuration = length => _video.NoteVideoDuration(length, new MusicVideoSource.YouTube(wanted));
@@ -238,17 +238,17 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         if (YouTubeEmbedSession.Message.Parse(e.WebMessageAsJson) is not { } message) return;
         var source = Uri.TryCreate(e.Source, UriKind.Absolute, out var uri) ? uri : null;
         var trusted = source is not null && YouTubeEmbed.Trusts(true, source.Scheme, source.Host);
-        var buffering = message is { Kind: YouTubeEmbedSession.MessageKind.State, Value: 3 };
-        Perform(_session.Receive(message, trusted), buffering);
+        Perform(_session.Receive(message, trusted));
     }
 
-    private void Perform(YouTubeEmbedSession.Effect effect, bool buffering = false)
+    private void Perform(YouTubeEmbedSession.Effect effect)
     {
         if (_disposed) return;
         switch (effect.Kind)
         {
             case YouTubeEmbedSession.EffectKind.Ready:
                 ApplyBlur();
+                Show(_session.ShowsPlayer);
                 _loop.Tick();
                 break;
             case YouTubeEmbedSession.EffectKind.Load when _controller is not null:
@@ -258,11 +258,11 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
                 _controller.CoreWebView2.Navigate(YouTubeEmbed.PageUrl(effect.Page).AbsoluteUri);
                 break;
             case YouTubeEmbedSession.EffectKind.Visible:
-                SetVisible(effect.Visible, buffering);
+                Show(effect.Visible);
                 break;
             case YouTubeEmbedSession.EffectKind.Fail when effect.VideoId is { } id:
-                SetVisible(false);
-                _freeze.Reset();
+                Show(false);
+                _idle.Reset();
                 Run("window.lunalyrPause && window.lunalyrPause()");
                 _log.Info($"Music video: YouTube's player couldn't show the video ({effect.Failure}).");
                 _video.ReportPlaybackFailure(new MusicVideoSource.YouTube(id), effect.Failure);
@@ -271,41 +271,11 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     }
 
     /// <summary>
-    /// The player shows only while it plays; a playing video that starts buffering stays up for a short grace (hidden at
-    /// once when a picture covers it). The wallpaper's layer draws the stand-in or the frozen frame while it is hidden.
+    /// The player is on screen from ready until it fails or closes, in every state, as YouTube draws it
+    /// (<see cref="YouTubeEmbed.ShowsPlayer"/>); the wallpaper's layer is see-through over it exactly then.
     /// </summary>
-    private void SetVisible(bool visible, bool buffering = false)
-    {
-        if (visible)
-        {
-            _pendingHide?.Stop();
-            _freeze.NotePlayer(true);
-            Show(true);
-            return;
-        }
-        var delay = YouTubeEmbed.HideDelay(buffering, _hold, _freeze.Image is not null);
-        if (delay > 0 && _playerVisible)
-        {
-            if (_pendingHide is { IsRunning: true }) return;
-            _pendingHide = _ui.CreateTimer();
-            _pendingHide.Interval = TimeSpan.FromSeconds(delay);
-            _pendingHide.IsRepeating = false;
-            _pendingHide.Tick += (_, _) =>
-            {
-                _freeze.NotePlayer(false);
-                Show(false);
-            };
-            _pendingHide.Start();
-            return;
-        }
-        _pendingHide?.Stop();
-        _freeze.NotePlayer(false);
-        Show(false);
-    }
-
     private void Show(bool visible)
     {
-        _playerVisible = visible;
         _feed.PlayerVisible = visible;
         if (_controller is not null) _controller.IsVisible = visible;
     }
@@ -332,10 +302,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     public void NoteHold(MusicVideoHold hold)
     {
-        // The wallpaper paused, covered or hidden pauses the video too (and holds its frame).
+        // The wallpaper paused, covered or hidden pauses the video too (shown paused, as YouTube draws it).
         _loop.SetSurfacePaused(SurfacePaused());
         _hold = hold;
-        _freeze.NoteHold(hold);
+        _idle.NoteHold(hold);
     }
 
     /// <summary>Tells the sync loop whether the wallpaper is paused, covered or hidden (from outside the loop, which may rest).</summary>
@@ -374,10 +344,9 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
             done(null, null);
             return;
         }
-        // Also from each sample, in case a state message was missed.
-        var showing = YouTubeEmbed.ShowsVideo(read.Sample);
-        SetVisible(_session.Ready && showing, read.Sample.Buffering);
-        var stuck = _session.NotePlayback(_hold == MusicVideoHold.Live, showing, Environment.TickCount64 / 1000.0);
+        // Also from each sample, in case a message was missed.
+        Show(_session.ShowsPlayer);
+        var stuck = _session.NotePlayback(_hold == MusicVideoHold.Live, YouTubeEmbed.IsPlaying(read.Sample), Environment.TickCount64 / 1000.0);
         if (stuck.Kind != YouTubeEmbedSession.EffectKind.None)
         {
             Perform(stuck);
@@ -389,47 +358,15 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     public void PlayVideo() => Run("window.lunalyrPlay()");
 
-    /// <summary>A pause that keeps the frame takes it first (MusicVideoFrozenFrame).</summary>
-    public void PauseVideo() => _freeze.Pause();
+    /// <summary>Just pauses: the paused player stays on screen as YouTube draws it.</summary>
+    public void PauseVideo() => _idle.Pause();
 
     public void SeekVideo(double seconds)
     {
-        _freeze.NoteSeek();
         Run($"window.lunalyrSeek({seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)})");
     }
 
-    // ---- IMusicVideoFreezeHost ----
-
-    public async void CaptureFrame(Action<object?> done)
-    {
-        if (_controller is null)
-        {
-            done(null);
-            return;
-        }
-        try
-        {
-            using var stream = new InMemoryRandomAccessStream();
-            await _controller.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
-            var bytes = new byte[stream.Size];
-            stream.Seek(0);
-            using (var reader = new DataReader(stream))
-            {
-                await reader.LoadAsync((uint)stream.Size);
-                reader.ReadBytes(bytes);
-            }
-            var picture = await Task.Run(() => ArtworkDecoder.DecodeCover(bytes, 1920));
-            done(picture is not null && !MusicVideoFrozenFrame.LooksBlank(picture.Pixels, picture.Width, picture.Height) ? picture : null);
-        }
-        catch (Exception ex) when (ex is COMException or InvalidOperationException)
-        {
-            done(null);
-        }
-    }
-
-    public void ShowFrozenFrame(object image) => _feed.FrozenFrame = image as CoverArt;
-
-    public void HideFrozenFrame(bool handOver) => _feed.FrozenFrame = null;
+    // ---- IMusicVideoIdleHost ----
 
     public void SendPause() => Run("window.lunalyrPause()");
 
@@ -525,7 +462,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     {
         _loop.Stop();
         _session.Stop();
-        _freeze.Reset();
+        _idle.Reset();
         _videoId = null;
         CloseWebView();
         _placement?.Stop();
@@ -535,7 +472,6 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     private void CloseWebView()
     {
-        _pendingHide?.Stop();
         Show(false);
         _controller?.Close();
         _controller = null;
