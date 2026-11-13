@@ -354,7 +354,7 @@ Still stuck? [Open a bug report](https://github.com/WaterBotol/Lunalyr/issues/ne
 ## Privacy
 
 - Lunalyr has no accounts, and no tracking, analytics or ads. It never uses your microphone, and the sound it uses for visualisers is analysed on your Mac and never recorded.
-- To find lyrics, it sends the playing song's title, artist, album and length to the lyric services you have turned on. It also asks Apple's iTunes search for album covers, and downloads typefaces from Google Fonts.
+- To find lyrics, it sends the playing song's title, artist, album and length to the lyric services you have turned on. It also asks Apple's iTunes search for album covers, may ask MusicBrainz for an artist's name in Chinese, Japanese or Korean, and downloads typefaces from Google Fonts.
 - Everything else is off until you turn it on: Discord status, YouTube search for music videos, translation, listen-along, web players in browsers, and checking for updates.
 
 The full detail, service by service, is in [PRIVACY.md](PRIVACY.md).
