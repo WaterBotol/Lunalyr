@@ -7,7 +7,8 @@ namespace Lunalyr.Core.Lyrics.Ranking;
 /// <summary>A MusicBrainz artist search reply (<c>/ws/2/artist?query="…"&amp;limit=5&amp;fmt=json</c>), reduced to what alias picking reads.</summary>
 public sealed record ArtistAliasReply(IReadOnlyList<ArtistAliasReply.Artist> Artists)
 {
-    public sealed record Artist(string Name, int? Score, IReadOnlyList<Alias>? Aliases);
+    /// <param name="Country">MusicBrainz's country code for the artist ("JP"), when it has one.</param>
+    public sealed record Artist(string Name, int? Score, IReadOnlyList<Alias>? Aliases, string? Country = null);
 
     public sealed record Alias(string Name, string? Locale, bool? Primary);
 
@@ -22,7 +23,8 @@ public sealed record ArtistAliasReply(IReadOnlyList<ArtistAliasReply.Artist> Art
                 return null;
             }
             return new ArtistAliasReply([.. dto.Artists.Where(a => a.Name is not null).Select(a => new Artist(a.Name!, a.Score,
-                a.Aliases?.Where(alias => alias.Name is not null).Select(alias => new Alias(alias.Name!, alias.Locale, alias.Primary)).ToList()))]);
+                a.Aliases?.Where(alias => alias.Name is not null).Select(alias => new Alias(alias.Name!, alias.Locale, alias.Primary)).ToList(),
+                string.IsNullOrWhiteSpace(a.Country) ? null : a.Country.Trim()))]);
         }
         catch (JsonException)
         {
@@ -75,9 +77,12 @@ public sealed class ArtistAliases
     private readonly IArtistAliasSearch _search;
     private readonly TimeProvider _time;
     private readonly Lock _gate = new();
-    private readonly Dictionary<string, Task<IReadOnlyList<string>?>> _inFlight = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<Found?>> _inFlight = new(StringComparer.Ordinal);
     private Dictionary<string, ArtistAliasEntryDto>? _entries;
     private DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
+
+    /// <summary>What one MusicBrainz answer gave: the other names, and the artist's country ("" when it has none).</summary>
+    private sealed record Found(IReadOnlyList<string> Names, string Country);
 
     /// <param name="folder">Where <c>ArtistAliases.json</c> lives (the app's data folder).</param>
     public ArtistAliases(string folder, IArtistAliasSearch search, TimeProvider? timeProvider = null)
@@ -88,19 +93,30 @@ public sealed class ArtistAliases
     }
 
     /// <summary>Up to two other names for <paramref name="artist"/>, native scripts first. Empty when MusicBrainz has none or cannot tell which artist this is.</summary>
-    public async Task<IReadOnlyList<string>> NamesAsync(string artist, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> NamesAsync(string artist, CancellationToken cancellationToken = default) =>
+        (await LookUpAsync(artist, needsCountry: false, cancellationToken).ConfigureAwait(false))?.Names ?? [];
+
+    /// <summary>
+    /// MusicBrainz's country code for <paramref name="artist"/> ("JP"), from the same request and cache entry as its
+    /// other names; null when MusicBrainz names none, cannot tell which artist this is, or could not be asked. Entries
+    /// stored before countries were kept are asked again.
+    /// </summary>
+    public async Task<string?> CountryAsync(string artist, CancellationToken cancellationToken = default) =>
+        (await LookUpAsync(artist, needsCountry: true, cancellationToken).ConfigureAwait(false))?.Country is { Length: > 0 } country ? country : null;
+
+    private async Task<Found?> LookUpAsync(string artist, bool needsCountry, CancellationToken cancellationToken)
     {
         var key = LyricQuery.Normalize(artist);
         if (key.Length == 0)
         {
-            return [];
+            return null;
         }
-        Task<IReadOnlyList<string>?> request;
+        Task<Found?> request;
         lock (_gate)
         {
-            if (Load().TryGetValue(key, out var entry) && _time.GetUtcNow() - entry.StoredAt < Lifetime)
+            if (Load().TryGetValue(key, out var entry) && _time.GetUtcNow() - entry.StoredAt < Lifetime && (!needsCountry || entry.Country is not null))
             {
-                return entry.Names;
+                return new Found(entry.Names, entry.Country ?? "");
             }
             if (!_inFlight.TryGetValue(key, out request!))
             {
@@ -108,10 +124,10 @@ public sealed class ArtistAliases
                 _inFlight[key] = request;
             }
         }
-        return await request.WaitAsync(cancellationToken).ConfigureAwait(false) ?? [];
+        return await request.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<IReadOnlyList<string>?> RequestAndStoreAsync(string key, string artist)
+    private async Task<Found?> RequestAndStoreAsync(string key, string artist)
     {
         await Task.Yield();
         try
@@ -143,9 +159,9 @@ public sealed class ArtistAliases
             {
                 return null;
             }
-            var names = Pick(reply, artist);
-            Store(key, names);
-            return names;
+            var found = new Found(Pick(reply, artist), Matched(reply, artist)?.Country ?? "");
+            Store(key, found);
+            return found;
         }
         finally
         {
@@ -159,12 +175,10 @@ public sealed class ArtistAliases
     /// <summary>The other names of the one artist that <paramref name="artist"/> names. Two strong matches mean two artists share the name, and nothing is guessed.</summary>
     public static IReadOnlyList<string> Pick(ArtistAliasReply reply, string artist)
     {
-        var matches = reply.Artists.Where(found => (found.Score ?? 0) >= 90 && Named(found)).ToList();
-        if (matches.Count != 1)
+        if (Matched(reply, artist) is not { } match)
         {
             return [];
         }
-        var match = matches[0];
         var ranked = new List<(string Name, int Rank)> { (match.Name, 1) };
         foreach (var alias in match.Aliases ?? [])
         {
@@ -187,6 +201,17 @@ public sealed class ArtistAliases
             }
         }
         return names;
+    }
+
+    /// <summary>
+    /// The one artist <paramref name="artist"/> names: scored 90 or more, with a name or alias that is the same name.
+    /// Null when there is none, or two (two artists share the name).
+    /// </summary>
+    public static ArtistAliasReply.Artist? Matched(ArtistAliasReply reply, string artist)
+    {
+        ArgumentNullException.ThrowIfNull(reply);
+        var matches = reply.Artists.Where(found => (found.Score ?? 0) >= 90 && Named(found)).ToList();
+        return matches.Count == 1 ? matches[0] : null;
 
         bool Named(ArtistAliasReply.Artist found) =>
             new[] { found.Name }.Concat((found.Aliases ?? []).Select(a => a.Name)).Any(name => LyricQuery.Similarity(name, artist) >= 0.95);
@@ -277,14 +302,14 @@ public sealed class ArtistAliases
         return _entries;
     }
 
-    private void Store(string key, IReadOnlyList<string> names)
+    private void Store(string key, Found found)
     {
         byte[] bytes;
         lock (_gate)
         {
             var now = _time.GetUtcNow();
             var all = Load().Where(pair => now - pair.Value.StoredAt < Lifetime).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-            all[key] = new ArtistAliasEntryDto { Names = [.. names], StoredAt = now };
+            all[key] = new ArtistAliasEntryDto { Names = [.. found.Names], Country = found.Country, StoredAt = now };
             if (all.Count > MaxEntries)
             {
                 foreach (var old in all.OrderBy(pair => pair.Value.StoredAt).Take(all.Count - MaxEntries).ToList())
@@ -326,6 +351,9 @@ internal sealed class MusicBrainzArtistDto
 
     [JsonPropertyName("aliases")]
     public List<MusicBrainzAliasDto>? Aliases { get; set; }
+
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
 }
 
 internal sealed class MusicBrainzAliasDto
