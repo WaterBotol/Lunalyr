@@ -5,6 +5,19 @@ namespace Lunalyr.Render.Tests;
 public sealed class FramePacingTests
 {
     [Theory]
+    [InlineData(120, FrameRateCap.Fps60)]
+    [InlineData(60, FrameRateCap.Fps30)]
+    [InlineData(240, FrameRateCap.Fps60)]
+    public void ACompositionSwapChainAlwaysPacesOnTheGrid(int hz, FrameRateCap cap)
+    {
+        // Measured live: a sync interval of 2 on a composition swap chain still drew a 120 Hz panel at 120 fps.
+        var plan = FramePacing.Plan(hz, cap, syncIntervalPaces: false);
+        Assert.Equal(1u, plan.SyncInterval);
+        Assert.Equal(1.0 / (int)cap, plan.GatePeriod, 9);
+        Assert.False(FramePacing.Plan(60, FrameRateCap.Fps60, syncIntervalPaces: false).IsGated); // at the refresh rate: no gate
+    }
+
+    [Theory]
     [InlineData(60, FrameRateCap.Fps60, 1u)]
     [InlineData(60, FrameRateCap.Fps30, 2u)]
     [InlineData(60, FrameRateCap.Fps15, 4u)]

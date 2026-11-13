@@ -608,7 +608,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         var clock = _renderer.Clock!;
         Assert.True(clock().Playing);
         _time.AdvanceSeconds(2);
-        Assert.Equal(32, clock().Seconds, 2);
+        Assert.Equal(32 + AppController.SyncLead, clock().Seconds, 2); // the lyrics run a little ahead while playing
 
         session.SetPlayback(PlaybackStatus.Paused);
         _time.AdvanceSeconds(5);
@@ -620,7 +620,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         session.SetPlayback(PlaybackStatus.Playing);
         _time.AdvanceSeconds(1);
         Assert.True(clock().Playing);
-        Assert.Equal(33, clock().Seconds, 2);
+        Assert.Equal(33 + AppController.SyncLead, clock().Seconds, 2);
     }
 
     [Fact]
@@ -631,15 +631,15 @@ public sealed class AppControllerTests : IAsyncDisposable
         var controller = Controller(new AppSettings { LyricOffset = 0.5 });
         controller.Start();
         await controller.WhenIdleAsync();
-        Assert.Equal(30.5, _renderer.Clock!().Seconds, 3);
+        Assert.Equal(30.5 + AppController.SyncLead, _renderer.Clock!().Seconds, 3);
 
         // A song offset tuned to the source on screen.
         var key = new LyricQuery("Song", "Artist", "Album", 200).RecordingKey;
         _offsets.Set(1.25, key, "LRCLIB");
-        Assert.Equal(31.75, _renderer.Clock!().Seconds, 3);
+        Assert.Equal(31.75 + AppController.SyncLead, _renderer.Clock!().Seconds, 3);
 
         controller.ApplySettings(controller.Settings with { LyricOffset = -1 });
-        Assert.Equal(30.25, _renderer.Clock!().Seconds, 3);
+        Assert.Equal(30.25 + AppController.SyncLead, _renderer.Clock!().Seconds, 3);
     }
 
     [Fact]

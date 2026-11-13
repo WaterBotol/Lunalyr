@@ -270,8 +270,17 @@ public sealed partial class AppController : IAsyncDisposable
     }
 
     /// <summary>
-    /// The lyric time for the renderer: the player's position plus the global and this song's offsets, and whether it
-    /// is moving; NaN when nothing is playing or the player gives no position. Called every frame: no allocation.
+    /// How far ahead of the player's position the lyrics run while playing (the Mac's <c>NowPlayingMonitor.syncLead</c>,
+    /// Lunalyr's own line): the player says where it was and the sound is buffered a little behind that, so a small
+    /// lead lands the highlight on the beat instead of just after it. Not applied to the music video, whose offsets are
+    /// measured against the song itself (<see cref="ReadSongPosition"/>).
+    /// </summary>
+    public const double SyncLead = 0.16;
+
+    /// <summary>
+    /// The lyric time for the renderer: the player's position plus the global and this song's offsets (and
+    /// <see cref="SyncLead"/> while playing), and whether it is moving; NaN when nothing is playing or the player gives
+    /// no position. Called every frame: no allocation.
     /// </summary>
     public (double Seconds, bool Playing) ReadClock()
     {
@@ -280,7 +289,8 @@ public sealed partial class AppController : IAsyncDisposable
         if (!reading.HasTimeline) return (double.NaN, false);
         var key = Volatile.Read(ref _recordingKey);
         var song = key is null ? 0 : _offsets.OffsetFor(key);
-        return (SongOffsets.LyricTime(reading.Position.TotalSeconds, Volatile.Read(ref _globalOffset), song), reading.IsPlaying);
+        var position = reading.Position.TotalSeconds + (reading.IsPlaying ? SyncLead : 0);
+        return (SongOffsets.LyricTime(position, Volatile.Read(ref _globalOffset), song), reading.IsPlaying);
     }
 
     /// <summary>Takes in changed settings: style, layers, frame rate, offset, pause, readings, and the lyric sources.</summary>

@@ -250,7 +250,7 @@ public sealed partial class RenderEngine
                 _ => SurfaceActivity.ForWallpaper(system, aligned && i < desktop!.Monitors.Count ? desktop.Monitors[i] : default,
                     perf.PauseWhenCovered, perf.PauseWallpaper),
             };
-            var plan = FramePacing.Plan(s.Window.Monitor.RefreshHz, rate);
+            var plan = FramePacing.Plan(s.Window.Monitor.RefreshHz, rate, syncIntervalPaces: s.Composition is null);
             if (plan != s.Plan || rate != s.Rate)
             {
                 s.Plan = plan;

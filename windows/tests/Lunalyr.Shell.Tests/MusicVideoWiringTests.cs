@@ -100,7 +100,7 @@ public sealed class MusicVideoWiringTests : IAsyncDisposable
         Assert.Equal(VideoFile, inputs.LocalPath);
         // The player's own position: not the lyrics' clock, which runs half a second early here.
         Assert.Equal(30, inputs.SongTime, 1);
-        Assert.Equal(app.ReadClock().Seconds - 0.5, inputs.SongTime, 1);
+        Assert.Equal(app.ReadClock().Seconds - 0.5 - AppController.SyncLead, inputs.SongTime, 1); // nor its lead
         video.NudgeOffset(5);
         Assert.Equal(5, _feed.Read().Offset);
         Assert.Equal(0.35, inputs.Dim);

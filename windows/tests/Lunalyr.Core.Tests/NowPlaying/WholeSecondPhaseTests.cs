@@ -35,6 +35,23 @@ public sealed class WholeSecondPhaseTests
     }
 
     [Fact]
+    public void ASongThatStartsAtZeroIsRightFromItsFirstSecond()
+    {
+        // A new song reports 0:00 the moment it begins (truth 0.02 s), then the usual cadence.
+        var phase = new WholeSecondPhase();
+        double worst = 0;
+        for (var i = 0; i < 12; i++)
+        {
+            var t = i * 1.024;
+            var truth = 0.02 + t;
+            var reported = TimeSpan.FromSeconds(Math.Floor(truth));
+            var corrected = reported.TotalSeconds + phase.Correct(reported, Ticks(t), Frequency, playing: true, rate: 1).TotalSeconds;
+            if (i >= WholeSecondPhase.WholeSnapshotsRequired) worst = Math.Max(worst, Math.Abs(truth - corrected));
+        }
+        Assert.True(worst < 0.08, $"within 80 ms from the start of the song (was {worst:0.###})");
+    }
+
+    [Fact]
     public void PrecisePositionsAreLeftAlone()
     {
         var phase = new WholeSecondPhase();

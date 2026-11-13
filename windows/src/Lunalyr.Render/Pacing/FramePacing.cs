@@ -27,11 +27,16 @@ public static class FramePacing
     /// time grid at sync interval 1, which averages exactly the cap with at most one refresh of jitter.
     /// A cap at or above the refresh rate is the refresh rate.
     /// </summary>
-    public static PacingPlan Plan(double refreshHz, FrameRateCap cap)
+    /// <param name="syncIntervalPaces">
+    /// False for a DirectComposition swap chain: measured live (13 Nov 2026), a sync interval of 2 there still let a
+    /// 120 Hz panel draw at its full refresh, so such a surface always paces on the time grid.
+    /// </param>
+    public static PacingPlan Plan(double refreshHz, FrameRateCap cap, bool syncIntervalPaces = true)
     {
         if (cap == FrameRateCap.Display || !(refreshHz > 0) || double.IsInfinity(refreshHz)) return new PacingPlan(1, 0);
         double ratio = refreshHz / (int)cap;
         if (ratio <= 1 + WholeTolerance) return new PacingPlan(1, 0);
+        if (!syncIntervalPaces) return new PacingPlan(1, 1.0 / (int)cap);
         double whole = Math.Round(ratio);
         if (whole <= MaxSyncInterval && Math.Abs(ratio - whole) <= WholeTolerance * whole)
             return new PacingPlan((uint)whole, 0);

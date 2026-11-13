@@ -54,7 +54,7 @@ public sealed class PlayerTests : IAsyncDisposable
         var controller = Controller(globalOffset: 0.5);
         await WaitUntil(() => controller.ReadPlayer().HasSong);
         var clock = _renderer.Clock!;
-        Assert.Equal(30.5, clock().Seconds, 1e-6);
+        Assert.Equal(30.5 + AppController.SyncLead, clock().Seconds, 1e-6);
         Assert.True(clock().Playing);
 
         // The drag points at 120 s: the wallpaper shows that moment (with the lyric offset), held still.
@@ -62,13 +62,13 @@ public sealed class PlayerTests : IAsyncDisposable
         Assert.True(controller.IsPreviewing);
         Assert.Equal((120.5, false), clock());
         // Lines on screen keep following the player itself (a better match waits for the sung line, not the drag).
-        Assert.Equal(30.5, controller.ReadClock().Seconds, 1e-6);
+        Assert.Equal(30.5 + AppController.SyncLead, controller.ReadClock().Seconds, 1e-6);
         controller.SetScrubPreview(121.25);
         Assert.Equal(121.75, clock().Seconds, 1e-9);
 
         controller.ClearScrubPreview();
         Assert.False(controller.IsPreviewing);
-        Assert.Equal(30.5, clock().Seconds, 1e-6);
+        Assert.Equal(30.5 + AppController.SyncLead, clock().Seconds, 1e-6);
         Assert.Empty(session.Commands); // the preview never reaches the player
     }
 

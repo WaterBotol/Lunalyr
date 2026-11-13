@@ -105,12 +105,18 @@ public sealed class WholeSecondPhase
     /// <summary>Forgets the current run (pause, seek, new track, new player).</summary>
     public void Restart() => _hasRun = false;
 
+    /// <summary>
+    /// How far into 0:00 a run that starts there can be: a new song (or a skip back to the start) reports 0 at the very
+    /// moment it begins (seen live: the 0:00 snapshot came 16 ms after the track change), not up to a second later.
+    /// </summary>
+    public const double StartOfSongWindow = 0.15;
+
     private void Start(double p, long timestamp, double rate)
     {
         _t0 = timestamp;
         _rate = rate;
         _low = p;
-        _high = p + 1;
+        _high = p == 0 ? StartOfSongWindow : p + 1;
         _hasRun = true;
     }
 }
