@@ -68,6 +68,8 @@ public sealed class AppSettingsTests
             "useMotionArtwork", "motionPlacement", "motionExclusions",
             "visualizerStyle", "audioReactiveEnabled", "audioSensitivity", "visualizerPunch", "starTrailsColours",
             "musicVideoFallback", "musicVideoOnline", "musicVideoDim", "musicVideoBlur",
+            "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
+            "floatingFrames", "floatingSizes",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

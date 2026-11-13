@@ -41,8 +41,24 @@ internal abstract partial class LyricCompositionLayer
         var schedule = OpeningScheduleFor(frame.Scene, frame.SongJoined);
         // Credits wait for the opening title of synced lyrics to leave (the Mac's notBefore).
         CreditsNotBefore(Sheet is { Count: > 0 } && schedule is { } s ? s.End : 0);
+        _openingSchedule = schedule;
         return schedule;
     }
+
+    /// <summary>This frame's opening title, for the interlude dots in the floating window, which wait for it.</summary>
+    private OpeningSchedule? _openingSchedule;
+
+    /// <summary>
+    /// The floating window's stage (its scene carries the floating text size): the opening title takes the middle,
+    /// compact and without a shade of its own (the Mac's <c>OpeningTitleCard.floating</c>).
+    /// </summary>
+    private bool FloatingStage => SceneShown?.Style.FloatingTextSize is not null;
+
+    /// <summary>
+    /// How much the interlude dots show: in the floating window the opening title takes the middle, where the dots are,
+    /// so they wait for it (the Mac's <c>OpeningTitle.yields</c>); on the wallpaper they always show.
+    /// </summary>
+    private double InterludeYield(double time) => FloatingStage ? OpeningTitle.Yields(_openingSchedule, time) : 1;
 
     private OpeningSchedule? OpeningScheduleFor(SceneSnapshot scene, double joined)
     {
@@ -82,12 +98,13 @@ internal abstract partial class LyricCompositionLayer
         // picture does not change, but the wallpaper still needs a frame when it starts to leave.
         if (frame.IsPlaying && OpeningTitle.Upcoming(schedule, time) is not null) IsAnimating = true;
         if (OpeningTitle.Phase(schedule, time) is not { } phase) return;
-        var compact = phase.Size == OpeningSize.Compact;
+        var floating = FloatingStage;
+        var compact = floating || phase.Size == OpeningSize.Compact;
         var card = Card(dc, scene, compact);
         if (card is null) return;
 
         var reduce = ReduceMotion;
-        var reveal = OpeningReveal.At(phase.Age, phase.Size, reduce);
+        var reveal = OpeningReveal.At(phase.Age, compact ? OpeningSize.Compact : phase.Size, reduce);
         var leaving = Easing.Smoothstep(phase.Exit);
         var unit = card.Unit;
         var opacity = 1 - leaving;
@@ -97,7 +114,7 @@ internal abstract partial class LyricCompositionLayer
 
         // Legible over a bright or busy picture: the wallpaper darkens softly towards the corner the card is in, like a
         // film's grade, rather than a patch behind the words.
-        if (_shade is not null)
+        if (_shade is not null && !floating)
         {
             var shade = (float)(Math.Max(reveal.Title, reveal.Rule) * opacity);
             if (shade > 0.002f)
@@ -140,7 +157,9 @@ internal abstract partial class LyricCompositionLayer
             var height = (float)card.RuleHeight;
             dc.Transform = Matrix3x2.Identity;
             var top = card.Top + lift;
-            dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(x, top, x + width, top + height), height / 2, height / 2), _paint);
+            // Centred in the floating window, it draws out from its middle.
+            var start = card.Centred ? x + card.ContentWidth / 2 - width / 2 : x;
+            dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(start, top, start + width, top + height), height / 2, height / 2), _paint);
         }
 
         // The title is wiped on beside the rule, rising into place.
@@ -148,14 +167,14 @@ internal abstract partial class LyricCompositionLayer
         var titleAlpha = Math.Min(1, reveal.Title * 1.6) * opacity;
         if (titleAlpha > 0.002)
         {
-            var world = Matrix3x2.CreateTranslation(x + title.Box.X / 2, card.Top + (float)card.TitleTop + title.Box.Y / 2
+            var world = Matrix3x2.CreateTranslation(Mid(card, title, x), card.Top + (float)card.TitleTop + title.Box.Y / 2
                                                     + (float)((1 - reveal.Title) * rise) + lift);
             DrawWiped(dc, title, world, (float)titleAlpha, blur, reduce ? 1 : reveal.Wipe);
         }
 
         if (card.Reading is { } reading && reveal.Reading * opacity > 0.002)
         {
-            var world = Matrix3x2.CreateTranslation(x + reading.Box.X / 2, card.Top + (float)card.ReadingTop + reading.Box.Y / 2
+            var world = Matrix3x2.CreateTranslation(Mid(card, reading, x), card.Top + (float)card.ReadingTop + reading.Box.Y / 2
                                                     + (float)((1 - reveal.Reading) * rise * 0.5) + lift);
             reading.Draw(dc, world, 1, (float)(reveal.Reading * opacity), blur, GlowSpec.None, 1);
         }
@@ -165,7 +184,7 @@ internal abstract partial class LyricCompositionLayer
             // Wide tracking that closes up as it arrives: each letter's stretch of the baked line is drawn further
             // along by the tracking still to close.
             var extra = reduce ? 0 : card.ArtistSize * 0.3 * (1 - reveal.Artist);
-            var centre = new Vector2(x + artist.Box.X / 2, card.Top + (float)card.ArtistTop + artist.Box.Y / 2 + lift);
+            var centre = new Vector2(Mid(card, artist, x), card.Top + (float)card.ArtistTop + artist.Box.Y / 2 + lift);
             var alpha = (float)(reveal.Artist * opacity);
             var edges = card.ArtistEdges;
             if (extra < 0.05 || edges is null)
@@ -188,10 +207,13 @@ internal abstract partial class LyricCompositionLayer
 
         if (card.Album is { } album && reveal.Album * opacity > 0.002)
         {
-            var world = Matrix3x2.CreateTranslation(x + album.Box.X / 2, card.Top + (float)card.AlbumTop + album.Box.Y / 2 + lift);
+            var world = Matrix3x2.CreateTranslation(Mid(card, album, x), card.Top + (float)card.AlbumTop + album.Box.Y / 2 + lift);
             album.Draw(dc, world, 1, (float)(reveal.Album * opacity), blur, GlowSpec.None, 1);
         }
     }
+
+    /// <summary>The centre of a line of the card: under the column's middle when centred, else from its left edge.</summary>
+    private static float Mid(OpeningCard card, Ink ink, float x) => card.Centred ? x + card.ContentWidth / 2 : x + ink.Box.X / 2;
 
     /// <summary>
     /// A soft left-to-right wipe over <paramref name="ink"/> (the Mac's card mask: solid up to the edge, then a feather
@@ -233,7 +255,7 @@ internal abstract partial class LyricCompositionLayer
             _albumOf = (scene.Album, scene.Title, OpeningTitle.AlbumLine(scene.Album, scene.Title));
         var key = new CardKey(scene.Title ?? "", scene.Artist ?? "", _albumOf.Line,
                               string.IsNullOrWhiteSpace(scene.TitleReading) ? null : scene.TitleReading.Trim(), compact,
-                              art is not null && _coverBrush is not null, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
+                              art is not null && _coverBrush is not null, FloatingStage, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
                               _ink.Dot is { } dot ? LyricInks.Vector(dot) : TextColour);
         if (_card is { } current && current.Key == key) return current;
         _card?.Dispose();
@@ -250,8 +272,10 @@ internal abstract partial class LyricCompositionLayer
     {
         var kit = Kit!;
         var compact = key.Compact;
-        // The lyric's base size on this screen; a compact card is smaller.
-        var unit = compact ? BaseSize * 0.8 : BaseSize;
+        // The lyric's base size on this screen; a compact card is smaller. The floating window's takes nearly its
+        // text size and nearly the window's width, in its middle.
+        var floating = key.Floating;
+        var unit = floating ? BaseSize * 0.95 : compact ? BaseSize * 0.8 : BaseSize;
         var type = key.Dark ? new Vector3(0.08f, 0.08f, 0.08f) : Vector3.One;
         var shadow = new ShadowSpec(0.45f, (float)(unit * 0.12 * 0.5), (float)(unit * 0.015), key.Dark ? Vector3.One : default);
         // The title's size; the lines under it take shares of it. A long title is set smaller, but they are not.
@@ -270,7 +294,7 @@ internal abstract partial class LyricCompositionLayer
         var titleLines = lengthScale < 1 ? 2 : 1;
         var side = titleLines * titleSize * 1.2 + (showsReading ? readingTop + readingSize * 1.25 : 0) + artistTop + artistSize * 1.2;
         var gap = side * 0.16;
-        var width = SurfaceSize.X * 0.46;
+        var width = SurfaceSize.X * (floating ? 0.9 : 0.46);
         var columnWidth = key.Cover ? Math.Max(width * 0.4, width - side - gap) : width;
 
         var titleRtl = ScriptDirection.IsRightToLeft(key.Title);
@@ -312,6 +336,16 @@ internal abstract partial class LyricCompositionLayer
         var height = Math.Max(y, key.Cover ? coverTop + side : 0);
         var left = Math.Max(Points(40), SurfaceSize.X * 0.058);
         var bottom = Math.Max(Points(96), SurfaceSize.Y * 0.13);
+        // The words' own width (the Mac's CappedWidth: a short title's card hugs its words).
+        var contentWidth = Math.Max(unit * (compact ? 0.7 : 1.0), Math.Max(titleInk.Box.X, Math.Max(readingInk?.Box.X ?? 0,
+            Math.Max(artistInk?.Box.X ?? 0, albumInk?.Box.X ?? 0))));
+        if (floating)
+        {
+            // Centred in the window: the block (with its cover) across, the card up and down.
+            var block = (key.Cover ? side + gap : 0) + contentWidth;
+            left = (SurfaceSize.X - block) / 2;
+            bottom = (SurfaceSize.Y - height) / 2;
+        }
         Ink? coverShadow = null;
         if (key.Cover)
         {
@@ -333,6 +367,8 @@ internal abstract partial class LyricCompositionLayer
             Left = (float)left,
             Top = (float)(SurfaceSize.Y - bottom - height),
             ColumnLeft = key.Cover ? (float)(side + gap) : 0,
+            Centred = floating && !key.Cover,
+            ContentWidth = (float)contentWidth,
             CoverTop = coverTop,
             RuleWidth = unit * (compact ? 0.7 : 1.0),
             RuleHeight = ruleHeight,
@@ -483,7 +519,7 @@ internal abstract partial class LyricCompositionLayer
     }
 
     private readonly record struct CardKey(string Title, string Artist, string? Album, string? Reading, bool Compact, bool Cover,
-                                           string Family, Vector2 Surface, float Scale, double BaseSize, bool Dark, Vector4 Accent);
+                                           bool Floating, string Family, Vector2 Surface, float Scale, double BaseSize, bool Dark, Vector4 Accent);
 
     /// <summary>The card as set: its baked lines and where they go, in device pixels.</summary>
     private sealed class OpeningCard(CardKey key) : IDisposable
@@ -505,6 +541,10 @@ internal abstract partial class LyricCompositionLayer
         public float Top { get; init; }
         /// <summary>The words' column, from the card's left edge (beside the cover).</summary>
         public float ColumnLeft { get; init; }
+        /// <summary>Centred in the floating window without a cover: each line under the column's middle.</summary>
+        public bool Centred { get; init; }
+        /// <summary>The widest line (or the rule), pixels.</summary>
+        public float ContentWidth { get; init; }
         // Each piece's top, from the card's top.
         public double CoverTop { get; init; }
         public double RuleWidth { get; init; }

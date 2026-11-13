@@ -139,7 +139,8 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         if ((manual is not null) != _backingManual) BuildBacking(_dc, manual is not null);
         if (scrim && strength > 0) dc.FillRectangle(whole, _scrim!);
 
-        var presence = Presence(StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
+        // Lyrics floating over the apps leave nothing on this stage to back.
+        var presence = Presence(frame.LyricsElsewhere ? 0 : StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
         var amount = BackingAmount(frame, fieldLuminance, scrim ? strength : 0, manual, stageShade) * presence;
         if (amount > WallpaperShade.MinimumBacking)
             dc.DrawBitmap(_backing!, whole, (float)Math.Min(1, amount), InterpolationMode.Linear, null, null);
@@ -172,8 +173,9 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         return Core.Motion.LyricStagePresence.Presence(inputs, now, Core.Motion.NoticeTiming.Default) > 0.5 ? 1 : 0;
     }
 
-    /// <summary>True while the backing is still fading in or out.</summary>
-    public bool IsEasing(double now) => _presenceTarget >= 0 && now - _presenceChangedAt < WallpaperShade.BackingFade;
+    /// <summary>True while the backing is still fading in or out (the first frame takes the stage as it is: no fade).</summary>
+    public bool IsEasing(double now) =>
+        _presenceTarget >= 0 && _presenceFrom != _presenceTarget && now - _presenceChangedAt < WallpaperShade.BackingFade;
 
     private double Presence(double target, double now)
     {

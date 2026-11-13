@@ -152,6 +152,7 @@ public sealed partial class RenderEngine : IDisposable
             {
                 _surfacesCreated.Reset();
                 _host.Start();
+                StartFloatingHost();
                 // The host hands the windows over asynchronously; return once their swap chains exist.
                 if (_host.Mode is not null) _surfacesCreated.Wait(TimeSpan.FromSeconds(5));
             }
@@ -174,6 +175,8 @@ public sealed partial class RenderEngine : IDisposable
         lock (_lifecycle)
         {
             if (_thread is null) return;
+            // The floating window hands its swap chain back to the render thread before it goes.
+            StopFloatingHost();
             _host?.Stop();
             _host = null;
             StopRenderThread();
