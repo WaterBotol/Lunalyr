@@ -133,7 +133,7 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 
 ## Milestone 7: floating lyrics, shortcuts and links, Discord and tray lyric, lyric cards
 
-2922 tests (2921 pass, 1 skipped opt-in) at Test Build 7. Report: [docs/milestones/M7.md](docs/milestones/M7.md).
+2922 tests (2921 pass, 1 skipped opt-in) at Test Build 7 plus one GIF test (full suite run after the report commit). Report: [docs/milestones/M7.md](docs/milestones/M7.md).
 
 | Item | Status | Evidence |
 | --- | --- | --- |

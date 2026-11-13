@@ -27,8 +27,8 @@ Written at the end of milestone 7 (`next/windows` e6193e5, Test Build 7). For a 
   $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
   $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; $env:DOTNET_NOLOGO = '1'
   ```
-- **Tests:** `dotnet build Lunalyr.slnx -c Debug -p:Platform=x64`, then `dotnet test --solution Lunalyr.slnx --no-build
-  -p:Platform=x64` (xUnit v3 on Microsoft.Testing.Platform; `-- --filter-class <name>` for one class). 2,922 tests,
+- **Tests:** `dotnet build Lunalyr.slnx`, then `dotnet test --solution Lunalyr.slnx --no-build` (no `-p:Platform` on
+  the solution; projects take `-p:Platform=x64`) (xUnit v3 on Microsoft.Testing.Platform; `-- --filter-class <name>` for one class). 2,922 tests,
   1 opt-in skip.
 - **Live checks:** `Lunalyr.exe --demo --data <temp folder> --quiet-windows --seconds N`.
   - Put `"wallpaperPaused": true` in that folder's `settings.json`, or the demo draws a wallpaper over the owner's
@@ -91,4 +91,10 @@ Fix the cause; don't add retries.
 - Constellation layouts are narrow on portrait cards.
 - Floating lyrics re-asserts topmost every 2 s, so it can sit above menus.
 - Hide lyrics has no tray entry.
-- Test Build 6.1 stopped at 19:46 on 2026-11-13 with no log line, dump or WER report. Ask whether they closed it.
+
+## Starting the owner's copy
+
+Test Build 6.1 stopped at 19:46 on 2026-11-13 because the Claude desktop app updated itself, and the copy had been
+started from an agent's shell inside it. Start the owner's copy through Explorer (`explorer.exe "…\Lunalyr.exe"`) so
+it isn't tied to the agent, or let the owner start it. The installer and updater (this milestone) must close a
+running Lunalyr gracefully before replacing it: post `WM_APP+2` to its `Lunalyr.Host.` window, or use Restart Manager.
