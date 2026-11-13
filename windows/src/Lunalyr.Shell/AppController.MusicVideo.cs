@@ -55,6 +55,15 @@ public sealed partial class AppController
         _musicVideo = controller;
         _youTubePlayer = youTubePlayer;
         controller.ReduceMotion = () => Scene.ReduceMotion;
+        lock (_gate)
+        {
+            // Connected after start-up: the song already playing (its length known or still awaited) is taken up now.
+            if (_query is { } query && _lookupTrack is { } track)
+                _musicVideoTrack = new MusicVideoTrack(track.Title, track.Artist, query.Duration, track.AlbumTitle.Length > 0 ? track.AlbumTitle : null);
+            else _musicVideoAwaiting = _lookupTrack is not null;
+            if (_musicVideoAwaiting) _musicVideoWaitCts = new CancellationTokenSource();
+        }
+        if (_musicVideoWaitCts is { } wait) Track(WaitForMusicVideoAsync(wait));
         feed.Attach(ReadMusicVideo, ReportMusicVideo, MusicVideoFileFailed);
         controller.Changed += OnMusicVideoChanged;
         UpdateMusicVideo();

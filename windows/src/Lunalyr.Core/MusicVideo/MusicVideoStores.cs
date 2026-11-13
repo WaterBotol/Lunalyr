@@ -79,7 +79,10 @@ public sealed class FileMusicVideoStorage : IMusicVideoStorage
         try
         {
             if (!File.Exists(_path)) return _values;
-            using var document = JsonDocument.Parse(File.ReadAllBytes(_path));
+            var bytes = File.ReadAllBytes(_path);
+            // A file saved by hand may start with a UTF-8 byte-order mark.
+            var start = bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0;
+            using var document = JsonDocument.Parse(bytes.AsMemory(start));
             if (document.RootElement.ValueKind != JsonValueKind.Object) return _values;
             foreach (var property in document.RootElement.EnumerateObject()) _values[property.Name] = property.Value.GetRawText();
         }

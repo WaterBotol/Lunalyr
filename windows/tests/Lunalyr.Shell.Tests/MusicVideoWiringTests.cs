@@ -38,7 +38,8 @@ public sealed class MusicVideoWiringTests : IAsyncDisposable
         public Task<MusicVideoPlayability> CheckAsync(string path, CancellationToken ct) => Task.FromResult(MusicVideoPlayability.Playable);
     }
 
-    private (AppController App, MusicVideoController Video) Start(AppSettings settings, bool youTube = true, TimeSpan? wait = null)
+    private (AppController App, MusicVideoController Video) Start(AppSettings settings, bool youTube = true, TimeSpan? wait = null,
+        bool connectAfterStart = false)
     {
         var app = new AppController(_source, _lyrics, _renderer, settings, new SongOffsets(), ReadingServices.Basic, new PlaybackGuard(),
             Logger.Null, options: new AppControllerOptions
@@ -51,9 +52,26 @@ public sealed class MusicVideoWiringTests : IAsyncDisposable
         var resolver = new MusicVideoResolver(files, new Playable(), null, new MusicVideoCache(_storage), new MusicVideoLinks(_storage));
         var video = new MusicVideoController(resolver, new MusicVideoOffsets(_storage), app.ReadSongPosition, app.MusicVideoLyrics, files: files);
         app.MusicVideoPendingWait = wait ?? TimeSpan.FromSeconds(30);
-        app.UseMusicVideo(video, _feed, youTube);
+        if (!connectAfterStart) app.UseMusicVideo(video, _feed, youTube);
         app.Start();
+        _connect = () => app.UseMusicVideo(video, _feed, youTube);
         return (app, video);
+    }
+
+    private Action? _connect;
+
+    // The app connects the music video after the controller has started (AppHost.StartMusicVideo, as the visualisers):
+    // a song already known by then is taken up at once.
+    [Fact]
+    public async Task ConnectedAfterStartUpTheSongAlreadyPlayingIsTakenUp()
+    {
+        new MusicVideoFiles(_storage).Set(VideoFile, SongA.Key);
+        _source.Add(Playing("Song A"));
+        var (app, video) = Start(new AppSettings { BackgroundMode = "musicVideo" }, connectAfterStart: true);
+        await WaitUntil(() => app.Status.Duration is not null);
+        _connect!();
+        await WaitUntil(() => _renderer.Layers.Background == "musicVideo" && _feed.Read().LocalPath == VideoFile);
+        Assert.Equal(new MusicVideoStatus.Showing(new MusicVideoSource.Local(VideoFile), "Song A"), video.Status);
     }
 
     private FakeMediaSession Playing(string title, double position = 30)

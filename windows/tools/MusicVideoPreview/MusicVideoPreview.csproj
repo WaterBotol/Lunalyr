@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Draws the music video layer under the demo song's lyrics offscreen (Direct2D on WARP) at moments of the demo's clock,
+       reads each drawn frame's number back from tools/WallpaperTestMedia's time-coded clip, and writes PNGs and a
+       report. Silent: only the clip's video stream is read. Not part of the app or the solution. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+  </ItemGroup>
+</Project>
