@@ -77,6 +77,19 @@ public sealed record ShellOptions
     /// </summary>
     public string? FloatingCapturePath { get; init; }
 
+    /// <summary>
+    /// <c>--ticker-capture &lt;file&gt;</c>: on quitting, write the tray lyric strip's last frame as a PNG and log the
+    /// strip's styles and whether it is the foreground window. For checks.
+    /// </summary>
+    public string? TickerCapturePath { get; init; }
+
+    /// <summary>
+    /// <c>--discord-pipe &lt;prefix&gt;</c>: Discord status dials <c>\\.\pipe\{prefix}0…9</c> instead of Discord's own
+    /// pipes, and runs even under <c>--demo</c> and <c>--no-network</c>, for checks against a pipe of one's own. A prefix
+    /// starting with "discord" is refused. Not forwarded to a running instance.
+    /// </summary>
+    public string? DiscordPipe { get; init; }
+
     public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
@@ -137,6 +150,23 @@ public sealed record ShellOptions
                     {
                         if (capture.Trim().Length == 0) problems.Add("--floating-capture needs a file.");
                         else options = options with { FloatingCapturePath = Path.GetFullPath(capture.Trim()) };
+                    }
+                    break;
+                case "--ticker-capture":
+                    if (Value() is { } ticker)
+                    {
+                        if (ticker.Trim().Length == 0) problems.Add("--ticker-capture needs a file.");
+                        else options = options with { TickerCapturePath = Path.GetFullPath(ticker.Trim()) };
+                    }
+                    break;
+                case "--discord-pipe":
+                    if (Value() is { } pipe)
+                    {
+                        var prefix = pipe.Trim();
+                        if (prefix.Length == 0 || prefix.StartsWith("discord", StringComparison.OrdinalIgnoreCase)
+                            || !prefix.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
+                            problems.Add($"--discord-pipe {pipe}: expected a pipe name prefix of your own (letters, digits, '-', '_', '.'), not Discord's.");
+                        else options = options with { DiscordPipe = prefix };
                     }
                     break;
                 case "--stats":

@@ -278,6 +278,7 @@ internal sealed partial class AppHost
             StartVisualisers(controller);
             StartMusicVideo(controller);
             StartMotionCovers(controller);
+            StartExtras(controller);
             _controller = controller;
             QueueStatusUpdate();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
@@ -511,6 +512,7 @@ internal sealed partial class AppHost
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             if (_options.FloatingCapturePath is { } capturePath) WriteFloatingCapture(capturePath);
+            await StopExtrasAsync().ConfigureAwait(false);
             StopVisualisers();
             StopMusicVideo();
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);
