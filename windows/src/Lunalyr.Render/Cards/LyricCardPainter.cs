@@ -85,7 +85,9 @@ public sealed class CardPageScene
         var size = animation.Rolls
             ? Math.Min(Math.Max(290, animation.CardTypeSize * 1.62), stage.Height / LyricCardLayout.RollingHeightInTypeSizes)
             : animation.CardTypeSize;
-        var line = animation.Line;
+        // The card's only line never hands over to another: it is held open, so the layer keeps it on the stage while
+        // the card holds its last moment (the Mac's LyricPhraseTiming with no next line), instead of letting it leave.
+        var line = animation.Line with { End = Math.Max(animation.Line.End, animation.End) + 600, EndFromNextLine = null };
         var scene = new SceneSnapshot
         {
             Title = content.Title,
@@ -295,7 +297,7 @@ public sealed class LyricCardPainter : IDisposable
                            * Matrix3x2.CreateTranslation(Width / 2f, Height / 2f);
             using (var layer = dc.CreateLayer(null))
             {
-                dc.PushLayer(new LayerParameters1 { ContentBounds = new Vortice.RawRectF(float.MinValue / 4, float.MinValue / 4, float.MaxValue / 4, float.MaxValue / 4), Opacity = 0.62f }, layer);
+                dc.PushLayer(new LayerParameters1 { ContentBounds = new Vortice.RawRectF(-1e7f, -1e7f, 1e7f, 1e7f), MaskTransform = Matrix3x2.Identity, Opacity = 0.62f }, layer);
                 dc.DrawImage(_blur.Output, InterpolationMode.Linear, CompositeMode.SourceOver);
                 dc.PopLayer();
             }
@@ -440,7 +442,7 @@ public sealed class LyricCardPainter : IDisposable
         using (var geometry = _surface.Factory.CreateRoundedRectangleGeometry(rounded))
         using (var layer = dc.CreateLayer(null))
         {
-            dc.PushLayer(new LayerParameters1 { ContentBounds = rect, GeometricMask = geometry, MaskAntialiasMode = AntialiasMode.PerPrimitive, Opacity = 1 }, layer);
+            dc.PushLayer(new LayerParameters1 { ContentBounds = rect, GeometricMask = geometry, MaskAntialiasMode = AntialiasMode.PerPrimitive, MaskTransform = Matrix3x2.Identity, Opacity = 1 }, layer);
             // Fitted whole (scaledToFit), centred.
             var fit = Math.Min(side / cover.Width, side / cover.Height);
             double w = cover.Width * fit, h = cover.Height * fit;
