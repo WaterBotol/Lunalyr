@@ -8,8 +8,8 @@
 //   (the lookup still running) it draws the stand-in, the Mac's musicVideoPending.
 // - "musicVideo.youtube": see-through (ISeeThroughLayer). YouTube's player is a WebView2 window of its own beneath the
 //   wallpaper surface (Lunalyr.App, YouTubeWallpaperHost); this layer draws over it only the dimming, the scrim and the
-//   text backing while it plays, and the stand-in or the frozen frame while it doesn't (YouTube draws its own controls
-//   over a paused player, so it is hidden then).
+//   text backing while the player is on screen (playing or paused, as YouTube draws it, never covered), and the stand-in
+//   while there is no player.
 
 using System.Numerics;
 using Lunalyr.Core.Colour;

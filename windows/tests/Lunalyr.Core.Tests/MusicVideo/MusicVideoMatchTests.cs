@@ -187,7 +187,12 @@ public sealed class MusicVideoMatchTests
             YouTubeEmbedSession.Message.Parse("{\"type\":\"state\",\"value\":1,\"video\":\"4NRXx6U8ABQ\",\"page\":" + page + "}"));
         session.Receive(new(YouTubeEmbedSession.MessageKind.Error, 150, "4NRXx6U8ABQ", page), true);
         Assert.Equal(YouTubeEmbedSession.Effect.Show(false), State(1));
+        // A closed player (a long pause, the type changed) is not on screen, whatever arrives late.
+        page = session.Attach("4NRXx6U8ABQ").Page;
+        session.Receive(new(YouTubeEmbedSession.MessageKind.Ready, 0, "4NRXx6U8ABQ", page), true);
+        Assert.True(session.ShowsPlayer);
         session.Stop();
+        Assert.False(session.ShowsPlayer);
     }
 
     // Ported from MusicVideoMatchTests.swift: testNonLatinAndKpopTitlesMatch

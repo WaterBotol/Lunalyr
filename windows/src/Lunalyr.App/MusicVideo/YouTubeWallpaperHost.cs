@@ -276,6 +276,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     /// </summary>
     private void Show(bool visible)
     {
+        // A sample answered after the player closed must not leave the wallpaper see-through over nothing.
+        visible &= _controller is not null;
         _feed.PlayerVisible = visible;
         if (_controller is not null) _controller.IsVisible = visible;
     }

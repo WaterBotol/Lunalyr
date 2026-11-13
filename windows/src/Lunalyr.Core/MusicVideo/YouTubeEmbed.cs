@@ -350,10 +350,12 @@ public sealed class YouTubeEmbedSession
         return Effect.Fail(videoId, failure);
     }
 
+    /// <summary>The player is closed: nothing is on screen until the next <see cref="Attach"/>.</summary>
     public void Stop()
     {
         _timeout?.Cancel();
         _timeout = null;
         VideoId = null;
+        Ready = false;
     }
 }
