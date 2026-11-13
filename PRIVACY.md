@@ -1,6 +1,6 @@
 # Privacy
 
-This page lists exactly what it reads on your Mac, what it sends, and to whom. A short summary is in the [README](README.md#privacy).
+This page lists exactly what Lunalyr reads on your Mac, what it sends, and to whom. A short summary is in the [README](README.md#privacy).
 
 ## On your Mac
 
