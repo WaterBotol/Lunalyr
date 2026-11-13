@@ -704,7 +704,8 @@ Apple Music's animated album covers play behind the lyrics in Match the music, a
   paused with the wallpaper, first frame under Reduce Motion) with the album gradient beneath, the cover placed and
   softened, a faint album tint, an even shade (40% × Darkening), a round shade darkest in the middle, and the text
   backing (which counts that shade). The song's still cover stands in until the first frame and if the video can't
-  play. A portrait display plays the tall rendition when it is a single MP4.
+  play. A portrait display plays the tall rendition when it is a single MP4. The settings preview is handed the same
+  layer (`AppController.MotionCover`), as it is the imported one.
 
 ### Checks
 
@@ -714,7 +715,8 @@ Apple Music's animated album covers play behind the lyrics in Match the music, a
 - `--settings-page wallpaper --theme dark --quiet-windows` and `tools/capture-window.ps1` for the pages. With
   `"wallpaperPaused": true` in the folder's `settings.json` no wallpaper surface is attached, so a running Lunalyr's
   wallpaper is left alone. The Covers page gave rendered captures this way (`docs/previews/motion-artwork/covers-page-*`),
-  though later runs in the same session captured a blank window.
+  though later runs in the same session captured a blank window whatever the page or settings (the displays were off;
+  UI Automation, read only, still lists the rows).
 - `tools/LayerPreview -wallpaper <file> -placements fill,fillTop,fillBottom,fit` draws the imported layer offscreen (a
   video plays in real time to each `-times` mark); `-layer desktop` draws Your wallpaper (keeping alpha);
   `-adjust speed=…,vividness=…,darkening=…,backing=…` draws the adjustments; `-bench <seconds>` measures a picture or
