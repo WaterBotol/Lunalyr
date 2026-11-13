@@ -14,6 +14,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Fixed
 - NetEase Cloud Music (and AMLL, which finds songs through it) found nothing after the first song: NetEase's tracking cookie, sent back with later searches, made it answer with unrelated popular songs. Lunalyr no longer sends or keeps NetEase cookies.
+- Lyrics+ answers timed only by line (Apple Music has no word timing for some songs, such as "Pleaser" by Wallows) were thrown away as "no lyrics". They are now kept as line timing, and still rank as Apple Music's lyrics.
 
 ## [2.0.1] - 2026-11-13
 
