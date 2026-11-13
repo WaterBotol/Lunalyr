@@ -119,9 +119,8 @@ public static class OnboardingCopy
 
     public const string ReadingsLanguage = "Language";
 
-    /// <summary>Translations: the Mac's promise, and that Windows doesn't show them yet.</summary>
-    public const string Translations =
-        "Translations under the lyrics arrive in a later build. Lyrics are never sent anywhere to be translated.";
+    /// <summary>Under Show translations under lyrics (the Mac's OnboardingCopy.translations, without its sentence about translating on the Mac).</summary>
+    public const string Translations = Lunalyr.Shell.Settings.TranslationsCopy.Onboarding;
 
     // ---- 5. The tray ----
 

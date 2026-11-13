@@ -29,5 +29,7 @@ public sealed partial record AppSettings
     private AppSettings NormalizedLyricTools() =>
         NoLyricsValues.Contains(NoLyrics) ? this : this with { NoLyrics = new AppSettings().NoLyrics };
 
-    private LyricStyle WithLyricToolsStyle(LyricStyle style) => style with { NoLyrics = NoLyricsShown() };
+    // Show translations under lyrics (AppSettings.Translations.cs) reaches the renderer here too.
+    private LyricStyle WithLyricToolsStyle(LyricStyle style) =>
+        style with { NoLyrics = NoLyricsShown(), Translations = ShowTranslations };
 }

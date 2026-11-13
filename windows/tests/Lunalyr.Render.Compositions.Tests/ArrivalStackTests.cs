@@ -225,6 +225,42 @@ public sealed class ArrivalStackTests : IDisposable
         }
     }
 
+    // Ported from RollingStackTests.swift: testRollingWordsKeepClearOfTheTranslationBand. With translations shown, the
+    // rolling stage keeps its foot clear: no word, preview or entrance reaches the band (SpokenLayer places the words in
+    // FreeStage, as here).
+    [Fact]
+    public void RollingWordsKeepClearOfTheTranslationBand()
+    {
+        var stage = new SizeD(1536, 777.6);
+        foreach (var composition in new[] { CompositionKind.Spoken, CompositionKind.Cascade, CompositionKind.Cutout })
+        foreach (var userScale in new[] { 1.0, 1.25, 1.5 })
+        foreach (var lyric in new[] { Lyrics[0], Phrases })
+        {
+            var (words, readings) = Timed(lyric);
+            var baseSize = 88.3 * userScale * 0.75;
+            var band = LineTranslations.RollingBand(88.3, userScale, shown: true);
+            Assert.Equal(88.3 * userScale * 0.30 * 2.7 + 88.3 * 0.3, band, 9);
+            var free = SpokenLayer.FreeStage(stage, band);
+            Assert.Equal(stage.Height - band, free.Height, 9);
+            var prepared = RollingWords.Prepare(words, baseSize, readings, composition: composition);
+            var sizes = Measure(prepared, stage.Width);
+            var arrival = WordArrival.Automatic.Resolved(composition);
+            for (var step = 0; step <= 44; step++)
+            {
+                var time = 9.4 + step * 0.11;
+                foreach (var unit in Stage(prepared, sizes, time, baseSize, free, arrival, false, composition))
+                {
+                    // A unit the stage has shrunk to nothing draws nothing.
+                    if (!(unit.Slot.Shown > 0.05) || !(unit.Fit > 0)) continue;
+                    var box = unit.Box;
+                    Assert.True(box.Y + box.Height <= free.Height + 0.5,
+                        $"{composition} {lyric.Name} x{userScale} at {time}: rank {unit.Slot.Rank} reaches the translation");
+                }
+            }
+        }
+        Assert.Equal(stage, SpokenLayer.FreeStage(stage, LineTranslations.RollingBand(88.3, 1, shown: false)));
+    }
+
     // Ported from RollingStackTests.swift: testRoomForAnEntranceShrinksSmoothly
     [Fact]
     public void RoomForAnEntranceShrinksSmoothly()

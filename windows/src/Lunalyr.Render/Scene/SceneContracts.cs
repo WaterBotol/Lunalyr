@@ -137,6 +137,12 @@ public sealed record LyricStyle
     public ReadingPlacement Readings { get; init; } = ReadingPlacement.Below;
 
     /// <summary>
+    /// Show a line's translation under it, when the lyrics came with one (the Mac's <c>custom.showTranslations</c>).
+    /// Off by default here so scenes made without it draw as before; the app's setting defaults to on, as the Mac's does.
+    /// </summary>
+    public bool Translations { get; init; }
+
+    /// <summary>
     /// Show the song's credits on the wallpaper: its "Title - Artist" as it starts, then any production credits that
     /// came with the lyrics, one after another in a band at the top or foot of the stage (the Mac's credits layer,
     /// <c>custom.creditsLayer</c>). Off by default here so scenes made without it draw as before; the app's setting

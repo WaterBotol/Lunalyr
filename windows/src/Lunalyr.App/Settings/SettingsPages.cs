@@ -106,8 +106,10 @@ internal static class ReadingsPage
         page.Children.Add(Caption("Saved readings are pronunciation guides. Japanese readings are matched to the lyric’s kana, however they’re spaced; a reading written for other words isn’t shown, and Lunalyr’s own reading is used for that line."));
 
         Section(page, "Translations");
-        page.Children.Add(Card("Show translations under lyrics", "Shown when the lyric source has a translation. Lyrics are never sent anywhere to be translated.",
-            "", FixedToggle(false), notYet: SettingsCopy.LaterBuild));
+        // The Mac's TranslationSection: translations that came with the lyrics. Windows has no on-device translator, so the
+        // Mac's controls for translating on the Mac have no counterpart (docs/READINGS-WINDOWS.md).
+        page.Children.Add(Card(TranslationsCopy.Title, TranslationsCopy.Description, "",
+            Toggle(ctx, s => s.ShowTranslations, (s, v) => s with { ShowTranslations = v })));
         return page;
     }
 }

@@ -4,6 +4,7 @@ using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Readings;
+using Lunalyr.Core.Motion;
 using Vortice.DirectWrite;
 
 namespace Lunalyr.Render.Compositions;
@@ -57,6 +58,10 @@ internal sealed class LinePlan : IDisposable
     public SizeD Content { get; init; }
     /// <summary>The line reading's centre in content coordinates.</summary>
     public PointD ReadingCentre { get; init; }
+    /// <summary>The line's translation (Show translations under lyrics), under the line and its reading; null when none.</summary>
+    public Ink? Translation { get; init; }
+    /// <summary>The translation's centre in content coordinates.</summary>
+    public PointD TranslationCentre { get; init; }
     public double Fit { get; init; }
     public BackingPlan[] Backing { get; set; } = [];
 
@@ -92,6 +97,7 @@ internal sealed class LinePlan : IDisposable
     {
         foreach (var run in Runs) run.Dispose();
         LineReading?.Dispose();
+        Translation?.Dispose();
         foreach (var backing in Backing) backing.Dispose();
         Echo?.Dispose();
     }
@@ -102,14 +108,19 @@ internal readonly record struct PlanSpec(
     double BaseSize, double MinimumSize, int LineIndex, bool WordTimed, bool Editorial, bool Heavy, double MaxWidth,
     double Spacing, double LineSpacing, LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
-    LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false);
+    LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false,
+    double TranslationSize = 0);
 
 internal static class LinePlans
 {
-    /// <summary>Sets a line: runs and metrics, laid-out labels and readings, rows, the line reading, the fit; then bakes.</summary>
+    /// <summary>
+    /// Sets a line: runs and metrics, laid-out labels and readings, rows, the line reading, the translation, the fit;
+    /// then bakes. The translation (set at <see cref="PlanSpec.TranslationSize"/>, as wide as the line reading may be)
+    /// goes under the line and its reading, and is fitted to the stage with them (the Mac's VStack).
+    /// </summary>
     public static LinePlan Build(TextKit kit, IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, PlanSpec spec,
                                  IReadOnlyList<string?>? runReadings, string? lineReading,
-                                 IReadOnlyList<ReadingShares?>? runShares = null)
+                                 IReadOnlyList<ReadingShares?>? runShares = null, string? translation = null)
     {
         var typography = EditorialSetting.Layout(words, glue, spec.BaseSize, spec.MinimumSize, spec.LineIndex, spec.WordTimed,
                                                  spec.Editorial, runReadings, 1, spec.Connections, spec.Spread,
@@ -163,6 +174,21 @@ internal static class LinePlans
                 content = new SizeD(Math.Max(block.Width, m.Width), block.Height + gap + m.Height);
                 readingCentre = new PointD(content.Width / 2, block.Height + gap + m.Height / 2);
             }
+            IDWriteTextLayout? translationLayout = null;
+            var translationCentre = default(PointD);
+            if (!string.IsNullOrWhiteSpace(translation) && spec.TranslationSize > 0)
+            {
+                var text = translation.Trim();
+                translationLayout = kit.Layout(text, Face.Quiet, (float)spec.TranslationSize, TextKit.LocaleFor(text),
+                                               ScriptDirection.IsRightToLeft(text), (float)spec.LineReadingWidth);
+                var m = translationLayout.Metrics;
+                var gap = spec.BaseSize * LineTranslations.Gap;
+                var top = content.Height + gap;
+                content = new SizeD(Math.Max(content.Width, m.Width), top + m.Height);
+                translationCentre = new PointD(content.Width / 2, top + m.Height / 2);
+                // The line and its reading stay centred over the wider stack.
+                readingCentre = readingCentre with { X = content.Width / 2 };
+            }
             var fit = spec.Fit.ScaleFor(content);
             var raster = (float)Math.Clamp(fit * spec.RasterBoost, 0.2, 2.5);
 
@@ -193,6 +219,9 @@ internal static class LinePlans
             }
             var lineInk = lineLayout is null ? null : kit.Bake(lineLayout, spec.ReadingColour, raster, spec.LineReadingShadow);
             lineLayout?.Dispose();
+            var translationInk = translationLayout is null ? null
+                : kit.Bake(translationLayout, spec.ReadingColour, raster, spec.LineReadingShadow);
+            translationLayout?.Dispose();
             var tokenCount = typography.Tokens.Count;
             return new LinePlan
             {
@@ -203,6 +232,8 @@ internal static class LinePlans
                 LineReading = lineInk,
                 Content = content,
                 ReadingCentre = readingCentre,
+                Translation = translationInk,
+                TranslationCentre = translationCentre,
                 Fit = fit,
                 TokenFrames = new EditorialTokenFrame[tokenCount],
                 RunFrames = new EditorialRunFrame[count],

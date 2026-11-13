@@ -62,7 +62,7 @@ public sealed class AppSettingsTests
             "spotifyClientId",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode", "player",
-            "noLyrics",
+            "noLyrics", "showTranslations",
             "albumGradientWallpaper", "shaderStyle", "patternStyle", "wallpaperPath", "wallpaperName", "wallpaperPlacement",
             "effectSpeed", "vividness", "scrimStrength", "patternOpacity", "motionBlur", "textBackingAutomatic", "textBacking",
             "useMotionArtwork", "motionPlacement", "motionExclusions",
@@ -70,6 +70,7 @@ public sealed class AppSettingsTests
             "musicVideoFallback", "musicVideoOnline", "musicVideoSearch", "musicVideoDim", "musicVideoBlur",
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
+            // (hideLyricsWhileMirroring is written only once chosen; MirroringTests checks it)
             "globalShortcuts", "globalShortcutModifiers", "globalShortcutsOff", "globalShortcutsOn", "lyricsHidden",
             // Discord status and the tray lyric (discordSongButton is written only once it is set)
             "discordPresence", "discordStatusText", "discordLyric", "discordCover", "discordButton", "discordProgress", "discordPaused",
@@ -111,6 +112,31 @@ public sealed class AppSettingsTests
             TestContext.Current.CancellationToken);
         await using (var unknown = AppSettingsStore.Open(temp.Path, Logger.Null))
             Assert.Equal("automatic", unknown.Current.Player);
+    }
+
+    // Ported from LyricReviewFixesTests.swift: testTranslationsAreOnByDefaultAndPersist (the key without "custom."; the
+    // renderer is told through the style). The Mac's last part, that cached lyrics saved before translations still
+    // decode, was ported earlier in SavedLyricsTests.
+    [Fact]
+    public async Task TranslationsAreOnByDefaultAndPersist()
+    {
+        using var temp = new TempFolder();
+        await using (var store = AppSettingsStore.Open(temp.Path, Logger.Null))
+        {
+            Assert.True(store.Current.ShowTranslations);
+            Assert.True(store.Current.Style().Translations);
+            store.Update(s => s with { ShowTranslations = false });
+            Assert.True(await store.FlushAsync());
+        }
+
+        await using var reopened = AppSettingsStore.Open(temp.Path, Logger.Null);
+        Assert.False(reopened.Current.ShowTranslations);
+        Assert.False(reopened.Current.Style().Translations);
+        // The field the parsers fill.
+        var line = new LyricLine { Start = 1, End = 2, Text = "Hola", Translation = "Hello" };
+        Assert.Equal("Hello", line.Translation);
+        Assert.Equal("Hello", Core.Compositions.LineTranslations.Of(line with { Translation = "  Hello " }));
+        Assert.Null(Core.Compositions.LineTranslations.Of(line with { Translation = "   " }));
     }
 
     [Fact]
