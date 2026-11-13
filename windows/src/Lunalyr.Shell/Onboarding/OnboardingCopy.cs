@@ -15,7 +15,7 @@ public static class OnboardingCopy
     public const string WindowTitle = "Welcome to Lunalyr";
 
     /// <summary>The window's size in DIPs (the Mac's is 640 × 540 points, title bar included).</summary>
-    public const double WindowWidth = 680, WindowHeight = 600;
+    public const double WindowWidth = 680, WindowHeight = 640;
 
     // ---- 1. Welcome ----
 

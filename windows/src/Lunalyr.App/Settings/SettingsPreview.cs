@@ -37,12 +37,12 @@ internal sealed class SettingsPreview : IDisposable
     private volatile bool _visible = true;
     private int _pending;
 
-    private SettingsPreview(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible)
+    private SettingsPreview(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible, double width)
     {
         _host = host;
         _dispatcher = dispatcher;
         _windowVisible = windowVisible;
-        var image = new Image { Source = _bitmap, Stretch = Stretch.Uniform, Width = PixelWidth, Height = PixelHeight };
+        var image = new Image { Source = _bitmap, Stretch = Stretch.Uniform, Width = width, Height = width * PixelHeight / PixelWidth };
         AutomationProperties.SetName(image, "Live wallpaper preview");
         AutomationProperties.SetHelpText(image, "What the wallpaper shows now, with the settings below.");
         _note = SettingsKit.Caption("Starting…");
@@ -65,12 +65,12 @@ internal sealed class SettingsPreview : IDisposable
 
     public UIElement View { get; }
 
-    /// <summary>A preview, or null when this build can't draw one.</summary>
-    public static SettingsPreview? TryCreate(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible)
+    /// <summary>A preview, or null when this build can't draw one. <paramref name="width"/>: how wide it shows, in DIPs (the welcome's is smaller).</summary>
+    public static SettingsPreview? TryCreate(AppHost host, DispatcherQueue dispatcher, Func<bool> windowVisible, double width = PixelWidth)
     {
         try
         {
-            return new SettingsPreview(host, dispatcher, windowVisible);
+            return new SettingsPreview(host, dispatcher, windowVisible, width);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

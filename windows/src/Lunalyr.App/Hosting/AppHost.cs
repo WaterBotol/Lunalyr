@@ -390,6 +390,7 @@ internal sealed partial class AppHost
         _pendingSettings = false;
         if (flyout is { } f) app.ToggleFlyout(f.Anchor, f.Keyboard);
         if (_options.OpenLyricCard) app.ShowLyricCard();
+        ShowWelcomeIfDue(app);
     }
 
     /// <summary>Forces light or dark for Lunalyr's windows (<c>--theme</c>), or null to follow Windows.</summary>
@@ -506,6 +507,7 @@ internal sealed partial class AppHost
     {
         _quitting = true;
         _quitTimer?.Dispose();
+        RecordWelcomeSeenAtQuit();
         StopPlayer();
         StopExtras();
         _tray.Dispose();

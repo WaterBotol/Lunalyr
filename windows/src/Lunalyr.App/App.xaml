@@ -94,6 +94,43 @@
                 <Setter Property="Width" Value="50" />
                 <Setter Property="Height" Value="14" />
             </Style>
+
+            <!-- The first-run welcome (Onboarding\OnboardingWindow.cs). Theme resources in styles, as the settings rows'. -->
+            <Style x:Key="OnboardingMessage" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="TextAlignment" Value="Center" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="OnboardingAccentIcon" TargetType="FontIcon">
+                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+            </Style>
+            <Style x:Key="OnboardingSuccessIcon" TargetType="FontIcon">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+            </Style>
+            <Style x:Key="OnboardingWarningIcon" TargetType="FontIcon">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+            </Style>
+            <Style x:Key="OnboardingDivider" TargetType="Border">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            </Style>
+            <Style x:Key="OnboardingFooter" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+            </Style>
+            <Style x:Key="OnboardingDot" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource ControlStrongFillColorDisabledBrush}" />
+                <Setter Property="CornerRadius" Value="3.5" />
+                <Setter Property="Width" Value="7" />
+                <Setter Property="Height" Value="7" />
+            </Style>
+            <Style x:Key="OnboardingDotCurrent" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                <Setter Property="CornerRadius" Value="3.5" />
+                <Setter Property="Width" Value="18" />
+                <Setter Property="Height" Value="7" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

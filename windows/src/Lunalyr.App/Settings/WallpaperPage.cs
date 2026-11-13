@@ -109,7 +109,7 @@ internal static partial class WallpaperPage
     /// Every type as a tile, the chosen one lit: the five Lunalyr draws in a row of small tiles, the three that start
     /// from something of yours in a row of wide ones. Imported image or video with no file yet asks for one first.
     /// </summary>
-    private static StackPanel TypeGrid(SettingsContext ctx, Action import)
+    internal static StackPanel TypeGrid(SettingsContext ctx, Action import)
     {
         var grid = new StackPanel { Spacing = 6 };
         AutomationProperties.SetName(grid, "Wallpaper type");

@@ -44,8 +44,14 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Opens the settings window (at <paramref name="page"/> when given), or brings it to the front; while the welcome is
+    /// up, it comes forward instead (App.Onboarding.cs).
+    /// </summary>
+    internal void ShowSettings(string? page = null) => Navigation(page).OpenSettings();
+
     /// <summary>Opens the settings window (at <paramref name="page"/> when given), or brings it to the front.</summary>
-    internal void ShowSettings(string? page = null)
+    internal void ShowSettingsWindow(string? page)
     {
         if (_window is null)
         {
@@ -72,6 +78,7 @@ public partial class App : Application
     {
         _window?.ApplyTheme();
         _lyricCard?.ApplyTheme();
+        _onboarding?.ApplyTheme();
     }
 
     /// <summary>The controller's status changed: refresh what the window shows.</summary>
@@ -80,5 +87,6 @@ public partial class App : Application
         _window?.RefreshStatus();
         _flyout?.RefreshIfOpen();
         RefreshLyricCard();
+        _onboarding?.RefreshStatus();
     }
 }
