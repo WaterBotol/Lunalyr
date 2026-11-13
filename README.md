@@ -24,7 +24,7 @@
   <a href="CHANGELOG.md">What's new</a>
 </p>
 
-[![Lunalyr on a Mac desktop: a song's lyrics arriving word by word in the Fable layout over the Aurora Curtains visualiser](docs/media/hero.gif)](docs/media/hero.mp4)
+[![Lunalyr on a Mac desktop: Counting Stars arriving word by word in the Fable layout, over the desktop where the Vinyl app spins the album on a turntable](docs/media/hero.gif)](docs/media/hero.mp4)
 
 Play a song and Lunalyr puts its lyrics on your desktop, lighting each word as it is sung. It follows Apple Music, Spotify and more, sits quietly in the menu bar, and draws beneath your desktop icons, so there is no window to manage. Prefer to see the words while you work? Float them over your apps instead.
 
