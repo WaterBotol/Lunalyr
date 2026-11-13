@@ -118,15 +118,29 @@ struct SampleLyric: View {
 /// with the app's icon resting on its lower edge.
 struct WelcomeHero: View {
     var width: CGFloat = 392
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The liquid-glass opening is on screen (`WelcomeGlass`).
+    @State private var intro = false
+
+    private static let desktop = CGSize(width: 1470, height: 956)
 
     var body: some View {
-        PreviewStage(desktop: CGSize(width: 1470, height: 956)) {
-            ZStack {
-                SampleWallpaper()
-                SampleLyric()
+        ZStack {
+            PreviewStage(desktop: Self.desktop) {
+                ZStack {
+                    SampleWallpaper()
+                    SampleLyric()
+                }
+            }
+            if intro, let url = WelcomeGlass.url {
+                // The opening, in a dark stage the preview's size and shape;
+                // it ends on the plain logo, then the preview fades in.
+                WelcomeGlassVideo(url: url) { endIntro() }
+                    .clipShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.preview, style: .continuous))
+                    .transition(.opacity)
             }
         }
-        .frame(width: width)
+        .frame(width: width, height: width * Self.desktop.height / Self.desktop.width)
         .overlay(alignment: .bottom) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
@@ -134,9 +148,21 @@ struct WelcomeHero: View {
                 .frame(width: 72, height: 72)
                 .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
                 .offset(y: 30)
+                .opacity(intro ? 0 : 1)
         }
         .padding(.bottom, 30)
         .accessibilityHidden(true)
+        .onAppear {
+            guard WelcomeGlass.shouldPlay(reduceMotion: reduceMotion, alreadyPlayed: WelcomeGlass.played) else { return }
+            WelcomeGlass.played = true
+            intro = true
+        }
+    }
+
+    private func endIntro() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + WelcomeGlass.hold) {
+            withAnimation(.easeInOut(duration: WelcomeGlass.fade)) { intro = false }
+        }
     }
 }
 

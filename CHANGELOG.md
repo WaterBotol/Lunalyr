@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+- The welcome opens with Lunalyr's logo forming as a drop of liquid glass (made with ReactDrops' Liquid Glass Logo from Lunalyr's own logo; silent). It plays once, then the wallpaper preview fades in; Reduce Motion skips it.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed
