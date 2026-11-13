@@ -242,7 +242,7 @@ When you use one of these while the wallpaper is hidden, a small confirmation ap
 
 ### First launch
 
-Releases are ad-hoc signed but not notarised by Apple, so macOS blocks the first launch. You only need to allow it once.
+Lunalyr is made by one person without a paid Apple developer account, so it isn't notarised by Apple and macOS warns you the first time you open it. The app is open source, and the steps below just tell macOS that you trust it. You only need to do this once.
 
 On **macOS 15 Sequoia or later**:
 
@@ -273,7 +273,7 @@ xattr -dr com.apple.quarantine /Applications/Lunalyr.app
 
 Click **Check for Updates…** in the menu-bar panel or in **Settings › General**. Stable releases install from there; preview builds are published as GitHub pre-releases and installed by hand.
 
-To uninstall, quit Lunalyr and move it to the Bin (Trash). To remove its data as well, delete these folders and reset its preferences:
+To uninstall, quit Lunalyr and move it to the Bin (Trash). To remove its data as well, delete these folders and reset its preferences. Lunalyr's files and settings still use its original project name, "Verso Custom" (`local.verso.custom`), so these are Lunalyr's own:
 
 - `~/Library/Application Support/Verso Custom/Lyrics` (saved and cached lyrics)
 - `~/Library/Application Support/Verso/Fonts` (downloaded fonts)
