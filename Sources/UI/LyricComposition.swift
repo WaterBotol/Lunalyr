@@ -234,28 +234,6 @@ struct LyricLineView: View {
     @ViewBuilder
     private func lineBody(words: [LyricsFetcher.Word], glue: [Bool]) -> some View {
         ZStack {
-            // Echo lays repeats of the whole phrase behind the live line, so
-            // it has to sit under the words rather than beside them.
-            if composition == .echo {
-                let reveals = wordTimed && Settings.shared.revealsWords(in: composition)
-                // Set as the line reads: glued characters and syllables
-                // together, as the live line shows them.
-                let phrase = echoText.value(for: EchoPhrase(words: words, glue: glue)) {
-                    (LyricRuns.text(words, glue: glue), LyricScript.lineIsRightToLeft(words.map(\.text)))
-                }
-                EchoBackdrop(
-                    text: phrase.text,
-                    revealed: reveals ? EchoBackdrop.revealed(words, at: time) : 1,
-                    rightToLeft: phrase.rightToLeft,
-                    font: { Settings.shared.lyricFont(size: $0, hero: false, mood: mood) },
-                    baseSize: baseSize,
-                    stageSize: stageSize,
-                    seed: seed,
-                    presence: presence,
-                    time: time
-                )
-                .frame(width: 0, height: 0)
-            }
             if composition.fillsStage {
                 StageLyricView(words: words, glue: glue, time: time, stageSize: stageSize, baseSize: baseSize, mood: mood,
                                composition: composition, seed: seed, exitStart: exitStart, firstRunOnly: firstRunOnly,
@@ -287,8 +265,40 @@ struct LyricLineView: View {
                 heldFirstRun: heldFirstRun,
                 hidesFirstRun: hidesFirstRun
               )
+              // Echo lays repeats of the whole phrase behind the live line,
+              // stepped off its top and bottom edges, so it needs the
+              // line's height.
+              .background {
+                  if composition == .echo {
+                      GeometryReader { proxy in
+                          echoBackdrop(words: words, glue: glue, lineHeight: proxy.size.height)
+                              .frame(width: proxy.size.width, height: proxy.size.height)
+                      }
+                  }
+              }
             }
         }
+    }
+    private func echoBackdrop(words: [LyricsFetcher.Word], glue: [Bool], lineHeight: CGFloat) -> some View {
+        let reveals = wordTimed && Settings.shared.revealsWords(in: composition)
+        // Set as the line reads: glued characters and syllables together,
+        // as the live line shows them.
+        let phrase = echoText.value(for: EchoPhrase(words: words, glue: glue)) {
+            (LyricRuns.text(words, glue: glue), LyricScript.lineIsRightToLeft(words.map(\.text)))
+        }
+        return EchoBackdrop(
+            text: phrase.text,
+            revealed: reveals ? EchoBackdrop.revealed(words, at: time) : 1,
+            rightToLeft: phrase.rightToLeft,
+            font: { Settings.shared.lyricFont(size: $0, hero: false, mood: mood) },
+            baseSize: baseSize,
+            stageSize: stageSize,
+            seed: seed,
+            presence: presence,
+            time: time,
+            lineHeight: lineHeight
+        )
+        .frame(width: 0, height: 0)
     }
 }
 
@@ -396,6 +406,8 @@ struct EchoBackdrop: View {
     let presence: Double
     /// Drives a slow, seeded drift so the reflections never sit frozen.
     var time: Double = 0
+    /// The live line's height: the repeats step away from its edges.
+    var lineHeight: CGFloat = 0
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
 
@@ -429,45 +441,52 @@ struct EchoBackdrop: View {
 
     /// Fixed rather than random: a line must set the same way every frame,
     /// and `TimelineView` rebuilds this view continuously.
+    ///
+    /// The repeats recede in steps from the live line: smaller and fainter
+    /// with each step away, rising above it, and mirrored below it as a
+    /// reflection in glass. The earlier set scattered five copies around the
+    /// line at random-looking places and near-invisible strengths, which
+    /// read as a smudge rather than an echo. `dx` and `dy` are in ems of the
+    /// base size; `dx` is mirrored by the seed, so lines alternate the side
+    /// the echo drifts to.
+    /// `dy` is measured from the line's nearer edge (negative above). Two
+    /// strengths only: the repeat next to the line, and those further off.
     private static let variants: [Ghost] = [
-        // Every repeat sits well under the live line and well away from the
-        // centre. The first pass had them at full size and a fifth opacity,
-        // which made them read as five competing lines rather than as an
-        // echo of one -- the live lyric was the hardest thing on screen to
-        // find. Nothing here is legible enough to be mistaken for the line
-        // being sung.
-        .init(scale: 0.85, dx: -0.30, dy: -0.62, angle: -2.0, opacity: 0.055, flipped: true),
-        .init(scale: 0.42, dx: 0.46, dy: -0.44, angle: 1.5, opacity: 0.085, flipped: false),
-        .init(scale: 0.30, dx: -0.50, dy: 0.48, angle: -1.0, opacity: 0.10, flipped: false),
-        .init(scale: 0.60, dx: 0.34, dy: 0.66, angle: 2.5, opacity: 0.065, flipped: true),
-        .init(scale: 0.22, dx: 0.10, dy: -0.78, angle: 0.0, opacity: 0.12, flipped: false),
+        .init(scale: 0.62, dx: 0.30, dy: -0.48, angle: 0, opacity: 0.18, flipped: false),
+        .init(scale: 0.42, dx: 0.62, dy: -1.16, angle: 0, opacity: 0.08, flipped: false),
+        .init(scale: 0.28, dx: 0.90, dy: -1.66, angle: 0, opacity: 0.08, flipped: false),
+        .init(scale: 0.78, dx: 0.0, dy: 0.58, angle: 0, opacity: 0.18, flipped: true),
+        .init(scale: 0.52, dx: -0.30, dy: 1.44, angle: 0, opacity: 0.08, flipped: true),
     ]
 
     var body: some View {
-        // The seed rotates which variant leads, so two lines in a row do not
-        // arrange themselves identically.
-        let offset = Int(seed.magnitude % UInt(Self.variants.count))
+        // The seed decides which way the echo drifts, so two lines in a row
+        // do not arrange themselves identically.
+        let side: CGFloat = seed.isMultiple(of: 2) ? 1 : -1
         let drift = reduceMotion ? 0.0 : 1.0
         let tint = ink.sample(slot: 0.5, seed: UInt64(seed.magnitude)).rest
+        let strength = presence * Settings.shared.echoStrength
         ZStack {
             ForEach(0..<Self.variants.count, id: \.self) { slot in
-                let ghost = Self.variants[(slot + offset) % Self.variants.count]
+                let ghost = Self.variants[slot]
                 let wander = Self.wanderSeed(seed, slot: slot)
-                let x = baseSize * ghost.dx * 3.2 + CGFloat(drift * vc_noise2(wander, time * 0.09)) * baseSize * 0.10
-                let y = baseSize * ghost.dy * 1.5 + CGFloat(drift * vc_noise2(wander ^ 0x5EED, time * 0.07)) * baseSize * 0.06
-                let stage = CGSize(width: stageSize.width * 2 / 3, height: stageSize.height * 2 / 3)
-                let centre = CGPoint(x: stage.width / 2 + baseSize * ghost.dx * 3.2, y: stage.height / 2 + baseSize * ghost.dy * 1.5)
+                let x = baseSize * ghost.dx * side + CGFloat(drift * vc_noise2(wander, time * 0.09)) * baseSize * 0.08
+                let edge = (ghost.dy < 0 ? -lineHeight : lineHeight) / 2
+                let y = edge + baseSize * ghost.dy + CGFloat(drift * vc_noise2(wander ^ 0x5EED, time * 0.07)) * baseSize * 0.03
+                // Kept inside the title-safe area, 5% in from every edge.
+                let stage = CGSize(width: stageSize.width * 0.90, height: stageSize.height * 0.90)
+                let centre = CGPoint(x: stage.width / 2 + baseSize * ghost.dx * side, y: stage.height / 2 + edge + baseSize * ghost.dy)
                 Text(text)
                     .font(font(baseSize * ghost.scale))
-                    .foregroundStyle(tint.opacity(ghost.opacity * presence * Settings.shared.echoStrength))
+                    .foregroundStyle(tint.opacity(ghost.opacity * strength))
                     .lineLimit(1)
                     .fixedSize()
                     .mask(LyricSweepMask(progress: revealed, rightToLeft: rightToLeft, feather: 0.2))
                     .visualEffect { ink, geometry in
                         ink.scaleEffect(WordStageFit.scale(ink: geometry.size, stage: stage,
-                            centre: centre, scale: 1.04, angle: ghost.angle, margin: 4))
+                            centre: centre, scale: 1.02, angle: ghost.angle, margin: 4))
                     }
-                    .rotationEffect(.degrees(ghost.angle + drift * vc_noise(wander ^ 0xA9, time * 0.11) * 0.9))
+                    .rotationEffect(.degrees(ghost.angle + drift * vc_noise(wander ^ 0xA9, time * 0.11) * 0.4))
                     .scaleEffect(x: 1, y: ghost.flipped ? -1 : 1)
                     .offset(x: x, y: y)
             }
