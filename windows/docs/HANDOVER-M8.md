@@ -98,3 +98,9 @@ Test Build 6.1 stopped at 19:46 on 2026-11-13 because the Claude desktop app upd
 started from an agent's shell inside it. Start the owner's copy through Explorer (`explorer.exe "…\Lunalyr.exe"`) so
 it isn't tied to the agent, or let the owner start it. The installer and updater (this milestone) must close a
 running Lunalyr gracefully before replacing it: post `WM_APP+2` to its `Lunalyr.Host.` window, or use Restart Manager.
+
+## Milestone 8 done (14 Nov 2026)
+
+Report: `docs/milestones/M8.md`. Test Build 8 has the installer (`Lunalyr Setup 0.8.0.exe`, unsigned) and the app in
+`app\`. Packaging: `docs/PACKAGING.md`. Waiting on the owner: the signing certificate, where the update feed goes (and
+the update key), whether to install over Test Build 7, and installer licence terms.
