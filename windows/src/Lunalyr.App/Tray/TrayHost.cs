@@ -67,6 +67,9 @@ internal sealed unsafe class TrayHost : IDisposable
     /// <summary>A system setting changed (<c>WM_SETTINGCHANGE</c>, broadcast to top-level windows): read what matters again.</summary>
     public Action? SettingChanged { get; set; }
 
+    /// <summary>A global shortcut registered on this window was pressed (<c>WM_HOTKEY</c>'s id).</summary>
+    public Action<nuint>? Hotkey { get; set; }
+
     /// <summary>Called when something inside a window message throws (it can't propagate to Windows).</summary>
     public Action<Exception>? OnError { get; set; }
 
@@ -263,6 +266,10 @@ internal sealed unsafe class TrayHost : IDisposable
 
             case WM_APP_QUIT:
                 Quit?.Invoke();
+                return 0;
+
+            case 0x0312: // WM_HOTKEY
+                Hotkey?.Invoke(wParam);
                 return 0;
 
             case WM_APP_INVOKE:

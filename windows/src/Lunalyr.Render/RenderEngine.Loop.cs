@@ -114,7 +114,7 @@ public sealed partial class RenderEngine
                 foreach (var s in _surfaces) s.NeedsFrame = true;
             }
             // The desktop player fading the lyrics: every frame of the fade is drawn, idle or not.
-            if (LyricFocusMoving(now)) foreach (var s in _surfaces) s.NeedsFrame = true;
+            if (LyricFocusMoving(now) || LyricsShownMoving(now)) foreach (var s in _surfaces) s.NeedsFrame = true;
             if (now >= _nextHousekeeping) Housekeeping(now);
             ReleaseHeldFades(now);
             UpdateStates(now);
@@ -327,7 +327,8 @@ public sealed partial class RenderEngine
             AheadWork = _aheadWork,
             SongJoined = _songJoined,
             IsMainDisplay = s.Window.Monitor.IsPrimary && !s.IsFloating,
-            LyricsElsewhere = _lyricsFloat && !s.IsFloating,
+            // Hidden lyrics (Hide lyrics) leave nothing to back either.
+            LyricsElsewhere = (_lyricsFloat || LyricsHiddenNow) && !s.IsFloating,
         };
         dc.Target = s.Target;
         dc.BeginDraw();
@@ -345,7 +346,7 @@ public sealed partial class RenderEngine
                 // A background still loading is drawn unseen, so it can load (a video starts decoding when first drawn).
                 if (d.Opacity > 0) DrawLayer(s, d.Layer, frame, d.Opacity);
                 else if (d.Layer.Layer is IFirstFrameLayer { HasFirstFrame: false }) DrawLayer(s, d.Layer, frame, 0.001);
-            var lyricOpacity = LyricFocusOpacity;
+            var lyricOpacity = LyricFocusOpacity * LyricsShownPresence(now);
             if (s.Lyric is not null && lyricOpacity > 0.001) DrawLayer(s, s.Lyric, frame, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
         }
         var result = dc.EndDraw();

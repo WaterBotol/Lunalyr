@@ -96,7 +96,7 @@ public sealed partial class AppController
         if (!hasTrack || playing) _pausedSince = null;
         else _pausedSince ??= now;
         var lines = scene.Lyrics is LyricResult.Synced synced ? synced.Lines : null;
-        return new FloatingVisibility.Input(settings.Surface, _floatEditing, LyricsVisible: true, hasTrack, playing,
+        return new FloatingVisibility.Input(settings.Surface, _floatEditing, LyricsVisible: !settings.LyricsHidden, hasTrack, playing,
             _pausedSince is { } since ? (now - since).TotalSeconds : null,
             HasTimedLines: lines is { Count: > 0 },
             HasPlainLines: scene.Lyrics is LyricResult.Plain { Lines.Count: > 0 },

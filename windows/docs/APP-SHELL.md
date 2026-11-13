@@ -32,7 +32,9 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `--floating-capture <file>` | On quitting, write the floating lyrics window's back buffer as a PNG (the engine draws a frame for it even while hidden or with the displays off) and log the window's style and extended style, and whether it is the foreground window. For checks. |
 | `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). `align`: the music video's align mode drawn as it looks mid-song (film button lit, the video's bar, Reset/Cancel/Done), for captures; nothing is changed. |
-| `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
+| `lunalyr://…` | A link to act on (see "Shortcuts, links and the action HUD"). A second launch forwards it to the running instance; a first launch runs it once start-up has finished. Every link is checked first and anything that isn't exactly one of Lunalyr's is logged and ignored. |
+| `--link <link>…` | Every argument after it is a link, never a flag (what the installer registers: `Lunalyr.exe --link "%1"`, so a link with quotes in it can't add `--data` or `--stats`). |
+| `--hud-capture <file>` | Each action HUD note's bitmap is also written as a PNG (`file`, then `file-2`, `file-3`…), with the window's styles, display affinity and whether it is the foreground window in the log. For checks: the window itself is left out of screen captures. |
 
 ## Demo mode (`--demo`)
 
@@ -66,7 +68,7 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
 
 - **Single instance per data folder:** a named mutex `Local\Lunalyr.{hash of the data folder}`. A second launch
   finds the first's hidden window (class `Lunalyr.Host.{hash}`), calls `AllowSetForegroundWindow` for it, sends its
-  command line with `WM_COPYDATA` and exits 0. The first opens settings (or logs the links).
+  command line with `WM_COPYDATA` and exits 0. The first opens settings (or acts on the links: no window opens for a link but Settings).
 - **WinUI from launch (since the tray flyout):** the tray icon (`Shell_NotifyIcon`, version 4, re-added on
   `TaskbarCreated`) goes up first; then the main thread starts WinUI (`Application.Start`), whose loop pumps the
   hidden tray window too. No window opens until one is asked for; `DispatcherShutdownMode.OnExplicitShutdown` keeps
@@ -429,6 +431,10 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `floatingDisplay` | `""` | a display's lasting key (its DisplayConfig device path), `""` = the main display; a display not connected falls back to the main one | `custom.floating.display` |
 | `floatingFrames`, `floatingSizes` | `{}` | display key → `[x, y, width, height]` in points, relative to the display, y up (the Mac's convention): the frame dragged into place, and the size the presets keep | `custom.floating.frames`, `custom.floating.sizes` |
 | `lyricStyleDesktop`, `lyricStyleFloating` | absent | the other surface's lyric style while one is in use: the style keys below, as stored (written once the surface has been switched) | `custom.lyricStyle.desktop`, `custom.lyricStyle.floating` |
+| `lyricsHidden` | `false` | Hide lyrics: the wallpapers' lyrics and backing fade out and the floating window hides (General, a shortcut or `lunalyr://toggle`) | `custom.lyricsHidden` |
+| `globalShortcuts` | `false` | "Keyboard shortcuts": nothing is registered with Windows until this is on | `custom.globalShortcuts` |
+| `globalShortcutModifiers` | `"controlOptionCommand"` | `controlOptionCommand` (Win+Ctrl+Alt) or `controlShiftCommand` (Win+Ctrl+Shift), the Mac's raw values by key position | `custom.globalShortcutModifiers` |
+| `globalShortcutsOff`, `globalShortcutsOn` | `[]` | shortcuts on by default that were switched off, and newer ones (off by default) that were switched on, by name (`toggleLyrics`, `syncEarlier`, `syncLater`, `cycleLayout`, `copyCard`, `pauseWallpaper`, `tapSyncLyrics`, `toggleMusicVideo`, `nextVisualizer`); unknown names are dropped | `custom.globalShortcutsOff`, `custom.globalShortcutsOn` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
@@ -561,8 +567,8 @@ theme. The window opens at Lyric style (or `--settings-page`).
   style, frame rate, pauses, readings, and a new lookup when the sources change. The window logs which keys it changed
   ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
 - **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
-  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, shortcuts, Discord, lyric cards; floating
-  lyrics are live since milestone 7, see "Floating lyrics"), "…milestone 8" (launch at login, updates), "Arrives in a
+  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, Discord, lyric cards; shortcuts and floating
+  lyrics are live since milestone 7, see "Shortcuts, links and the action HUD" and "Floating lyrics"), "…milestone 8" (launch at login, updates), "Arrives in a
   later build" for the rest. Launch at login writes nothing anywhere.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
@@ -632,9 +638,103 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
   Fade when the pointer is over them, Place (a small screen with its taskbar and a spot per preset, and Custom),
   Display (only with more than one; names from DisplayConfig, "Main display" first), Edit position… / Done and Reset
   size. Lyric size hides while floating; Readings says it changes the Floating style.
-- **Not built:** the Mac's menu-bar "Floating" toggle, `lunalyr://floating` and the Shortcuts action (links aren't
-  handled on Windows yet; the tray flyout has no such tile), and the Hide lyrics / mirroring input
-  (`lyricsVisible` is always true).
+- **Links and Hide lyrics:** `lunalyr://floating` switches the surface (see "Shortcuts, links and the action HUD"), and
+  Hide lyrics hides the window (`FloatingVisibility`'s `LyricsVisible` is `!lyricsHidden`).
+- **Not built:** the Mac's menu-bar "Floating" toggle (the tray flyout has no such tile) and mirroring.
+
+## Shortcuts, links and the action HUD (milestone 7)
+
+The Mac's `GlobalHotkeys.swift`, `LunalyrExtrasShortcuts.swift`, `LunalyrLinks.swift`, `ActionHUD.swift` and the
+actions and notes of `LunalyrExtras.swift`. Logic in `src/Lunalyr.Shell/Extras/` (tested with fakes), Win32 in
+`src/Lunalyr.App/Extras/` and `Hosting/AppHost.Extras.cs`. Checks and what wasn't seen live:
+[milestones/M7.md](milestones/M7.md), "Shortcuts, links and HUD".
+
+### Global shortcuts
+
+- **Off until switched on**, as on the Mac: Settings › General › "Keyboard shortcuts" (`globalShortcuts`, default off)
+  registers nothing with Windows until it is on. Then the Mac's first six are on unless switched off one by one; the
+  three newest (Tap to sync, Music video, Next visualiser) wait to be switched on (`globalShortcutsOff`/`On`).
+- **Keys:** Win+Ctrl+Alt (default) or Win+Ctrl+Shift, the Mac's ⌃⌥⌘ and ⌃⇧⌘ by key position (the Win key where Command
+  is). Neither set is Ctrl+Alt on its own, which layouts with AltGr type characters with, so no typed character is ever
+  taken. Keys go by position (scan codes, turned into the layout's virtual key when registering), and the rows show
+  the character the layout in use puts there (`[` is `Ü` on a German keyboard). None uses the arrow keys (Windows'
+  snapping and virtual desktops).
+
+| Action | Key | Default | What it does (its HUD note) |
+|---|---|---|---|
+| Show or hide lyrics | L | on | Hide lyrics on or off ("Lyrics hidden" / "Lyrics shown") |
+| Lyrics 0.1 s earlier / later for this song | `[` / `]` | on | the flyout's Earlier / Later ("Lyrics 0.1 s earlier · +0.30 s for this song’s lyric source"; with nothing playing "Play a song to adjust its timing") |
+| Next layout | K | on | Match the music, each layout in turn, Match the music again ("Layout: Editorial") |
+| Open lyric card | C | on | the lyric card window; until it is wired in, "Lyric cards aren’t in this build yet" (nothing playing: "Play a song to make a lyric card") |
+| Pause or resume the wallpaper | P | on | `wallpaperPaused` ("Wallpaper paused" / "Wallpaper resumed") |
+| Tap to sync lyrics | T | off | starts or stops Tap to sync (its panel takes the keyboard, as from the flyout) |
+| Music video on or off | V | off | Music video, or back to "Without a video" ("Music video on" / "Music video off · Line patterns") |
+| Next visualiser | N | off | Visualisers, then the next scene ("Visualiser: Silk") |
+
+- **Registration:** `RegisterHotKey` on the tray's hidden window (`MOD_NOREPEAT`), ids 1–9 as the Mac's raw values;
+  `WM_HOTKEY` runs the action only while that id is live. A combination another app holds fails (it is exclusive): the
+  row says "In use by another app", a caption says it is left to that app, and Lunalyr tries again every 30 s (Windows
+  doesn't say when a hot key is freed; the Mac retries when an app quits). Switching one off releases it at once;
+  changing the keys registers them all again. The log says what is live and what is taken.
+- **Playback:** none of the nine is a playback command (nothing reaches a player), so `PlaybackGuard` has nothing to
+  refuse; Tap to sync sends nothing either.
+- **Settings › General › Tray & shortcuts:** Hide lyrics, Keyboard shortcuts, Keys, a row per shortcut (its combination
+  in a fixed-width font and its own switch, dimmed while off or taken) and the Mac's caption.
+- **Seam for the lyric card:** `AppHost.OpenLyricCard` (`Func<bool>`, false while there is no card window); the card
+  shortcut and `lunalyr://card` call it.
+
+### `lunalyr://` links
+
+| Link | Does |
+|---|---|
+| `lunalyr://toggle` | Show or hide lyrics |
+| `lunalyr://card` | Open lyric card (as its shortcut) |
+| `lunalyr://settings` | Open Settings |
+| `lunalyr://floating` | Lyrics between the desktop and floating ("Lyrics floating over apps" / "Lyrics on the desktop", Windows' own note: the Mac's answer is its Shortcuts dialog) |
+| `lunalyr://join/<room>` | Checked (exactly ten `a–z0–9`), then a note: Windows has no listen-along relay yet. Nothing connects. |
+
+- **Checked before anything happens** (`LunalyrLink.Parse`, by hand rather than `System.Uri`): the scheme, then `//`,
+  a host of letters only (no user, password or port), no query or fragment (not even an empty one), nothing outside
+  printable ASCII, at most 256 characters, the raw path (no percent-decoding, so `%61bc…` and `../` never pass), one
+  trailing slash allowed. Anything else, other hosts (`quit`, `share`) included, is logged ("Ignored a link that isn't
+  one of Lunalyr's: …", escaped and cut short) and ignored.
+- **Arriving:** a second launch forwards its links (no settings window opens for them); a link that starts Lunalyr
+  waits until start-up has finished, and links run in the order they came. Each runs as its shortcut does, its note in
+  the HUD.
+- **Registration (milestone 8's installer; the app never writes it):** per user, under `HKCU\Software\Classes\lunalyr`:
+  `(Default)` = `URL:Lunalyr`, `URL Protocol` = `""` (empty), `DefaultIcon\(Default)` = `"<install>\Lunalyr.exe",0`,
+  `shell\open\command\(Default)` = `"<install>\Lunalyr.exe" --link "%1"`. `--link` keeps a link with quotes in it
+  from adding flags (`--data`, `--stats`…). Links go to the instance using the default data folder. Uninstalling
+  removes the key. A packaged (MSIX) build would declare a `windows.protocol` extension instead.
+
+### The action HUD
+
+- **What:** a capsule with a Segoe Fluent Icons glyph (standing in for the Mac's SF Symbol) and the note, centred at
+  the top of the work area of the display the pointer is on (6 points below it, and at least 30 below the display's
+  top edge, clear of a taskbar docked or auto-hidden there), in a 560 × 56-point window (per-monitor DPI). In over
+  0.16 s settling 6 points down, held 1.4 s, out over 0.28 s, then hidden; a second note while it shows changes the
+  text in place and restarts the hold. Under Reduce Motion (Animation effects off) it only fades, as the Mac's does.
+- **When:** every note from a shortcut or link; from Lunalyr's own controls only while the wallpaper is paused (the
+  tray's Pause wallpaper says "Wallpaper paused"). Windows draws no wallpaper notes, so the HUD is where they're seen.
+- **Never in the way:** a layered `WS_POPUP` with `WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE |
+  WS_EX_TOOLWINDOW | WS_EX_TOPMOST` (`ActionHudStyles`), shown with `SW_SHOWNOACTIVATE` and `SWP_NOACTIVATE`,
+  `WM_MOUSEACTIVATE` → `MA_NOACTIVATE`, `WM_NCHITTEST` → `HTTRANSPARENT`, and `WDA_EXCLUDEFROMCAPTURE` (out of
+  screenshots and sharing, the Mac's `sharingType = .none`). Drawn with Direct2D into a premultiplied DIB for
+  `UpdateLayeredWindow`; light or dark app mode, Transparency effects off (opaque) and contrast themes are followed
+  (`--player-debug light|dark|opaque|contrast|reduce-motion` force them for checks).
+
+### Hide lyrics
+
+`lyricsHidden` (kept across launches, as the Mac's): the renderer fades the wallpapers' lyric layer out over 0.45 s
+and back over 0.6 s (`RenderEngine.SetLyricsShown`, the Mac's `LyricVisibility`, multiplied with the desktop player's
+focus), the text backing goes with it, and the floating window hides. A launch with them hidden starts hidden. The
+settings preview still shows the lyrics (the Mac's preview follows Hide); Windows has no mirroring.
+
+### `LunalyrIntents.swift`
+
+Not applicable: App Intents are the Mac's Shortcuts app and Siri. Windows' counterpart is the links: anything that can
+open a URL (a `.url` file, a Stream Deck, AutoHotkey, the Run box) runs the same commands. `doneText` is kept
+(`LunalyrCommand.DoneText`) and logged when a link runs.
 
 ## Wallpaper types (milestone 6)
 

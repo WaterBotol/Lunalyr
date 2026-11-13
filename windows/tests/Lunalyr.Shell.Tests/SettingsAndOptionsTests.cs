@@ -70,6 +70,7 @@ public sealed class AppSettingsTests
             "musicVideoFallback", "musicVideoOnline", "musicVideoSearch", "musicVideoDim", "musicVideoBlur",
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
+            "globalShortcuts", "globalShortcutModifiers", "globalShortcutsOff", "globalShortcutsOn", "lyricsHidden",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
