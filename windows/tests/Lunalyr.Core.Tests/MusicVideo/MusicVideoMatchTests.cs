@@ -4,7 +4,7 @@ namespace Lunalyr.Core.Tests.MusicVideo;
 
 // Ported from MusicVideoMatchTests.swift: the YouTube pick must be the song itself, from the artist, and never a live or
 // fan upload. The library-pick tests aren't ported (Windows has no Apple Music library to match against: the user chooses
-// the file), nor the page-reading and caption-hiding ones (scraping, and undocumented player calls; see the M6 notes).
+// the file), nor the caption-hiding one (undocumented player calls; see the M6 notes).
 public sealed class MusicVideoMatchTests
 {
     private static string? Pick(IReadOnlyList<YouTubeVideoResult> results, string title, string artist) =>
@@ -87,8 +87,24 @@ public sealed class MusicVideoMatchTests
         Assert.Equal("AAAAAAAAAAA", Pick([new("AAAAAAAAAAA", "Are You Bored Yet? [Official Video]", "Clairo")], "Are You Bored Yet?", "Wallows & Clairo"));
     }
 
-    // Windows' own, beside testVerifiedArtistBadgeIsReadFromTheResults (not ported: the badge is read from youtube.com's
-    // page): the Data API has no badge, so a result from it never claims one, and a label's channel then doesn't count.
+    // Ported from MusicVideoMatchTests.swift: testVerifiedArtistBadgeIsReadFromTheResults
+    [Fact]
+    public void VerifiedArtistBadgeIsReadFromTheResults()
+    {
+        const string html = """
+            <html><script>var ytInitialData = {"contents":[{"videoRenderer":{"videoId":"4NRXx6U8ABQ",
+            "title":{"runs":[{"text":"Wallows - Love (Official Video)"}]},"ownerText":{"runs":[{"text":"Atlantic"}]},
+            "ownerBadges":[{"metadataBadgeRenderer":{"icon":{"iconType":"OFFICIAL_ARTIST_BADGE"},
+            "style":"BADGE_STYLE_TYPE_VERIFIED_ARTIST"}}]}},{"videoRenderer":{"videoId":"BBBBBBBBBBB",
+            "title":{"runs":[{"text":"x"}]},"ownerText":{"runs":[{"text":"y"}]},
+            "ownerBadges":[{"metadataBadgeRenderer":{"style":"BADGE_STYLE_TYPE_VERIFIED"}}]}}]};</script></html>
+            """;
+        var results = YouTubeSearchPage.Results(html);
+        Assert.Equal([true, false], results.Select(r => r.VerifiedArtist));
+    }
+
+    // Windows' own, beside the badge test: the Data API (the fallback) has no badge, so a result from it never claims one,
+    // and a label's channel then doesn't count.
     [Fact]
     public void ApiResultsNeverClaimTheVerifiedBadge()
     {

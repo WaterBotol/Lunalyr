@@ -1,6 +1,6 @@
 // Windows' services for the music video (the Mac's MusicVideoServices.swift does the same jobs with AVFoundation, URLSession
-// and AppleScript): whether Media Foundation can play a chosen file, the HTTP client for the YouTube Data API, and the API
-// key, kept with DPAPI. Nothing here plays anything: a check opens the file's video stream only and reads one frame.
+// and AppleScript): whether Media Foundation can play a chosen file, the HTTP client (YouTube's results page, as the Mac
+// asks it, the YouTube Data API and the stills), and the API key, kept with DPAPI. Nothing here plays anything: a check opens the file's video stream only and reads one frame.
 
 using System.Net;
 using System.Runtime.InteropServices;
@@ -23,14 +23,16 @@ public sealed class MediaFoundationPlayability : IMusicVideoPlayabilityCheck
 }
 
 /// <summary>
-/// GETs for the music video: HTTPS only, to the YouTube Data API and YouTube's image host (the stills the API returns),
-/// no cookies, nothing cached, a generic User-Agent, eight seconds at most. Anything else is refused before it is sent.
+/// GETs for the music video, the Mac's URLSessionMusicVideoHTTP: HTTPS only, to YouTube's results page, the YouTube Data API
+/// and YouTube's image host (the results' stills); no cookies, no redirects followed, nothing cached, eight seconds at most,
+/// <c>Accept-Language: en</c>. youtube.com is sent the Mac's WebKit User-Agent (its results data is served only to a
+/// browser); every other host is told it is Lunalyr. Anything else is refused before it is sent.
 /// </summary>
 public sealed class MusicVideoHttpClient : IMusicVideoHttp, IDisposable
 {
     public const string UserAgent = "Lunalyr/0.1 (Windows)";
 
-    /// <summary>The only hosts asked: the Data API, and i.ytimg.com for the stills it lists.</summary>
+    /// <summary>The only hosts asked: the Data API, and i.ytimg.com for the results' stills (and youtube.com's results page alone).</summary>
     public static readonly IReadOnlySet<string> AllowedHosts =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { YouTubeDataApi.Host, "i.ytimg.com" };
 
@@ -48,16 +50,29 @@ public sealed class MusicVideoHttpClient : IMusicVideoHttp, IDisposable
         {
             Timeout = TimeSpan.FromSeconds(8),
         };
-        _client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
     }
 
-    public static bool Allows(Uri url) => url.Scheme == Uri.UriSchemeHttps && AllowedHosts.Contains(url.Host);
+    public static bool Allows(Uri url) =>
+        url.Scheme == Uri.UriSchemeHttps && (AllowedHosts.Contains(url.Host) || YouTubeSearchPage.IsResultsPage(url));
+
+    /// <summary>The User-Agent for <paramref name="url"/>: the Mac's WebKit one for youtube.com, Lunalyr's own elsewhere.</summary>
+    public static string UserAgentFor(Uri url) =>
+        url.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ? YouTubeSearchPage.WebKitAgent : UserAgent;
 
     public async Task<MusicVideoHttpReply> GetAsync(Uri url, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
     {
-        if (!Allows(url)) throw new InvalidOperationException("The music video asks only YouTube's Data API and its stills.");
+        if (!Allows(url)) throw new InvalidOperationException("The music video asks only YouTube's results page, its Data API and its stills.");
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        foreach (var (name, value) in headers) request.Headers.TryAddWithoutValidation(name, value);
+        // youtube.com is sent nothing of the caller's (never a key, never a cookie); the others never a cookie or a second agent.
+        var page = YouTubeSearchPage.IsResultsPage(url);
+        foreach (var (name, value) in headers)
+        {
+            if (page || name.Equals("User-Agent", StringComparison.OrdinalIgnoreCase) || name.Equals("Accept-Language", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)) continue;
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+        request.Headers.TryAddWithoutValidation("User-Agent", UserAgentFor(url));
+        request.Headers.TryAddWithoutValidation("Accept-Language", YouTubeSearchPage.AcceptLanguage);
         request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoStore = true };
         using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
         var body = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
@@ -67,6 +82,8 @@ public sealed class MusicVideoHttpClient : IMusicVideoHttp, IDisposable
             var seconds = retry.Delta?.TotalSeconds ?? (retry.Date is { } at ? (at - DateTimeOffset.UtcNow).TotalSeconds : (double?)null);
             if (seconds is { } s) replyHeaders["Retry-After"] = Math.Max(0, s).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
+        // A redirect is never followed: where it pointed tells a consent or sign-in wall (Windows' guardrail).
+        if (response.Headers.Location is { } location) replyHeaders["Location"] = location.ToString();
         return new MusicVideoHttpReply((int)response.StatusCode, body, replyHeaders);
     }
 

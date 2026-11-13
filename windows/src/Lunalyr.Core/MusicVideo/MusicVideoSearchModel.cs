@@ -1,7 +1,7 @@
 // Ported from the Mac's MusicVideoSearch.swift (MusicVideoSearchRow, MusicVideoSearchModel; Lunalyr's own code). Search
 // YouTube…: the user searches for the playing song and picks the upload to use. Thumbnails only: nothing plays here. A pick
-// goes through the pasted-link path. On Windows the picker sits in Settings › Wallpaper › Music video, and a row's still is
-// the one the Data API returned (the Mac builds an i.ytimg.com address by hand).
+// goes through the pasted-link path. On Windows the picker sits in Settings › Wallpaper › Music video. Windows' own: a page
+// YouTube wouldn't serve as results (a consent or bot-check page) is told apart from a passing failure (Unavailable).
 
 using System.Globalization;
 
@@ -27,7 +27,6 @@ public sealed record MusicVideoSearchRow
         Details = DetailsOf(result.Views, result.Uploaded);
         SameLength = IsSameLength(result.Duration, songDuration);
         PlayingNow = playing == result.VideoId;
-        ThumbnailUrl = result.ThumbnailUrl;
     }
 
     public string Id => VideoId;
@@ -48,8 +47,8 @@ public sealed record MusicVideoSearchRow
     /// <summary>The video on the wallpaper now.</summary>
     public bool PlayingNow { get; }
 
-    /// <summary>The still the API returned (an image, never the video), or null.</summary>
-    public string? ThumbnailUrl { get; }
+    /// <summary>The thumbnail: YouTube's 320 × 180 still. An image, never the video.</summary>
+    public string? ThumbnailUrl => YouTubeVideoId.IsValid(VideoId) ? $"https://i.ytimg.com/vi/{VideoId}/mqdefault.jpg" : null;
 
     /// <summary>"0:07", "3:45", "1:02:03"; null without a usable length.</summary>
     public static string? Duration(double? seconds)
@@ -155,6 +154,9 @@ public sealed class MusicVideoSearchModel(IMusicVideoSearching source)
     /// <summary>The key was refused (rather than missing), for the NeedsKey phase's words.</summary>
     public bool KeyRejected { get; private set; }
 
+    /// <summary>Windows: the Failed phase came from a page YouTube wouldn't serve as results (its search isn't available).</summary>
+    public bool Unavailable { get; private set; }
+
     /// <summary>Closes the picker: after a pick, Back to automatic, or Close.</summary>
     public Action OnClose { get; set; } = () => { };
 
@@ -258,7 +260,8 @@ public sealed class MusicVideoSearchModel(IMusicVideoSearching source)
             case MusicVideoSearchOutcome.RateLimited:
                 Phase = SearchPhase.RateLimited;
                 break;
-            case MusicVideoSearchOutcome.Failed:
+            case MusicVideoSearchOutcome.Failed failed:
+                Unavailable = failed.Unavailable;
                 Phase = SearchPhase.Failed;
                 break;
             case MusicVideoSearchOutcome.NeedsKey key:

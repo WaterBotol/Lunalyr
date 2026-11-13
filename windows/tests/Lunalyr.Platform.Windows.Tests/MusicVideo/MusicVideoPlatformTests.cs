@@ -87,12 +87,15 @@ public sealed class MusicVideoPlatformTests
     }
 
     [Fact]
-    public async Task TheHttpClientAsksOnlyTheDataApiAndItsStillsOverHttps()
+    public async Task TheHttpClientAsksOnlyTheResultsPageTheDataApiAndStillsOverHttps()
     {
         Assert.True(MusicVideoHttpClient.Allows(new Uri("https://www.googleapis.com/youtube/v3/search?q=x")));
         Assert.True(MusicVideoHttpClient.Allows(new Uri("https://i.ytimg.com/vi/4NRXx6U8ABQ/mqdefault.jpg")));
+        Assert.True(MusicVideoHttpClient.Allows(new Uri("https://www.youtube.com/results?search_query=x")));
         Assert.False(MusicVideoHttpClient.Allows(new Uri("http://www.googleapis.com/youtube/v3/search")));
-        Assert.False(MusicVideoHttpClient.Allows(new Uri("https://www.youtube.com/results?search_query=x")));
+        Assert.False(MusicVideoHttpClient.Allows(new Uri("http://www.youtube.com/results?search_query=x")));
+        Assert.False(MusicVideoHttpClient.Allows(new Uri("https://www.youtube.com/watch?v=4NRXx6U8ABQ")));
+        Assert.False(MusicVideoHttpClient.Allows(new Uri("https://consent.youtube.com/m")));
         Assert.False(MusicVideoHttpClient.Allows(new Uri("https://example.com/")));
         // Refused before anything is sent: the handler would throw if it were reached.
         using var client = new MusicVideoHttpClient(new RefusingHandler());
@@ -104,6 +107,47 @@ public sealed class MusicVideoPlatformTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw new Xunit.Sdk.XunitException("No request may be sent.");
+    }
+
+    /// <summary>Records each request and answers with a redirect to YouTube's consent page (never followed).</summary>
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.Found) { Content = new ByteArrayContent([]) };
+            response.Headers.Location = new Uri("https://consent.youtube.com/m?continue=x");
+            return Task.FromResult(response);
+        }
+    }
+
+    // The Mac's URLSessionMusicVideoHTTP: YouTube is sent its WebKit User-Agent and nothing of the caller's (never a key or
+    // a cookie); every other host is told it is Lunalyr; all ask for English. A redirect is handed back, not followed.
+    [Fact]
+    public async Task YouTubeGetsTheMacsWebKitAgentAndNothingElse()
+    {
+        var handler = new RecordingHandler();
+        using var client = new MusicVideoHttpClient(handler);
+        var ct = TestContext.Current.CancellationToken;
+        var reply = await client.GetAsync(new Uri("https://www.youtube.com/results?search_query=x"),
+            new Dictionary<string, string> { [YouTubeDataApi.KeyHeader] = "AIza-not-real", ["Cookie"] = "x=1", ["User-Agent"] = "other" }, ct);
+        Assert.Equal(302, reply.Status);
+        Assert.Equal("https://consent.youtube.com/m?continue=x", reply.Header("Location"));
+        Assert.Single(handler.Requests);
+        var page = handler.Requests[0];
+        Assert.Equal(YouTubeSearchPage.WebKitAgent, string.Join(" ", page.Headers.GetValues("User-Agent")));
+        Assert.Equal("en", string.Join(",", page.Headers.GetValues("Accept-Language")));
+        Assert.False(page.Headers.Contains(YouTubeDataApi.KeyHeader));
+        Assert.False(page.Headers.Contains("Cookie"));
+
+        await client.GetAsync(new Uri("https://www.googleapis.com/youtube/v3/search?q=x"),
+            new Dictionary<string, string> { [YouTubeDataApi.KeyHeader] = "AIza-not-real" }, ct);
+        var api = handler.Requests[1];
+        Assert.Equal(MusicVideoHttpClient.UserAgent, string.Join(" ", api.Headers.GetValues("User-Agent")));
+        Assert.Equal("AIza-not-real", string.Join(",", api.Headers.GetValues(YouTubeDataApi.KeyHeader)));
+        Assert.Equal("en", string.Join(",", api.Headers.GetValues("Accept-Language")));
     }
 
     [Fact]

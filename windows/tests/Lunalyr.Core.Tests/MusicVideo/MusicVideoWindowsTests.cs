@@ -3,7 +3,7 @@ using static Lunalyr.Core.Tests.MusicVideo.Sources;
 
 namespace Lunalyr.Core.Tests.MusicVideo;
 
-// Windows' own: the YouTube Data API client's replies and failures, the key's handling, the frame-by-frame sync of a local
+// Windows' own: the YouTube Data API client's replies and failures (the fallback, and "Use my API key"), the key's handling, the frame-by-frame sync of a local
 // file, the per-song file choice and the file storage. Fixtures are hand-built in the API's documented shapes; nothing
 // reaches YouTube.
 public sealed class MusicVideoWindowsTests
@@ -15,7 +15,7 @@ public sealed class MusicVideoWindowsTests
     {
         var http = new FakeHttp();
         MusicVideoWorld.ServeOfficialPage(http);
-        var resolver = _world.Resolver(http: http, key: "  ");
+        var resolver = _world.Resolver(http: http, key: "  ", mode: MusicVideoSearchMode.ApiKey);
         Assert.False(resolver.CanSearch);
         Assert.Equal(Missing(MusicVideoMiss.NoApiKey), await resolver.ResolveAsync(_world.Song, online: true, TestContext.Current.CancellationToken));
         Assert.Empty(http.Urls);
@@ -46,14 +46,14 @@ public sealed class MusicVideoWindowsTests
     {
         var http = new FakeHttp();
         http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(400, ApiFixtures.Error(400, "keyInvalid"));
-        var resolver = _world.Resolver(http: http);
+        var resolver = _world.ApiResolver(http);
         Assert.Equal(Missing(MusicVideoMiss.KeyRejected), await resolver.ResolveAsync(_world.Song, online: true, TestContext.Current.CancellationToken));
         Assert.Null(resolver.Cache.Lookup(_world.Song.Key, MusicVideoWorld.Start));
 
         http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(403, ApiFixtures.Error(403, "quotaExceeded"));
         _world.Time += 10;
         Assert.Equal(Missing(MusicVideoMiss.QuotaExceeded), await resolver.ResolveAsync(_world.Song, online: true, TestContext.Current.CancellationToken));
-        Assert.True(resolver.RateLimit.BlockedUntil - _world.Time > 3600, "backs off until the quota resets, not a minute");
+        Assert.True(resolver.ApiRateLimit.BlockedUntil - _world.Time > 3600, "backs off until the quota resets, not a minute");
         var sent = http.Urls.Count;
         _world.Time += 600;
         Assert.Equal(Missing(MusicVideoMiss.RateLimited), await resolver.ResolveAsync(_world.Song with { Title = "Other" }, online: true, TestContext.Current.CancellationToken));
@@ -73,18 +73,18 @@ public sealed class MusicVideoWindowsTests
     public async Task VideosTheApiSaysCantBeEmbeddedAreLeftOut()
     {
         var http = new FakeHttp();
-        MusicVideoWorld.ServeSearch(http,
+        MusicVideoWorld.ServeApiSearch(http,
             ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"),
             ("CCCCCCCCCCC", "The Weeknd - Blinding Lights (Official Music Video)", "The Weeknd"));
         http.ByPath[ApiFixtures.VideosPath] = new FakeHttp.Reply(200, ApiFixtures.Videos(
             ("4NRXx6U8ABQ", "PT3M22S", 5, true), ("CCCCCCCCCCC", "PT3M20S", 5, false)));
-        Assert.Equal(Found(YouTube("4NRXx6U8ABQ")), await _world.Resolver(http: http).ResolveAsync(_world.Song, online: true, TestContext.Current.CancellationToken));
+        Assert.Equal(Found(YouTube("4NRXx6U8ABQ")), await _world.ApiResolver(http).ResolveAsync(_world.Song, online: true, TestContext.Current.CancellationToken));
         Assert.Contains("videoEmbeddable=true", http.Urls[0].Query);
         Assert.Contains("type=video", http.Urls[0].Query);
     }
 
     [Fact]
-    public void ApiTitlesAreDecodedAndOnlyHttpsStillsKept()
+    public void ApiTitlesAreDecodedAndOnlyVideosKept()
     {
         var results = YouTubeDataApi.ParseSearch("""
             {"items":[{"id":{"kind":"youtube#video","videoId":"4NRXx6U8ABQ"},"snippet":{"title":"Don&#39;t Stop &amp; Go","channelTitle":"A &amp; B",
@@ -94,7 +94,6 @@ public sealed class MusicVideoWindowsTests
         var only = Assert.Single(results);
         Assert.Equal("Don't Stop & Go", only.Title);
         Assert.Equal("A & B", only.Channel);
-        Assert.Null(only.ThumbnailUrl);
     }
 
     [Theory]

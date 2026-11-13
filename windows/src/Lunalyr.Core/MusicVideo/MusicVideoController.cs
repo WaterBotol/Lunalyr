@@ -381,6 +381,9 @@ public sealed class MusicVideoController
 
     public Task<MusicVideoSearchOutcome> SearchYouTubeAsync(string query, CancellationToken ct) => _resolver.SearchResultsAsync(query, ct);
 
+    /// <summary>Windows: YouTube's results page came back as something other than results lately (a consent or bot-check page).</summary>
+    public bool YouTubeSearchUnavailable => _resolver.PageUnavailable;
+
     /// <summary>Uses a video picked in Search YouTube… for the song it was searched for, exactly as a pasted link.</summary>
     public bool UsePickedVideo(string videoId, string songKey)
     {
@@ -914,9 +917,13 @@ public sealed class MusicVideoController
 
     // ---- Settings copy ----
 
+    /// <summary>Windows: YouTube answered its search with a consent, bot-check or sign-in page, which Lunalyr never works around.</summary>
+    public const string UnavailableNote = "YouTube’s search isn’t available right now.";
+
     /// <summary>One line for Settings about what the wallpaper is showing.</summary>
     /// <param name="fallback">What shows without a video, by the type's name ("Line patterns").</param>
-    public static string? Note(MusicVideoStatus status, bool online, string fallback)
+    /// <param name="searchUnavailable">Windows: YouTube's search page isn't available (<see cref="YouTubeSearchUnavailable"/>).</param>
+    public static string? Note(MusicVideoStatus status, bool online, string fallback, bool searchUnavailable = false)
     {
         switch (status)
         {
@@ -941,11 +948,12 @@ public sealed class MusicVideoController
                     MusicVideoMiss.NotFound => $"No official video found for “{title}”. {instead} You can paste a YouTube link for it below.",
                     MusicVideoMiss.NotEmbeddable => $"The video for “{title}” can’t be shown outside YouTube. {instead}",
                     MusicVideoMiss.RateLimited => $"Too many lookups just now; trying again shortly. {instead}",
+                    MusicVideoMiss.LookupFailed when searchUnavailable => $"{UnavailableNote} {instead} You can paste a YouTube link for it below.",
                     MusicVideoMiss.LookupFailed => $"Couldn’t search YouTube just now. {instead} You can paste a YouTube link for it below.",
                     MusicVideoMiss.NotASong => $"Radio and adverts have no video. {instead}",
                     MusicVideoMiss.PlayerUnreachable => $"Couldn’t load YouTube’s player for “{title}” just now; trying again shortly. {instead}",
                     MusicVideoMiss.LocalFileFailed => $"The video file for “{title}” wouldn’t play here. {instead}",
-                    MusicVideoMiss.NoApiKey => $"Search YouTube needs a YouTube Data API key: add yours below. {instead}",
+                    MusicVideoMiss.NoApiKey => $"Searching with your API key needs a YouTube Data API key: add yours below, or search YouTube’s site instead. {instead}",
                     MusicVideoMiss.KeyRejected => $"YouTube refused the API key, so it can’t be searched. Check the key below. {instead}",
                     MusicVideoMiss.QuotaExceeded => $"The API key’s daily YouTube search allowance is used up; searching again once it resets. {instead}",
                     _ => instead,

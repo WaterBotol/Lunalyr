@@ -1,7 +1,7 @@
 // The music-video wallpaper's decisions as plain values, ported from the Mac's MusicVideoCore.swift (Lunalyr's own code;
 // `git blame` finds no line of the Verso import in it). Free of Windows APIs so every rule is tested with plain values.
-// Left out on purpose: the Mac's YouTubeSearchPage reads youtube.com's results page (scraping); Windows searches through
-// the YouTube Data API instead (YouTubeDataApi.cs), and only the ranking below is shared.
+// The Mac's YouTubeSearchPage (youtube.com's results page) is in YouTubeSearchPage.cs, and its ranking in YouTubeSearch.cs;
+// the owner's YouTube Data API key (YouTubeDataApi.cs) is Windows' own fallback.
 
 using System.Globalization;
 using Lunalyr.Core.Lyrics;
@@ -275,7 +275,7 @@ public enum MusicVideoMiss
     LocalFileFailed,
     /// <summary>Live radio, adverts and streams have no video.</summary>
     NotASong,
-    /// <summary>Windows: Search YouTube is on but no YouTube Data API key is set.</summary>
+    /// <summary>Windows: "Use my API key" is chosen (or YouTube's site can't be asked this run) but no YouTube Data API key is set.</summary>
     NoApiKey,
     /// <summary>Windows: the YouTube Data API refused the key (invalid, or the API not enabled for it).</summary>
     KeyRejected,

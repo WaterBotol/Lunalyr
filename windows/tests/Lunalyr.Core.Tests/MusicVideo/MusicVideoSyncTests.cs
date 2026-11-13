@@ -405,8 +405,7 @@ public sealed class MusicVideoSyncTests
         Assert.Equal(40.45 + 0.25 + MusicVideoSeekLatency.Initial, surface.Seeks[0], 9);
     }
 
-    // Ported from MusicVideoOffsetTests.swift: testLengthsOnResultsAreRead (the "3:45" reader; the API's ISO 8601 lengths
-    // are read too)
+    // Ported from MusicVideoOffsetTests.swift: testLengthsOnResultsAreRead
     [Fact]
     public void LengthsOnResultsAreRead()
     {
@@ -416,10 +415,8 @@ public sealed class MusicVideoSyncTests
         Assert.Null(YouTubeSearch.LengthSeconds("LIVE"));
         Assert.Null(YouTubeSearch.LengthSeconds("3:4x"));
         Assert.Null(YouTubeSearch.LengthSeconds("12"));
-        Assert.Equal(262, YouTubeDataApi.Iso8601Seconds("PT4M22S"));
-        var merged = YouTubeDataApi.Merge(YouTubeDataApi.ParseSearch(ApiFixtures.Search(("dQw4w9WgXcQ", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))),
-            YouTubeDataApi.ParseVideos(ApiFixtures.Videos(("dQw4w9WgXcQ", "PT4M22S", 10, true))), MusicVideoWorld.Start);
-        Assert.Equal(262, merged.Single().Duration);
+        const string html = """<script>var ytInitialData = {"contents":[{"videoRenderer":{"videoId":"dQw4w9WgXcQ","title":{"runs":[{"text":"The Weeknd - Blinding Lights (Official Video)"}]},"ownerText":{"runs":[{"text":"TheWeekndVEVO"}]},"lengthText":{"accessibility":{"accessibilityData":{"label":"4 minutes, 22 seconds"}},"simpleText":"4:22"}}}]};</script>""";
+        Assert.Equal(262, YouTubeSearchPage.Results(html).FirstOrDefault()?.Duration);
     }
 
     // Ported from MusicVideoOffsetTests.swift: testAnOfficialVideoAsLongAsTheSongComesFirst
