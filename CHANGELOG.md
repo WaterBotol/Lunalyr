@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Fixed
+- NetEase Cloud Music (and AMLL, which finds songs through it) found nothing after the first song: NetEase's tracking cookie, sent back with later searches, made it answer with unrelated popular songs. Lunalyr no longer sends or keeps NetEase cookies.
+
 ## [2.0.1] - 2026-11-13
 
 ### Added

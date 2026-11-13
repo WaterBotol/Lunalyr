@@ -157,6 +157,11 @@ enum NetEaseLyricsProvider {
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)", forHTTPHeaderField: "User-Agent")
         request.setValue("https://music.163.com/", forHTTPHeaderField: "Referer")
+        // NetEase sets an anonymous tracking cookie (NMTID) on its first
+        // reply. Sent back, it makes search ignore the query and answer with
+        // unrelated popular songs, so every request after the first found
+        // nothing. No cookie is sent or stored (`noCookies`).
+        noCookies(&request)
         request.timeoutInterval = 6
         do {
             let (data, response) = try await LyricTrace.data(recorder?.session ?? .shared, for: request)
@@ -170,6 +175,12 @@ enum NetEaseLyricsProvider {
             recorder?.failure = error
             return nil
         }
+    }
+
+    /// Keeps cookies out of a NetEase request, both ways.
+    static func noCookies(_ request: inout URLRequest) {
+        request.httpShouldHandleCookies = false
+        request.setValue(nil, forHTTPHeaderField: "Cookie")
     }
 
     // MARK: - yrc parsing

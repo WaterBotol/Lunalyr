@@ -161,11 +161,19 @@ final class LyricProviderTests: XCTestCase {
             private var replies: [String: Mirror.Reply] = [:]
             func set(_ path: String, _ reply: Mirror.Reply) { lock.withLock { replies[path] = reply } }
             func reply(_ path: String) -> Mirror.Reply { lock.withLock { replies[path] ?? Mirror.Reply(status: 500, body: "") } }
+            private var cookies: [Bool] = []
+            /// Whether each request would carry or keep cookies.
+            func record(_ request: URLRequest) {
+                lock.withLock { cookies.append(request.httpShouldHandleCookies || request.value(forHTTPHeaderField: "Cookie") != nil) }
+            }
+            var cookieRequests: Int { lock.withLock { cookies.filter { $0 }.count } }
+            var requests: Int { lock.withLock { cookies.count } }
         }
         static let store = Store()
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
         override func startLoading() {
+            Self.store.record(request)
             let reply = Self.store.reply(request.url?.path ?? "")
             let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: [:])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -202,6 +210,10 @@ final class LyricProviderTests: XCTestCase {
         XCTAssertEqual(found?.metadataReported, true)
         NetEase.store.set("/api/song/lyric", .init(status: 502, body: ""))
         await fails("A failed lyric request is an outage")
+        // NetEase's tracking cookie, sent back, turns search into a list of
+        // unrelated popular songs: no request carries or keeps cookies.
+        XCTAssertGreaterThan(NetEase.store.requests, 0)
+        XCTAssertEqual(NetEase.store.cookieRequests, 0)
     }
 
     /// Answers Kugou by host and path, as the live service did when checked,
