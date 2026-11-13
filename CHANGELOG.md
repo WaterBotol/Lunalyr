@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Fixed
+- Instrument and role credits in a song's opening or closing credits ("吉他：蔡科俊Again", "和声：周杰伦", traditional Chinese, Japanese and Korean labels such as ギター or 편곡, and "Mixed by", "Guitar" and the like) now show in the background instead of as sung lines, and a first line that is only the artist or the title ("周杰伦") is no longer shown as a lyric. Lines that are sung with a colon in them ("爱情：不是这样", "Note: I love you") stay lyrics, and credits no longer count when sources' words are compared.
+
 ## [2.0.1] - 2026-11-13
 
 ### Added
