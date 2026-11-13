@@ -13,7 +13,7 @@ When merging, keep every entry and combine duplicate headings.
 -->
 
 ### Added
-- Update reminders: when a new version is out, a small dot appears on Lunalyr's menu-bar icon, and clicking it opens the panel with "Lunalyr x.y is available", **Update…** (Sparkle's window, with what's new) and **Later** (hides the dot until the next day's check). Settings › General says an update is waiting too, with **Update…** in place of Check for Updates….
+- Update reminders: when a new version is out, Lunalyr's menu-bar icon turns into a violet circle with a down arrow, and clicking it opens the panel with "Lunalyr x.y is available", **Update…** (Sparkle's window, with what's new) and **Later** (back to the usual moon until the next day's check). Settings › General says an update is waiting too, with **Update…** in place of Check for Updates….
 - Settings › General › "Check for updates automatically" (on by default).
 
 ### Changed

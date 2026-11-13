@@ -52,7 +52,7 @@ Run [**Publish preview release**](https://github.com/WaterBotol/Lunalyr/actions/
 4. Test the new app, and an upgrade from an older updater-enabled build if you can.
 5. Publish the draft as the latest release. Updater-enabled copies see it at their next daily check (or at once with **Check for updates…** in the menu-bar panel or under **Settings → General**). Copies built without a configured updater need one manual installation.
 
-Updater-enabled copies newer than 2.0.0 also check the appcast once a day in the background (`SUEnableAutomaticChecks` true, `SUScheduledCheckInterval` 86400; users can turn this off in **Settings → General**). A scheduled check that finds an update never opens a window: it puts a dot on the menu-bar icon and an "is available" row at the top of the panel, using Sparkle's gentle reminders. Unattended downloading and installation, and Sparkle's system-profile reporting, stay off: users always start an update themselves. So a newly published release reaches most users within a day.
+Updater-enabled copies newer than 2.0.0 also check the appcast once a day in the background (`SUEnableAutomaticChecks` true, `SUScheduledCheckInterval` 86400; users can turn this off in **Settings → General**). A scheduled check that finds an update never opens a window: it swaps the menu-bar moon for a violet down-arrow icon and an "is available" row at the top of the panel, using Sparkle's gentle reminders. Unattended downloading and installation, and Sparkle's system-profile reporting, stay off: users always start an update themselves. So a newly published release reaches most users within a day.
 
 ### Packaging locally
 

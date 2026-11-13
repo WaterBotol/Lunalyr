@@ -263,7 +263,7 @@ xattr -dr com.apple.quarantine /Applications/Lunalyr.app
 
 ### Updating and uninstalling
 
-Once a day Lunalyr checks quietly for a new stable release. When there is one, a small dot appears on its menu-bar icon; click the icon and the panel opens with **Lunalyr x.y is available**. Choose **Update…** to see what's new and install it, or **Later** to hide the dot until the next day's check (**Settings › General** keeps saying an update is waiting). Nothing is downloaded or installed until you choose to. You can also click **Check for Updates…** in the menu-bar panel or in **Settings › General** at any time, and turn off **Check for updates automatically** there. Preview builds are published as GitHub pre-releases and installed by hand.
+Once a day Lunalyr checks quietly for a new stable release. When there is one, its menu-bar moon turns into a violet circle with a down arrow; click the icon and the panel opens with **Lunalyr x.y is available**. Choose **Update…** to see what's new and install it, or **Later** to bring the moon back until the next day's check (**Settings › General** keeps saying an update is waiting). Nothing is downloaded or installed until you choose to. You can also click **Check for Updates…** in the menu-bar panel or in **Settings › General** at any time, and turn off **Check for updates automatically** there. Preview builds are published as GitHub pre-releases and installed by hand.
 
 To uninstall, quit Lunalyr and move it to the Bin (Trash). To remove its data as well, delete these folders and reset its preferences. Lunalyr's files and settings still use its original project name, "Verso Custom" (`local.verso.custom`), so these are Lunalyr's own:
 
