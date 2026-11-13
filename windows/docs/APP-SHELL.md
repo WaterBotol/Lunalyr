@@ -771,8 +771,9 @@ WallpaperPage.MusicVideo.cs`, `App/Player/*Align*.cs`, `App/Tray/TrayFlyout.Musi
    "official music video" first, and an official video as long as the song ahead of the rest. A page with no videos is
    a failure, not "nothing official" (the Mac's rule), and isn't cached. Rate limited as on the Mac (2 s apart, 8 a
    minute; 429 backs off as asked, up to an hour, or a minute); the Data API has its own limiter, the same spacing with
-   a used-up daily quota waiting until midnight Pacific, so neither stops the other. A lookup skipped past sends
-   nothing. A refused video makes way for the song's next official one (three at most), then "can't be embedded" is
+   a used-up daily quota waiting until midnight Pacific, so neither stops the other. A lookup held back by Lunalyr's
+   own spacing (not by YouTube) is "too many lookups" and never spends the key. A lookup skipped past sends nothing.
+   A refused video makes way for the song's next official one (three at most), then "can't be embedded" is
    remembered.
    
    **The guardrail (the owner's rule): YouTube's bot, consent, sign-in and PO-token protections are never worked

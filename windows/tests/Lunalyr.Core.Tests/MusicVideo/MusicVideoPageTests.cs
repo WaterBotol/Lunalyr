@@ -229,6 +229,20 @@ public sealed class MusicVideoPageTests
     }
 
     [Fact]
+    public async Task OurOwnSpacingNeverSpendsTheKey()
+    {
+        var http = new FakeHttp();
+        MusicVideoWorld.ServeOfficialPage(http);
+        MusicVideoWorld.ServeApiOfficial(http);
+        var resolver = _world.Resolver(http: http, key: MusicVideoWorld.ApiKey);
+        for (var i = 0; i < 8; i++) await resolver.SearchResultsAsync($"query {i}", Ct);
+        Assert.IsType<MusicVideoSearchOutcome.RateLimited>(await resolver.SearchResultsAsync("query 8", Ct));
+        Assert.Equal(Missing(MusicVideoMiss.RateLimited), await resolver.ResolveAsync(_world.Song, online: true, Ct));
+        Assert.All(http.Paths, p => Assert.Equal(PageFixtures.Path, p));
+        Assert.Empty(resolver.ApiRateLimit.Sent);
+    }
+
+    [Fact]
     public async Task ThePageKeepsTheMacsRateLimit()
     {
         var resolver = _world.Resolver();

@@ -202,7 +202,8 @@ public sealed class MusicVideoResolver
         return false;
     }
 
-    private enum FetchFailure { None, RateLimited, Failed, Unavailable, Cancelled, Quota, Key }
+    /// <summary>Throttled: Lunalyr's own spacing held the page back (no server back-off), which reports as RateLimited.</summary>
+    private enum FetchFailure { None, RateLimited, Throttled, Failed, Unavailable, Cancelled, Quota, Key }
 
     /// <summary>
     /// YouTube's results for "&lt;artist&gt; &lt;title&gt; official music video". A page with no results at all is taken as
@@ -269,6 +270,8 @@ public sealed class MusicVideoResolver
         var (results, failure) = await PageAsync(query, ct).ConfigureAwait(false);
         // The automatic lookup takes a page without videos as a failure (the Mac's rule); the picker shows it as none.
         if (failure == FetchFailure.None && automatic && results!.Count == 0) failure = FetchFailure.Failed;
+        // Our own spacing held the page back: that isn't the page failing, so the key isn't spent either.
+        if (failure == FetchFailure.Throttled) return (null, FetchFailure.RateLimited);
         if (failure is FetchFailure.None or FetchFailure.Cancelled || !HasKey || ct.IsCancellationRequested) return (results, failure);
         return await ApiAsync(query, ct).ConfigureAwait(false);
     }
@@ -282,13 +285,16 @@ public sealed class MusicVideoResolver
     {
         if (ct.IsCancellationRequested) return (null, FetchFailure.Cancelled);
         double wait;
+        bool backingOff;
         lock (_gate)
         {
             // The page was a wall lately: it isn't asked again yet.
             if (_uptime() < _pageUnavailableUntil) return (null, FetchFailure.Unavailable);
             wait = RateLimit.Delay(_uptime());
+            backingOff = RateLimit.BlockedUntil > _uptime();
         }
-        if (wait > LongestWait) return (null, FetchFailure.RateLimited);
+        // Backing off after YouTube's 429 or 503 is the page being busy (the key may stand in); anything else is our spacing.
+        if (wait > LongestWait) return (null, backingOff ? FetchFailure.RateLimited : FetchFailure.Throttled);
         if (wait > 0)
         {
             try
