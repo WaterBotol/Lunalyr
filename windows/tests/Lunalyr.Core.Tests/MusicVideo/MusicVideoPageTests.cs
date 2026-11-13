@@ -79,6 +79,7 @@ public sealed class MusicVideoPageTests
     [InlineData(LostInYesterdayJoined, "Lost in Yesterday", "Tame Impala", 249, "utCjuKDXQsE")]
     [InlineData("results-dayglow-hot-rod-official-music-video.html", "Hot Rod", "Dayglow", 205, "tsJXoqvmgzM")]
     [InlineData("results-dayglow-hot-rod-official-music-video.html", "Can I Call You Tonight?", "Dayglow", 300, "hh1WeQxfCX0")]
+    [InlineData("results-wallows-pleaser-official-music-video.html", "Scrawny", "Wallows", 168, "zgOR698RMLY")]
     [InlineData("results-wallows-pleaser-official-music-video.html", "Pleaser", "Wallows", 190, null)]
     [InlineData("results-hers-what-once-was-official-music-video.html", "What Once Was", "Her's", 256, null)]
     public void TheOwnersSongsFindTheirOfficialVideosOnRecordedPages(string fixture, string title, string artist, double duration,

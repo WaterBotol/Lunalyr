@@ -40,9 +40,9 @@ public sealed record MusicVideoTrack(string Title, string Artist, double Duratio
     /// <summary>
     /// The song looked up. Windows' own: an artist that still holds Apple Music for Windows' "Artist — Album"
     /// (<see cref="AppleMusicWindowsMetadata"/>) is split here too, whichever app reported it, when the album is missing or
-    /// is the part after the dash. The joined text can never match a video (the artist's own "Tame Impala - " segment
-    /// isn't taken off a title, and the channel isn't the artist's), so the search, its cache key, the picker and the
-    /// pasted link all use the artist alone.
+    /// is the part after the dash. With the joined text the usual "Tame Impala - Lost in Yesterday (Official Video)" doesn't
+    /// match (its "Tame Impala" segment isn't the joined artist, so it isn't taken off), so the search, its cache key, the
+    /// picker and the pasted link all use the artist alone.
     /// </summary>
     public MusicVideoSong Song => JoinedArtist() is { } joined
         ? new(Title, joined.Artist, joined.Album, Duration)
