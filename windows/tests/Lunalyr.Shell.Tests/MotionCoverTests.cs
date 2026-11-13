@@ -122,6 +122,8 @@ public sealed class MotionCoverTests : IAsyncDisposable
         Assert.Equal("motion", _renderer.Layers.Background);
         _covers.Hold.SetResult();
         await WaitUntil(() => controller.MotionStatus.State == MotionCoverState.NotFound);
+        // The answer is seen here a moment before the lookup hands the renderer the wallpaper: wait for the lookup.
+        await controller.WhenIdleAsync();
         Assert.NotEqual("motion", _renderer.Layers.Background);
         Assert.Equal(["Dawn", "Far"], _covers.Lookups);
         Assert.Single(_renderer.Replaced); // no cut away and back within an album
