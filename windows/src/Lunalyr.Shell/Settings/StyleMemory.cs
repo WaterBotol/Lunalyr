@@ -79,6 +79,36 @@ public static class StyleMemory
     private static RememberedStyle? FromStored(IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? map, string key) =>
         map is not null && map.TryGetValue(key, out var stored) ? RememberedStyle.FromStored(stored) : null;
 
+    /// <summary>
+    /// The settings as the music playing sees them: the layout and colour remembered for it in place of the ones chosen
+    /// (a remembered "automatic" means Match the music even where a layout is chosen), the rest as chosen.
+    /// </summary>
+    public static AppSettings Applied(AppSettings settings, RememberedStyle? style)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (style is null) return settings;
+        var composition = style.Composition is { } id && AppSettings.Compositions.Contains(id) ? id : settings.LyricComposition;
+        var colour = style.ColourMode is { } mode ? mode.RawValue() : settings.LyricColourMode;
+        return composition == settings.LyricComposition && colour == settings.LyricColourMode
+            ? settings
+            : settings with { LyricComposition = composition, LyricColourMode = colour };
+    }
+
+    /// <summary>
+    /// "Next layout" with a style remembered for the music playing: the remembered layout steps on in place, so the
+    /// change shows and stays with the music (the Mac's <c>cycleLayout(settings:memory:track:)</c>); null when nothing is
+    /// remembered and the chosen layout should step on instead.
+    /// </summary>
+    public static (AppSettings Settings, string Layout, StyleScope Scope)? CycledRemembered(AppSettings settings, LyricQuery? song,
+                                                                                           Func<string?, string> cycled)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(cycled);
+        if (song is null || Remembered(settings, song, song.Artist) is not { } active) return null;
+        var next = cycled(active.Style.Composition);
+        return (Remember(settings, active.Style with { Composition = next }, song, active.Scope), next, active.Scope);
+    }
+
     /// <summary>The settings with <paramref name="style"/> remembered for the song or its artist.</summary>
     public static AppSettings Remember(AppSettings settings, RememberedStyle style, LyricQuery song, StyleScope scope)
     {

@@ -37,7 +37,11 @@ public sealed partial class AppController
     private string CompositionFor(AppSettings settings)
     {
         lock (_gate)
-            return settings.LyricComposition == AutomaticComposition ? _layout ?? "editorial" : settings.LyricComposition;
+        {
+            // A layout remembered for the music playing wins over the chosen one.
+            var layout = Effective(settings).LyricComposition;
+            return layout == AutomaticComposition ? _layout ?? "editorial" : layout;
+        }
     }
 
     /// <summary>The compositions the renderer has (the ones every build has when it cannot say).</summary>
@@ -63,7 +67,7 @@ public sealed partial class AppController
         var available = AvailableCompositions();
         lock (_gate)
         {
-            if (_disposed || _settings.LyricComposition != AutomaticComposition || _lookupTrack is not { } track) return;
+            if (_disposed || Effective(_settings).LyricComposition != AutomaticComposition || _lookupTrack is not { } track) return;
             if (onlyWhenSettled && _shown is null && _lookupCts is not null) return;
             lyrics ??= _shown;
             var key = track.TrackKey;
@@ -100,20 +104,25 @@ public sealed partial class AppController
     }
 
     /// <summary>The rotation's counts or the layout setting changed.</summary>
-    private void ApplyLayoutSettings(AppSettings old, AppSettings settings)
+    /// <param name="layoutChanged">The layout the music playing sees changed (the chosen one, or the one remembered for it).</param>
+    private void ApplyLayoutSettings(AppSettings old, AppSettings settings, bool layoutChanged)
     {
         lock (_gate)
         {
             if (!SameCounts(old.RotateLayoutCounts, settings.RotateLayoutCounts)) _rotation?.SetCounts(settings.RotateLayoutCounts);
             // Turned to "Match the music" (or its rotation switched): the song on screen is matched afresh.
-            if (old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts)
-            {
-                _layoutTrack = null;
-                _layout = null;
-                _layouts.Clear();
-                _layoutOrder.Clear();
-            }
+            if (layoutChanged || old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts)
+                ResetMatchedLayoutLocked();
         }
+    }
+
+    // Must hold _gate. The song on screen is matched afresh (its layout setting, or the one remembered for it, changed).
+    private void ResetMatchedLayoutLocked()
+    {
+        _layoutTrack = null;
+        _layout = null;
+        _layouts.Clear();
+        _layoutOrder.Clear();
     }
 
     private static bool SameCounts(IReadOnlyDictionary<string, int> a, IReadOnlyDictionary<string, int> b) =>

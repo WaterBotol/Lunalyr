@@ -305,4 +305,24 @@ public class LyricStyleExtrasTests
         Assert.Null(Remembered(memory, Song));
         Assert.Equal("1 song · 2 artists remembered", StyleMemory.RememberedCount(1, 2));
     }
+
+    /// <summary>
+    /// Windows' own: what the music playing sees. A remembered layout and colour replace the chosen ones (a remembered
+    /// "automatic" means Match the music over a chosen layout), a part left to the settings keeps the chosen one, and
+    /// nothing remembered changes nothing.
+    /// </summary>
+    [Fact]
+    public void ARememberedStyleReplacesTheChosenLayoutAndColour()
+    {
+        var chosen = new AppSettings { LyricComposition = "spoken", LyricColourMode = "sungSweep", EditorialTypography = true };
+        Assert.Same(chosen, StyleMemory.Applied(chosen, null));
+        var both = StyleMemory.Applied(chosen, new RememberedStyle("automatic", "customGradient"));
+        Assert.Equal(("automatic", LyricColourMode.CustomGradient), (both.LyricComposition, both.ColourMode));
+        Assert.True(both.EditorialTypography);
+        var colourOnly = StyleMemory.Applied(chosen, new RememberedStyle(null, "musicReactive"));
+        Assert.Equal(("spoken", LyricColourMode.MusicReactive), (colourOnly.LyricComposition, colourOnly.ColourMode));
+        var unknown = StyleMemory.Applied(chosen, new RememberedStyle("nonsense", "nonsense"));
+        Assert.Equal(("spoken", LyricColourMode.SungSweep), (unknown.LyricComposition, unknown.ColourMode));
+        Assert.Equal(LyricColourMode.CustomGradient, both.Style().ColourMode);
+    }
 }

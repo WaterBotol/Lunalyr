@@ -37,6 +37,9 @@ public sealed record ExtrasHooks
     /// <summary>A song is playing (on screen).</summary>
     public Func<bool>? HasSong { get; init; }
 
+    /// <summary>The song playing, once its length is known (its remembered style is changed in place), or null.</summary>
+    public Func<Core.Lyrics.LyricQuery?>? PlayingSong { get; init; }
+
     /// <summary>Opens the lyric card window for the line playing; false when this build has none.</summary>
     public Func<bool>? OpenLyricCard { get; init; }
 
@@ -234,7 +237,24 @@ public sealed class LunalyrExtras
     /// <summary>The next layout: Match the music, then each layout in turn, then Match the music again.</summary>
     public void CycleLayout()
     {
-        _update(s => s with { LyricComposition = CycledLayout(s.LyricComposition) });
+        // A layout remembered for this song or artist is cycled in place, so the change shows and stays with the music.
+        var song = _hooks.PlayingSong?.Invoke();
+        (string Layout, StyleScope Scope)? remembered = null;
+        _update(s =>
+        {
+            if (StyleMemory.CycledRemembered(s, song, CycledLayout) is { } cycled)
+            {
+                remembered = (cycled.Layout, cycled.Scope);
+                return cycled.Settings;
+            }
+            remembered = null;
+            return s with { LyricComposition = CycledLayout(s.LyricComposition) };
+        });
+        if (remembered is { } kept)
+        {
+            Post($"Layout for this {StyleMemory.ScopeName(kept.Scope)}: {LayoutTitle(kept.Layout)}", "square.grid.3x3");
+            return;
+        }
         var id = _read().LyricComposition;
         Post($"Layout: {LayoutTitle(id)}", "square.grid.3x3");
     }

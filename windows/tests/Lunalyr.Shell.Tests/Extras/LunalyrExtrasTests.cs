@@ -135,6 +135,20 @@ public sealed class LunalyrExtrasTests
         Assert.Equal("Layout: Match the music", _shown[^1]);
     }
 
+    // Ported from LyricExtrasTests.swift: testCyclingChangesARememberedLayoutInPlace
+    [Fact]
+    public void TestCyclingChangesARememberedLayoutInPlace()
+    {
+        var song = new Core.Lyrics.LyricQuery("Midnight Rain", "Taylor Swift", "Midnights", 174);
+        _settings = StyleMemory.Remember(_settings, new RememberedStyle("echo", null), song, StyleScope.Song);
+        var globalBefore = _settings.LyricComposition;
+        var extras = Extras(new ExtrasHooks { PlayingSong = () => song });
+        extras.CycleLayout();
+        Assert.Equal(Core.Compositions.CompositionKind.Editorial, StyleMemory.Remembered(_settings, song, song.Artist)?.Style.Layout);
+        Assert.Equal(globalBefore, _settings.LyricComposition); // the global layout is left alone
+        Assert.Equal("Layout for this song: Editorial", extras.Note?.Text);
+    }
+
     // Ported from LyricTapSyncTests.swift: testMusicVideoAndVisualiserShortcuts.
     [Fact]
     public void TestMusicVideoAndVisualiserShortcuts()

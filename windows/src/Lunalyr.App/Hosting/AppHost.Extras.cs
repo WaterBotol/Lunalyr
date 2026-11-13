@@ -26,6 +26,7 @@ internal sealed partial class AppHost
         {
             NudgeSync = delta => _controller?.NudgeSongOffset(delta),
             HasSong = () => _controller?.Status.Title is not null,
+            PlayingSong = () => _controller?.CurrentQuery,
             // The card shortcut and lunalyr://card open the lyric card window (AppHost.LyricCards.cs).
             OpenLyricCard = () =>
             {
