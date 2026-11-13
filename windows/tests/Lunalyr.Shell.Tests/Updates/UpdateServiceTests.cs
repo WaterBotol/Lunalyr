@@ -266,6 +266,22 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public void AnInstalledUpdatesDownloadIsRemovedAtStartUp()
+    {
+        var folder = Path.Combine(_folder, "Updates");
+        Directory.CreateDirectory(folder);
+        foreach (var name in new[] { "Lunalyr Setup 0.8.0.exe", "Lunalyr Setup 0.7.9.exe", "Lunalyr Setup 0.9.0.exe",
+                     "Lunalyr Setup 0.9.1.exe.partial", "last-check.txt", "notes.txt" })
+            File.WriteAllText(Path.Combine(folder, name), "x");
+
+        using var service = Service(current: "0.8.0");
+        service.RemoveStaleDownloads();
+
+        Assert.Equal(["Lunalyr Setup 0.9.0.exe", "last-check.txt", "notes.txt"],
+            Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task AnEarlierVerifiedDownloadIsUsedAgain()
     {
         Publish("0.9.0");

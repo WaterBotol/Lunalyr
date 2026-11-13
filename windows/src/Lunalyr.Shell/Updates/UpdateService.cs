@@ -291,6 +291,30 @@ public sealed class UpdateService : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Removes downloads this version has no use for: installers for this version or older (an update that has been
+    /// installed) and unfinished downloads. Called at start-up.
+    /// </summary>
+    public void RemoveStaleDownloads()
+    {
+        if (!Directory.Exists(_env.Folder)) return;
+        foreach (var file in Directory.EnumerateFiles(_env.Folder, "Lunalyr Setup *"))
+        {
+            var name = Path.GetFileName(file);
+            if (name.EndsWith(".partial", StringComparison.OrdinalIgnoreCase))
+            {
+                TryDelete(file);
+                continue;
+            }
+            var version = ProductVersion.Parse(Path.GetFileNameWithoutExtension(name)["Lunalyr Setup ".Length..]);
+            if (version is not null && version <= _current)
+            {
+                TryDelete(file);
+                _log.Info($"Removed the installed update's download ({name}).");
+            }
+        }
+    }
+
     private string InstallerPath(UpdateFeed feed) =>
         Path.Combine(_env.Folder, $"Lunalyr Setup {ProductVersion.Parse(feed.Version)}.exe");
 

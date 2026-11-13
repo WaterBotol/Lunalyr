@@ -48,6 +48,7 @@ internal sealed partial class AppHost
             RequireSignature = string.Equals(Metadata("LunalyrRequireSignature"), "true", StringComparison.OrdinalIgnoreCase),
         }, Log.App);
         _log.Info(config is null ? "Updates: no update service is built into this copy." : $"Updates: checking {config.Feed.Host}.");
+        _updates.RemoveStaleDownloads();
         _updates.Changed += OnUpdateChanged;
         _tray.DescribeUpdate = () => _updates.State is { Phase: UpdatePhase.Ready, NewVersion: { } v } ? $"Restart to update to Lunalyr {v}" : null;
         _tray.InstallUpdate = InstallUpdate;
