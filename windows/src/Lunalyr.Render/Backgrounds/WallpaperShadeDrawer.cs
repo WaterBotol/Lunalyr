@@ -172,8 +172,9 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         return Core.Motion.LyricStagePresence.Presence(inputs, now, Core.Motion.NoticeTiming.Default) > 0.5 ? 1 : 0;
     }
 
-    /// <summary>True while the backing is still fading in or out.</summary>
-    public bool IsEasing(double now) => _presenceTarget >= 0 && now - _presenceChangedAt < WallpaperShade.BackingFade;
+    /// <summary>True while the backing is still fading in or out (the first frame takes the stage as it is: no fade).</summary>
+    public bool IsEasing(double now) =>
+        _presenceTarget >= 0 && _presenceFrom != _presenceTarget && now - _presenceChangedAt < WallpaperShade.BackingFade;
 
     private double Presence(double target, double now)
     {
