@@ -194,9 +194,20 @@ enum KPoeLyricsProvider {
         let start = entry.time / 1000
         let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, start.isFinite, start >= 0 else { return nil }
-        let length = entry.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
-        let fromNext = length == nil && next.map { $0 > entry.time } == true
-        let end = length.map { (entry.time + $0) / 1000 } ?? next.map { max($0, entry.time + 1) / 1000 } ?? start + 0.001
+        // Spelled out step by step: older compilers (Xcode 16) time out
+        // type-checking this as one chained expression.
+        var length: Double? = nil
+        if let duration = entry.duration, duration.isFinite, duration > 0 { length = duration }
+        var fromNext = false
+        let end: Double
+        if let length {
+            end = (entry.time + length) / 1000
+        } else if let next {
+            fromNext = next > entry.time
+            end = max(next, entry.time + 1) / 1000
+        } else {
+            end = start + 0.001
+        }
 
         var words: [LyricsFetcher.Word] = []
         if let syllabus = entry.syllabus, !syllabus.isEmpty {
