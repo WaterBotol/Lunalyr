@@ -101,4 +101,25 @@ public sealed class VisualiserColoursTests
         Assert.True(Difference(Draw(silk, Cover(0)), Draw(Original(VisualizerStyle.Wavefield) with { Style = VisualizerStyle.Silk, FosforaAlbumColours = false }, Cover(0)))
             < Width * Height / 10);
     }
+
+    [Fact]
+    public void ChangingTheChoiceRecoloursTheSceneOnScreen()
+    {
+        // The Colours menu changes the setting under a layer already drawing: the next frames follow it.
+        var settings = VisualiserSettings.Default with { Style = VisualizerStyle.Wavefield };
+        var host = new VisualiserHost(() => settings, new Steady(VisualiserSceneTests.Tone(220)));
+        using var surface = new OffscreenSurface(Width, Height);
+        using var layer = new VisualiserLayerFactory(host, new BackgroundOptions { Grain = false, ScrimStrength = 0, ManualBacking = 0 }).Create();
+        surface.Prepare(layer);
+        var scene = new SceneSnapshot { Palette = Cover(0) };
+        for (var frame = 0; frame < 3; frame++) surface.Draw(layer, scene, 12 + frame / 60.0);
+        var album = surface.ReadPixels();
+        Assert.True(Difference(album, Draw(settings, Cover(0))) < Width * Height / 10);
+
+        settings = Original(VisualizerStyle.Wavefield);
+        for (var frame = 3; frame < 6; frame++) surface.Draw(layer, scene, 12 + frame / 60.0);
+        var original = surface.ReadPixels();
+        Assert.True(Difference(original, album) > Width * Height, "the scene's own colours replace the cover's");
+        Assert.True(Difference(original, Draw(settings, Cover(0))) < Width * Height / 10, "as a layer made with the choice draws");
+    }
 }

@@ -1086,7 +1086,9 @@ per track for the session. See [compositions/matching.md](compositions/matching.
   Beat punch with the calm caption. On the Mac the last two keys colour its web scenes Wavefield Original and Wavecore
   and the native scenes standing in for them (`WebVisualizerView.scenePalette`: "original" passes no album palette);
   Windows' Wavefield, Wavefield Sphere and Fosfora Aurora are those stand-ins, so the choice is offered on them and
-  works the same way (no palette: the shaders' own colours, as with no cover). The scene's other options belong to
+  works the same way (no palette: the shaders' own colours, as with no cover). One difference: Colour richness
+  doesn't change the Original colours on Windows (the shaders apply it with the album palette only, as with no cover),
+  while the Mac's web layer, stand-in included, is saturated by it as a whole. The scene's other options belong to
   the Mac's web scenes, which Windows doesn't have, and aren't offered: Wavefield preset (`custom.wavefieldPreset`, the
   web engine's preset list; the native Wavefield has none), Projection (`custom.wavefieldProjection`: the Mac's stand-in
   for "Sphere" is Wavefield Sphere, which is its own scene in Windows' menu), Light 3D's Colours
