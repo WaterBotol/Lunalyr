@@ -114,7 +114,7 @@ Lyrics in a language you don't read can also be **translated on your Mac**, with
 
 [![Lyrics floating over an open TextEdit note, line by line as the song plays](docs/media/floating-lyrics.gif)](docs/media/floating-lyrics.mp4)
 
-Choose **Floating over apps** (in **Settings › Lyric style**, or the **Floating** button in the menu bar) and the lyrics move into a see-through window above every app, full-screen ones included. Put them in a corner, the centre, under the menu bar or above the Dock, or drag them anywhere with **Edit position**, and give them their own style and size. Clicks pass straight through, and the lyrics fade while the pointer is over them.
+Choose **Floating over apps** (in **Settings › Lyric style**, or the **Floating** button in the menu bar) and the lyrics move into a see-through window above every app, full-screen ones included. Put them in a corner, the centre, under the menu bar or above the Dock, on the display you choose, or drag them anywhere with **Edit position**, and give them their own style, size and shade. Clicks pass straight through, the lyrics fade while the pointer is over them, and they hide when nothing is playing.
 
 ### An opening title for every song
 
@@ -317,6 +317,26 @@ Use **Earlier** and **Later** under **Settings › Timing & sources › This son
 <summary><b>The wrong lyrics, or the wrong music video, show</b></summary>
 
 For lyrics, pick another result for the song in **Settings › Timing & sources**. For a music video, choose **Search YouTube…** in the menu bar to pick a different one, or paste a link in **Settings › Wallpaper › Music video**.
+
+</details>
+
+<details>
+<summary><b>How does Lunalyr choose lyrics?</b></summary>
+
+| Source | Timing |
+| --- | --- |
+| Apple Music (the Music app's own lyrics) | Word or line |
+| Lyrics+ | Word or syllable |
+| AMLL, a community lyrics collection | Word or syllable |
+| NetEase Cloud Music | Word or line |
+| LRCLIB | Word or line |
+| QQ Music | Line |
+| Kugou Music | Word or line |
+| Kuwo Music | Line |
+| lyrics.ovh | Plain text, when nothing timed is found |
+| Files saved by [Lyrimuse](https://github.com/Yudaotor/lyrimuse) (LRC, TTML and YRC) | Word or line, with readings |
+
+By default, **Accuracy first** rejects results whose title, artist or length do not match, prefers lyrics that several services agree on, and ranks lyrics for a live or remixed version below the version you are playing. In **Settings › Timing & sources** you can reorder or turn off sources, pick a different result for a song, search by hand, or import an LRC or TTML file.
 
 </details>
 
