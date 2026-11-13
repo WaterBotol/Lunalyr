@@ -77,12 +77,25 @@ public sealed record ShellOptions
     /// </summary>
     public string? FloatingCapturePath { get; init; }
 
+    /// <summary>
+    /// <c>--hud-capture &lt;file&gt;</c>: each action HUD note's bitmap is also written as a PNG (the window itself is
+    /// left out of screen captures), with the window's styles in the log. For checks.
+    /// </summary>
+    public string? HudCapturePath { get; init; }
+
+    /// <summary>
+    /// <c>lunalyr://…</c> arguments, and every argument after <c>--link</c>: links to act on, each checked before
+    /// anything is done (<c>Lunalyr.Shell.Extras.LunalyrLink</c>).
+    /// </summary>
     public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
     public IReadOnlyList<string> Problems { get; init; } = [];
 
     public const string LinkScheme = "lunalyr:";
+
+    /// <summary>Every argument after it is a link (see <see cref="Links"/>).</summary>
+    public const string LinkFlag = "--link";
 
     public static ShellOptions Parse(IReadOnlyList<string> args)
     {
@@ -93,6 +106,14 @@ public sealed record ShellOptions
         for (var i = 0; i < args.Count; i++)
         {
             var arg = args[i];
+            // "--link": what follows is only ever a link, never a flag, however a page shaped it (the installer registers
+            // the scheme as `Lunalyr.exe --link "%1"`, so a link with quotes in it can't add --data or --stats).
+            if (string.Equals(arg, LinkFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                for (i++; i < args.Count; i++) links.Add(args[i]);
+                break;
+            }
+
             string? Value()
             {
                 if (i + 1 < args.Count && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) return args[++i];
@@ -137,6 +158,13 @@ public sealed record ShellOptions
                     {
                         if (capture.Trim().Length == 0) problems.Add("--floating-capture needs a file.");
                         else options = options with { FloatingCapturePath = Path.GetFullPath(capture.Trim()) };
+                    }
+                    break;
+                case "--hud-capture":
+                    if (Value() is { } hud)
+                    {
+                        if (hud.Trim().Length == 0) problems.Add("--hud-capture needs a file.");
+                        else options = options with { HudCapturePath = Path.GetFullPath(hud.Trim()) };
                     }
                     break;
                 case "--stats":
