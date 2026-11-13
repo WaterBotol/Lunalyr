@@ -17,14 +17,14 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
     // MARK: Hinge
 
     /// The focal word swings open; function words only ink; content words
-    /// and members of a quick run slide (a run as one group).
+    /// and members of a quick run flip open (a run as one group).
     func testHingeEntranceFollowsTheRole() {
         let (p, runs) = line(StagePhrasesTests.mixed)
         let entrances = p.words.map(StageLyricView.hingeEntrance)
         for phrase in p.phrases { XCTAssertEqual(entrances[phrase.focal], .swing) }
         XCTAssertEqual(entrances.filter { $0 == .swing }.count, p.phrases.count, "One swing per phrase")
-        // "and we keep": a quick run, so even "and" and "we" slide, together.
-        XCTAssertEqual(Array(entrances.prefix(3)), [.slide, .slide, .slide])
+        // "and we keep": a quick run, so even "and" and "we" flip, together.
+        XCTAssertEqual(Array(entrances.prefix(3)), [.flip, .flip, .flip])
         // "the" in "through the city lights" inks in place.
         let the = runs.firstIndex { $0.text == "the" && $0.id > 4 } ?? 0
         XCTAssertEqual(entrances[the], .ink)
@@ -32,8 +32,8 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
         let groupStart = runs[0].start
         for time in stride(from: 1.0, through: 1.6, by: 0.05) {
             let slides = (0..<3).map {
-                StageLyricView.hingePose(.slide, start: runs[$0].start, groupStart: groupStart, held: nil, at: time,
-                                         speed: 1, reduceMotion: false).slide
+                StageLyricView.hingePose(.flip, start: runs[$0].start, groupStart: groupStart, held: nil, at: time,
+                                         speed: 1, reduceMotion: false).swing
             }
             XCTAssertEqual(slides[0], slides[1], accuracy: 1e-9)
             XCTAssertEqual(slides[1], slides[2], accuracy: 1e-9)
@@ -43,7 +43,7 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
     /// Every word lands on its own onset: nothing shows before it, and it
     /// is inked a tenth of a second after (the focal word mostly open).
     func testHingeWordsLandOnTheirOnsets() {
-        for entrance in [StageLyricView.HingeEntrance.swing, .slide, .ink] {
+        for entrance in [StageLyricView.HingeEntrance.swing, .flip, .ink] {
             let before = StageLyricView.hingePose(entrance, start: 5, groupStart: 5, held: nil, at: 5 - 0.05, speed: 1,
                                                   reduceMotion: false)
             XCTAssertEqual(before.ink, 0, "\(entrance) shows before its onset")
@@ -51,8 +51,15 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
                                                  reduceMotion: false)
             XCTAssertGreaterThan(after.ink, 0.6, "\(entrance) is not inked on time")
         }
-        let swing = StageLyricView.hingePose(.swing, start: 5, groupStart: 5, held: nil, at: 5.2, speed: 1, reduceMotion: false)
-        XCTAssertLessThan(swing.swing, StageMotion.hingeSwingAngle * 0.25)
+        // The focal word bursts in: oversized and blurred at first, settled
+        // (within the spring's small overshoot) half a second later.
+        let burst = StageLyricView.hingePose(.swing, start: 5, groupStart: 5, held: nil, at: 5.02, speed: 1, reduceMotion: false)
+        XCTAssertGreaterThan(burst.grow, 1.2)
+        XCTAssertGreaterThan(burst.blur, 0.5)
+        let swing = StageLyricView.hingePose(.swing, start: 5, groupStart: 5, held: nil, at: 5.5, speed: 1, reduceMotion: false)
+        XCTAssertLessThan(abs(swing.swing), StageMotion.hingeSwingAngle * 0.1)
+        XCTAssertEqual(swing.grow, 1, accuracy: 0.02)
+        XCTAssertLessThan(swing.blur, 0.05)
         // Held: it grows from the spine while held, then holds still.
         let early = StageLyricView.hingePose(.swing, start: 5, groupStart: 5, held: 1.2, at: 5.3, speed: 1, reduceMotion: false)
         let late = StageLyricView.hingePose(.swing, start: 5, groupStart: 5, held: 1.2, at: 6.2, speed: 1, reduceMotion: false)
@@ -62,7 +69,7 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
         // Reduce Motion: no travel, no swing, a fade.
         let reduced = StageLyricView.hingePose(.swing, start: 5, groupStart: 5, held: 1.2, at: 5.05, speed: 1, reduceMotion: true)
         XCTAssertEqual(reduced.swing, 0)
-        XCTAssertEqual(reduced.slide, 0)
+        XCTAssertEqual(reduced.blur, 0)
         XCTAssertEqual(reduced.grow, 1)
     }
 
@@ -135,16 +142,26 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
         XCTAssertGreaterThan(phraseGaps.min() ?? 0, wordGaps.max() ?? 0)
     }
 
-    /// Ink lands on time: the focal word fills over its sung time (a held
-    /// word slowly), other words in a quick sweep, and a glued word's
-    /// syllables are reached on their own onsets.
+    /// Ink lands on time: each big word is struck on its onset, the focal
+    /// word hard and the others lightly; a held focal word spreads while
+    /// held; a glued word's syllables are reached on their own onsets.
     func testBroadsideInkByRole() {
         let (p, runs) = line(StagePhrasesTests.mixed)
         let running = runs[3]
         XCTAssertEqual(StageLyricView.broadsideInk(running, info: p.words[3], next: runs[4].start, at: running.start - 0.05), 0)
-        let half = StageLyricView.broadsideInk(running, info: p.words[3], next: runs[4].start, at: running.start + 0.58)
-        XCTAssertGreaterThan(half, 0.3)
-        XCTAssertLessThan(half, 0.7, "A held focal word fills across its held time")
+        XCTAssertEqual(StageLyricView.broadsideInk(running, info: p.words[3], next: runs[4].start, at: running.start + 0.15), 1,
+                       accuracy: 0.02)
+        let hard = StageLyricView.broadsideStrike(focal: true, start: 5, held: nil, at: 5.02, speed: 1)
+        let light = StageLyricView.broadsideStrike(focal: false, start: 5, held: nil, at: 5.02, speed: 1)
+        XCTAssertGreaterThan(hard.scale, 1.2, "The focal word is struck hard")
+        XCTAssertLessThan(light.scale, 1.13)
+        XCTAssertEqual(StageLyricView.broadsideStrike(focal: true, start: 5, held: nil, at: 4.9, speed: 1).ink, 0)
+        XCTAssertGreaterThan(StageLyricView.broadsideStrike(focal: true, start: 5, held: nil, at: 5.1, speed: 1).ink, 0.9)
+        let settled = StageLyricView.broadsideStrike(focal: true, start: 5, held: 1.2, at: 5.4, speed: 1)
+        let spread = StageLyricView.broadsideStrike(focal: true, start: 5, held: 1.2, at: 6.3, speed: 1)
+        XCTAssertGreaterThan(spread.scale, settled.scale, "A held focal word spreads while held")
+        XCTAssertEqual(StageLyricView.broadsideStrike(focal: true, start: 5, held: nil, at: 5.1, speed: 1,
+                                                      reduceMotion: true).scale, 1)
         let city = runs[6]
         XCTAssertEqual(StageLyricView.broadsideInk(city, info: p.words[6], next: runs[7].start, at: city.start + 0.15), 1,
                        accuracy: 0.02)
@@ -220,5 +237,68 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
         let first = StageLyricView.broadsidePhrasePresence(1, phrases: p.phrases, exitStart: 7.5, at: 7.7)
         let last = StageLyricView.broadsidePhrasePresence(2, phrases: p.phrases, exitStart: 7.5, at: 7.7)
         XCTAssertLessThan(first, last)
+    }
+}
+
+/// A fast line (ten words in two seconds) through Hinge and Broadside,
+/// written as 30 fps frames only when LUNALYR_HB_FAST_DIR is set (pass it
+/// as TEST_RUNNER_LUNALYR_HB_FAST_DIR): <dir>/<size>/<layout>/fast/frames.
+/// Drawn as StageLayoutVideoTests draws its clips.
+@MainActor
+final class HingeBroadsideFastLineTests: XCTestCase {
+    static var fastClip: StageLayoutVideoTests.Clip {
+        let texts = "we were running out of time and never looked back again".split(separator: " ").map(String.init)
+        let words = texts.enumerated().map { i, text in
+            LyricsFetcher.Word(text: text, start: 1 + Double(i) * 0.19, end: 1 + Double(i) * 0.19 + 0.17)
+        }
+        let line = StageLayoutVideoTests.line(words)
+        let next = StageLayoutVideoTests.line(StageLayoutVideoTests.follower(["hold", "on", "tight", "now"], after: line,
+                                                                             step: 0.2))
+        let flat = [Bool](repeating: false, count: words.count)
+        return StageLayoutVideoTests.Clip(name: "fast", line: line, glue: flat, readings: [:], next: next,
+                                          nextGlue: [false, false, false, false], nextReadings: [:], hue: 0.9)
+    }
+
+    func testFastLineIsPhrasedWithoutPileUps() {
+        let clip = Self.fastClip
+        let runs = StageRun.make(clip.line.words, glue: clip.glue)
+        let phrasing = StagePhrases.analyse(runs)
+        XCTAssertGreaterThanOrEqual(phrasing.phrases.count, 3)
+        // Hinge: at most two pages drawn at any frame between turns.
+        let starts = phrasing.phrases.map(\.start)
+        for time in stride(from: 1.0, through: 3.2, by: 1.0 / 30) {
+            let turns = StageLyricView.hingeTurns(pageStarts: starts, lineTimed: false, exitStart: 4, at: time, speed: 2.6)
+            let begun = starts.map { time >= $0 - StageMotion.lead }
+            let drawn = StageLyricView.hingeInstances(turns: turns, begun: begun, exitPage: nil, reduceMotion: false)
+                .filter { $0.opacity > 0.05 }
+            XCTAssertLessThanOrEqual(drawn.count, 3, "Pages pile up at \(time)s")
+        }
+    }
+
+    func testWriteFastLineFrames() throws {
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_HB_FAST_DIR"], !dir.isEmpty else {
+            throw XCTSkip("Set TEST_RUNNER_LUNALYR_HB_FAST_DIR to write the fast-line frames")
+        }
+        let clip = Self.fastClip
+        for size in StageLayoutVideoTests.sizes {
+            for composition in [LyricComposition.hinge, .broadside] {
+                let frames = "\(dir)/\(size.name)/\(composition.rawValue)/fast/frames"
+                try? FileManager.default.removeItem(atPath: frames)
+                try FileManager.default.createDirectory(atPath: frames, withIntermediateDirectories: true)
+                let painter = StageLayoutVideoTests.Painter(size: size.stage,
+                                                            renderer: StageLayoutVideoTests.renderer(for: composition))
+                defer { painter.close() }
+                let span = StageLayoutVideoTests.span(of: clip)
+                let count = Int(((span.upperBound - span.lowerBound) * StageLayoutVideoTests.fps).rounded(.up))
+                for index in 0...count {
+                    try autoreleasepool {
+                        let time = span.lowerBound + Double(index) / StageLayoutVideoTests.fps
+                        let rep = try painter.draw(StageLayoutVideoTests.frame(clip, composition: composition, size: size,
+                                                                               time: time))
+                        try StageLayoutVideoTests.writePNG(rep, to: frames + String(format: "/%04d.png", index))
+                    }
+                }
+            }
+        }
     }
 }

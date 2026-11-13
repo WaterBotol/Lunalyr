@@ -27,9 +27,10 @@ extension StageLyricView {
     // fresh page beneath it, and the page before is covered. One axis, one
     // move at two scales: the focal word swings open on the spine as it is
     // sung, the page turns on it at each phrase, and the line leaves with a
-    // last turn. Small words ink in place (content words with a short slide
-    // away from the spine, function words with none); a quick run slides as
-    // one group. A held focal word grows a little from the spine as it is held.
+    // last turn. The focal word bursts in oversized and blurred as it swings,
+    // and settles; small content words flip open on the spine with the same
+    // spring, a quick run as one group; function words just ink. A held
+    // focal word grows a little from the spine as it is held.
 
     /// Which side of the spine a page sits on.
     enum HingeSide: Equatable { case left, right }
@@ -38,8 +39,8 @@ extension StageLyricView {
     enum HingeEntrance: Equatable {
         /// The focal word: it swings open on the spine.
         case swing
-        /// A content word or a member of a quick run: inks with a short slide away from the spine.
-        case slide
+        /// A content word or a member of a quick run: flips open on the spine (a run as one group).
+        case flip
         /// A function word: inks in place.
         case ink
     }
@@ -47,7 +48,7 @@ extension StageLyricView {
     static func hingeEntrance(_ info: StageWordInfo) -> HingeEntrance {
         if info.isFocal { return .swing }
         if info.isFunction, info.runGroup == nil { return .ink }
-        return .slide
+        return .flip
     }
 
     /// The phrases on each page: one phrase a page for a word-timed line; a
@@ -197,32 +198,44 @@ extension StageLyricView {
         return result
     }
 
-    /// A word's pose as it arrives: its ink (opacity), its slide away from
-    /// the spine (in type units), its swing (degrees, 0 flat) and its growth
-    /// while held. Each lands on the word's onset; `groupStart` is when the
-    /// quick run it belongs to starts to slide (its own onset otherwise).
+    /// A word's pose as it arrives: its ink (opacity), its swing about the
+    /// spine (degrees, 0 flat; the spring takes it a little past flat and
+    /// back), its scale (the focal word bursts in oversized and settles,
+    /// then grows a little while held) and its blur (0...1, the burst's
+    /// speed). Each lands on the word's onset; `groupStart` is when the
+    /// quick run it belongs to swings in as one (its own onset otherwise).
     static func hingePose(_ entrance: HingeEntrance, start: Double, groupStart: Double, held: Double?, at time: Double,
                           speed: Double, reduceMotion: Bool)
-        -> (ink: Double, slide: CGFloat, swing: Double, grow: CGFloat) {
+        -> (ink: Double, swing: Double, grow: CGFloat, blur: Double) {
         let age = time - (start - StageMotion.lead)
         if reduceMotion {
-            return (Easing.smoothstep(age / WallpaperMotion.reducedDissolve), 0, 0, 1)
+            return (Easing.smoothstep(age / WallpaperMotion.reducedDissolve), 0, 1, 0)
         }
         let pace = 1 + (min(3, max(1, speed)) - 1) * 0.5
+        let inked = Easing.smoothstep(age / (StageMotion.hingeInk / pace))
         switch entrance {
         case .ink:
-            return (Easing.smoothstep(age / (StageMotion.hingeInk / pace)), 0, 0, 1)
-        case .slide:
-            let travel = hingeEaseOut((time - (groupStart - StageMotion.lead)) / (StageMotion.hingeSlide / pace))
-            return (Easing.smoothstep(age / (StageMotion.hingeInk / pace)), CGFloat(1 - travel), 0, 1)
+            return (inked, 0, 1, 0)
+        case .flip:
+            // The shared arrival spring: a quick flip open with a little overshoot.
+            let open = StageMotion.arrival(groupStart, at: time, speed: speed)
+            return (inked, StageMotion.hingeFlipAngle * (1 - open), 1, 0)
         case .swing:
-            let open = hingeEaseOut(age / (StageMotion.hingeSwing / pace))
-            var grow: CGFloat = 1
+            let open = hingeSpring(age, rise: StageMotion.arrivalRise / StageMotion.hingeSwingPace / pace)
+            let t = min(max(age / (StageMotion.hingeSwing / pace), 0), 1)
+            let settle = 1 - (1 - t) * (1 - t) * (1 - t)
+            var grow = 1 + StageMotion.hingeBurst * CGFloat(1 - settle)
             if let held, held > 0 {
-                grow = 1 + StageMotion.hingeHeldGrowth * CGFloat(hingeEaseInOut((time - start) / held))
+                grow *= 1 + StageMotion.hingeHeldGrowth * CGFloat(hingeEaseInOut((time - start) / held))
             }
-            return (min(1, open * 2.5), 0, StageMotion.hingeSwingAngle * (1 - open), grow)
+            return (min(1, max(0, open) * 3), StageMotion.hingeSwingAngle * (1 - open), grow, 1 - settle)
         }
+    }
+
+    /// The arrival spring (as `StageMotion.arrival`: about 8% overshoot,
+    /// from rest) with its own rise time.
+    static func hingeSpring(_ age: Double, rise: Double) -> Double {
+        vc_spring_step(age, VCSpring(omega: 3.36 / max(rise, 0.01), zeta: StageMotion.arrivalDamping))
     }
 
     /// Ease-out (exponential): arrivals.
@@ -336,15 +349,14 @@ extension StageLyricView {
                 .map { runs[$0.run].start }.min() ?? run.start
         }()
         let held: Double? = info.flatMap { $0.isHeld ? $0.duration : nil }
-        let pose: (ink: Double, slide: CGFloat, swing: Double, grow: CGFloat) = phrasing.lineTimed || !live
-            ? (time >= run.start - StageMotion.lead ? 1 : 0, 0, 0, held == nil ? 1 : 1 + StageMotion.hingeHeldGrowth)
+        let pose: (ink: Double, swing: Double, grow: CGFloat, blur: Double) = phrasing.lineTimed || !live
+            ? (time >= run.start - StageMotion.lead ? 1 : 0, 0, held == nil ? 1 : 1 + StageMotion.hingeHeldGrowth, 0)
             : Self.hingePose(entrance, start: run.start, groupStart: groupStart, held: held, at: time, speed: speed,
                              reduceMotion: reduceMotion)
         let sample = sample(run, of: phrasing.words.count)
         let tile = tiled(run)
-        let towardSpine: CGFloat = side == .right ? -1 : 1
         let spineAnchor: UnitPoint = side == .right ? .leading : .trailing
-        let swingSign: Double = side == .right ? 1 : -1
+        let swingSign: Double = side == .right ? -1 : 1
         return HingeCap(limit: room) {
             withReading(run, size: size, colour: sample.reading, alignment: side == .right ? .leading : .trailing,
                         maxWidth: room) {
@@ -355,10 +367,12 @@ extension StageLyricView {
             }
         }
         .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: max(2, size * 0.06), y: 2)
-        .scaleEffect(pose.grow, anchor: spineAnchor)
+        // The burst grows about a point a quarter in from the spine, so a big
+        // word does not run far past the page's outer margin.
+        .scaleEffect(pose.grow, anchor: UnitPoint(x: side == .right ? 0.25 : 0.75, y: 0.6))
+        .blur(radius: pose.blur > 0.01 ? size * 0.07 * CGFloat(pose.blur) : 0)
         .rotation3DEffect(.degrees(swingSign * pose.swing), axis: (x: 0, y: 1, z: 0), anchor: spineAnchor,
                           perspective: 0.5)
-        .offset(x: towardSpine * pose.slide * unit * StageMotion.hingeSlideDistance)
         .opacity(pose.ink)
     }
 
@@ -391,15 +405,18 @@ extension StageMotion {
     static let hingeTurn = 0.62
     /// Hinge: a page starts to turn this long before the next page's first word arrives.
     static let hingeTurnLead = 0.12
-    /// Hinge: the focal word swinging open on the spine.
-    static let hingeSwing = 0.48
-    /// Hinge: the focal word's starting angle, standing out of the page.
-    static let hingeSwingAngle = 72.0
-    /// Hinge: a small word inking in, and a content word's slide.
-    static let hingeInk = 0.12
-    static let hingeSlide = 0.24
-    /// Hinge: the slide, in type units.
-    static let hingeSlideDistance: CGFloat = 0.22
+    /// Hinge: the focal word's burst settling (scale and blur), and its
+    /// swing's pace against the shared arrival spring (a big word swings a
+    /// little slower than a small one flips).
+    static let hingeSwing = 0.42
+    static let hingeSwingPace = 0.75
+    /// Hinge: the focal word's starting angle, standing out of the page,
+    /// and how oversized it bursts in.
+    static let hingeSwingAngle = 84.0
+    static let hingeBurst: CGFloat = 0.4
+    /// Hinge: a small content word's flip, and any small word's ink.
+    static let hingeFlipAngle = 70.0
+    static let hingeInk = 0.1
     /// Hinge: how much a held focal word grows over its held time.
     static let hingeHeldGrowth: CGFloat = 0.045
     /// Hinge: the two pages of a line-timed spread open this far apart.

@@ -23,11 +23,12 @@ extension StageLyricView {
     // function words) are labels: tiny type stacked up to two lines high
     // against the cap height of the big word they belong to, as a printer
     // filled the space beside a big word. A phrase ends in an extra em of
-    // space. The type never moves on the strip: a camera pans along it at
-    // the singing pace and ink fills each word as it is sung. The focal word
-    // fills across its whole sung time (a held word fills slowly); other big
-    // words fill in a quick sweep; labels ink flat; a quick run is one sweep
-    // across its words. The line leaves still travelling in the reading
+    // space. A camera pans along the strip at the singing pace and each word
+    // is struck as it is sung: the press comes down on the focal word hard
+    // (its ink lands half again as large and slams into the print), on the
+    // other big words lightly, the ink sweeping in from the reading side;
+    // labels ink flat; a quick run is one sweep across its words; a held
+    // focal word spreads a little as it is held. The line leaves still travelling in the reading
     // direction, its phrases fading oldest first, and the next line's strip
     // arrives already moving the same way.
 
@@ -193,24 +194,23 @@ extension StageLyricView {
         return camera
     }
 
-    /// How far a word is inked, 0...1, at `time`: a sweep from its onset,
-    /// reaching each glued syllable at the syllable's own onset. The focal
-    /// word's sweep lasts its sung time (at least `broadsideFocalSweep`);
-    /// other words sweep in `broadsideSweep`, a quick run's member in the
-    /// time to the next member. Reduce Motion: 0 or 1 (it fades instead).
+    /// How far a word is inked, 0...1, at `time`: a quick sweep from its
+    /// onset (`broadsideSweep`; a quick run's member in the time to the next
+    /// member), reaching each glued syllable at the syllable's own onset.
+    /// Reduce Motion: 0 or 1 (it fades instead).
     static func broadsideInk(_ run: StageRun, info: StageWordInfo?, next: Double?, at time: Double,
                              reduceMotion: Bool = false) -> Double {
         let lead = StageMotion.lead
         if reduceMotion { return time >= run.start - lead ? 1 : 0 }
         var span = broadsideSweep
         if let info {
-            if info.isFocal {
-                span = max(broadsideFocalSweep, info.duration)
-            } else if info.runGroup != nil, let next {
+            if info.runGroup != nil, !info.isFocal, let next {
                 span = min(max(next - run.start, 0.08), broadsideSweep)
             }
         }
         let parts = run.parts
+        // The focal word is struck whole (`broadsideStrike`), not swept.
+        if info?.isFocal ?? false, parts.count < 2 { return time >= run.start - lead ? 1 : 0 }
         guard parts.count > 1 else { return sweep((time - (run.start - lead)) / span) }
         // Each syllable fills its share of the word from its own onset.
         let total = CGFloat(max(1, run.text.count))
@@ -227,6 +227,25 @@ extension StageLyricView {
             if filled < 1 { break }
         }
         return min(1, reached)
+    }
+
+    /// The press striking a big word as it is inked: its ink lands
+    /// oversized and settles with the arrival spring's small overshoot, as
+    /// the platen comes down. The focal word takes the full strike
+    /// (`StageMotion.broadsideStrike`), other big words a light one; a held
+    /// focal word then spreads a little over its held time. Returns the
+    /// ink's scale and opacity.
+    static func broadsideStrike(focal: Bool, start: Double, held: Double?, at time: Double, speed: Double,
+                                reduceMotion: Bool = false) -> (scale: CGFloat, ink: Double) {
+        let age = time - (start - StageMotion.lead)
+        if reduceMotion { return (1, Easing.smoothstep(age / WallpaperMotion.reducedDissolve)) }
+        let landed = StageMotion.arrival(start, at: time, speed: speed)
+        let amount = focal ? StageMotion.broadsideStrike : StageMotion.broadsideLightStrike
+        var scale = 1 + amount * CGFloat(1 - landed)
+        if focal, let held, held > 0 {
+            scale *= 1 + StageMotion.broadsideHeldSpread * CGFloat(glide((time - start) / held))
+        }
+        return (scale, min(1, max(0, landed) * 3))
     }
 
     private static func sweep(_ x: Double) -> Double {
@@ -248,9 +267,8 @@ extension StageLyricView {
     static let broadsideFadeSpan: CGFloat = 0.7
     /// How far ahead of the word being inked the camera looks (share of the stage).
     static let broadsideLeadRoom: CGFloat = 0.1
-    /// The quick sweep of an ordinary big word, and the shortest focal sweep.
+    /// The quick sweep of a big word's ink.
     static let broadsideSweep = 0.16
-    static let broadsideFocalSweep = 0.3
 
     /// How visible a Broadside word is from where its box sits: 1 well inside
     /// the stage, fading to 0 as either end reaches the margin.
@@ -435,6 +453,10 @@ extension StageLyricView {
         let inkFade = flat ? Easing.smoothstep((time - (run.start - StageMotion.lead))
                                                     / (reduceMotion ? WallpaperMotion.reducedDissolve : 0.12)) : 1
         let fill = flat ? (lineInk ?? 1) : filled
+        let strike: (scale: CGFloat, ink: Double) = label || phrasing.lineTimed ? (1, 1)
+            : Self.broadsideStrike(focal: info?.isFocal ?? false, start: run.start,
+                                   held: info.flatMap { $0.isHeld ? $0.duration : nil }, at: time, speed: lineSpeed,
+                                   reduceMotion: reduceMotion)
         let sample = sample(run, of: runs.count)
         let tile = tiled(run)
         let hard = size * 0.04
@@ -455,7 +477,8 @@ extension StageLyricView {
                     }
                     .background { tileBackground(tile, size: size) }
                     .mask { if fill < 1 { mask } else { Color.black } }
-                    .opacity(inkFade)
+                    .scaleEffect(strike.scale, anchor: .bottom)
+                    .opacity(inkFade * strike.ink)
                 }
             }
             .font(font(size, hero: !label, id: run.id))
@@ -473,5 +496,10 @@ extension StageMotion {
     static let broadsideLeave = 0.45
     /// Broadside: phrases fade out oldest first as the line leaves.
     static let broadsideExitStagger = 0.08
+    /// Broadside: how oversized the ink lands on a focal word (the strike),
+    /// on other big words, and how far a held focal word spreads.
+    static let broadsideStrike: CGFloat = 0.42
+    static let broadsideLightStrike: CGFloat = 0.12
+    static let broadsideHeldSpread: CGFloat = 0.05
     static let broadsideExitFade = 0.32
 }
