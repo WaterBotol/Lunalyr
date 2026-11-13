@@ -36,7 +36,7 @@ public static class OnboardingGate
         if (options.QuitAfterSeconds is not null) return (false, "--seconds (a check)");
         if (options.OpenSettings) return (false, options.SettingsPage is null ? "--settings" : "--settings-page");
         if (options.OpenLyricCard) return (false, "--lyric-card");
-        // TODO(M8 merge): never on a launch-at-login start (--login), once the launch-at-login branch adds that flag.
+        if (options.Login) return (false, "--login (started at sign-in, quietly)");
         return (true, "first run");
     }
 

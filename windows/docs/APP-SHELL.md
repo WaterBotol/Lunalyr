@@ -634,8 +634,8 @@ The Mac's first-run welcome (`Sources/UI/Onboarding/`), adapted. The flow and it
 - **Never** with `--demo`, a capture flag (`--onboarding-capture`, `--floating-capture`, `--ticker-capture`,
   `--hud-capture`), `--stats`, `--seconds`, `--settings`, `--settings-page` or `--lyric-card`: a check, or a launch that
   asked for another window. `--quiet-windows`, `--no-playback`, `--data` and links don't stop it; with
-  `--quiet-windows` it opens unactivated at the bottom of the z-order like every other window. A launch-at-login start
-  (`--login`, from the launch-at-login branch) must not show it either: a `TODO(M8 merge)` in `OnboardingGate.Decide`.
+  `--quiet-windows` it opens unactivated at the bottom of the z-order like every other window. Nor does a launch-at-login
+  start (`--login`): Windows started Lunalyr at sign-in, quietly.
 - **When:** as soon as WinUI is up (`AppHost.ShowPendingUi`), before the players and the wallpaper have started; the
   music and last steps say "Looking for players…" until they have, and follow from then on.
 - **Again:** Settings › General › Welcome › Show Welcome… shows it from the first step (one already up comes forward).
@@ -682,10 +682,10 @@ theme setting and `--theme` apply as in Settings.
 | The tray | The Mac's menu-bar step: a picture of the taskbar's corner (the overflow ^, Lunalyr's icon lit, the clock, and the tray lyric strip while it is on); Lunalyr lives in the notification area with no taskbar button once Settings is closed, may be under ^ and can be dragged onto the taskbar to stay pinned, and opening it again brings back Settings. Switches: Lyric by the tray (`trayLyric`) and Launch at login. |
 | Done | The Mac's words: "“Title” is playing, so its lyrics are on your desktop now." or "Play a song in any music app and its lyrics appear on your desktop."; the players again and "Wallpaper: …" with what it draws; "Settings has the rest…" (first run) or "You can change all of this in Settings." (again). |
 
-**Launch at login** belongs to the launch-at-login branch. The window takes two delegates from its host,
-`AppHost.IsLaunchAtLoginOn` (`Func<bool>`) and `AppHost.SetLaunchAtLogin` (`Func<bool, string?>`: an error sentence
-or null); after a change the switch shows what `IsLaunchAtLoginOn` says, and an error shows under it. Until the merge
-connects them they are stubs (`() => false`, `_ => null`, `TODO(M8 merge)`), so the switch reads Off and springs back.
+**Launch at login** is the same switch as Settings › General's (see "Startup, updates and packaging"). The window takes
+two delegates from its host, `AppHost.IsLaunchAtLoginOn` (`Func<bool>`) and `AppHost.SetLaunchAtLogin`
+(`Func<bool, string?>`: an error sentence or null), both on `LaunchAtLoginSwitch`; after a change the switch shows what
+Windows' entry now says, and an error shows under it (in `--demo`/`--data` runs: "isn’t changed by test runs").
 
 ### Checks: `--onboarding-capture`
 

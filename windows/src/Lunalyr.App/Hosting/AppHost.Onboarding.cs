@@ -15,13 +15,11 @@ internal sealed partial class AppHost
     /// <summary>The players Windows' media controls know about (null until start-up has opened them), read only.</summary>
     internal IMediaSessionSource? MediaSessions => _sessions;
 
-    // TODO(M8 merge): launch at login. The launch-at-login branch connects these two to its real switch; until then the
-    // welcome's row reads off and changing it does nothing.
-    /// <summary>Whether Lunalyr starts when the user signs in to Windows.</summary>
-    internal Func<bool> IsLaunchAtLoginOn { get; set; } = () => false;
+    /// <summary>Whether Lunalyr starts when the user signs in to Windows (the same switch as Settings › General).</summary>
+    internal Func<bool> IsLaunchAtLoginOn => () => _launchAtLogin?.Status.IsOn ?? false;
 
     /// <summary>Turns launch at login on or off; returns a sentence for the user when it couldn't, else null.</summary>
-    internal Func<bool, string?> SetLaunchAtLogin { get; set; } = _ => null;
+    internal Func<bool, string?> SetLaunchAtLogin => on => _launchAtLogin is { } sw ? sw.Set(on) : "Lunalyr is still starting. Try again in a moment.";
 
     /// <summary>
     /// WinUI is up: the welcome for <c>--onboarding-capture</c>, or on a true first run. A first run is decided from what
