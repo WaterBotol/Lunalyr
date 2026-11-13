@@ -263,7 +263,7 @@ xattr -dr com.apple.quarantine /Applications/Lunalyr.app
 
 ### Updating and uninstalling
 
-Click **Check for Updates…** in the menu-bar panel or in **Settings › General**. Stable releases install from there; preview builds are published as GitHub pre-releases and installed by hand.
+Once a day Lunalyr checks quietly for a new stable release. When there is one, a small dot appears on its menu-bar icon; click the icon and the panel opens with **Lunalyr x.y is available**. Choose **Update…** to see what's new and install it, or **Later** to hide the dot until the next day's check (**Settings › General** keeps saying an update is waiting). Nothing is downloaded or installed until you choose to. You can also click **Check for Updates…** in the menu-bar panel or in **Settings › General** at any time, and turn off **Check for updates automatically** there. Preview builds are published as GitHub pre-releases and installed by hand.
 
 To uninstall, quit Lunalyr and move it to the Bin (Trash). To remove its data as well, delete these folders and reset its preferences. Lunalyr's files and settings still use its original project name, "Verso Custom" (`local.verso.custom`), so these are Lunalyr's own:
 
@@ -377,7 +377,8 @@ Still stuck? [Open a bug report](https://github.com/WaterBotol/Lunalyr/issues/ne
 
 - Lunalyr has no accounts, and no tracking, analytics or ads. It never uses your microphone, and the sound it uses for visualisers is analysed on your Mac and never recorded.
 - To find lyrics, it sends the playing song's title, artist, album and length to the lyric services you have turned on. It also asks Apple's iTunes search for album covers, may ask MusicBrainz for an artist's name in Chinese, Japanese or Korean, and downloads typefaces from Google Fonts.
-- Everything else is off until you turn it on: Discord status, YouTube search for music videos, translation, listen-along, web players in browsers, and checking for updates.
+- Once a day it asks GitHub whether a new version is out (turn this off in **Settings › General**). Updates are never installed without asking, and no information about your Mac is sent.
+- Everything else is off until you turn it on: Discord status, YouTube search for music videos, translation, listen-along and web players in browsers.
 
 The full detail, service by service, is in [PRIVACY.md](PRIVACY.md).
 

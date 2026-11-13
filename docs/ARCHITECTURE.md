@@ -199,7 +199,7 @@ Artwork, animated covers and AppleScript results are cached in memory only. The 
 
 ## Updates
 
-`UpdateConfiguration` enables the updater only when `Info.plist` has an HTTPS `SUFeedURL` and a valid 32-byte `SUPublicEDKey`. `AppUpdates` then starts Sparkle's standard updater. Automatic checks, automatic installation and system-profile reporting are off. The feed is the `appcast.xml` attached to the latest stable GitHub release. See [RELEASING.md](RELEASING.md).
+`UpdateConfiguration` enables the updater only when `Info.plist` has an HTTPS `SUFeedURL` and a valid 32-byte `SUPublicEDKey`. `AppUpdates` then starts Sparkle's standard updater, which checks once a day. A scheduled check's update is shown through Sparkle's gentle reminders: the delegate callbacks feed `UpdateBadgeState`, which badges the menu-bar icon and adds the panel's "is available" row. Automatic installation and system-profile reporting are off. The feed is the `appcast.xml` attached to the latest stable GitHub release. See [RELEASING.md](RELEASING.md).
 
 ## Build and test
 

@@ -12,6 +12,13 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+- Update reminders: when a new version is out, a small dot appears on Lunalyr's menu-bar icon, and clicking it opens the panel with "Lunalyr x.y is available", **Update…** (Sparkle's window, with what's new) and **Later** (hides the dot until the next day's check). Settings › General says an update is waiting too, with **Update…** in place of Check for Updates….
+- Settings › General › "Check for updates automatically" (on by default).
+
+### Changed
+- Lunalyr now checks for updates once a day in the background, including on existing installations, without asking first. It still never downloads or installs an update until you choose to, and sends no system profile. See PRIVACY.md.
+
 ## [2.0.0] - 2026-11-13
 
 ### Added

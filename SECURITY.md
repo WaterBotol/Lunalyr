@@ -43,7 +43,7 @@ Out of scope:
 ## How Lunalyr protects you
 
 - Update archives are signed with an EdDSA (Ed25519) key. Sparkle checks the signature against the public key embedded in the app before installing. The private key is never stored in this repository.
-- Updates and lyric requests use HTTPS. Automatic update checks are off.
+- Updates and lyric requests use HTTPS. Lunalyr checks its update feed once a day (this can be turned off in Settings › General); updates are verified with the publisher's EdDSA key and never install without the user choosing to.
 - Audio for the visualisers is analysed in memory. Nothing is recorded or uploaded, and the microphone is never used.
 - The TTML parser refuses external entities and DTD declarations, and limits input size and nesting depth.
 

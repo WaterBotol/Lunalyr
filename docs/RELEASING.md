@@ -50,9 +50,9 @@ Run [**Publish preview release**](https://github.com/WaterBotol/Lunalyr/actions/
 2. The workflow runs the tests, builds the app with the public key, packages it with `ditto` to keep the framework symlinks intact, signs the archive with Sparkle's tools, and creates a draft release `v<version>` with the ZIP and `appcast.xml`. An existing release or tag is never overwritten.
 3. The draft's notes are the whole of `CHANGELOG.md`. Trim them to the new version's section.
 4. Test the new app, and an upgrade from an older updater-enabled build if you can.
-5. Publish the draft as the latest release. Updater-enabled copies can then install it with **Check for updates…** in the menu-bar panel or under **Settings → General**. Copies built without a configured updater need one manual installation.
+5. Publish the draft as the latest release. Updater-enabled copies see it at their next daily check (or at once with **Check for updates…** in the menu-bar panel or under **Settings → General**). Copies built without a configured updater need one manual installation.
 
-Automatic update checks, unattended installation and Sparkle's system-profile reporting are all off. Users always start an update themselves.
+Updater-enabled copies newer than 2.0.0 also check the appcast once a day in the background (`SUEnableAutomaticChecks` true, `SUScheduledCheckInterval` 86400; users can turn this off in **Settings → General**). A scheduled check that finds an update never opens a window: it puts a dot on the menu-bar icon and an "is available" row at the top of the panel, using Sparkle's gentle reminders. Unattended downloading and installation, and Sparkle's system-profile reporting, stay off: users always start an update themselves. So a newly published release reaches most users within a day.
 
 ### Packaging locally
 

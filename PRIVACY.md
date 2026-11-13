@@ -25,7 +25,7 @@ The music-video wallpaper (**Music video**, off by default) first looks for a mu
   - The relay's web listen-along page, opened by people without Lunalyr, asks Apple's iTunes Search API for the song's cover and links, and loads Spotify's or Apple Music's embedded player only when the visitor chooses to listen. Those requests come from the visitor's browser, not from your Mac.
 - **Apple**, for translation languages only: with **Translations** on, lyrics are translated on your Mac, and macOS downloads a language only when you turn it on or press **Download**.
 - **Google Fonts** supplies the default interface and lyric typeface, Manrope, and any Google Font you choose. Downloaded fonts are kept on your Mac.
-- **GitHub** serves update information, only when you click **Check for Updates…**. Automatic checks are off, and no system profile is sent.
+- **GitHub** serves update information. Once a day, and whenever you click **Check for Updates…**, Lunalyr downloads the update feed from `https://github.com/WaterBotol/Lunalyr/releases/latest/download/appcast.xml` (GitHub redirects it to its download servers). The request carries Lunalyr's and Sparkle's version numbers in its user agent and, like any download, your IP address; no system profile or other information about your Mac is sent. A new version is only downloaded and installed after you choose **Update…** or **Install Update**. To stop the daily check, turn off **Check for updates automatically** in **Settings › General**; **Check for Updates…** still works when you click it.
 
 ## Where your data is stored
 
