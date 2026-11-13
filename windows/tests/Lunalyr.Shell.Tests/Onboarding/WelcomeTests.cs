@@ -291,7 +291,7 @@ public sealed class WelcomeTests
         [
             ["--demo"], ["--settings"], ["--settings-page", "general"], ["--lyric-card"], ["--seconds", "20"], ["--stats", "s.json"],
             ["--floating-capture", "f.png"], ["--ticker-capture", "t.png"], ["--hud-capture", "h.png"],
-            ["--onboarding-capture", "o.png"], ["--login"],
+            ["--onboarding-capture", "o.png"], ["--login"], ["--youtube-search"],
         ];
         foreach (var args in never)
         {

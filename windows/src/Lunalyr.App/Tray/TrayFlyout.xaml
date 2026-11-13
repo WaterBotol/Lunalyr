@@ -160,7 +160,7 @@
                                     Click="TapSyncButton_Click" />
                         </StackPanel>
 
-                        <!-- Search YouTube: the browser, only from a click here. -->
+                        <!-- Search YouTube…: the Search YouTube window (the Mac's picker), never the browser. -->
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -169,7 +169,7 @@
                             <HyperlinkButton x:Name="SearchButton" Padding="6,4,6,4" Margin="-6,0,0,0" Click="SearchButton_Click">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE721;" FontSize="14" />
-                                    <TextBlock Text="Search YouTube" />
+                                    <TextBlock Text="Search YouTube…" />
                                 </StackPanel>
                             </HyperlinkButton>
                             <TextBlock x:Name="SearchNote" Grid.Column="1" Style="{StaticResource Caption}"

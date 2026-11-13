@@ -19,8 +19,8 @@ namespace Lunalyr.App.Settings;
 // YouTube… window (MusicVideoSearchWindow.swift), all Lunalyr's own lines; the window's two Verso-attributed lines are
 // SwiftUI declarations. Windows' differences: the Music library becomes "Video file" (a file chosen for the song), search
 // reads YouTube's site as on the Mac but can use the owner's YouTube Data API key instead ("Search YouTube with", and the
-// key's row), the picker sits in this section rather than a window of its own, and "Show the video on" isn't offered (one
-// background draws on every display).
+// key's row), and "Show the video on" isn't offered (one background draws on every display). The picker is its own window
+// as on the Mac (MusicVideo/MusicVideoSearchWindow.cs), opened by Search… beside the link.
 internal static partial class WallpaperPage
 {
     public const string PrivacyCaption =
@@ -120,13 +120,16 @@ internal static partial class WallpaperPage
             link.Text = "";
         }, name: "Stop using the pasted link for this song");
         ToolTipService.SetToolTip(clearLink, "Stop using the pasted link for this song");
+        // Search…: the Search YouTube window, as on the Mac (MusicVideoSettings' PastedVideoLink row).
+        var searchVideo = Button("Search…", () => App.CurrentHost?.OpenMusicVideoSearch(), name: "Search YouTube…");
+        ToolTipService.SetToolTip(searchVideo, "Search YouTube for this song and pick the video to use");
         var linkRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         linkRow.Children.Add(link);
         linkRow.Children.Add(use);
+        linkRow.Children.Add(searchVideo);
         linkRow.Children.Add(clearLink);
         sections.Children.Add(Card("YouTube link", null, "", linkRow));
         sections.Children.Add(linkNote);
-        sections.Children.Add(SearchExpander(video));
 
         // ---- Video timing ----
         var offset = new TextBlock { MinWidth = 64, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -280,130 +283,6 @@ internal static partial class WallpaperPage
         ctx.OnRefresh(_ => Show());
         return Expander("YouTube Data API key", "Optional: your own key, for “Use my API key”, or when YouTube’s site can’t be searched.", "", content,
             expanded: keys is not null && !keys.HasKey && ctx.Current.MusicVideoSearch == "apiKey");
-    }
-
-    /// <summary>Search YouTube…: the results for the playing song with stills, length, channel and age; a click uses one.</summary>
-    private static Expander SearchExpander(MusicVideoController video)
-    {
-        var model = MusicVideoUi.Search;
-        var content = new StackPanel { Spacing = 8 };
-        var label = new TextBlock { Style = Resource<Style>("SettingsCaption") };
-        var query = new TextBox { Width = 320, PlaceholderText = "Search YouTube" };
-        AutomationProperties.SetName(query, "Search YouTube for this song");
-        var go = Button("Search", () => { }, name: "Search YouTube");
-        var back = Button("Back to automatic", () => model?.BackToAutomatic(), name: "Back to automatic");
-        ToolTipService.SetToolTip(back, "Stop using the pick for this song and let Lunalyr choose again");
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        row.Children.Add(query);
-        row.Children.Add(go);
-        row.Children.Add(back);
-        var phase = Caption("");
-        AutomationProperties.SetLiveSetting(phase, AutomationLiveSetting.Polite);
-        var results = new StackPanel { Spacing = 4 };
-        AutomationProperties.SetName(results, "Search results");
-        content.Children.Add(label);
-        content.Children.Add(row);
-        content.Children.Add(phase);
-        content.Children.Add(results);
-        var expander = Expander("Search YouTube…", "Pick another upload for this song (a lyric video, a live take…). Nothing plays here.", "", content);
-        if (model is null)
-        {
-            content.IsHitTestVisible = false;
-            return expander;
-        }
-        void Search()
-        {
-            model.Query = query.Text;
-            model.Search();
-        }
-        go.Click += (_, _) => Search();
-        query.KeyDown += (_, e) =>
-        {
-            if (e.Key == Windows.System.VirtualKey.Enter)
-            {
-                Search();
-                e.Handled = true;
-            }
-        };
-        void Show()
-        {
-            label.Text = model.Notice ?? model.SongLabel ?? "";
-            if (query.Text != model.Query && query.FocusState == FocusState.Unfocused) query.Text = model.Query;
-            back.IsEnabled = model.CanGoBackToAutomatic;
-            go.IsEnabled = model.Phase != MusicVideoSearchModel.SearchPhase.NoSong;
-            phase.Text = model.Phase switch
-            {
-                MusicVideoSearchModel.SearchPhase.Loading => "Searching…",
-                MusicVideoSearchModel.SearchPhase.Empty => "No videos found.",
-                MusicVideoSearchModel.SearchPhase.RateLimited => "Too many searches just now. Try again in a minute.",
-                MusicVideoSearchModel.SearchPhase.Failed => model.Unavailable
-                    ? MusicVideoController.UnavailableNote + (MusicVideoUi.Keys?.HasKey == true ? "" : " With an API key of your own, Lunalyr can search YouTube’s Data API instead.")
-                    : "Couldn’t search YouTube just now.",
-                MusicVideoSearchModel.SearchPhase.NoSong => "Play a song to search for its video.",
-                MusicVideoSearchModel.SearchPhase.NeedsKey => model.KeyRejected
-                    ? "YouTube refused the API key. Check it under YouTube Data API key."
-                    : MusicVideoUi.Keys is null ? "YouTube is off for this run." : "Add a YouTube Data API key above to search with it, or choose YouTube’s site.",
-                _ => "",
-            };
-            results.Children.Clear();
-            foreach (var result in model.Rows) results.Children.Add(Row(result));
-        }
-        Button Row(MusicVideoSearchRow result)
-        {
-            var grid = new Grid { ColumnSpacing = 10 };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var still = new Image { Width = 128, Height = 72, Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill };
-            if (result.ThumbnailUrl is { } url) _ = LoadStillAsync(still, url);
-            grid.Children.Add(still);
-            var text = new StackPanel { Spacing = 2 };
-            text.Children.Add(new TextBlock { Text = result.Title, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-            var line = string.Join(" · ", new[] { result.Channel, result.DurationText, result.Details }.Where(p => !string.IsNullOrEmpty(p)));
-            text.Children.Add(new TextBlock { Text = line, Style = Resource<Style>("SettingsCaption") });
-            var marks = string.Join(" · ", new[] { result.PlayingNow ? MusicVideoSearchRow.PlayingNowLabel : null, result.SameLength ? MusicVideoSearchRow.SameLengthHint : null }
-                .Where(p => p is not null));
-            if (marks.Length > 0) text.Children.Add(new TextBlock { Text = marks, Style = Resource<Style>("SettingsCaption") });
-            Grid.SetColumn(text, 1);
-            grid.Children.Add(text);
-            var button = new Button { Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left };
-            AutomationProperties.SetName(button, result.AccessibilityLabel);
-            button.Click += (_, _) => model.Pick(result.VideoId);
-            return button;
-        }
-        void Changed() => expander.DispatcherQueue?.TryEnqueue(Show);
-        model.Changed += Changed;
-        expander.Expanding += (_, _) => model.Prepare();
-        expander.Unloaded += (_, _) => model.Changed -= Changed;
-        model.OnClose = () => expander.DispatcherQueue?.TryEnqueue(() => expander.IsExpanded = false);
-        _ = video;
-        Show();
-        return expander;
-    }
-
-    /// <summary>A result's still: YouTube's 320 × 180 thumbnail for the video (its image host, HTTPS, the Mac's address).</summary>
-    private static async Task LoadStillAsync(Image image, string url)
-    {
-        if (MusicVideoUi.Http is not { } http || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || !MusicVideoHttpClient.Allows(uri)) return;
-        try
-        {
-            var reply = await http.GetAsync(uri, new Dictionary<string, string>(), CancellationToken.None);
-            if (reply.Status != 200) return;
-            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-            using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
-            {
-                writer.WriteBytes(reply.Body);
-                await writer.StoreAsync();
-                writer.DetachStream();
-            }
-            stream.Seek(0);
-            var bitmap = new BitmapImage();
-            await bitmap.SetSourceAsync(stream);
-            image.Source = bitmap;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Runtime.InteropServices.COMException)
-        {
-            // The row shows without its still.
-        }
     }
 
     /// <summary>Windows' file picker for a video, over this window; only ever opened by a click.</summary>

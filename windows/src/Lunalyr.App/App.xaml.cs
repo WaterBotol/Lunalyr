@@ -79,6 +79,7 @@ public partial class App : Application
         _window?.ApplyTheme();
         _lyricCard?.ApplyTheme();
         _onboarding?.ApplyTheme();
+        _videoSearch?.ApplyTheme();
     }
 
     /// <summary>The controller's status changed: refresh what the window shows.</summary>

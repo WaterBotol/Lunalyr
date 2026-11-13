@@ -412,14 +412,15 @@ internal sealed partial class AppHost
     }
 
     /// <summary>
-    /// "Search YouTube" in the flyout: the song's search in the default browser, from that click only. Nothing opens
-    /// while playback and sound are off for the run (<c>--no-playback</c>, <c>--demo</c>).
+    /// "Search YouTube…" (the tray flyout, its music video row, Settings › Wallpaper › Music video): the Search YouTube
+    /// window, as on the Mac. It looks YouTube up for the playing song and uses the video picked for it; it never opens the
+    /// browser and nothing in it plays.
     /// </summary>
-    internal bool SearchYouTube()
+    internal void OpenMusicVideoSearch()
     {
-        var status = _controller?.Status;
-        IUrlLauncher launcher = PlaybackGuard.Process.IsBlocked ? RefusingUrlLauncher.Instance : ShellUrlLauncher.Instance;
-        return YouTubeSearch.Open(launcher, PlaybackGuard.Process, status?.Title, status?.Artist, message => _log.Info(message));
+        if (_quitting || _app is null) return;
+        _log.Info("Opening Search YouTube.");
+        _app.ShowMusicVideoSearch();
     }
 
     internal void TogglePause()

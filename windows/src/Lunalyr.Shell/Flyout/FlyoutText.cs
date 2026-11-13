@@ -136,16 +136,13 @@ public static class FlyoutText
 
     public const string TapToSyncHelp = "Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps";
 
-    // ---- Search YouTube (Windows: the browser, not the Mac's music-video picker) ----
+    // ---- Search YouTube… (the Mac's music-video picker: a window, never the browser) ----
 
-    public const string SearchYouTube = "Search YouTube";
+    public const string SearchYouTube = "Search YouTube…";
 
-    public const string SearchYouTubeHelp = "Searches YouTube for this song in your browser";
+    public const string SearchYouTubeHelp = "Search YouTube for this song and pick the video to use";
 
     public const string SearchYouTubeNeedsSong = "Available while a song plays";
-
-    /// <summary>Windows only: nothing that could make a sound opens while playback is off for the run.</summary>
-    public static string SearchYouTubeOff(string reason) => $"Off for this run ({reason}).";
 
     // ---- Wallpaper (MenuBarWallpaperControls, QuickToggle, WallpaperModeGrid) ----
 

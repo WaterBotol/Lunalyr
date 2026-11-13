@@ -487,8 +487,8 @@ public sealed partial class TrayFlyout : Window
 
     private void SearchButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_host.SearchYouTube()) Hide();
-        else Refresh();
+        Hide();
+        _host.OpenMusicVideoSearch();
     }
 
     private void OptionsButton_Click(object sender, RoutedEventArgs e)

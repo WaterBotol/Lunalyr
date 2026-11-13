@@ -217,9 +217,10 @@ public sealed record TrayFlyoutState
             OffsetText = FlyoutText.FormatOffset(offset),
             OffsetSpoken = FlyoutText.SpokenOffset(offset),
             ResetEnabled = hasTrack && inputs.SongTimingAvailable && offset != 0,
-            SearchEnabled = hasTrack && inputs.PlaybackBlocked is null,
-            SearchNote = inputs.PlaybackBlocked is { } off ? FlyoutText.SearchYouTubeOff(off)
-                : hasTrack ? null : FlyoutText.SearchYouTubeNeedsSong,
+            // The picker opens nothing outside Lunalyr and plays nothing, so a run without playback can show it too (it
+            // then says YouTube is off for the run).
+            SearchEnabled = hasTrack,
+            SearchNote = hasTrack ? null : FlyoutText.SearchYouTubeNeedsSong,
             WallpaperPaused = settings.WallpaperPaused,
             PauseLabel = settings.WallpaperPaused ? FlyoutText.Resume : FlyoutText.Pause,
             PauseTitle = settings.WallpaperPaused ? FlyoutText.ResumeWallpaper : FlyoutText.PauseWallpaper,

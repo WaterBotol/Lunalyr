@@ -84,6 +84,12 @@ public sealed record ShellOptions
     public bool OpenLyricCard { get; init; }
 
     /// <summary>
+    /// <c>--youtube-search</c>: open the Search YouTube window once Lunalyr is up (for checks, as <c>--lyric-card</c>).
+    /// Not forwarded to a running instance.
+    /// </summary>
+    public bool OpenYouTubeSearch { get; init; }
+
+    /// <summary>
     /// <c>--ticker-capture &lt;file&gt;</c>: on quitting, write the tray lyric strip's last frame as a PNG and log the
     /// strip's styles and whether it is the foreground window. For checks.
     /// </summary>
@@ -181,6 +187,9 @@ public sealed record ShellOptions
                     break;
                 case "--lyric-card":
                     options = options with { OpenLyricCard = true };
+                    break;
+                case "--youtube-search":
+                    options = options with { OpenYouTubeSearch = true };
                     break;
                 case "--demo":
                     // Silent and offline by definition: no real player is followed and nothing is looked up.
