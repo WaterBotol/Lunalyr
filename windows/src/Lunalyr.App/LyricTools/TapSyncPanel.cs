@@ -171,10 +171,16 @@ internal sealed partial class TapSyncPanel : Window
         _host.LyricToolsChanged();
     }
 
-    private string SongPosition() =>
-        _host.Controller?.TapContext().PlaybackTime() is { } seconds
+    private string SongPosition()
+    {
+        var position = _host.Controller?.TapContext().PlaybackTime() is { } seconds
             ? TimeSpan.FromSeconds(seconds).ToString(@"m\:ss\.fff", System.Globalization.CultureInfo.InvariantCulture)
             : "unknown";
+        // For timing checks: what the Apple Music whole-second correction is adding and how sure it is.
+        if (_host.Controller?.Monitor.Clock.WholeSecondState is { Active: true } ws)
+            position += FormattableString.Invariant($"; whole-second correction +{ws.LastFraction:0.000} s, ±{(ws.Uncertainty ?? 1) / 2:0.000} s");
+        return position;
+    }
 
     // ---- Actions ----
 

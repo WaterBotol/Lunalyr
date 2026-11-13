@@ -58,5 +58,5 @@ while (DateTime.Now < end)
 {
     await Task.Delay(1000);
     var r = monitor.Clock.Read();
-    Log($"clock pos={r.Position:mm\\:ss\\.ff} dur={r.Duration:mm\\:ss} playing={r.IsPlaying} rate={r.Rate} quality={r.Quality} conf={r.Confidence:F2}");
+    Log($"clock pos={r.Position:mm\\:ss\\.ff} dur={r.Duration:mm\\:ss} playing={r.IsPlaying} rate={r.Rate} quality={r.Quality} conf={r.Confidence:F2} whole-second: on={monitor.Clock.WholeSecondState.Active} added={monitor.Clock.WholeSecondState.LastFraction:F3} uncertainty={monitor.Clock.WholeSecondState.Uncertainty:F3}");
 }

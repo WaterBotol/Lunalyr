@@ -115,6 +115,14 @@ public sealed class SongClock
     /// Whether the followed player is known to cut its position to whole seconds (Apple Music for Windows), so the
     /// clock recovers the lost fraction (<see cref="WholeSecondPhase"/>). Off for every other player.
     /// </summary>
+    /// <summary>For diagnostics: whether the whole-second correction is on, the last fraction it added, and how sure it is.</summary>
+    public (bool Active, double LastFraction, double? Uncertainty) WholeSecondState
+    {
+        get { lock (_gate) return (_correctsWholeSeconds && _phase.Active, _lastFraction, _phase.Uncertainty); }
+    }
+
+    private double _lastFraction;
+
     public bool CorrectsWholeSeconds
     {
         get { lock (_gate) return _correctsWholeSeconds; }
@@ -227,7 +235,11 @@ public sealed class SongClock
             // A player that cuts its position to whole seconds (Apple Music for Windows) is put back where it really is.
             var snapshotTimestamp = now - (long)(age.TotalSeconds * _time.TimestampFrequency);
             if (_correctsWholeSeconds)
-                position += _phase.Correct(timeline.RelativePosition, snapshotTimestamp, _time.TimestampFrequency, _playing, _rate);
+            {
+                var fraction = _phase.Correct(timeline.RelativePosition, snapshotTimestamp, _time.TimestampFrequency, _playing, _rate);
+                _lastFraction = fraction.TotalSeconds;
+                position += fraction;
+            }
 
             if (duration is { } d && position > d)
             {

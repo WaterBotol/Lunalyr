@@ -35,20 +35,25 @@ public sealed class WholeSecondPhaseTests
     }
 
     [Fact]
-    public void ASongThatStartsAtZeroIsRightFromItsFirstSecond()
+    public void TheStallAsASongStartsDoesNotPinTheEstimate()
     {
-        // A new song reports 0:00 the moment it begins (truth 0.02 s), then the usual cadence.
+        // As recorded live (17:06:09 and 17:09:57): 0:00 is held for ~1.9 s while the song already plays, then 1 and 2
+        // come 0.45 s apart, then the usual 1.024 s cadence. The estimate must recover, not stay pinned.
         var phase = new WholeSecondPhase();
-        double worst = 0;
-        for (var i = 0; i < 12; i++)
+        (double T, int P)[] stall = [(0.0, 0), (0.006, 0), (0.035, 0), (0.231, 0), (1.255, 0), (1.893, 1), (2.342, 2)];
+        foreach (var (t, p) in stall) phase.Correct(TimeSpan.FromSeconds(p), Ticks(t), Frequency, true, 1);
+        double worstAfter10 = 0, last = 0;
+        for (var i = 1; i < 70; i++)
         {
-            var t = i * 1.024;
-            var truth = 0.02 + t;
+            var t = 2.342 + i * 1.024;
+            var truth = t; // the song really started at 0
             var reported = TimeSpan.FromSeconds(Math.Floor(truth));
-            var corrected = reported.TotalSeconds + phase.Correct(reported, Ticks(t), Frequency, playing: true, rate: 1).TotalSeconds;
-            if (i >= WholeSecondPhase.WholeSnapshotsRequired) worst = Math.Max(worst, Math.Abs(truth - corrected));
+            var corrected = reported.TotalSeconds + phase.Correct(reported, Ticks(t), Frequency, true, 1).TotalSeconds;
+            last = Math.Abs(truth - corrected);
+            if (t > 10) worstAfter10 = Math.Max(worstAfter10, last);
         }
-        Assert.True(worst < 0.08, $"within 80 ms from the start of the song (was {worst:0.###})");
+        Assert.True(worstAfter10 <= 0.5 + 1e-9, $"never more than half a second off after the stall (was {worstAfter10:0.###})");
+        Assert.True(last < 0.03, $"within 30 ms after a minute (was {last:0.###})");
     }
 
     [Fact]

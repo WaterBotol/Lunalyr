@@ -28,9 +28,9 @@ public sealed class WholeSecondPhase
     /// <summary>Whole-second positions in a row (while playing) before positions are taken to be cut to the second.</summary>
     public const int WholeSnapshotsRequired = 3;
 
-    // How far outside the current interval a snapshot may land before it is taken as a jump (seek, stall) and the
-    // estimate restarts rather than collapsing to nothing.
-    private const double Slack = 0.25;
+    // The narrowest the interval may get; a report that would leave less (timestamp jitter included) starts a new run.
+    // The cadence's own drift (about 0.024 s a report) pins a steady run to about this within a minute.
+    private const double MinimumWidth = 0.005;
 
     private int _wholeInARow;
     private bool _hasRun;
@@ -75,24 +75,19 @@ public sealed class WholeSecondPhase
         {
             var elapsed = (snapshotTimestamp - _t0) / (double)frequency * _rate;
             double low = p - elapsed, high = p + 1 - elapsed;
-            if (high <= _low - Slack || low >= _high + Slack)
+            var newLow = Math.Max(_low, low);
+            var newHigh = Math.Min(_high, high);
+            if (newHigh - newLow > MinimumWidth)
             {
-                Start(p, snapshotTimestamp, rate); // a jump the clock may not have called a seek: begin again
+                _low = newLow;
+                _high = newHigh;
             }
             else
             {
-                var newLow = Math.Max(_low, low);
-                var newHigh = Math.Min(_high, high);
-                if (newHigh > newLow)
-                {
-                    _low = newLow;
-                    _high = newHigh;
-                }
-                else
-                {
-                    // Barely inconsistent (timestamp jitter): keep the nearest edge rather than an empty interval.
-                    _low = _high = (newLow + newHigh) / 2;
-                }
+                // The reports no longer fit one steady run: a jump the clock didn't call a seek, or the stall Apple
+                // Music shows as a song starts (0:00 held for about 2 s while the song plays, then 1 and 2 in quick
+                // succession, seen live). Begin again from this report rather than pinning the estimate to a point.
+                Start(p, snapshotTimestamp, rate);
             }
         }
 
@@ -105,18 +100,12 @@ public sealed class WholeSecondPhase
     /// <summary>Forgets the current run (pause, seek, new track, new player).</summary>
     public void Restart() => _hasRun = false;
 
-    /// <summary>
-    /// How far into 0:00 a run that starts there can be: a new song (or a skip back to the start) reports 0 at the very
-    /// moment it begins (seen live: the 0:00 snapshot came 16 ms after the track change), not up to a second later.
-    /// </summary>
-    public const double StartOfSongWindow = 0.15;
-
     private void Start(double p, long timestamp, double rate)
     {
         _t0 = timestamp;
         _rate = rate;
         _low = p;
-        _high = p == 0 ? StartOfSongWindow : p + 1;
+        _high = p + 1;
         _hasRun = true;
     }
 }
