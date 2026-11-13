@@ -50,6 +50,8 @@ enum LunalyrDesign {
         static let badge: CGFloat = 6
         /// Album artwork up to 64 points.
         static let artwork: CGFloat = 8
+        /// Search fields, capsules, notes; small pictures of a surface.
+        static let control: CGFloat = 10
         /// Banners, cards, tiles.
         static let card: CGFloat = 14
         /// The wallpaper preview: a desktop in miniature.
@@ -85,6 +87,38 @@ enum LunalyrDesign {
         static let settingsMaximum = CGSize(width: 1200, height: 780)
         /// Onboarding's fixed window content size.
         static let onboarding = CGSize(width: 640, height: 540)
+    }
+
+    /// Onboarding's page geometry and its pictures' sizes (`Sources/UI/Onboarding`).
+    enum Onboarding {
+        /// From the window's sides to a step's content.
+        static let sideInset: CGFloat = 48
+        /// From the window's top (under the see-through title bar) to a
+        /// step's title, the same on every step.
+        static let titleTop: CGFloat = 40
+        /// The text column under a title.
+        static let messageWidth: CGFloat = 480
+        /// The welcome's desktop in miniature.
+        static let heroWidth: CGFloat = 392
+        /// The look step's live preview, and the choices under it.
+        static let previewWidth: CGFloat = 280
+        static let choicesWidth: CGFloat = 408
+        /// The choices' reserved height, so switching Wallpaper and Lyrics
+        /// doesn't move the window's content.
+        static let choicesHeight: CGFloat = 148
+        /// A lyric layout's thumbnail (16:9-ish) and the stage it is set on
+        /// before being scaled down to it.
+        static let layoutThumb = CGSize(width: 96, height: 56)
+        static let layoutStage = CGSize(width: 360, height: 210)
+        /// The music-video step's two framing pictures.
+        static let framingThumb = CGSize(width: 112, height: 76)
+        /// The extras' pictures, beside their rows.
+        static let extraPicture = CGSize(width: 196, height: 52)
+        /// The Discord status recording: 254 x 44 pixels, shown at 1.5 times
+        /// its 2x point size so its 11-point name and line read as 16.
+        static let discordStatus = CGSize(width: 190.5, height: 33)
+        /// Discord's dark member list, behind the recording.
+        static let discordBacking = Color(.sRGB, red: 0.169, green: 0.176, blue: 0.192, opacity: 1)
     }
 
     /// Animation, always through `LunalyrDesign.Motion.animation(_:reduceMotion:)`
