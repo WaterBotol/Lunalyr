@@ -104,7 +104,14 @@ internal sealed class FakeRenderer : IWallpaperRenderer
         lock (_gate) _scenes.Add(scene);
     }
 
-    public void SetLayers(string background, string composition) => Layers = (background, composition);
+    /// <summary>Called with the layers handed over, before they are taken (a test can hold a hand-over there).</summary>
+    public Action<string, string>? BeforeSetLayers { get; set; }
+
+    public void SetLayers(string background, string composition)
+    {
+        BeforeSetLayers?.Invoke(background, composition);
+        Layers = (background, composition);
+    }
 
     private Lunalyr.Platform.Desktop.FloatingLyricsOptions _floating = Lunalyr.Platform.Desktop.FloatingLyricsOptions.Off;
 

@@ -73,15 +73,13 @@ public sealed partial class AppController
     public void SetPowerConstraint(PowerConstraint? power)
     {
         var paused = power is { Fallback: PowerFallback.Patterns or PowerFallback.ColourOnly };
-        AppSettings settings;
         lock (_gate)
         {
             if (_disposed || (_motionPowerPaused == paused && _motionPowerReason == power?.Reason)) return;
             _motionPowerPaused = paused;
             _motionPowerReason = power?.Reason;
-            settings = _settings;
         }
-        if (_motionFiles is not null) _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
+        if (_motionFiles is not null) PublishLayers();
         RaiseStatusChanged();
     }
 
@@ -273,7 +271,7 @@ public sealed partial class AppController
             }
         }
         if (replace is not null) _renderer.ReplaceLayer(replace);
-        if (changed || replace is not null) _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
+        if (changed || replace is not null) PublishLayers();
         RaiseStatusChanged();
     }
 

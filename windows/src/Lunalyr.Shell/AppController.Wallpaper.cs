@@ -39,6 +39,26 @@ public sealed partial class AppController
     /// <summary>The imported picture or video's layer as last handed to the renderer, or null.</summary>
     public CustomLayerFactory? CustomWallpaper { get; private set; }
 
+    /// <summary>Held while the layers are worked out and handed to the renderer (<see cref="PublishLayers"/>).</summary>
+    private readonly Lock _layersGate = new();
+
+    /// <summary>
+    /// Hands the renderer the background and composition the settings and the song on screen draw now. Whatever changes
+    /// them (settings, a song's matched wallpaper or layout, an animated cover, power saving, the music video) calls this
+    /// after the change. The layers are worked out and handed over under one lock, so the last hand-over always reflects
+    /// the latest state: worked out first and handed over after, a slower thread's older layers could land after a newer
+    /// pick (a song's animated cover or matched wallpaper replaced by the wallpaper before it, until the next change).
+    /// Never called holding <see cref="_gate"/> (the monitor's lock, then the controller's, are taken inside).
+    /// </summary>
+    private void PublishLayers()
+    {
+        lock (_layersGate)
+        {
+            var settings = Settings;
+            _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
+        }
+    }
+
     /// <summary>The background layer id <paramref name="settings"/> draw for the song on screen.</summary>
     private string BackgroundLayerFor(AppSettings settings)
     {
@@ -107,7 +127,7 @@ public sealed partial class AppController
         }
         if (settings.BackgroundMode is not ("auto" or "shader" or "pattern" or "musicVideo") || before == after) return;
         _app.Info($"Match the music: \"{title}\" takes the {after} wallpaper.");
-        _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
+        PublishLayers();
     }
 
     /// <summary>

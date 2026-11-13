@@ -222,7 +222,7 @@ public sealed partial class AppController
             _musicVideoLayer = layer;
         }
         _app.Info($"Music video: the wallpaper draws {layer} ({DescribeMusicVideo()}).");
-        _renderer.SetLayers(layer, CompositionFor(settings));
+        PublishLayers();
     }
 
     private string DescribeMusicVideo() => _musicVideo?.Status switch

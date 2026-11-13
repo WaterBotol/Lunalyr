@@ -253,7 +253,7 @@ public sealed partial class AppController : IAsyncDisposable
 
         _renderer.SetClock(_clockReader);
         ApplyCustomWallpaper(null, settings);
-        _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
+        PublishLayers();
         _renderer.SetFrameRate(settings.AnimationRate);
         ApplyLyricsHidden(null, settings);
         PublishScene();
@@ -352,7 +352,7 @@ public sealed partial class AppController : IAsyncDisposable
         ApplyLyricsHidden(old, settings);
         if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
-            _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
+            PublishLayers();
         // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
         // otherwise when they arrive. Other settings changes never decide it.
         if (settings.LyricComposition == AutomaticComposition
