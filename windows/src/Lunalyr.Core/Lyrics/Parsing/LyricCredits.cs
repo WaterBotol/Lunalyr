@@ -73,6 +73,7 @@ public static partial class LyricCredits
             return null;
         }
         var inCredits = true;
+        var sung = false;
         for (var index = 0; index < result.Count; index++)
         {
             if (result[index].Credit == true) { inCredits = true; continue; }
@@ -95,10 +96,39 @@ public static partial class LyricCredits
             {
                 credit = true;
             }
+            // Before the first sung line, a line that is only the artist, or only the title when the song never sings
+            // its title, is the file's header (the Mac's 1cdde21).
+            if (!credit && !sung && names.IsHeader(text, result.Skip(index + 1).Where(line => !line.IsInstrumental).Select(line => line.Text)))
+            {
+                credit = true;
+            }
             if (credit) { inCredits = true; Convert(index); }
-            else inCredits = false;
+            else { inCredits = false; sung = true; }
+        }
+        // Closing credits: a run of "<role>：<names>" lines ending the song counts even when it opens with an everyday
+        // label ("吉他：蔡科俊Again"), which only counts among other credits (the Mac's 1cdde21).
+        for (var index = result.Count - 1; index >= 0; index--)
+        {
+            if (result[index].IsInstrumental) continue;
+            if (!IsRoleLine(result[index].Text)) break;
+            Convert(index);
         }
         return MarkingTitleHeader(result);
+    }
+
+    /// <summary>A "&lt;role&gt;：&lt;names&gt;" line: a credit label, a colon, then names (an everyday label needs names too).</summary>
+    public static bool IsRoleLine(string text) => ColonInFirstCharacters(text.Trim(), 48) >= 0 && IsCredit(text, inCredits: true);
+
+    /// <summary>
+    /// The sung lines of plain text: credits at its start or end, its header ("Title - Artist", a line of only the
+    /// artist, or of only a title the song doesn't sing) and section labels left out, as <see cref="Flagging"/> leaves
+    /// them out of synced lines. What agreement between sources compares.
+    /// </summary>
+    public static IReadOnlyList<string> SungLines(IReadOnlyList<string> lines, string title = "", string artist = "")
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        var timed = lines.Select((text, index) => LyricLines.MakeLine(text, index, index + 1, (_, _, _) => [])).ToList();
+        return [.. Flagging(timed, title, artist).Where(line => !line.IsInstrumental).Select(line => line.Text)];
     }
 
     private static LyricLine AsCredit(LyricLine line) => line with
@@ -163,6 +193,19 @@ public static partial class LyricCredits
         public bool IsEither(string text) => IsHeading(text) || IsLoneName(text);
 
         /// <summary>
+        /// A first line that is only the artist, or only the title when none of <paramref name="later"/> lines sings the
+        /// title again (a song that opens with its title, "Hello", sings it).
+        /// </summary>
+        public bool IsHeader(string text, IEnumerable<string> later)
+        {
+            if (!Usable) return false;
+            var line = Name(text);
+            if (line.Length == 0) return false;
+            if (line == _artist || line == _primaryArtist) return true;
+            return line == _title && !later.Any(other => Contains(Name(other), _title));
+        }
+
+        /// <summary>
         /// Normalised, with traditional Chinese folded to simplified, so "周杰伦" in a lyric file names the "周杰倫" the
         /// player reports (a Windows addition, as in <see cref="LyricQuery.Similarity"/>).
         /// </summary>
@@ -187,9 +230,16 @@ public static partial class LyricCredits
             var next = lines.Skip(index + 1).FirstOrDefault(line => !Blank(line));
             if (next is not null && IsCredit(next, true)) index++;
         }
+        // A first line that is only the artist, or only a title the song doesn't sing (the Mac's 1cdde21).
+        var header = false;
+        if (index < lines.Count && !IsCredit(lines[index], true) && names.IsHeader(lines[index], lines.Skip(index + 1)))
+        {
+            header = true;
+            index++;
+        }
         var heading = index;
         while (index < lines.Count && (Blank(lines[index]) || IsCredit(lines[index], true))) index++;
-        return index == heading ? lines : lines.Skip(index).ToList();
+        return index == heading && !header ? lines : lines.Skip(index).ToList();
     }
 
     /// <summary>
@@ -245,7 +295,14 @@ public static partial class LyricCredits
         "策劃", "企划", "企劃", "宣传", "宣傳", "推广", "推廣", "营销", "營銷", "封面", "设计", "設計",
         "摄影", "攝影", "视觉", "視覺", "后期", "後期", "美术", "美術", "文案", "音乐", "音樂", "总监",
         "總監", "艺人", "藝人", "经纪", "經紀", "项目", "項目", "执行", "執行", "助理", "指导", "指導",
-        "声乐", "聲樂", "鸣谢", "鳴謝", "艺术", "藝術", "작사", "작곡", "편곡", "프로듀서", "MV", "OP", "SP", "ISRC",
+        "声乐", "聲樂", "鸣谢", "鳴謝", "艺术", "藝術", "监唱", "監唱", "作編曲",
+        // Japanese and Korean role words (the Mac's 1cdde21 counts CN/JP/KR/EN roles).
+        "ボーカル", "ヴォーカル", "ギター", "ベース", "ドラム", "ドラムス", "キーボード", "ピアノ", "ストリングス",
+        "コーラス", "プロデューサー", "プロデュース", "ミックス", "ミキシング", "マスタリング", "レコーディング",
+        "エンジニア", "ディレクター", "アレンジ", "サウンドプロデュース",
+        "작사", "작곡", "편곡", "프로듀서", "프로듀싱", "보컬", "기타", "베이스", "드럼", "키보드", "피아노", "코러스",
+        "믹싱", "마스터링", "녹음", "엔지니어", "디렉터", "디렉팅", "스트링",
+        "MV", "OP", "SP", "ISRC",
     ];
 
     /// <summary>Terms that only qualify the role after them: "电" + "吉他", "架子" + "鼓", "总" + "监制", "特别" + "鸣谢".</summary>
@@ -268,6 +325,8 @@ public static partial class LyricCredits
         "音乐", "音樂", "鼓", "和声", "和聲", "合声", "合聲", "和音", "人声", "人聲", "合唱", "伴唱", "主唱", "演唱",
         "童声", "童聲", "吉他", "贝斯", "貝斯", "钢琴", "鋼琴", "键盘", "鍵盤", "弦乐", "弦樂", "提琴", "笛子", "口琴",
         "二胡", "古筝", "古箏", "琵琶",
+        "ボーカル", "ヴォーカル", "ギター", "ベース", "ドラム", "ドラムス", "キーボード", "ピアノ", "コーラス",
+        "보컬", "기타", "베이스", "드럼", "키보드", "피아노", "코러스",
     ];
 
     private static readonly string[][] RoleTerms = Roles.Select(TextRules.Characters).ToArray();
@@ -397,20 +456,46 @@ public static partial class LyricCredits
         {
             var words = item.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (words.Length > 5 || !words.Any(word => !Particles.Contains(word.ToLowerInvariant()))) return false;
-            return words.All(word =>
-            {
-                if (!LyricScript.KeepsSyllables(word))
-                {
-                    return char.IsUpper(word, 0) || Particles.Contains(word.ToLowerInvariant());
-                }
-                // Han, kana or Hangul names have no pronoun or particle in them, and people's names run two to four
-                // characters without being one sound repeated.
-                var characters = TextRules.Characters(word);
-                if (characters.Any(SungCharacters.Contains)) return false;
-                if (characters.Length <= 24 && Organisations.Any(ending =>
-                        characters.Length > TextElements.Count(ending) && word.EndsWith(ending, StringComparison.Ordinal))) return true;
-                return characters.Length is >= 2 and <= 4 && characters.Distinct().Count() * 2 > characters.Length;
-            });
+            return words.All(word => IsName(word) || (ScriptRuns(word) is { Count: > 1 } runs && runs.All(IsName)));
         });
+
+        static bool IsName(string word)
+        {
+            if (!LyricScript.KeepsSyllables(word))
+            {
+                return char.IsUpper(word, 0) || Particles.Contains(word.ToLowerInvariant());
+            }
+            // Han, kana or Hangul names have no pronoun or particle in them, and people's names run two to four
+            // characters without being one sound repeated.
+            var characters = TextRules.Characters(word);
+            if (characters.Any(SungCharacters.Contains)) return false;
+            if (characters.Length <= 24 && Organisations.Any(ending =>
+                    characters.Length > TextElements.Count(ending) && word.EndsWith(ending, StringComparison.Ordinal))) return true;
+            return characters.Length is >= 2 and <= 4 && characters.Distinct().Count() * 2 > characters.Length;
+        }
+    }
+
+    /// <summary>
+    /// A word cut where it changes between Han, kana or Hangul and other script: "蔡科俊Again" is "蔡科俊" and "Again",
+    /// a name with its English one written on (the Mac's 1cdde21: names may mix CJK and Latin).
+    /// </summary>
+    private static List<string> ScriptRuns(string word)
+    {
+        var runs = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool? native = null;
+        foreach (var element in TextRules.Characters(word))
+        {
+            var isNative = LyricScript.KeepsSyllables(element);
+            if (native is { } previous && previous != isNative && current.Length > 0)
+            {
+                runs.Add(current.ToString());
+                current.Clear();
+            }
+            native = isNative;
+            current.Append(element);
+        }
+        if (current.Length > 0) runs.Add(current.ToString());
+        return runs;
     }
 }
