@@ -326,10 +326,7 @@ final class LyricColourTests: XCTestCase {
         XCTAssertNil(accent.sweepUnderline)
         let washedOut = sweep(on: 0.62)
         XCTAssertGreaterThan(Perceptual.oklab(sRGB: rgb(washedOut.sung)).l, 0.98)
-        let marker = try XCTUnwrap(washedOut.sweepUnderline)
-        let rendered = try XCTUnwrap(NSColor(marker).usingColorSpace(.sRGB))
-        XCTAssertGreaterThan(rendered.alphaComponent, 0.8)
-        XCTAssertGreaterThan(Perceptual.contrast(luminance(marker), 0.62), 3)
+        XCTAssertNil(washedOut.sweepUnderline, "no underline under sung words, even when the sung colour is near white")
         XCTAssertNil(sweep(on: 0.62, strength: 0).sweepUnderline)
     }
 
