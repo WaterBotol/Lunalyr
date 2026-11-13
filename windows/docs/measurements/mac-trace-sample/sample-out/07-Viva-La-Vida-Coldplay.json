@@ -1,0 +1,651 @@
+{
+  "digest" : [
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "Coldplay",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "I used to rule the world",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 49,
+        "metadataReported" : false,
+        "provenance" : "Mixed timing · Apple via Lyrics+",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "mixed",
+        "title" : "Viva La Vida",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 18,
+      "requests" : [
+        "200 2 ms https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Viva%20La%20Vida&artist=Coldplay&duration=242&album=Viva%20La%20Vida%20or%20Death%20and%20All%20His%20Friends"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "Match found · Apple Music’s lyrics · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 41 ms https://music.163.com/api/search/get?s=Viva%20La%20Vida%20Coldplay&type=1&limit=8"
+      ],
+      "source" : "amll",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 41 ms https://music.163.com/api/search/get?s=Viva%20La%20Vida%20Coldplay&type=1&limit=8"
+      ],
+      "source" : "netEase",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 42 ms https://lrclib.net/api/get?album_name=Viva%20La%20Vida%20or%20Death%20and%20All%20His%20Friends&artist_name=Coldplay&duration=242&track_name=Viva%20La%20Vida"
+      ],
+      "source" : "lrclib",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 41 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Viva%20La%20Vida%20Coldplay"
+      ],
+      "source" : "qqMusic",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 41 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Viva%20La%20Vida%20Coldplay&page=1&pagesize=8"
+      ],
+      "source" : "kugou",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 41 ms https://search.kuwo.cn/r.s?all=Viva%20La%20Vida%20Coldplay&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 41,
+      "requests" : [
+        "cancelled 41 ms https://api.lyrics.ovh/v1/Coldplay/Viva%20La%20Vida?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+
+      ],
+      "verdict" : "stopped"
+    }
+  ],
+  "elapsedMs" : 54,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "note",
+      "message" : "Lyrics+ mirrors in order (resting ones last or skipped): [\"https://lyricsplus.prjktla.my.id\", \"https://lyricsplus.binimum.org\"]",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Viva La Vida or Death and All His Friends",
+        "artist" : "Coldplay",
+        "duration" : 242,
+        "title" : "Viva La Vida"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 25351,
+        "ms" : 2,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Viva%20La%20Vida&artist=Coldplay&duration=242&album=Viva%20La%20Vida%20or%20Death%20and%20All%20His%20Friends"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.my.id: 49 lines from Apple",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.011,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "Coldplay",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "I used to rule the world",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 49,
+        "metadataReported" : false,
+        "provenance" : "Mixed timing · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "mixed",
+        "title" : "Viva La Vida",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.018,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : true,
+        "artist" : "Coldplay",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "I used to rule the world",
+        "languageMismatch" : false,
+        "lead" : 1,
+        "lines" : 49,
+        "metadataReported" : false,
+        "provenance" : "Mixed timing · Apple via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "latin",
+        "source" : "lyricsPlus",
+        "timing" : "mixed",
+        "title" : "Viva La Vida",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 18,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.028,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "mixed",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 0.042,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "amll",
+        "kugou",
+        "kuwo",
+        "lrclib",
+        "lyricsOVH",
+        "netEase",
+        "qqMusic"
+      ]
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.042,
+      "elapsedMs" : 41,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 41,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Viva%20La%20Vida%20Coldplay"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 41,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Viva%20La%20Vida%20Coldplay&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 41,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=Viva%20La%20Vida%20Coldplay&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 41,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Viva%20La%20Vida%20Coldplay&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 41,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/Coldplay/Viva%20La%20Vida?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 41,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Viva%20La%20Vida%20Coldplay&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.042,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 42,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=Viva%20La%20Vida%20or%20Death%20and%20All%20His%20Friends&artist_name=Coldplay&duration=242&track_name=Viva%20La%20Vida"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.045,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "mixed",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "lyricsPlus",
+        "shownBefore" : "lyricsPlus",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.054,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.06,
+      "elapsedMs" : 54,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 0,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : true,
+          "artist" : "Coldplay",
+          "artistSimilarity" : 1,
+          "confidence" : 2,
+          "firstLine" : "I used to rule the world",
+          "languageMismatch" : false,
+          "lead" : 1,
+          "lines" : 49,
+          "metadataReported" : false,
+          "provenance" : "Mixed timing · Apple via Lyrics+",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 113,
+          "script" : "latin",
+          "source" : "lyricsPlus",
+          "timing" : "mixed",
+          "title" : "Viva La Vida",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "lyricsPlus",
+      "states" : {
+        "amll" : "Not needed: it couldn’t beat the match showing",
+        "kugou" : "Not needed: it couldn’t beat the match showing",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Not needed: it couldn’t beat the match showing",
+        "lyricsOVH" : "Not needed: it couldn’t beat the match showing",
+        "lyricsPlus" : "Match found · Apple Music’s lyrics · showing",
+        "netEase" : "Not needed: it couldn’t beat the match showing",
+        "qqMusic" : "Not needed: it couldn’t beat the match showing"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "Coldplay",
+    "provenance" : "Mixed timing · Apple via Lyrics+",
+    "source" : "lyricsPlus",
+    "timing" : "mixed",
+    "title" : "Viva La Vida",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "Viva La Vida or Death and All His Friends",
+    "artist" : "Coldplay",
+    "duration" : 242,
+    "title" : "Viva La Vida"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:09Z",
+  "storefront" : "au"
+}

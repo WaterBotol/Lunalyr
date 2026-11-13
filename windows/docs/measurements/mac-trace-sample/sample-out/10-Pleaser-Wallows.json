@@ -1,0 +1,1754 @@
+{
+  "digest" : [
+    {
+      "elapsedMs" : 1015,
+      "requests" : [
+        "200 2 ms https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Pleaser&artist=Wallows&duration=188&album=Pleaser%20-%20Single",
+        "200 1 ms https://itunes.apple.com/search?country=au&entity=song&limit=15&term=Wallows%20Pleaser",
+        "200 1 ms https://itunes.apple.com/lookup?country=jp&id=1363234543&lang=ja_jp"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 1013,
+      "requests" : [
+        "200 201 ms https://music.163.com/api/search/get?s=Pleaser%20Wallows&type=1&limit=8"
+      ],
+      "source" : "amll",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 1013,
+      "requests" : [
+        "200 208 ms https://music.163.com/api/search/get?s=Pleaser%20Wallows&type=1&limit=8",
+        "200 288 ms https://musicbrainz.org/ws/2/artist?query=%22Wallows%22&limit=5&fmt=json"
+      ],
+      "source" : "netEase",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 3,
+          "timedCompared" : 2,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 188,
+        "durationDelta" : 0,
+        "firstLine" : "You're talking while you're fast asleep",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 50,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rank" : 2,
+        "rankedTiming" : 1,
+        "score" : 100,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 461,
+      "requests" : [
+        "200 432 ms https://lrclib.net/api/get?album_name=Pleaser%20-%20Single&artist_name=Wallows&duration=188&track_name=Pleaser"
+      ],
+      "source" : "lrclib",
+      "state" : "Match found · 3 other sources agree",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "accepted #2"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 3,
+          "timedCompared" : 2,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 187,
+        "durationDelta" : -1,
+        "firstLine" : "Pleaser - Wallows",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · QQ Music",
+        "rank" : 3,
+        "rankedTiming" : 1,
+        "score" : 94,
+        "script" : "latin",
+        "source" : "qqMusic",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 1455,
+      "requests" : [
+        "200 1132 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Pleaser%20Wallows",
+        "200 309 ms https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?format=json&g_tk=5381&nobase64=1&songmid=003DKHL52bKSqn"
+      ],
+      "source" : "qqMusic",
+      "state" : "Match found · 3 other sources agree",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "accepted #3"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 3,
+          "timedCompared" : 2,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 187,
+        "durationDelta" : -1,
+        "firstLine" : "Pleaser - Wallows",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Kugou Music",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 107,
+        "script" : "latin",
+        "source" : "kugou",
+        "timing" : "word",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 203,
+      "requests" : [
+        "200 177 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Pleaser%20Wallows&page=1&pagesize=8",
+        "200 1 ms https://lyrics.kugou.com/search?client=pc&duration=188000&hash=66e72eded194715f2d90955767175e4a&keyword=Pleaser%20Wallows&man=yes&ver=1",
+        "200 1 ms https://lyrics.kugou.com/download?accesskey=REDACTED&charset=utf8&client=pc&fmt=krc&id=145773190&ver=1"
+      ],
+      "source" : "kugou",
+      "state" : "Match found · 3 other sources agree · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 1487,
+      "requests" : [
+        "cancelled 1487 ms https://search.kuwo.cn/r.s?all=Pleaser%20Wallows&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 3,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "You're talking while you're fast asleep",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Plain text · no timing · lyrics.ovh",
+        "rank" : 4,
+        "rankedTiming" : 0,
+        "score" : 0,
+        "script" : "latin",
+        "source" : "lyricsOVH",
+        "timing" : "plain",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 441,
+      "requests" : [
+        "200 440 ms https://api.lyrics.ovh/v1/Wallows/Pleaser?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Match found · 3 other sources agree",
+      "variants" : [
+
+      ],
+      "verdict" : "accepted #4"
+    }
+  ],
+  "elapsedMs" : 1514,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "note",
+      "message" : "Lyrics+ mirrors in order (resting ones last or skipped): [\"https://lyricsplus.prjktla.my.id\", \"https://lyricsplus.binimum.org\"]",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "duration" : 188,
+        "title" : "Pleaser"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7480,
+        "ms" : 2,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=Pleaser&artist=Wallows&duration=188&album=Pleaser%20-%20Single"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.my.id: no lyrics",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 6174,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://itunes.apple.com/search?country=au&entity=song&limit=15&term=Wallows%20Pleaser"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.003,
+      "kind" : "results",
+      "results" : {
+        "label" : "iTunes au search",
+        "read" : 4,
+        "returned" : 4
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.177,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 5325,
+        "ms" : 177,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=Pleaser%20Wallows&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.178,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kugou search",
+        "read" : 1,
+        "returned" : 2
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.178,
+      "hit" : {
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "duration" : 187,
+        "score" : 94,
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.178,
+      "kind" : "note",
+      "message" : "1 result(s) scored 0 and were dropped",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.179,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 3227,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://lyrics.kugou.com/search?client=pc&duration=188000&hash=66e72eded194715f2d90955767175e4a&keyword=Pleaser%20Wallows&man=yes&ver=1"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.179,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kugou lyric candidates for “Pleaser”",
+        "read" : 2,
+        "returned" : 6
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.18,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 5744,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://lyrics.kugou.com/download?accesskey=REDACTED&charset=utf8&client=pc&fmt=krc&id=145773190&ver=1"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.197,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 187,
+        "durationDelta" : -1,
+        "firstLine" : "Pleaser - Wallows",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Kugou Music",
+        "rankedTiming" : 2,
+        "score" : 107,
+        "script" : "latin",
+        "source" : "kugou",
+        "timing" : "word",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 8566,
+        "ms" : 201,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Pleaser%20Wallows&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 10,
+        "returned" : 10
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.201,
+      "hit" : {
+        "artist" : "卢冠廷, 莫文蔚",
+        "artistSimilarity" : 0,
+        "duration" : 273.666,
+        "title" : "一生所爱",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.201,
+      "hit" : {
+        "artist" : "卢冠廷, 莫文蔚",
+        "artistSimilarity" : 0,
+        "duration" : 273,
+        "title" : "一生所爱",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "卢冠廷",
+        "artistSimilarity" : 0,
+        "duration" : 256.195,
+        "title" : "一生所爱",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "卢冠廷, 岑宁儿",
+        "artistSimilarity" : 0,
+        "duration" : 292.306,
+        "title" : "一生所爱(Live)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "舒淇",
+        "artistSimilarity" : 0,
+        "duration" : 193.358,
+        "title" : "一生所爱",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "李铁柱",
+        "artistSimilarity" : 0,
+        "duration" : 221.152,
+        "title" : "一生所爱国语版",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "舒淇",
+        "artistSimilarity" : 0,
+        "duration" : 114.144,
+        "title" : "一生所爱(粤)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "艾力-NM",
+        "artistSimilarity" : 0,
+        "duration" : 224,
+        "title" : "一生所爱（烟嗓版）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "高天霸",
+        "artistSimilarity" : 0,
+        "duration" : 282.86,
+        "title" : "高天霸 - 一生所爱 （烟嗓+嘶吼版）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "hit" : {
+        "artist" : "莫文蔚",
+        "artistSimilarity" : 0,
+        "duration" : 268.956,
+        "title" : "一生所爱",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "kind" : "note",
+      "message" : "AMLL: NetEase found no song, so there is no file to read",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.202,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.203,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 187,
+        "durationDelta" : -1,
+        "firstLine" : "Pleaser - Wallows",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Kugou Music",
+        "rankedTiming" : 2,
+        "score" : 107,
+        "script" : "latin",
+        "source" : "kugou",
+        "timing" : "word",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 203,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.208,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.209,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7643,
+        "ms" : 208,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=Pleaser%20Wallows&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 10,
+        "returned" : 10
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 261.373,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "大梦",
+        "artistSimilarity" : 0,
+        "duration" : 261.459,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 261.373,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 458.04,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李瑨瑶",
+        "artistSimilarity" : 0,
+        "duration" : 157.174,
+        "title" : "痴心绝对（女声吉他弹唱）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 261.373,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "✘",
+        "artistSimilarity" : 0,
+        "duration" : 258.56,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 261.373,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 288.44,
+        "title" : "痴心绝对",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "hit" : {
+        "artist" : "李圣杰",
+        "artistSimilarity" : 0,
+        "duration" : 312.576,
+        "title" : "痴心绝对 (Live)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.209,
+      "kind" : "variantResult",
+      "message" : "nothing under the library artist: trying aliases",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.432,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 9026,
+        "ms" : 432,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=Pleaser%20-%20Single&artist_name=Wallows&duration=188&track_name=Pleaser"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.432,
+      "kind" : "results",
+      "results" : {
+        "label" : "LRCLIB exact (get)",
+        "read" : 1,
+        "returned" : 1
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.44,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 1462,
+        "ms" : 440,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/Wallows/Pleaser?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.441,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "You're talking while you're fast asleep",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Plain text · no timing · lyrics.ovh",
+        "rankedTiming" : 0,
+        "score" : 0,
+        "script" : "latin",
+        "source" : "lyricsOVH",
+        "timing" : "plain",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 441,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0.443,
+      "kind" : "note",
+      "message" : "LRCLIB exact match has sound timing: search skipped",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.452,
+      "hit" : {
+        "album" : "Pleaser - Single",
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "duration" : 188,
+        "score" : 100,
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "passes the recording check · line"
+      },
+      "kind" : "hit",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.455,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 188,
+        "durationDelta" : 0,
+        "firstLine" : "You're talking while you're fast asleep",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 50,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rankedTiming" : 1,
+        "score" : 100,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "candidate",
+      "message" : "LRCLIB best offer of 1 with lyrics",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.458,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 188,
+        "durationDelta" : 0,
+        "firstLine" : "You're talking while you're fast asleep",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 50,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rankedTiming" : 1,
+        "score" : 100,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.459,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kuwo",
+          "lrclib",
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.461,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 188,
+        "durationDelta" : 0,
+        "firstLine" : "You're talking while you're fast asleep",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 50,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rankedTiming" : 1,
+        "score" : 100,
+        "script" : "latin",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 461,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.474,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kuwo",
+          "lyricsPlus",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.497,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 4152,
+        "ms" : 288,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://musicbrainz.org/ws/2/artist?query=%22Wallows%22&limit=5&fmt=json"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.497,
+      "kind" : "results",
+      "results" : {
+        "label" : "MusicBrainz artists",
+        "read" : 5,
+        "returned" : 5
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.497,
+      "kind" : "note",
+      "message" : "MusicBrainz aliases for “Wallows”: []",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.498,
+      "kind" : "note",
+      "message" : "no artist aliases to try",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.498,
+      "kind" : "variantResult",
+      "message" : "nothing under the listed title: looking up the original title",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.014,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 1534,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://itunes.apple.com/lookup?country=jp&id=1363234543&lang=ja_jp"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 1.014,
+      "kind" : "note",
+      "message" : "iTunes JP name for “Pleaser”: the same, or not native script",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 1.014,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.014,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "amll"
+    },
+    {
+      "at" : 1.014,
+      "elapsedMs" : 1013,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "netEase"
+    },
+    {
+      "at" : 1.014,
+      "elapsedMs" : 1013,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "amll"
+    },
+    {
+      "at" : 1.015,
+      "kind" : "note",
+      "message" : "no original title found (iTunes JP): listed-title answer kept",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 1.015,
+      "elapsedMs" : 1015,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 1.045,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kuwo",
+          "lyricsPlus",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.058,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kuwo",
+          "lyricsPlus",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.071,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kuwo",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.132,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 8015,
+        "ms" : 1132,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=Pleaser%20Wallows"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.133,
+      "kind" : "results",
+      "results" : {
+        "label" : "QQ search",
+        "read" : 1,
+        "returned" : 8
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.133,
+      "hit" : {
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "duration" : 187,
+        "score" : 94,
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.133,
+      "kind" : "note",
+      "message" : "7 result(s) scored 0 and were dropped",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.442,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 2146,
+        "ms" : 309,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?format=json&g_tk=5381&nobase64=1&songmid=003DKHL52bKSqn"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.451,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 187,
+        "durationDelta" : -1,
+        "firstLine" : "Pleaser - Wallows",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · QQ Music",
+        "rankedTiming" : 1,
+        "score" : 94,
+        "script" : "latin",
+        "source" : "qqMusic",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: listed-title answer is usable",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.455,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "Wallows",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 187,
+        "durationDelta" : -1,
+        "firstLine" : "Pleaser - Wallows",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 53,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · QQ Music",
+        "rankedTiming" : 1,
+        "score" : 94,
+        "script" : "latin",
+        "source" : "qqMusic",
+        "timing" : "line",
+        "title" : "Pleaser",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 1455,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.479,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kuwo"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "kugou",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 1.487,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "kuwo"
+      ]
+    },
+    {
+      "at" : 1.487,
+      "elapsedMs" : 1487,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.487,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 1487,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=Pleaser%20Wallows&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.503,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "kugou",
+        "shownBefore" : "kugou",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.514,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.523,
+      "elapsedMs" : 1514,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 3,
+            "timedCompared" : 2,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "Wallows",
+          "artistSimilarity" : 1,
+          "confidence" : 2.225,
+          "duration" : 187,
+          "durationDelta" : -1,
+          "firstLine" : "Pleaser - Wallows",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 53,
+          "metadataReported" : true,
+          "provenance" : "Word-by-word · Kugou Music",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 107,
+          "script" : "latin",
+          "source" : "kugou",
+          "timing" : "word",
+          "title" : "Pleaser",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        },
+        {
+          "agreement" : {
+            "peers" : 3,
+            "timedCompared" : 2,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "Wallows",
+          "artistSimilarity" : 1,
+          "confidence" : 2.25,
+          "duration" : 188,
+          "durationDelta" : 0,
+          "firstLine" : "You're talking while you're fast asleep",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 50,
+          "metadataReported" : true,
+          "provenance" : "Line-synced · LRCLIB",
+          "rank" : 2,
+          "rankedTiming" : 1,
+          "score" : 100,
+          "script" : "latin",
+          "source" : "lrclib",
+          "timing" : "line",
+          "title" : "Pleaser",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        },
+        {
+          "agreement" : {
+            "peers" : 3,
+            "timedCompared" : 2,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "Wallows",
+          "artistSimilarity" : 1,
+          "confidence" : 2.225,
+          "duration" : 187,
+          "durationDelta" : -1,
+          "firstLine" : "Pleaser - Wallows",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 53,
+          "metadataReported" : true,
+          "provenance" : "Line-synced · QQ Music",
+          "rank" : 3,
+          "rankedTiming" : 1,
+          "score" : 94,
+          "script" : "latin",
+          "source" : "qqMusic",
+          "timing" : "line",
+          "title" : "Pleaser",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        },
+        {
+          "agreement" : {
+            "peers" : 3,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "Wallows",
+          "artistSimilarity" : 1,
+          "confidence" : 2,
+          "firstLine" : "You're talking while you're fast asleep",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 53,
+          "metadataReported" : true,
+          "provenance" : "Plain text · no timing · lyrics.ovh",
+          "rank" : 4,
+          "rankedTiming" : 0,
+          "score" : 0,
+          "script" : "latin",
+          "source" : "lyricsOVH",
+          "timing" : "plain",
+          "title" : "Pleaser",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "kugou",
+      "states" : {
+        "amll" : "No usable match / unavailable",
+        "kugou" : "Match found · 3 other sources agree · showing",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Match found · 3 other sources agree",
+        "lyricsOVH" : "Match found · 3 other sources agree",
+        "lyricsPlus" : "No usable match / unavailable",
+        "netEase" : "No usable match / unavailable",
+        "qqMusic" : "Match found · 3 other sources agree"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "Wallows",
+    "duration" : 187,
+    "provenance" : "Word-by-word · Kugou Music",
+    "source" : "kugou",
+    "timing" : "word",
+    "title" : "Pleaser",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "Pleaser - Single",
+    "artist" : "Wallows",
+    "duration" : 188,
+    "title" : "Pleaser"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:09Z",
+  "storefront" : "au"
+}

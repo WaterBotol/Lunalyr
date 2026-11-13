@@ -1,0 +1,43 @@
+Query: "DtMF" by "Bad Bunny" (3:57, 237 s), album "DeBÍ TiRAR MáS FOToS", automatic lookup
+Storefront for original titles: au; cache policy v18
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.69s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.69s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.69s    Lyrics+ (KPoe): Searching…
+  0.69s    AMLL TTML DB: Searching…
+  0.69s    NetEase Cloud Music: Searching…
+  0.69s    LRCLIB: Match found
+  0.69s    QQ Music: Searching…
+  0.69s    Kugou Music: Searching…
+  0.69s    Kuwo Music: Searching…
+  0.69s    lyrics.ovh: Searching…
+  0.84s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · Apple Music’s lyrics · showing
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Not needed: it couldn’t beat the match showing
+  LRCLIB                 Match found
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Word-by-word · Apple via Lyrics+              "Bad Bunny on DtMF" / "Bad Bunny" ?:??, 1 lines, score 87.5, tier 3
+  2. Line-synced · LRCLIB                          "DtMF" / "Bad Bunny" 3:57, 63 lines, score 93.0, tier 1
+
+Chosen: Word-by-word · Apple via Lyrics+
+  0:00  Si tú me hubieras preguntado la noche anterior a lanzar el álbum que cuál iba a ser la canción más escuchada o cuál iba a ser la canción más exitosa, honestamente no hubiera mencionado "DtMF" ni en las primeras diez. No porque no me guste, sino porque no es la norma. Cuando estudias el negocio, cuando tú estudias la industria, cuando tú estudias lo que está sucediendo en la música, este no es el típico tema que pega. Al final del día uno nunca sabe, pero tú puedes pensar en cualquier otro, los reggaetones, VOY A LLeVARTE PA PR, KETU TeCRÉ, NUEVAYoL. Pero un tema de fusión con plena, sentimental, de casi cuatro minutos, tú no piensas que va a llegar al número uno global, a impactar al mundo entero, y que el mundo entero va a abrazar la canción y la va a hacer suya. Yo por lo menos no lo imaginé, y es de los regalos más bonitos que me ha dado la música. El que una canción que se hizo con tanto amor, con tanto corazón, sin esperar nada a cambio, sin esperar un número uno, sin esperar que se pegara a nivel mundial, nos regalara eso. Eso solamente demuestra que la gente necesita música, que el mundo está pidiendo alma, corazón y temáticas distintas en la música. Que sean genuinas también porque eso es todo lo que tiene esta canción. No tiene género, hermano. Es algo urbano, con plena, pero tiene unos sonidos que pueden rayar en lo alternativo. Tú no sabes de qué te estoy cantando. Te estoy cantando de un amor, luego de mi país. Es como diferentes ámbitos de mi vida personal en un solo tema. Es un gran resumen del álbum, que también tiene diferentes ámbitos de mi vida personal, diferentes temas que me afectan, y a veces uno no sabe por dónde empezar. DtMF reúne todo eso en una solo tema. Tiene tantos sentimientos distintos. Tiene nostalgia, felicidad, tristeza, fiesta. Es chill, es tranquilo, pero también tiene todo lo que uno necesita. Fue el último tema que se hizo. MAG me enseñó el beat. La melodía ya la teníamos y después de habernos ido de parranda, me lo enseñó de nuevo, pero con la plena, con el ritmo. Y ahí dije "Oh, wow, ¿qué vamos a hacer? Ya tengo que entregar, todavía me faltan temas por terminar en cuestión de producción. Tengo la mente bien ocupada, no tengo tiempo para escribir otra canción y mucho menos para grabarla". Y él "No, no, sé. Yo sé que la música te va a llegar". Y efectivamente, a los dos días escribí la canción y la grabé, y fue la última canción de DeBÍ TiRAR MáS FOToS. El disco ya tenía ese nombre, y yo planeaba hacer una canción con ese título, pero hasta ese momento no lo había hecho. Y ya había pichado, y había dicho "Mira, en realidad no tiene que existir una canción que se llame como el álbum, no es obligatorio. No voy a hacer nada, no tengo tiempo, no salió la canción, pues no la voy a forzar" Y llegó esta canción a lo último, clutch, con el nombre, con el significado, con el sentimiento de lo que es el álbum. Y boom, fue la canción a la que el mundo entero le dio un abrazo y la hizo suya.  [561 timed words]

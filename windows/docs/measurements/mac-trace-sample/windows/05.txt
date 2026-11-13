@@ -1,0 +1,43 @@
+Query: "Lemon" by "米津玄師" (4:15, 255 s), album "STRAY SHEEP", automatic lookup
+Storefront for original titles: au; cache policy v18
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  0.67s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  0.68s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  0.68s    Lyrics+ (KPoe): Searching…
+  0.68s    AMLL TTML DB: Searching…
+  0.68s    NetEase Cloud Music: Searching…
+  0.68s    LRCLIB: Match found
+  0.68s    QQ Music: Searching…
+  0.68s    Kugou Music: Searching…
+  0.68s    Kuwo Music: Searching…
+  0.68s    lyrics.ovh: Searching…
+  1.19s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · Apple Music’s lyrics · 1 other source agrees · showing
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Not needed: it couldn’t beat the match showing
+  LRCLIB                 Match found · 1 other source agrees
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Word-by-word · Apple via Lyrics+              "Lemon" / "米津玄師" ?:??, 40 lines, score 95.0, tier 3
+  2. Line-synced · LRCLIB                          "Lemon" / "米津玄師" 4:16, 37 lines, score 91.5, tier 1
+
+Chosen: Word-by-word · Apple via Lyrics+
+  0:01  夢ならばどれほどよかったでしょう  [9 timed words]

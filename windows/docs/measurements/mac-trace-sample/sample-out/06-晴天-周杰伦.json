@@ -1,0 +1,1861 @@
+{
+  "digest" : [
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 2,
+          "timedCompared" : 2,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "周杰伦",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 56,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · QQ Music via Lyrics+",
+        "rank" : 2,
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "native",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 10,
+      "requests" : [
+        "200 2 ms https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=%E6%99%B4%E5%A4%A9&artist=%E5%91%A8%E6%9D%B0%E4%BC%A6&duration=269&album=%E5%8F%B6%E6%83%A0%E7%BE%8E"
+      ],
+      "source" : "lyricsPlus",
+      "state" : "Match found · 2 other sources agree",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "accepted #2"
+    },
+    {
+      "elapsedMs" : 206,
+      "requests" : [
+        "200 204 ms https://music.163.com/api/search/get?s=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&type=1&limit=8"
+      ],
+      "source" : "amll",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "elapsedMs" : 214,
+      "requests" : [
+        "200 213 ms https://music.163.com/api/search/get?s=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&type=1&limit=8"
+      ],
+      "source" : "netEase",
+      "state" : "No usable match / unavailable",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "none"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 270,
+        "durationDelta" : 1,
+        "firstLine" : "故事的小黃花從出生那年就飄著",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 39,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rank" : 4,
+        "rankedTiming" : 1,
+        "score" : 98,
+        "script" : "native",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 378,
+      "requests" : [
+        "200 347 ms https://lrclib.net/api/get?album_name=%E5%8F%B6%E6%83%A0%E7%BE%8E&artist_name=%E5%91%A8%E6%9D%B0%E4%BC%A6&duration=269&track_name=%E6%99%B4%E5%A4%A9"
+      ],
+      "source" : "lrclib",
+      "state" : "Match found",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "accepted #4"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 2,
+          "timedCompared" : 2,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 269,
+        "durationDelta" : 0,
+        "firstLine" : "吉他：蔡科俊Again",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 63,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · QQ Music",
+        "rank" : 3,
+        "rankedTiming" : 1,
+        "score" : 96,
+        "script" : "native",
+        "source" : "qqMusic",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 1789,
+      "requests" : [
+        "200 1555 ms https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6",
+        "200 203 ms https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?format=json&g_tk=5381&nobase64=1&songmid=0039MnYb0qxYhV"
+      ],
+      "source" : "qqMusic",
+      "state" : "Match found · 2 other sources agree",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "accepted #3"
+    },
+    {
+      "candidate" : {
+        "agreement" : {
+          "peers" : 2,
+          "timedCompared" : 2,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 269,
+        "durationDelta" : 0,
+        "firstLine" : "吉他：蔡科俊Again",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 63,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Kugou Music",
+        "rank" : 1,
+        "rankedTiming" : 2,
+        "score" : 109,
+        "script" : "native",
+        "source" : "kugou",
+        "timing" : "word",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 260,
+      "requests" : [
+        "200 196 ms https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&page=1&pagesize=8",
+        "200 1 ms https://lyrics.kugou.com/search?client=pc&duration=269000&hash=b3a52a7a958bf0aed0ebfba2e9a818b7&keyword=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&man=yes&ver=1",
+        "200 1 ms https://lyrics.kugou.com/download?accesskey=REDACTED&charset=utf8&client=pc&fmt=krc&id=274944371&ver=1"
+      ],
+      "source" : "kugou",
+      "state" : "Match found · 2 other sources agree · showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "picked"
+    },
+    {
+      "elapsedMs" : 1550,
+      "requests" : [
+        "200 1164 ms https://search.kuwo.cn/r.s?all=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1",
+        "cancelled 382 ms https://www.kuwo.cn/openapi/v1/www/lyric/getlyric?musicId=228908"
+      ],
+      "source" : "kuwo",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+        "listed title"
+      ],
+      "verdict" : "stopped"
+    },
+    {
+      "elapsedMs" : 1550,
+      "requests" : [
+        "cancelled 1550 ms https://api.lyrics.ovh/v1/%E5%91%A8%E6%9D%B0%E4%BC%A6/%E6%99%B4%E5%A4%A9?"
+      ],
+      "source" : "lyricsOVH",
+      "state" : "Not needed: it couldn’t beat the match showing",
+      "variants" : [
+
+      ],
+      "verdict" : "stopped"
+    }
+  ],
+  "elapsedMs" : 1852,
+  "events" : [
+    {
+      "at" : 0,
+      "kind" : "lookup",
+      "message" : "mode smart, automatic",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "sources" : [
+        "lyricsPlus",
+        "amll",
+        "netEase",
+        "lrclib",
+        "qqMusic",
+        "kugou",
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0,
+      "kind" : "sourceStart",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0,
+      "kind" : "note",
+      "message" : "Lyrics+ mirrors in order (resting ones last or skipped): [\"https://lyricsplus.prjktla.my.id\", \"https://lyricsplus.binimum.org\"]",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0,
+      "kind" : "variant",
+      "message" : "listed title",
+      "query" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "duration" : 269,
+        "title" : "晴天"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 0.002,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 31569,
+        "ms" : 2,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lyricsplus.prjktla.my.id/v2/lyrics/get?title=%E6%99%B4%E5%A4%A9&artist=%E5%91%A8%E6%9D%B0%E4%BC%A6&duration=269&album=%E5%8F%B6%E6%83%A0%E7%BE%8E"
+      },
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.004,
+      "kind" : "note",
+      "message" : "Lyrics+ https://lyricsplus.prjktla.my.id: 56 lines from QQ Music",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.007,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "周杰伦",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 56,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · QQ Music via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "native",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: title already in native script",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.01,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2,
+        "firstLine" : "周杰伦",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 56,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · QQ Music via Lyrics+",
+        "rankedTiming" : 2,
+        "score" : 113,
+        "script" : "native",
+        "source" : "lyricsPlus",
+        "timing" : "word",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 10,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lyricsPlus"
+    },
+    {
+      "at" : 0.012,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "amll",
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.196,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 20059,
+        "ms" : 196,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://mobileservice.kugou.com/api/v3/search/song?format=json&keyword=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&page=1&pagesize=8"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.198,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kugou search",
+        "read" : 2,
+        "returned" : 8
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.198,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 269,
+        "score" : 96,
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.198,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 265,
+        "score" : 85.6,
+        "title" : "晴天 (Live)",
+        "titleSimilarity" : 0.95,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.199,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 249,
+        "score" : 57.599999999999994,
+        "title" : "晴天 (Live)",
+        "titleSimilarity" : 0.95,
+        "verdict" : "not read · fails the recording check"
+      },
+      "kind" : "hit",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.199,
+      "kind" : "note",
+      "message" : "5 result(s) scored 0 and were dropped",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.2,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 13135,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://lyrics.kugou.com/search?client=pc&duration=269000&hash=b3a52a7a958bf0aed0ebfba2e9a818b7&keyword=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&man=yes&ver=1"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.201,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kugou lyric candidates for “晴天”",
+        "read" : 2,
+        "returned" : 20
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.202,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 5720,
+        "ms" : 1,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://lyrics.kugou.com/download?accesskey=REDACTED&charset=utf8&client=pc&fmt=krc&id=274944371&ver=1"
+      },
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.204,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7513,
+        "ms" : 204,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&type=1&limit=8"
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.204,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 10,
+        "returned" : 10
+      },
+      "source" : "amll"
+    },
+    {
+      "at" : 0.205,
+      "hit" : {
+        "artist" : "陈佳",
+        "artistSimilarity" : 0,
+        "duration" : 236.8,
+        "title" : "红尘客栈",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.205,
+      "hit" : {
+        "artist" : "文景熙",
+        "artistSimilarity" : 0,
+        "duration" : 276.632,
+        "title" : "红尘客栈（续 浮生莫念）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.205,
+      "hit" : {
+        "artist" : "陈佳",
+        "artistSimilarity" : 0,
+        "duration" : 236.8,
+        "title" : "红尘客栈",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.205,
+      "hit" : {
+        "artist" : "白绝",
+        "artistSimilarity" : 0,
+        "duration" : 103.7,
+        "title" : "此生不换（翻自 麦振鸿）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "hit" : {
+        "artist" : "刘锦轩",
+        "artistSimilarity" : 0,
+        "duration" : 196.075,
+        "title" : "红尘客栈",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "hit" : {
+        "artist" : "黄应英",
+        "artistSimilarity" : 0,
+        "duration" : 57.514,
+        "title" : "红尘客栈dj",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "hit" : {
+        "artist" : "沈波",
+        "artistSimilarity" : 0,
+        "duration" : 66.321,
+        "title" : "红尘客栈(古筝版)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "hit" : {
+        "artist" : "安眠音乐盒",
+        "artistSimilarity" : 0,
+        "duration" : 97.5,
+        "title" : "红尘客栈",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "hit" : {
+        "artist" : "沈波",
+        "artistSimilarity" : 0,
+        "duration" : 66.321,
+        "title" : "红尘客栈(钢琴版)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "hit" : {
+        "artist" : "夺情神秘客",
+        "artistSimilarity" : 0,
+        "duration" : 99.707,
+        "title" : "红尘客栈（福利）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.206,
+      "kind" : "note",
+      "message" : "AMLL: NetEase found no song, so there is no file to read",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.207,
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: title already in native script",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.207,
+      "elapsedMs" : 206,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "amll"
+    },
+    {
+      "at" : 0.214,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7855,
+        "ms" : 213,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://music.163.com/api/search/get?s=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&type=1&limit=8"
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "kind" : "results",
+      "results" : {
+        "label" : "NetEase search",
+        "read" : 10,
+        "returned" : 10
+      },
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "陈奕迅",
+        "artistSimilarity" : 0,
+        "duration" : 259.986,
+        "title" : "爱情转移",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "陈奕迅",
+        "artistSimilarity" : 0,
+        "duration" : 259.213,
+        "title" : "富士山下",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "刘大拿, SipSu小口酥",
+        "artistSimilarity" : 0,
+        "duration" : 223,
+        "title" : "爱情转移·2023",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "netEase",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "絮舍",
+        "artistSimilarity" : 0,
+        "duration" : 260.44,
+        "title" : "爱情转移（温柔御音）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "汪晨蕊",
+        "artistSimilarity" : 0,
+        "duration" : 270.412,
+        "title" : "爱情转移 (Live)",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "陈奕迅",
+        "artistSimilarity" : 0,
+        "duration" : 257.12,
+        "title" : "富士山下",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "陈奕迅",
+        "artistSimilarity" : 0,
+        "duration" : 290.847,
+        "title" : "爱情转移",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "白叔",
+        "artistSimilarity" : 0,
+        "duration" : 12.561,
+        "title" : "爱情转移（抖音版）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "陈奕迅",
+        "artistSimilarity" : 0,
+        "duration" : 259.133,
+        "title" : "富士山下",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "hit" : {
+        "artist" : "刘姿含",
+        "artistSimilarity" : 0,
+        "duration" : 264.724,
+        "title" : "爱情转移（翻自 汪晨蕊）",
+        "titleSimilarity" : 0,
+        "verdict" : "title < 0.75"
+      },
+      "kind" : "hit",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "kind" : "note",
+      "message" : "NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "kind" : "note",
+      "message" : "no alias search: artist already in native script",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: title already in native script",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.214,
+      "elapsedMs" : 214,
+      "kind" : "sourceEnd",
+      "message" : "No usable match / unavailable",
+      "source" : "netEase"
+    },
+    {
+      "at" : 0.216,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "lyricsPlus",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kugou",
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.25,
+      "kind" : "note",
+      "message" : "no alias search: artist already in native script",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.255,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 269,
+        "durationDelta" : 0,
+        "firstLine" : "吉他：蔡科俊Again",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 63,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Kugou Music",
+        "rankedTiming" : 2,
+        "score" : 109,
+        "script" : "native",
+        "source" : "kugou",
+        "timing" : "word",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: title already in native script",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.26,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 269,
+        "durationDelta" : 0,
+        "firstLine" : "吉他：蔡科俊Again",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 63,
+        "metadataReported" : true,
+        "provenance" : "Word-by-word · Kugou Music",
+        "rankedTiming" : 2,
+        "score" : 109,
+        "script" : "native",
+        "source" : "kugou",
+        "timing" : "word",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 260,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "kugou"
+    },
+    {
+      "at" : 0.27,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kuwo",
+          "lrclib",
+          "lyricsOVH",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 0.347,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 14113,
+        "ms" : 347,
+        "status" : 200,
+        "timeout" : 4,
+        "url" : "https://lrclib.net/api/get?album_name=%E5%8F%B6%E6%83%A0%E7%BE%8E&artist_name=%E5%91%A8%E6%9D%B0%E4%BC%A6&duration=269&track_name=%E6%99%B4%E5%A4%A9"
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.347,
+      "kind" : "results",
+      "results" : {
+        "label" : "LRCLIB exact (get)",
+        "read" : 1,
+        "returned" : 1
+      },
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.367,
+      "kind" : "note",
+      "message" : "LRCLIB exact match has sound timing: search skipped",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.376,
+      "hit" : {
+        "album" : "叶惠美",
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 270,
+        "score" : 98,
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "passes the recording check · line"
+      },
+      "kind" : "hit",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.377,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 270,
+        "durationDelta" : 1,
+        "firstLine" : "故事的小黃花從出生那年就飄著",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 39,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rankedTiming" : 1,
+        "score" : 98,
+        "script" : "native",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "candidate",
+      "message" : "LRCLIB best offer of 1 with lyrics",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.378,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 270,
+        "durationDelta" : 1,
+        "firstLine" : "故事的小黃花從出生那年就飄著",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 39,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rankedTiming" : 1,
+        "score" : 98,
+        "script" : "native",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: title already in native script",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.379,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.225,
+        "duration" : 270,
+        "durationDelta" : 1,
+        "firstLine" : "故事的小黃花從出生那年就飄著",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 39,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · LRCLIB",
+        "rankedTiming" : 1,
+        "score" : 98,
+        "script" : "native",
+        "source" : "lrclib",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 378,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "lrclib"
+    },
+    {
+      "at" : 0.392,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : false,
+        "pending" : [
+          "kuwo",
+          "lyricsOVH",
+          "qqMusic"
+        ],
+        "revision" : 0,
+        "settleOver" : false,
+        "settled" : false,
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.165,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 21232,
+        "ms" : 1164,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://search.kuwo.cn/r.s?all=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6&client=kt&encoding=utf8&ft=music&itemset=web_2013&pcjson=1&pn=0&rformat=json&rn=8&vipver=1"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.167,
+      "kind" : "results",
+      "results" : {
+        "label" : "Kuwo search",
+        "read" : 2,
+        "returned" : 8
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.167,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 269,
+        "score" : 96,
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.167,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 268,
+        "score" : 94,
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.167,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 269,
+        "score" : 88.8,
+        "title" : "晴天 (KTV版伴奏)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "not read"
+      },
+      "kind" : "hit",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.168,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 284,
+        "score" : 58.8,
+        "title" : "晴天 (DJ版)",
+        "titleSimilarity" : 0.85,
+        "verdict" : "not read · fails the recording check"
+      },
+      "kind" : "hit",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.168,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 249,
+        "score" : 57.599999999999994,
+        "title" : "晴天 (Live)",
+        "titleSimilarity" : 0.95,
+        "verdict" : "not read · fails the recording check"
+      },
+      "kind" : "hit",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.168,
+      "kind" : "note",
+      "message" : "3 result(s) scored 0 and were dropped",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.542,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+          "kuwo",
+          "lyricsOVH",
+          "qqMusic"
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : false,
+        "shownAfter" : "kugou",
+        "step" : "publish"
+      }
+    },
+    {
+      "at" : 1.55,
+      "kind" : "stop",
+      "message" : "Not needed: it couldn’t beat the match showing",
+      "sources" : [
+        "kuwo",
+        "lyricsOVH"
+      ]
+    },
+    {
+      "at" : 1.55,
+      "elapsedMs" : 1550,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 1.55,
+      "elapsedMs" : 1550,
+      "kind" : "sourceEnd",
+      "message" : "Timed out (no answer)",
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.55,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 382,
+        "timeout" : 6,
+        "url" : "https://www.kuwo.cn/openapi/v1/www/lyric/getlyric?musicId=228908"
+      },
+      "source" : "kuwo"
+    },
+    {
+      "at" : 1.55,
+      "kind" : "request",
+      "request" : {
+        "error" : "cancelled",
+        "ms" : 1550,
+        "timeout" : 6,
+        "url" : "https://api.lyrics.ovh/v1/%E5%91%A8%E6%9D%B0%E4%BC%A6/%E6%99%B4%E5%A4%A9?"
+      },
+      "source" : "lyricsOVH"
+    },
+    {
+      "at" : 1.555,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 7662,
+        "ms" : 1555,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json&n=8&p=1&w=%E6%99%B4%E5%A4%A9%20%E5%91%A8%E6%9D%B0%E4%BC%A6"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.555,
+      "kind" : "results",
+      "results" : {
+        "label" : "QQ search",
+        "read" : 3,
+        "returned" : 8
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.555,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 269,
+        "score" : 96,
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.555,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 268,
+        "score" : 94,
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "read"
+      },
+      "kind" : "hit",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.555,
+      "hit" : {
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "duration" : 249,
+        "score" : 57.599999999999994,
+        "title" : "晴天 (Live)",
+        "titleSimilarity" : 0.95,
+        "verdict" : "read · fails the recording check"
+      },
+      "kind" : "hit",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.555,
+      "kind" : "note",
+      "message" : "5 result(s) scored 0 and were dropped",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.758,
+      "kind" : "request",
+      "request" : {
+        "bytes" : 2671,
+        "ms" : 203,
+        "status" : 200,
+        "timeout" : 6,
+        "url" : "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?format=json&g_tk=5381&nobase64=1&songmid=0039MnYb0qxYhV"
+      },
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.784,
+      "kind" : "note",
+      "message" : "no alias search: artist already in native script",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.787,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 269,
+        "durationDelta" : 0,
+        "firstLine" : "吉他：蔡科俊Again",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 63,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · QQ Music",
+        "rankedTiming" : 1,
+        "score" : 96,
+        "script" : "native",
+        "source" : "qqMusic",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "kind" : "variantResult",
+      "message" : "kept; no original-title search: title already in native script",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.789,
+      "candidate" : {
+        "agreement" : {
+          "peers" : 0,
+          "timedCompared" : 0,
+          "timingOutlier" : false
+        },
+        "appleRelay" : false,
+        "artist" : "周杰伦",
+        "artistSimilarity" : 1,
+        "confidence" : 2.25,
+        "duration" : 269,
+        "durationDelta" : 0,
+        "firstLine" : "吉他：蔡科俊Again",
+        "languageMismatch" : false,
+        "lead" : 3,
+        "lines" : 63,
+        "metadataReported" : true,
+        "provenance" : "Line-synced · QQ Music",
+        "rankedTiming" : 1,
+        "score" : 96,
+        "script" : "native",
+        "source" : "qqMusic",
+        "timing" : "line",
+        "title" : "晴天",
+        "titleSimilarity" : 1,
+        "verdict" : "accepted",
+        "versionMismatch" : [
+
+        ],
+        "versionTags" : [
+
+        ],
+        "viaOriginalTitle" : false
+      },
+      "elapsedMs" : 1789,
+      "kind" : "sourceEnd",
+      "message" : "Match found",
+      "source" : "qqMusic"
+    },
+    {
+      "at" : 1.81,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : false,
+        "settled" : true,
+        "shownAfter" : "kugou",
+        "shownBefore" : "kugou",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.838,
+      "kind" : "publication",
+      "publication" : {
+        "best" : "kugou",
+        "bestTiming" : "word",
+        "graceOver" : true,
+        "pending" : [
+
+        ],
+        "revision" : 1,
+        "settleOver" : true,
+        "settled" : true,
+        "shownAfter" : "kugou",
+        "shownBefore" : "kugou",
+        "step" : "wait"
+      }
+    },
+    {
+      "at" : 1.852,
+      "kind" : "cache",
+      "message" : "online choice saved to the cache",
+      "source" : "kugou"
+    },
+    {
+      "at" : 1.862,
+      "elapsedMs" : 1852,
+      "kind" : "final",
+      "message" : "shown",
+      "ranked" : [
+        {
+          "agreement" : {
+            "peers" : 2,
+            "timedCompared" : 2,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "周杰伦",
+          "artistSimilarity" : 1,
+          "confidence" : 2.25,
+          "duration" : 269,
+          "durationDelta" : 0,
+          "firstLine" : "吉他：蔡科俊Again",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 63,
+          "metadataReported" : true,
+          "provenance" : "Word-by-word · Kugou Music",
+          "rank" : 1,
+          "rankedTiming" : 2,
+          "score" : 109,
+          "script" : "native",
+          "source" : "kugou",
+          "timing" : "word",
+          "title" : "晴天",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        },
+        {
+          "agreement" : {
+            "peers" : 2,
+            "timedCompared" : 2,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "周杰伦",
+          "artistSimilarity" : 1,
+          "confidence" : 2,
+          "firstLine" : "周杰伦",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 56,
+          "metadataReported" : true,
+          "provenance" : "Word-by-word · QQ Music via Lyrics+",
+          "rank" : 2,
+          "rankedTiming" : 2,
+          "score" : 113,
+          "script" : "native",
+          "source" : "lyricsPlus",
+          "timing" : "word",
+          "title" : "晴天",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        },
+        {
+          "agreement" : {
+            "peers" : 2,
+            "timedCompared" : 2,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "周杰伦",
+          "artistSimilarity" : 1,
+          "confidence" : 2.25,
+          "duration" : 269,
+          "durationDelta" : 0,
+          "firstLine" : "吉他：蔡科俊Again",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 63,
+          "metadataReported" : true,
+          "provenance" : "Line-synced · QQ Music",
+          "rank" : 3,
+          "rankedTiming" : 1,
+          "score" : 96,
+          "script" : "native",
+          "source" : "qqMusic",
+          "timing" : "line",
+          "title" : "晴天",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        },
+        {
+          "agreement" : {
+            "peers" : 0,
+            "timedCompared" : 0,
+            "timingOutlier" : false
+          },
+          "appleRelay" : false,
+          "artist" : "周杰伦",
+          "artistSimilarity" : 1,
+          "confidence" : 2.225,
+          "duration" : 270,
+          "durationDelta" : 1,
+          "firstLine" : "故事的小黃花從出生那年就飄著",
+          "languageMismatch" : false,
+          "lead" : 3,
+          "lines" : 39,
+          "metadataReported" : true,
+          "provenance" : "Line-synced · LRCLIB",
+          "rank" : 4,
+          "rankedTiming" : 1,
+          "score" : 98,
+          "script" : "native",
+          "source" : "lrclib",
+          "timing" : "line",
+          "title" : "晴天",
+          "titleSimilarity" : 1,
+          "verdict" : "accepted",
+          "versionMismatch" : [
+
+          ],
+          "versionTags" : [
+
+          ],
+          "viaOriginalTitle" : false
+        }
+      ],
+      "rejected" : [
+
+      ],
+      "source" : "kugou",
+      "states" : {
+        "amll" : "No usable match / unavailable",
+        "kugou" : "Match found · 2 other sources agree · showing",
+        "kuwo" : "Not needed: it couldn’t beat the match showing",
+        "lrclib" : "Match found",
+        "lyricsOVH" : "Not needed: it couldn’t beat the match showing",
+        "lyricsPlus" : "Match found · 2 other sources agree",
+        "netEase" : "No usable match / unavailable",
+        "qqMusic" : "Match found · 2 other sources agree"
+      }
+    }
+  ],
+  "mode" : "mode smart, automatic",
+  "pick" : {
+    "artist" : "周杰伦",
+    "duration" : 269,
+    "provenance" : "Word-by-word · Kugou Music",
+    "source" : "kugou",
+    "timing" : "word",
+    "title" : "晴天",
+    "viaOriginalTitle" : false
+  },
+  "song" : {
+    "album" : "叶惠美",
+    "artist" : "周杰伦",
+    "duration" : 269,
+    "title" : "晴天"
+  },
+  "sources" : [
+    "lyricsPlus",
+    "amll",
+    "netEase",
+    "lrclib",
+    "qqMusic",
+    "kugou",
+    "kuwo",
+    "lyricsOVH"
+  ],
+  "startedAt" : "2026-11-13T06:17:07Z",
+  "storefront" : "au"
+}
