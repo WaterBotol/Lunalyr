@@ -44,9 +44,8 @@ struct SettingsSidebar: View {
                             let pages = group.pages.filter { $0.matches(query) }
                             if !pages.isEmpty {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(group.title.uppercased())
-                                        .font(.system(size: 11, weight: .bold))
-                                        .tracking(0.6)
+                                    Text(group.title)
+                                        .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(Color(nsColor: t.secondary))
                                         .padding(.horizontal, 8)
                                         .padding(.bottom, 2)

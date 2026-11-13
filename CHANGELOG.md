@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+- The desktop player looks calmer: the album's colour is one flat tint instead of three layered gradients with a shining rim, borders are gone (they come back with Increase Contrast), labels are in sentence case ("Apple Music", "Queue", "Library") instead of spaced capitals, type uses three weights, small grey text is easier to read on bright wallpapers (the card's deep album shade is a little darker), and presses and the record settle without bouncing. Everything works as before. Section headers in the menu-bar panel and the Settings sidebar, and the artist on the song's opening title, are no longer in capitals. A design guide for the whole interface is in docs/DESIGN.md.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed

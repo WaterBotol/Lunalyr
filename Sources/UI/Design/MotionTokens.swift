@@ -29,6 +29,12 @@ extension LunalyrDesign.Motion {
 
     /// Removals and dismissals: about 75% of `standard`.
     static let exit = Animation.smooth(duration: 0.2)
+    /// A quick change leaving (a capsule, a highlight): about 75% of `quick`.
+    static let quickExit = Animation.smooth(duration: 0.12)
+    /// A control pressed in: answers at once.
+    static let press = Animation.smooth(duration: 0.1)
+    /// A control let go: settles back with no overshoot.
+    static let release = Animation.smooth(duration: 0.24)
     /// Larger moments: the onboarding hero, a card being made. Below the 500 ms "drag" line.
     static let emphasised = Animation.smooth(duration: 0.45)
     /// The only bouncy token: one-shot celebrations (card made, tap sync applied).

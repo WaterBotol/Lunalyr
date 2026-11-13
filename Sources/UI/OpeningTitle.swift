@@ -396,10 +396,9 @@ struct OpeningTitleCard: View {
                             .offset(y: (1 - reveal.reading) * rise * 0.5)
                     }
                     if !artist.isEmpty {
-                        // Wide tracking that closes up as it arrives.
-                        Text(artist.uppercased())
-                            .font(settings.uiFont(size: artistSize, bold: true, mood: mood))
-                            .kerning(artistSize * (0.16 + (reduceMotion ? 0 : 0.3 * (1 - reveal.artist))))
+                        // In the artist's own case, as the menu bar and player show it.
+                        Text(artist)
+                            .font(settings.uiFont(size: artistSize, mood: mood))
                             .foregroundStyle(type.opacity(0.92))
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)

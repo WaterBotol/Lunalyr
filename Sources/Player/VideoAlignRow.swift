@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private typealias P = LunalyrDesign.Player
+
 // Align mode in the desktop player: while a music video is the wallpaper, a
 // small film button beside the seek bar turns the seek row into the video's
 // own bar. Dragging it moves only the video (the song plays on) until the
@@ -81,9 +83,9 @@ struct VideoAlignButton: View {
                 if let now = self.reason() { say(now) } else { action() }
             } label: {
                 Image(systemName: on ? "film.fill" : "film")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(on ? tint : .white.opacity(reason == nil ? (look.increaseContrast ? 1 : 0.75) : 0.3))
-                    .frame(width: 30, height: 30)
+                    .font(P.Glyph.icon)
+                    .foregroundStyle(on ? tint : (reason == nil ? P.Ink.secondary : P.Ink.quaternary).color(look))
+                    .frame(width: P.Glyph.button, height: P.Glyph.button)
                     .contentShape(Rectangle())
             }
             .buttonStyle(TransportButtonStyle())
@@ -91,9 +93,9 @@ struct VideoAlignButton: View {
             .overlay(alignment: .topTrailing) {
                 if let shownReason {
                     Text(shownReason)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .font(P.TypeScale.tag)
+                        .foregroundStyle(P.Ink.primary.color(look))
+                        .padding(.horizontal, 8).padding(.vertical, 4)
                         .playerCapsule(look)
                         .fixedSize()
                         .alignmentGuide(.top) { $0[.bottom] + 4 }
@@ -185,14 +187,15 @@ struct VideoAlignRow: View {
             HStack(spacing: 6) {
                 Text(ScrubMath.timestamp(display.videoTime)).accessibilityHidden(true)
                 Spacer(minLength: 0)
-                Text(VideoAlignControls.hint).font(.system(size: 10)).opacity(0.7).lineLimit(1).accessibilityHidden(true)
+                Text(VideoAlignControls.hint).font(P.TypeScale.rowSubtitle).foregroundStyle(P.Ink.tertiary.color(look))
+                    .lineLimit(1).accessibilityHidden(true)
                 Spacer(minLength: 0)
                 Text(ScrubMath.timestamp(display.videoLength)).accessibilityHidden(true)
             }
             .frame(width: ScrubRow.barWidth, height: ScrubRow.timesHeight)
         }
-        .font(.system(size: 11).monospacedDigit())
-        .foregroundStyle(.white.opacity(look.increaseContrast ? 0.95 : 0.8))
+        .font(P.TypeScale.time)
+        .foregroundStyle(P.Ink.secondary.color(look))
         .frame(width: ScrubRow.rowWidth, height: ScrubRow.height)
     }
 
@@ -251,14 +254,14 @@ struct VideoAlignRow: View {
         ClampedCenter(x: knob) {
             VStack(spacing: 1) {
                 Text(display.title)
-                    .font(.system(size: 14, weight: .bold).monospacedDigit())
+                    .font(P.TypeScale.capsuleLyric.monospacedDigit())
                     .contentTransition(.numericText())
                 Text(display.detail)
-                    .font(.system(size: 10, weight: .medium))
-                    .opacity(0.75)
+                    .font(P.TypeScale.tag)
+                    .foregroundStyle(P.Ink.secondary.color(look))
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14).padding(.vertical, 6)
+            .foregroundStyle(P.Ink.primary.color(look))
+            .padding(.horizontal, 12).padding(.vertical, 8)
             .playerCapsule(look)
             .fixedSize()
         }
@@ -285,26 +288,26 @@ struct VideoAlignControls: View {
         if maskRender {
             Color.black.opacity(0.3).frame(width: DesktopPlayerView.column, height: PlayerTransportRowHeight.value)
         } else {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Button(action: onReset) {
                     Label("Reset", systemImage: "arrow.counterclockwise")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(P.TypeScale.label)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .opacity(canReset ? 0.85 : 0.4)
+                .foregroundStyle((canReset ? P.Ink.secondary : P.Ink.quaternary).color(look))
                 .disabled(!canReset)
                 .help("Forget your timing for this video and go back to the estimate")
                 Spacer(minLength: 0)
                 Button(action: onCancel) {
-                    Text("Cancel").font(.system(size: 13, weight: .medium))
-                        .padding(.horizontal, 6).padding(.vertical, 8).contentShape(Rectangle())
+                    Text("Cancel").font(P.TypeScale.rowTitle.weight(.medium))
+                        .padding(.horizontal, 8).padding(.vertical, 8).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .opacity(look.increaseContrast ? 1 : 0.85)
+                .foregroundStyle(P.Ink.secondary.color(look))
                 .help("Put the video\u{2019}s timing back as it was (Esc)")
                 Button(action: onDone) {
-                    Text("Done").font(.system(size: 13, weight: .bold)).foregroundStyle(.black)
+                    Text("Done").font(P.TypeScale.rowTitle).foregroundStyle(.black)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(Capsule().fill(.white))
                         .contentShape(Capsule())

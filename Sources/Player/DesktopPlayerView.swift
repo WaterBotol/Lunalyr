@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 
+private typealias P = LunalyrDesign.Player
+
 extension PlayerKind {
     /// The colour each player is known by, so the switch reads at a glance.
     var tint: Color {
@@ -68,7 +70,7 @@ struct DesktopPlayerView: View {
     static let column: CGFloat = 364
     static let artWidth: CGFloat = 216
     static let padding: CGFloat = 20
-    static let radius: CGFloat = 28
+    static let radius: CGFloat = P.Radius.card
     /// The card at rest.
     static let restHeight: CGFloat = cover + 2 * padding
     /// The card at its tallest (the queue open).
@@ -179,9 +181,9 @@ struct DesktopPlayerView: View {
         .environment(\.playerLook, look)
         .environment(\.playerPalette, palette)
         .opacity(shown ? 1 : 0)
-        .offset(y: shown || !riseArmed || look.reduceMotion ? 0 : 8)
+        .offset(y: shown || !riseArmed || look.reduceMotion ? 0 : P.Motion.rise)
         .animation(PlayerMotion.reveal(shown: shown, reduceMotion: look.reduceMotion), value: shown)
-        .animation(look.reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.32), value: pane)
+        .animation(P.Motion.pane(reduceMotion: look.reduceMotion), value: pane)
         .onChange(of: shown) { _, now in shownChanged(now) }
         .onChange(of: searchFocused) { _, focused in
             guard !maskRender, preview == nil else { return }
@@ -304,7 +306,7 @@ struct DesktopPlayerView: View {
         .background(SleeveCardBackground(palette: palette, hasSong: now.track != nil))
         .overlay(alignment: .top) {
             PlayerNoteToast(note: model.playNote, trigger: noteTrigger, alwaysShown: preview != nil)
-                .alignmentGuide(.top) { $0[.bottom] + 10 }
+                .alignmentGuide(.top) { $0[.bottom] + 12 }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Lunalyr player")
@@ -321,7 +323,7 @@ struct DesktopPlayerView: View {
                     let out = displayedPlaying || look.reduceMotion
                     SleeveRecord(size: Self.cover - 6, palette: palette)
                         .offset(x: out ? 40 : 14)
-                        .animation(look.reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.1), value: out)
+                        .animation(look.reduceMotion ? nil : P.Motion.record, value: out)
                         .accessibilityHidden(true)
                 }
                 coverButton(now: now)
@@ -330,9 +332,9 @@ struct DesktopPlayerView: View {
             if compact {
                 // The song and the transport sit centred under the cover.
                 VStack(alignment: .center, spacing: 2) {
-                    Text(now.track?.title ?? now.idleTitle).font(.system(size: 13, weight: .bold)).lineLimit(1)
+                    Text(now.track?.title ?? now.idleTitle).font(P.TypeScale.rowTitle).lineLimit(1)
                     if let artist = now.track?.artist, !artist.isEmpty {
-                        Text(artist).font(.system(size: 11)).foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.7))
+                        Text(artist).font(P.TypeScale.meta).foregroundStyle(P.Ink.secondary.color(look))
                             .lineLimit(1)
                     }
                 }
@@ -349,10 +351,10 @@ struct DesktopPlayerView: View {
         Button(action: coverClicked) {
             coverImage(now: now)
                 .frame(width: Self.cover, height: Self.cover)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(.white.opacity(look.increaseContrast ? 0.5 : 0.12), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.45), radius: 10, x: 4, y: 6)
+                .clipShape(RoundedRectangle(cornerRadius: P.Radius.cover, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: P.Radius.cover, style: .continuous)
+                    .strokeBorder(P.Line.hairline(look), lineWidth: 0.5))
+                .shadow(color: P.Shadow.coverColor, radius: P.Shadow.coverRadius, y: P.Shadow.coverY)
                 .contentShape(Rectangle())
         }
         .buttonStyle(CoverButtonStyle())
@@ -373,9 +375,9 @@ struct DesktopPlayerView: View {
             Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
         } else {
             ZStack {
-                Color.white.opacity(0.1)
+                Color.white.opacity(P.Fill.placeholder)
                 Image(systemName: now.track?.isStream == true ? "dot.radiowaves.left.and.right" : "music.note")
-                    .font(.system(size: 40)).foregroundStyle(.white.opacity(0.4))
+                    .font(.system(size: 40, weight: .light)).foregroundStyle(P.Ink.quaternary.color(look))
             }
         }
     }
@@ -415,7 +417,7 @@ struct DesktopPlayerView: View {
             ScrubActivityReader(activity: scrub.activity) { activity in
                 titles(now: now)
                     .opacity(Self.titleOpacity(dimmed: (activity.capsulesUp && kind == .seekable) || aligning))
-                    .animation(activity.capsulesUp ? .easeIn(duration: 0.10) : .easeOut(duration: 0.14),
+                    .animation(activity.capsulesUp ? P.Motion.feedbackOut : P.Motion.feedback,
                                value: activity.capsulesUp)
             }
             Spacer(minLength: 0)
@@ -423,7 +425,7 @@ struct DesktopPlayerView: View {
                 seekRow(kind: kind, shown: shown)
             }
             alignOrControls(kind: kind)
-                .padding(.top, 8)
+                .padding(.top, 4)
         }
     }
 
@@ -431,13 +433,13 @@ struct DesktopPlayerView: View {
     /// search, where the switch is.
     private var playerLabel: some View {
         Button { openSearch() } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Circle().fill(playingKind.tint).frame(width: 6, height: 6)
-                Text(playingKind.shortName.uppercased()).font(.system(size: 10, weight: .bold)).tracking(1.2)
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                Text(playingKind.shortName).font(P.TypeScale.label)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(P.Ink.tertiary.color(look))
             }
-            .foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.7))
-            .padding(.vertical, 2)
+            .foregroundStyle(P.Ink.secondary.color(look))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -452,18 +454,18 @@ struct DesktopPlayerView: View {
         let album = track?.album.flatMap { $0.isEmpty || $0 == track?.title ? nil : $0 }
         return VStack(alignment: .leading, spacing: 0) {
             Text(track?.title ?? now.idleTitle)
-                .font(.system(size: 25, weight: .bold))
-                .lineLimit(1).minimumScaleFactor(0.75)
-                .padding(.top, 8)
+                .font(P.TypeScale.title)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .padding(.top, 12)
             if !artist.isEmpty {
-                Text(artist).font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(look.increaseContrast ? 0.95 : 0.8)).lineLimit(1)
-                    .padding(.top, 1)
+                Text(artist).font(P.TypeScale.artist)
+                    .foregroundStyle(P.Ink.secondary.color(look)).lineLimit(1)
+                    .padding(.top, 2)
             }
             if let album {
-                Text(album).font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(look.increaseContrast ? 0.85 : 0.55)).lineLimit(1)
-                    .padding(.top, 1)
+                Text(album).font(P.TypeScale.meta)
+                    .foregroundStyle(P.Ink.tertiary.color(look)).lineLimit(1)
+                    .padding(.top, 2)
             }
         }
         .accessibilityElement(children: .combine)
@@ -613,7 +615,7 @@ struct DesktopPlayerView: View {
     // MARK: Search column
 
     private var searchColumn: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 PlayerPicker(kinds: switchKinds, selected: model.player) { model.player = $0 }
                 Spacer(minLength: 0)
@@ -646,16 +648,17 @@ struct DesktopPlayerView: View {
         }
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text("QUEUE").font(.system(size: 10, weight: .bold)).tracking(1.2)
+                Text("Queue").font(P.TypeScale.rowTitle).foregroundStyle(P.Ink.primary.color(look))
                 Spacer(minLength: 0)
                 if model.shuffleOn, !model.queue.isEmpty {
                     Label("Playlist order, shuffle is on", systemImage: "shuffle")
-                        .font(.system(size: 10))
+                        .font(P.TypeScale.tag)
                         .help("Shuffle is on: this is the playlist\u{2019}s order, not the order songs will play in")
                 }
                 PaneCloseButton(label: "Close queue") { model.pane = .song }
             }
-            .foregroundStyle(.white.opacity(look.increaseContrast ? 0.9 : 0.65))
+            .foregroundStyle(P.Ink.tertiary.color(look))
+            .padding(.leading, 6)
             PlayerQueueList(items: items, optimisticCurrent: optimisticCurrent, isPlaying: displayedPlaying,
                             artwork: now.artwork, footnote: footnote, onTap: queueTapped)
         }
@@ -681,8 +684,7 @@ private struct ScrubActivityReader<Content: View>: View {
 /// plain fade. Under Reduce Motion, short fades.
 enum PlayerMotion {
     static func reveal(shown: Bool, reduceMotion: Bool) -> Animation {
-        if reduceMotion { return shown ? .easeOut(duration: 0.15) : .easeIn(duration: 0.12) }
-        return shown ? .spring(duration: 0.32, bounce: 0) : .spring(duration: 0.20, bounce: 0)
+        P.Motion.reveal(shown: shown, reduceMotion: reduceMotion)
     }
 }
 
@@ -729,7 +731,7 @@ struct CoverButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(configuration.isPressed ? .spring(duration: 0.10, bounce: 0) : .spring(duration: 0.30, bounce: 0.15),
+            .animation(configuration.isPressed ? P.Motion.press : P.Motion.release,
                        value: configuration.isPressed)
     }
 }
@@ -924,15 +926,15 @@ struct RemoteCover: View {
 
     var body: some View {
         ZStack {
-            Rectangle().fill(.white.opacity(0.1))
+            Rectangle().fill(.white.opacity(P.Fill.placeholder))
             if let image {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill).transition(.opacity)
             } else {
-                Image(systemName: symbol).foregroundStyle(.white.opacity(0.4))
+                Image(systemName: symbol).foregroundStyle(.white.opacity(P.Ink.quaternary.opacity(increaseContrast: false)))
             }
         }
-        .animation(.easeOut(duration: 0.25), value: image)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .animation(LunalyrDesign.Motion.standard, value: image)
+        .clipShape(RoundedRectangle(cornerRadius: P.Radius.thumb, style: .continuous))
         .task(id: "\(url?.absoluteString ?? "")|\(persistentID ?? "")|\(lookup?.0 ?? "")|\(lookup?.1 ?? "")") {
             image = nil
             if url == nil, let persistentID, let art = await LibraryArtwork.image(persistentID: persistentID) {
@@ -951,6 +953,7 @@ struct RemoteCover: View {
 struct RowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(configuration.isPressed ? Color.white.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(configuration.isPressed ? Color.white.opacity(P.Fill.selected) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: P.Radius.row, style: .continuous))
     }
 }

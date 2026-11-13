@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private typealias P = LunalyrDesign.Player
+
 /// The row under the seek bar: the transport on the left; search, the
 /// queue and the film button (lining up the music video) on the right.
 /// The player switch is not here: it only steers search, so it sits by
@@ -51,15 +53,14 @@ struct PlayerTransport: View {
         HStack(spacing: size == .large ? 6 : 4) {
             Button(action: onPrevious) { glyph("backward.fill") }
                 .buttonStyle(TransportButtonStyle())
-                .opacity(hasSong ? 1 : 0.35)
+                .opacity(hasSong ? 1 : P.Ink.quaternary.opacity(increaseContrast: false))
                 .disabled(!hasSong)
                 .help("Previous").accessibilityLabel("Previous track")
             Button(action: onPlayPause) {
                 ZStack {
                     Circle().fill(.white)
-                        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: size.disc * 0.4, weight: .bold))
+                        .font(.system(size: size.disc * 0.38, weight: .semibold))
                         .foregroundStyle(.black)
                         .offset(x: isPlaying ? 0 : size.disc * 0.03)
                         .contentTransition(look.reduceMotion ? .opacity : .symbolEffect(.replace))
@@ -71,7 +72,7 @@ struct PlayerTransport: View {
             .help(isPlaying ? "Pause" : "Play").accessibilityLabel(isPlaying ? "Pause" : "Play")
             Button(action: onNext) { glyph("forward.fill") }
                 .buttonStyle(TransportButtonStyle())
-                .opacity(hasSong ? 1 : 0.35)
+                .opacity(hasSong ? 1 : P.Ink.quaternary.opacity(increaseContrast: false))
                 .disabled(!hasSong)
                 .help("Next").accessibilityLabel("Next track")
         }
@@ -80,7 +81,7 @@ struct PlayerTransport: View {
     }
 
     private func glyph(_ symbol: String) -> some View {
-        Image(systemName: symbol).font(.system(size: size.glyph, weight: .semibold))
+        Image(systemName: symbol).font(.system(size: size.glyph, weight: .medium))
             .frame(width: size.cell, height: size.cell)
             .contentShape(Rectangle())
     }
@@ -98,10 +99,10 @@ struct PlayerIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(on || look.increaseContrast ? 1 : 0.75))
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(.white.opacity(on ? 0.2 : 0)))
+                .font(P.Glyph.icon)
+                .foregroundStyle((on ? P.Ink.primary : P.Ink.secondary).color(look))
+                .frame(width: P.Glyph.button, height: P.Glyph.button)
+                .background(Circle().fill(.white.opacity(on ? P.Fill.selected : 0)))
                 .contentShape(Circle())
         }
         .buttonStyle(TransportButtonStyle())
@@ -111,8 +112,8 @@ struct PlayerIconButton: View {
     }
 }
 
-/// Highlight on mouse-down, a quick press-in, and a release with a little
-/// momentum (the one bounce in the player). A faint circle on hover.
+/// Highlight on mouse-down, a quick press-in and a release that settles
+/// without overshoot. A faint circle on hover.
 struct TransportButtonStyle: ButtonStyle {
     /// The faint circle behind on hover (not for the play disc, which is its own circle).
     var halo = true
@@ -135,14 +136,13 @@ private struct TransportButtonBody: View {
         let pressed = configuration.isPressed
         configuration.label
             .background {
-                Circle().fill(.white.opacity(!halo ? 0 : pressed ? 0.14 : hovering && enabled ? 0.1 : 0))
-                    .frame(width: 32, height: 32)
-                    .animation(.easeOut(duration: 0.10), value: hovering)
+                Circle().fill(.white.opacity(!halo ? 0 : pressed ? P.Fill.selected : hovering && enabled ? P.Fill.hover : 0))
+                    .frame(width: P.Glyph.button, height: P.Glyph.button)
+                    .animation(hovering ? P.Motion.feedback : P.Motion.feedbackOut, value: hovering)
             }
             .brightness(!halo && hovering && enabled ? -0.06 : 0)
-            .scaleEffect(pressed && !look.reduceMotion ? 0.88 : 1)
-            .animation(look.reduceMotion ? nil
-                       : pressed ? .spring(duration: 0.10, bounce: 0) : .spring(duration: 0.30, bounce: 0.15),
+            .scaleEffect(pressed && !look.reduceMotion ? P.Motion.pressScale : 1)
+            .animation(look.reduceMotion ? nil : pressed ? P.Motion.press : P.Motion.release,
                        value: pressed)
             .background { if preview == nil && !maskRender { PointerHover { hovering = $0 } } }
             .onChange(of: pressed) { _, down in if down { PlayerInteraction.shared.noteClick() } }
