@@ -272,7 +272,7 @@ private final class OnboardingRig {
             desktop: DesktopOptions(defaults: defaults), players: players,
             visualizer: VisualizerPreferences(defaults: defaults), offsets: SongOffsets(defaults: defaults),
             nowPlaying: harness.monitor, audio: AudioReactiveController(environment: UISnapshotScene.captureEnvironment()),
-            updates: AppUpdates(), navigation: navigation, installedPlayers: [.appleMusic, .spotify])
+            updates: AppUpdates(defaults: defaults), navigation: navigation, installedPlayers: [.appleMusic, .spotify])
         navigation.presentSettings = { [weak self] in self?.navigated.append("settings") }
         navigation.openURL = { [weak self] url in self?.navigated.append(url.absoluteString) }
     }

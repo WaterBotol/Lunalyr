@@ -37,11 +37,24 @@ struct GeneralPage: View {
                             Text(updates.status).lunalyrText(.caption)
                         }
                         Spacer()
-                        Button("Check for Updates…") { updates.check() }
-                            .buttonStyle(ThemedButtonStyle())
-                            .disabled(updates.buttonDisabled)
-                            .help(updates.buttonDisabled ? "Available once the update service is ready, or when its current check finishes." : "")
+                        if updates.badge.pendingVersion != nil {
+                            // The update the daily check found, waiting.
+                            Button("Update…") { updates.check() }
+                                .buttonStyle(ThemedButtonStyle())
+                                .help("See what’s new and install the update")
+                        } else {
+                            Button("Check for Updates…") { updates.check() }
+                                .buttonStyle(ThemedButtonStyle())
+                                .disabled(updates.buttonDisabled)
+                                .help(updates.buttonDisabled ? "Available once the update service is ready, or when its current check finishes." : "")
+                        }
                     }
+                    Toggle("Check for updates automatically", isOn: Binding(
+                        get: { updates.automaticallyChecks },
+                        set: { updates.setAutomaticallyChecks($0) }))
+                        .toggleStyle(ThemedToggleStyle())
+                        .disabled(!updates.configured)
+                        .help("Once a day, Lunalyr asks GitHub whether a newer version is out. It never installs one without asking.")
                 }
                 ThemedCard("Welcome") {
                     HStack {

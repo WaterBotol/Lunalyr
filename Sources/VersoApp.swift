@@ -7,6 +7,8 @@ struct VersoApp: App {
     @StateObject private var nowPlaying = NowPlayingMonitor.shared
     /// For the icon, which says when the wallpaper is paused.
     @StateObject private var extras = LunalyrExtras.shared
+    /// For the icon, which carries a dot while an update waits.
+    @StateObject private var updates = AppUpdates.shared
 
     var body: some Scene {
         // The XCTest host is this app: without this, every test run put a
@@ -15,8 +17,9 @@ struct VersoApp: App {
             MenuBarView()
                 .environmentObject(nowPlaying)
         } label: {
-            Image(nsImage: extras.wallpaperPaused ? Self.pausedMenuBarIcon : Self.menuBarIcon)
-                .accessibilityLabel(extras.wallpaperPaused ? "Lunalyr, wallpaper paused" : "Lunalyr")
+            let paused = extras.wallpaperPaused, update = updates.badge.showsBadge
+            Image(nsImage: Self.icon(paused: paused, updateAvailable: update))
+                .accessibilityLabel(MenuBarView.accessibilityLabel(paused: paused, updateAvailable: update))
         }
         .menuBarExtraStyle(.window)
         .commands {
@@ -42,5 +45,12 @@ struct VersoApp: App {
         return image
     }()
 
-    private static let pausedMenuBarIcon = MenuBarView.pausedIcon(from: menuBarIcon)
+    /// Plain, paused, update waiting, and both: drawn once each.
+    private static let icons: [[NSImage]] = [false, true].map { paused in
+        [false, true].map { MenuBarView.badgedIcon(from: menuBarIcon, paused: paused, updateAvailable: $0) }
+    }
+
+    private static func icon(paused: Bool, updateAvailable: Bool) -> NSImage {
+        icons[paused ? 1 : 0][updateAvailable ? 1 : 0]
+    }
 }

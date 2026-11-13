@@ -108,6 +108,19 @@ extension UISnapshotCatalogue {
                                scene.settings.lowPowerVisuals = true
                                scene.hideLyricsForMirroring()
                            }, view: menuBarPanel),
+            UISnapshotCase("menu-bar/update-available", note: "the daily check found an update: the row at the top",
+                           chrome: .menuBarPanel, size: .menuBarPanel, player: .playing,
+                           prepare: { scene in
+                               scene.lyricNow = menuBarSinging
+                               scene.updates.receive(.found(version: "2.1.0", userInitiated: false, sparkleShowsIt: false))
+                           }, view: menuBarPanel),
+            UISnapshotCase("menu-bar/update-and-statuses", note: "an update waiting, with two statuses raised",
+                           chrome: .menuBarPanel, size: .menuBarPanel, player: .denied,
+                           prepare: { scene in
+                               scene.settings.backgroundMode = .shader
+                               scene.settings.lowPowerVisuals = true
+                               scene.updates.receive(.found(version: "2.1.0", userInitiated: false, sparkleShowsIt: false))
+                           }, view: menuBarPanel),
             UISnapshotCase("menu-bar/busiest", note: "the tallest: two statuses, the scene picker, a paused wallpaper",
                            chrome: .menuBarPanel, size: .menuBarPanel, player: .needsConsent,
                            prepare: { scene in

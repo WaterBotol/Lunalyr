@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The menu-bar panel (gui/spec.md §3.3), top to bottom: the song, its
+/// The menu-bar panel (gui/spec.md §3.3), top to bottom: a waiting update,
+/// when the daily check found one; the song, its
 /// transport, the line being sung and this song's lyric timing; anything
 /// that needs the person's attention, with its fix; the wallpaper's quick
 /// controls; then Player, Settings…, Check for Updates… and Quit, like a menu.
@@ -12,6 +13,7 @@ struct MenuBarView: View {
     @Model(\.nowPlaying) private var playing
     @Model(\.settings) private var settings
     @Model(\.extras) private var extras
+    @Model(\.updates) private var updates
     @Environment(\.lunalyrModels) private var models
     /// Where system-audio capture is in a failure and its recovery. Followed
     /// on its own: the capture controller also publishes meter levels many
@@ -47,6 +49,12 @@ struct MenuBarView: View {
 
     private func panel(_ statuses: [MenuBarStatus]) -> some View {
         VStack(alignment: .leading, spacing: Self.groupSpacing) {
+            if updates.badge.showsBadge {
+                // First, as the dot on the icon is what was clicked.
+                MenuBarUpdateBanner()
+                    .focusSection()
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
+            }
             MenuBarNowPlaying()
                 .menuCard()
                 .focusSection()
@@ -69,7 +77,7 @@ struct MenuBarView: View {
         .padding(LunalyrDesign.Spacing.panel)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
-                   value: statuses.isEmpty)
+                   value: [statuses.isEmpty, updates.badge.showsBadge])
     }
 
     /// Leaves room for the menu bar and popover chrome on a 13-inch display.
@@ -102,6 +110,19 @@ struct MenuBarView: View {
     /// view, as the menu-bar line is off by default. Still a template, so
     /// the system colours it exactly like the plain icon.
     static func pausedIcon(from icon: NSImage) -> NSImage {
+        badgedIcon(from: icon, paused: true, updateAvailable: false)
+    }
+
+    /// The menu-bar icon for the moment: plain, with the pause badge (lower
+    /// right), with the update dot (upper right), or both.
+    ///
+    /// The update dot is a solid disc cut out of the mark by a clear ring,
+    /// like a notification dot, and like the rest of the icon a template:
+    /// a coloured dot can't follow the menu bar, which on recent macOS takes
+    /// its light or dark from the wallpaper -- Lunalyr's own wallpaper,
+    /// often dark album art behind a light-mode menu bar.
+    static func badgedIcon(from icon: NSImage, paused: Bool, updateAvailable: Bool) -> NSImage {
+        guard paused || updateAvailable else { return icon }
         let image = NSImage(size: icon.size)
         // Drawn once into bitmaps of its own, at 1x and 2x: the badge is cut
         // out with a clearing blend, which must never reach the menu bar.
@@ -116,17 +137,38 @@ struct MenuBarView: View {
             guard let context = NSGraphicsContext(bitmapImageRep: bitmap) else { continue }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = context
-            drawBadge(over: icon, in: CGRect(origin: .zero, size: icon.size), context: context.cgContext)
+            let rect = CGRect(origin: .zero, size: icon.size)
+            icon.draw(in: rect)
+            if paused { drawBadge(in: rect, context: context.cgContext) }
+            if updateAvailable { drawUpdateDot(in: rect, context: context.cgContext) }
             NSGraphicsContext.restoreGraphicsState()
             image.addRepresentation(bitmap)
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Lunalyr, wallpaper paused"
+        image.accessibilityDescription = accessibilityLabel(paused: paused, updateAvailable: updateAvailable)
         return image
     }
 
-    private static func drawBadge(over icon: NSImage, in rect: CGRect, context: CGContext) {
-        icon.draw(in: rect)
+    /// What VoiceOver says for the status item.
+    static func accessibilityLabel(paused: Bool, updateAvailable: Bool) -> String {
+        var parts = ["Lunalyr"]
+        if paused { parts.append("wallpaper paused") }
+        if updateAvailable { parts.append("update available") }
+        return parts.joined(separator: ", ")
+    }
+
+    /// A solid dot in the upper right corner, set apart by a clear ring.
+    private static func drawUpdateDot(in rect: CGRect, context: CGContext) {
+        let diameter = (rect.width * 0.42).rounded()
+        let dot = CGRect(x: rect.maxX - diameter, y: rect.maxY - diameter, width: diameter, height: diameter)
+        context.setBlendMode(.clear)
+        context.fillEllipse(in: dot.insetBy(dx: -1.5, dy: -1.5))
+        context.setBlendMode(.normal)
+        context.setFillColor(NSColor.black.cgColor)
+        context.fillEllipse(in: dot)
+    }
+
+    private static func drawBadge(in rect: CGRect, context: CGContext) {
         let diameter = (rect.width * 0.5).rounded()
         let badge = CGRect(x: rect.maxX - diameter, y: rect.minY, width: diameter, height: diameter)
         // A clear ring sets the badge apart from the mark beneath it.

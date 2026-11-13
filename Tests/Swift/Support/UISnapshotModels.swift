@@ -86,7 +86,7 @@ final class UISnapshotScene {
             highlightColours: LyricHighlightOptions(defaults: defaults), styleMemory: StyleMemory(defaults: defaults),
             extras: extras, hotkeys: hotkeys, desktop: DesktopOptions(defaults: defaults), players: players,
             visualizer: VisualizerPreferences(defaults: defaults), offsets: SongOffsets(defaults: defaults),
-            nowPlaying: harness.monitor, audio: audio, updates: AppUpdates(), navigation: navigation,
+            nowPlaying: harness.monitor, audio: audio, updates: AppUpdates(defaults: defaults), navigation: navigation,
             installedPlayers: [.appleMusic, .spotify],
             lyricNow: { _ in lyricBox.value })
         // Requests are recorded, never acted on.
@@ -96,6 +96,9 @@ final class UISnapshotScene {
     }
 
     var colours: LyricColourOptions { models.colours }
+    /// Never started: no Sparkle, no feed. `updates.receive(_:)` stands in
+    /// for what Sparkle would report.
+    var updates: AppUpdates { models.updates }
     var offsets: SongOffsets { models.offsets }
     var styleMemory: StyleMemory { models.styleMemory }
     var visualizer: VisualizerPreferences { models.visualizer }
