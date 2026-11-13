@@ -67,7 +67,7 @@ public sealed class AppSettingsTests
             "effectSpeed", "vividness", "scrimStrength", "patternOpacity", "motionBlur", "textBackingAutomatic", "textBacking",
             "useMotionArtwork", "motionPlacement", "motionExclusions",
             "visualizerStyle", "audioReactiveEnabled", "audioSensitivity", "visualizerPunch", "starTrailsColours",
-            "musicVideoFallback", "musicVideoOnline", "musicVideoDim", "musicVideoBlur",
+            "musicVideoFallback", "musicVideoOnline", "musicVideoSearch", "musicVideoDim", "musicVideoBlur",
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
         ];

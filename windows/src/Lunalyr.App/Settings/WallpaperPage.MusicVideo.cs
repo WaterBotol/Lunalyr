@@ -18,15 +18,22 @@ namespace Lunalyr.App.Settings;
 // MusicVideoSettings.swift (MusicVideoSection, PastedVideoLink, VideoTimingNudge, VideoTimingOrigin) and its Search
 // YouTube… window (MusicVideoSearchWindow.swift), all Lunalyr's own lines; the window's two Verso-attributed lines are
 // SwiftUI declarations. Windows' differences: the Music library becomes "Video file" (a file chosen for the song), search
-// goes through the YouTube Data API with the owner's key (a row of its own here), the picker sits in this section rather
-// than a window of its own, and "Show the video on" isn't offered (one background draws on every display).
+// reads YouTube's site as on the Mac but can use the owner's YouTube Data API key instead ("Search YouTube with", and the
+// key's row), the picker sits in this section rather than a window of its own, and "Show the video on" isn't offered (one
+// background draws on every display).
 internal static partial class WallpaperPage
 {
     public const string PrivacyCaption =
-        "Off by default. When on, the song’s title and artist are sent to YouTube’s Data API to find its official video, which then streams from YouTube, muted.";
+        "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube.";
 
     public const string PrivacyDetail =
-        "A video file you chose for a song is always tried first and needs nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” with your API key and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this PC so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… sends only what is in its search box, when you search.";
+        "A video file you chose for a song is always tried first and needs nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this PC so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… works with this off too: it sends only what is in its search box, when you search, and loads the results’ thumbnails.";
+
+    public const string SearchWithDetail =
+        "YouTube’s site needs no key: Lunalyr reads its search results page, as a browser would, without signing in or keeping cookies. If YouTube asks for consent or to confirm you’re not a bot, Lunalyr doesn’t get past it: with an API key of your own it searches YouTube’s Data API instead, otherwise it says the search isn’t available. “Use my API key” always searches the Data API.";
+
+    public const string SiteChoice = "Search YouTube’s site (no key)";
+    public const string KeyChoice = "Use my API key";
 
     public const string TimingDetail =
         "Official videos often open with a scene, or are a different edit from the album track. A video longer than the song is guessed to have that much intro (Estimated); when searching, an official video as long as the song is preferred, as it needs no guess. Tap to sync: click it, then press any key (or Tap now) the moment the singing starts in the video; later in the song, tap when the next line is sung in the video. Tap again to refine: the taps are averaged. A tap, nudge or Align is kept for the video it was made on. Reset goes back to the estimate.";
@@ -64,7 +71,11 @@ internal static partial class WallpaperPage
             Toggle(ctx, s => s.MusicVideoOnline, (s, v) => s with { MusicVideoOnline = v }));
         sections.Children.Add(online);
         sections.Children.Add(Caption(PrivacyDetail));
-        sections.Children.Add(KeyRow());
+        sections.Children.Add(Card("Search YouTube with", null, "",
+            Combo(ctx, [new SettingsChoice("site", SiteChoice), new SettingsChoice("apiKey", KeyChoice)],
+                s => s.MusicVideoSearch, (s, v) => s with { MusicVideoSearch = v }, width: 240)));
+        sections.Children.Add(Caption(SearchWithDetail));
+        sections.Children.Add(KeyRow(ctx));
         if (MusicVideoUi.YouTubeOffReason is { } off)
             sections.Children.Add(Caption($"YouTube is off for this run ({off}): nothing is looked up or loaded from YouTube. Video files still play."));
 
@@ -168,7 +179,7 @@ internal static partial class WallpaperPage
             note.Text = video.Status is MusicVideoStatus.Showing { Source: MusicVideoSource.YouTube } shown && MusicVideoUi.YouTubeOffReason is { } off
                 // A YouTube video was found (a pasted link), but its player isn't made this run: the fallback draws.
                 ? $"The video for “{shown.Title}” is on YouTube, and YouTube's player is off for this run ({off}). Showing {fallbackTitle} instead."
-                : MusicVideoController.Note(video.Status, settings.MusicVideoOnline, fallbackTitle) ?? "";
+                : MusicVideoController.Note(video.Status, settings.MusicVideoOnline, fallbackTitle, video.YouTubeSearchUnavailable) ?? "";
             note.Visibility = note.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             open.Visibility = video.ShowingYouTubeId is not null && MusicVideoUi.OpenUrl is not null ? Visibility.Visible : Visibility.Collapsed;
             var hasSong = video.HasSong;
@@ -214,7 +225,7 @@ internal static partial class WallpaperPage
         Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     /// <summary>The YouTube Data API key: kept encrypted (DPAPI), never shown again once saved.</summary>
-    private static Expander KeyRow()
+    private static Expander KeyRow(SettingsContext ctx)
     {
         var content = new StackPanel { Spacing = 8 };
         var status = Caption("");
@@ -240,7 +251,10 @@ internal static partial class WallpaperPage
                 return;
             }
             var rejected = MusicVideoUi.Controller?.Status is MusicVideoStatus.Missing { Miss: MusicVideoMiss.KeyRejected };
-            status.Text = !keys.HasKey ? "No key yet: Search YouTube can’t search until you add one. Pasted links still play."
+            status.Text = !keys.HasKey
+                ? ctx.Current.MusicVideoSearch == "apiKey"
+                    ? "No key yet: “Use my API key” can’t search until you add one, so choose YouTube’s site or add a key. Pasted links still play."
+                    : "No key: YouTube’s site is searched without one. A key is used only when the site can’t be searched."
                 : rejected ? "YouTube refused this key. Check it is a YouTube Data API v3 key and the API is enabled for its project."
                 : "A key is saved (encrypted for your Windows account).";
             remove.IsEnabled = keys.HasKey;
@@ -263,7 +277,9 @@ internal static partial class WallpaperPage
             Show();
         };
         Show();
-        return Expander("YouTube Data API key", "Search YouTube needs an API key of your own.", "", content, expanded: keys is not null && !keys.HasKey);
+        ctx.OnRefresh(_ => Show());
+        return Expander("YouTube Data API key", "Optional: your own key, for “Use my API key”, or when YouTube’s site can’t be searched.", "", content,
+            expanded: keys is not null && !keys.HasKey && ctx.Current.MusicVideoSearch == "apiKey");
     }
 
     /// <summary>Search YouTube…: the results for the playing song with stills, length, channel and age; a click uses one.</summary>
@@ -320,11 +336,13 @@ internal static partial class WallpaperPage
                 MusicVideoSearchModel.SearchPhase.Loading => "Searching…",
                 MusicVideoSearchModel.SearchPhase.Empty => "No videos found.",
                 MusicVideoSearchModel.SearchPhase.RateLimited => "Too many searches just now. Try again in a minute.",
-                MusicVideoSearchModel.SearchPhase.Failed => "Couldn’t search YouTube just now.",
+                MusicVideoSearchModel.SearchPhase.Failed => model.Unavailable
+                    ? MusicVideoController.UnavailableNote + (MusicVideoUi.Keys?.HasKey == true ? "" : " With an API key of your own, Lunalyr can search YouTube’s Data API instead.")
+                    : "Couldn’t search YouTube just now.",
                 MusicVideoSearchModel.SearchPhase.NoSong => "Play a song to search for its video.",
                 MusicVideoSearchModel.SearchPhase.NeedsKey => model.KeyRejected
                     ? "YouTube refused the API key. Check it under YouTube Data API key."
-                    : MusicVideoUi.Keys is null ? "YouTube is off for this run." : "Add a YouTube Data API key above to search.",
+                    : MusicVideoUi.Keys is null ? "YouTube is off for this run." : "Add a YouTube Data API key above to search with it, or choose YouTube’s site.",
                 _ => "",
             };
             results.Children.Clear();
@@ -362,7 +380,7 @@ internal static partial class WallpaperPage
         return expander;
     }
 
-    /// <summary>A result's still, fetched only from the address the API returned for it (YouTube's image host, HTTPS).</summary>
+    /// <summary>A result's still: YouTube's 320 × 180 thumbnail for the video (its image host, HTTPS, the Mac's address).</summary>
     private static async Task LoadStillAsync(Image image, string url)
     {
         if (MusicVideoUi.Http is not { } http || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || !MusicVideoHttpClient.Allows(uri)) return;
