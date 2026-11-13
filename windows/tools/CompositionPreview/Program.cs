@@ -138,6 +138,11 @@ if (floating)
     // <screen>-<shot>.png. -only picks the layout (Editorial by default); -screen 2560 or 3200 picks one display.
     var lyricFactory = factories.FirstOrDefault(factory => factory.Id == (only ?? "editorial")) ?? factories[0];
     var floatingFixtures = new Dictionary<string, Func<SceneSnapshot>>(fixtures) { ["opening"] = () => OpeningFixtures.HumanNature() };
+    // -style reaches the floating window's scenes too (-tag names the folder the shots go to).
+    if (extras.Count > 0)
+        foreach (var (name, make) in floatingFixtures.ToList())
+            floatingFixtures[name] = () => make() is var scene ? scene with { Style = StyleExtras.Apply(scene.Style, extras) } : scene;
+    if (tag is not null) output = Path.Combine(output, tag);
     FloatingShots.Run(output, lyricFactory, floatingFixtures, warp, screenFilter);
     return;
 }

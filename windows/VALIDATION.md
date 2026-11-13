@@ -174,3 +174,17 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | High contrast on the new rows and the welcome | theme resources only; needs the owner's contrast theme | — |
 | Wallpaper cost per mode, playing and idle | PC, offscreen (`tools/WallpaperCost`) | `docs/measurements/m8-wallpaper-cost/cost.md` |
 | Flaky tests from the handover | fixed by cause (two app races, two early reads, an offscreen wall-clock budget, a GPU-contention pixel comparison moved to WARP) | `docs/milestones/M8.md` "Flaky tests" |
+
+## Lyric style extras (backing vocals, Editorial typography, mixed fonts, colour, reveal, remembered styles)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Backing vocals in the background on/off, "animate like" (lead, rolling and stage layouts; credits follow) | unit + PC (offscreen) | `LyricStyleExtrasRenderTests.BackingVocals*`, `LyricStyleExtrasTests.BackingWordsStayInTheRollingLineWhenTheLayerIsOff`; `docs/previews/lyric-style-extras/{editorial,spoken}-{base,nobacking}-english-14.90.png`, `editorial-backingecho-english-14.90.png` |
+| Add Editorial typography and its amount in every layout; Randomise lyric fonts | unit + PC (offscreen) | `LyricStyleExtrasRenderTests.TypographyChoicesChangeTheWords`, `EditorialTypographyReachesTheStageLayouts`, `LyricStyleExtrasTests.EditorialAmountChangesTheType`; `scattered-{base,editorial,random}-english-11.90.png` |
+| Colour modes (Album drift, Sung sweep, Music reactive, Custom gradient), strength, speed, custom colours | unit + PC (offscreen) | `LyricStyleExtrasRenderTests.SungSweepTravelsFromWhiteAcrossAWholeLine`, `ColourModesChangeTheInk`, `TheSettledInkFollowsTheColourSettings`; `editorial-{sweep,custom,reactive,neutral}-english-11.90.png`, `spoken-sweep-english-11.90.png`, `editorial-sweep-linetimed-12.00.png` |
+| Sung sweep's underline when contrast washes the fill out to white | not done (noted in APP-SHELL) | — |
+| Reveal sung words, faint next-word preview and its lead per layout, lock reasons | unit + PC (offscreen) | settings tests in `tests/Lunalyr.Shell.Tests/LyricStyleExtrasTests.cs`; `editorial-{noreveal,nopreview}-english-11.90.png` |
+| Floating lyrics take the same options | PC (offscreen, `CompositionPreview -floating -style …`) | `docs/previews/lyric-style-extras/floating-{base,sweep-editorial}.png` |
+| Remembered styles applied while the music plays, remembered/forgotten at once, "Next layout" cycles them in place | unit (silent fakes) | `AppControllerStyleMemoryTests`, `LunalyrExtrasTests.TestCyclingChangesARememberedLayoutInPlace`, `LyricStyleExtrasTests.ARememberedStyleReplacesTheChosenLayoutAndColour` |
+| Lyric style page rows live, light and dark (with an artist's remembered style in the dark run) | PC (`--demo --quiet-windows --settings-page lyric-style --theme …`, Release AOT, UI Automation scroll + PrintWindow, own PIDs only) | `docs/previews/settings/lyric-style-extras-{light,dark}-{025,050,075,100}.png` |
+| Remembered style on lyric cards | not ported | — |

@@ -620,7 +620,8 @@ theme. The window opens at Lyric style (or `--settings-page`).
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
   (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.
 - **Live preview** (`SettingsPreview`, `Lunalyr.Shell.Rendering.SettingsPreviewRenderer`): at the top of Lyric style,
-  the scene on the wallpaper (the controller's scene, clock, background and the composition Match the music chose)
+  the scene on the wallpaper (the controller's scene, clock, background and the composition it draws: the chosen one,
+  the one remembered for the music, or Match the music's)
   drawn by the wallpaper's own layers into a 640×360 offscreen surface on its own thread at 15 fps, laid out as a
   1080-line display, read back into a `WriteableBitmap`. It draws only while Lyric style shows and the window is
   visible, and lets its device go when you leave the page. About 5% of one core while showing; about 100 MB more
@@ -1301,6 +1302,55 @@ Apple Music's animated album covers play behind the lyrics in Match the music, a
   colours and still cover, `-adjust softening=0..25`, `-reduce-motion`).
 - `tools/WallpaperTestMedia <folder>` makes invented test media (a 6 s H.264 gradient clip with no audio track, and
   pictures, one turned by its EXIF orientation); `… <folder> clip` makes the unit tests' fixture.
+
+## Lyric style extras
+
+The last rows of Lyric style, live on the desktop and in floating lyrics (both draw with the same composition layers
+and take the style of the surface showing). Keys in the table above; each joins the per-surface style except
+remembered styles, which belong to the music.
+
+- **Backing vocals in the background** (`backingVocalsLayer`): bracketed words of word-timed lines are lifted out of
+  the lead (`BackingVocals.Split`) and drawn small and soft in the band below it (`BackingVocalLayout`), in every
+  layout: the lead, rolling (`RollingSong(liftsBacking:)`) and stage layouts. Off, they stay in the line as sung,
+  brackets and all. **Backing vocals animate like** (`backingVocalStyle`): Scattered, Constellation, Constellation +
+  Editorial, Echo or Editorial; "The lead’s layout" keeps the lead's where it can (Spoken, Cascade, Cutout and the stage
+  layouts take Editorial). Credits animate in the same layout.
+- **Add Editorial typography** and **Editorial amount** (`editorialTypography`, `editorialAmount`): Editorial's wider
+  size range and its second, contrasting face (Georgia, else Cambria) in every layout, the Mac's constants
+  (`EditorialSetting.Metrics`, Spoken's every-third word, the stage layouts' `Chance(…, 60) < 0.34`). Off, Editorial and
+  Constellation + Editorial keep theirs at 1.
+- **Randomise lyric fonts** (`randomizeLyricFonts`): each synced word takes one of four faces by its seed, the Mac's
+  sans, serif, slab and soft, as Windows has them: Segoe UI Variable Display, Georgia (else Cambria or Times New
+  Roman), Rockwell (it comes with Office; else Roboto Slab or Bahnschrift) and Candara (else Corbel). Weights stay as
+  the layout has them; a word's reading takes its face. The typeface still sets titles, unsynced lyrics and Echo's
+  repeats.
+- **Colour** (`lyricColourMode`, `lyricColourStrength`, `lyricColourSpeed`, `lyricColourCustom`): the settled ink is
+  worked out in the mode, strength and custom colours (`LyricInks.Settled`), settled again when any of them or the
+  cover changes; the speed scales the drift. Album drift is as before. **Sung sweep**: white words fill with the
+  cover's contrasting colour from their leading edge as they are sung (a second label in the sung colour drawn over
+  the sung part, `SungSweep`); a line sung as one fills over its estimated words' time; the stage layouts draw their
+  sung words in it. Not drawn yet: the Mac's underline for a sweep washed out to white on a bright wallpaper.
+  **Music reactive**: a line takes the cover's colours brighter and deeper by its loudest moment
+  (`OrganicMotion.VocalIntensity`), from six settled inks; the Mac follows the voice frame by frame (or live audio),
+  Windows bakes a line's colours when it is set, so they hold for the line. Reduce Motion holds the rest level.
+  **Custom gradient**: two to four colours (swatches with Windows' colour picker, a remove button while there are more
+  than two, Add colour up to four), drifting through each line.
+- **Reveal sung words**, **Faint next-word preview** and **Preview lead** (`wordRevealByStyle`,
+  `nextWordPreviewByStyle`, `nextWordPreviewLead`): per layout, for the layout chosen or every one Match the music
+  picks; they reach the renderer as `LyricStyle.NoWordReveal`, `NoNextWordPreview` and `PreviewLead`
+  (`RevealOptionsFor(kind)`). The reveal is locked on, with the reason under it, where the layout or the entrance
+  needs it.
+- **Remember a style** (`styleMemoryEnabled`, `styleMemorySongs`, `styleMemoryArtists`): "For this song" or "For
+  <artist>" keeps the layout and text colour chosen above; a song's own wins over its artist's. While that music plays
+  the controller works the style, the layout and Match the music's choice out from the settings as the music sees
+  them (`StyleMemory.Applied`; a remembered "automatic" means Match the music over a chosen layout): the artist's from
+  the moment the song is known, the song's once its length is (the key is the recording's, as the song offsets').
+  Under Layout and Colour a note says what is remembered, with Update and Forget; "This song uses" offers Update with
+  the choices above and Forget; Forget all asks first. "Next layout" (the shortcut, `lunalyr://`) steps a remembered
+  layout on in place ("Layout for this song: Editorial"). Not ported: the lyric card's use of a remembered style.
+- **Checks.** `tools/CompositionPreview -style name=value … -tag word` draws each option on and off offscreen
+  (`backing=off`, `backingStyle=echo`, `editorial=0.5`, `fonts=random`, `colour=sungSweep`, `strength=0`, `speed=2`,
+  `custom=#RRGGBB,#RRGGBB`, `reveal=off`, `preview=off`, `lead=1.0`).
 
 ## Lyric tools
 
