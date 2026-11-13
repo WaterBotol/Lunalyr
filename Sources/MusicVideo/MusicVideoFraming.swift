@@ -102,6 +102,28 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
         return CGSize(width: width, height: width / youTubeAspect)
     }
 
+    /// A YouTube video shown whole in `container`: the picture's frame (the
+    /// width matched), the part of it on screen (the web view's size, never
+    /// larger than the container), the 16:9 player's size, and the player's
+    /// size within the visible part in per cent (for the page).
+    struct WholeLayout: Equatable {
+        var frame: CGSize
+        var visible: CGSize
+        var player: CGSize
+        var box: YouTubeEmbed.Box?
+    }
+
+    static func wholeLayout(contentAspect: CGFloat, in container: CGSize) -> WholeLayout {
+        let frame = MusicVideoFraming.whole.rect(aspect: contentAspect, in: container).size
+        let visible = CGSize(width: min(frame.width, container.width), height: min(frame.height, container.height))
+        let player = playerSize(contentAspect: contentAspect, frame: frame)
+        let box = visible.width > 0 && visible.height > 0
+            ? YouTubeEmbed.Box(width: Double(player.width / visible.width) * 100,
+                               height: Double(player.height / visible.height) * 100)
+            : nil
+        return WholeLayout(frame: frame, visible: visible, player: player, box: box)
+    }
+
     /// The share of the picture's area that falls outside `container`,
     /// 0...1. A YouTube video's overscan is included.
     func croppedShare(aspect: CGFloat, in container: CGSize, overscan: Double = 1) -> Double {
@@ -190,65 +212,5 @@ struct MusicVideoBackdropView: View {
     private static func blur(_ image: CGImage?) async -> CGImage? {
         guard let image else { return nil }
         return await Task.detached(priority: .utility) { MusicVideoBackdrop.blurred(image) }.value
-    }
-}
-
-/// The shape of the picture inside a 16:9 YouTube still: an older or
-/// cinema-shaped video is letterboxed or pillarboxed in black by YouTube.
-/// Read from the video's own still (maxresdefault.jpg, 16:9), so a video
-/// shown whole is cropped to its picture rather than showing those bars.
-enum MusicVideoContentShape {
-    /// Darker than this (0...255 grey) counts as a bar.
-    static let barLevel = 22
-    /// A bar must be this share of the still's width or height, each side.
-    static let minimumBar = 0.04
-    /// The two bars may differ by this share.
-    static let symmetry = 0.025
-    /// Shapes outside this are not believed (a dark scene, not bars).
-    static let believable: ClosedRange<CGFloat> = 1.0...2.6
-
-    /// The picture's aspect (width / height), or nil for a full 16:9 still
-    /// (or one whose edges are not clearly bars).
-    nonisolated static func aspect(of image: CGImage) -> CGFloat? {
-        let width = 160, height = 90
-        var pixels = [UInt8](repeating: 0, count: width * height)
-        let drawn: Bool = pixels.withUnsafeMutableBytes { buffer in
-            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
-                                          bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
-                                          bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
-            context.interpolationQuality = .medium
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return true
-        }
-        guard drawn else { return nil }
-        func columnDark(_ x: Int) -> Bool {
-            for y in 0..<height where Int(pixels[y * width + x]) > barLevel { return false }
-            return true
-        }
-        func rowDark(_ y: Int) -> Bool {
-            for x in 0..<width where Int(pixels[y * width + x]) > barLevel { return false }
-            return true
-        }
-        let left = (0..<width).first { !columnDark($0) } ?? width
-        let right = (0..<width).reversed().first { !columnDark($0) }.map { width - 1 - $0 } ?? width
-        let top = (0..<height).first { !rowDark($0) } ?? height
-        let bottom = (0..<height).reversed().first { !rowDark($0) }.map { height - 1 - $0 } ?? height
-        guard left < width / 2, top < height / 2 else { return nil }  // all dark
-        let sideBars = bars(left, right, of: width)
-        let endBars = bars(top, bottom, of: height)
-        guard sideBars || endBars else { return nil }
-        // One step inside the bars: a column half bar, half picture is read
-        // as picture, and must not leave a sliver of black at the edge.
-        let pictureWidth = CGFloat(sideBars ? width - left - right - 2 : width)
-        let pictureHeight = CGFloat(endBars ? height - top - bottom - 2 : height)
-        guard pictureHeight > 0 else { return nil }
-        // Back to the still's own shape (16:9), from the 160×90 grid.
-        let aspect = pictureWidth / pictureHeight
-        return believable.contains(aspect) ? aspect : nil
-    }
-
-    private nonisolated static func bars(_ a: Int, _ b: Int, of length: Int) -> Bool {
-        let first = Double(a) / Double(length), second = Double(b) / Double(length)
-        return first >= minimumBar && second >= minimumBar && abs(first - second) <= symmetry
     }
 }

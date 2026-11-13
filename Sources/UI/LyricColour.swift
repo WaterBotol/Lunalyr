@@ -628,13 +628,7 @@ final class LyricInkDirector {
             let sung = Perceptual.readable(followed.1, background: behind, ratio: ratio, keepingColour: true)
             ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio, keepingColour: true),
                                        sung: sung)
-            let fade = Easing.smoothstep((sung.l - 0.91) / 0.07)
-                * Easing.smoothstep((0.065 - sung.chroma) / 0.045)
-                * Easing.smoothstep((behind - 0.14) / 0.10) * min(1, strength)
-            if fade > 0.001 {
-                let marker = OKLab(l: 0.33, chroma: 0.12, hue: goals.1.hue)
-                ink.base.sweepUnderline = Perceptual.color(marker, opacity: fade)
-            }
+            // No underline under sung words (the user, 14 Nov 2026).
         default:
             ink.base = LyricInk.sample(Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio,
                                                            keepingColour: true))

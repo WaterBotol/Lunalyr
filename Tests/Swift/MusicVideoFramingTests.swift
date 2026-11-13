@@ -155,15 +155,15 @@ final class MusicVideoFramingTests: XCTestCase {
     func testEmbedPageZoomFollowsTheFraming() {
         let filled = YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0)
         XCTAssertTrue(filled.contains("scale(1.25)"))
-        XCTAssertTrue(filled.contains("overscan = 1.25;"))
+        XCTAssertTrue(filled.contains("overscan = 1.25,"))
         let whole = YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: MusicVideoFraming.whole.youTubeOverscan)
         XCTAssertTrue(whole.contains("scale(1.0)"))
-        XCTAssertTrue(whole.contains("overscan = 1.0;"))
+        XCTAssertTrue(whole.contains("overscan = 1.0,"))
         XCTAssertTrue(whole.contains("window.lunalyrOverscan = function (scale)"), "changed live without a reload")
         XCTAssertTrue(whole.contains("scale(' + (overscan * (blurPx > 0 ? 1.04 : 1))"), "the blur keeps its own margin")
-        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: .nan).contains("overscan = 1.25;"))
-        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 9).contains("overscan = 2.0;"))
-        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 0.5).contains("overscan = 1.0;"))
+        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: .nan).contains("overscan = 1.25,"))
+        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 9).contains("overscan = 2.0,"))
+        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 0.5).contains("overscan = 1.0,"))
     }
 
     func testWholeHoldsTheRevealUntilYouTubesTitleHasFaded() {
@@ -200,45 +200,65 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertEqual(MusicVideoFraming.playerSize(contentAspect: .nan, frame: hdFrame), hdFrame)
     }
 
-    func testReadsPillarboxAndLetterboxFromTheStill() throws {
-        // A 4:3 picture pillarboxed in a 1280×720 still (Wallows, Her's).
-        let pillar = try still(picture: CGRect(x: 160, y: 0, width: 960, height: 720))
-        XCTAssertEqual(try XCTUnwrap(MusicVideoContentShape.aspect(of: pillar)), 4.0 / 3.0, accuracy: 0.04)
-        // A 2.39:1 picture letterboxed.
-        let barHeight = (720 - 1280 / 2.39) / 2
-        let letter = try still(picture: CGRect(x: 0, y: barHeight, width: 1280, height: 1280 / 2.39))
-        XCTAssertEqual(try XCTUnwrap(MusicVideoContentShape.aspect(of: letter)), 2.39, accuracy: 0.08)
-        // A full 16:9 picture: nothing to crop.
-        XCTAssertNil(MusicVideoContentShape.aspect(of: try still(picture: CGRect(x: 0, y: 0, width: 1280, height: 720))))
+    func testTheVideosShapeComesFromOEmbed() async throws {
+        XCTAssertEqual(YouTubeVideoShape.aspect(fromOEmbed: Data(#"{"width":200,"height":150,"title":"x"}"#.utf8)) ?? 0,
+                       4.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(YouTubeVideoShape.aspect(fromOEmbed: Data(#"{"width":200,"height":113}"#.utf8)) ?? 0,
+                       200.0 / 113.0, accuracy: 0.001)
+        XCTAssertNil(YouTubeVideoShape.aspect(fromOEmbed: Data(#"{"width":0,"height":113}"#.utf8)))
+        XCTAssertNil(YouTubeVideoShape.aspect(fromOEmbed: Data(#"{"width":2000,"height":10}"#.utf8)), "not believable")
+        XCTAssertNil(YouTubeVideoShape.aspect(fromOEmbed: Data("nonsense".utf8)))
+        let url = try XCTUnwrap(YouTubeVideoShape.url(for: "9fdQtU5CEAw"))
+        XCTAssertEqual(url.host, "www.youtube.com")
+        XCTAssertTrue(url.absoluteString.contains("oembed"))
+        XCTAssertTrue(url.absoluteString.contains("9fdQtU5CEAw"), "only the video's ID is sent")
+        XCTAssertNil(YouTubeVideoShape.url(for: "bad id'"))
+
+        struct Fake: MusicVideoHTTP {
+            func get(_ url: URL) async throws -> (Data, HTTPURLResponse) {
+                (Data(#"{"width":200,"height":150}"#.utf8),
+                 HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+        }
+        let found = await YouTubeVideoShape.aspect(of: "AAAAAAAAAA1", http: Fake())
+        XCTAssertEqual(found ?? 0, 4.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(YouTubeVideoShape.cached("AAAAAAAAAA1") ?? 0, 4.0 / 3.0, accuracy: 0.001, "remembered")
     }
 
-    func testDarkEdgesThatAreNotBarsAreNotCropped() throws {
-        // All black (a fade): no shape.
-        XCTAssertNil(MusicVideoContentShape.aspect(of: try still(picture: .zero)))
-        // Dark on one side only (a night scene): not bars.
-        XCTAssertNil(MusicVideoContentShape.aspect(of: try still(picture: CGRect(x: 200, y: 0, width: 1080, height: 720))))
-        // A thin dark rim: too small to be bars.
-        XCTAssertNil(MusicVideoContentShape.aspect(of: try still(picture: CGRect(x: 20, y: 0, width: 1240, height: 720))))
-        // A tall sliver in the middle: not believable as a video.
-        XCTAssertNil(MusicVideoContentShape.aspect(of: try still(picture: CGRect(x: 500, y: 0, width: 280, height: 720))))
+    func testTheWholeLayoutNeverDrawsTheViewLargerThanTheScreen() throws {
+        for screen in [laptop, wide, tall] {
+            for aspect in [hd, 4.0 / 3.0, 2.39, 1.0] {
+                let layout = MusicVideoFraming.wholeLayout(contentAspect: aspect, in: screen)
+                XCTAssertLessThanOrEqual(layout.visible.width, screen.width + 0.001, "\(screen) \(aspect)")
+                XCTAssertLessThanOrEqual(layout.visible.height, screen.height + 0.001, "\(screen) \(aspect)")
+                XCTAssertEqual(layout.frame.width, screen.width * MusicVideoFraming.wholeBleed, accuracy: 0.01,
+                               "the width is matched")
+                let box = try XCTUnwrap(layout.box)
+                XCTAssertGreaterThanOrEqual(box.width, 99.9, "the player covers the view across")
+                XCTAssertGreaterThanOrEqual(box.height, 99.9, "and down")
+            }
+        }
+        // A 16:9 video on a 16:10 laptop: the view is the picture, the player fills it.
+        let hdOnLaptop = MusicVideoFraming.wholeLayout(contentAspect: hd, in: laptop)
+        XCTAssertLessThan(hdOnLaptop.visible.height, laptop.height)
+        XCTAssertEqual(try XCTUnwrap(hdOnLaptop.box).height, 100, accuracy: 0.1)
+        // A 4:3 video: the player is wider than the view, so its own side bars fall outside.
+        let square = MusicVideoFraming.wholeLayout(contentAspect: 4.0 / 3.0, in: laptop)
+        XCTAssertEqual(square.visible.height, laptop.height, accuracy: 0.01, "top and bottom cut")
+        XCTAssertGreaterThan(try XCTUnwrap(square.box).width, 130)
     }
 
-    /// A 1280×720 still, black except a mid-grey, textured `picture`.
-    private func still(picture: CGRect) throws -> CGImage {
-        let context = try XCTUnwrap(CGContext(data: nil, width: 1280, height: 720, bitsPerComponent: 8, bytesPerRow: 0,
-                                              space: CGColorSpaceCreateDeviceRGB(),
-                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(NSColor.black.cgColor)
-        context.fill(CGRect(x: 0, y: 0, width: 1280, height: 720))
-        context.setFillColor(NSColor(white: 0.45, alpha: 1).cgColor)
-        context.fill(picture)
-        // Some darker detail inside, as a real frame has (not dark enough to read as a bar).
-        context.setFillColor(NSColor(white: 0.2, alpha: 1).cgColor)
-        context.fill(picture.insetBy(dx: picture.width / 3, dy: picture.height / 3))
-        return try XCTUnwrap(context.makeImage())
+    func testThePageDrawsThePlayerAtTheBox() throws {
+        let box = try XCTUnwrap(YouTubeEmbed.Box(width: 133.4, height: 100))
+        let html = YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0, overscan: 1, box: box)
+        XCTAssertTrue(html.contains("box = [133.400,100.000]"))
+        XCTAssertTrue(html.contains("window.lunalyrBox = function (w, h)"))
+        XCTAssertTrue(html.contains("frame.style.width = box ? box[0] + '%' : '';"))
+        XCTAssertTrue(YouTubeEmbed.html(videoID: "4NRXx6U8ABQ", start: 0).contains("box = null"), "fill: no box")
+        XCTAssertNil(YouTubeEmbed.Box(width: .nan, height: 100))
+        XCTAssertNil(YouTubeEmbed.Box(width: 0, height: 100))
+        XCTAssertEqual(YouTubeEmbed.Box(width: 9999, height: 100)?.width, 400, "capped")
     }
-
-    // MARK: Backdrop
 
     func testBackdropIsSmallAndBlurred() throws {
         let side = 1024

@@ -104,8 +104,7 @@ struct WholeYouTubeVideo: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frame = MusicVideoFraming.whole.rect(aspect: aspect, in: proxy.size)
-            let player = MusicVideoFraming.playerSize(contentAspect: aspect, frame: frame.size)
+            let layout = MusicVideoFraming.wholeLayout(contentAspect: aspect, in: proxy.size)
             ZStack {
                 ZStack {
                     if let still {
@@ -113,30 +112,69 @@ struct WholeYouTubeVideo: View {
                             .transition(.opacity)
                     }
                 }
-                .frame(width: player.width, height: player.height)
+                .frame(width: layout.player.width, height: layout.player.height)
                 .blur(radius: blur).scaleEffect(blur > 0 ? 1.04 : 1)
+                .frame(width: layout.visible.width, height: layout.visible.height)
+                .clipped()
                 if playing {
-                    YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: .whole)
-                        .frame(width: player.width, height: player.height)
+                    // Never larger than the screen: the page draws the player
+                    // at `box` inside it, so YouTube's own bars fall outside.
+                    YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: .whole,
+                                          box: layout.box)
+                        .frame(width: layout.visible.width, height: layout.visible.height)
                 }
             }
-            .frame(width: frame.width, height: frame.height)
-            .clipped()
+            .frame(width: layout.visible.width, height: layout.visible.height)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
             .animation(.easeOut(duration: YouTubeThumbnail.fadeIn), value: still != nil)
         }
         .task(id: videoID) {
             still = nil
-            aspect = MusicVideoFraming.youTubeAspect
+            aspect = YouTubeVideoShape.cached(videoID) ?? MusicVideoFraming.youTubeAspect
+            async let shape = YouTubeVideoShape.aspect(of: videoID)
             let image = await YouTubeThumbnail.load(videoID, large: large)
-            guard !Task.isCancelled, let image else { return }
-            still = image
-            let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            let shape = await Task.detached(priority: .utility) {
-                picture.flatMap { MusicVideoContentShape.aspect(of: $0) }
-            }.value
-            if !Task.isCancelled, let shape { aspect = shape }
+            if !Task.isCancelled, let image { still = image }
+            let found = await shape
+            if !Task.isCancelled, let found { aspect = found }
         }
+    }
+}
+
+/// A YouTube video's own shape, from YouTube's oEmbed endpoint (its width and
+/// height; only the video's ID is sent, and only for a video already being
+/// shown). YouTube's player letterboxes or pillarboxes any other shape inside
+/// 16:9; knowing it lets "Show the whole video" leave those bars out. Black
+/// bars baked into a video's own picture stay: guessing from dark edges
+/// mistook dark videos for narrow ones. Remembered per video for the run.
+@MainActor
+enum YouTubeVideoShape {
+    private static var memory: [String: CGFloat] = [:]
+
+    static func cached(_ videoID: String) -> CGFloat? { memory[videoID] }
+
+    static func url(for videoID: String) -> URL? {
+        guard YouTubeVideoID.isValid(videoID) else { return nil }
+        return URL(string: "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D\(videoID)")
+    }
+
+    /// The aspect from an oEmbed reply, nil when it is not believable.
+    nonisolated static func aspect(fromOEmbed data: Data) -> CGFloat? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let width = (object["width"] as? NSNumber)?.doubleValue,
+              let height = (object["height"] as? NSNumber)?.doubleValue,
+              width > 0, height > 0 else { return nil }
+        let aspect = CGFloat(width / height)
+        return (0.4...3).contains(aspect) ? aspect : nil
+    }
+
+    /// The video's aspect, or nil (then 16:9 is assumed). `http` is a seam for tests.
+    static func aspect(of videoID: String, http: MusicVideoHTTP = URLSessionMusicVideoHTTP()) async -> CGFloat? {
+        if let known = memory[videoID] { return known }
+        guard let url = url(for: videoID),
+              let (data, response) = try? await http.get(url), response.statusCode == 200,
+              let aspect = aspect(fromOEmbed: data) else { return nil }
+        memory[videoID] = aspect
+        return aspect
     }
 }
 
@@ -617,6 +655,8 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
     let paused: Bool
     let blur: Double
     var framing: MusicVideoFraming = .fill
+    /// Shown whole: the player's size within the view (`YouTubeEmbed.Box`).
+    var box: YouTubeEmbed.Box?
 
     func makeCoordinator() -> YouTubeMusicVideoCoordinator { YouTubeMusicVideoCoordinator() }
 
@@ -625,6 +665,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         let host = YouTubeMusicVideoHostView(frame: .zero)
         coordinator.host = host
         coordinator.setFraming(framing)
+        coordinator.setBox(box)
         coordinator.attach(videoID: videoID)
         coordinator.loop.setSurfacePaused(paused)
         coordinator.loop.start()
@@ -635,6 +676,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
     func updateNSView(_ host: YouTubeMusicVideoHostView, context: Context) {
         let coordinator = context.coordinator
         coordinator.setFraming(framing)
+        coordinator.setBox(box)
         if coordinator.videoID != videoID { coordinator.attach(videoID: videoID) }
         coordinator.loop.setSurfacePaused(paused)
         coordinator.setBlur(blur)
@@ -760,8 +802,25 @@ enum YouTubeEmbed {
         return (2...3).contains(code.count) && code.allSatisfy({ $0.isASCII && $0.isLetter }) ? code : "en"
     }
 
+    /// Shown whole: the player's size in per cent of the web view, which is
+    /// only as large as the visible picture. A video of another shape than
+    /// 16:9 is drawn larger so YouTube's own bars fall outside the view;
+    /// nothing is ever drawn larger than the screen (`WholeYouTubeVideo`).
+    struct Box: Equatable {
+        var width: Double
+        var height: Double
+
+        init?(width: Double, height: Double) {
+            guard width.isFinite, height.isFinite, width > 0, height > 0 else { return nil }
+            self.width = min(400, width)
+            self.height = min(400, height)
+        }
+
+        var script: String { String(format: "[%.3f,%.3f]", width, height) }
+    }
+
     static func html(videoID: String, start: Double, page: Int = 0, language: String = playerLanguage(),
-                     overscan: Double = YouTubeEmbed.overscan) -> String {
+                     overscan: Double = YouTubeEmbed.overscan, box: Box? = nil) -> String {
         precondition(YouTubeVideoID.isValid(videoID))
         let overscan = overscan.isFinite ? min(2, max(1, overscan)) : YouTubeEmbed.overscan
         let startSecond = max(0, Int(start.isFinite ? start : 0))
@@ -776,7 +835,7 @@ enum YouTubeEmbed {
         #frame iframe,#player{width:100%;height:100%;border:0;pointer-events:none}
         </style></head><body><div id="frame"><div id="player"></div></div>
         <script>
-        var player = null, ready = false, blurPx = 0, overscan = \(overscan);
+        var player = null, ready = false, blurPx = 0, overscan = \(overscan), box = \(box?.script ?? "null");
         function post(type, value) {
           try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value,
                 video: '\(videoID)', page: \(page)}); } catch (e) {}
@@ -827,9 +886,13 @@ enum YouTubeEmbed {
           var frame = document.getElementById('frame');
           frame.style.filter = blurPx > 0 ? 'blur(' + blurPx + 'px)' : '';
           frame.style.transform = 'translate(-50%,-50%) scale(' + (overscan * (blurPx > 0 ? 1.04 : 1)) + ')';
+          frame.style.width = box ? box[0] + '%' : '';
+          frame.style.height = box ? box[1] + '%' : '';
         }
         window.lunalyrBlur = function (px) { blurPx = px; applyLook(); };
         window.lunalyrOverscan = function (scale) { overscan = scale; applyLook(); };
+        window.lunalyrBox = function (w, h) { box = (w > 0 && h > 0) ? [w, h] : null; applyLook(); };
+        applyLook();
         </script>
         <script src="https://www.youtube.com/iframe_api"></script>
         </body></html>
@@ -1144,6 +1207,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             blur = -1
             setBlur(wanted)
             run("window.lunalyrOverscan(\(framing.youTubeOverscan))")
+            runBox()
             loop.tick()
         case .load(let videoID, let page):
             guard let view else { return }
@@ -1151,7 +1215,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                                                    offset: MusicVideoController.shared.currentOffset,
                                                    videoDuration: nil) ?? 0
             let html = YouTubeEmbed.html(videoID: videoID, start: start, page: page,
-                                         overscan: framing.youTubeOverscan)
+                                         overscan: framing.youTubeOverscan, box: box)
             navigation = view.loadHTMLString(html, baseURL: YouTubeEmbed.baseURL)
         case .visible(let visible):
             setVisible(visible, buffering: buffering)
@@ -1236,6 +1300,22 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         framing = value
         guard session.ready else { return }
         run("window.lunalyrOverscan(\(value.youTubeOverscan))")
+    }
+
+    /// The player's size within the view, shown whole. Applied to a ready
+    /// page at once; a loading page gets it in its HTML.
+    private(set) var box: YouTubeEmbed.Box?
+
+    func setBox(_ value: YouTubeEmbed.Box?) {
+        guard value != box else { return }
+        box = value
+        guard session.ready else { return }
+        runBox()
+    }
+
+    private func runBox() {
+        guard let box else { run("window.lunalyrBox && window.lunalyrBox(0, 0)"); return }
+        run(String(format: "window.lunalyrBox && window.lunalyrBox(%.3f, %.3f)", box.width, box.height))
     }
 
     private func fade(visible: Bool) {
