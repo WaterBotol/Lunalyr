@@ -20,6 +20,8 @@ When merging, keep every entry and combine duplicate headings.
 - Hinge, Broadside and Portal layouts reworked: Hinge's leading words stay readable in the corner and its exit folds without squashing; Broadside builds its line centred, keeps little words as labels between the big ones and fades words out whole inside a 5% margin instead of cutting them at the edge; Portal's earlier words climb above the live pill as a still, evenly spaced trail of plain type instead of piling up.
 ### Added
 - The welcome opens with Lunalyr's logo forming as a drop of liquid glass (made with ReactDrops' Liquid Glass Logo from Lunalyr's own logo; silent). It plays once, then the wallpaper preview fades in; Reduce Motion skips it.
+### Added
+- Music video: "Show the whole video" (Settings › Wallpaper › Music video, separately for YouTube and library videos). The video's width is matched to the screen's, with no extra zoom, so nothing is cut from its sides (a squarer 4:3 video loses a little of its top and bottom), and the space above and below shows a blurred, darkened copy of the video's still or the album cover instead of black bars; a YouTube video made in another shape (4:3, or cinema-wide) is cropped to its picture, without YouTube's own bars. A YouTube video appears about five seconds after it starts playing (and after a pause or a jump), once YouTube's title, buttons and logo have faded; its still or last frame shows until then. "Fill the screen" stays the default.
 
 ## [2.0.2] - 2026-11-13
 

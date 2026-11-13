@@ -645,7 +645,10 @@ struct NowPlayingView: View {
                 // A paused or covered wallpaper holds the video's frame.
                 MusicVideoBackground(source: source, paused: renderingPaused,
                                      dim: settings.musicVideoDim, blur: settings.musicVideoBlur,
-                                     preview: isSettingsPreview, still: reduceMotion, standIn: cover.gradient)
+                                     preview: isSettingsPreview, still: reduceMotion, standIn: cover.gradient,
+                                     youTubeFraming: settings.musicVideoFraming,
+                                     libraryFraming: settings.libraryVideoFraming,
+                                     artwork: nowPlaying.artwork)
                 scrim
                 textBacking(backing, presence: stage, size: size)
             }

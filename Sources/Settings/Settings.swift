@@ -146,6 +146,15 @@ final class Settings: ObservableObject {
     @Published var musicVideoDisplays: MusicVideoDisplayChoice {
         didSet { store(musicVideoDisplays.stored, MusicVideoDisplayChoice.key) }
     }
+    /// How a YouTube video sits on the screen: filled (and overscanned past
+    /// YouTube's overlays) or whole, fitted over a blurred backdrop.
+    @Published var musicVideoFraming: MusicVideoFraming {
+        didSet { store(musicVideoFraming.rawValue, MusicVideoFraming.youTubeKey) }
+    }
+    /// The same choice for videos from the Music library.
+    @Published var libraryVideoFraming: MusicVideoFraming {
+        didSet { store(libraryVideoFraming.rawValue, MusicVideoFraming.libraryKey) }
+    }
     static let musicVideoDimRange: ClosedRange<Double> = 0...0.85
     static let musicVideoBlurRange: ClosedRange<Double> = 0...24
     @Published var albumGradientWallpaper: Bool { didSet { store(albumGradientWallpaper, "custom.albumGradientWallpaper") } }
@@ -346,6 +355,8 @@ final class Settings: ObservableObject {
                             max(0, d.object(forKey: "custom.musicVideoDim") as? Double ?? 0.35))
         musicVideoBlur = min(Self.musicVideoBlurRange.upperBound, max(0, d.object(forKey: "custom.musicVideoBlur") as? Double ?? 0))
         musicVideoDisplays = MusicVideoDisplayChoice(stored: d.object(forKey: MusicVideoDisplayChoice.key))
+        musicVideoFraming = MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.youTubeKey))
+        libraryVideoFraming = MusicVideoFraming(stored: d.object(forKey: MusicVideoFraming.libraryKey))
         albumGradientWallpaper = d.object(forKey: "custom.albumGradientWallpaper") as? Bool ?? true
         patternStyle = (d.object(forKey: "patternStyle") as? Int).flatMap(BackgroundStyle.init(rawValue:))
         shaderStyle = (d.string(forKey: "shaderStyle")).flatMap(ShaderStyle.init(rawValue:))
