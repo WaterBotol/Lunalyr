@@ -29,6 +29,12 @@ public sealed partial class AppController
         get { lock (_gate) return _layout; }
     }
 
+    /// <summary>
+    /// The composition drawn for the music playing now: the chosen one, the one remembered for it, or Match the music's
+    /// choice (what the settings' preview draws too).
+    /// </summary>
+    public string ShownComposition => CompositionFor(Settings);
+
     // Must hold _gate.
     private LayoutRotation RotationLocked() =>
         _rotation ??= new LayoutRotation(_settings.RotateLayoutsCursor, _settings.RotateLayoutCounts);

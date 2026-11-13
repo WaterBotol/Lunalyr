@@ -158,7 +158,7 @@ public sealed partial class SettingsWindow : Window
         {
             "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, _host.Hotkeys, _host.DiscordHooks, _host.Packaging),
             "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
-                new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing)),
+                new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing), () => _host.Controller),
             "Readings" => ReadingsPage.Build(_ctx),
             "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
             "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion),

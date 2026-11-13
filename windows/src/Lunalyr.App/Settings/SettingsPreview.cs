@@ -124,9 +124,8 @@ internal sealed class SettingsPreview : IDisposable
                     {
                         renderer ??= new SettingsPreviewRenderer(PixelWidth, PixelHeight, WallpaperLayers.Factories(readings.WordBreaker, _host.Log));
                         var settings = _host.Settings.Current;
-                        var composition = settings.LyricComposition == AppController.AutomaticComposition
-                            ? controller.MatchedComposition ?? "editorial"
-                            : settings.LyricComposition;
+                        // As the wallpaper draws it: a layout remembered for the music playing wins.
+                        var composition = controller.ShownComposition;
                         var (seconds, playing) = controller.ReadClock();
                         var scene = controller.Scene;
                         var pixels = _buffers[buffer];

@@ -44,6 +44,25 @@ public static class LyricStyleCopy
 
     public const string BackingLeadsLayout = "The lead’s layout";
 
+    /// <summary>"Backing vocals animate like": the lead's layout, then the layouts backing words can take.</summary>
+    public static IReadOnlyList<SettingsChoice> BackingChoices { get; } =
+    [
+        new("", BackingLeadsLayout),
+        .. AppSettings.BackingVocalChoices.Select(id => new SettingsChoice(id, SettingsCopy.Kind(id)?.Title() ?? id)),
+    ];
+
+    /// <summary>The text colours, with their details.</summary>
+    public static IReadOnlyList<SettingsChoice> ColourChoices { get; } =
+        [.. LyricColourModes.Choices.Select(mode => new SettingsChoice(mode.RawValue(), mode.Title(), ColourDetail(mode)))];
+
+    /// <summary>"Preview lead" as the page writes it: "0.45 s".</summary>
+    public static string Seconds(double seconds) =>
+        seconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " s";
+
+    /// <summary>"Preview lead" as Narrator says it.</summary>
+    public static string SpokenPreviewLead(double seconds) =>
+        seconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " seconds before the next word";
+
     public const string RevealSungWords = "Words appear one by one as they are sung.";
 
     public const string NextWordPreview = "A faint preview of each word just before it is sung.";
@@ -71,7 +90,11 @@ public static class LyricStyleCopy
 
     public const string MemoryInUse = "Changes above apply to other music until you update or forget this.";
 
-    /// <summary>Under the Layout or Colour picker while a remembered style overrides it.</summary>
-    public static string RememberedNote(StyleScope scope, string name) =>
-        $"This {StyleMemory.ScopeName(scope)} uses {name}, remembered for it. The choice above applies to other music.";
+    /// <summary>
+    /// Under the Layout or Colour picker while a remembered style overrides it (the Mac's one line, split into the row's
+    /// title and its description).
+    /// </summary>
+    public static string RememberedTitle(StyleScope scope, string name) => $"This {StyleMemory.ScopeName(scope)} uses {name}";
+
+    public const string RememberedDetail = "Remembered for it. The choice above applies to other music.";
 }
