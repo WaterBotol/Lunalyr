@@ -19,7 +19,7 @@ public static class PowerCopy
     /// </summary>
     public static string? InEffect(AppSettings settings, PowerConstraint? power)
     {
-        if (power is not { } constraint) return null;
+        if (Current(settings, power) is not { } constraint) return null;
         var parts = new List<string>(2);
         var chosen = settings.Performance().FrameRate;
         if (PowerPolicy.EffectiveRate(chosen, sparingGpu: true) != chosen)
@@ -27,5 +27,18 @@ public static class PowerCopy
         if (constraint.Kind != PowerConstraintKind.LowPowerVisuals)
             parts.Add($"{constraint.Reason} now, so power saving is in effect.");
         return parts.Count == 0 ? null : string.Join(" ", parts);
+    }
+
+    /// <summary>
+    /// The power saving the page speaks of: what the renderer last reported, read against the Low power visuals switch
+    /// as it is now. The Mac works its constraint out from its settings, so the switch counts from the moment it is
+    /// turned on, also while the wallpaper is paused (the renderer then isn't running and reports nothing), and stops
+    /// counting once it is turned off, before the renderer has caught up.
+    /// </summary>
+    public static PowerConstraint? Current(AppSettings settings, PowerConstraint? reported)
+    {
+        PowerConstraint? own = settings.LowPowerVisuals ? PowerConstraint.LowPowerVisuals : null;
+        if (reported is { Kind: PowerConstraintKind.LowPowerVisuals }) return own;
+        return reported ?? own;
     }
 }

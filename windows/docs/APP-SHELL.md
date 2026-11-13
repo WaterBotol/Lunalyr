@@ -612,7 +612,9 @@ theme. The window opens at Lyric style (or `--settings-page`).
   only" battery rule), and the chosen type otherwise, with a pinned or matched heavy GPU effect swapped for a light one.
   The chosen type is kept and returns when power saving ends; YouTube's player closes while power saving shows another
   type; animated covers and System audio pause as before. Under Performance a caption says what power saving is doing
-  (the frame rate held, or a rule other than Low power visuals in force). Until 14 Nov 2026 Energy saver only held the
+  (the frame rate held, or a rule other than Low power visuals in force); it reads the Low power visuals switch from
+  the settings, as the Mac does, so it shows from the moment the switch is on, also while the wallpaper is paused and
+  the renderer reports nothing (`PowerCopy.Current`). Until 14 Nov 2026 Energy saver only held the
   frame rate (the row said it paused the wallpaper, which it never did) and the visualiser showed the album colours.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label

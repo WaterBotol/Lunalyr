@@ -113,8 +113,14 @@ public sealed class PowerSavingShellTests : IAsyncDisposable
     {
         Assert.Null(PowerCopy.InEffect(new AppSettings(), null));
         // Low power visuals' own switch already says so; only the held frame rate is news.
-        Assert.Equal("Power saving is holding animation at 30 fps for now.", PowerCopy.InEffect(new AppSettings(), PowerConstraint.LowPowerVisuals));
-        Assert.Null(PowerCopy.InEffect(new AppSettings { AnimationRate = 30 }, PowerConstraint.LowPowerVisuals));
+        var low = new AppSettings { LowPowerVisuals = true };
+        Assert.Equal("Power saving is holding animation at 30 fps for now.", PowerCopy.InEffect(low, PowerConstraint.LowPowerVisuals));
+        Assert.Null(PowerCopy.InEffect(low with { AnimationRate = 30 }, PowerConstraint.LowPowerVisuals));
+        // The switch counts as soon as it is on, also with nothing reported (a paused wallpaper's renderer isn't running),
+        // and no longer once it is off, whatever the renderer said last.
+        Assert.Equal("Power saving is holding animation at 30 fps for now.", PowerCopy.InEffect(low, null));
+        Assert.Null(PowerCopy.InEffect(new AppSettings(), PowerConstraint.LowPowerVisuals));
+        Assert.Equal(PowerConstraint.EnergySaver, PowerCopy.Current(low, PowerConstraint.EnergySaver));
         Assert.Equal("Energy saver is on now, so power saving is in effect.",
             PowerCopy.InEffect(new AppSettings { AnimationRate = 15 }, PowerConstraint.EnergySaver));
         Assert.Contains("This PC is on battery power now", PowerCopy.InEffect(new AppSettings(), PowerConstraint.OnBattery(PowerFallback.LightEffects)));
