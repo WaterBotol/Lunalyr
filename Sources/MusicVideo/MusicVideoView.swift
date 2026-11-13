@@ -3,9 +3,10 @@ import SwiftUI
 import WebKit
 
 /// The music video behind the lyrics: filled to the screen (cropping the
-/// edges), muted, dimmed and blurred as Settings asks, and kept on the
-/// song's position. A paused or covered wallpaper pauses the video too,
-/// holding its frame.
+/// edges) or shown whole over a blurred backdrop (`MusicVideoFraming`),
+/// muted, dimmed and blurred as Settings asks, and kept on the song's
+/// position. A paused or covered wallpaper pauses the video too, holding
+/// its frame.
 @MainActor
 struct MusicVideoBackground: View {
     let source: MusicVideoSource
@@ -21,11 +22,27 @@ struct MusicVideoBackground: View {
     /// (it is hidden then, so none of YouTube's overlays can show), unless
     /// its frozen frame shows instead (`MusicVideoFrozenFrame`).
     var standIn: LinearGradient = LinearGradient(colors: [.black], startPoint: .top, endPoint: .bottom)
+    /// Fill or whole, for YouTube videos and for library videos.
+    var youTubeFraming: MusicVideoFraming = .fill
+    var libraryFraming: MusicVideoFraming = .fill
+    /// The album cover, for the backdrop around a video shown whole.
+    var artwork: NSImage?
+
+    /// The framing for this source.
+    var framing: MusicVideoFraming {
+        switch source {
+        case .local: return libraryFraming
+        case .youTube: return youTubeFraming
+        }
+    }
 
     var body: some View {
         ZStack {
             Color.black
             standIn.ignoresSafeArea()
+            if framing.showsBackdrop {
+                MusicVideoBackdropView(artwork: artwork, videoID: youTubeID, large: !preview)
+            }
             // Never a real player inside the unit-test host: no file, no
             // network, nothing that could make a sound.
             if !AppRuntime.isUnitTesting {
@@ -37,15 +54,23 @@ struct MusicVideoBackground: View {
         .allowsHitTesting(false)
     }
 
+    private var youTubeID: String? {
+        if case .youTube(let id) = source { return id }
+        return nil
+    }
+
     private var player: some View {
             Group {
                 switch source {
                 case .local(let url):
-                    LocalMusicVideoView(url: url, paused: paused || still)
+                    LocalMusicVideoView(url: url, paused: paused || still, framing: libraryFraming)
                         // Softened like the animated covers; the overscan
                         // keeps the blur from showing the frame's edge.
                         .blur(radius: blur)
-                        .scaleEffect(blur > 0 ? 1.04 : 1)
+                        .scaleEffect((blur > 0 ? 1.04 : 1) * libraryFraming.bleedScale)
+                case .youTube(let id) where youTubeFraming == .whole:
+                    WholeYouTubeVideo(videoID: id, paused: paused, blur: blur, playing: !(preview || still),
+                                      large: !preview)
                 case .youTube(let id):
                     if preview || still {
                         // The preview does not start a second YouTube
@@ -60,6 +85,58 @@ struct MusicVideoBackground: View {
                 }
             }
             .clipped()
+    }
+}
+
+/// A YouTube video shown whole: fitted to the picture's own shape (read
+/// from its still, so YouTube's letterbox or pillarbox bars are cropped),
+/// with the still under the player until it plays, and while YouTube's
+/// overlays show (`MusicVideoFraming.revealHold`).
+struct WholeYouTubeVideo: View {
+    let videoID: String
+    let paused: Bool
+    let blur: Double
+    /// False for the Settings preview and Reduce Motion: the still only.
+    let playing: Bool
+    var large = true
+    @State private var still: NSImage?
+    @State private var aspect: CGFloat = MusicVideoFraming.youTubeAspect
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frame = MusicVideoFraming.whole.rect(aspect: aspect, in: proxy.size)
+            let player = MusicVideoFraming.playerSize(contentAspect: aspect, frame: frame.size)
+            ZStack {
+                ZStack {
+                    if let still {
+                        Image(nsImage: still).resizable().aspectRatio(contentMode: .fill)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(width: player.width, height: player.height)
+                .blur(radius: blur).scaleEffect(blur > 0 ? 1.04 : 1)
+                if playing {
+                    YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: .whole)
+                        .frame(width: player.width, height: player.height)
+                }
+            }
+            .frame(width: frame.width, height: frame.height)
+            .clipped()
+            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            .animation(.easeOut(duration: YouTubeThumbnail.fadeIn), value: still != nil)
+        }
+        .task(id: videoID) {
+            still = nil
+            aspect = MusicVideoFraming.youTubeAspect
+            let image = await YouTubeThumbnail.load(videoID, large: large)
+            guard !Task.isCancelled, let image else { return }
+            still = image
+            let picture = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            let shape = await Task.detached(priority: .utility) {
+                picture.flatMap { MusicVideoContentShape.aspect(of: $0) }
+            }.value
+            if !Task.isCancelled, let shape { aspect = shape }
+        }
     }
 }
 
@@ -352,9 +429,11 @@ final class MusicVideoSyncLoop {
 struct LocalMusicVideoView: NSViewRepresentable {
     let url: URL
     let paused: Bool
+    var framing: MusicVideoFraming = .fill
 
     func makeNSView(context: Context) -> LocalMusicVideoNSView {
         let view = LocalMusicVideoNSView()
+        view.setFraming(framing)
         view.load(url)
         view.loop.setSurfacePaused(paused)
         view.loop.start()
@@ -362,6 +441,7 @@ struct LocalMusicVideoView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: LocalMusicVideoNSView, context: Context) {
+        view.setFraming(framing)
         view.load(url)
         view.loop.setSurfacePaused(paused)
     }
@@ -416,6 +496,17 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         playerLayer.frame = bounds
+        CATransaction.commit()
+    }
+
+    /// Filled (cropped) or whole (fitted, clear around it so the backdrop
+    /// shows).
+    func setFraming(_ framing: MusicVideoFraming) {
+        let gravity = framing.videoGravity
+        guard playerLayer.videoGravity != gravity else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.videoGravity = gravity
         CATransaction.commit()
     }
 
@@ -506,6 +597,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
     let videoID: String
     let paused: Bool
     let blur: Double
+    var framing: MusicVideoFraming = .fill
 
     func makeCoordinator() -> YouTubeMusicVideoCoordinator { YouTubeMusicVideoCoordinator() }
 
@@ -513,6 +605,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         let coordinator = context.coordinator
         let host = YouTubeMusicVideoHostView(frame: .zero)
         coordinator.host = host
+        coordinator.setFraming(framing)
         coordinator.attach(videoID: videoID)
         coordinator.loop.setSurfacePaused(paused)
         coordinator.loop.start()
@@ -522,6 +615,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
 
     func updateNSView(_ host: YouTubeMusicVideoHostView, context: Context) {
         let coordinator = context.coordinator
+        coordinator.setFraming(framing)
         if coordinator.videoID != videoID { coordinator.attach(videoID: videoID) }
         coordinator.loop.setSurfacePaused(paused)
         coordinator.setBlur(blur)
@@ -601,10 +695,11 @@ enum YouTubeEmbed {
 
     /// `page` numbers each load, so a message from a page that has since
     /// been replaced is told apart from the current one's.
-    /// How much larger than the screen the player is drawn (and clipped):
-    /// enough to push YouTube's title bar (top left) and logo (bottom right)
-    /// off the edges. The video is aspect-filled anyway.
-    static let overscan = 1.25
+    /// How much larger than the screen a filled player is drawn (and
+    /// clipped): enough to push YouTube's title bar (top left) and logo
+    /// (bottom right) off the edges. The video is aspect-filled anyway.
+    /// Shown whole, there is none (`MusicVideoFraming.youTubeOverscan`).
+    static let overscan = MusicVideoFraming.fillOverscan
 
     /// The player is visible only while it plays (state 1). Paused, ended,
     /// cued, unstarted or buffering, YouTube draws its title bar and a big
@@ -626,8 +721,18 @@ enum YouTubeEmbed {
     /// song plays waits, and not when a picture is ready to cover it (the
     /// seek's frozen frame shows at once instead); anything else (a pause,
     /// the end, an error) hides at once.
-    static func hideDelay(buffering: Bool, hold: MusicVideoHold, hasFrame: Bool) -> TimeInterval {
-        buffering && hold == .live && !hasFrame ? bufferingGrace : 0
+    /// Shown whole, a buffering player hides at once: YouTube shows its
+    /// overlays again once the seek or stall is over.
+    static func hideDelay(buffering: Bool, hold: MusicVideoHold, hasFrame: Bool,
+                          framing: MusicVideoFraming = .fill) -> TimeInterval {
+        buffering && hold == .live && !hasFrame && framing == .fill ? bufferingGrace : 0
+    }
+
+    /// How long a player that starts playing stays hidden before it is
+    /// shown: none when filled (YouTube's title is off-screen) or when it
+    /// shows already; YouTube's title overlay's while when shown whole.
+    static func revealDelay(framing: MusicVideoFraming, showing: Bool) -> TimeInterval {
+        showing ? 0 : framing.revealHold
     }
 
     /// The interface language for the player's own text: the system's.
@@ -636,8 +741,10 @@ enum YouTubeEmbed {
         return (2...3).contains(code.count) && code.allSatisfy({ $0.isASCII && $0.isLetter }) ? code : "en"
     }
 
-    static func html(videoID: String, start: Double, page: Int = 0, language: String = playerLanguage()) -> String {
+    static func html(videoID: String, start: Double, page: Int = 0, language: String = playerLanguage(),
+                     overscan: Double = YouTubeEmbed.overscan) -> String {
         precondition(YouTubeVideoID.isValid(videoID))
+        let overscan = overscan.isFinite ? min(2, max(1, overscan)) : YouTubeEmbed.overscan
         let startSecond = max(0, Int(start.isFinite ? start : 0))
         let language = language.allSatisfy({ $0.isASCII && $0.isLetter }) && !language.isEmpty ? language : "en"
         return """
@@ -650,7 +757,7 @@ enum YouTubeEmbed {
         #frame iframe,#player{width:100%;height:100%;border:0;pointer-events:none}
         </style></head><body><div id="frame"><div id="player"></div></div>
         <script>
-        var player = null, ready = false, blurScale = 1;
+        var player = null, ready = false, blurPx = 0, overscan = \(overscan);
         function post(type, value) {
           try { window.webkit.messageHandlers.\(messageName).postMessage({type: type, value: value,
                 video: '\(videoID)', page: \(page)}); } catch (e) {}
@@ -697,11 +804,13 @@ enum YouTubeEmbed {
         window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
         window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
         window.lunalyrSeek = function (t) { if (ready) { player.mute(); player.seekTo(t, true); } };
-        window.lunalyrBlur = function (px) {
+        function applyLook() {
           var frame = document.getElementById('frame');
-          frame.style.filter = px > 0 ? 'blur(' + px + 'px)' : '';
-          frame.style.transform = 'translate(-50%,-50%) scale(' + (\(overscan) * (px > 0 ? 1.04 : 1)) + ')';
-        };
+          frame.style.filter = blurPx > 0 ? 'blur(' + blurPx + 'px)' : '';
+          frame.style.transform = 'translate(-50%,-50%) scale(' + (overscan * (blurPx > 0 ? 1.04 : 1)) + ')';
+        }
+        window.lunalyrBlur = function (px) { blurPx = px; applyLook(); };
+        window.lunalyrOverscan = function (scale) { overscan = scale; applyLook(); };
         </script>
         <script src="https://www.youtube.com/iframe_api"></script>
         </body></html>
@@ -945,6 +1054,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private var playerVisible = false
     /// A buffering player's hide, waiting out `YouTubeEmbed.bufferingGrace`.
     private var pendingHide: DispatchWorkItem?
+    /// Fill or whole; whole holds each reveal (`MusicVideoFraming.revealHold`).
+    private(set) var framing: MusicVideoFraming = .fill
+    /// A playing player's reveal, waiting for YouTube's title overlay to fade.
+    private var pendingReveal: DispatchWorkItem?
 
     /// The first seek's lead; later ones use the measured latency.
     var seekLead: Double { MusicVideoSeekLatency.initial }
@@ -981,6 +1094,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         view.alphaValue = 0
         playerVisible = false
         cancelPendingHide()
+        cancelPendingReveal()
         view.underPageBackgroundColor = .black
         view.allowsMagnification = false
         view.navigationDelegate = self
@@ -991,6 +1105,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     /// Closes the web view, and with it the page and its player.
     private func closeWebView() {
         cancelPendingHide()
+        cancelPendingReveal()
         playerVisible = false
         guard let view else { return }
         view.configuration.userContentController.removeScriptMessageHandler(forName: YouTubeEmbed.messageName)
@@ -1009,14 +1124,16 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
             let wanted = blur
             blur = -1
             setBlur(wanted)
+            run("window.lunalyrOverscan(\(framing.youTubeOverscan))")
             loop.tick()
         case .load(let videoID, let page):
             guard let view else { return }
             let start = MusicVideoTiming.videoTime(songTime: NowPlayingMonitor.shared.playbackPosition(),
                                                    offset: MusicVideoController.shared.currentOffset,
                                                    videoDuration: nil) ?? 0
-            navigation = view.loadHTMLString(YouTubeEmbed.html(videoID: videoID, start: start, page: page),
-                                             baseURL: YouTubeEmbed.baseURL)
+            let html = YouTubeEmbed.html(videoID: videoID, start: start, page: page,
+                                         overscan: framing.youTubeOverscan)
+            navigation = view.loadHTMLString(html, baseURL: YouTubeEmbed.baseURL)
         case .visible(let visible):
             setVisible(visible, buffering: buffering)
         case .fail(let videoID, let failure):
@@ -1032,14 +1149,32 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     /// or the frozen frame. A playing video that starts to buffer is hidden
     /// only after a short grace (`YouTubeEmbed.hideDelay`), so a drift seek
     /// does not blink to the stand-in.
+    /// Shown whole, a player that starts playing stays hidden (behind the
+    /// frozen frame or the video's still) for `MusicVideoFraming.revealHold`,
+    /// so YouTube's start-of-play title overlay is never seen.
     private func setVisible(_ visible: Bool, buffering: Bool = false) {
         if visible {
             cancelPendingHide()
-            freeze.notePlayer(showing: true)
-            fade(visible: true)
+            let hold = YouTubeEmbed.revealDelay(framing: framing, showing: playerVisible)
+            guard hold > 0 else {
+                reveal()
+                return
+            }
+            guard pendingReveal == nil else { return }
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.pendingReveal != nil else { return }
+                    self.pendingReveal = nil
+                    self.reveal()
+                }
+            }
+            pendingReveal = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + hold, execute: work)
             return
         }
-        let delay = YouTubeEmbed.hideDelay(buffering: buffering, hold: hold, hasFrame: freeze.image != nil)
+        cancelPendingReveal()
+        let delay = YouTubeEmbed.hideDelay(buffering: buffering, hold: hold, hasFrame: freeze.image != nil,
+                                           framing: framing)
         if delay > 0, playerVisible {
             guard pendingHide == nil else { return }
             let work = DispatchWorkItem { [weak self] in
@@ -1062,6 +1197,26 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private func cancelPendingHide() {
         pendingHide?.cancel()
         pendingHide = nil
+    }
+
+    private func cancelPendingReveal() {
+        pendingReveal?.cancel()
+        pendingReveal = nil
+    }
+
+    private func reveal() {
+        cancelPendingReveal()
+        freeze.notePlayer(showing: true)
+        fade(visible: true)
+    }
+
+    /// Fill or whole. Applied to a ready page at once; a page still loading
+    /// is told when it is ready.
+    func setFraming(_ value: MusicVideoFraming) {
+        guard value != framing else { return }
+        framing = value
+        guard session.ready else { return }
+        run("window.lunalyrOverscan(\(value.youTubeOverscan))")
     }
 
     private func fade(visible: Bool) {

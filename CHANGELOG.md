@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Added
+- Music video: "Show the whole video" (Settings › Wallpaper › Music video, separately for YouTube and library videos). The video is fitted rather than cropped, with no extra zoom, and the space around it shows a blurred, darkened copy of the video's still or the album cover instead of black bars; a YouTube video made in another shape (4:3, or cinema-wide) is cropped to its picture, without YouTube's own bars. A YouTube video appears about five seconds after it starts playing (and after a pause or a jump), once YouTube's title, buttons and logo have faded; its still or last frame shows until then. "Fill the screen" stays the default.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed
