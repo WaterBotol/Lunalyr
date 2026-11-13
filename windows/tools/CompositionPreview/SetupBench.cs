@@ -9,7 +9,10 @@
 // median, and the worst frame by the worst of all runs.
 //
 // -hashes FILE writes a SHA-256 of the frame every tenth of a second of the same play-through at 30 frames a second, to
-// compare two builds pixel for pixel (same adapter, same size).
+// compare two builds pixel for pixel (same adapter, same size). With the environment variable LUNALYR_KEEP_FRAMES=DIR it
+// also keeps those frames (raw BGRA); with LUNALYR_AGAINST_FRAMES=DIR it prints how far each frame is from the one kept
+// there (how many channel values differ, by how many steps at most). Direct2D is not bit-stable from run to run: two
+// runs of one build already differ by a step in a few pixels of some frames, so compare against more than one run.
 
 using System.Diagnostics;
 using System.Globalization;
@@ -96,8 +99,25 @@ internal static class SetupBench
             Play(stage, factory, playlist, scale, 1, (song, frame, t) =>
             {
                 if (frame % 3 != 0) return;
+                var pixels = stage.Pixels();
                 file.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                    $"{factory.Id} {song} {t:0.000} {Convert.ToHexString(SHA256.HashData(stage.Pixels()))}"));
+                    $"{factory.Id} {song} {t:0.000} {Convert.ToHexString(SHA256.HashData(pixels))}"));
+                // -keep DIR keeps the frames themselves (raw BGRA) to compare two builds pixel by pixel (-against DIR).
+                var name = string.Create(CultureInfo.InvariantCulture, $"{factory.Id}-{song}-{t:00.000}.bgra");
+                if (Environment.GetEnvironmentVariable("LUNALYR_KEEP_FRAMES") is { } keep) File.WriteAllBytes(Path.Combine(keep, name), pixels);
+                if (Environment.GetEnvironmentVariable("LUNALYR_AGAINST_FRAMES") is { } against && File.Exists(Path.Combine(against, name)))
+                {
+                    var other = File.ReadAllBytes(Path.Combine(against, name));
+                    int count = 0, worst = 0;
+                    for (var i = 0; i < pixels.Length; i++)
+                    {
+                        var d = Math.Abs(pixels[i] - other[i]);
+                        if (d == 0) continue;
+                        count++;
+                        worst = Math.Max(worst, d);
+                    }
+                    if (count > 0) Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{name}: {count} channel values differ, up to {worst}/255"));
+                }
             }, fps: 30);
             Console.WriteLine($"{factory.Id} hashed");
         }
@@ -144,6 +164,8 @@ internal static class SetupBench
                     stage.WaitForGpu();
                     frames.Add(pass);
                     if (setup > 0) setups.Add(setup);
+                    if (setup > 4 && Environment.GetEnvironmentVariable("LUNALYR_SETUP_TRACE") is not null)
+                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  {factory.Id} song {s} at {t:0.000} s: setup {setup:0.0} ms, pass {pass:0.0} ms"));
                     if (t < 1.5 && pass > songWorst) { songWorst = pass; songWorstSetup = setup; }
                     afterFrame?.Invoke(s, f, t);
                 }

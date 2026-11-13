@@ -227,14 +227,14 @@ internal abstract partial class LyricCompositionLayer
         var art = scene.Style.OpeningTitleCover && scene.Cover is { } cover && OpeningTitle.ShowsCover(true, cover.Width, cover.Height)
             ? cover : null;
         SyncCover(dc, art);
-        var dark = IsDarkInk(_ink.Base.Rest);
+        var dark = IsDarkInk(SettledInk.Base.Rest);
         // The album line is worked out once per song, not every frame (it normalises both names).
         if (!ReferenceEquals(scene.Album, _albumOf.Album) || !ReferenceEquals(scene.Title, _albumOf.Title))
             _albumOf = (scene.Album, scene.Title, OpeningTitle.AlbumLine(scene.Album, scene.Title));
         var key = new CardKey(scene.Title ?? "", scene.Artist ?? "", _albumOf.Line,
                               string.IsNullOrWhiteSpace(scene.TitleReading) ? null : scene.TitleReading.Trim(), compact,
                               art is not null && _coverBrush is not null, scene.Style.FontFamily, SurfaceSize, Scale, BaseSize, dark,
-                              _ink.Dot is { } dot ? LyricInks.Vector(dot) : TextColour);
+                              SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour);
         if (_card is { } current && current.Key == key) return current;
         _card?.Dispose();
         _card = null;

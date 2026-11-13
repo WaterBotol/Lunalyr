@@ -16,59 +16,95 @@ internal readonly record struct GlowSpec(Vector4 Colour, float Radius)
 /// One baked piece of text (a word, a run, a reading) and its effect graph, built once per line: the text bitmap with
 /// a blur and an opacity effect over it, a soft shadow bitmap, and a glow made when first needed. A settled word is a
 /// plain bitmap draw; only a word in transit goes through its effects.
+/// <para>
+/// Its size and placement are known as soon as it is laid out; its bitmaps may be baked later (<see cref="TextKit.Defers"/>):
+/// a frame or two after, a slice at a time, or at the latest when it is first drawn, so what is drawn never changes.
+/// </para>
 /// </summary>
 internal sealed class Ink : IDisposable
 {
-    private readonly Vortice.Direct2D1.Effects.GaussianBlur _blur;
-    private readonly Vortice.Direct2D1.Effects.Opacity _opacity;
-    private readonly ID2D1Image _blurred;
     private readonly ID2D1DeviceContext _owner;
+    private ID2D1Bitmap1? _text;
+    private ID2D1Bitmap1? _soft;
+    private Vortice.Direct2D1.Effects.GaussianBlur? _blur;
+    private Vortice.Direct2D1.Effects.Opacity? _opacity;
+    private ID2D1Image? _blurred;
     private Vortice.Direct2D1.Effects.Shadow? _glow;
     private ID2D1Image? _glowOut;
     private Vortice.Direct2D1.Effects.Shadow? _tint;
     private ID2D1Image? _tintOut;
+    private bool _disposed;
 
-    public Ink(ID2D1DeviceContext owner, ID2D1Bitmap1 text, float raster, Vector2 centre, Vector2 box, ID2D1Bitmap1? soft,
-               float softRaster, Vector2 softCentre)
+    /// <summary>An ink still to be baked by <paramref name="kit"/> (see <see cref="TextKit.Bake"/>).</summary>
+    /// <param name="pixels">The text bitmap's size; <paramref name="softPixels"/> the shadow's (zero for none).</param>
+    internal Ink(ID2D1DeviceContext owner, TextKit kit, float raster, Vector2 centre, Vector2 box, (int Width, int Height) pixels,
+                 bool hasSoft, float softRaster, Vector2 softCentre, (int Width, int Height) softPixels)
     {
         _owner = owner;
-        Text = text;
+        Kit = kit;
         Raster = raster;
         Centre = centre;
         Box = box;
-        Soft = soft;
+        HasSoft = hasSoft;
         SoftRaster = softRaster;
         SoftCentre = softCentre;
-        var pixels = text.PixelSize;
         PixelWidth = pixels.Width;
         PixelHeight = pixels.Height;
-        if (soft is not null)
+        if (hasSoft)
         {
-            var softPixels = soft.PixelSize;
             SoftWidth = softPixels.Width;
             SoftHeight = softPixels.Height;
         }
-        _blur = new Vortice.Direct2D1.Effects.GaussianBlur(owner) { BorderMode = BorderMode.Soft, Optimization = GaussianBlurOptimization.Balanced };
-        _blur.SetInput(0, text, true);
-        _opacity = new Vortice.Direct2D1.Effects.Opacity(owner);
-        _opacity.SetInputEffect(0, _blur, true);
-        _blurred = _opacity.Output;
     }
 
-    public ID2D1Bitmap1 Text { get; }
+    /// <summary>The kit baking it, until it is baked.</summary>
+    internal TextKit? Kit { get; private set; }
+
+    /// <summary>What is left of its bake (the kit's), or null once baked or let go.</summary>
+    internal object? Pending { get; set; }
+
+    /// <summary>True once its bitmaps are made.</summary>
+    public bool IsBaked => _text is not null && !_disposed;
+
+    /// <summary>The text bitmap (baked now if it was not yet).</summary>
+    public ID2D1Bitmap1 Text => Bake() ? _text! : throw new ObjectDisposedException(nameof(Ink));
     /// <summary>Bitmap pixels per layout pixel.</summary>
     public float Raster { get; }
     /// <summary>The centre of the text's layout box, in bitmap pixels.</summary>
     public Vector2 Centre { get; }
     /// <summary>The layout box, in layout pixels.</summary>
     public Vector2 Box { get; }
-    public ID2D1Bitmap1? Soft { get; }
+    /// <summary>The soft shadow bitmap (baked now if it was not yet), or null for none.</summary>
+    public ID2D1Bitmap1? Soft => HasSoft && Bake() ? _soft : null;
+    /// <summary>Whether it has a soft shadow.</summary>
+    public bool HasSoft { get; }
     public float SoftRaster { get; }
     public Vector2 SoftCentre { get; }
     public int PixelWidth { get; }
     public int PixelHeight { get; }
     public int SoftWidth { get; }
     public int SoftHeight { get; }
+
+    /// <summary>Bakes it now if its bake is still waiting; false once it has been let go.</summary>
+    public bool Bake()
+    {
+        if (Kit is { } kit) kit.Complete(this);
+        return !_disposed && _text is not null;
+    }
+
+    /// <summary>Takes its baked bitmaps (the kit's last step) and makes the effects a frame draws it through.</summary>
+    internal void Finish(ID2D1Bitmap1 text, ID2D1Bitmap1? soft)
+    {
+        _text = text;
+        _soft = soft;
+        _blur = new Vortice.Direct2D1.Effects.GaussianBlur(_owner) { BorderMode = BorderMode.Soft, Optimization = GaussianBlurOptimization.Balanced };
+        _blur.SetInput(0, text, true);
+        _opacity = new Vortice.Direct2D1.Effects.Opacity(_owner);
+        _opacity.SetInputEffect(0, _blur, true);
+        _blurred = _opacity.Output;
+        Kit = null;
+        Pending = null;
+    }
 
     /// <summary>
     /// Draws the text with its shadow and glow. <paramref name="world"/> maps layout pixels (origin at the centre of
@@ -83,6 +119,7 @@ internal sealed class Ink : IDisposable
     {
         if (!(opacity > 0.002f) || !(worldScale > 0.0001f)) return;
         if (clip.IsSet && !(clip.Right > clip.Left)) return;
+        if (!Bake()) return;
         var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
         var textTransform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
 
@@ -121,9 +158,9 @@ internal sealed class Ink : IDisposable
             else
             {
                 SetBlur(sigma);
-                _opacity.Value = opacity;
-                if (!clip.IsSet) dc.DrawImage(_blurred, InterpolationMode.Linear, CompositeMode.SourceOver);
-                else dc.DrawImage(_blurred, null, Spill(clip), InterpolationMode.Linear, CompositeMode.SourceOver);
+                _opacity!.Value = opacity;
+                if (!clip.IsSet) dc.DrawImage(_blurred!, InterpolationMode.Linear, CompositeMode.SourceOver);
+                else dc.DrawImage(_blurred!, null, Spill(clip), InterpolationMode.Linear, CompositeMode.SourceOver);
             }
             return;
         }
@@ -138,8 +175,8 @@ internal sealed class Ink : IDisposable
             var span = Clipped(new RawRectF(MathF.Min(first.Left, last.Left), 0, MathF.Max(first.Right, last.Right), PixelHeight),
                                clip, Centre, Raster);
             SetBlur(sigma);
-            _opacity.Value = opacity;
-            if (span.Right > span.Left) dc.DrawImage(_blurred, null, span, InterpolationMode.Linear, CompositeMode.SourceOver);
+            _opacity!.Value = opacity;
+            if (span.Right > span.Left) dc.DrawImage(_blurred!, null, span, InterpolationMode.Linear, CompositeMode.SourceOver);
             start = settled;
         }
         for (var k = start; k < tokenOpacities.Length; k++)
@@ -161,19 +198,20 @@ internal sealed class Ink : IDisposable
                            ReadOnlySpan<double> boundaries = default, ReadOnlySpan<double> tokenOpacities = default,
                            bool rightToLeft = false, InkClip clip = default)
     {
-        if (Soft is null || !(shadowOpacity * opacity > 0.004f)) return;
+        if (!HasSoft || !(shadowOpacity * opacity > 0.004f)) return;
         if (clip.IsSet && !(clip.Right > clip.Left)) return;
+        if (!Bake()) return;
         var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
         dc.Transform = Matrix3x2.CreateTranslation(-SoftCentre) * Matrix3x2.CreateScale(1 / SoftRaster) * world;
         if (!sliced)
         {
             if (!clip.IsSet)
             {
-                dc.DrawBitmap(Soft, new RawRectF(0, 0, SoftWidth, SoftHeight), opacity * shadowOpacity, InterpolationMode.Linear, null, null);
+                dc.DrawBitmap(_soft, new RawRectF(0, 0, SoftWidth, SoftHeight), opacity * shadowOpacity, InterpolationMode.Linear, null, null);
                 return;
             }
             var whole = Clipped(new RawRectF(0, 0, SoftWidth, SoftHeight), clip, SoftCentre, SoftRaster);
-            if (whole.Right > whole.Left) dc.DrawBitmap(Soft, whole, opacity * shadowOpacity, InterpolationMode.Linear, whole, null);
+            if (whole.Right > whole.Left) dc.DrawBitmap(_soft, whole, opacity * shadowOpacity, InterpolationMode.Linear, whole, null);
             return;
         }
         for (var k = 0; k < tokenOpacities.Length; k++)
@@ -182,7 +220,7 @@ internal sealed class Ink : IDisposable
             if (alpha <= 0.004f) continue;
             var slice = Clipped(SliceRect(k, boundaries, tokenOpacities.Length, rightToLeft, SoftCentre, SoftRaster, SoftWidth, SoftHeight),
                                 clip, SoftCentre, SoftRaster);
-            if (slice.Right > slice.Left) dc.DrawBitmap(Soft, slice, alpha, InterpolationMode.Linear, slice, null);
+            if (slice.Right > slice.Left) dc.DrawBitmap(_soft, slice, alpha, InterpolationMode.Linear, slice, null);
         }
     }
 
@@ -199,6 +237,7 @@ internal sealed class Ink : IDisposable
         var from = Math.Clamp(Centre.X + left * Raster, 0, PixelWidth);
         var to = Math.Clamp(Centre.X + right * Raster, 0, PixelWidth);
         if (!(to > from)) return;
+        if (!Bake()) return;
         var sliced = tokenOpacities.Length > 1 && boundaries.Length == tokenOpacities.Length + 1;
         dc.Transform = Matrix3x2.CreateTranslation(-Centre) * Matrix3x2.CreateScale(1 / Raster) * world;
         var sigma = blur * 0.5f * Raster / worldScale;
@@ -215,8 +254,8 @@ internal sealed class Ink : IDisposable
                 var spill = new RawRectF(float.IsNegativeInfinity(left) ? -PixelWidth : from, -PixelHeight,
                                          float.IsPositiveInfinity(right) ? 2f * PixelWidth : to, 2f * PixelHeight);
                 SetBlur(sigma);
-                _opacity.Value = opacity;
-                dc.DrawImage(_blurred, new Vector2(spill.Left, spill.Top), spill, InterpolationMode.Linear, CompositeMode.SourceOver);
+                _opacity!.Value = opacity;
+                dc.DrawImage(_blurred!, new Vector2(spill.Left, spill.Top), spill, InterpolationMode.Linear, CompositeMode.SourceOver);
             }
             return;
         }
@@ -233,8 +272,8 @@ internal sealed class Ink : IDisposable
             if (b > a)
             {
                 SetBlur(sigma);
-                _opacity.Value = opacity;
-                dc.DrawImage(_blurred, new Vector2(a, 0), new RawRectF(a, 0, b, PixelHeight), InterpolationMode.Linear, CompositeMode.SourceOver);
+                _opacity!.Value = opacity;
+                dc.DrawImage(_blurred!, new Vector2(a, 0), new RawRectF(a, 0, b, PixelHeight), InterpolationMode.Linear, CompositeMode.SourceOver);
             }
             start = settled;
         }
@@ -261,6 +300,7 @@ internal sealed class Ink : IDisposable
                            ReadOnlySpan<double> boundaries = default, ReadOnlySpan<double> opacities = default)
     {
         if (!(colour.W > 0.004f) || (clip.IsSet && !(clip.Right > clip.Left))) return;
+        if (!Bake()) return;
         if (_tint is null)
         {
             _tint = new Vortice.Direct2D1.Effects.Shadow(_owner) { Optimization = ShadowOptimization.Speed, BlurStandardDeviation = 0 };
@@ -308,7 +348,7 @@ internal sealed class Ink : IDisposable
     }
 
     /// <summary>The blur's standard deviation (property 0), set through the float overload: the typed setter boxes.</summary>
-    private void SetBlur(float sigma) => _blur.SetValue(0u, sigma);
+    private void SetBlur(float sigma) => _blur!.SetValue(0u, sigma);
 
     /// <summary>Token <paramref name="k"/>'s share of the label, in bitmap pixels; the first and last reach the bitmap's edges.</summary>
     private RawRectF SliceRect(int k, ReadOnlySpan<double> boundaries, int count, bool rightToLeft, Vector2 centre,
@@ -333,15 +373,20 @@ internal sealed class Ink : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        // A bake still waiting is let go (the kit skips it).
+        Kit?.Cancel(this);
+        Kit = null;
         _tintOut?.Dispose();
         _tint?.Dispose();
         _glowOut?.Dispose();
         _glow?.Dispose();
-        _blurred.Dispose();
-        _opacity.Dispose();
-        _blur.Dispose();
-        Soft?.Dispose();
-        Text.Dispose();
+        _blurred?.Dispose();
+        _opacity?.Dispose();
+        _blur?.Dispose();
+        _soft?.Dispose();
+        _text?.Dispose();
     }
 }
 

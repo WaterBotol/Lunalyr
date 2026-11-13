@@ -595,6 +595,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             ink.Draw(dc, flat, scale, (float)opacity, blur, GlowSpec.None, shadow, boundaries, opacities, rightToLeft);
             return;
         }
+        // Baked now if its turn has not come yet (it is about to be drawn).
+        if (!ink.Bake()) return;
         dc.Transform = Matrix3x2.Identity;
         var sliced = opacities.Length > 1 && boundaries.Length == opacities.Length + 1;
         if (ink.Soft is { } soft && shadow * opacity > 0.004)
