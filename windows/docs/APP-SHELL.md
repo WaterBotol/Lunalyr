@@ -380,6 +380,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `romanizationLanguage` | `"automatic"` | `automatic`, `japanese`, `mandarin`, `cantonese`, `korean`, `other` | `custom.romanizationLanguage` |
 | `romanizationTones` | `true` | | `custom.romanizationTones` |
 | `romanizationSaved` | `true` | prefer readings that came with the lyrics | `custom.romanizationSaved` |
+| `showTranslations` | `true` | Readings › Show translations under lyrics (and the welcome's checkbox): a translation that came with the lyrics sits under its line; a rolling stage keeps a band at its foot for it. Nothing is ever translated on Windows | `custom.showTranslations` |
 | `backgroundMode` | `"auto"` | the Mac's types: `auto` (Match the music), `pattern`, `shader`, `colourOnly`, `visualizer`, `desktop`, `custom`, `musicVideo`. Windows' old `gradient` reads as `colourOnly` with `albumGradientWallpaper: false`; `colour`/`colorOnly` as `colourOnly`; unknown as `auto` (see "Wallpaper types") | `backgroundMode` |
 | `albumGradientWallpaper` | `true` | Colour only › Album gradient (off: the album colour field) | `custom.albumGradientWallpaper` |
 | `shaderStyle` | `""` | a GPU effect's id, `""` = Match the music | `shaderStyle` |
@@ -432,6 +433,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `appTheme` | `"system"` | `system` (follow Windows), `light`, `dark`: how Lunalyr's own windows look. Windows only; never changes Windows' setting | Windows only (the Mac's "Look" is a different choice) |
 | `showControlsOnHover` | `true` | the desktop player comes up where the pointer rests on the desktop | `custom.showControlsOnHover` |
 | `desktopPlayerTimeMode` | `"remaining"` | the seek bar's right-hand time: `remaining` or `total` (anything else reads as `remaining`) | `custom.desktopPlayer.timeMode` |
+| `player` | `"automatic"` | Music players › Player and the welcome's Follow menu: `automatic` (the session Windows calls current), `appleMusic`, `spotify`, `mediaPlayer`, a browser (`edge`, `chrome`, `firefox`, `brave`, `arc`, `opera`, `vivaldi`) or `app:` and any other app's AppUserModelID. A chosen player's sessions are the only ones followed (`FollowedSessionSource`); anything unknown reads as `automatic` | `custom.player` (the Mac's raw values where the player is the same) |
 | `noLyrics` | `"notice"` | "When none are found" (Timing › Without synced lyrics): `notice` (a short note that fades after 4 s), `trackName` (the song's title and artist), `nothing`; unknown values reset to `notice` | `noLyrics` |
 | `lyricsSurface` | `"desktop"` | `desktop` (on the wallpaper), `floating` (over every app). Never both. Changing it swaps the lyric style (see "Floating lyrics") | `custom.lyricsSurface` |
 | `floatingTextSize` | `44` | 22–110 points; Small 30, Medium 44, Large 64 | `custom.floating.textSize` |
@@ -458,6 +460,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricCardTextScale` | `0.85` | 0.5–1.1, the card's text size | `custom.lyricCardTextScale` |
 | `lyricStyleDesktop`, `lyricStyleFloating` | absent | the other surface's lyric style while one is in use: the style keys below, as stored (written once the surface has been switched) | `custom.lyricStyle.desktop`, `custom.lyricStyle.floating` |
 | `lyricsHidden` | `false` | Hide lyrics: the wallpapers' lyrics and backing fade out and the floating window hides (General, a shortcut or `lunalyr://toggle`) | `custom.lyricsHidden` |
+| `hideLyricsWhileMirroring` | absent | General › Hide lyrics while a display is mirrored: while Windows duplicates a display (Win+P › Duplicate, a projector or TV) the lyrics leave every display until it ends. Absent means not yet chosen, which acts as on; written once chosen | `custom.hideLyricsWhileMirroring` |
 | `automaticUpdateChecks` | `true` | "Check for updates automatically": once a day, a newer version downloads and is verified in the background; it installs only on Restart and Update (milestone 8; builds without an update service never check) | Sparkle's automatic checks |
 | `globalShortcuts` | `false` | "Keyboard shortcuts": nothing is registered with Windows until this is on | `custom.globalShortcuts` |
 | `globalShortcutModifiers` | `"controlOptionCommand"` | `controlOptionCommand` (Win+Ctrl+Alt) or `controlShiftCommand` (Win+Ctrl+Shift), the Mac's raw values by key position | `custom.globalShortcutModifiers` |
@@ -604,6 +607,22 @@ theme. The window opens at Lyric style (or `--settings-page`).
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
   (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.
+- **Readings, Music players and Timing, the last rows** (live since `port/lyrics-players-gaps`):
+  - *Readings › Import reading LRC…*: Windows' file picker (`.lrc`, `.txt`, up to 1 MB, decoded as lyric imports are);
+    the file's readings are matched to the lines showing by time (`LocalSidecars.AttachingReadings`), shown at once
+    and saved with the recording as a pin, the lyric source and its per-source offset kept
+    (`AppController.ImportReadingsFile`). The button waits for timed lyrics and says why; an unreadable file warns; a
+    file whose timestamps fall on no line changes nothing and says so.
+  - *Readings › Show translations under lyrics* (`showTranslations`): see the key table and READINGS-WINDOWS.md.
+  - *Music players › Player* (`player`, `PlayerChoiceCombo`): Automatic, Apple Music and Spotify always, every player
+    sharing now and the current choice (the Mac's `Choice.offered`). `FollowedSessionSource` sits between GSMTC and the
+    monitor: only the chosen player's sessions are handed on, and a new choice moves the monitor at once. The other
+    players' sessions keep the change notifications GSMTC's wrapper always subscribes to, but nothing reads what they
+    play. The Mac's web and local player switches exist for macOS permission prompts and have no Windows counterpart.
+  - *Timing › Ranking*: the Mac's "Prefer word timing" and "Prefer word-timed LRCLIB" (`custom.preferWordTiming`,
+    `custom.preferWordTimedLRCLIB`) are retired on the Mac (LyricSources.swift: "no longer read: word and mixed timing
+    always rank first, with LRCLIB after Music's own lyrics"), so Windows has neither key nor switch; the Ranking card
+    carries the Mac's ranking text (`LyricSourceSnapshot.RankingText`).
 - **Live preview** (`SettingsPreview`, `Lunalyr.Shell.Rendering.SettingsPreviewRenderer`): at the top of Lyric style,
   the scene on the wallpaper (the controller's scene, clock, background and the composition Match the music chose)
   drawn by the wallpaper's own layers into a 640×360 offscreen surface on its own thread at 15 fps, laid out as a
@@ -677,9 +696,9 @@ theme setting and `--theme` apply as in Settings.
 | Step | What it shows and does |
 |---|---|
 | Welcome | A drawn desktop in an album's colours with two sample lines lit word by word, "Welcome to Lunalyr" and the Mac's sentence. (The Mac's Calm/Bold settings look has no Windows counterpart and isn't offered.) |
-| Your music | Windows' counterpart of the Mac's permission step: Lunalyr follows any app that shares what it plays with Windows (the media controls by the volume flyout), **Windows asks nothing and Lunalyr needs no permission**, and it only reads the song and its position. "Sharing with Windows now" lists the players GSMTC has sessions for, each Playing/Paused, the one followed marked (`OnboardingPlayers`, read only, never a command). Follow shows Settings › Music players' choice as it is there ("Automatic", not changeable yet). Continue asks nothing of anyone. |
+| Your music | Windows' counterpart of the Mac's permission step: Lunalyr follows any app that shares what it plays with Windows (the media controls by the volume flyout), **Windows asks nothing and Lunalyr needs no permission**, and it only reads the song and its position. "Sharing with Windows now" lists the players GSMTC has sessions for, each Playing/Paused, the one followed marked (`OnboardingPlayers`, read only, never a command). Follow is Settings › Music players' Player, the same setting (`player`, `PlayerChoiceCombo`): Automatic, Apple Music, Spotify, each player sharing now and the current choice; with one player chosen the others are listed as "Not followed: Lunalyr follows … only" and what they play isn't read. Continue asks nothing of anyone. |
 | Pick a look | The Mac's look step: the live preview (Settings' `SettingsPreview`, 320 wide, drawn only on this step and while the window is visible), every wallpaper type as a tile (`backgroundMode`; Settings' own tile grid, so Image or video with nothing imported opens the file picker and imports), the Layout menu (`lyricComposition`, Match the music first) and a line on what the type draws (or the import's progress or failure). The wallpaper follows at once. |
-| Lyrics & readings | Where lyrics come from (lyric services such as LRCLIB, sent only the song's title, artist, album and length; Windows has no Apple Music lyrics of its own), nudging the timing from the tray panel or with the two shortcuts (labelled as this keyboard types them, e.g. Win+Ctrl+Alt+[), readings Display and Language (`romanizationDisplay`, `romanizationLanguage`), and that translations arrive in a later build and lyrics are never sent anywhere to be translated. |
+| Lyrics & readings | Where lyrics come from (lyric services such as LRCLIB, sent only the song's title, artist, album and length; Windows has no Apple Music lyrics of its own), nudging the timing from the tray panel or with the two shortcuts (labelled as this keyboard types them, e.g. Win+Ctrl+Alt+[), readings Display and Language (`romanizationDisplay`, `romanizationLanguage`), and the Mac's "Show translations under lyrics" checkbox (`showTranslations`) with its caption: translations that come with the lyrics, never sent anywhere to be translated. |
 | The tray | The Mac's menu-bar step: a picture of the taskbar's corner (the overflow ^, Lunalyr's icon lit, the clock, and the tray lyric strip while it is on); Lunalyr lives in the notification area with no taskbar button once Settings is closed, may be under ^ and can be dragged onto the taskbar to stay pinned, and opening it again brings back Settings. Switches: Lyric by the tray (`trayLyric`) and Launch at login. |
 | Done | The Mac's words: "“Title” is playing, so its lyrics are on your desktop now." or "Play a song in any music app and its lyrics appear on your desktop."; the players again and "Wallpaper: …" with what it draws; "Settings has the rest…" (first run) or "You can change all of this in Settings." (again). |
 
@@ -841,7 +860,20 @@ actions and notes of `LunalyrExtras.swift`. Logic in `src/Lunalyr.Shell/Extras/`
 `lyricsHidden` (kept across launches, as the Mac's): the renderer fades the wallpapers' lyric layer out over 0.45 s
 and back over 0.6 s (`RenderEngine.SetLyricsShown`, the Mac's `LyricVisibility`, multiplied with the desktop player's
 focus), the text backing goes with it, and the floating window hides. A launch with them hidden starts hidden. The
-settings preview still shows the lyrics (the Mac's preview follows Hide); Windows has no mirroring.
+settings preview still shows the lyrics (the Mac's preview follows Hide).
+
+**While a display is mirrored** (`hideLyricsWhileMirroring`, the Mac's `custom.hideLyricsWhileMirroring`): Windows'
+counterpart of a mirror set is a duplicated display (Win+P › Duplicate, a projector, a TV, a wireless display), one
+DisplayConfig source shown on two or more monitors (`DisplayMirroring`, read only, never changed). The tray window's
+`WM_DISPLAYCHANGE` reads it at once and again 2 s later (the Mac's screen observer is on Verso lines, so this is
+re-implemented from its behaviour). While one is, the lyrics fade from every wallpaper and the floating window hides
+(`AppController.SetHiddenByMirroring`); the user's own Hide is untouched. `LunalyrExtras` keeps the Mac's state machine:
+Show lyrics anyway holds for that mirroring, a lapse under 10 s is the same mirroring and says nothing again, the HUD
+says "Lyrics hidden while a display is mirrored" once, and the show/hide action reads "Show lyrics anyway" while
+mirroring is what hides them. Settings › General has the switch with the Mac's caption (what mirroring is doing now)
+and, while mirroring hides the lyrics, Show lyrics anyway. The Mac asks once, in its menu-bar banner, whether to keep
+hiding; Windows has no such banner, so the choice is the switch (on until chosen). Not tried live: duplicating a
+display on the development PC would change Windows' settings.
 
 ### `LunalyrIntents.swift`
 

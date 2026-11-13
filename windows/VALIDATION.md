@@ -174,3 +174,17 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | High contrast on the new rows and the welcome | theme resources only; needs the owner's contrast theme | — |
 | Wallpaper cost per mode, playing and idle | PC, offscreen (`tools/WallpaperCost`) | `docs/measurements/m8-wallpaper-cost/cost.md` |
 | Flaky tests from the handover | fixed by cause (two app races, two early reads, an offscreen wall-clock budget, a GPU-contention pixel comparison moved to WARP) | `docs/milestones/M8.md` "Flaky tests" |
+
+## Readings, Music players and Timing: the last rows (`port/lyrics-players-gaps`)
+
+| Item | Status | Evidence |
+|---|---|---|
+| Import reading LRC: readings join the lines showing by time, saved as the recording's pin, source and offset kept; unreadable or unmatched files change nothing | unit | `tests/Lunalyr.Shell.Tests/LyricToolsTests.cs` (three tests) |
+| Player: Automatic, or one chosen player followed alone; other players' sessions never handed on or read; a new choice moves the monitor at once; the welcome's Follow is the same setting | unit (silent fake sessions) | `PlayerChoiceTests`, `FollowedSessionSourceTests`, `AppControllerTests.AChosenPlayerIsFollowedAndTheOthersAreLeftAlone`, `WelcomeTests.ThePlayersStepMarksTheChosenPlayerAndLeavesTheOthersUnread` |
+| Player with real players (Spotify, a browser, Apple Music) | live: needs the owner's players | — |
+| Hide lyrics while a display is mirrored: the Mac's state machine, the controller's fade, the floating window | unit | `tests/Lunalyr.Shell.Tests/Extras/MirroringTests.cs`, `AppControllerHideLyricsTests` |
+| Mirroring read from a real duplicated display (Win+P › Duplicate) | live: duplicating a display would change Windows' settings on the development PC | — |
+| Show translations under lyrics: drawn in every layout only while shown; rolling stages keep the band clear; a song without translations draws as before; no allocation per frame | unit (offscreen, Direct2D) | `tests/Lunalyr.Render.Compositions.Tests/TranslationRenderTests.cs`, `ArrivalStackTests.RollingWordsKeepClearOfTheTranslationBand`, `AppSettingsTests.TranslationsAreOnByDefaultAndPersist` |
+| Translations as drawn (Editorial, Spoken, Hinge, a line-timed line) | PC, offscreen PNGs (`LUNALYR_TRANSLATION_SHOTS`); not kept in the repo | `TranslationRenderTests.ShotsForAPersonToLookAt` |
+| Settings › Readings, Music players and Timing in light and dark (quiet captures) | not done: Smart App Control blocked the freshly built `Lunalyr.exe` on 14 Nov 2026 (Code Integrity events 3033, 3077, 3118); Windows' security settings were left alone | — |
+| Prefer word timing, Prefer word-timed LRCLIB | not applicable: retired on the Mac (its keys are no longer read); Timing › Ranking carries the Mac's ranking text | `docs/APP-SHELL.md` "Settings window" |

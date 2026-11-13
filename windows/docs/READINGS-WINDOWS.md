@@ -181,6 +181,21 @@ So `LyricMachineTranslator.SystemTranslator()` returns null and every song is sk
 line map (same SHA-256 cache key bytes as the Mac), disk cache and coordinator are ported behind `ILyricTranslator`,
 so a translator can be plugged in later. Nothing calls the cloud.
 
+**Translations that come with the lyrics are shown** (Settings › Readings › Show translations under lyrics,
+`showTranslations`, on by default, the Mac's `custom.showTranslations`): a bilingual LRC's, a TTML's (inline or
+Apple-supplied, in a language the listener reads, `TranslationLanguages`), NetEase's `tlyric`, QQ's `trans` or a local
+`.tr.lrc`, all parsed into `LyricLine.Translation`. As on the Mac (`LyricLayerView`, Lunalyr's own lines): under its line
+in the reading colour at 0.34 × base × the size slider, up to 80% of the stage wide, arriving and leaving with the line
+(line plans and the stage layouts fit it with the line and its reading); a rolling stage (Spoken, Cascade, Cutout)
+keeps a band at its foot whenever the song has any translation, places its words above it, and shows the translation
+there at 0.30, two lines at most (`LineTranslations`, `LyricCompositionLayer.Translations.cs`). The Mac's "Translate on
+this Mac" controls are not shown.
+
+**Import reading LRC** (Settings › Readings): the Mac's `LyricsViewModel.importRomanization` is on Verso-attributed
+lines, so it is re-implemented from its behaviour (`AppController.ImportReadings`): the file's readings attach to the
+lyrics as the lookup gave them (before presentation), by time (`LocalSidecars.AttachingReadings`, Lunalyr's own, ported
+earlier), and the result is saved as the recording's pin. Its messages are worded afresh.
+
 ## Re-implemented from behaviour (Verso-attributed lines)
 
 - `RomanizationOptions` and the outer `readings` loop and `romanize` dispatch of `LyricRomanization.swift`.

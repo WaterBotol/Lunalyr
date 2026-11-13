@@ -51,6 +51,36 @@ public sealed class FollowedSessionSourceTests : IDisposable
         Assert.Empty(edge.Commands);
     }
 
+    // Ported from SpotifyPlayerTests.swift: testChoosingOnePlayerNeverMessagesTheOther (Windows' sessions for the Mac's
+    // scripted apps, silent fakes whose commands only record that they were called; the Mac's idle prompt, "Play a
+    // song in Spotify", has no Windows counterpart).
+    [Fact]
+    public async Task ChoosingOnePlayerNeverMessagesTheOther()
+    {
+        var spotify = _source.Add(new FakeMediaSession("Spotify.exe", _time).SetTrack("Blinding Lights").SetPlayback(PlaybackStatus.Paused));
+        var music = _source.Add(new FakeMediaSession("AppleInc.AppleMusicWin_nzyj5cx40ttqa!App", _time).SetTrack("Song")
+            .SetPlayback(PlaybackStatus.Playing));
+        using var followed = new FollowedSessionSource(_source);
+        using var monitor = new NowPlayingMonitor(followed, _time);
+        monitor.Start();
+        Assert.Same(music, monitor.Session);
+
+        followed.SetChoice("spotify");
+        Assert.Same(spotify, monitor.Session);
+        Assert.Equal("Blinding Lights", monitor.Track?.Title);
+        var reads = (music.Reads, music.PropertyReads);
+        music.SetTrack("Song").SetPlayback(PlaybackStatus.Playing);
+        music.RaiseTimelineChanged();
+        await monitor.Session!.TryTogglePlayPauseAsync(); // the fake only records it
+        Assert.Equal(reads, (music.Reads, music.PropertyReads)); // an unchosen player is never read
+        Assert.Empty(music.Commands); // nor sent anything
+        Assert.Equal(["toggle"], spotify.Commands);
+
+        followed.SetChoice(PlayerChoice.Automatic);
+        Assert.Same(music, monitor.Session);
+        Assert.True(music.Reads > reads.Reads);
+    }
+
     [Fact]
     public void AChosenPlayerThatIsntSharingMeansNothingIsFollowedUntilItIs()
     {

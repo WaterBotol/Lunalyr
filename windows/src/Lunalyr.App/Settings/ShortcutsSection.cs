@@ -8,14 +8,15 @@ using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
 
-/// <summary>
-/// Settings › General's Hide lyrics and keyboard shortcuts (milestone 7; the Mac's ExtrasInspector "Lyrics on screen"
-/// and "Keyboard shortcuts"): the master switch (off until switched on), the keys, one row per shortcut with its
-/// combination as the keyboard in use types it and a switch of its own, and a calm note when another app holds one.
-/// </summary>
 /// <summary>The app's extras (null until the tray window exists) and a way to run an action on their thread.</summary>
 internal sealed record MirroringHooks(Func<LunalyrExtras?> Extras, Action<Action<LunalyrExtras>> OnExtrasThread);
 
+/// <summary>
+/// Settings › General's Hide lyrics (and hiding them while a display is mirrored) and keyboard shortcuts (milestone 7;
+/// the Mac's ExtrasInspector "Lyrics on screen" and "Keyboard shortcuts"): the master switch (off until switched on), the
+/// keys, one row per shortcut with its combination as the keyboard in use types it and a switch of its own, and a calm
+/// note when another app holds one.
+/// </summary>
 internal static class ShortcutsSection
 {
     public static void Add(StackPanel page, SettingsContext ctx, GlobalHotkeys? hotkeys, MirroringHooks? mirroring = null)
