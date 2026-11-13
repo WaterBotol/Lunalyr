@@ -128,5 +128,16 @@ int main(void) {
     assert(vc_region_covered(visible,many,VC_MAX_COVERS+8,24,.06)==0);
     many[0]=(VCBox){0,25,1512,945};
     assert(vc_region_covered(visible,many,VC_MAX_COVERS+8,24,.06)==1);
+    /* With the card's size set, the zones hug the card. */
+    vc_hover_set_card(640,216);
+    {   VCBox big=(VCBox){0,0,2560,1440},hot=vc_hover_hot_zone(big),keep=vc_hover_keep_zone(big);
+        assert(hot.width==640+2*VC_HOVER_REVEAL_MARGIN&&hot.height==216+2*VC_HOVER_REVEAL_MARGIN);
+        assert(hot.x==(2560-hot.width)/2&&hot.y==(1440-hot.height)/2);
+        assert(keep.width==640+2*VC_HOVER_KEEP_MARGIN&&keep.width<vc_control_panel_frame(big).width&&keep.height<vc_control_panel_frame(big).height);
+        VCBox tiny=(VCBox){0,0,500,300};
+        assert(vc_hover_hot_zone(tiny).width==500); /* never past the screen */
+    }
+    vc_hover_set_card(0,0);
+    assert(vc_hover_keep_zone((VCBox){0,0,2560,1440}).width==780); /* unset: as before */
     puts("Held-button hover gating and window-coverage geometry passed.");
 }

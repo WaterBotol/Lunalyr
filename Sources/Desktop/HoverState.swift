@@ -136,6 +136,9 @@ final class HoverState: ObservableObject {
             guard let id = screen.versoDisplayID else { return nil }
             return VCDisplayFrame(displayID: id, frame: screen.versoFrame)
         }
+        // The zones follow the card as it is now (taller with search or the queue open).
+        vc_hover_set_card(Double(DesktopPlayerView.width),
+                          Double(DesktopPlayerView.cardHeight(DesktopPlayerModel.shared.pane)))
         let point = VCPoint(x: Double(location.x), y: Double(location.y))
         let index = displays.withUnsafeBufferPointer { vc_display_at_point($0.baseAddress, Int32($0.count), point) }
         guard index >= 0 else { reset(); return }

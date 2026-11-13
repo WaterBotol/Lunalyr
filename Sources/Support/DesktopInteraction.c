@@ -8,9 +8,25 @@ static int valid(VCBox b) {
 static int contains(VCBox b,VCPoint p) {
     return valid(b)&&isfinite(p.x)&&isfinite(p.y)&&p.x>=b.x&&p.y>=b.y&&p.x<b.x+b.width&&p.y<b.y+b.height;
 }
+static double card_w=0,card_h=0;
+void vc_hover_set_card(double width,double height) {
+    card_w=(isfinite(width)&&width>0)?width:0;
+    card_h=(isfinite(height)&&height>0)?height:0;
+}
+/* The card centred on the screen, grown by `margin`, kept on the screen. */
+static VCBox card_zone(VCBox s,double margin) {
+    double w=fmin(s.width,card_w+2*margin),h=fmin(s.height,card_h+2*margin);
+    return (VCBox){s.x+(s.width-w)/2,s.y+(s.height-h)/2,w,h};
+}
 VCBox vc_hover_hot_zone(VCBox s) {
     if(!valid(s))return (VCBox){0};
+    if(card_w>0&&card_h>0)return card_zone(s,VC_HOVER_REVEAL_MARGIN);
     return (VCBox){s.x+s.width*.35,s.y+s.height*.35,s.width*.30,s.height*.30};
+}
+VCBox vc_hover_keep_zone(VCBox s) {
+    if(!valid(s))return (VCBox){0};
+    if(card_w>0&&card_h>0)return card_zone(s,VC_HOVER_KEEP_MARGIN);
+    return vc_control_panel_frame(s);
 }
 VCBox vc_control_panel_frame(VCBox s) {
     if(!valid(s))return (VCBox){0};
@@ -35,7 +51,7 @@ uint32_t vc_hover_update(VCHoverSession *s,const VCDisplayFrame *screens,int cou
     uint32_t display=screens[index].displayID;
     if(s->activeDisplayID!=display) {s->activeDisplayID=0;s->deadline=0;}
     int hot=contains(vc_hover_hot_zone(screens[index].frame),mouse);
-    int controls=s->activeDisplayID==display&&contains(vc_control_panel_frame(screens[index].frame),mouse);
+    int controls=s->activeDisplayID==display&&contains(vc_hover_keep_zone(screens[index].frame),mouse);
     if(hot||controls) {
         s->activeDisplayID=display;
         s->deadline=now+(isfinite(linger)?fmax(0,fmin(2,linger)):.7);

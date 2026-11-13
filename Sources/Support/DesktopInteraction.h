@@ -7,6 +7,14 @@ typedef struct { uint32_t displayID; VCBox frame; } VCDisplayFrame;
 typedef struct { uint32_t activeDisplayID; double deadline; } VCHoverSession;
 /* AppKit global coordinates, including negative/stacked screen origins. */
 VCBox vc_hover_hot_zone(VCBox screen);
+/* The player card's size, centred on each screen. Once set (> 0), the reveal
+   zone is the card grown by VC_HOVER_REVEAL_MARGIN and the zone that keeps a
+   revealed player up is the card grown by VC_HOVER_KEEP_MARGIN, instead of
+   the middle 30 % of the screen and the whole control panel. */
+#define VC_HOVER_REVEAL_MARGIN 24.0
+#define VC_HOVER_KEEP_MARGIN 56.0
+void vc_hover_set_card(double width, double height);
+VCBox vc_hover_keep_zone(VCBox screen);
 VCBox vc_control_panel_frame(VCBox screen);
 int vc_display_at_point(const VCDisplayFrame *screens, int count, VCPoint point);
 /* Classify the actual mouse-down target supplied by AppKit, not every window
