@@ -66,16 +66,26 @@ final class LyricLookupTraceTests: XCTestCase {
             try JSONEncoder.trace.encode(document).write(to: output.appendingPathComponent(name), options: .atomic)
             rows.append(Self.row(document, file: name))
         }
-        let header = "| # | Song | " + options.enabled.map(\.title).joined(separator: " | ") + " | Final pick | ms |\n"
-            + "|---|---|" + options.enabled.map { _ in "---" }.joined(separator: "|") + "|---|---|\n"
-        let numbered = rows.enumerated().map { "| \($0 + 1) " + $1 }.joined(separator: "\n")
-        let summary = "# Lunalyr lookup trace\n\n"
-            + "\(songs.count) songs from `\(songsFile.lastPathComponent)`, \(ISO8601DateFormatter().string(from: Date())). "
-            + "Mode: Accuracy first (smart), \(everySource ? "search (every source asked)" : "automatic (sources stopped once they cannot change the pick)"), "
-            + "iTunes storefront `\(storefront)`, empty cache, nothing pinned.\n\n"
-            + "Cells: **PICK** shown, `#n` accepted at rank n, `rej …` failed the recording check, `none` no match, "
-            + "`stopped` not needed, `timeout`, `error: …`; then the timing tier (word, mixed, line, phrase-timed, plain, faulty).\n\n"
-            + header + numbered + "\n"
+        // Built from parts joined once: long `+` chains time out in Xcode 16's type checker.
+        let sourceNames: [String] = options.enabled.map(\.title)
+        let dashes: [String] = options.enabled.map { _ in "---" }
+        let header: String = ["| # | Song | ", sourceNames.joined(separator: " | "), " | Final pick | ms |\n",
+                              "|---|---|", dashes.joined(separator: "|"), "|---|---|\n"].joined()
+        var numberedRows: [String] = []
+        for (index, row) in rows.enumerated() { numberedRows.append("| \(index + 1) \(row)") }
+        let numbered: String = numberedRows.joined(separator: "\n")
+        let mode: String = everySource ? "search (every source asked)" : "automatic (sources stopped once they cannot change the pick)"
+        let when: String = ISO8601DateFormatter().string(from: Date())
+        let parts: [String] = [
+            "# Lunalyr lookup trace\n\n",
+            "\(songs.count) songs from `\(songsFile.lastPathComponent)`, \(when). ",
+            "Mode: Accuracy first (smart), \(mode), ",
+            "iTunes storefront `\(storefront)`, empty cache, nothing pinned.\n\n",
+            "Cells: **PICK** shown, `#n` accepted at rank n, `rej …` failed the recording check, `none` no match, ",
+            "`stopped` not needed, `timeout`, `error: …`; then the timing tier (word, mixed, line, phrase-timed, plain, faulty).\n\n",
+            header, numbered, "\n",
+        ]
+        let summary: String = parts.joined()
         try Data(summary.utf8).write(to: output.appendingPathComponent("summary.md"), options: .atomic)
         print("Lookup trace written to \(output.path)")
     }
@@ -83,8 +93,17 @@ final class LyricLookupTraceTests: XCTestCase {
     private static func row(_ document: LyricLookupTraceDocument, file: String) -> String {
         let song = "[\(escape(document.song.title)) — \(escape(document.song.artist))](\(file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file))"
         let cells = document.digest.map { escape(LyricLookupTraceDocument.cell($0)) }
-        let pick = document.pick.map { "\($0.source) · \($0.timing)" + ($0.viaOriginalTitle ? " (orig. title)" : "") } ?? "**nothing**"
-        return "| " + ([song] + cells + [pick, document.elapsedMs.map(String.init) ?? ""]).joined(separator: " | ") + " |"
+        var pick = "**nothing**"
+        if let chosen = document.pick {
+            let via: String = chosen.viaOriginalTitle ? " (orig. title)" : ""
+            pick = "\(chosen.source) · \(chosen.timing)\(via)"
+        }
+        let elapsed: String = document.elapsedMs.map { String($0) } ?? ""
+        var columns: [String] = [song]
+        columns.append(contentsOf: cells)
+        columns.append(pick)
+        columns.append(elapsed)
+        return "| \(columns.joined(separator: " | ")) |"
     }
 
     private static func escape(_ text: String) -> String {

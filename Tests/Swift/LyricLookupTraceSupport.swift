@@ -97,8 +97,10 @@ struct LyricLookupTraceDocument: Codable {
                 let label = event.variant ?? "listed title"
                 if !variants.contains(label) { variants.append(label) }
             }
-            let requests = mine.compactMap(\.request).map { request in
-                "\(request.status.map(String.init) ?? request.error ?? "?") \(request.ms) ms \(request.url)"
+            let requests = mine.compactMap(\.request).map { request -> String in
+                var outcome = "?"
+                if let status = request.status { outcome = String(status) } else if let error = request.error { outcome = error }
+                return "\(outcome) \(request.ms) ms \(request.url)"
             }
             return SourceDigest(source: id, state: state, verdict: verdict,
                                 elapsedMs: mine.last { $0.kind == .sourceEnd }?.elapsedMs, variants: variants,

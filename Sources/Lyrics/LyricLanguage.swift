@@ -210,7 +210,9 @@ actor OriginalTitles {
                     guard let local = await fetch("lookup", ["id": String(id), "country": Self.original.country,
                                                               "lang": Self.original.language]) else { return nil }
                     let name = Self.originalName(local.first { $0.trackId == id }, query: query)
-                    LyricTrace.note("iTunes JP name for “\(match.trackName ?? "")”: " + (name.map { "“\($0.title)”" } ?? "the same, or not native script"))
+                    var found = "the same, or not native script"
+                    if let name { found = "“\(name.title)”" }
+                    LyricTrace.note("iTunes JP name for “\(match.trackName ?? "")”: \(found)")
                     return .some(name)
                 }
                 if let found = Self.nativeMatch(listed, query: query) {
@@ -376,8 +378,7 @@ extension LyricsFetcher {
                 var kept = first
                 kept.languageUnchecked = true
                 if LyricTrace.isOn {
-                    LyricTrace.candidate(kept, query: query, kind: .variantResult, message: "kept; no original-title search: "
-                        + "the artist's country is not known yet (asked in the background); not saved as the song's choice")
+                    LyricTrace.candidate(kept, query: query, kind: .variantResult, message: "kept; no original-title search: the artist's country is not known yet (asked in the background); not saved as the song's choice")
                 }
                 return kept
             }

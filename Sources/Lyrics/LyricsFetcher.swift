@@ -976,8 +976,7 @@ final class LyricsFetcher {
             LyricTrace.hit(LyricTraceHit(title: title, artist: artist, album: payload.albumName, duration: payload.duration,
                                          score: candidate.score, titleSimilarity: LyricQuery.similarity(query.title, title),
                                          artistSimilarity: query.artistScore(artist),
-                                         verdict: (rejection(candidate, query: query) ?? "passes the recording check")
-                                            + " · " + LyricTraceCandidate.timing(result)))
+                                         verdict: "\(rejection(candidate, query: query) ?? "passes the recording check") · \(LyricTraceCandidate.timing(result))"))
             return candidate
         }
         let offer = bestOffer(candidates, query: query)
