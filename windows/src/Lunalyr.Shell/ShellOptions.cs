@@ -103,6 +103,16 @@ public sealed record ShellOptions
     public string? HudCapturePath { get; init; }
 
     /// <summary>
+    /// <c>--onboarding-capture &lt;file&gt;</c>: open the welcome (as a first run sees it) without activating it, at the bottom
+    /// of the z-order, at <see cref="OnboardingStep"/>; once it has settled, write the window as a PNG (PrintWindow) and quit.
+    /// Nothing is recorded as seen. For checks; not forwarded to a running instance.
+    /// </summary>
+    public string? OnboardingCapturePath { get; init; }
+
+    /// <summary><c>--onboarding-step &lt;name&gt;</c>: the step <c>--onboarding-capture</c> shows (welcome, music, look, lyrics, tray, done; or 1–6).</summary>
+    public Onboarding.OnboardingStep? OnboardingStep { get; init; }
+
+    /// <summary>
     /// <c>lunalyr://…</c> arguments, and every argument after <c>--link</c>: links to act on, each checked before
     /// anything is done (<c>Lunalyr.Shell.Extras.LunalyrLink</c>).
     /// </summary>
@@ -206,6 +216,20 @@ public sealed record ShellOptions
                         else options = options with { HudCapturePath = Path.GetFullPath(hud.Trim()) };
                     }
                     break;
+                case "--onboarding-capture":
+                    if (Value() is { } welcome)
+                    {
+                        if (welcome.Trim().Length == 0) problems.Add("--onboarding-capture needs a file.");
+                        else options = options with { OnboardingCapturePath = Path.GetFullPath(welcome.Trim()) };
+                    }
+                    break;
+                case "--onboarding-step":
+                    if (Value() is { } stepName)
+                    {
+                        if (Onboarding.OnboardingSteps.Parse(stepName) is { } step) options = options with { OnboardingStep = step };
+                        else problems.Add($"--onboarding-step {stepName}: expected welcome, music, look, lyrics, tray or done (or 1–6).");
+                    }
+                    break;
                 case "--stats":
                     if (Value() is { } stats)
                     {
@@ -250,6 +274,8 @@ public sealed record ShellOptions
             }
         }
 
+        if (options.OnboardingStep is not null && options.OnboardingCapturePath is null)
+            problems.Add("--onboarding-step goes with --onboarding-capture; on its own it does nothing.");
         return options with { Links = links, Problems = problems };
     }
 
