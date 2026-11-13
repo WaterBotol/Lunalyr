@@ -116,9 +116,13 @@ struct SpokenTypographyView: View {
         let stage = CGSize(width: geometry.size.width, height: max(1, geometry.size.height - bottomInset))
         // Rank 0 -- the word in focus -- sits here; every other word is
         // stacked above or below it by measured size (`RollingStack`).
+        // Cutout's labels are tall, and the words already sung stack above
+        // the one in focus, so its focus sits a little lower to keep the
+        // collage off the top edge.
+        let focusHeight: CGFloat = composition == .cutout ? 0.59 : 0.54
         let anchor = CGPoint(x: stage.width * 0.5,
-                             y: stage.height * 0.54 + CGFloat(vc_rolling_baseline(style, 0)) * baseSize)
-        return RollingStackLayout(anchor: anchor, gap: baseSize * 0.16) {
+                             y: stage.height * focusHeight + CGFloat(vc_rolling_baseline(style, 0)) * baseSize)
+        return RollingStackLayout(anchor: anchor, gap: baseSize * Self.gap(composition)) {
             ForEach(prepared) { word in
                 let rank = position - 1 - Double(word.index)
                 if rank >= -2 && rank <= 5.2 {
@@ -136,6 +140,13 @@ struct SpokenTypographyView: View {
         }
         .coordinateSpace(.named(RollingStack.space))
         .frame(width: geometry.size.width, height: geometry.size.height)
+    }
+
+    /// The clear space between neighbouring words, in type sizes. Cutout's
+    /// labels are tilted blocks, so they get more air or their corners
+    /// nearly meet.
+    static func gap(_ composition: LyricComposition) -> CGFloat {
+        composition == .cutout ? 0.30 : composition == .cascade ? 0.18 : 0.16
     }
 
     /// A rolling window can show words from more than one line.
@@ -246,11 +257,18 @@ struct RollingTokenState {
         let focus = exp(-rank * rank * 2.4)
         // Hold against the time-based fade while the tile is lit. The
         // stage still fades words as they scroll off the top.
-        let visible = max(pose.opacity, highlightOpacity * vc_rolling_rank_opacity(rank))
+        let visible = max(pose.opacity * recede(rank, composition: composition),
+                          highlightOpacity * vc_rolling_rank_opacity(rank))
         let shown = presentation.opacity * (presentation.preview ? 1 : visible)
         // Settled words keep a slow float; the word in focus breathes instead.
         let drift = vc_idle_drift(token.seed, time, reduceMotion ? 0 : 0.55 * (1 - focus))
-        let columnShift = composition == .spoken ? 0 : -stageWidth * 0.13
+        // Cascade is a flush column on the left third (the right third for
+        // a right-to-left line): big words on the axis, small ones tucked
+        // in a little. Cutout's collage sits a little left of centre.
+        let direction: CGFloat = token.rightToLeft ? -1 : 1
+        let columnShift: CGFloat = composition == .spoken ? 0
+            : composition == .cascade ? -stageWidth * 0.19 * direction : -stageWidth * 0.10
+        let indent: CGFloat = composition == .cascade && !token.hero ? baseSize * 0.34 * direction : 0
         let scale = pose.scale * drift.scale
         let angle = pose.angle + drift.angle
         // The entrance exactly as WordEntrance will draw it: its travel,
@@ -263,16 +281,30 @@ struct RollingTokenState {
         // Where the stack puts this word comes from its measured size; the
         // breath and float ride on top as a small lift inside the gap.
         let slot = RollingStack.Slot(rank: rank, scale: scale, angle: angle,
-            dx: columnShift + CGFloat(pose.x + drift.x) * baseSize,
+            dx: columnShift + indent + CGFloat(pose.x + drift.x) * baseSize,
             lift: CGFloat(pose.y - vc_rolling_baseline(style, rank) + drift.y) * baseSize,
             entrance: travel.offset, turn: travel.turn, entranceScale: travel.scale,
-            tilt: token.tile && !reduceMotion ? 1.2 : 0, shown: shown)
+            tilt: token.tile && !reduceMotion ? 1.2 : 0, shown: shown,
+            align: composition == .cascade ? direction : 0)
         return RollingTokenState(presentation: presentation, pose: pose, shown: shown, focus: focus, scale: scale,
                                  angle: angle, maxTurn: maxTurn, slot: slot)
     }
 }
 
 extension RollingTokenState {
+    /// Words already sung step back in two tiers, so the word being sung
+    /// is plainly the one in front: the last word at about three quarters,
+    /// the one before at a little over half. Cascade and Cutout, whose
+    /// units are taller, retire them sooner too, before they reach the top
+    /// of the stage. A held highlight is not dimmed (see `make`).
+    static func recede(_ rank: Double, composition: LyricComposition) -> Double {
+        let back = min(max(rank, 0), 1) * 0.26 + min(max(rank - 1, 0), 1) * 0.16
+        guard composition != .spoken else { return 1 - back }
+        let retire = composition == .cutout ? Easing.smoothstep((rank - 1.4) / 1.0)
+            : Easing.smoothstep((rank - 1.7) / 1.2)
+        return (1 - back) * (1 - retire)
+    }
+
     /// A glued run's syllables or characters arriving one by one, as a
     /// scattered run's do: each token's opacity, relative to the run's own,
     /// over its share of the word (see `TokenReveal`). A run of Chinese or
@@ -380,7 +412,14 @@ struct RollingUnit: View {
                 if let readingWidth { reading.wrapping(at: readingWidth) } else { reading }
             }
         }
-        .padding(.horizontal, token.tile ? 11 : 2).padding(.vertical, token.tile ? 3 : 0)
+        .padding(.horizontal, token.tile ? Self.tilePadding(token.pointSize).width : 2)
+        .padding(.vertical, token.tile ? Self.tilePadding(token.pointSize).height : 0)
+    }
+
+    /// A Cutout label's padding around its word: in proportion to the
+    /// type, so a label on a large stage is not a tight sliver.
+    static func tilePadding(_ pointSize: CGFloat) -> CGSize {
+        CGSize(width: max(11, pointSize * 0.26), height: max(3, pointSize * 0.08))
     }
 
     /// Where a unit's tile has pressed in, at its strength.
@@ -434,6 +473,9 @@ enum RollingStack {
         var tilt: Double = 0
         /// How visible the unit is; not used for placement.
         var shown = 1.0
+        /// Which edge sits on the anchor's column: 0 centres the unit, 1
+        /// puts its leading (left) edge there, -1 its right edge.
+        var align: CGFloat = 0
     }
 
     /// The largest entrance turn for a unit, in degrees: the ends of the
@@ -451,7 +493,7 @@ enum RollingStack {
             }
         }
         let readingWidth = reading.map { width($0, pointSize * 0.56) } ?? 0
-        let unitWidth = max(width(text, pointSize), readingWidth) + (tile ? 22 : 4)
+        let unitWidth = max(width(text, pointSize), readingWidth) + (tile ? 2 * RollingUnit.tilePadding(pointSize).width : 4)
         let unitHeight = pointSize * 1.3 + (reading == nil ? 0 : pointSize * 0.75)
         let ratio = min(1, 0.6 * unitHeight / max(1, unitWidth))
         return min(12, asin(ratio) * 180 / .pi)
@@ -496,7 +538,8 @@ enum RollingStack {
             origin = stack[members.count - 1] + CGFloat(slots[last].rank) * (extent(sizes[last], slots[last]) + gap)
         }
         for (k, member) in members.enumerated() {
-            result[member] = CGPoint(x: anchor.x + slots[member].dx,
+            let flush = slots[member].align * sizes[member].width * CGFloat(max(0, slots[member].scale)) / 2
+            result[member] = CGPoint(x: anchor.x + slots[member].dx + flush,
                                      y: anchor.y + stack[k] - origin + slots[member].lift)
         }
         return result

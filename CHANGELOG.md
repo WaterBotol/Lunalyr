@@ -12,6 +12,10 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+
+- Spoken, Cascade and Cutout: words already sung step back so the sung word leads; Cascade is a steady flush column with clearer large and small sizes; Cutout's labels get more room, scale with the type and stay clear of the top of the stage.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed
