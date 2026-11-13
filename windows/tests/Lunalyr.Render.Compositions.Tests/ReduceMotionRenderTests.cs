@@ -17,7 +17,10 @@ public sealed class ReduceMotionRenderTests : IDisposable
 {
     private const int Width = 960, Height = 540;
     private const float Scale = 1;
-    private readonly Offscreen _stage = new(Width, Height);
+    // WARP, Direct2D's software rasteriser: these compare frames pixel for pixel, and a hardware GPU shared with other
+    // processes now and then rasterises a pixel differently (see SpreadSetupRenderTests); WARP draws the same input the
+    // same way every time.
+    private readonly Offscreen _stage = new(Width, Height, warp: true);
     private readonly Sink _sink = new();
     private readonly Logger _logger;
     private static readonly Vector4 Background = Fixtures.Night.Base;
