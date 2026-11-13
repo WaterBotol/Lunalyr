@@ -279,6 +279,7 @@ internal sealed partial class AppHost
             StartVisualisers(controller);
             StartMusicVideo(controller);
             StartMotionCovers(controller);
+            StartDiscordAndTicker(controller);
             _controller = controller;
             QueueStatusUpdate();
             ExtrasReady();
@@ -523,6 +524,7 @@ internal sealed partial class AppHost
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             if (_options.FloatingCapturePath is { } capturePath) WriteFloatingCapture(capturePath);
+            await StopDiscordAndTickerAsync().ConfigureAwait(false);
             StopVisualisers();
             StopMusicVideo();
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);

@@ -210,7 +210,8 @@ public sealed partial record AppSettings
             RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
-        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating().NormalizedExtras();
+        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating().NormalizedExtras()
+            .NormalizedDiscord();
     }
 
     /// <summary>What the lyric lookup asks: the configured order (unknown names dropped, new sources appended) and the switched-on set.</summary>

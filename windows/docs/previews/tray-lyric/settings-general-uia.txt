@@ -1,0 +1,82 @@
+﻿WINDOW: Lunalyr tray lyric
+WINDOW: Lunalyr Settings
+ControlType.Pane: Non Client Input Sink Window
+ControlType.Pane: AppWindow Custom Title Bar
+ControlType.Button: Minimize
+ControlType.Button: Maximize
+ControlType.Button: Close
+ControlType.Text: Lunalyr Settings
+ControlType.Button: Close Navigation
+ControlType.Text: Look
+ControlType.ListItem: Lyric style
+ControlType.ListItem: Wallpaper
+ControlType.ListItem: Covers
+ControlType.Text: Words
+ControlType.ListItem: Timing
+ControlType.ListItem: Readings
+ControlType.Text: App
+ControlType.ListItem: Music players
+ControlType.ListItem: General
+ControlType.ListItem: Performance
+ControlType.ListItem: About
+ControlType.Text: General
+ControlType.Text: Appearance
+ControlType.Text: App theme
+ControlType.Text: How Lunalyr’s own windows look. This run shows them dark (--theme); your choice applies next time.
+ControlType.ComboBox: App theme | help: How Lunalyr’s own windows look. This run shows them dark (--theme); your choice applies next time.
+ControlType.Text: Startup
+ControlType.Text: Launch at login
+ControlType.Text: Start Lunalyr in the tray when you sign in to Windows.
+ControlType.Text: Arrives in milestone 8.
+ControlType.Button: Launch at login [Off] | help: Start Lunalyr in the tray when you sign in to Windows. Arrives in milestone 8.
+ControlType.Text: Updates
+ControlType.Text: Lunalyr 0.1.0
+ControlType.Text: Lunalyr checks for new versions and installs them when you agree.
+ControlType.Text: Arrives in milestone 8.
+ControlType.Button: Lunalyr 0.1.0 | help: Lunalyr checks for new versions and installs them when you agree. Arrives in milestone 8.
+ControlType.Text: Welcome
+ControlType.Text: Show welcome again
+ControlType.Text: Music players, a look and the tray.
+ControlType.Text: Arrives in a later build.
+ControlType.Button: Show welcome again | help: Music players, a look and the tray. Arrives in a later build.
+ControlType.Text: Tray & shortcuts
+ControlType.Text: Lyric by the tray
+ControlType.Text: The line being sung, in a small strip beside the taskbar’s clock. It never takes clicks or the keyboard.
+ControlType.Button: Lyric by the tray [On] | help: The line being sung, in a small strip beside the taskbar’s clock. It never takes clicks or the keyboard.
+ControlType.Text: Longest line
+ControlType.Text: Follows Pause wallpaper: a paused wallpaper says so there. Hidden behind full-screen apps.
+ControlType.Slider: Longest line | help: Follows Pause wallpaper: a paused wallpaper says so there. Hidden behind full-screen apps.
+ControlType.Text: Keyboard shortcuts
+ControlType.Text: Hide lyrics, pause the wallpaper or copy a lyric card from anywhere.
+ControlType.Text: Arrives in milestone 7.
+ControlType.Button: Keyboard shortcuts [Off] | help: Hide lyrics, pause the wallpaper or copy a lyric card from anywhere. Arrives in milestone 7.
+ControlType.Text: Discord & lyric card
+ControlType.Text: Show what I’m listening to on Discord
+ControlType.Text: Needs the Discord desktop app. Shows the line being sung.
+ControlType.Button: Show what I’m listening to on Discord [On] | help: Needs the Discord desktop app. Shows the line being sung.
+ControlType.Text: Connection
+ControlType.Text: Connected as fake-discord
+ControlType.Text: Status shows
+ControlType.ComboBox: Status shows
+ControlType.Text: Show the current lyric
+ControlType.Button: Show the current lyric [On]
+ControlType.Text: Show the album cover
+ControlType.Text: Looks the cover up by song and artist.
+ControlType.Button: Show the album cover [On] | help: Looks the cover up by song and artist.
+ControlType.Text: Show the progress bar
+ControlType.Button: Show the progress bar [On]
+ControlType.Text: Show a Play this song button
+ControlType.Text: Opens the song on Spotify, Apple Music, YouTube Music and more.
+ControlType.Button: Show a Play this song button [On] | help: Opens the song on Spotify, Apple Music, YouTube Music and more.
+ControlType.Text: Show a Get Lunalyr button
+ControlType.Button: Show a Get Lunalyr button [On]
+ControlType.Text: Keep showing while paused
+ControlType.Button: Keep showing while paused [Off]
+ControlType.Text: Lyric lead
+ControlType.Text: How far ahead of the music Discord shows the line.
+ControlType.Slider: Lyric lead | help: How far ahead of the music Discord shows the line.
+ControlType.Text: Lyric cards
+ControlType.Text: Save or copy a lyric as a picture, GIF or video.
+ControlType.Text: Arrives in milestone 7.
+ControlType.Button: Lyric cards | help: Save or copy a lyric as a picture, GIF or video. Arrives in milestone 7.
+ControlType.ScrollBar: Vertical

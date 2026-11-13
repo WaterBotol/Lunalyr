@@ -11,7 +11,7 @@ namespace Lunalyr.App.Settings;
 internal static class GeneralPage
 {
     public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
-                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null)
+                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null)
     {
         var page = Page();
         Section(page, "Appearance");
@@ -37,13 +37,11 @@ internal static class GeneralPage
             Button("Show Welcome…", () => { }), notYet: SettingsCopy.LaterBuild));
 
         Section(page, "Tray & shortcuts");
-        page.Children.Add(Card("Lyric in the tray", "The current line beside the tray icon.", "", FixedToggle(false),
-            notYet: SettingsCopy.Milestone7));
+        ExtrasSections.AddTrayLyric(page, ctx);
         ShortcutsSection.Add(page, ctx, hotkeys);
 
         Section(page, "Discord & lyric card");
-        page.Children.Add(Card("Discord status", "Show the song and line playing in your Discord status.", "", FixedToggle(false),
-            notYet: SettingsCopy.Milestone7));
+        ExtrasSections.AddDiscord(page, ctx, discord);
         page.Children.Add(Card("Lyric cards", "Save or copy a lyric as a picture, GIF or video.", "",
             Button("Make a Lyric Card…", () => { }), notYet: SettingsCopy.Milestone7));
         return page;

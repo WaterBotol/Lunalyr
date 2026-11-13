@@ -71,6 +71,9 @@ public sealed class AppSettingsTests
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
             "globalShortcuts", "globalShortcutModifiers", "globalShortcutsOff", "globalShortcutsOn", "lyricsHidden",
+            // Discord status and the tray lyric (discordSongButton is written only once it is set)
+            "discordPresence", "discordStatusText", "discordLyric", "discordCover", "discordButton", "discordProgress", "discordPaused",
+            "discordLyricLead", "trayLyric", "trayLyricLength",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
