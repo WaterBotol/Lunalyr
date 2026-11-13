@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private typealias P = LunalyrDesign.Player
+
 // The pieces of the desktop player's "Sleeve" card: its glass, the record,
 // the note over it, and the search and queue that take over its right-hand
 // column. `DesktopPlayerView` lays them out.
@@ -20,30 +22,29 @@ struct SleeveCardBackground: View {
     @Environment(\.playerPreview) private var preview
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: DesktopPlayerView.radius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: P.Radius.card, style: .continuous)
         if maskRender {
             shape.fill(Color.black)
         } else if look.reduceTransparency {
             shape.fill(palette.deep.mixed(with: .init(0.06, 0.06, 0.07), 0.35).color)
-                .overlay(shape.strokeBorder(.white.opacity(look.increaseContrast ? 0.6 : 0.2), lineWidth: 1))
+                .overlay(shape.strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width))
         } else {
+            // The material, a veil so white type always reads, and the album's
+            // colour as one flat tint (no gradient in chrome). One shadow; an
+            // edge only under Increase Contrast.
             ZStack {
                 glass
-                Color.black.opacity(0.24)
-                LinearGradient(colors: [palette.accentColor.opacity(palette.fromArtwork ? 0.42 : 0.3),
-                                        palette.deepColor.opacity(palette.fromArtwork ? 0.8 : 0.85)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                LinearGradient(colors: [.white.opacity(0.10), .clear], startPoint: .top, endPoint: .center)
+                Color.black.opacity(P.Fill.veil)
+                wash.opacity(P.Fill.tint)
             }
             .clipShape(shape)
-            .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(look.increaseContrast ? 0.7 : 0.45),
-                                                                .white.opacity(look.increaseContrast ? 0.35 : 0.06),
-                                                                .white.opacity(look.increaseContrast ? 0.5 : 0.18)],
-                                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                                        lineWidth: look.increaseContrast ? 1.5 : 1))
-            .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+            .overlay(shape.strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width))
+            .shadow(color: P.Shadow.cardColor, radius: P.Shadow.cardRadius, y: P.Shadow.cardY)
         }
     }
+
+    /// The card's tint: the deep shade with a little of the accent in it.
+    private var wash: Color { palette.cardTint.color }
 
     /// The system material; a preview, which can't draw it, shows the
     /// scene behind blurred instead.
@@ -75,14 +76,14 @@ struct SleeveRecord: View {
             ForEach(Array(stride(from: size * 0.2, to: size * 0.49, by: 3.5)), id: \.self) { radius in
                 Circle().stroke(Color.white.opacity(0.05), lineWidth: 0.6).frame(width: radius * 2, height: radius * 2)
             }
-            Circle().fill(AngularGradient(colors: [.clear, .white.opacity(0.13), .clear, .white.opacity(0.09), .clear],
+            Circle().fill(AngularGradient(colors: [.clear, .white.opacity(0.07), .clear, .white.opacity(0.05), .clear],
                                           center: .center))
-            Circle().fill(LinearGradient(colors: [palette.accentColor, palette.deepColor], startPoint: .top, endPoint: .bottom))
+            Circle().fill(palette.accentColor)
                 .frame(width: size * 0.33, height: size * 0.33)
             Circle().fill(Color(white: 0.05)).frame(width: 6, height: 6)
         }
         .frame(width: size, height: size)
-        .shadow(color: .black.opacity(0.4), radius: 6, x: 3)
+        .shadow(color: P.Shadow.coverColor, radius: 6, x: 3)
     }
 }
 
@@ -106,16 +107,16 @@ struct PlayerNoteToast: View {
     var body: some View {
         ZStack {
             if let note, shown || alwaysShown {
-                Text(note).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.92))
+                Text(note).font(P.TypeScale.note).foregroundStyle(P.Ink.primary.color(look))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 520)
-                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
                     .playerCapsule(look)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.3), value: shown)
+        .animation(shown ? P.Motion.feedback : P.Motion.feedbackOut, value: shown)
         .allowsHitTesting(false)
         .onChange(of: trigger) { _, trigger in
             shown = true
@@ -133,15 +134,16 @@ struct PlayerNoteToast: View {
 struct PaneCloseButton: View {
     let label: String
     let action: () -> Void
+    @Environment(\.playerLook) private var look
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
-                .frame(width: 24, height: 24)
+            Image(systemName: "xmark").font(P.Glyph.icon)
+                .frame(width: P.Glyph.button, height: P.Glyph.button)
                 .contentShape(Rectangle())
         }
         .buttonStyle(TransportButtonStyle())
-        .foregroundStyle(.white.opacity(0.75))
+        .foregroundStyle(P.Ink.secondary.color(look))
         .help("\(label) (Esc)")
         .accessibilityLabel(label)
     }
@@ -164,9 +166,9 @@ struct PlayerPicker: View {
                 Button { onSelect(kind) } label: {
                     HStack(spacing: 5) {
                         Circle().fill(kind.tint).frame(width: 6, height: 6)
-                        Text(kind.shortName).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                        Text(kind.shortName).font(P.TypeScale.label).lineLimit(1)
                     }
-                    .foregroundStyle(on ? Color.black : .white.opacity(look.increaseContrast ? 0.9 : 0.72))
+                    .foregroundStyle(on ? Color.black : P.Ink.secondary.color(look))
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(Capsule().fill(on ? Color.white : .clear))
                     .contentShape(Capsule())
@@ -178,10 +180,10 @@ struct PlayerPicker: View {
             }
         }
         .padding(3)
-        .background(Capsule().fill(Color.black.opacity(0.25)))
-        .overlay(Capsule().strokeBorder(.white.opacity(look.increaseContrast ? 0.4 : 0), lineWidth: 1))
+        .background(Capsule().fill(Color.black.opacity(P.Fill.well)))
+        .overlay(Capsule().strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width))
         .fixedSize()
-        .animation(.easeOut(duration: 0.2), value: selected)
+        .animation(P.Motion.feedback, value: selected)
     }
 }
 
@@ -198,25 +200,25 @@ struct PlayerSearchField: View {
     @Environment(\.playerLook) private var look
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: P.Radius.control, style: .continuous)
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(.white.opacity(0.7))
+            Image(systemName: "magnifyingglass").font(P.Glyph.icon).foregroundStyle(P.Ink.tertiary.color(look))
             if preview != nil {
                 HStack(spacing: 1) {
-                    Text(query.isEmpty ? "Search \(player.shortName)" : query).font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white.opacity(query.isEmpty ? 0.45 : 1))
+                    Text(query.isEmpty ? "Search \(player.shortName)" : query).font(P.TypeScale.field)
+                        .foregroundStyle((query.isEmpty ? P.Ink.tertiary : P.Ink.primary).color(look))
                     if shownFocused { Rectangle().fill(.white).frame(width: 1.5, height: 17) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 TextField("Search \(player.shortName)", text: $query)
-                    .textFieldStyle(.plain).font(.system(size: 15, weight: .medium))
+                    .textFieldStyle(.plain).font(P.TypeScale.field)
                     .focused(focused)
                     .onSubmit(onSubmit)
             }
             if !query.isEmpty {
                 Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.5))
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(P.Ink.tertiary.color(look))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -224,10 +226,10 @@ struct PlayerSearchField: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 36)
-        .background(shape.fill(Color.black.opacity(0.28)))
-        .overlay(shape.strokeBorder(.white.opacity(shownFocused ? 0.85 : look.increaseContrast ? 0.6 : 0.25),
-                                    lineWidth: shownFocused ? 2 : 1))
-        .animation(.easeOut(duration: 0.15), value: shownFocused)
+        .background(shape.fill(Color.black.opacity(P.Fill.well)))
+        .overlay(shape.strokeBorder(shownFocused ? P.Line.focus(look) : P.Line.hairline(look),
+                                    lineWidth: shownFocused ? P.Line.focusWidth : P.Line.width))
+        .animation(P.Motion.feedback, value: shownFocused)
     }
 }
 
@@ -274,8 +276,8 @@ struct PlayerResultsList: View {
     @ViewBuilder
     private var statusLine: some View {
         switch status {
-        case .searching: Text("Searching\u{2026}").font(.system(size: 12)).foregroundStyle(.white.opacity(0.65)).padding(8)
-        case .message(let text): Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(0.75)).padding(8)
+        case .searching: Text("Searching\u{2026}").font(P.TypeScale.meta).foregroundStyle(P.Ink.tertiary.color(look)).padding(8)
+        case .message(let text): Text(text).font(P.TypeScale.meta).foregroundStyle(P.Ink.secondary.color(look)).padding(8)
                 .fixedSize(horizontal: false, vertical: true)
         case .idle: EmptyView()
         }
@@ -288,7 +290,7 @@ struct PlayerResultsList: View {
                     if let image = preview?.covers[result.id] {
                         Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
                     } else if preview != nil {
-                        Color.white.opacity(0.1)
+                        Color.white.opacity(P.Fill.placeholder)
                     } else {
                         RemoteCover(url: result.artworkURL, symbol: result.kind == .album ? "square.stack" : "music.note",
                                     lookup: result.artworkURL == nil && player == .appleMusic ? (result.title, result.artist) : nil,
@@ -296,36 +298,35 @@ struct PlayerResultsList: View {
                     }
                 }
                 .frame(width: 36, height: 36)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: P.Radius.thumb, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(result.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(subtitle(result)).font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(look.increaseContrast ? 0.85 : 0.65)).lineLimit(1)
+                    Text(result.title).font(P.TypeScale.rowTitle).lineLimit(1)
+                    Text(subtitle(result)).font(P.TypeScale.rowSubtitle)
+                        .foregroundStyle(P.Ink.secondary.color(look)).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if let tag = tag(result) {
-                    Text(tag).font(.system(size: 9, weight: .bold)).tracking(0.8)
-                        .foregroundStyle(.white.opacity(look.increaseContrast ? 0.8 : 0.5))
+                    Text(tag).font(P.TypeScale.tag)
+                        .foregroundStyle(P.Ink.tertiary.color(look))
                 }
                 if selected {
-                    Image(systemName: "return").font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.8))
+                    Image(systemName: "return").font(P.TypeScale.tag)
+                        .foregroundStyle(P.Ink.secondary.color(look))
                         .frame(width: 22, height: 18)
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.white.opacity(0.45), lineWidth: 1))
                         .accessibilityHidden(true)
                 }
             }
             .padding(6).contentShape(Rectangle())
-            .background(selected ? Color.white.opacity(0.16) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(selected ? Color.white.opacity(P.Fill.selected) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: P.Radius.row, style: .continuous))
         }
         .buttonStyle(RowButtonStyle())
         .accessibilityHint(selected ? "Selected. Return plays it" : "")
     }
 
     private func tag(_ result: PlayerSearchResult) -> String? {
-        if result.inLibrary { return "LIBRARY" }
-        return result.kind == .album ? "ALBUM" : nil
+        if result.inLibrary { return "Library" }
+        return result.kind == .album ? "Album" : nil
     }
 
     private func subtitle(_ result: PlayerSearchResult) -> String {
@@ -374,7 +375,7 @@ struct PlayerQueueList: View {
                     // Laid out lazily: give it a moment before scrolling to the song playing.
                     try? await Task.sleep(nanoseconds: 60_000_000)
                     guard !Task.isCancelled, let currentID else { return }
-                    withAnimation(look.reduceMotion ? nil : .smooth(duration: 0.3)) {
+                    withAnimation(look.reduceMotion ? nil : LunalyrDesign.Motion.standard) {
                         proxy.scrollTo(currentID, anchor: .center)
                     }
                 }
@@ -392,7 +393,7 @@ struct PlayerQueueList: View {
                 .id(item.id)
         }
         if let footnote {
-            Text(footnote).font(.system(size: 11)).foregroundStyle(.white.opacity(look.increaseContrast ? 0.85 : 0.6))
+            Text(footnote).font(P.TypeScale.rowSubtitle).foregroundStyle(P.Ink.tertiary.color(look))
                 .padding(.horizontal, 6).padding(.top, 6)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -401,9 +402,9 @@ struct PlayerQueueList: View {
     private enum Place { case earlier, now, next }
 
     private func section(_ title: String) -> some View {
-        Text(title).font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white.opacity(look.increaseContrast ? 0.8 : 0.5))
-            .padding(.top, 4).padding(.horizontal, 2)
+        Text(title).font(P.TypeScale.tag)
+            .foregroundStyle(P.Ink.tertiary.color(look))
+            .padding(.top, 4).padding(.horizontal, 6)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -413,27 +414,27 @@ struct PlayerQueueList: View {
             HStack(spacing: 10) {
                 cover(item)
                     .frame(width: 30, height: 30)
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: P.Radius.thumb, style: .continuous))
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(item.title).font(.system(size: 12, weight: current ? .bold : .semibold)).lineLimit(1)
-                    Text(item.artist).font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(look.increaseContrast ? 0.85 : 0.62)).lineLimit(1)
+                    Text(item.title).font(P.TypeScale.rowTitle).lineLimit(1)
+                    Text(item.artist).font(P.TypeScale.rowSubtitle)
+                        .foregroundStyle(P.Ink.secondary.color(look)).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if current {
-                    Image(systemName: isPlaying ? "waveform" : "pause.fill").font(.system(size: 11, weight: .bold))
+                    Image(systemName: isPlaying ? "waveform" : "pause.fill").font(P.TypeScale.tag)
                 } else if item.index > 0 {
-                    Text("\(item.index)").font(.system(size: 10).monospacedDigit()).foregroundStyle(.white.opacity(0.42))
+                    Text("\(item.index)").font(P.TypeScale.time).foregroundStyle(P.Ink.tertiary.color(look))
                 }
             }
             .padding(.horizontal, 6).padding(.vertical, 4)
             .contentShape(Rectangle())
-            .background(current ? Color.white.opacity(0.16) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(current ? Color.white.opacity(P.Fill.selected) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: P.Radius.row, style: .continuous))
         }
         .buttonStyle(RowButtonStyle())
         .disabled(!item.isPlayable)
-        .opacity(place == .earlier ? (look.increaseContrast ? 0.7 : 0.5) : item.isPlayable ? 1 : 0.6)
+        .opacity(place == .earlier ? (look.increaseContrast ? 0.75 : 0.55) : item.isPlayable ? 1 : 0.6)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.artist.isEmpty ? item.title : "\(item.title) by \(item.artist)")
         .accessibilityHint(current ? "Now playing" : place == .earlier ? "Played earlier" : "Up next")
@@ -448,7 +449,7 @@ struct PlayerQueueList: View {
         } else if item.id == currentID, item.persistentID == nil, let artwork {
             Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
         } else if preview != nil {
-            Color.white.opacity(0.1)
+            Color.white.opacity(P.Fill.placeholder)
         } else {
             RemoteCover(url: nil, symbol: "music.note", lookup: (item.title, item.artist), persistentID: item.persistentID)
         }

@@ -59,12 +59,15 @@ struct ArtworkPalette: Equatable, Sendable {
     var fromArtwork: Bool
 
     var accentColor: Color { accent.color }
+    /// The desktop player card's flat tint: the deep shade with a little of the accent.
+    var cardTint: RGB { deep.mixed(with: accent, fromArtwork ? 0.08 : 0.04) }
     var deepColor: Color { deep.color }
 
     static let neutral = ArtworkPalette(accent: RGB(0.50, 0.52, 0.62), deep: RGB(0.13, 0.13, 0.17), fromArtwork: false)
 
-    /// White type on `deep` reaches at least this (WCAG AA for body text).
-    static let deepContrast = 7.0
+    /// White type on `deep` reaches at least this, so the card's quieter ink
+    /// levels (docs/DESIGN.md) still read 4.5:1 over a bright wallpaper.
+    static let deepContrast = 9.0
     /// The accent carries the big title at the wash's top: AA for large type.
     static let accentContrast = 3.0
 

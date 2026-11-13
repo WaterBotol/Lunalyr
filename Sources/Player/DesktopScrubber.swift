@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private typealias P = LunalyrDesign.Player
+
 // MARK: - Accessibility look
 
 /// Reduce Motion, Reduce Transparency and Increase Contrast as the player
@@ -41,20 +43,23 @@ private struct PlayerCapsuleBacking: ViewModifier {
     @Environment(\.playerPalette) private var palette
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: P.Radius.control, style: .continuous)
         if look.reduceTransparency {
             content
                 .background(Color(white: 0.08), in: shape)
-                .overlay(shape.strokeBorder(.white.opacity(look.increaseContrast ? 0.6 : 0.3), lineWidth: 1))
+                .overlay(shape.strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width))
         } else if let palette {
+            // The card's own deep shade and hairline: a capsule is a piece of
+            // the card lifted over it, not a second accent.
             content
-                .background(palette.deepColor.opacity(0.95), in: shape)
-                .overlay(shape.strokeBorder(palette.accentColor.opacity(look.increaseContrast ? 0.9 : 0.55), lineWidth: 1))
-                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                .background(palette.deepColor.opacity(0.96), in: shape)
+                .overlay(shape.strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width))
+                .shadow(color: .black.opacity(0.24), radius: 8, y: 3)
         } else {
             content
-                .background(.ultraThinMaterial, in: Capsule())
-                .background(Color.black.opacity(0.35), in: Capsule())
+                .background(.ultraThinMaterial, in: shape)
+                .background(Color.black.opacity(P.Fill.veil), in: shape)
+                .overlay(shape.strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width))
         }
     }
 }
@@ -121,8 +126,8 @@ struct ScrubRow: View {
                 case .elapsedOnly:
                     TimelineView(.animation(minimumInterval: 0.25, paused: !shown || !isPlaying)) { _ in
                         HStack(spacing: 8) {
-                            Text(ScrubMath.timestamp(controller.playback())).font(.system(size: 11).monospacedDigit())
-                            Text("Length unknown").font(.system(size: 11)).opacity(0.6)
+                            Text(ScrubMath.timestamp(controller.playback())).font(P.TypeScale.time)
+                            Text("Length unknown").font(P.TypeScale.rowSubtitle)
                         }
                         .foregroundStyle(.white.opacity(timeOpacity(active: false)))
                     }
@@ -158,7 +163,7 @@ struct ScrubRow: View {
     private var dragging: Bool { controller.session != nil }
 
     private func timeOpacity(active: Bool) -> Double {
-        look.increaseContrast ? 0.95 : active ? 0.85 : 0.55
+        (active ? P.Ink.secondary : P.Ink.tertiary).opacity(increaseContrast: look.increaseContrast)
     }
 
     private func row(elapsed: Double) -> some View {
@@ -168,7 +173,7 @@ struct ScrubRow: View {
                 .frame(width: Self.barWidth, height: Self.barHeight)
             HStack(spacing: 8) {
                 if kind == .advert {
-                    Text("Advertisement").font(.system(size: 10, weight: .medium))
+                    Text("Advertisement").font(P.TypeScale.tag)
                 } else {
                     Text(ScrubMath.timestamp(elapsed)).accessibilityHidden(true)
                 }
@@ -177,9 +182,9 @@ struct ScrubRow: View {
             }
             .frame(width: Self.barWidth, height: Self.timesHeight)
         }
-        .font(.system(size: 11).monospacedDigit())
+        .font(P.TypeScale.time)
         .foregroundStyle(.white.opacity(timeOpacity(active: active)))
-        .animation(look.reduceMotion ? nil : .easeOut(duration: 0.12), value: active)
+        .animation(look.reduceMotion ? nil : P.Motion.feedback, value: active)
     }
 
     @ViewBuilder
@@ -261,7 +266,7 @@ struct ScrubRow: View {
             if kind == .seekable, active {
                 Circle().fill(.white)
                     .frame(width: dragging ? 14 : 12, height: dragging ? 14 : 12)
-                    .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
                     .offset(x: playX - (dragging ? 7 : 6))
                     .transition(.opacity)
                     .allowsHitTesting(false)
@@ -301,13 +306,13 @@ struct ScrubRow: View {
                         lyricCapsule(at: shown.time)
                         HStack(spacing: 6) {
                             Text(ScrubMath.timestamp(shown.time))
-                                .font(.system(size: 11, weight: .bold).monospacedDigit())
+                                .font(P.TypeScale.timeStrong)
                             if let rate = controller.session?.rateLabel {
-                                Text(rate).font(.system(size: 10, weight: .medium)).opacity(0.75)
+                                Text(rate).font(P.TypeScale.tag).foregroundStyle(P.Ink.secondary.color(look))
                             }
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
                         .playerCapsule(look)
                     }
                     .fixedSize()
@@ -317,7 +322,7 @@ struct ScrubRow: View {
             }
         }
         .alignmentGuide(.top) { $0[.bottom] + 2 }
-        .animation(shown == nil ? .easeIn(duration: 0.10) : .easeOut(duration: 0.12), value: shown == nil)
+        .animation(shown == nil ? P.Motion.feedbackOut : P.Motion.feedback, value: shown == nil)
         .allowsHitTesting(false)
     }
 
@@ -331,22 +336,22 @@ struct ScrubRow: View {
                 let replaced = context.romanization == .replace ? line.romanized : nil
                 VStack(spacing: 1) {
                     Text(replaced ?? line.text)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(P.TypeScale.capsuleLyric)
                         .lineLimit(1)
                         .contentTransition(.opacity)
                     if context.romanization == .below, let roman = line.romanized {
-                        Text(roman).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                        Text(roman).font(P.TypeScale.rowSubtitle).foregroundStyle(P.Ink.secondary.color(look)).lineLimit(1)
                     }
                 }
-                .animation(.easeOut(duration: 0.12), value: index)
+                .animation(P.Motion.feedback, value: index)
                 .foregroundStyle(.white)
                 .frame(maxWidth: 330)
-                .padding(.horizontal, 14).padding(.vertical, 7)
+                .padding(.horizontal, 12).padding(.vertical, 8)
                 .playerCapsule(look)
             case .instrumental:
-                Text("\u{266A} instrumental").font(.system(size: 14, weight: .semibold).italic())
-                    .foregroundStyle(.white.opacity(0.7))
-                    .padding(.horizontal, 14).padding(.vertical, 7)
+                Text("\u{266A} Instrumental").font(P.TypeScale.capsuleLyric)
+                    .foregroundStyle(P.Ink.secondary.color(look))
+                    .padding(.horizontal, 12).padding(.vertical, 8)
                     .playerCapsule(look)
             case .none:
                 EmptyView()
@@ -470,9 +475,9 @@ private struct LiveCapsule: View {
             let breath = look.reduceMotion ? 1 : 0.75 + 0.25 * cos(phase * 2 * .pi)
             HStack(spacing: 6) {
                 Circle().fill(Color.red).frame(width: 6, height: 6).opacity(breath)
-                Text("LIVE").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                Text("Live").font(P.TypeScale.tag).foregroundStyle(P.Ink.primary.color(look))
             }
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .padding(.horizontal, 8).padding(.vertical, 4)
             .playerCapsule(look)
         }
         .accessibilityElement(children: .ignore)
