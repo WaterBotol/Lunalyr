@@ -193,6 +193,7 @@ internal sealed unsafe partial class DesktopPlayer
     {
         var m = _model;
         var pane = m.Pane;
+        if (AlignPartAt(x, y) is { } aligned) return aligned;
         if (CardLayout.CoverRect.Contains(x, y)) return m.HasSong ? CardPart.Cover : CardPart.None;
         if (CardLayout.PlayFor(pane).Inflate(2).Contains(x, y)) return CardPart.PlayPause;
         if (CardLayout.PreviousFor(pane).Contains(x, y)) return m.HasSong ? CardPart.Previous : CardPart.None;
@@ -239,6 +240,7 @@ internal sealed unsafe partial class DesktopPlayer
         }
 
         var (x, y) = Dips(lParam);
+        if (AlignDragMove(x, y)) return;
         var (bx, by) = BarLocal(x, y);
         if (_scrub.IsDragging)
         {
@@ -281,6 +283,10 @@ internal sealed unsafe partial class DesktopPlayer
             _scrub.MouseDown(bx, by, fine: Alt, noSnap: Ctrl);
             _automation?.Focus(CardPart.SeekBar);
         }
+        else if (part == CardPart.AlignBar)
+        {
+            AlignPress(x, y);
+        }
         else
         {
             _pressed = part;
@@ -293,7 +299,11 @@ internal sealed unsafe partial class DesktopPlayer
     private void MouseUp(nint lParam, nuint wParam)
     {
         var (x, y) = Dips(lParam);
-        if (_scrub.IsDragging && double.IsNaN(_debugScrub))
+        if (AlignRelease(x, y))
+        {
+            // The video's bar kept (or dropped) its offset.
+        }
+        else if (_scrub.IsDragging && double.IsNaN(_debugScrub))
         {
             var (bx, by) = BarLocal(x, y);
             _scrub.MouseUp(bx, by, fine: Alt, noSnap: Ctrl);
@@ -331,6 +341,9 @@ internal sealed unsafe partial class DesktopPlayer
                     PlayerNative.SetTimer(_surface.Hwnd, CoverTimer, Math.Min(PlayerNative.GetDoubleClickTime(), 300u), 0);
                 }
 
+                break;
+            case CardPart.AlignButton or CardPart.AlignBar or CardPart.AlignReset or CardPart.AlignCancel or CardPart.AlignDone:
+                ClickAlign(part);
                 break;
             case CardPart.PlayPause: PlayPause(); break;
             case CardPart.Previous: Skip(forward: false); break;
@@ -378,6 +391,7 @@ internal sealed unsafe partial class DesktopPlayer
     {
         var ctrl = Ctrl;
         var alt = Alt || ((long)lParam & (1 << 29)) != 0;
+        if (AlignKey(vk, ctrl, alt, PlayerNative.KeyDown(PlayerNative.VK_LWIN) || PlayerNative.KeyDown(PlayerNative.VK_RWIN))) return true;
         if (vk is PlayerNative.VK_CONTROL or PlayerNative.VK_MENU or PlayerNative.VK_SHIFT)
         {
             if (_scrub.IsDragging) _scrub.ModifiersChanged(fine: alt, noSnap: ctrl);
@@ -542,6 +556,7 @@ internal sealed unsafe partial class DesktopPlayer
                     order.Add(CardPart.QueueButton);
                 }
 
+                AddAlignFocus(order);
                 break;
             case PlayerPane.Search:
                 for (var i = 0; i < m.Pickers.Count; i++) order.Add(CardParts.Picker(i));

@@ -253,6 +253,7 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
             return (q.Artist.Length == 0 ? q.Title : $"{q.Title} by {q.Artist}", row == current ? "Plays or pauses" : "Plays it, then what is listed after it", ListItem, place);
         }
 
+        if (DesktopPlayer.DescribeAlign(m, part) is { } align) return align;
         return ("", "", Button, "");
     }
 

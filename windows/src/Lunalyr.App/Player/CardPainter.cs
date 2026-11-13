@@ -343,6 +343,14 @@ internal sealed partial class CardPainter : IDisposable
             }
         }
 
+        // Align mode (the music video): the video's bar and its row take the seek row's and the transport's place.
+        if (m.Align is not null)
+        {
+            DrawAlign(dc, m);
+            DrawAlignButton(dc, m);
+            return;
+        }
+
         DrawSeekRow(dc, m);
         DrawTransport(dc, m);
     }
@@ -592,6 +600,7 @@ internal sealed partial class CardPainter : IDisposable
             // Search and the queue, at the row's right-hand end, lit while open.
             IconButton(dc, m, CardLayout.SearchButtonRect, CardPart.SearchButton, on: false);
             IconButton(dc, m, CardLayout.QueueButtonRect, CardPart.QueueButton, on: false);
+            if (m.MusicVideoOffered) DrawAlignButton(dc, m);
         }
 
         var disc = CardLayout.PlayFor(m.Pane);
