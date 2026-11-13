@@ -102,7 +102,8 @@ internal readonly record struct PlanSpec(
     double BaseSize, double MinimumSize, int LineIndex, bool WordTimed, bool Editorial, bool Heavy, double MaxWidth,
     double Spacing, double LineSpacing, LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
-    LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false);
+    LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false,
+    double EditorialAmount = 1, bool RandomFonts = false);
 
 internal static class LinePlans
 {
@@ -113,7 +114,7 @@ internal static class LinePlans
     {
         var typography = EditorialSetting.Layout(words, glue, spec.BaseSize, spec.MinimumSize, spec.LineIndex, spec.WordTimed,
                                                  spec.Editorial, runReadings, 1, spec.Connections, spec.Spread,
-                                                 spec.EvenRunsAlternate);
+                                                 spec.EvenRunsAlternate, spec.EditorialAmount);
         var locale = TextKit.LocaleFor(string.Concat(words.Select(word => word.Text)));
         var count = typography.Runs.Count;
         var labels = new IDWriteTextLayout[count];
@@ -127,14 +128,18 @@ internal static class LinePlans
             {
                 var run = typography.Runs[r];
                 var metrics = run.Metrics;
-                var face = metrics.AlternateFace ? Face.Contrast : metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular;
-                labels[r] = kit.Layout(run.Label, face, (float)metrics.Size, locale, run.RightToLeft);
+                // "Randomise lyric fonts": each run takes one of the mix's faces by its seed (its weight as it would have it),
+                // ahead of the second face; its reading takes the same one.
+                var mix = spec.RandomFonts ? (int)(run.Seed % TextKit.MixFaces) : -1;
+                var face = mix >= 0 ? metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular
+                    : metrics.AlternateFace ? Face.Contrast : metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular;
+                labels[r] = kit.Layout(run.Label, face, (float)metrics.Size, locale, run.RightToLeft, mix: mix);
                 var label = labels[r].Metrics;
                 double width = label.Width, height = label.Height;
                 if (!string.IsNullOrWhiteSpace(run.Reading))
                 {
-                    readings[r] = kit.Layout(run.Reading!, metrics.AlternateFace ? Face.Contrast : Face.Quiet,
-                                             (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false);
+                    readings[r] = kit.Layout(run.Reading!, mix < 0 && metrics.AlternateFace ? Face.Contrast : Face.Quiet,
+                                             (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false, mix: mix);
                     slices[r] = ReadingSlices.Measure(readings[r]!, run.Reading, runShares is not null && r < runShares.Count ? runShares[r] : null);
                     var reading = readings[r]!.Metrics;
                     width = Math.Max(width, reading.Width);

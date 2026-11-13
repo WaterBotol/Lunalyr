@@ -545,8 +545,7 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Ported from BackingVocalsTests.swift: testBackingWordsNeverAnimateInTheRollingLayouts (there is no chosen backing
-    // style on Windows, so the "chosen" case is left out)
+    // Ported from BackingVocalsTests.swift: testBackingWordsNeverAnimateInTheRollingLayouts
     [Fact]
     public void BackingWordsNeverAnimateInTheRollingLayouts()
     {
@@ -554,6 +553,9 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         CompositionKind[] choices = [CompositionKind.Scattered, CompositionKind.Constellation, CompositionKind.ConstellationEditorial,
                                      CompositionKind.Echo, CompositionKind.Editorial];
         foreach (var lead in choices) Assert.Equal(lead, LyricCompositionLayer.BackingKind(lead));
+        foreach (var lead in new[] { CompositionKind.Spoken, CompositionKind.Cascade, CompositionKind.Cutout })
+            Assert.Equal(CompositionKind.Editorial, LyricCompositionLayer.BackingKind(lead, null));
+        Assert.Equal(CompositionKind.Echo, LyricCompositionLayer.BackingKind(CompositionKind.Cutout, "echo"));
         Assert.DoesNotContain(choices, kind => kind.ArrivalOnly());
     }
 

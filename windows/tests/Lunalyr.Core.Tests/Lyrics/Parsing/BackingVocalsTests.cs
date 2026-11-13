@@ -68,4 +68,17 @@ public class BackingVocalsTests
         Assert.Equal(0.7, split.Backing[0].Words[1].Start, 0.001);
         Assert.Equal(2, split.Backing[0].Glue.Count);
     }
+
+    // Ported from BackingVocalsTests.swift: testTheLayerEasesInHoldsAndLingersAfterAQuickSung
+    [Fact]
+    public void TheLayerEasesInHoldsAndLingersAfterAQuickSung()
+    {
+        var group = new BackingGroup(0, "oh", 10, 10.2, [new LyricWord("oh", 10, 10.2)], [false]);
+        Assert.Equal(0, Lunalyr.Core.Compositions.BackingVocalLayout.Level(group, 9.5));
+        Assert.True(Lunalyr.Core.Compositions.BackingVocalLayout.Level(group, 10.2) > 0);
+        Assert.True(Lunalyr.Core.Compositions.BackingVocalLayout.Level(group, 9.95) < 1);
+        Assert.Equal(1, Lunalyr.Core.Compositions.BackingVocalLayout.Level(group, 11.0)); // held past the 0.2 s it was sung
+        Assert.True(Lunalyr.Core.Compositions.BackingVocalLayout.Level(group, 11.5) > 0);
+        Assert.Equal(0, Lunalyr.Core.Compositions.BackingVocalLayout.Level(group, 13));
+    }
 }

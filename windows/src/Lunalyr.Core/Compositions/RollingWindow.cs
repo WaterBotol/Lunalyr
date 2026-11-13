@@ -60,11 +60,12 @@ public sealed class RollingSong
     /// Mac's <c>romanized</c>): with "Below lyrics" each rolling word carries the reading of its run, and a reading
     /// that cannot be split by word hangs under the line's first word; with "Replace lyrics" the readings roll in the
     /// words' place. A line with no entry in <paramref name="wordReadings"/> falls back to its reading in
-    /// <paramref name="lineReadings"/>, given as one string.
+    /// <paramref name="lineReadings"/>, given as one string. With <paramref name="liftsBacking"/> off ("Backing vocals in
+    /// the background" switched off), bracketed backing words stay in the rolling line.
     /// </summary>
     public RollingSong(IReadOnlyList<LyricLine> lines, IWordBreaker breaker,
                        IReadOnlyDictionary<int, IReadOnlyList<LyricWord>>? wordReadings, RomanizationDisplay display,
-                       IReadOnlyDictionary<int, string>? lineReadings = null)
+                       IReadOnlyDictionary<int, string>? lineReadings = null, bool liftsBacking = true)
     {
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(breaker);
@@ -92,7 +93,7 @@ public sealed class RollingSong
             var merged = LyricRunParts.Merged(source, glue, pairs);
             // Bracketed backing vocals are lifted out of the rolling words and drawn apart.
             _backing[row] = [];
-            if (line.WordTimed)
+            if (line.WordTimed && liftsBacking)
             {
                 var split = Lyrics.Parsing.BackingVocals.Split(merged.Words, new bool[merged.Words.Count]);
                 _backing[row] = split.Backing;

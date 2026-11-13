@@ -87,7 +87,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     protected override void OnLyrics(IReadOnlyList<LyricLine> lines, SceneSnapshot scene)
     {
         // Word-by-word readings where the scene has them, each line's reading string otherwise.
-        _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings);
+        _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings, scene.Style.BackingVocals);
         _trackSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x7FFF_FFFF);
     }
 
@@ -380,7 +380,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private SpokenUnit SetUnit(RollingWord token)
     {
         var kit = Kit!;
-        var (label, reading, width, height) = Layout(kit, token, Stage.Width, Scale);
+        // "Add Editorial typography": about a third of the words, by the amount set, take the contrasting face (the Mac's
+        // SpokenTypography); "Randomise lyric fonts" gives each word one of the mix's faces by its seed.
+        var style = StyleShown;
+        var amount = double.IsFinite(style.EditorialAmount) ? Math.Clamp(style.EditorialAmount, 0, 1) : 1;
+        var alternate = style.EditorialTypography && token.Hash % 3 == 1 && (double)((token.Hash / 300) % 100) < amount * 100;
+        var mix = style.RandomFonts ? (int)(token.Seed % TextKit.MixFaces) : -1;
+        var (label, reading, width, height) = Layout(kit, token, Stage.Width, Scale, alternate, mix);
         using var _ = label;
         using var __ = reading;
         var labelBox = label.Metrics;
@@ -428,14 +434,17 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// Cascade or Cutout word that is not a hero, the regular one), its reading under it (wrapping at 80% of the
     /// stage), 2 points of padding at each side, or 11 by 3 round a Cutout label. The caller disposes the layouts.
     /// </summary>
+    /// <param name="alternate">Set in Editorial's contrasting face ("Add Editorial typography").</param>
+    /// <param name="mix">One of "Randomise lyric fonts" faces, or −1.</param>
     internal static (IDWriteTextLayout Label, IDWriteTextLayout? Reading, double Width, double Height) Layout(
-        TextKit kit, RollingWord token, double stageWidth, float scale)
+        TextKit kit, RollingWord token, double stageWidth, float scale, bool alternate = false, int mix = -1)
     {
         var size = (float)token.PointSize;
-        var label = kit.Layout(token.Source.Text, token.Heavy ? Face.Heavy : Face.Regular, size,
-                               TextKit.LocaleFor(token.Source.Text), token.RightToLeft);
+        var face = mix < 0 && alternate ? Face.Contrast : token.Heavy ? Face.Heavy : Face.Regular;
+        var label = kit.Layout(token.Source.Text, face, size, TextKit.LocaleFor(token.Source.Text), token.RightToLeft, mix: mix);
         var reading = token.Reading is { } text
-            ? kit.Layout(text, Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false, (float)(stageWidth * 0.8))
+            ? kit.Layout(text, mix < 0 && alternate ? Face.Contrast : Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false,
+                         (float)(stageWidth * 0.8), mix)
             : null;
         double width = label.Metrics.Width, height = label.Metrics.Height;
         if (reading is not null)
@@ -471,8 +480,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                     var group = groups[g];
                     var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id,
                                          group.Words.Count > 0 ? group.Words[0].Start : 0, wordTimed: true,
-                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width,
-                                         kind: BackingKind(Kind));
+                                         editorial: BackingFor(Kind).HasEditorialTypography(), null, null, new LineFit(box, 1, 1), box.Width,
+                                         kind: BackingFor(Kind));
                     plans[g] = new BackingPlan(group, plan);
                 }
                 _backing[row] = plans;

@@ -42,8 +42,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     protected CompositionKind Kind { get; }
     protected IWordBreaker Breaker { get; }
-    protected StageRules Rules { get; }
-    protected WordRevealOptions Options { get; } = new();
+    protected StageRules Rules { get; private set; }
+    /// <summary>How this composition reveals sung words and previews the next one (the scene's style, per layout).</summary>
+    protected WordRevealOptions Options { get; private set; } = new();
     protected TextKit? Kit { get; private set; }
     protected Vector2 SurfaceSize { get; private set; }
     protected float Scale { get; private set; } = 1;
@@ -298,6 +299,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.
         Choice = scene.Style.EntranceFor(Kind);
+        // "Reveal sung words", the faint next-word preview and its lead, as the style sets them for this layout.
+        Options = scene.Style.RevealOptionsFor(Kind);
+        Rules = Rules with { RevealsWords = Options.RevealsWords, PreviewsNextWord = Options.PreviewsNextWord, PreviewLead = Options.PreviewLead };
         Arrival = Choice.For(Kind, 0).Motion(Kind);
         var highlight = (scene.Style.HighlightMode, scene.Style.HighlightCustom);
         if ((!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
@@ -538,6 +542,31 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     internal static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
         or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Editorial;
 
+    /// <summary>
+    /// The composition a backing group (or a credit) animates in: the one chosen under "Backing vocals animate like", else
+    /// <see cref="BackingKind(CompositionKind)"/> (the Mac's <c>BackingVocals.style(forLead:chosen:)</c>).
+    /// </summary>
+    internal static CompositionKind BackingKind(CompositionKind lead, string? chosen) => chosen switch
+    {
+        "scattered" => CompositionKind.Scattered,
+        "constellation" => CompositionKind.Constellation,
+        "constellationEditorial" => CompositionKind.ConstellationEditorial,
+        "echo" => CompositionKind.Echo,
+        "editorial" => CompositionKind.Editorial,
+        _ => BackingKind(lead),
+    };
+
+    /// <summary>
+    /// How much of Editorial's typography a line gets: "Editorial amount" with "Add Editorial typography" on, else all of it
+    /// where the composition has it of its own (<paramref name="own"/>) and none elsewhere (the Mac's
+    /// <c>ScatteredTypography.metrics</c>).
+    /// </summary>
+    protected double EditorialAmountFor(bool own) =>
+        StyleShown.EditorialTypography ? (double.IsFinite(StyleShown.EditorialAmount) ? Math.Clamp(StyleShown.EditorialAmount, 0, 1) : 1) : own ? 1 : 0;
+
+    /// <summary>The composition this scene's backing groups animate in, for lead <paramref name="lead"/>.</summary>
+    protected CompositionKind BackingFor(CompositionKind lead) => BackingKind(lead, StyleShown.BackingStyle);
+
     private void DrawLine(ID2D1DeviceContext dc, in DrawnLine drawn, double time, double offset)
     {
         var lines = Sheet!.Lines;
@@ -655,7 +684,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         IReadOnlyList<LyricWord> words = set?.Words ?? line.Words;
         IReadOnlyList<bool> mainGlue = glue;
         var groups = Array.Empty<BackingGroup>() as IReadOnlyList<BackingGroup>;
-        if (line.WordTimed)
+        // "Backing vocals in the background" off: bracketed backing words stay in the line.
+        if (line.WordTimed && StyleShown.BackingVocals)
         {
             var split = BackingVocals.Split(words, glue);
             if (split.Backing.Count > 0)
@@ -729,8 +759,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
         var connections = wordTimed && planKind.HasConnections();
+        var editorialAmount = EditorialAmountFor(editorial);
         var spec = new PlanSpec(
-            BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorial,
+            BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorialAmount > 0,
             Heavy: heavy, MaxWidth: maxWidth, Spacing: baseSize * ConstellationLayout.Spacing(connections),
             LineSpacing: baseSize * 0.30, Fit: fit,
             RasterBoost: wordTimed ? 1.12 : 1.0,
@@ -738,13 +769,14 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: baseSize * 0.38,
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
             Connections: connections, Spread: StyleShown.ConstellationSpread,
-            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial);
+            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial, EditorialAmount: editorialAmount,
+            RandomFonts: StyleShown.RandomFonts);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
         {
             var box = BackingVocalLayout.Box(Stage);
-            var backingKind = BackingKind(planKind);
+            var backingKind = BackingFor(planKind);
             var backingConnections = backingKind.HasConnections();
             var backing = new BackingPlan[groups.Count];
             for (var g = 0; g < groups.Count; g++)
@@ -753,7 +785,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 var sub = LinePlans.Build(Kit!, group.Words, group.Glue, spec with
                 {
                     BaseSize = baseSize * 0.5, LineIndex = backingSeed + group.Id,
-                    Editorial = backingKind.HasEditorialTypography(), Heavy = false,
+                    Editorial = EditorialAmountFor(backingKind.HasEditorialTypography()) > 0,
+                    EditorialAmount = EditorialAmountFor(backingKind.HasEditorialTypography()), Heavy = false,
                     MaxWidth = box.Width, Spacing = baseSize * 0.5 * ConstellationLayout.Spacing(backingConnections),
                     LineSpacing = baseSize * 0.5 * 0.30, Fit = new LineFit(box, 1, 1), Connections = backingConnections,
                     EvenRunsAlternate = backingKind == CompositionKind.ConstellationEditorial,

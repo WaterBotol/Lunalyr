@@ -44,6 +44,22 @@ internal sealed class TextKit : IDisposable
     private string _family = "";
     private string _resolvedFamily = "Segoe UI";
     private string _contrastFamily = "Georgia";
+    private readonly string[] _mixFamilies = new string[MixFaces];
+
+    /// <summary>How many typefaces "Randomise lyric fonts" picks from (the Mac's sans, serif, slab and soft faces).</summary>
+    public const int MixFaces = 4;
+
+    /// <summary>
+    /// The typefaces "Randomise lyric fonts" picks from, each the first of its list installed: a sans, a serif, a slab
+    /// and a soft face, as the Mac's four. Windows ships Georgia, Bahnschrift and Candara; Rockwell comes with Office.
+    /// </summary>
+    internal static readonly string[][] MixCandidates =
+    [
+        ["Segoe UI Variable Display", "Segoe UI"],
+        ["Georgia", "Cambria", "Times New Roman"],
+        ["Rockwell", "Roboto Slab", "Bahnschrift"],
+        ["Candara", "Corbel", "Segoe UI"],
+    ];
 
     public TextKit(ID2D1DeviceContext dc, IDWriteFactory dwrite)
     {
@@ -77,6 +93,8 @@ internal sealed class TextKit : IDisposable
         _family = family;
         _resolvedFamily = Installed(family) ? family : Installed("Segoe UI Variable Display") ? "Segoe UI Variable Display" : "Segoe UI";
         _contrastFamily = Installed("Georgia") ? "Georgia" : Installed("Cambria") ? "Cambria" : _resolvedFamily;
+        for (var i = 0; i < MixFaces; i++)
+            _mixFamilies[i] = MixCandidates[i].FirstOrDefault(Installed) ?? _resolvedFamily;
         foreach (var format in _formats.Values) format.Dispose();
         _formats.Clear();
     }
@@ -86,7 +104,11 @@ internal sealed class TextKit : IDisposable
         return !string.IsNullOrWhiteSpace(family) && _fonts.FindFamilyName(family, out _);
     }
 
-    public IDWriteTextFormat Format(Face face, float size, string locale)
+    /// <summary>The family "Randomise lyric fonts" face <paramref name="mix"/> resolves to on this PC.</summary>
+    public string MixFamily(int mix) => _mixFamilies[(mix % MixFaces + MixFaces) % MixFaces] ?? _resolvedFamily;
+
+    /// <param name="mix">One of the randomised faces (0–3), in <paramref name="face"/>'s weight; −1 for the face's own family.</param>
+    public IDWriteTextFormat Format(Face face, float size, string locale, int mix = -1)
     {
         var (family, weight) = face switch
         {
@@ -95,6 +117,7 @@ internal sealed class TextKit : IDisposable
             Face.Quiet => (_resolvedFamily, FontWeight.Normal),
             _ => (_resolvedFamily, FontWeight.Medium),
         };
+        if (mix >= 0) family = MixFamily(mix);
         size = MathF.Max(1, MathF.Round(size * 4) / 4);
         var key = (family, weight, size, locale);
         if (_formats.TryGetValue(key, out var found)) return found;
@@ -113,9 +136,10 @@ internal sealed class TextKit : IDisposable
     /// A laid-out label on one line (or wrapped and centred at <paramref name="wrapWidth"/>), right to left when its
     /// script reads that way. The caller disposes it.
     /// </summary>
-    public IDWriteTextLayout Layout(string text, Face face, float size, string locale, bool rightToLeft, float wrapWidth = 0)
+    public IDWriteTextLayout Layout(string text, Face face, float size, string locale, bool rightToLeft, float wrapWidth = 0,
+                                    int mix = -1)
     {
-        var format = Format(face, size, locale);
+        var format = Format(face, size, locale, mix);
         var layout = _dwrite.CreateTextLayout(text, format, 100_000, 100_000);
         layout.ReadingDirection = rightToLeft ? ReadingDirection.RightToLeft : ReadingDirection.LeftToRight;
         if (wrapWidth > 0)
