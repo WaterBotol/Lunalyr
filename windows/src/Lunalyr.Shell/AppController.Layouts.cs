@@ -58,7 +58,7 @@ public sealed partial class AppController
     private void ChooseLayout(LyricResult? lyrics = null, bool onlyWhenSettled = false)
     {
         ChooseWallpaper(lyrics, onlyWhenSettled);
-        string pick, background, title;
+        string pick, title;
         int? cursor = null;
         var available = AvailableCompositions();
         lock (_gate)
@@ -91,12 +91,11 @@ public sealed partial class AppController
             pick = remembered;
             _layout = pick;
             _layoutTrack = key;
-            background = BackgroundLayerFor(_settings);
             title = track.Title;
         }
 
         _app.Info($"Match the music: \"{title}\" takes the {pick} layout.");
-        _renderer.SetLayers(background, pick);
+        PublishLayers();
         if (cursor is { } moved) _options.LayoutCursorChanged?.Invoke(moved);
     }
 

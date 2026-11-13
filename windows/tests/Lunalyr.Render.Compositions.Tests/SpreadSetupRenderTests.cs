@@ -19,11 +19,15 @@ public sealed class SpreadSetupRenderTests : IDisposable
 {
     private const int Width = 960, Height = 540;
     private const float Scale = 1;
-    private readonly Offscreen _stage = new(Width, Height);
+    // Both on WARP, Direct2D's software rasteriser: the comparison is of Lunalyr's own logic (spread setup draws what
+    // whole setup draws), and a hardware GPU shared with other processes now and then rasterises a pixel differently
+    // between two devices (seen: 1 pixel 126/255 off, 6 pixels on mosaic, about 1 run in 20-50 under load). WARP
+    // draws the same input the same way every time.
+    private readonly Offscreen _stage = new(Width, Height, warp: true);
     // A device of its own for the layer compared: two layers baking on one device move a few of each other's pixels by a
     // step (Direct2D keeps state across bakes on a device), whichever way their lines are set. On two devices, two
     // layers setting lines the old way draw exactly the same frames here.
-    private readonly Offscreen _other = new(Width, Height);
+    private readonly Offscreen _other = new(Width, Height, warp: true);
     private readonly Sink _sink = new();
     private readonly Logger _logger;
     private static readonly Vector4 Background = Fixtures.Night.Base;
@@ -189,6 +193,32 @@ public sealed class SpreadSetupRenderTests : IDisposable
             _stage.Render(layer, scene, t, t, Scale, Background, ahead: ahead);
         }
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    }
+
+    /// <summary>
+    /// Offscreen (no <see cref="AheadWork"/>: previews, lyric cards, tests) work ahead of time is always allowed: a line
+    /// laid out ahead is baked whole on the next frame, however busy the machine is. A frame's own allowance of real time
+    /// used to decide it, so what was left pending (and the frames and allocations that followed) changed with the load.
+    /// </summary>
+    [Theory]
+    [InlineData("editorial")]
+    [InlineData("scattered")]
+    [InlineData("portal")]
+    [InlineData("mosaic")]
+    public void OffscreenSetupLaidOutAheadIsBakedOnTheNextFrame(string id)
+    {
+        using var layer = Layer(id, spreads: true);
+        var scene = Fixtures.English();
+        int laidOut = 0;
+        for (var t = 9.5; t < 26; t += 1.0 / 30)
+        {
+            var pending = layer.SetupPending;
+            _stage.Render(layer, scene, t, 100 + t, Scale, Background);
+            if (pending) Assert.False(layer.SetupPending, $"{id}: setup still pending at {t:0.000} s");
+            else if (layer.SetupPending) laidOut++;
+        }
+        Assert.True(laidOut > 0, $"{id} never laid a line out ahead");
+        Assert.Empty(_sink.Entries);
     }
 
     [Fact]

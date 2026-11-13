@@ -122,6 +122,8 @@ public sealed class MotionCoverTests : IAsyncDisposable
         Assert.Equal("motion", _renderer.Layers.Background);
         _covers.Hold.SetResult();
         await WaitUntil(() => controller.MotionStatus.State == MotionCoverState.NotFound);
+        // The answer is seen here a moment before the lookup hands the renderer the wallpaper: wait for the lookup.
+        await controller.WhenIdleAsync();
         Assert.NotEqual("motion", _renderer.Layers.Background);
         Assert.Equal(["Dawn", "Far"], _covers.Lookups);
         Assert.Single(_renderer.Replaced); // no cut away and back within an album
@@ -200,6 +202,38 @@ public sealed class MotionCoverTests : IAsyncDisposable
         controller.ApplySettings(controller.Settings with { MotionBlur = 12 });
         Assert.Equal(12, _renderer.Last!.Adjustments.Softening);
         Assert.Equal(2, _renderer.Replaced.Count);
+    }
+
+    /// <summary>
+    /// A cover found while the song's matched wallpaper is being handed to the renderer is not lost to it. The layers used
+    /// to be worked out first and handed over after, so a slower hand-over of the wallpaper picked before the cover was
+    /// found could land after the cover's and stay (seen as these tests timing out waiting for "motion" under load).
+    /// Here the wallpaper's hand-over is held until the cover's has had its chance.
+    /// </summary>
+    [Fact]
+    public async Task ACoverFoundDuringTheWallpapersHandOverIsNotLostToIt()
+    {
+        _covers.Albums["Dawn"] = Dawn;
+        _covers.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lyrics = _lyrics.Hold("First Light");
+        _source.Add(Playing("First Light", "Dawn"));
+        // A chosen layout: the lyrics' arrival hands over only the matched wallpaper.
+        var controller = Start(new AppSettings { LyricComposition = "editorial" });
+        await WaitUntil(() => !_covers.Lookups.IsEmpty && _lyrics.Queries.Count == 1);
+        var held = 0;
+        _renderer.BeforeSetLayers = (background, _) =>
+        {
+            if (background == "motion" || Interlocked.Exchange(ref held, 1) != 0) return;
+            // The wallpaper's hand-over, worked out before the cover is found: let the cover arrive meanwhile. (Fixed, the
+            // cover's hand-over waits for this one to finish, so this wait runs out; how long it is changes nothing then.)
+            _covers.Hold.SetResult();
+            SpinWait.SpinUntil(() => _renderer.Layers.Background == "motion", TimeSpan.FromMilliseconds(500));
+        };
+        lyrics.SetResult(TestLyrics.Found(TestLyrics.Synced("LRCLIB", "A line sung slowly")));
+        await WaitUntil(() => controller.MatchedWallpaper is not null && controller.MotionStatus.State == MotionCoverState.Available);
+        await controller.WhenIdleAsync();
+        Assert.Equal(1, held);
+        Assert.Equal("motion", _renderer.Layers.Background);
     }
 
     [Fact]

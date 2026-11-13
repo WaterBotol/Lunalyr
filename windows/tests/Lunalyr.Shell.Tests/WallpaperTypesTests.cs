@@ -191,6 +191,8 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         var a = _source.Add(Playing("Song A"));
         var controller = Start(new AppSettings(), styles: true);
         await WaitUntil(() => controller.MatchedWallpaper is not null);
+        // The pick is made (and seen here) a moment before the lookup hands the renderer its layer: wait for the lookup.
+        await controller.WhenIdleAsync();
         var first = controller.MatchedWallpaper!.Value;
         Assert.NotNull(first.LayerId);
         Assert.Equal(first.LayerId, _renderer.Layers.Background);

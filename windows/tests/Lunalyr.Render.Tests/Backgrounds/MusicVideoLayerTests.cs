@@ -149,6 +149,33 @@ public sealed class MusicVideoLayerTests : IDisposable
         Assert.Equal(30, FrameNumber(_surface.ReadPixels()));
     }
 
+    /// <summary>
+    /// The still is the song's own frame even when the frame on screen lags it: after a seek the reader decodes the frame
+    /// just before the target first, and a slow reader (a loaded machine) can have only that one ready when Reduce Motion
+    /// first holds. Here the lag is made on purpose: frame 29 shows, then Reduce Motion comes on as the song reaches 30.
+    /// </summary>
+    [Fact]
+    public void ReduceMotionHoldsTheSongsFrameNotOneThatLagsIt()
+    {
+        var feed = new Feed { Inputs = new MusicVideoInputs(Clip, 1.95, true, 0, 0, 0) };
+        using var layer = new MusicVideoLayerFactory(feed, Plain).Create();
+        _surface.Prepare(layer);
+        double wall = 0;
+        Assert.Equal(29, DrawUntil(layer, 29, ref wall));
+        feed.Inputs = new MusicVideoInputs(Clip, 2.0, true, 0, 0, 0);
+        Assert.Equal(30, DrawUntil(layer, 30, ref wall, reduceMotion: true));
+        // Held there while the song plays on.
+        feed.Inputs = new MusicVideoInputs(Clip, 4.0, true, 0, 0, 0);
+        for (var i = 0; i < 20; i++)
+        {
+            wall += 1 / 60.0;
+            _surface.Draw(layer, Scene(reduceMotion: true), wall);
+            Thread.Sleep(5);
+        }
+        Assert.Equal(30, FrameNumber(_surface.ReadPixels()));
+        Assert.DoesNotContain(feed.Reports, r => r.Playing && r.Time > 2.01);
+    }
+
     [Fact]
     public void WithoutAFileTheAlbumColoursShowAndDimmingDarkensThem()
     {
