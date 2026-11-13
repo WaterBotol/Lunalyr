@@ -235,9 +235,16 @@ final class FableRenderTests: XCTestCase {
     }
 }
 
-/// Fable's per-line variety and its layout, without rendering.
+/// Fable's per-line variety, its page layout and its phrase choreography,
+/// without rendering. (The redesign of 14 Nov 2026 replaced the old pins:
+/// five shapes and five accents with width-wrapped rows became four shapes,
+/// two accents and one row per phrase; the underline, ring and tile accents
+/// and the random per-word entrances are gone.)
+@MainActor
 final class FableStyleTests: XCTestCase {
-    func testNeighbouringLinesNeverShareShapeOrAccent() {
+    typealias Word = LyricsFetcher.Word
+
+    func testNeighbouringLinesNeverShareShapeAndAccentsAlternate() {
         for seed in -60...400 {
             let this = FableStyle.forLine(seed), next = FableStyle.forLine(seed + 1)
             XCTAssertNotEqual(this.shape, next.shape, "lines \(seed) and \(seed + 1) share a shape")
@@ -246,81 +253,140 @@ final class FableStyleTests: XCTestCase {
     }
 
     func testEveryPairingComesRoundBeforeAnyRepeats() {
-        let styles = (0..<25).map { FableStyle.forLine($0) }
-        XCTAssertEqual(Set(styles.map { "\($0.shape)-\($0.accent)" }).count, 25)
+        let styles = (0..<8).map { FableStyle.forLine($0) }
+        XCTAssertEqual(Set(styles.map { "\($0.shape)-\($0.accent)" }).count, 8)
     }
 
     func testStyleIsTheLinesOwn() {
         for seed in 0..<50 { XCTAssertEqual(FableStyle.forLine(seed), FableStyle.forLine(seed)) }
     }
 
-    func testHeroIsTheLongestWord() {
-        XCTAssertNil(FableStyle.heroIndex(["Oh", "no"]))
-        XCTAssertEqual(FableStyle.heroIndex(["Rain", "over", "the", "city"]), 0)
-        XCTAssertEqual(FableStyle.heroIndex(["a", "beautiful", "day"]), 1)
-    }
-
-    /// Words of all sorts, in every shape, on both displays: no word's box
-    /// meets another's, the block fits once scaled, and right-to-left lines
-    /// begin on the right.
-    func testLayoutKeepsWordsApartAndOnStage() {
-        let stages = [CGSize(width: 1210, height: 707), CGSize(width: 2048, height: 1037)]
-        let lines: [[CGSize]] = [
-            [CGSize(width: 120, height: 80)],
-            [CGSize(width: 1900, height: 90), CGSize(width: 150, height: 90)],
-            (0..<6).map { CGSize(width: 90 + CGFloat($0 * 37 % 120), height: 80 + CGFloat($0 % 2) * 30) },
-            (0..<30).map { CGSize(width: 60 + CGFloat($0 * 53 % 200), height: 70 + CGFloat($0 % 3) * 20) },
-            (0..<4).map { _ in CGSize(width: 140, height: 170) },
+    /// Rows of words of all sorts, in every shape, on both displays: no
+    /// word's box meets another's, each stays in the page, and right-to-left
+    /// pages begin on the right.
+    func testLayoutKeepsWordsApart() {
+        let pages: [([CGSize], [[Int]])] = [
+            ([CGSize(width: 120, height: 80)], [[0]]),
+            ([CGSize(width: 1900, height: 90), CGSize(width: 150, height: 90)], [[0, 1]]),
+            ((0..<6).map { CGSize(width: 90 + CGFloat($0 * 37 % 120), height: 80 + CGFloat($0 % 2) * 30) }, [[0, 1, 2], [3, 4, 5]]),
+            ((0..<8).map { CGSize(width: 60 + CGFloat($0 * 53 % 200), height: 70 + CGFloat($0 % 3) * 20) },
+             [[0, 1, 2, 3], [4, 5, 6, 7]]),
+            ((0..<4).map { _ in CGSize(width: 140, height: 170) }, [[0], [1, 2, 3]]),
         ]
-        for stage in stages {
-            for shape in FableStyle.Shape.allCases {
-                for sizes in lines {
-                    for rtl in [false, true] {
-                        let laid = FableLayout.arrange(sizes, shape: shape, rightToLeft: rtl, available: stage, gap: 4, rowGap: 6)
-                        XCTAssertEqual(laid.frames.count, sizes.count)
-                        XCTAssertGreaterThan(laid.scale, 0.2)
-                        XCTAssertLessThanOrEqual(laid.size.width * laid.scale, stage.width + 0.5)
-                        XCTAssertLessThanOrEqual(laid.size.height * laid.scale, stage.height + 0.5)
-                        let box = CGRect(origin: .zero, size: laid.size).insetBy(dx: -0.5, dy: -0.5)
-                        for (i, frame) in laid.frames.enumerated() {
-                            XCTAssertTrue(box.contains(frame), "\(shape) word \(i) leaves its block")
-                            XCTAssertEqual(frame.size, sizes[i])
-                            for j in (i + 1)..<laid.frames.count {
-                                XCTAssertFalse(frame.insetBy(dx: 0.5, dy: 0.5).intersects(laid.frames[j]),
-                                               "\(shape): words \(i) and \(j) overlap")
-                            }
+        for shape in FableStyle.Shape.allCases {
+            for (sizes, rows) in pages {
+                for rtl in [false, true] {
+                    let laid = FableLayout.arrange(sizes, rows: rows, shape: shape, rightToLeft: rtl, gap: 4, rowGap: 6)
+                    XCTAssertEqual(laid.frames.count, sizes.count)
+                    let box = CGRect(origin: .zero, size: laid.size).insetBy(dx: -0.5, dy: -0.5)
+                    for (i, frame) in laid.frames.enumerated() {
+                        XCTAssertTrue(box.contains(frame), "\(shape) word \(i) leaves its page")
+                        XCTAssertEqual(frame.size, sizes[i])
+                        for j in (i + 1)..<laid.frames.count {
+                            XCTAssertFalse(frame.insetBy(dx: 0.5, dy: 0.5).intersects(laid.frames[j]),
+                                           "\(shape): words \(i) and \(j) overlap")
                         }
-                        if sizes.count > 1, laid.frames[0].minY == laid.frames.map(\.minY).min() {
-                            let firstRow = laid.frames.filter { abs($0.midY - laid.frames[0].midY) < 1 }
-                            if firstRow.count > 1 {
-                                XCTAssertEqual(laid.frames[0].midX > firstRow.map(\.midX).min()!, rtl,
-                                               "\(shape) reads the wrong way (rtl \(rtl))")
-                            }
-                        }
+                    }
+                    if let row = rows.first, row.count > 1 {
+                        XCTAssertEqual(laid.frames[row[0]].midX > laid.frames[row[1]].midX, rtl,
+                                       "\(shape) reads the wrong way (rtl \(rtl))")
+                    }
+                    // Each phrase is its own row: a later row starts below the one before.
+                    if rows.count > 1 {
+                        let firstBottom = rows[0].map { laid.frames[$0].maxY }.max() ?? 0
+                        let secondTop = rows[1].map { laid.frames[$0].minY }.min() ?? 0
+                        XCTAssertGreaterThanOrEqual(secondTop, firstBottom - 0.5, "\(shape): rows overlap")
                     }
                 }
             }
         }
     }
 
-    /// A short line sets large; a long one is wrapped before it is shrunk.
-    func testLongLinesWrapBeforeShrinking() {
-        let stage = CGSize(width: 1210, height: 707)
-        let short = FableLayout.arrange([CGSize(width: 200, height: 90)], shape: .wave, rightToLeft: false,
-                                        available: stage, gap: 4, rowGap: 6)
-        XCTAssertEqual(short.scale, 1)
-        let words = (0..<18).map { _ in CGSize(width: 180, height: 90) }
-        let long = FableLayout.arrange(words, shape: .arch, rightToLeft: false, available: stage, gap: 4, rowGap: 6)
-        XCTAssertGreaterThan(Set(long.frames.map { Int($0.minY / 10) }).count, 2, "a long line should take several rows")
-        XCTAssertGreaterThan(long.scale, 0.6)
+    private func plan(_ words: [Word]) -> (StageLyricView.FablePlan, [StageRun]) {
+        let runs = StageRun.make(words, glue: [Bool](repeating: false, count: words.count))
+        return (StageLyricView.makeFablePlan(runs, phrasing: StagePhrases.analyse(runs)), runs)
     }
 
-    /// Short words then one very long one: the long word gets its own row
-    /// rather than pulling a short word down beside it past the stage's edge.
-    func testALoneLongLastWordKeepsItsRowWithinTheWidth() {
-        let sizes = [100, 100, 100, 1150].map { CGSize(width: $0, height: 90) }
-        let laid = FableLayout.arrange(sizes, shape: .wave, rightToLeft: false,
-                                       available: CGSize(width: 1210, height: 707), gap: 4, rowGap: 6)
-        XCTAssertEqual(laid.scale, 1, accuracy: 0.001)
+    /// The review videos' long line: three phrases on two pages, turned at
+    /// the pause before "until"; one accent, on the held word.
+    func testLongLineTurnsThePageAtThePause() {
+        let (plan, runs) = plan(StagePhrasesTests.mixed)
+        XCTAssertEqual(plan.pages.map(\.phrases), [[0, 1], [2]])
+        XCTAssertEqual(plan.pages[0].rows.map { $0.map { runs[$0].text } },
+                       [["and", "we", "keep", "running"], ["through", "the", "city", "lights"]], "One row per phrase")
+        XCTAssertEqual(plan.accent.map { runs[$0].text }, "running", "The accent goes to the longest-held focal word")
+        XCTAssertEqual(plan.roles.filter { $0 == .accent }.count, 1, "One accent per line")
+        // The old page turns before the next is begun, never before its own last word has landed.
+        let turn = plan.pages[1].turnStart
+        XCTAssertLessThanOrEqual(turn, runs[8].start - StageMotion.lead)
+        XCTAssertGreaterThan(turn, runs[7].start)
+        XCTAssertEqual(StageLyricView.fablePageTurn(0, plan: plan, at: runs[8].start + 0.3, exitStart: .infinity), 1,
+                       accuracy: 1e-9, "Turned away once the next page is being written")
+        XCTAssertFalse(StageLyricView.fablePageShown(0, plan: plan, at: runs[8].start + 0.3, exitStart: .infinity))
+        XCTAssertFalse(StageLyricView.fablePageShown(1, plan: plan, at: runs[7].start, exitStart: .infinity),
+                       "A page shows from its first word")
+    }
+
+    /// Never more than two phrases or eight words on a page.
+    func testPagesHoldAtMostTwoPhrases() {
+        let words = FableRenderTests.cases[1].words
+        let (plan, runs) = plan(words)
+        XCTAssertGreaterThan(plan.pages.count, 2)
+        for page in plan.pages {
+            XCTAssertLessThanOrEqual(page.phrases.count, StageLyricView.fablePagePhrases)
+            XCTAssertLessThanOrEqual(page.runs.count, StageLyricView.fablePageRuns)
+        }
+        XCTAssertEqual(plan.pages.flatMap(\.runs), Array(runs.indices), "Every word on one page, in order")
+    }
+
+    /// The stroke follows the word's role: a function word is a flick, a held
+    /// word is written over the time it is sung, and a quick run is one
+    /// stroke (each member written until the next one starts).
+    func testStrokesFollowTheRoles() {
+        let (plan, runs) = plan(StagePhrasesTests.mixed)
+        let unit = StageMotion.fableUnit
+        XCTAssertEqual(plan.roles[5], .function)
+        XCTAssertEqual(plan.strokes[5].length, unit, accuracy: 1e-9, "\"the\" is a flick")
+        XCTAssertGreaterThanOrEqual(plan.strokes[3].length, 1.0, "\"running\" is held, so written slowly")
+        XCTAssertEqual(plan.strokes[0].length, runs[1].start - runs[0].start, accuracy: 1e-9, "The run is one stroke")
+        XCTAssertEqual(plan.strokes[1].start + plan.strokes[1].length, plan.strokes[2].start, accuracy: 1e-9)
+        for (index, run) in runs.enumerated() {
+            XCTAssertEqual(plan.strokes[index].start, run.start - StageMotion.lead, accuracy: 1e-9, "Lands on its beat")
+        }
+        // Nothing is written before its beat; everything is written once its stroke ends.
+        XCTAssertEqual(StageLyricView.fableWritten(plan.strokes[4], at: runs[4].start - 0.1), 0)
+        XCTAssertEqual(StageLyricView.fableWritten(plan.strokes[4], at: plan.strokes[4].start + plan.strokes[4].length), 1)
+    }
+
+    /// Only focal words settle; the accent comes on after its word is written.
+    func testFocalWordsSettleAndTheAccentFollows() {
+        let (plan, runs) = plan(StagePhrasesTests.mixed)
+        let accent = plan.accent ?? 0
+        XCTAssertGreaterThan(StageLyricView.fableSettle(runs[accent], role: .accent, at: runs[accent].start), 0)
+        XCTAssertEqual(StageLyricView.fableSettle(runs[accent], role: .accent, at: runs[accent].start + 1), 0, accuracy: 1e-9)
+        XCTAssertEqual(StageLyricView.fableSettle(runs[5], role: .function, at: runs[5].start), 0)
+        let stroke = plan.strokes[accent]
+        XCTAssertEqual(StageLyricView.fableAccent(stroke, at: stroke.start + stroke.length, reduceMotion: false), 0)
+        XCTAssertEqual(StageLyricView.fableAccent(stroke, at: stroke.start + stroke.length + 0.5, reduceMotion: false), 1)
+    }
+
+    /// A line-timed line is one page, its phrases written in together.
+    func testLineTimedLineIsOnePage() {
+        let words = "rain over the city can fly away tonight".split(separator: " ").map {
+            Word(text: String($0), start: 2, end: 6)
+        }
+        let (plan, _) = plan(words)
+        XCTAssertTrue(plan.lineTimed)
+        XCTAssertEqual(plan.pages.count, 1)
+        XCTAssertGreaterThan(plan.pages[0].rows.count, 1, "Still a row per phrase")
+    }
+
+    func testStrokeMaskStops() {
+        XCTAssertEqual(FableStroke.stops(0).clear, 0)
+        XCTAssertEqual(FableStroke.stops(1).solid, 1)
+        let half = FableStroke.stops(0.5)
+        XCTAssertLessThanOrEqual(half.solid, half.clear)
+        XCTAssertGreaterThan(half.clear, 0)
+        XCTAssertLessThan(half.solid, 1)
     }
 }
