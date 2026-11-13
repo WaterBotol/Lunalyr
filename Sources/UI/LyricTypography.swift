@@ -151,6 +151,7 @@ enum ScatteredTypography {
         let durations = sources.map { $0.end - $0.start }.filter { $0 > 0.01 }
         let average = durations.isEmpty ? 0.3 : durations.reduce(0, +) / Double(durations.count)
         let fullness = min(Double(ranges.count) / 7, 1)
+        let focal = key.wordTimed ? focalRun(sources, average: average) : nil
         let lineRightToLeft = LyricScript.lineIsRightToLeft(words.map(\.text))
         let span = Double(max(ranges.count - 1, 1))
         var tokens: [Word] = []
@@ -158,9 +159,10 @@ enum ScatteredTypography {
         tokens.reserveCapacity(words.count)
         for (runIndex, range) in ranges.enumerated() {
             let source = sources[runIndex]
-            let metrics = metrics(index: runIndex, word: source, averageDuration: average, fullness: fullness, key: key)
+            let metrics = metrics(index: runIndex, word: source, averageDuration: average, fullness: fullness,
+                                  focal: focal, count: ranges.count, key: key)
             let seed = source.presentationID.visualSeed
-            let font = settings.lyricFont(size: metrics.size, hero: metrics.isHero, mood: key.mood,
+            let font = settings.lyricFont(size: metrics.size, hero: metrics.isHero || metrics.isFocal, mood: key.mood,
                 seed: seed, alternate: metrics.alternateFace)
             // Readings are secondary: smaller, regular weight, same face.
             let readingFont = settings.lyricFont(size: metrics.size * 0.56, hero: false, mood: key.mood,
@@ -244,11 +246,47 @@ enum ScatteredTypography {
         var uppercased: Bool
         /// Set this word in the contrasting typeface (editorial only).
         var alternateFace: Bool
+        /// The line's focal word: set largest and heaviest, so each line
+        /// has one clear place for the eye to land.
+        var isFocal = false
+        /// Starts a new row of the flow (`FlowRowBreakKey`): Editorial and
+        /// Constellation + Editorial give the focal word a row of its own.
+        var breakBefore = false
     }
+
+    /// The run the line is built around: the word the singer leans on
+    /// longest, else the longest word that carries meaning. Function words
+    /// ("the", "and") only lead when nothing else is there.
+    static func focalRun(_ sources: [LyricsFetcher.Word], average: Double) -> Int? {
+        var best: Int?
+        var bestScore = -Double.infinity
+        for (index, word) in sources.enumerated() {
+            let cleaned = word.text.lowercased()
+                .trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
+            guard !cleaned.isEmpty else { continue }
+            let length = Double(min(cleaned.count, 10))
+            var score = drag(word, average: average) * 6 + length
+            if functionWords.contains(cleaned) { score -= 20 }
+            // Ties go to the later word: a line resolves forwards.
+            if score >= bestScore { bestScore = score; best = index }
+        }
+        return best
+    }
+
+    /// Deliberate heights for the constellation's stars, in ems: up, down,
+    /// small, large, so the links between neighbours always run on a slant
+    /// and the figure never collapses into a ruled line.
+    private static let starHeights: [CGFloat] = [-0.55, 0.40, -0.20, 0.62, -0.42, 0.18, 0.52, -0.30]
 
     /// Derived from the word itself so a lyric always sets the same way
     /// rather than reshuffling on every redraw.
-    private static func metrics(index: Int, word: LyricsFetcher.Word, averageDuration: Double, fullness: Double, key: Key) -> WordMetrics {
+    ///
+    /// Each flow layout sets three tiers -- the focal word, ordinary words
+    /// and small function words -- so a line has real hierarchy instead of
+    /// every word at one size. The tiers stay within a ratio of about 1.8
+    /// so the smallest word is still easily read.
+    private static func metrics(index: Int, word: LyricsFetcher.Word, averageDuration: Double, fullness: Double,
+                                focal: Int?, count: Int, key: Key) -> WordMetrics {
         let baseSize = key.baseSize, style = key.style, mood = key.mood, composition = key.composition
         var value: UInt64 = 1469598103934665603
         for byte in word.text.utf8 {
@@ -261,54 +299,110 @@ enum ScatteredTypography {
         let held = key.wordTimed ? drag(word, average: averageDuration) : 0
         let isHero = held > 0.25
         let jitter = CGFloat(Int(value / 100) % 5) / 5.0
+        let cleaned = word.text.lowercased()
+            .trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
+        let isFocal = key.wordTimed && index == focal
+        let isMinor = !isFocal && functionWords.contains(cleaned)
 
-        // Idle sizes stay well below baseSize; the active word's scale takes
-        // it clearly past all of them. A longer-held word sits larger still.
-        var size = isHero
-            ? baseSize * (0.58 + 0.30 * style.sizeContrast * CGFloat(held) + 0.05 * jitter)
-            : baseSize * (0.64 + 0.06 * jitter)
-
-        // Editorial widens the range hard: a spread gets its character from
-        // real size contrast, not from a gentle wobble around one size.
-        var alternate = false
         let editorialAmount = key.fontIdentity.editorial ? key.fontIdentity.editorialAmount
             : composition.hasEditorialTypography ? 1 : 0
-        if editorialAmount > 0 {
-            size *= 1 + 0.10 * editorialAmount * (isHero ? 1 : jitter)
-            // Roughly every third word takes the second face. Driven by the
-            // word's own hash, so the pairing is fixed for a given lyric.
-            let eligible = composition == .constellationEditorial ? index % 2 == 0 : (value / 10_000) % 3 == 0
-            alternate = !isHero && eligible && Double((value / 700_000) % 100) < editorialAmount * 100
-        }
+        // Whether the hash lets this word take the second face at the
+        // current editorial amount.
+        let takesAlternate = Double((value / 700_000) % 100) < editorialAmount * 100
 
         // A line without word timing is read as one phrase: one size, level
         // and upright, as a single sentence would be set.
         guard key.wordTimed else {
+            let alternate = editorialAmount > 0 && !isHero && (value / 10_000) % 3 == 0 && takesAlternate
             return WordMetrics(size: max(baseSize * 0.68, 11), isHero: false, rotation: 0, waveOffset: 0,
                                uppercased: false, alternateFace: alternate)
         }
-        var offset = sin(Double(index) * 0.85) * style.wave * baseSize * CGFloat(mood.intensity)
 
-        if composition.hasConnections {
-            // The web needs the words at genuinely different heights. On a
-            // single baseline every link comes out horizontal and collinear,
-            // and the whole figure reads as a rule struck through the line
-            // rather than as a constellation.
-            let spread = CGFloat(Int(value / 7) % 100) / 100.0 - 0.5
-            let reach = CGFloat(0.30 + 0.70 * fullness) * CGFloat(key.spread)
-            offset += (spread * baseSize * 2.1 + CGFloat(sin(Double(index) * 2.3)) * baseSize * 0.42) * reach
-            // Satellites shrink well back so the held words carry the figure,
-            // the way the small linked fragments do on the real display.
-            size *= isHero ? 1.06 : 0.96
+        // Tier sizes, in ems of the base size.
+        let tiers: (focal: CGFloat, normal: CGFloat, minor: CGFloat)
+        switch composition {
+        case .editorial: tiers = (1.08, 0.74, 0.60)
+        case .constellation: tiers = (1.04, 0.70, 0.60)
+        case .constellationEditorial: tiers = (1.06, 0.70, 0.60)
+        case .echo: tiers = (0.98, 0.80, 0.66)
+        default: tiers = (1.04, 0.72, 0.60)
+        }
+        var size: CGFloat
+        if isFocal {
+            size = tiers.focal
+        } else if isMinor {
+            size = tiers.minor
+        } else {
+            // A held word that is not the focus still sits a step up.
+            size = tiers.normal + 0.03 * jitter + 0.14 * style.sizeContrast * CGFloat(held)
+        }
+        // Editorial's kicker -- the words before the focal one -- is set
+        // small, so the spread reads kicker, headline, then text.
+        if composition == .editorial, !isFocal, let focal, index < focal { size = tiers.minor }
+        size = min(size, tiers.focal) * baseSize
+
+        var alternate = false
+        // A held word is set in capitals where the line's style asks for it.
+        var uppercased = isHero && style.uppercaseHeroes
+        var rotation = 0.0
+        var offset: CGFloat = 0
+        var breakBefore = false
+        // Words before the focal word in Editorial: the small kicker.
+        let kicker = focal.map { index < $0 } ?? false
+        switch composition {
+        case .editorial:
+            // A spread: a small kicker, the focal word alone on its own
+            // row in the second face, then the rest of the line under it.
+            // Level and upright; the contrast is in the type, not the tilt.
+            if let focal, focal > 0 { breakBefore = index == focal || index == focal + 1 }
+            else if let focal { breakBefore = index == focal + 1 }
+            alternate = editorialAmount > 0 && takesAlternate
+                && (isFocal || (!kicker && (value / 10_000) % 3 == 0))
+        case .constellationEditorial:
+            // The focal word is the bright star on a row of its own; the
+            // other words spread above and below it as satellites, every
+            // other one in the second face.
+            if let focal { breakBefore = (index == focal && focal > 0) || index == focal + 1 }
+            alternate = editorialAmount > 0 && takesAlternate && (isFocal || index % 2 == 0)
+            if !isFocal {
+                let height = starHeights[(index + 3) % starHeights.count]
+                offset = height * 0.45 * baseSize * CGFloat(key.spread)
+            }
+        case .constellation:
+            // A field of stars at deliberate heights; the focal word holds
+            // its row's line and the others climb and dip around it.
+            if !isFocal {
+                let reach = CGFloat(0.45 + 0.55 * fullness) * CGFloat(key.spread)
+                let wobble = CGFloat(Int(value / 7) % 100) / 100.0 - 0.5
+                offset = (starHeights[index % starHeights.count] + 0.18 * wobble) * baseSize * reach
+            }
+            alternate = editorialAmount > 0 && !isFocal && (value / 10_000) % 3 == 0 && takesAlternate
+        case .echo:
+            // One calm level line: the repeats behind it carry the idea.
+            alternate = editorialAmount > 0 && !isFocal && (value / 10_000) % 3 == 0 && takesAlternate
+        default:
+            // Scattered: words set loose -- each tilted and lifted a little
+            // off the baseline by its own hash. The focal word stays level,
+            // the anchor the loose words gather round.
+            if !isFocal {
+                let lift = CGFloat(Int(value / 13) % 100) / 100.0 - 0.5
+                offset = lift * 0.52 * baseSize * CGFloat(0.5 + 0.5 * mood.intensity)
+                    + CGFloat(sin(Double(index) * 0.85)) * style.wave * baseSize
+                rotation = Double(Int(value / 1000) % 9 - 4) * 0.7 * max(0.6, style.rotationSpread) * mood.intensity
+            }
+            uppercased = (isHero || isFocal) && style.uppercaseHeroes
+            alternate = editorialAmount > 0 && !isFocal && (value / 10_000) % 3 == 0 && takesAlternate
         }
 
         return WordMetrics(
             size: max(size, 11),
             isHero: isHero,
-            rotation: Double(Int(value / 1000) % 9 - 4) * 0.35 * style.rotationSpread * mood.intensity,
+            rotation: rotation,
             waveOffset: offset,
-            uppercased: isHero && style.uppercaseHeroes,
-            alternateFace: alternate
+            uppercased: uppercased,
+            alternateFace: alternate,
+            isFocal: isFocal,
+            breakBefore: breakBefore && count > 1
         )
     }
 }

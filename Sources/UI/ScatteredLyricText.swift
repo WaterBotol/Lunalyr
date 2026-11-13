@@ -175,6 +175,11 @@ struct PeakScaleKey: LayoutValueKey {
     static let defaultValue: CGFloat = 1
 }
 
+/// Starts a new row of a `FlowLayout` at this child.
+struct FlowRowBreakKey: LayoutValueKey {
+    static let defaultValue = false
+}
+
 extension View {
     func peakScale(_ value: CGFloat) -> some View {
         layoutValue(key: PeakScaleKey.self, value: value)
@@ -194,6 +199,16 @@ struct FlowLayout: Layout {
     /// Arabic, Hebrew and other right-to-left lines read from the right:
     /// the first word sits rightmost and rows fill leftwards.
     var rightToLeft = false
+    /// Evens out the rows: a line that needs two rows is parted near its
+    /// middle rather than leaving one word alone on the second row.
+    var balanced = false
+    /// Per row, cycling, a sideways shift from the row's aligned place, in
+    /// points. Applied only when the line takes more than one row, so the
+    /// rows of a line step against each other.
+    var rowShifts: [CGFloat] = []
+    /// The narrowest the block may be: rows align inside this width, so a
+    /// flush-left layout keeps one left edge from line to line.
+    var fieldWidth: CGFloat?
 
     struct Row {
         var items: [(index: Int, size: CGSize)] = []
@@ -204,18 +219,21 @@ struct FlowLayout: Layout {
     struct RowKey: Equatable {
         let width: CGFloat
         let spacing: CGFloat
+        let balanced: Bool
     }
     struct Cache {
         var sizes: [CGSize]
+        var breaks: [Bool] = []
         var rowKey: RowKey?
         var rows: [Row] = []
     }
     func makeCache(subviews: Subviews) -> Cache {
-        Cache(sizes: measuredSizes(subviews))
+        Cache(sizes: measuredSizes(subviews), breaks: subviews.map { $0[FlowRowBreakKey.self] })
     }
     func updateCache(_ cache: inout Cache, subviews: Subviews) {
         let sizes = measuredSizes(subviews)
-        if sizes != cache.sizes { cache = Cache(sizes: sizes) }
+        let breaks = subviews.map { $0[FlowRowBreakKey.self] }
+        if sizes != cache.sizes || breaks != cache.breaks { cache = Cache(sizes: sizes, breaks: breaks) }
     }
     private func measuredSizes(_ subviews: Subviews) -> [CGSize] {
         subviews.map { subview in
@@ -225,14 +243,13 @@ struct FlowLayout: Layout {
             return CGSize(width: natural.width * peak, height: natural.height * peak + scatter * 2)
         }
     }
-    private func rows(maxWidth: CGFloat, cache: inout Cache) -> [Row] {
-        let key = RowKey(width: maxWidth, spacing: spacing)
-        if key == cache.rowKey { return cache.rows }
+    private func wrap(_ sizes: [CGSize], breaks: [Bool], maxWidth: CGFloat) -> [Row] {
         var result: [Row] = []
         var current = Row()
-        for (index, size) in cache.sizes.enumerated() {
+        for (index, size) in sizes.enumerated() {
             let projected = current.items.isEmpty ? size.width : current.width + spacing + size.width
-            if projected > maxWidth, !current.items.isEmpty {
+            let forced = breaks.indices.contains(index) && breaks[index]
+            if (projected > maxWidth || forced), !current.items.isEmpty {
                 result.append(current)
                 current = Row()
             }
@@ -241,8 +258,33 @@ struct FlowLayout: Layout {
             current.items.append((index, size))
         }
         if !current.items.isEmpty { result.append(current) }
+        return result
+    }
+    private func rows(maxWidth: CGFloat, cache: inout Cache) -> [Row] {
+        let key = RowKey(width: maxWidth, spacing: spacing, balanced: balanced)
+        if key == cache.rowKey { return cache.rows }
+        var result = wrap(cache.sizes, breaks: cache.breaks, maxWidth: maxWidth)
+        if balanced, result.count > 1, maxWidth.isFinite {
+            // The narrowest measure that still takes no more rows.
+            var low = cache.sizes.map(\.width).max() ?? 0, high = maxWidth
+            for _ in 0..<14 where high - low > 1 {
+                let middle = (low + high) / 2
+                if wrap(cache.sizes, breaks: cache.breaks, maxWidth: middle).count > result.count {
+                    low = middle
+                } else {
+                    high = middle
+                }
+            }
+            result = wrap(cache.sizes, breaks: cache.breaks, maxWidth: high)
+        }
         cache.rowKey = key; cache.rows = result
         return result
+    }
+
+    private func shift(row: Int, of count: Int) -> CGFloat {
+        guard count > 1, !rowShifts.isEmpty else { return 0 }
+        let value = rowShifts[row % rowShifts.count]
+        return rightToLeft ? -value : value
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
@@ -250,7 +292,11 @@ struct FlowLayout: Layout {
         let maxWidth = stageWidth ?? proposal.width ?? .infinity
         let laid = rows(maxWidth: maxWidth, cache: &cache)
         let height = laid.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(laid.count - 1, 0))
-        let width = laid.map(\.width).max() ?? 0
+        var width: CGFloat = 0
+        for (number, row) in laid.enumerated() {
+            width = max(width, row.width + 2 * abs(shift(row: number, of: laid.count)))
+        }
+        if let fieldWidth { width = max(width, min(fieldWidth, maxWidth)) }
         // Report an oversized word honestly so the outer stage can fit it;
         // claiming the proposed width hid overflow from the fitting pass.
         return CGSize(width: width, height: height)
@@ -260,7 +306,7 @@ struct FlowLayout: Layout {
         if cache.sizes.count != subviews.count { cache = makeCache(subviews: subviews) }
         let laid = rows(maxWidth: stageWidth ?? proposal.width ?? .infinity, cache: &cache)
         var y = bounds.minY
-        for row in laid {
+        for (number, row) in laid.enumerated() {
             var x: CGFloat
             // A right-to-left line's "leading" edge is the right one.
             let alignment: RowAlignment = !rightToLeft ? rowAlignment
@@ -270,6 +316,7 @@ struct FlowLayout: Layout {
             case .center: x = bounds.midX - row.width / 2
             case .trailing: x = bounds.maxX - row.width
             }
+            x += shift(row: number, of: laid.count)
             let count = row.items.count
             for position in 0..<count {
                 let item = row.items[rightToLeft ? count - 1 - position : position]
@@ -572,25 +619,26 @@ struct ScatteredLyricText: View {
             ScatteredRunFrame.make($0, states: states, reveals: reveals, ink: ink,
                                    highlights: arrivals[$0.index].highlightsSungWords, time: time, reduceMotion: reduceMotion)
         } : []
-        let idle = OrganicMotion.idleAmplitude(composition: composition, mood: mood, reduceMotion: reduceMotion)
-        // The float wanders a couple of points over several seconds; sampled
-        // twelve times a second its steps are a fraction of a pixel, and a
-        // settled word's layer is left alone in between.
+        // Settled words hold still while they are being read: the flow
+        // layouts no longer float idle words about.
+        let idle = 0.0
+        // Sampled twelve times a second, so a settled word's layer is left
+        // alone in between (the float itself is now still).
         let floatTime = (time * 12).rounded(.down) / 12
         // Gaps come from a fixed inset on each word's slot, not from
         // reserving a share of its width -- proportional reservation made a
         // wide word claim a wide margin and a narrow one almost none, so the
         // spacing visibly changed from word to word.
+        let plan = FlowPlan.make(composition, style: style, wordTimed: wordTimed, fullness: fullness)
         FlowLayout(
-            spacing: baseSize * (composition.hasConnections ? 0.06 : 0.02),
-            // The web needs vertical room to scatter into; without it the
-            // words collide with the rows above and below. Short lines get
-            // less of it -- see `fullness`.
-            lineSpacing: baseSize * (composition.hasConnections && wordTimed
-                                     ? 0.34 + 0.96 * CGFloat(fullness) : 0.30),
-            rowAlignment: wordTimed ? style.rowAlignment : .center,
-            stageWidth: stageWidth,
-            rightToLeft: layout.rightToLeft
+            spacing: baseSize * plan.spacing,
+            lineSpacing: baseSize * plan.lineSpacing,
+            rowAlignment: plan.alignment,
+            stageWidth: plan.measure.map { min(stageWidth ?? .infinity, $0 * baseSize) } ?? stageWidth,
+            rightToLeft: layout.rightToLeft,
+            balanced: plan.balanced,
+            rowShifts: plan.rowShifts.map { $0 * baseSize },
+            fieldWidth: plan.field.map { $0 * baseSize }
         ) {
             ForEach(layout.runs, id: \.index) { run in
                 if wordTimed {
@@ -647,7 +695,7 @@ struct ScatteredLyricText: View {
         // The float and the exit sit outside the equatable ink, so a settled
         // word's glyph tree is reused and only its layer moves. They also sit
         // inside the slot, so the constellation's anchors never drift.
-        return ScatteredRunInk(run: run, frame: frame, arrival: arrival)
+        return ScatteredRunInk(run: run, frame: frame, arrival: arrival, settles: composition != .echo)
             .equatable()
             .modifier(WordFloat(drift: vc_idle_drift(run.seed, floatTime, idle), leave: leave,
                                 size: run.metrics.size, seed: run.seed, reduceMotion: reduceMotion))
@@ -659,6 +707,59 @@ struct ScatteredLyricText: View {
             .offset(y: run.metrics.waveOffset)
             .zIndex(frame.heat > 0.05 ? 1 : 0)
             .layoutValue(key: ScatterOffsetKey.self, value: run.metrics.waveOffset)
+            .layoutValue(key: FlowRowBreakKey.self, value: run.metrics.breakBefore)
+    }
+}
+
+/// How a flow layout uses the stage: the measure it wraps at, its gaps, and
+/// how its rows sit. Lengths are in ems of the line's base size, so a line
+/// composes the same way on a small window and a wide display.
+struct FlowPlan: Equatable {
+    /// The spacing unit: 8 pt at the gallery's 46 pt base size.
+    static let unit: CGFloat = 8.0 / 46.0
+
+    var spacing: CGFloat = 0.02
+    var lineSpacing: CGFloat = 0.30
+    var alignment: FlowLayout.RowAlignment = .center
+    /// Wrap width; nil wraps only at the stage's edge.
+    var measure: CGFloat?
+    var balanced = false
+    var rowShifts: [CGFloat] = []
+    var field: CGFloat?
+
+    static func make(_ composition: LyricComposition, style: LyricLineStyle, wordTimed: Bool,
+                     fullness: Double) -> FlowPlan {
+        // A line sung as one phrase is set as one level sentence.
+        guard wordTimed else { return FlowPlan(spacing: composition.hasConnections ? 0.06 : 0.02) }
+        switch composition {
+        case .editorial:
+            // A flush-left column of fixed measure, centred on the stage:
+            // every line hangs from the same left edge, as on a page.
+            return FlowPlan(spacing: 0.02, lineSpacing: 0, alignment: .leading, measure: 10, balanced: true,
+                            field: 10)
+        case .constellation:
+            // A wide field, rows stepping against each other, with real
+            // gaps between the stars so the hairlines can be seen.
+            let step = 6 * unit
+            let shifts: [CGFloat] = style.rowAlignment == .trailing ? [step, -step] : [-step, step]
+            return FlowPlan(spacing: 4 * unit, lineSpacing: (fullness < 0.6 ? 2 : 1) * unit, measure: 12,
+                            balanced: true, rowShifts: shifts)
+        case .constellationEditorial:
+            // Satellites spread wide above and below the focal star.
+            return FlowPlan(spacing: 5 * unit, lineSpacing: unit, measure: 13, balanced: true)
+        case .echo:
+            return FlowPlan(spacing: 0.02, lineSpacing: 0, measure: 13, balanced: true)
+        default:
+            // Scattered: a compact block whose rows step left and right of
+            // each other, so the line breaks loose of a single baseline.
+            let shifts: [CGFloat]
+            switch style.rowAlignment {
+            case .leading: shifts = [-9 * unit, 7 * unit, -2 * unit]
+            case .trailing: shifts = [9 * unit, -7 * unit, 2 * unit]
+            case .center: shifts = [-5 * unit, 9 * unit, -9 * unit]
+            }
+            return FlowPlan(spacing: 0.02, lineSpacing: 0, measure: 9, balanced: true, rowShifts: shifts)
+        }
     }
 }
 
@@ -824,9 +925,12 @@ private struct ScatteredRunInk: View, Equatable {
     let run: ScatteredTypography.Run
     let frame: ScatteredRunFrame
     let arrival: WordArrival
+    /// The calm layouts land without overshoot: the word's spring is held
+    /// at its rest instead of passing it. Echo keeps its small overshoot.
+    var settles = true
     @Environment(\.lyricReduceMotion) private var reduceMotion
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival
+        lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival && lhs.settles == rhs.settles
     }
     var body: some View {
         let size = run.metrics.size
@@ -863,8 +967,11 @@ private struct ScatteredRunInk: View, Equatable {
             .offset(x: reduceMotion ? 0 : CGFloat(frame.driftX) * size,
                     y: reduceMotion ? 0 : CGFloat(frame.driftY) * size)
             .modifier(WordEntrance(progress: frame.presentation.progress, style: arrival,
-                size: size, direction: run.index.isMultiple(of: 2) ? 1 : -1,
-                visibility: frame.presentation.opacity, arrival: frame.presentation.arrival))
+                // Words come in along the reading direction: from the
+                // right, or from the left in a right-to-left line.
+                size: size, direction: run.rightToLeft ? -1 : 1,
+                visibility: frame.presentation.opacity,
+                arrival: settles ? min(1, frame.presentation.arrival) : frame.presentation.arrival))
             .modifier(OptionalGlow(colour: frame.ink.glow, strength: 0.45 * frame.glow * frame.fill * (1 - tiled),
                                    radius: 10 + 22 * frame.glow))
             .shadow(color: .black.opacity(0.28 + 0.24 * heat), radius: 7 + 12 * heat, y: 2)
