@@ -112,15 +112,18 @@ final class LocalPlayersOptInTests: XCTestCase {
         XCTAssertEqual(PlayerAccessList.shown(installed: [.appleMusic, .vlc, .safari], followed: [.appleMusic, .spotify]),
                        [.appleMusic], "no row offering to ask for control of an unfollowed VLC")
 
+        // The line under the title names the apps; the caption under the
+        // list, what else can be followed once turned on.
         let musicOnly = OnboardingCopy.permissionNote(installed: [.appleMusic])
+            + OnboardingCopy.permissionDetail(installed: [.appleMusic])
         for absent in ["Spotify", "VLC", "Swinsian", "VOX"] {
             XCTAssertFalse(musicOnly.contains(absent), absent)
         }
         XCTAssertTrue(musicOnly.contains("Music"))
         XCTAssertTrue(musicOnly.contains("YouTube Music, SoundCloud and Amazon Music"))
 
-        let withVox = OnboardingCopy.permissionNote(installed: [.appleMusic, .spotify, .vox])
-        XCTAssertTrue(withVox.contains("Music and Spotify"))
+        XCTAssertTrue(OnboardingCopy.permissionNote(installed: [.appleMusic, .spotify, .vox]).contains("Music and Spotify"))
+        let withVox = OnboardingCopy.permissionDetail(installed: [.appleMusic, .spotify, .vox])
         XCTAssertTrue(withVox.contains("Once you turn them on in Settings, it also follows VOX"))
         XCTAssertFalse(withVox.contains("VLC"))
         XCTAssertFalse(OnboardingCopy.permissionNote(installed: []).isEmpty)

@@ -24,15 +24,28 @@ extension UISnapshotCatalogue {
                      scene.settings.backgroundMode = .visualizer
                      scene.settings.lowPowerVisuals = true
                  }),
-            step("onboarding/4-lyrics", "Lyrics & readings: sources, timing, readings and translations", .lyrics),
-            step("onboarding/5-menu-bar", "The menu bar: where Lunalyr lives, its two switches", .menuBar),
-            step("onboarding/5-menu-bar-line-on", "The menu bar, with the current line switched on", .menuBar,
+            step("onboarding/3-look-lyrics", "Pick a look: the lyric layouts, the one in use first", .look,
+                 prepare: { $0.settings.lyricComposition = .broadside }, lookPart: .lyrics),
+            step("onboarding/4-videos", "Music videos: off, both framings, YouTube search off", .videos),
+            step("onboarding/4-videos-on", "Music videos: on, library videos whole, YouTube search on", .videos,
+                 looks: every, prepare: { scene in
+                     scene.settings.backgroundMode = .musicVideo
+                     scene.settings.libraryVideoFraming = .whole
+                     scene.settings.musicVideoOnline = true
+                 }),
+            step("onboarding/5-lyrics", "Lyrics & readings: sources, timing, readings and translations", .lyrics),
+            step("onboarding/6-extras", "Extras: the player, floating lyrics, the Discord status (off)", .extras,
+                 looks: every),
+            step("onboarding/6-extras-discord-on", "Extras: the Discord status switched on", .extras,
+                 prepare: { $0.extras.showsDiscordPresence = true }),
+            step("onboarding/7-menu-bar", "The menu bar: where Lunalyr lives, its two switches", .menuBar),
+            step("onboarding/7-menu-bar-line-on", "The menu bar, with the current line switched on", .menuBar,
                  prepare: { $0.extras.showsMenuBarLine = true }),
-            step("onboarding/6-done", "Done, first run: a song playing; Open Settings is the default", .done,
+            step("onboarding/8-done", "Done, first run: a song playing; Open Settings is the default", .done,
                  looks: every, player: .playing),
-            step("onboarding/6-done-denied", "Done, first run: Music refused, its fix still offered", .done,
+            step("onboarding/8-done-denied", "Done, first run: Music refused, its fix still offered", .done,
                  player: .denied),
-            step("onboarding/6-done-again", "Done, shown again from Settings: finishing just closes", .done,
+            step("onboarding/8-done-again", "Done, shown again from Settings: finishing just closes", .done,
                  firstRun: false),
         ]
     }
@@ -41,10 +54,11 @@ extension UISnapshotCatalogue {
     private static func step(_ name: String, _ note: String, _ step: OnboardingFlow.Step,
                              looks: [UISnapshotRenderer.Look] = [.light, .dark], player: UISnapshotScene.Player = .idle,
                              firstRun: Bool = true,
-                             prepare: @escaping @MainActor (UISnapshotScene) -> Void = { _ in }) -> UISnapshotCase {
+                             prepare: @escaping @MainActor (UISnapshotScene) -> Void = { _ in },
+                             lookPart: OnboardingFlow.LookPart = .wallpaper) -> UISnapshotCase {
         UISnapshotCase(name, note: note, chrome: .onboardingWindow, size: .frame(LunalyrDesign.Layout.onboarding),
                        looks: looks, player: player, prepare: prepare,
-                       view: { scene in onboardingView(scene, step: step, firstRun: firstRun) })
+                       view: { scene in onboardingView(scene, step: step, firstRun: firstRun, lookPart: lookPart) })
     }
 
     /// The window onboarding draws in, configured as the app configures it.
@@ -52,8 +66,10 @@ extension UISnapshotCatalogue {
         .window(styleMask: OnboardingWindowController.styleMask, configure: OnboardingWindowController.configure)
     }
 
-    static func onboardingView(_ scene: UISnapshotScene, step: OnboardingFlow.Step, firstRun: Bool = true) -> some View {
-        OnboardingView(flow: OnboardingFlow(models: scene.models, firstRun: firstRun, step: step),
-                       previewDisplay: SettingsPreviewDisplay(size: UISnapshotDisplay.screen))
+    static func onboardingView(_ scene: UISnapshotScene, step: OnboardingFlow.Step, firstRun: Bool = true,
+                               lookPart: OnboardingFlow.LookPart = .wallpaper) -> some View {
+        let flow = OnboardingFlow(models: scene.models, firstRun: firstRun, step: step)
+        flow.lookPart = lookPart
+        return OnboardingView(flow: flow, previewDisplay: SettingsPreviewDisplay(size: UISnapshotDisplay.screen))
     }
 }

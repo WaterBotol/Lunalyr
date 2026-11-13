@@ -3,7 +3,7 @@ import Combine
 
 // MARK: - Onboarding: the steps and what moving between them does
 //
-// Six steps, one window (`OnboardingWindowController`). The flow is a plain
+// Eight steps, one window (`OnboardingWindowController`). The flow is a plain
 // model, so the order of things -- and above all when macOS may ask about a
 // player -- can be tested without a window:
 //
@@ -30,7 +30,7 @@ enum OnboardingEnding: Equatable {
 @MainActor
 final class OnboardingFlow: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable, Comparable {
-        case welcome, music, look, lyrics, menuBar, done
+        case welcome, music, look, videos, lyrics, extras, menuBar, done
 
         var id: Int { rawValue }
 
@@ -40,19 +40,30 @@ final class OnboardingFlow: ObservableObject {
             case .welcome: return "Welcome"
             case .music: return "Your music"
             case .look: return "Pick a look"
+            case .videos: return "Music videos"
             case .lyrics: return "Lyrics & readings"
+            case .extras: return "Extras"
             case .menuBar: return "The menu bar"
             case .done: return "Done"
             }
         }
 
-        /// "Step 2 of 6": the step dots, to VoiceOver.
+        /// "Step 2 of 8": the step dots, to VoiceOver.
         var position: String { "Step \(rawValue + 1) of \(Self.allCases.count)" }
 
         static func < (lhs: Step, rhs: Step) -> Bool { lhs.rawValue < rhs.rawValue }
     }
 
+    /// The look step's two halves: the wallpaper, or the lyrics' layout.
+    enum LookPart: String, CaseIterable, Identifiable {
+        case wallpaper, lyrics
+        var id: String { rawValue }
+        var title: String { self == .wallpaper ? "Wallpaper" : "Lyrics" }
+    }
+
     @Published private(set) var step: Step
+    /// Which half of the look step is showing; kept here so Back returns to it.
+    @Published var lookPart: LookPart = .wallpaper
     /// First run: finishing can open Settings. Shown again from Settings ›
     /// General, the same steps run and finishing just closes.
     let firstRun: Bool
@@ -130,25 +141,31 @@ final class OnboardingFlow: ObservableObject {
 }
 
 /// What onboarding says, kept apart from the views so tests can pin the
-/// promises in it.
+/// promises in it. Short and plain: one line under a title, one caption
+/// under a control.
 enum OnboardingCopy {
     static let welcomeTitle = "Welcome to Lunalyr"
-    static let welcome = "Your desktop becomes the lyrics of the song you’re playing, timed word by word, over a wallpaper that moves with the music."
+    static let welcome = "Your desktop sings along: the lyrics of the song you’re playing, timed word by word, over a wallpaper that moves with the music."
 
     static let musicTitle = "Let Lunalyr see what’s playing"
-    /// What macOS is about to ask, what to answer, and what Lunalyr does
-    /// with the access (inventory B7). Names only the players installed on
-    /// this Mac; VLC, Swinsian and VOX, like web players, only as something
-    /// to turn on in Settings.
+    /// What macOS is about to ask and what to answer (inventory B7). Names
+    /// only the players installed on this Mac.
     static func permissionNote(installed: [PlayerKind]) -> String {
         let apps = PlayerKind.musicApps.filter(installed.contains)
-        let local = PlayerKind.localPlayers.filter(installed.contains)
         let followed = list((apps.isEmpty ? [.appleMusic] : apps).map(\.displayName))
-        let web = WebService.allCases.map(\.displayName)
+        return "Lunalyr follows \(followed). The first time it reads one, macOS asks whether Lunalyr may control it: allow it."
+    }
+
+    /// What Lunalyr does with the access, and what else it can follow once
+    /// turned on in Settings: VLC, Swinsian and VOX (only those installed),
+    /// and web players.
+    static func permissionDetail(installed: [PlayerKind]) -> String {
+        let local = PlayerKind.localPlayers.filter(installed.contains)
+        let web = list(WebService.allCases.map(\.displayName))
         let optional = local.isEmpty
-            ? "Once you turn web players on in Settings, it also follows \(list(web)) in your browser."
-            : "Once you turn them on in Settings, it also follows \(list(local.map(\.displayName))), and \(list(web)) in your browser."
-        return "Lunalyr follows what’s playing in \(followed). \(optional) The first time it reads a player, macOS asks whether Lunalyr may control it: allow it. Lunalyr only reads the song and its position, and controls playback only when you use its buttons."
+            ? "Once you turn web players on in Settings, it also follows \(web) in your browser."
+            : "Once you turn them on in Settings, it also follows \(list(local.map(\.displayName))), and \(web) in your browser."
+        return "It only reads the song and its position, and controls playback only when you use its buttons. \(optional)"
     }
 
     /// "A", "A and B", "A, B and C".
@@ -164,18 +181,45 @@ enum OnboardingCopy {
     }
 
     static let lookTitle = "Pick a look"
+    /// Under the layouts: what the chosen one does (its name is on its
+    /// tile), or Automatic's promise.
+    static func layoutCaption(_ layout: LyricComposition?) -> String {
+        layout?.detail ?? "Automatic picks a layout to suit each song."
+    }
+    /// How many more layouts Settings has than the look step shows.
+    static func moreLayouts(_ count: Int) -> String { "\(count) more in Settings, with Automatic." }
+
+    static let videosTitle = "Music videos"
+    static let videos = "Play a song’s official video behind its lyrics, muted. Videos in your Music library come first and need nothing sent."
+    static let videoWallpaper = "Play music videos as the wallpaper"
+    static let videoWallpaperCaption = "Songs without a video show the look you picked."
+    static let searchYouTube = "Search YouTube for videos"
+    /// The same facts as Settings › Wallpaper › Music video.
+    static let youTubePrivacy = MusicVideoSection.privacyCaption
 
     static let lyricsTitle = "Lyrics & readings"
-    static let sources = "Lunalyr finds synced lyrics in Music’s own lyrics on this Mac and in lyric services such as LRCLIB. The services receive only the song’s title, artist, album and length."
+    static let sources = "From Music’s own lyrics on this Mac and services such as LRCLIB, which receive only the song’s title, artist, album and length."
     static func timing(earlier: String, later: String) -> String {
-        "Nudge them a tenth of a second at a time from the menu bar, or press \(earlier) and \(later) once global shortcuts are on. Lunalyr remembers the timing for each song."
+        "Nudge them from the menu bar, or press \(earlier) and \(later) once shortcuts are on. Each song keeps its timing."
     }
-    static let readings = "Romanisation shows how lyrics in other scripts sound, below them or in their place."
-    static let translations = "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Translating on this Mac is a separate option in Settings, off unless you turn it on. Lyrics are never sent anywhere to be translated."
+    static let readings = "How lyrics in other scripts sound, below them or in their place."
+    static let translations = "When the lyrics include one, as bilingual LRC files do. Lyrics are never sent anywhere to be translated."
+
+    static let extrasTitle = "Extras"
+    static let extras = "A player on the desktop, lyrics over your apps, and the line you’re hearing on Discord."
+    static let playerTitle = "Desktop player"
+    static let player = "Rest the pointer on an uncovered desktop to see what’s playing and next, and search."
+    static let floatingTitle = "Floating lyrics"
+    static let floating = "Lyrics over your apps instead of on the desktop. Turn them on in Settings › Lyric style."
+    static let discordTitle = "Discord status"
+    static let discord = "Your status shows the line being sung, as it changes."
+    /// What the switch sends, and to whom (DiscordPresence: a local socket to
+    /// the Discord app; the cover from Apple's public search; cleared on stop).
+    static let discordPrivacy = "Off by default. Talks only to the Discord app on this Mac (covers come from Apple’s search) and clears when playback stops."
 
     static let menuBarTitle = "Find Lunalyr in the menu bar"
     /// Where the app lives and the way back (inventory B10).
-    static let menuBarNote = "Lunalyr lives in the menu bar and has no Dock icon once Settings is closed. If the notch hides its icon, open Lunalyr again from Applications to bring back Settings."
+    static let menuBarNote = "Lunalyr lives in the menu bar, with no Dock icon. If the notch hides it, open Lunalyr from Applications."
     static let menuBarLineCaption = "The line being sung, beside Lunalyr’s icon."
     static let launchAtLoginCaption = "Lunalyr starts quietly in the menu bar when you log in."
 

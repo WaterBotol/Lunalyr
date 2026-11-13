@@ -11,7 +11,9 @@ final class WelcomeTests: XCTestCase {
     @MainActor
     func testTheWelcomeExplainsThePromptAndTheWayBack() {
         let note = OnboardingCopy.permissionNote(installed: PlayerKind.allCases)
+            + OnboardingCopy.permissionDetail(installed: PlayerKind.allCases)
         XCTAssertTrue(note.contains("macOS asks"))
+        XCTAssertTrue(note.contains("only reads the song and its position"))
         for kind in PlayerKind.apps {
             XCTAssertTrue(note.contains(kind.displayName))
         }
@@ -57,14 +59,16 @@ final class WelcomeTests: XCTestCase {
             visited.append(flow.step)
         }
         XCTAssertEqual(visited, OnboardingFlow.Step.allCases)
-        XCTAssertEqual(visited.count, 6)
+        XCTAssertEqual(visited, [.welcome, .music, .look, .videos, .lyrics, .extras, .menuBar, .done])
+        XCTAssertEqual(visited.map(\.title), ["Welcome", "Your music", "Pick a look", "Music videos", "Lyrics & readings",
+                                              "Extras", "The menu bar", "Done"])
         flow.advance()
         XCTAssertEqual(flow.step, .done, "Continue stops at the end")
         flow.back()
         XCTAssertEqual(flow.step, .menuBar)
         XCTAssertTrue(flow.canGoBack)
-        XCTAssertEqual(OnboardingFlow.Step.music.position, "Step 2 of 6")
-        XCTAssertEqual(OnboardingFlow.Step.done.position, "Step 6 of 6")
+        XCTAssertEqual(OnboardingFlow.Step.music.position, "Step 2 of 8")
+        XCTAssertEqual(OnboardingFlow.Step.done.position, "Step 8 of 8")
     }
 
     /// The access step starts following the players without asking, so
@@ -234,13 +238,92 @@ final class WelcomeTests: XCTestCase {
 
     @MainActor
     func testEverySymbolOnboardingNamesExists() {
-        let symbols = ["music.note.list", "quote.bubble", "text.quote", "clock", "character.book.closed",
-                       "checkmark.circle.fill", "info.circle", "leaf.fill", "battery.75percent", "wifi", "switch.2"]
+        let symbols = ["checkmark.circle.fill", "info.circle", "leaf.fill", "pause.fill", "battery.75percent", "wifi",
+                       "switch.2"]
         for symbol in symbols {
             XCTAssertNotNil(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), symbol)
         }
         XCTAssertNotNil(NSImage(named: "MenuBarIconTemplate"), "the menu-bar icon the illustration lights")
+        let recording = try? XCTUnwrap(DiscordStatusRecording.image, "the Discord status recording is in the bundle")
+        XCTAssertEqual(recording?.representations.first?.pixelsWide, 254, "drawn at 2x: 127 points wide")
     }
+    // MARK: The reworked steps
+
+    /// The new steps' promises: music videos say what YouTube receives (the
+    /// same words as Settings), and Discord what it talks to.
+    func testTheNewStepsSayWhatIsSentAndWhere() {
+        XCTAssertEqual(OnboardingCopy.youTubePrivacy, MusicVideoSection.privacyCaption)
+        XCTAssertTrue(OnboardingCopy.youTubePrivacy.hasPrefix("Off by default"))
+        XCTAssertTrue(OnboardingCopy.videos.contains("need nothing sent"))
+        XCTAssertTrue(OnboardingCopy.discordPrivacy.hasPrefix("Off by default"))
+        XCTAssertTrue(OnboardingCopy.discordPrivacy.contains("only to the Discord app on this Mac"))
+        XCTAssertTrue(OnboardingCopy.discordPrivacy.contains("clears when playback stops"))
+        XCTAssertTrue(OnboardingCopy.discordPrivacy.contains("Apple"), "the cover lookup is named")
+        XCTAssertEqual(MusicVideoFraming.allCases.map(\.title), ["Fill the screen", "Show the whole video"])
+        XCTAssertEqual(OnboardingCopy.layoutCaption(nil), "Automatic picks a layout to suit each song.")
+        XCTAssertEqual(OnboardingCopy.layoutCaption(.broadside), LyricComposition.broadside.detail)
+        // Sentence case, no periods in titles.
+        for step in OnboardingFlow.Step.allCases {
+            XCTAssertFalse(step.title.hasSuffix("."), step.title)
+            XCTAssertNotEqual(step.title, step.title.uppercased(), step.title)
+        }
+    }
+
+    /// The switches write the real settings, here a throwaway suite: Discord
+    /// under its own key, off until turned on; the music-video switch picks
+    /// Music video and turns back to the look chosen before it.
+    @MainActor
+    func testTheNewSwitchesAreBoundToTheirSettings() {
+        let rig = OnboardingRig()
+        defer { rig.tearDown() }
+        let extras = rig.models.extras
+        XCTAssertFalse(extras.showsDiscordPresence, "off by default")
+        XCTAssertNil(rig.defaults.object(forKey: "custom.discordPresence"))
+        extras.showsDiscordPresence = true
+        XCTAssertEqual(rig.defaults.object(forKey: "custom.discordPresence") as? Bool, true)
+        XCTAssertTrue(LunalyrExtras(defaults: rig.defaults).showsDiscordPresence, "read back from the same suite")
+        extras.showsDiscordPresence = false
+        XCTAssertEqual(rig.defaults.object(forKey: "custom.discordPresence") as? Bool, false)
+
+        let settings = rig.models.settings
+        XCTAssertFalse(settings.musicVideoOnline, "searching YouTube is off by default")
+        settings.backgroundMode = .pattern
+        let videos = VideosStep.videoWallpaper(settings)
+        XCTAssertFalse(videos.wrappedValue)
+        videos.wrappedValue = true
+        XCTAssertEqual(settings.backgroundMode, .musicVideo)
+        XCTAssertTrue(videos.wrappedValue)
+        videos.wrappedValue = false
+        XCTAssertEqual(settings.backgroundMode, .pattern, "back to the look chosen before")
+        settings.libraryVideoFraming = .whole
+        XCTAssertEqual(rig.defaults.string(forKey: MusicVideoFraming.libraryKey), "whole")
+    }
+
+    /// The look step's layouts: a few reworked ones, the one in use always
+    /// among them; the chosen one plays its line a few times, then holds.
+    @MainActor
+    func testTheLookStepShowsTheLayoutInUse() {
+        XCTAssertEqual(LayoutChoices.shown(current: nil), LayoutChoices.featured)
+        XCTAssertEqual(LayoutChoices.shown(current: .portal), LayoutChoices.featured)
+        let withEditorial = LayoutChoices.shown(current: .constellationEditorial)
+        XCTAssertEqual(withEditorial.first, .constellationEditorial)
+        XCTAssertEqual(withEditorial.count, LayoutChoices.featured.count)
+        XCTAssertEqual(LayoutThumbnail.time(after: 0), 0)
+        XCTAssertEqual(LayoutThumbnail.time(after: LayoutThumbnail.cycle + 1), 1, accuracy: 0.0001)
+        XCTAssertEqual(LayoutThumbnail.time(after: LayoutThumbnail.cycle * Double(LayoutThumbnail.plays) + 1),
+                       LayoutThumbnail.held)
+        XCTAssertEqual(LayoutThumbnail.words.count, SampleLyric.lines.flatMap { $0 }.count)
+
+        let rig = OnboardingRig()
+        defer { rig.tearDown() }
+        let flow = OnboardingFlow(models: rig.models, firstRun: true, step: .look)
+        XCTAssertEqual(flow.lookPart, .wallpaper)
+        flow.lookPart = .lyrics
+        flow.advance()
+        flow.back()
+        XCTAssertEqual(flow.lookPart, .lyrics, "Back returns to the half that was showing")
+    }
+
 }
 
 /// Isolated stores around players that haven't been followed yet, as at

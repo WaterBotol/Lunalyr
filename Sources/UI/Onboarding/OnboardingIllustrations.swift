@@ -117,7 +117,7 @@ struct SampleLyric: View {
 /// The welcome's picture: the desktop as Lunalyr draws it, in miniature,
 /// with the app's icon resting on its lower edge.
 struct WelcomeHero: View {
-    var width: CGFloat = 392
+    var width: CGFloat = LunalyrDesign.Onboarding.heroWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The liquid-glass opening is on screen (`WelcomeGlass`).
     @State private var intro = false
@@ -193,8 +193,6 @@ struct MenuBarIllustration: View {
         }
         .frame(height: 104)
         .clipShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-            .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5))
         .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
             .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
         .environment(\.colorScheme, .dark)

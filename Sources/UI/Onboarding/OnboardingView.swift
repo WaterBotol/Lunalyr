@@ -53,7 +53,7 @@ struct OnboardingView: View {
             forward = new > old
             DispatchQueue.main.async {
                 // VoiceOver moves to the new title once the step has settled.
-                withAnimation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.step, reduceMotion: reduceMotion),
+                withAnimation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
                               completionCriteria: .logicallyComplete) {
                     shown = flow.step
                 } completion: {
@@ -68,8 +68,10 @@ struct OnboardingView: View {
         switch step {
         case .welcome: WelcomeStep(focus: title)
         case .music: MusicStep(flow: flow, focus: title)
-        case .look: LookStep(previewDisplay: previewDisplay, focus: title)
+        case .look: LookStep(flow: flow, previewDisplay: previewDisplay, focus: title)
+        case .videos: VideosStep(focus: title)
         case .lyrics: LyricsStep(focus: title)
+        case .extras: ExtrasStep(focus: title)
         case .menuBar: MenuBarStep(focus: title)
         case .done: DoneStep(flow: flow, focus: title)
         }
@@ -122,13 +124,13 @@ private struct OnboardingFooter: View {
 }
 
 /// Where the person is: a dot per step, the current one a lit bar. One
-/// element to VoiceOver: "Step 2 of 6".
+/// element to VoiceOver: "Step 2 of 8".
 private struct StepDots: View {
     let current: OnboardingFlow.Step
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: LunalyrDesign.Spacing.xSmall + LunalyrDesign.Spacing.hairline) {
             ForEach(OnboardingFlow.Step.allCases) { step in
                 Capsule(style: .continuous)
                     .fill(step == current ? AnyShapeStyle(Color.lunalyrAccent) : AnyShapeStyle(Color.secondary.opacity(0.35)))
@@ -144,13 +146,48 @@ private struct StepDots: View {
 
 // MARK: - Shared step pieces
 
-/// A step's frame: its content vertically centred in the room between the
-/// title bar and the buttons, 48 points from the sides, scrolling only if
-/// larger text makes it taller than the window.
-struct OnboardingStepLayout<Content: View>: View {
+/// A step's page: its title at the same height on every step, a line under
+/// it, then the step's content; scrolling only if larger text makes it
+/// taller than the window.
+///
+///     OnboardingPage(step: .lyrics, title: OnboardingCopy.lyricsTitle, focus: focus) {
+///         OnboardingCard { … }
+///     }
+struct OnboardingPage<Content: View>: View {
+    let step: OnboardingFlow.Step
+    let title: String
+    var message: String?
+    var focus: OnboardingTitleFocus
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(step: OnboardingFlow.Step, title: String, message: String? = nil, focus: OnboardingTitleFocus,
+         @ViewBuilder content: () -> Content) {
+        self.step = step
+        self.title = title
+        self.message = message
+        self.focus = focus
+        self.content = content()
+    }
+
+    var body: some View {
+        OnboardingStepLayout(alignment: .top) {
+            OnboardingHeader(step: step, title: title, message: message, focus: focus)
+                .padding(.bottom, LunalyrDesign.Spacing.large)
+            content
+        }
+    }
+}
+
+/// A step's frame: 48 points from the sides, its content from the shared
+/// title line down (`.top`) or centred in the room between the title bar and
+/// the buttons (`.center`, the welcome and the end), scrolling only if larger
+/// text makes it taller than the window.
+struct OnboardingStepLayout<Content: View>: View {
+    var alignment: VerticalAlignment = .center
+    let content: Content
+
+    init(alignment: VerticalAlignment = .center, @ViewBuilder content: () -> Content) {
+        self.alignment = alignment
         self.content = content()
     }
 
@@ -158,9 +195,11 @@ struct OnboardingStepLayout<Content: View>: View {
         GeometryReader { proxy in
             ScrollView(.vertical) {
                 VStack(spacing: 0) { content }
-                    .padding(.horizontal, 48)
-                    .padding(.vertical, LunalyrDesign.Spacing.small)
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+                    .padding(.horizontal, LunalyrDesign.Onboarding.sideInset)
+                    .padding(.top, alignment == .top ? LunalyrDesign.Onboarding.titleTop : LunalyrDesign.Spacing.small)
+                    .padding(.bottom, LunalyrDesign.Spacing.large)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height,
+                           alignment: alignment == .top ? .top : .center)
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.automatic)
@@ -168,27 +207,16 @@ struct OnboardingStepLayout<Content: View>: View {
     }
 }
 
-/// A step's symbol, title and explanation, centred. The title is a header,
+/// A step's title and the line under it, centred. The title is a header,
 /// and VoiceOver lands on it when the step appears.
 struct OnboardingHeader: View {
     let step: OnboardingFlow.Step
-    var symbol: String?
-    var symbolColour: Color = .lunalyrAccentText
     let title: String
     var message: String?
-    var focus: AccessibilityFocusState<OnboardingFlow.Step?>.Binding
+    var focus: OnboardingTitleFocus
 
     var body: some View {
         VStack(spacing: LunalyrDesign.Spacing.small) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 34, weight: .regular))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(symbolColour)
-                    .frame(height: 40)
-                    .padding(.bottom, LunalyrDesign.Spacing.xSmall)
-                    .accessibilityHidden(true)
-            }
             Text(title)
                 .lunalyrText(.largeTitle)
                 .multilineTextAlignment(.center)
@@ -201,14 +229,15 @@ struct OnboardingHeader: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 520)
+                    .frame(maxWidth: LunalyrDesign.Onboarding.messageWidth)
             }
         }
         .frame(maxWidth: .infinity)
     }
 }
 
-/// A rounded group of rows, as a grouped form draws its sections.
+/// A group of rows, as a grouped form draws its sections: a quiet fill, no
+/// edge except under Increase Contrast.
 struct OnboardingCard<Content: View>: View {
     let content: Content
 
@@ -218,7 +247,7 @@ struct OnboardingCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.medium) { content }
-            .padding(LunalyrDesign.Spacing.medium + 2)
+            .padding(LunalyrDesign.Spacing.large)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous).fill(.quinary))
             .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
@@ -226,42 +255,58 @@ struct OnboardingCard<Content: View>: View {
     }
 }
 
-/// A symbol beside a short title and its explanation: a row of a card.
+/// A short title and its explanation, with whatever the row offers beneath:
+/// a row of a card.
 struct OnboardingFeatureRow<Accessory: View>: View {
-    let symbol: String
     let title: String
     let text: String
     let accessory: Accessory
 
-    init(symbol: String, title: String, text: String, @ViewBuilder accessory: () -> Accessory) {
-        self.symbol = symbol
+    init(title: String, text: String, @ViewBuilder accessory: () -> Accessory) {
         self.title = title
         self.text = text
         self.accessory = accessory()
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.medium) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color.lunalyrAccentText)
-                .frame(width: 22)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xSmall) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).lunalyrText(.emphasis)
-                    Text(text).lunalyrText(.caption)
-                }
-                .accessibilityElement(children: .combine)
-                accessory
+        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
+            VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.hairline) {
+                Text(title).lunalyrText(.emphasis)
+                Text(text).lunalyrText(.caption)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            accessory
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 extension OnboardingFeatureRow where Accessory == EmptyView {
-    init(symbol: String, title: String, text: String) {
-        self.init(symbol: symbol, title: title, text: text) { EmptyView() }
+    init(title: String, text: String) {
+        self.init(title: title, text: text) { EmptyView() }
+    }
+}
+
+/// A switch at the trailing edge, as a grouped form lays one out; to
+/// VoiceOver, the switch named by its title, with the caption as a hint.
+struct OnboardingSwitchRow: View {
+    let title: String
+    let caption: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: LunalyrDesign.Spacing.medium) {
+            VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.hairline) {
+                Text(title)
+                Text(caption).lunalyrText(.caption)
+            }
+            .accessibilityHidden(true)
+            Spacer(minLength: 0)
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .accessibilityHint(caption)
+        }
     }
 }
