@@ -9,6 +9,9 @@
     <Project Path="src/Lunalyr.Render/Lunalyr.Render.csproj">
       <Platform Project="x64" />
     </Project>
+    <Project Path="src/Lunalyr.Setup/Lunalyr.Setup.csproj">
+      <Platform Project="x64" />
+    </Project>
     <Project Path="src/Lunalyr.Shell/Lunalyr.Shell.csproj">
       <Platform Project="x64" />
     </Project>

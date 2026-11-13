@@ -61,6 +61,8 @@ public sealed partial class WindowsShortcuts : IShortcuts
 
     private static IShellLinkW NewLink()
     {
+        // Any apartment will do (S_FALSE or RPC_E_CHANGED_MODE when this thread already has one).
+        _ = CoInitializeEx(0, 0 /* COINIT_MULTITHREADED */);
         var iid = typeof(IShellLinkW).GUID;
         Marshal.ThrowExceptionForHR(CoCreateInstance(ClsidShellLink, 0, 1 /* CLSCTX_INPROC_SERVER */, iid, out var unknown));
         try
@@ -72,6 +74,9 @@ public sealed partial class WindowsShortcuts : IShortcuts
             Marshal.Release(unknown);
         }
     }
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoInitializeEx(nint reserved, uint flags);
 
     [LibraryImport("ole32.dll")]
     private static partial int CoCreateInstance(in Guid clsid, nint outer, uint context, in Guid iid, out nint unknown);

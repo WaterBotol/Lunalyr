@@ -128,7 +128,7 @@ public static class Payload
         return CryptographicOperations.FixedTimeEquals(sha.GetHashAndReset(), payload.Sha256);
     }
 
-    /// <summary>The payload's zip, read in place.</summary>
+    /// <summary>The payload's zip, read in place. Disposing it leaves <paramref name="installer"/> open.</summary>
     public static ZipArchive Open(Stream installer, Located payload) =>
         new(new SubStream(installer, payload.Offset, payload.Length), ZipArchiveMode.Read, leaveOpen: false);
 
@@ -208,10 +208,6 @@ public static class Payload
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset1, int count) => throw new NotSupportedException();
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing) inner.Dispose();
-            base.Dispose(disposing);
-        }
+        // Disposing the window leaves the installer's stream open: its owner closes it.
     }
 }

@@ -27,6 +27,15 @@ public sealed class PayloadTests : IDisposable
     }
 
     [Fact]
+    public void ReadingThePayloadLeavesTheInstallerOpen()
+    {
+        using var stream = File.OpenRead(_f.Installer("0.8.0"));
+        var payload = Payload.Locate(stream)!;
+        using (var zip = Payload.Open(stream, payload)) Assert.Equal("0.8.0", Payload.ReadManifest(zip).Version);
+        Assert.True(Payload.Verify(stream, payload)); // Setup reads the version, then installs from the same stream.
+    }
+
+    [Fact]
     public void TheBareSetupHasNoPayload()
     {
         using var stream = File.OpenRead(_f.Stub());
