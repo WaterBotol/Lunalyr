@@ -54,12 +54,14 @@ extension LyricsFetcher {
         return result
     }
 
-    /// Sung lines, normalised for comparison.
+    /// Sung lines, normalised for comparison. Credits and the song's own
+    /// heading are left out, whether or not the source's parser set them
+    /// apart (`LyricCredits`).
     static func agreementText(_ candidate: LyricCandidate) -> [String] {
         let raw: [String]
         switch candidate.result {
-        case .synced(let lines, _): raw = lines.filter { !$0.isInstrumental }.map(\.text)
-        case .plain(let lines, _): raw = lines
+        case .synced(let lines, _): raw = sungLines(lines, candidate).map(\.text)
+        case .plain(let lines, _): raw = LyricCredits.droppingLeadingCredits(lines, title: candidate.title, artist: candidate.artist)
         }
         return raw.map(LyricQuery.normalize).filter { !$0.isEmpty }
     }
@@ -67,8 +69,12 @@ extension LyricsFetcher {
     /// Sung lines with their start time; empty for plain text.
     static func agreementTiming(_ candidate: LyricCandidate) -> [(text: String, start: Double)] {
         guard case .synced(let lines, _) = candidate.result else { return [] }
-        return lines.filter { !$0.isInstrumental }
+        return sungLines(lines, candidate)
             .map { (LyricQuery.normalize($0.text), $0.start) }.filter { !$0.0.isEmpty }
+    }
+
+    private static func sungLines(_ lines: [Line], _ candidate: LyricCandidate) -> [Line] {
+        LyricCredits.flagging(lines, title: candidate.title, artist: candidate.artist).filter { !$0.isInstrumental }
     }
 
     /// At least 60% of the lines of the longer text appear in the other, and
