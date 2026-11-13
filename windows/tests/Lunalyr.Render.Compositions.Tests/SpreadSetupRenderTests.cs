@@ -191,6 +191,32 @@ public sealed class SpreadSetupRenderTests : IDisposable
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
+    /// <summary>
+    /// Offscreen (no <see cref="AheadWork"/>: previews, lyric cards, tests) work ahead of time is always allowed: a line
+    /// laid out ahead is baked whole on the next frame, however busy the machine is. A frame's own allowance of real time
+    /// used to decide it, so what was left pending (and the frames and allocations that followed) changed with the load.
+    /// </summary>
+    [Theory]
+    [InlineData("editorial")]
+    [InlineData("scattered")]
+    [InlineData("portal")]
+    [InlineData("mosaic")]
+    public void OffscreenSetupLaidOutAheadIsBakedOnTheNextFrame(string id)
+    {
+        using var layer = Layer(id, spreads: true);
+        var scene = Fixtures.English();
+        int laidOut = 0;
+        for (var t = 9.5; t < 26; t += 1.0 / 30)
+        {
+            var pending = layer.SetupPending;
+            _stage.Render(layer, scene, t, 100 + t, Scale, Background);
+            if (pending) Assert.False(layer.SetupPending, $"{id}: setup still pending at {t:0.000} s");
+            else if (layer.SetupPending) laidOut++;
+        }
+        Assert.True(laidOut > 0, $"{id} never laid a line out ahead");
+        Assert.Empty(_sink.Entries);
+    }
+
     [Fact]
     public void ABakeWaitsItsTurnAndALetGoBakeIsSkipped()
     {

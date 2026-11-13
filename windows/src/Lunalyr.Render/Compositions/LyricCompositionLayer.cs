@@ -483,13 +483,23 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     /// <summary>
     /// Opens this frame's work ahead of time when the pass has allowance left (shared by every surface through
-    /// <see cref="AheadWork"/>; a frame's own allowance without one); true while it lasts.
+    /// <see cref="AheadWork"/>); true while it lasts. Without one (offscreen: previews, lyric cards, tests) work ahead of
+    /// time is always allowed, as <see cref="FrameContext.AheadWork"/> says: no clock decides how much a frame does, so
+    /// what an offscreen frame leaves for the next never depends on how busy the machine is. (It used to take a frame's
+    /// own 2.5 ms of real time, so how much setup was left pending, and with it the state that frames and allocation
+    /// counts were compared from, changed with the machine's load.)
     /// </summary>
     private bool BeginAhead()
     {
+        if (_aheadWork is null)
+        {
+            _aheadOpen = true;
+            _aheadDeadline = long.MaxValue;
+            return true;
+        }
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
         if (_aheadOpen) return now < _aheadDeadline;
-        var remaining = _aheadWork?.Open() ?? AheadWork.AllowanceTicks;
+        var remaining = _aheadWork.Open();
         if (remaining <= 0) return false;
         _aheadOpen = true;
         _aheadStart = now;
