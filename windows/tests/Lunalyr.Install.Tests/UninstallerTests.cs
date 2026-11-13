@@ -76,6 +76,19 @@ public sealed class UninstallerTests : IDisposable
     }
 
     [Fact]
+    public void FoldersThatDontHoldLunalyrAreLeftAlone()
+    {
+        // An install folder that was never Lunalyr's (a setup renamed and run from Downloads, say).
+        var app = Path.Combine(_f.Layout.Root, "app");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "holiday.jpg"), "someone's photo");
+
+        Assert.True(Uninstaller.Uninstall(_f.Target, _f.Services).Succeeded);
+
+        Assert.True(File.Exists(Path.Combine(app, "holiday.jpg")));
+    }
+
+    [Fact]
     public void UninstallingTwiceIsHarmless()
     {
         Assert.True(_f.Install(_f.Installer("0.8.0")).Succeeded);

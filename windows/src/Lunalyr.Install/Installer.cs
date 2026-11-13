@@ -54,6 +54,9 @@ public static class Installer
         var log = services.Log;
         var others = OtherCopies(services.Copies, layout);
         if (layout.Problem(target.DataRoot) is { } problem) return Fail(problem);
+        foreach (var folder in new[] { layout.AppDir, layout.PreviousDir })
+            if (!HoldsLunalyrOrNothing(folder))
+                return Fail($"{folder} already exists and isn’t Lunalyr’s, so Setup won’t replace it. Choose another folder.");
 
         progress?.Report(new("Checking the installer", 0.02));
         if (!Payload.Verify(installer, payload))
@@ -218,6 +221,11 @@ public static class Installer
             }
         }
     }
+
+    /// <summary>Missing, empty, or holding Lunalyr.exe: a folder the installer may replace.</summary>
+    internal static bool HoldsLunalyrOrNothing(string folder) =>
+        !Directory.Exists(folder) || File.Exists(Path.Combine(folder, Product.ExeName))
+        || !Directory.EnumerateFileSystemEntries(folder).Any();
 
     internal static void DeleteFolder(string folder)
     {

@@ -162,6 +162,19 @@ public sealed class InstallerTests : IDisposable
     }
 
     [Fact]
+    public void AnAppFolderThatIsntLunalyrsIsNeverReplaced()
+    {
+        Directory.CreateDirectory(_f.Layout.AppDir);
+        File.WriteAllText(Path.Combine(_f.Layout.AppDir, "notes.txt"), "someone's");
+
+        var result = _f.Install(_f.Installer("0.8.0"));
+
+        Assert.Contains("isn’t Lunalyr’s", result.Error);
+        Assert.True(File.Exists(Path.Combine(_f.Layout.AppDir, "notes.txt")));
+        Assert.Empty(_f.Registry.Writes);
+    }
+
+    [Fact]
     public void CancellingWhileUnpackingChangesNothing()
     {
         Assert.True(_f.Install(_f.Installer("0.8.0", (Product.ExeName, "old"))).Succeeded);

@@ -44,6 +44,13 @@ public static class Uninstaller
         var leftovers = new List<string>();
         foreach (var folder in new[] { layout.AppDir, layout.StagingDir, layout.PreviousDir })
         {
+            // Only a folder that holds Lunalyr is removed: a folder of the same name that isn't Lunalyr's stays.
+            if (!Directory.Exists(folder)) continue;
+            if (!File.Exists(Path.Combine(folder, Product.ExeName)) && Directory.EnumerateFileSystemEntries(folder).Any())
+            {
+                log($"Left {folder}: it doesn't hold {Product.ExeName}.");
+                continue;
+            }
             Installer.TryDeleteFolder(folder, log);
             if (Directory.Exists(folder)) leftovers.Add(folder);
         }

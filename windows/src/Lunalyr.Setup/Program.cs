@@ -162,8 +162,9 @@ internal static partial class Program
     private static int Uninstall()
     {
         var self = Environment.ProcessPath!;
-        var root = _options.Root ?? (Path.GetFileName(self).Equals(Product.SetupName, StringComparison.OrdinalIgnoreCase)
-            ? Path.GetDirectoryName(self) : null);
+        // The installed uninstaller sits beside the app folder; a setup run from anywhere else removes the default install.
+        var here = Path.GetDirectoryName(self);
+        var root = _options.Root ?? (here is not null && File.Exists(Path.Combine(here, "app", Product.ExeName)) ? here : null);
         var target = Target() with { Layout = root is null ? InstallLayout.Default() : new InstallLayout(root) };
 
         // Running from inside the install, Setup can't remove itself: continue from a copy in Temp.
