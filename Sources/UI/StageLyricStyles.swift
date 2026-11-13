@@ -1000,8 +1000,9 @@ extension StageLyricView {
     //
     // A collage: each word is set a different way as it arrives -- huge and cut
     // off by the edge of the stage with a star beside it, white on a colour bar
-    // across a pale panel, or letter by letter on jumping baselines -- while the
-    // words before it shrink into a small stack above.
+    // across a pale panel, or letter by letter on loosely set baselines -- and
+    // then shrinks into a small, flush-left stack above, read top to bottom,
+    // the oldest words fading out at its top.
 
     /// The size Mosaic's small stack sets its words at.
     static func mosaicSmallSize(unit: CGFloat) -> CGFloat { unit * 0.6 }
@@ -1012,6 +1013,46 @@ extension StageLyricView {
         unit * 0.85 + (readings ? readingSlot(mosaicSmallSize(unit: unit)) : 0)
     }
 
+    /// The centre of the stack's row for a word `rank` hand-offs old: the
+    /// newest small word sits lowest, nearest the big one, and older words
+    /// climb a row each (rank 1 to 4).
+    static func mosaicRowY(rank: Double, step: CGFloat, in bounds: CGRect) -> CGFloat {
+        let top = bounds.minY + max(bounds.height * 0.1, step * 0.6)
+        return top + (3 - CGFloat(min(4, max(rank, 1)))) * step
+    }
+
+    /// Where Mosaic's word lands before it joins the stack: on the lower
+    /// right thirds, below the stack, and inside the 5 % title-safe margin. On a stage too short
+    /// for both, it moves right of the stack's column instead. `overhang` is
+    /// how far the setting reaches past its own box (the colour bar's panel);
+    /// `rightToLeft` mirrors it.
+    static func mosaicHome(_ size: CGSize, sway: CGFloat, step: CGFloat, overhang: CGFloat = 0,
+                           rightToLeft: Bool = false, in bounds: CGRect) -> CGPoint {
+        let below = mosaicRowY(rank: 1, step: step, in: bounds) + step * 0.7 + overhang + size.height / 2
+        let lowest = bounds.maxY - size.height / 2 - bounds.height * 0.05 - overhang
+        let y = min(lowest, max(bounds.minY + bounds.height * 0.6, below))
+        // Its centre towards the right third, never past the safe edge.
+        let right = bounds.width * 0.95 - size.width / 2
+        var x = bounds.minX + max(bounds.width / 2, min(right, bounds.width * (0.6 + sway)))
+        if below > lowest + 1 {
+            // Clear of the stack's column (a fifth of the stage from it), as
+            // far as the far edge allows.
+            let clear = bounds.width * 0.34 + size.width / 2
+            let far = bounds.width * 0.95 - size.width / 2
+            x = bounds.minX + max(x - bounds.minX, min(clear, far))
+        }
+        if rightToLeft { x = bounds.maxX - (x - bounds.minX) }
+        return CGPoint(x: x, y: y)
+    }
+
+    /// Mosaic's accent (the bar and the star) a little less saturated than
+    /// the ink's tile colour: on a dark stage a full-chroma bar shouts.
+    static let mosaicAccentSaturation: Double = 0.72
+
+    /// How much of a stacked word still shows: the newest two clearly, the
+    /// third faint, gone by the fourth row.
+    static func mosaicStackFade(rank: Double) -> Double { max(0, min(1, 1 - (rank - 1.6) * 0.45)) }
+
     fileprivate func mosaic(_ runs: [StageRun], total: Int) -> some View {
         let speed = lineSpeed
         let arrivals = runs.map { arrive($0, speed: speed) }
@@ -1021,6 +1062,9 @@ extension StageLyricView {
         let kinds = runs.map { tiled($0) ? 0 : Int(chance($0.id, 20) * 3) % 3 }
         let stage = stageSize
         let u = unit
+        let rightToLeft = LyricScript.lineIsRightToLeft(runs.map(\.text))
+        let edge: Alignment = rightToLeft ? .trailing : .leading
+        let flush: HorizontalAlignment = rightToLeft ? .trailing : .leading
         // The stack's rows make room for readings when the line has any.
         let step = Self.mosaicStackStep(unit: u, readings: runs.contains { Self.reading(of: $0, in: readings) != nil })
         return StageLayout(place: { measured, bounds in
@@ -1028,11 +1072,17 @@ extension StageLyricView {
                 // One continuous path: the word sits where it landed, then glides into the stack.
                 let rank = ranks[index]
                 let settle = CGFloat(Self.glide(min(rank, 1.2) / 1.2))
-                let sway = (chance(index, 21) - 0.5) * 0.24 * bounds.width
-                let home = CGPoint(x: bounds.midX + sway, y: bounds.midY + (chance(index, 22) - 0.5) * 0.16 * bounds.height)
-                let slot = CGFloat(min(3, max(rank, 1)))
-                let stack = CGPoint(x: bounds.midX - bounds.width * 0.2 + CGFloat(index % 2) * bounds.width * 0.04,
-                                    y: bounds.minY + bounds.height * 0.12 + (slot - 1) * step)
+                let sway = CGFloat(chance(index, 21) - 0.5) * 0.06
+                let size = measured[index]
+                // The colour bar's panel reaches past the bar (see below).
+                let overhang = kinds.indices.contains(index) && kinds[index] == 1 ? u * 2.3 * 0.45 : 0
+                let home = Self.mosaicHome(size, sway: sway, step: step, overhang: overhang,
+                                           rightToLeft: rightToLeft, in: bounds)
+                // The stack is flush to one column: each word's own edge (the
+                // big setting shrinks towards it) sits on it.
+                let column = rightToLeft ? bounds.maxX - bounds.width * 0.14 : bounds.minX + bounds.width * 0.14
+                let stack = CGPoint(x: column + (rightToLeft ? -1 : 1) * size.width / 2,
+                                    y: Self.mosaicRowY(rank: rank, step: step, in: bounds))
                 return CGPoint(x: home.x + (stack.x - home.x) * settle, y: home.y + (stack.y - home.y) * settle)
             }
         }) {
@@ -1042,24 +1092,27 @@ extension StageLyricView {
                 let settle = Self.glide(min(rank, 1.2) / 1.2)
                 let sample = sample(run, of: total)
                 let tile = tiled(run)
-                let side: Double = chance(run.id, 23) < 0.5 ? 1 : -1
+                // Words come in the reading direction: from the right, or the left
+                // for a right-to-left line.
+                let side: Double = rightToLeft ? -1 : 1
                 let bigSize: CGFloat = kinds[run.id] == 0 ? 3.0 : kinds[run.id] == 1 ? 2.3 : 2.4
                 let morph = StageMotion.mosaicMorph(settle: settle, smallRatio: 0.6 / bigSize)
-                ZStack {
+                ZStack(alignment: edge) {
                     // The big setting, shrinking and dimming as the next word takes over.
                     Group {
                         if kinds[run.id] == 0 {
-                            // Huge, running off the edge, with a star beside it.
+                            // Huge, nearly the stage's width (inside its safe edge), with a star beside it.
                             let size = unit * 3.0
                             ZStack(alignment: .topTrailing) {
-                                withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 1.1) {
+                                withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 0.9) {
                                     word(run, tile ? ink.tileText : sample.sung)
                                         .font(font(size, hero: true, id: run.id))
-                                        .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
+                                        .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.9)
                                         .background { tileBackground(tile, size: size) }
                                         .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
                                 }
                                 Star4().fill(ink.tileColour).frame(width: size * 0.32, height: size * 0.32)
+                                    .saturation(Self.mosaicAccentSaturation)
                                     .rotationEffect(.degrees(reduceMotion ? 0 : time * 40))
                                     .offset(x: size * 0.1, y: -size * 0.12)
                             }
@@ -1072,6 +1125,7 @@ extension StageLyricView {
                                 .font(font(size, hero: true, id: run.id))
                                 .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
                             let tilt = (chance(run.id, 28) - 0.5) * 5
+                            let readingInk = ink.tileText.opacity(LyricHighlight.readingOpacity)
                             ZStack {
                                 // The pale panel behind, a little off-square, arriving a beat after the bar.
                                 RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.9))
@@ -1080,27 +1134,28 @@ extension StageLyricView {
                                     .offset(x: size * 0.12, y: size * 0.1)
                                     .opacity(Self.glide((time - (run.start + 0.05)) / 0.3))
                                     .scaleEffect(x: reduceMotion ? 1 : 0.6 + 0.4 * Self.glide((time - (run.start + 0.05)) / 0.3), y: 1)
-                                // The bar wipes across, then the word lands on it; a
-                                // reading is printed on the bar under its word.
-                                let readingInk = ink.tileText.opacity(LyricHighlight.readingOpacity)
-                                withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) { plain }
-                                    .hidden()
-                                    .padding(.horizontal, size * 0.28).padding(.vertical, size * 0.06)
-                                    .background {
-                                        ink.tileColour
-                                            .mask(alignment: side > 0 ? .leading : .trailing) {
-                                                GeometryReader { box in Rectangle().frame(width: box.size.width * wipe) }
-                                            }
+                                // The bar and its word are printed together: one wipe
+                                // lays them both down, so the bar is never seen
+                                // apart from its word. A reading is printed on the
+                                // bar under its word.
+                                ZStack {
+                                    withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) { plain }
+                                        .hidden()
+                                        .padding(.horizontal, size * 0.28).padding(.vertical, size * 0.06)
+                                        .background { ink.tileColour.saturation(Self.mosaicAccentSaturation) }
+                                    withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) {
+                                        word(run, ink.tileText)
+                                            .font(font(size, hero: true, id: run.id))
+                                            .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
                                     }
-                                    .rotationEffect(.degrees(tilt))
-                                withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) {
-                                    word(run, ink.tileText)
-                                        .font(font(size, hero: true, id: run.id))
-                                        .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
                                 }
-                                    .rotationEffect(.degrees(tilt))
-                                    .opacity(Self.glide((time - (run.start + 0.1)) / 0.2))
-                                    .offset(x: reduceMotion ? 0 : CGFloat(1 - wipe) * size * 0.5 * side)
+                                .mask {
+                                    GeometryReader { box in
+                                        Rectangle().frame(width: box.size.width * wipe)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: side > 0 ? .leading : .trailing)
+                                    }
+                                }
+                                .rotationEffect(.degrees(tilt))
                                 Star4().fill(Color.white).frame(width: size * 0.3, height: size * 0.3)
                                     .shadow(color: .black.opacity(0.2), radius: 3)
                                     .rotationEffect(.degrees(reduceMotion ? 0 : time * 50))
@@ -1111,18 +1166,21 @@ extension StageLyricView {
                             }
                             .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
                         } else {
-                            // Letter by letter, each on its own baseline.
+                            // Letter by letter, each rising onto its own baseline:
+                            // one size, a small and steady rise and fall, so the
+                            // word reads as set loosely, not as broken.
                             let size = unit * 2.4
                             withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 0.8) {
-                            HStack(spacing: size * 0.02) {
+                            HStack(spacing: size * 0.03) {
                                 ForEach(Array(run.text.enumerated()), id: \.offset) { index, character in
                                     let reveal = Self.glide((time - (run.start + Double(index) * 0.05)) / 0.25)
+                                    let lift = (index.isMultiple(of: 2) ? -1.0 : 1.0) * (0.5 + 0.5 * chance(run.id * 31 + index, 25))
                                     Text(String(character))
-                                        .font(font(size * (0.85 + 0.3 * CGFloat(chance(run.id * 31 + index, 24))), hero: true, id: run.id))
+                                        .font(font(size, hero: true, id: run.id))
                                         .foregroundStyle(sample.sung)
-                                        .offset(y: CGFloat(chance(run.id * 31 + index, 25) - 0.5) * size * 0.28
+                                        .offset(y: CGFloat(lift) * size * 0.06
                                                 + (reduceMotion ? 0 : CGFloat(1 - reveal) * size * 0.3))
-                                        .rotationEffect(.degrees((chance(run.id * 31 + index, 26) - 0.5) * 22))
+                                        .rotationEffect(.degrees(lift * 5))
                                         .opacity(reveal)
                                 }
                             }
@@ -1131,17 +1189,19 @@ extension StageLyricView {
                             .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
                         }
                     }
-                    .scaleEffect(morph.bigScale)
+                    .scaleEffect(morph.bigScale, anchor: UnitPoint(x: rightToLeft ? 1 : 0, y: 0.5))
                     .opacity(min(1, a * 1.6) * morph.bigOpacity)
                     // The small version it becomes, taking over once the big one has
                     // shrunk to its size.
-                    let fade = max(0, 1 - (rank - 1.5) * 0.6)
+                    let fade = Self.mosaicStackFade(rank: rank)
                     let small = Self.mosaicSmallSize(unit: unit)
-                    withReading(run, size: small, colour: sample.reading.opacity(fade), maxWidth: stage.width * 0.4) {
-                        word(run, sample.rest.opacity(0.75 * fade))
+                    withReading(run, size: small, colour: sample.reading.opacity(fade), alignment: flush, maxWidth: stage.width * 0.4) {
+                        word(run, sample.rest.opacity(0.8 * fade))
                             .font(font(small, hero: true, id: run.id))
-                            .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
+                            .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4, alignment: edge)
                     }
+                        // Its own width, so its reading sits flush with it too.
+                        .fixedSize(horizontal: true, vertical: false)
                         .opacity(morph.smallOpacity)
                 }
             }
@@ -1179,6 +1239,16 @@ extension StageLyricView {
         readingSlot(restSize, gap: torqueReadingGap(restSize))
     }
 
+    /// How visible a Torque word is from its rank: the newest three clearly,
+    /// the fourth fading as it climbs, none after it, so the stack stays a
+    /// readable few lines and the oldest never pile up at the stage's top.
+    static func torqueVisibility(rank: Double) -> Double { max(0, min(1, 1 - (rank - 2.4) * 0.9)) }
+
+    /// Torque's leading: the share of a word's measured height (without its
+    /// reading) it takes in the stack. Open enough that the thick edge of one
+    /// word clears the next.
+    static let torqueLeading: CGFloat = 0.94
+
     static func torqueState(_ runs: [StageRun], at time: Double, speed: Double, seed: Int,
                             reduceMotion: Bool) -> TorqueState {
         let arrivals = runs.map { StageMotion.arrival($0.start, at: time, speed: speed, reduceMotion: reduceMotion) }
@@ -1189,20 +1259,20 @@ extension StageLyricView {
         // back as the word fades out at the top, so the stack neither jumps at
         // an onset nor sinks off the stage on a long line.
         let weights = runs.indices.map {
-            CGFloat(StageMotion.weight(arrivals[$0]) * StageMotion.torqueVisibility(rank: ranks[$0]))
+            CGFloat(StageMotion.weight(arrivals[$0]) * torqueVisibility(rank: ranks[$0]))
         }
         return TorqueState(arrivals: arrivals, ranks: ranks, scales: scales, weights: weights)
     }
 
     /// Where Torque puts each word's centre, from the sizes measured at the
     /// resting size.
-    /// The room each word takes in Torque's stack. Words overlap their
-    /// neighbours' leading; a reading takes all its room and a little more,
+    /// The room each word takes in Torque's stack: most of its height
+    /// (`torqueLeading`); a reading takes all its room and a little more,
     /// as the stack sways and turns.
     static func torqueHeights(_ measured: [CGSize], _ state: TorqueState) -> [CGFloat] {
         func slot(_ index: Int) -> CGFloat { state.slots.indices.contains(index) ? state.slots[index] : 0 }
         return measured.indices.map {
-            ((measured[$0].height - slot($0)) * 0.82 + slot($0) * 1.2) * state.scales[$0] * state.weights[$0]
+            ((measured[$0].height - slot($0)) * torqueLeading + slot($0) * 1.2) * state.scales[$0] * state.weights[$0]
         }
     }
 
@@ -1213,8 +1283,13 @@ extension StageLyricView {
         torqueHeights(measured, state).reduce(0, +) + restSize * 0.3
     }
 
-    static func torqueStack(_ measured: [CGSize], _ state: TorqueState, seed: Int, in bounds: CGRect) -> [CGPoint] {
+    /// The share of the stage's height Torque keeps clear above and below its
+    /// stack, so the oldest, tipped words never touch the top edge.
+    static let torqueMargin: CGFloat = 0.07
+
+    static func torqueStack(_ measured: [CGSize], _ state: TorqueState, seed: Int, in stage: CGRect) -> [CGPoint] {
         let ranks = state.ranks
+        let bounds = stage.insetBy(dx: 0, dy: stage.height * torqueMargin)
         // The stack is centred whatever its height.
         let heights = torqueHeights(measured, state)
         var cursor = bounds.midY + heights.reduce(0, +) / 2
@@ -1255,7 +1330,9 @@ extension StageLyricView {
         var stack = StageLayout(place: { measured, bounds in
             Self.torqueStack(measured, state, seed: seed, in: bounds)
         })
-        stack.needs = { measured in CGSize(width: 0, height: Self.torqueHeight(measured, state, restSize: restSize)) }
+        stack.needs = { measured in
+            CGSize(width: 0, height: Self.torqueHeight(measured, state, restSize: restSize) / (1 - 2 * Self.torqueMargin))
+        }
         return stack {
             ForEach(runs) { run in
                 let a = arrivals[run.id]
@@ -1269,9 +1346,11 @@ extension StageLyricView {
                 // The word's own wringing, unless another word entrance has been chosen.
                 let entrance = chosenEntrance(run, progress: a, size: size)
                 let twist = reduceMotion || !entrance.native ? 0 : (1 - min(a, 1)) * 110 * (run.id.isMultiple(of: 2) ? 1 : -1)
-                // Wrung and loosened again, all the while it is held.
-                let breathe = reduceMotion ? 0 : sin(time * 2.1 + Double(run.id) * 1.7) * (5 + 6 * live)
-                let wander = reduceMotion ? 0 : CGFloat(sin(time * 1.3 + Double(run.id) * 2.3)) * unit * CGFloat(0.08 + 0.06 * live)
+                // Wrung and loosened again while it is being sung; once the next
+                // word takes over it settles and holds still, so the words
+                // being read never keep moving.
+                let breathe = reduceMotion ? 0 : sin(time * 2.1 + Double(run.id) * 1.7) * 9 * live
+                let wander = reduceMotion ? 0 : CGFloat(sin(time * 1.3 + Double(run.id) * 2.3)) * unit * CGFloat(0.12 * live)
                 let lean = min(rank, 2) * 3 * (run.id.isMultiple(of: 2) ? 1 : -1)
                 let restColour = tile ? ink.tileText : sample.rest.opacity(0.85)
                 let liveColour = tile ? ink.tileText : sample.sung
@@ -1313,16 +1392,20 @@ extension StageLyricView {
                 .scaleEffect(entrance.scale)
                 .offset(x: wander + entrance.offset.width, y: entrance.offset.height)
                 .blur(radius: reduceMotion ? 0 : size * 0.07 * (1 - min(a, 1)))
-                .opacity(min(1, a * 1.6) * StageMotion.torqueVisibility(rank: rank))
+                .opacity(min(1, a * 1.6) * Self.torqueVisibility(rank: rank))
             }
         }
         // A stack taller than the stage (`needs`) is shrunk to fit it.
         .visualEffect { stack, geometry in
             stack.scaleEffect(LyricStageFit.scale(content: geometry.size, available: stage))
         }
-        .rotation3DEffect(.degrees(reduceMotion ? 0 : -10), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
-        .offset(y: reduceMotion ? 0 : stage.height * 0.12 * leaving)
-        .opacity(1 - leaving)
+        // The line is wrung out as it leaves: it turns edge-on, rising the
+        // way the stack grows, and fades early, so the next line's first
+        // word -- landing in the middle while this one is still going --
+        // never sits on a readable word (it used to sink onto it).
+        .rotation3DEffect(.degrees(reduceMotion ? 0 : -10 - 70 * leaving), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+        .offset(y: reduceMotion ? 0 : -stage.height * 0.22 * leaving)
+        .opacity((1 - leaving) * (1 - leaving))
     }
 
     // MARK: Fable
@@ -1343,8 +1426,10 @@ extension StageLyricView {
         let leaving = leave
         let stage = stageSize
         // Room kept round the block for shadows, accents and entrances.
-        let margin = max(unit * 0.5, min(stage.width, stage.height) * 0.05)
-        let available = CGSize(width: max(1, stage.width - 2 * margin), height: max(1, stage.height - 2 * margin))
+        // At least the 5 % title-safe margin on every side.
+        let marginX = max(unit * 0.5, stage.width * 0.05)
+        let marginY = max(unit * 0.5, stage.height * 0.05)
+        let available = CGSize(width: max(1, stage.width - 2 * marginX), height: max(1, stage.height - 2 * marginY))
         let hero = FableStyle.heroIndex(runs.map(\.text))
         // The word being sung: from its onset until the next word's.
         let current = runs.lastIndex { time >= $0.start - 0.04 }
@@ -1367,7 +1452,7 @@ extension StageLyricView {
                 let entrance = chosenEntrance(run, progress: a, size: size)
                 let kind = Int(chance(index, 73) * 4) % 4
                 let motion: (offset: CGSize, scale: CGFloat, spin: Double) = reduceMotion || !entrance.native
-                    ? (.zero, 1, 0) : FableStyle.entrance(kind, progress: a, size: size, side: chance(index, 74) < 0.5 ? -1 : 1)
+                    ? (.zero, 1, 0) : FableStyle.entrance(kind, progress: a, size: size, side: rightToLeft ? -1 : 1)
                 fableWord(run, size: size, style: style, wear: wear, rightToLeft: rightToLeft,
                           sample: sample(run, of: total))
                     .opacity(shown ? min(1, a * 1.8) * (0.8 + 0.2 * (index == current ? 1 : wear)) : 0)
@@ -1645,13 +1730,13 @@ struct FableStyle: Equatable {
     }
 
     /// A word's own entrance (one of four), as `progress` runs 0...1 with a
-    /// little overshoot: it drops in, pops up, swings up from its foot, or
-    /// slides in from `side`.
+    /// little overshoot: it rises in, pops up, swings up from its foot, or
+    /// slides in from `side` (the reading direction).
     static func entrance(_ kind: Int, progress a: Double, size: CGFloat, side: CGFloat)
         -> (offset: CGSize, scale: CGFloat, spin: Double) {
         let left = CGFloat(1 - a)
         switch kind {
-        case 0: return (CGSize(width: 0, height: -left * size * 0.5), 1, 0)
+        case 0: return (CGSize(width: 0, height: left * size * 0.5), 1, 0)
         case 1: return (.zero, 0.55 + 0.45 * CGFloat(a), 0)
         case 2: return (.zero, 1, Double(left) * -16 * Double(side))
         default: return (CGSize(width: side * left * size * 0.6, height: 0), 1, 0)
@@ -1684,7 +1769,8 @@ struct FableLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let laid = Self.arrange(sizes, shape: shape, rightToLeft: rightToLeft, available: available, gap: gap, rowGap: rowGap)
+        let laid = Self.arrange(sizes, shape: shape, rightToLeft: rightToLeft, available: available, gap: gap, rowGap: rowGap,
+                                baselines: Self.baselines(subviews))
         let origin = CGPoint(x: bounds.midX - laid.size.width / 2, y: bounds.midY - laid.size.height / 2)
         for (index, subview) in subviews.enumerated() where laid.frames.indices.contains(index) {
             let frame = laid.frames[index]
@@ -1695,18 +1781,26 @@ struct FableLayout: Layout {
 
     private func arrangement(_ subviews: Subviews) -> Arrangement {
         Self.arrange(subviews.map { $0.sizeThatFits(.unspecified) }, shape: shape, rightToLeft: rightToLeft,
-                     available: available, gap: gap, rowGap: rowGap)
+                     available: available, gap: gap, rowGap: rowGap, baselines: Self.baselines(subviews))
+    }
+
+    /// Each word's baseline, from the top of its box (the word's, not its reading's).
+    private static func baselines(_ subviews: Subviews) -> [CGFloat] {
+        subviews.map { $0.dimensions(in: .unspecified)[VerticalAlignment.firstTextBaseline] }
     }
 
     /// Tries a few row widths and keeps the one that can be shown largest.
+    /// Words in a row share a baseline, which the shape then bends; with no
+    /// `baselines` given, they share a centre line.
     static func arrange(_ sizes: [CGSize], shape: FableStyle.Shape, rightToLeft: Bool, available: CGSize,
-                        gap: CGFloat, rowGap: CGFloat) -> Arrangement {
+                        gap: CGFloat, rowGap: CGFloat, baselines: [CGFloat]? = nil) -> Arrangement {
         guard !sizes.isEmpty, available.width > 0, available.height > 0 else {
             return Arrangement(size: .zero, frames: sizes.map { _ in .zero }, scale: 1)
         }
         var best: Arrangement?
         for guess: CGFloat in [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.42, 0.35, 0.28] {
-            var laid = build(sizes, shape: shape, wrap: available.width * shape.share / guess, gap: gap, rowGap: rowGap)
+            var laid = build(sizes, shape: shape, wrap: available.width * shape.share / guess, gap: gap, rowGap: rowGap,
+                             baselines: baselines)
             laid.scale = LyricStageFit.scale(content: laid.size, available: available)
             if best == nil || laid.scale > best!.scale + 0.001 { best = laid }
             if laid.scale >= guess - 0.001 { break }
@@ -1720,7 +1814,11 @@ struct FableLayout: Layout {
     }
 
     private static func build(_ sizes: [CGSize], shape: FableStyle.Shape, wrap: CGFloat, gap: CGFloat,
-                              rowGap: CGFloat) -> Arrangement {
+                              rowGap: CGFloat, baselines: [CGFloat]?) -> Arrangement {
+        func baseline(_ index: Int) -> CGFloat {
+            guard let baselines, baselines.indices.contains(index) else { return sizes[index].height / 2 }
+            return min(sizes[index].height, max(0, baselines[index]))
+        }
         // Rows, by width and by count; a very long line allows more words a row
         // rather than more than about four rows.
         let cap = max(shape.wordsPerRow, Int((Double(sizes.count) / 4).rounded(.up)))
@@ -1769,10 +1867,10 @@ struct FableLayout: Layout {
                 case .staircase: dy = CGFloat(j) * rowHeight * 0.24
                 case .arch: dy = -rowHeight * 0.45 * (1 - u * u)
                 case .zigzag: dy = row.count > 1 ? (j.isMultiple(of: 2) ? -1 : 1) * rowHeight * 0.16 : 0
-                case .wave: dy = CGFloat(sin(Double(order) * 1.25 + 0.4)) * rowHeight * 0.2
+                case .wave: dy = CGFloat(sin(Double(order) * 1.25 + 0.4)) * rowHeight * 0.12
                 case .ramp: dy = -(u + 1) / 2 * rowHeight * 0.8
                 }
-                placed.append((index, CGRect(x: x, y: dy - size.height / 2, width: size.width, height: size.height)))
+                placed.append((index, CGRect(x: x, y: dy - baseline(index), width: size.width, height: size.height)))
                 x += size.width + gap
                 order += 1
             }
