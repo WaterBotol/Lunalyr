@@ -205,6 +205,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="4">
                                 <ToggleButton x:Name="PauseToggle" Style="{StaticResource QuickToggle}" Click="PauseToggle_Click">
@@ -225,6 +226,14 @@
                                     <FontIcon Glyph="&#xE716;" FontSize="16" />
                                 </ToggleButton>
                                 <TextBlock Text="Credits" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <!-- The lyric card (milestone 7): opens the card window, as the Mac's menu-bar tile does. -->
+                            <StackPanel Grid.Column="3" Spacing="4">
+                                <ToggleButton x:Name="LyricCardTile" Style="{StaticResource QuickToggle}" Click="LyricCardTile_Click">
+                                    <FontIcon Glyph="&#xE91B;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Lyric card" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
                                            AutomationProperties.AccessibilityView="Raw" />
                             </StackPanel>
                         </Grid>

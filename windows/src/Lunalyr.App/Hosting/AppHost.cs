@@ -385,6 +385,7 @@ internal sealed partial class AppHost
         if (_pendingSettings) app.ShowSettings(TakeRequestedPage());
         _pendingSettings = false;
         if (flyout is { } f) app.ToggleFlyout(f.Anchor, f.Keyboard);
+        if (_options.OpenLyricCard) app.ShowLyricCard();
     }
 
     /// <summary>Forces light or dark for Lunalyr's windows (<c>--theme</c>), or null to follow Windows.</summary>

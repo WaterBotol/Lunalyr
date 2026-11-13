@@ -44,8 +44,7 @@ internal static class GeneralPage
         Section(page, "Discord & lyric card");
         page.Children.Add(Card("Discord status", "Show the song and line playing in your Discord status.", "", FixedToggle(false),
             notYet: SettingsCopy.Milestone7));
-        page.Children.Add(Card("Lyric cards", "Save or copy a lyric as a picture, GIF or video.", "",
-            Button("Make a Lyric Card…", () => { }), notYet: SettingsCopy.Milestone7));
+        LyricCardRows.Add(page, ctx);
         return page;
     }
 }

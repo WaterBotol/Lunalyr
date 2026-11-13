@@ -42,7 +42,7 @@ public sealed class LyricCardSource
     public required Action<Func<AppSettings, AppSettings>> UpdateSettings { get; init; }
 
     /// <summary>Puts made files on the clipboard (a PNG also as a picture); false when it couldn't.</summary>
-    public Func<IReadOnlyList<(CardFormat Format, string Path)>, bool> Publish { get; init; } = _ => false;
+    public Func<IReadOnlyList<(CardFormat Format, string Path)>, Task<bool>> Publish { get; init; } = _ => Task.FromResult(false);
 
     /// <summary>Shows made files in Explorer.</summary>
     public Action<IReadOnlyList<string>> ShowFiles { get; init; } = _ => { };
@@ -622,17 +622,19 @@ public sealed class LyricCardWindowModel
             LyricCardExportPlan.DiscardExport(files, directory, ownsDirectory: folder is null);
             return;
         }
+        // Copy: the files go on the clipboard (on the window's thread, which the source's Publish goes to).
+        var published = folder is null && files.Count > 0 && await _source.Publish(files).ConfigureAwait(false);
         var done = new TaskCompletionSource();
         _source.Post(() =>
         {
-            lock (_gate) Finish(files, warnings, directory, folder);
+            lock (_gate) Finish(files, warnings, directory, folder, published);
             Raise();
             done.TrySetResult();
         });
         await done.Task.ConfigureAwait(false);
     }
 
-    private void Finish(IReadOnlyList<(CardFormat Format, string Path)> files, List<string> warnings, string directory, string? folder)
+    private void Finish(IReadOnlyList<(CardFormat Format, string Path)> files, List<string> warnings, string directory, string? folder, bool published)
     {
         _exportId = null;
         Progress = null;
@@ -646,7 +648,7 @@ public sealed class LyricCardWindowModel
             var names = string.Join(", ", files.Select(f => f.Format.Title()));
             if (folder is null)
             {
-                if (_source.Publish(files))
+                if (published)
                 {
                     LyricCardExportPlan.PruneExpiredExports(Path.GetDirectoryName(directory)!, directory, DateTime.Now);
                     Succeeded($"Copied {names}", files);

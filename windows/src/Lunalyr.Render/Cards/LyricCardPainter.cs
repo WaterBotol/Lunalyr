@@ -51,6 +51,21 @@ public sealed record CardLook(Palette Palette, CoverArt? Cover, LyricStyle Style
     /// <summary>The palette a picture behind the card gives (its own colours, not the album's), from its pixels.</summary>
     public static Palette PaletteFor(ArtworkPixels picture) =>
         PaletteMapper.FromAlbum(new AlbumWallpaperPalette(AlbumColourGrid.Extract(picture)));
+
+    /// <summary>The palette a background frame gives (premultiplied BGRA, read as opaque).</summary>
+    public static Palette PaletteFor(CoverArt frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        var rgba = new byte[frame.Pixels.Length];
+        for (var i = 0; i < rgba.Length; i += 4)
+        {
+            rgba[i] = frame.Pixels[i + 2];
+            rgba[i + 1] = frame.Pixels[i + 1];
+            rgba[i + 2] = frame.Pixels[i];
+            rgba[i + 3] = 255;
+        }
+        return PaletteFor(new ArtworkPixels(frame.Width, frame.Height, rgba));
+    }
 }
 
 /// <summary>

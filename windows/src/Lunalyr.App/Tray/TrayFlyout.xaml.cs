@@ -289,6 +289,7 @@ public sealed partial class TrayFlyout : Window
     {
         var state = BuildState();
         _state = state;
+        RefreshLyricCardTile();
         _updating = true;
         try
         {

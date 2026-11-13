@@ -77,6 +77,12 @@ public sealed record ShellOptions
     /// </summary>
     public string? FloatingCapturePath { get; init; }
 
+    /// <summary>
+    /// <c>--lyric-card</c>: open the lyric card window once Lunalyr is up (for checks; with <c>--quiet-windows</c> it opens
+    /// unactivated at the bottom, like the settings window). Not forwarded to a running instance.
+    /// </summary>
+    public bool OpenLyricCard { get; init; }
+
     public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
@@ -113,6 +119,9 @@ public sealed record ShellOptions
                     break;
                 case "--quiet-windows":
                     options = options with { QuietWindows = true };
+                    break;
+                case "--lyric-card":
+                    options = options with { OpenLyricCard = true };
                     break;
                 case "--demo":
                     // Silent and offline by definition: no real player is followed and nothing is looked up.
