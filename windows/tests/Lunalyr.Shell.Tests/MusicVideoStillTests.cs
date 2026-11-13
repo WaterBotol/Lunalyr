@@ -122,6 +122,41 @@ public sealed class MusicVideoStillTests : IAsyncDisposable
         Assert.All(host.Asked, u => Assert.Equal("i.ytimg.com", u.Host));
     }
 
+    /// <summary>An image host that never answers; says when the request was given up.</summary>
+    private sealed class SilentImageHost : IMusicVideoHttp
+    {
+        public TaskCompletionSource Asked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource GivenUp { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<MusicVideoHttpReply> GetAsync(Uri url, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        {
+            Asked.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                GivenUp.TrySetResult();
+                throw;
+            }
+            return new MusicVideoHttpReply(404, []);
+        }
+    }
+
+    [Fact]
+    public async Task ShuttingDownGivesUpTheStill()
+    {
+        var host = new SilentImageHost();
+        new MusicVideoLinks(_storage).Set("https://youtu.be/4NRXx6U8ABQ", SongKey);
+        _source.Add(Playing("Song A"));
+        var app = Start(host);
+        await host.Asked.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await app.DisposeAsync();
+        await host.GivenUp.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Null(app.MusicVideoStill);
+    }
+
     [Fact]
     public async Task WithoutAClientNoStillIsFetched()
     {

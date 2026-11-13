@@ -39,14 +39,20 @@ public sealed partial class AppController
             if (_disposed || video == _stillVideo) return;
             _stillVideo = video;
             _musicVideoStill = null;
-            _stillCts?.Cancel();
-            _stillCts = null;
+            CancelMusicVideoStillLocked();
             http = _stillHttp;
             if (video is null || http is null) return;
             _stillCts = cts = new CancellationTokenSource();
         }
         // Not tracked as lookup work: a slow image host never holds up shutdown.
         _ = LoadMusicVideoStillAsync(video, http, cts.Token);
+    }
+
+    /// <summary>Stops fetching a still (another video, or shutting down). Called under <c>_gate</c>.</summary>
+    private void CancelMusicVideoStillLocked()
+    {
+        _stillCts?.Cancel();
+        _stillCts = null;
     }
 
     private async Task LoadMusicVideoStillAsync(string video, IMusicVideoHttp http, CancellationToken ct)
