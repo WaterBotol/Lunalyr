@@ -13,6 +13,7 @@ When merging, keep every entry and combine duplicate headings.
 -->
 
 ### Added
+- The first time Settings opens after launch, Lunalyr's liquid-glass logo plays while it builds (about half a second), then fades into Settings; never a wait of its own, skipped with a click or Reduce Motion.
 - The welcome opens with Lunalyr's logo forming as a drop of liquid glass (made with ReactDrops' Liquid Glass Logo from Lunalyr's own logo; silent). It plays once, then the wallpaper preview fades in; Reduce Motion skips it.
 - Music video: "Show the whole video" (Settings › Wallpaper › Music video, separately for YouTube and library videos). The video's width is matched to the screen's, with no extra zoom, so nothing is cut from its sides (a squarer 4:3 video loses a little of its top and bottom), and the space above and below shows a blurred, darkened copy of the video's still or the album cover instead of black bars; a YouTube video made in another shape (4:3, or cinema-wide) is shown without the bars YouTube's player adds (its shape comes from YouTube's oEmbed, which receives only the video's ID). A YouTube video appears about five seconds after it starts playing (and after a pause or a jump), once YouTube's title, buttons and logo have faded; its still or last frame shows until then. "Fill the screen" stays the default.
 

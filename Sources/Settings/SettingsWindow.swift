@@ -63,7 +63,21 @@ final class SettingsWindowController: NSObject {
         // this controller still points at it -- an over-release crash.
         window.isReleasedWhenClosed = false
         previewDisplay.activate()
-        window.contentView = NSHostingView(rootView: SettingsWindowView(previewDisplay: previewDisplay))
+        // The first opening of a launch shows the logo while Settings builds
+        // behind it (`SettingsLoader`); later ones open straight on Settings.
+        let loader: SettingsLoaderView?
+        if SettingsLoader.shouldShow(alreadyShown: SettingsLoader.shown), let url = WelcomeGlass.url {
+            SettingsLoader.shown = true
+            let container = NSView(frame: window.contentRect(forFrameRect: window.frame))
+            let view = SettingsLoaderView(frame: container.bounds, url: url)
+            view.autoresizingMask = [.width, .height]
+            container.addSubview(view)
+            window.contentView = container
+            loader = view
+        } else {
+            window.contentView = NSHostingView(rootView: SettingsWindowView(previewDisplay: previewDisplay))
+            loader = nil
+        }
         // Where it was last left; otherwise at the trailing edge of the
         // screen that was clicked, near the menu bar extra. Naming the frame
         // also restores it, and saves every later move and resize.
@@ -78,6 +92,29 @@ final class SettingsWindowController: NSObject {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
+        if let loader { buildBehind(loader, in: window) }
+    }
+
+    /// Settings is built on the next turn of the run loop, under the playing
+    /// logo (the video keeps moving on its own layer meanwhile), then the
+    /// logo fades once the glass has formed.
+    private func buildBehind(_ loader: SettingsLoaderView, in window: NSWindow) {
+        let opened = ProcessInfo.processInfo.systemUptime
+        loader.onSkip = { [weak loader] in loader?.dismissNow() }
+        DispatchQueue.main.async { [weak self, weak window, weak loader] in
+            guard let self, let window, let container = window.contentView else { return }
+            let host = NSHostingView(rootView: SettingsWindowView(previewDisplay: self.previewDisplay))
+            host.frame = container.bounds
+            host.autoresizingMask = [.width, .height]
+            if let loader, loader.superview === container {
+                container.addSubview(host, positioned: .below, relativeTo: loader)
+            } else {
+                container.addSubview(host)
+            }
+            host.layoutSubtreeIfNeeded()
+            let elapsed = ProcessInfo.processInfo.systemUptime - opened
+            loader?.dismiss(after: SettingsLoader.remaining(after: elapsed)) {}
+        }
     }
 
     /// The screen under the pointer -- the one whose menu bar was just
