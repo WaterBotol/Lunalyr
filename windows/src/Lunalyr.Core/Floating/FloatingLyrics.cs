@@ -275,7 +275,7 @@ public static class FloatingFrame
 public static class FloatingVisibility
 {
     /// <param name="Editing">Edit position is on: shown even with nothing playing, to place it.</param>
-    /// <param name="LyricsVisible">Not hidden (the Mac's Hide lyrics or mirroring; always true on Windows so far).</param>
+    /// <param name="LyricsVisible">Not hidden (Hide lyrics, or a mirrored display while that hides them).</param>
     /// <param name="PausedFor">How long the song has been paused, in seconds, when it is.</param>
     /// <param name="AllInstrumental">Every timed line is an instrumental marker.</param>
     [SuppressMessage("Design", "CA1034", Justification = "The Mac's nested Input, kept beside its rule.")]

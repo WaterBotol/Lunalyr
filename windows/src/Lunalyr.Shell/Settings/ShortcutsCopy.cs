@@ -9,6 +9,9 @@ public static class ShortcutsCopy
 {
     public const string HideLyrics = "Hide lyrics";
 
+    /// <summary>The Mac's "Hide lyrics while a display is mirrored" (ExtrasInspector, Lyrics on screen).</summary>
+    public const string HideWhileMirroring = "Hide lyrics while a display is mirrored";
+
     public const string HideLyricsDescription =
         "The wallpaper and the floating lyrics show none until you switch this off. Show or hide lyrics (a shortcut or a lunalyr://toggle link) does the same.";
 

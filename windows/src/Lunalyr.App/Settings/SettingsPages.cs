@@ -13,7 +13,7 @@ internal static class GeneralPage
 {
     public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
                                    Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null,
-                                   Lunalyr.App.Hosting.PackagingHooks? packaging = null)
+                                   Lunalyr.App.Hosting.PackagingHooks? packaging = null, MirroringHooks? mirroring = null)
     {
         var page = Page();
         if (packaging?.SettingsProblem is { } problem)
@@ -42,7 +42,7 @@ internal static class GeneralPage
 
         Section(page, "Tray & shortcuts");
         ExtrasSections.AddTrayLyric(page, ctx);
-        ShortcutsSection.Add(page, ctx, hotkeys);
+        ShortcutsSection.Add(page, ctx, hotkeys, mirroring);
 
         Section(page, "Discord & lyric card");
         ExtrasSections.AddDiscord(page, ctx, discord);

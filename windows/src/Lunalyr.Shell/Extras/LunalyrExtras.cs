@@ -1,9 +1,12 @@
 // What a global shortcut or a lunalyr:// link does, and the brief note that confirms it: ported from the Mac's
-// LunalyrExtras (its actions, notes and note origins), LunalyrExtrasShortcuts.swift (music video, next visualiser) and
-// LyricExtrasOptions' LyricComposition.cycled (Lunalyr's own lines; blame-checked against a99fd65: the two Verso lines
-// in LunalyrExtras.swift are a screen observer for mirroring, not used here). Windows has no mirroring, no per-song style
-// memory and no wallpaper note of its own (the Mac draws one on the wallpaper): the action HUD is where notes are seen.
-// Nothing here sends a playback command: none of these actions touches the player.
+// LunalyrExtras (its actions, notes and note origins, and hiding the lyrics while a display is mirrored),
+// LunalyrExtrasShortcuts.swift (music video, next visualiser) and LyricExtrasOptions' LyricComposition.cycled (Lunalyr's
+// own lines; blame-checked against a99fd65: the two Verso lines in LunalyrExtras.swift are the screen observer that
+// re-reads mirroring on a display change, re-implemented from its behaviour by the app: the tray window's
+// WM_DISPLAYCHANGE asks Platform's DisplayMirroring and calls UpdateMirroring). Windows has no per-song style memory and
+// no wallpaper note of its own (the Mac draws one on the wallpaper): the action HUD is where notes are seen. The Mac's
+// titles ("Show Lyrics Anyway") are in Windows' sentence case. Nothing here sends a playback command: none of these
+// actions touches the player.
 
 using Lunalyr.Core.Visualisers;
 using Lunalyr.Shell.Flyout;
@@ -51,6 +54,9 @@ public sealed record ExtrasHooks
 
     /// <summary>Where every note is written down.</summary>
     public Action<string>? Log { get; init; }
+
+    /// <summary>A mirrored display now hides the lyrics (true), or no longer does: the controller fades them.</summary>
+    public Action<bool>? HiddenByMirroringChanged { get; init; }
 }
 
 /// <summary>
@@ -91,8 +97,115 @@ public sealed class LunalyrExtras
     /// <summary>The origin of the action running now; see <see cref="Performing{T}"/>.</summary>
     public NoteOrigin ActionOrigin { get; private set; } = NoteOrigin.Window;
 
-    /// <summary>The user's own Hide lyrics is off (Windows has no mirroring, which also hides them on the Mac).</summary>
-    public bool LyricsVisible => !_read().LyricsHidden;
+    /// <summary>On screen: neither the user's own Hide lyrics nor a mirrored display keeps them off.</summary>
+    public bool LyricsVisible => !_read().LyricsHidden && !HiddenByMirroring;
+
+    /// <summary>What the settings preview would follow: the user's own Hide, not mirroring (the Mac's lyricsVisibleInPreview).</summary>
+    public bool LyricsVisibleInPreview => !_read().LyricsHidden;
+
+    // ---- Mirroring ----
+
+    /// <summary>
+    /// A mirroring that stops for less than this and starts again is still the same one: display reconfigurations and
+    /// flaky HDMI or wireless links report a moment without it.
+    /// </summary>
+    public static readonly TimeSpan MirroringLapse = TimeSpan.FromSeconds(10);
+
+    private bool _mirroring;
+    private bool _showsWhileMirrored;
+    private DateTimeOffset? _mirroringEndedAt;
+    private bool _hiddenByMirroringSent;
+
+    /// <summary>A display is mirrored (duplicated) now: usually a projector, a TV or a shared screen.</summary>
+    public bool Mirroring => _mirroring;
+
+    /// <summary>"Show lyrics anyway" for as long as this mirroring lasts; the next one hides them again.</summary>
+    public bool ShowsWhileMirrored => _showsWhileMirrored;
+
+    /// <summary>"Hide lyrics while a display is mirrored": the user's choice, else on.</summary>
+    public bool HidesWhileMirroring => _read().HidesWhileMirroring;
+
+    /// <summary>The user has said whether mirroring hides the lyrics, in Settings or when asked the first time.</summary>
+    public bool MirroringChoiceMade => _read().HideLyricsWhileMirroring is not null;
+
+    /// <summary>Mirroring, not the user's own Hide, keeps the lyrics off screen.</summary>
+    public bool HiddenByMirroring => HidesWhileMirroring && _mirroring && !_showsWhileMirrored;
+
+    /// <summary>The first time mirroring hides the lyrics, Lunalyr asks whether it should keep doing so.</summary>
+    public bool AsksAboutMirroring => HiddenByMirroring && !MirroringChoiceMade;
+
+    /// <summary>Mirroring started or ended, Show anyway was pressed, or the setting changed.</summary>
+    public event EventHandler? MirroringChanged;
+
+    /// <summary>
+    /// What the lyrics control does now. It follows what is on screen, so it never offers to hide lyrics mirroring has
+    /// already hidden, and says "anyway" whenever showing them also overrides mirroring.
+    /// </summary>
+    public string LyricsActionTitle => LyricsVisible ? HideLyricsTitle : HiddenByMirroring ? ShowLyricsAnywayTitle : ShowLyricsTitle;
+
+    public string LyricsActionSymbol => LyricsVisible ? "eye.slash" : "eye";
+
+    public const string HideLyricsTitle = "Hide lyrics";
+    public const string ShowLyricsTitle = "Show lyrics";
+    public const string ShowLyricsAnywayTitle = "Show lyrics anyway";
+    public const string HiddenWhileMirroredNote = "Lyrics hidden while a display is mirrored";
+    public const string ShownWhileMirroringNote = "Lyrics shown while mirroring";
+
+    /// <summary>Whether any display is mirrored now. Display changes call it; so do tests.</summary>
+    public void UpdateMirroring(bool mirrored)
+    {
+        if (mirrored == _mirroring) return;
+        _mirroring = mirrored;
+        var time = _time.GetUtcNow();
+        // Back within a lapse (a cable reseated, a projector waking) it is the same mirroring: Show anyway still holds,
+        // and nothing is said again on the shared screen.
+        var resumed = mirrored && _mirroringEndedAt is { } ended && time - ended < MirroringLapse;
+        _mirroringEndedAt = mirrored ? null : time;
+        if (mirrored && !resumed) _showsWhileMirrored = false;
+        _hooks.Log?.Invoke(mirrored ? "A display is mirrored." : "No display is mirrored now.");
+        VisibilityChanged();
+        // Say why the lyrics just went.
+        if (mirrored && !resumed && HiddenByMirroring && !_read().LyricsHidden) Post(HiddenWhileMirroredNote, "eye.slash");
+    }
+
+    /// <summary>The settings changed (perhaps "Hide lyrics while a display is mirrored" or Hide lyrics): follow them.</summary>
+    public void SettingsChanged() => VisibilityChanged();
+
+    /// <summary>The one-time question's first answer: keep hiding lyrics whenever a display is mirrored.</summary>
+    public void KeepHidingWhileMirroring()
+    {
+        _update(s => s with { HideLyricsWhileMirroring = true });
+        VisibilityChanged();
+    }
+
+    /// <summary>The other answer: mirroring no longer hides the lyrics.</summary>
+    public void StopHidingWhileMirroring()
+    {
+        _update(s => s with { HideLyricsWhileMirroring = false });
+        VisibilityChanged();
+        if (LyricsVisible) Post(ShownWhileMirroringNote, "eye");
+    }
+
+    private void VisibilityChanged()
+    {
+        var hidden = HiddenByMirroring;
+        if (hidden != _hiddenByMirroringSent)
+        {
+            _hiddenByMirroringSent = hidden;
+            _hooks.HiddenByMirroringChanged?.Invoke(hidden);
+        }
+        MirroringChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The caption under "Hide lyrics while a display is mirrored" (the Mac's ExtrasInspector.mirroringNote).</summary>
+    public static string MirroringNote(bool mirroring, bool hides, bool showsAnyway)
+    {
+        if (!mirroring) return "For presenting: duplicating a display to a projector or TV hides the lyrics until it ends.";
+        if (!hides) return "A display is mirrored now; the lyrics stay on every display.";
+        return showsAnyway
+            ? "A display is mirrored now, and the lyrics are shown anyway until mirroring ends."
+            : "A display is mirrored now, so the lyrics are hidden on every display until mirroring ends.";
+    }
 
     // ---- Notes ----
 
@@ -192,13 +305,18 @@ public sealed class LunalyrExtras
     public void HideLyrics()
     {
         _update(s => s with { LyricsHidden = true });
+        VisibilityChanged();
         Post("Lyrics hidden", "eye.slash");
     }
 
+    /// <summary>Shows the lyrics, even while a mirrored display would hide them (until that mirroring ends).</summary>
     public void ShowLyrics()
     {
+        var mirrored = HidesWhileMirroring && _mirroring;
         _update(s => s with { LyricsHidden = false });
-        Post("Lyrics shown", "eye");
+        if (mirrored) _showsWhileMirrored = true;
+        VisibilityChanged();
+        Post(mirrored ? ShownWhileMirroringNote : "Lyrics shown", "eye");
     }
 
     /// <summary>

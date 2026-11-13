@@ -88,4 +88,27 @@ public sealed class AppControllerHideLyricsTests : IAsyncDisposable
         controller.ApplySettings(controller.Settings with { LyricsHidden = false });
         Assert.True(_renderer.Floating.Shown);
     }
+
+    // The Mac's hiddenByMirroring reaching the wallpapers and the floating window (LunalyrExtras decides it).
+    [Fact]
+    public async Task AMirroredDisplayHidesTheLyricsEverywhereUntilItEnds()
+    {
+        var floating = new AppSettings().WithLyricsSurface(LyricsSurface.Floating);
+        var controller = await PlayingWithLyrics(floating);
+        controller.SetHiddenByMirroring(true);
+        Assert.Equal((false, true), _renderer.LyricsShown[^1]); // faded out
+        Assert.False(controller.LyricsShown);
+        Assert.False(_renderer.Floating.Shown);
+        Assert.False(controller.Settings.LyricsHidden); // the user's own Hide is untouched
+        controller.SetHiddenByMirroring(true);
+        Assert.Equal(2, _renderer.LyricsShown.Count); // no change, nothing handed over
+
+        // The user's own Hide during mirroring, then mirroring ends: still hidden.
+        controller.ApplySettings(controller.Settings with { LyricsHidden = true });
+        controller.SetHiddenByMirroring(false);
+        Assert.False(_renderer.LyricsShown[^1].Shown);
+        controller.ApplySettings(controller.Settings with { LyricsHidden = false });
+        Assert.Equal((true, true), _renderer.LyricsShown[^1]);
+        Assert.True(_renderer.Floating.Shown);
+    }
 }
