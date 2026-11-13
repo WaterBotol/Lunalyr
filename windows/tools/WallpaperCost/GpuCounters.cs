@@ -13,7 +13,8 @@ internal sealed partial class GpuCounters : IDisposable
     private readonly nint _engines, _memory, _shared;
     private readonly string _pid;
     private readonly string _luid;
-    private readonly List<(double ThreeD, double Decode, double Processing, double Other)> _samples = [];
+    private readonly List<(double ThreeD, double Decode, double Processing, double Other, double Weight)> _samples = [];
+    private readonly System.Diagnostics.Stopwatch _sinceLast = new();
     private readonly List<double> _dedicated = [], _sharedMb = [];
 
     public GpuCounters(int processId, string luid)
@@ -26,12 +27,16 @@ internal sealed partial class GpuCounters : IDisposable
         Check(PdhAddEnglishCounterW(_query, @"\GPU Process Memory(*)\Shared Usage", 0, out _shared), "GPU Process Memory counter");
         // Utilisation is a rate: the first collection is its starting point.
         PdhCollectQueryData(_query);
+        _sinceLast.Start();
     }
 
     /// <summary>Takes one sample (utilisation since the previous one).</summary>
     public void Sample()
     {
         if (PdhCollectQueryData(_query) != 0) return;
+        // Each sample covers the time since the one before (the last can be short): averages are weighted by it.
+        var weight = _sinceLast.Elapsed.TotalSeconds;
+        _sinceLast.Restart();
         double threeD = 0, decode = 0, processing = 0, other = 0;
         var any = false;
         foreach (var (name, value) in Read(_engines))
@@ -43,7 +48,7 @@ internal sealed partial class GpuCounters : IDisposable
             else if (name.EndsWith("engtype_VideoProcessing", StringComparison.OrdinalIgnoreCase)) processing += value;
             else other += value;
         }
-        if (any) _samples.Add((threeD, decode, processing, other));
+        if (any && weight > 0) _samples.Add((threeD, decode, processing, other, weight));
         double dedicated = 0;
         foreach (var (name, value) in Read(_memory))
             if (name.StartsWith(_pid, StringComparison.Ordinal) && name.Contains(_luid, StringComparison.OrdinalIgnoreCase)) dedicated += value;
@@ -56,13 +61,19 @@ internal sealed partial class GpuCounters : IDisposable
 
     public int Samples => _samples.Count;
 
-    public double ThreeD => _samples.Count == 0 ? double.NaN : _samples.Average(s => s.ThreeD);
+    public double ThreeD => Weighted(s => s.ThreeD);
 
-    public double Decode => _samples.Count == 0 ? double.NaN : _samples.Average(s => s.Decode);
+    public double Decode => Weighted(s => s.Decode);
 
-    public double Processing => _samples.Count == 0 ? double.NaN : _samples.Average(s => s.Processing);
+    public double Processing => Weighted(s => s.Processing);
 
-    public double Other => _samples.Count == 0 ? double.NaN : _samples.Average(s => s.Other);
+    public double Other => Weighted(s => s.Other);
+
+    private double Weighted(Func<(double ThreeD, double Decode, double Processing, double Other, double Weight), double> value)
+    {
+        var total = _samples.Sum(s => s.Weight);
+        return total > 0 ? _samples.Sum(s => value(s) * s.Weight) / total : double.NaN;
+    }
 
     /// <summary>Dedicated GPU memory at the last sample, in MB.</summary>
     public double DedicatedMb => _dedicated.Count == 0 ? double.NaN : _dedicated[^1] / (1024 * 1024);

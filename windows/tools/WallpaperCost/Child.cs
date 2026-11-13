@@ -269,6 +269,8 @@ internal static partial class Child
         if (measuredPrevious && double.IsFinite(final)) gpuMs.Add(final);
         var stop = Snapshot.Take();
         var songEnd = controller.ReadClock().Seconds;
+        if (VisualiserServices.Audio is { } heard)
+            notes.Add($"visualiser sound: {heard.State}, {heard.Packets} packets ({heard.Status})");
 
         // ---- Result ----
         var measuredCpu = cpu.AsSpan(0, Math.Min(frames, capacity)).ToArray();
@@ -285,6 +287,9 @@ internal static partial class Child
             GpuMsMean = Mean(sortedGpu), GpuMsP95 = Pct(sortedGpu, 0.95), GpuSamples = sortedGpu.Length,
             RenderThreadBytesPerFrame = frames == 0 ? null : alloc.AsSpan(0, Math.Min(frames, capacity)).ToArray().Average(),
             BackgroundBytesPerFrame = frames == 0 ? null : backgroundBytes / (double)frames,
+            AllocatingFrames = alloc.AsSpan(0, Math.Min(frames, capacity)).ToArray().Count(b => b > 0),
+            MaxBytesInAFrame = frames == 0 ? 0 : alloc.AsSpan(0, Math.Min(frames, capacity)).ToArray().Max(),
+            MedianBytesInAFrame = frames == 0 ? 0 : alloc.AsSpan(0, Math.Min(frames, capacity)).ToArray().Order().ElementAt(Math.Min(frames, capacity) / 2),
             LyricsBytesPerFrame = frames == 0 ? null : lyricBytes / (double)frames,
             AllocatedBytesPerSecond = (stop.Allocated - start.Allocated) / Math.Max(1e-9, seconds),
             Gc0 = stop.Gc0 - start.Gc0, Gc1 = stop.Gc1 - start.Gc1, Gc2 = stop.Gc2 - start.Gc2,

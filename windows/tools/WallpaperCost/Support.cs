@@ -23,7 +23,7 @@ internal sealed record Options
     public string? Snapshots { get; init; }
     public string Media { get; init; } = WallpaperCost.Media.DefaultFolder();
     /// <summary>The demo song's time when the controller starts following it (the measured stretch starts about 3 s later).</summary>
-    public double Start { get; init; } = 5;
+    public double Start { get; init; } = 8;
     /// <summary>Seconds drawn before measuring; default 3 playing, 6 idle (the idle notice fades out in 5).</summary>
     public double? Warmup { get; init; }
     public bool Baseline { get; init; } = true;
@@ -214,6 +214,10 @@ internal sealed record ChildResult
     public double? RenderThreadBytesPerFrame { get; init; }
     public double? BackgroundBytesPerFrame { get; init; }
     public double? LyricsBytesPerFrame { get; init; }
+    /// <summary>How many measured frames allocated anything on the render thread, and the most one did.</summary>
+    public int AllocatingFrames { get; init; }
+    public long MaxBytesInAFrame { get; init; }
+    public long MedianBytesInAFrame { get; init; }
     public double AllocatedBytesPerSecond { get; init; }
     public int Gc0 { get; init; }
     public int Gc1 { get; init; }
