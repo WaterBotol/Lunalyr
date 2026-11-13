@@ -114,3 +114,19 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | "qApple" relay ranks as Apple Music | unit + live (12 songs) | `RankingDecisionsTests`, d392a6d |
 | A held clock keeps the lyric on screen (all 14 compositions) | offscreen guard test + live captures | `HeldLyricRenderTests`, `docs/previews/held-line/` |
 | Card from a real hover; transport on a real player; Spotify sign-in; Narrator; high contrast | needs the owner | Test Build 5 README |
+
+## Milestone 6: wallpaper options (and floating lyrics from milestone 7)
+
+2603 tests (2602 pass, 1 skipped opt-in) at Test Build 6. Report: [docs/milestones/M6.md](docs/milestones/M6.md).
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Eight wallpaper types, adjustments, imported picture/video | unit + offscreen + **live** (Intel panel, 60 fps) | `WallpaperTypesTests`, `docs/previews/live-m6/` |
+| 27 GPU effects, 18 line patterns | unit + offscreen sheets + live (aurora, ripples) | `docs/previews/gpu-effects/`, `docs/PROVENANCE.md` |
+| Visualisers, exposure limiter, safety rules | unit (96 Mac tests) + offscreen + live (demo signal) | `docs/previews/visualisers/` |
+| Your wallpaper (composition swap chain, see-through) | live: the owner's desktop picture showed behind the lyrics | live capture (not committed: private wallpaper) |
+| Music video (files, YouTube embed, page search) | unit (129 Mac tests) + offscreen sync; YouTube not loaded | `docs/previews/music-video/`, fixtures |
+| Animated covers | unit (13 Mac tests) + offscreen + recorded fixtures | `docs/previews/motion-artwork/` |
+| Floating lyrics (M7) | unit (27 Mac tests) + live window flags + back buffer | `docs/previews/floating/`, `docs/previews/live-m6/floating-backbuffer.png` |
+| Line setup sliced across frames | offscreen bench before/after | `docs/measurements/line-setup/` |
+| Real YouTube, system audio, 280 Hz monitor, full-screen apps | needs the owner | Test Build 6 README |
