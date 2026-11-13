@@ -24,9 +24,9 @@
   <a href="CHANGELOG.md">What's new</a>
 </p>
 
-[![Lunalyr on a Mac desktop: Counting Stars arriving word by word in the Fable layout, over the desktop where the Vinyl app spins the album on a turntable](docs/media/hero.gif)](docs/media/hero.mp4)
+[![Lunalyr on a Mac desktop: Counting Stars arriving word by word in the Fable layout, over the desktop where the Vinyl app spins the album on a turntable](docs/media/hero.webp)](docs/media/hero.mp4)
 
-Play a song and Lunalyr puts its lyrics on your desktop, lighting each word as it is sung. It follows Apple Music, Spotify and more, sits quietly in the menu bar, and draws beneath your desktop icons, so there is no window to manage. Prefer to see the words while you work? Float them over your apps instead.
+Play a song and Lunalyr puts its lyrics on your desktop, lighting each word as it is sung. It follows Apple Music, Spotify and more, sits quietly in the menu bar, and draws beneath your desktop icons, so there is no window to manage. Prefer to see the words while you work? Float them over your apps instead. And with Discord on, your friends see the line you're hearing on your profile.
 
 Lunalyr is free and open source. It started as a fork of [Verso](https://github.com/AkkiCode06/verso) by AkkiCode06.
 
@@ -39,6 +39,7 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 - [Fourteen layouts](#fourteen-layouts)
 - [Japanese, Chinese and Korean readings](#japanese-chinese-and-korean-readings)
 - [Floating lyrics over your apps](#floating-lyrics-over-your-apps)
+- [Discord and listening along](#discord-and-listening-along)
 - [An opening title for every song](#an-opening-title-for-every-song)
 - [Backgrounds](#backgrounds)
 - [The desktop player](#the-desktop-player)
@@ -46,7 +47,6 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 - [Where lyrics come from](#where-lyrics-come-from)
 - [Works with the music apps you use](#works-with-the-music-apps-you-use)
 - [Menu bar, keyboard shortcuts and Shortcuts](#menu-bar-keyboard-shortcuts-and-shortcuts)
-- [Discord and listening along](#discord-and-listening-along)
 - [Accessibility](#accessibility)
 
 ### Lyrics on your desktop
@@ -59,7 +59,7 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 
 ### Fourteen layouts
 
-[![A tour of twelve of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.gif)](docs/media/layouts-tour.mp4)
+[![A tour of twelve of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.webp)](docs/media/layouts-tour.mp4)
 
 Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Match the music** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
 
@@ -69,32 +69,32 @@ Each layout sets the words in its own way, from calm and spacious to bold and pl
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-scattered.gif" alt="Scattered layout"><br><b>Scattered</b> · Calm<br><sub>Words set loose across the line</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-constellation.gif" alt="Constellation layout"><br><b>Constellation</b> · Calm<br><sub>Fragments linked by hairlines, like a star chart</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-scattered.webp" alt="Scattered layout"><br><b>Scattered</b> · Calm<br><sub>Words set loose across the line</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-constellation.webp" alt="Constellation layout"><br><b>Constellation</b> · Calm<br><sub>Fragments linked by hairlines, like a star chart</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-constellationEditorial.gif" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm<br><sub>Linked fragments in two contrasting typefaces</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-editorial.gif" alt="Editorial layout"><br><b>Editorial</b> · Calm<br><sub>Two typefaces in one line, set like a magazine spread</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-constellationEditorial.webp" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm<br><sub>Linked fragments in two contrasting typefaces</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-editorial.webp" alt="Editorial layout"><br><b>Editorial</b> · Calm<br><sub>Two typefaces in one line, set like a magazine spread</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-spoken.gif" alt="Spoken layout"><br><b>Spoken</b> · Calm<br><sub>Each sung word takes focus, recent words settle around it</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-echo.gif" alt="Echo layout"><br><b>Echo</b> · Bold<br><sub>The line repeated at many sizes, some inverted</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-spoken.webp" alt="Spoken layout"><br><b>Spoken</b> · Calm<br><sub>Each sung word takes focus, recent words settle around it</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-echo.webp" alt="Echo layout"><br><b>Echo</b> · Bold<br><sub>The line repeated at many sizes, some inverted</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-cascade.gif" alt="Cascade layout"><br><b>Cascade</b> · Bold<br><sub>A moving column of words, arriving with the voice</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-hinge.gif" alt="Hinge layout"><br><b>Hinge</b> · Bold<br><sub>Heavy words swing in on a hinge and fold into a stack</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-cascade.webp" alt="Cascade layout"><br><b>Cascade</b> · Bold<br><sub>A moving column of words, arriving with the voice</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-hinge.webp" alt="Hinge layout"><br><b>Hinge</b> · Bold<br><sub>Heavy words swing in on a hinge and fold into a stack</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-broadside.gif" alt="Broadside layout"><br><b>Broadside</b> · Bold<br><sub>One strip of big type that slides along</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-torque.gif" alt="Torque layout"><br><b>Torque</b> · Bold<br><sub>Words wrung into place with a thick edge, stacking upwards</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-broadside.webp" alt="Broadside layout"><br><b>Broadside</b> · Bold<br><sub>One strip of big type that slides along</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-torque.webp" alt="Torque layout"><br><b>Torque</b> · Bold<br><sub>Words wrung into place with a thick edge, stacking upwards</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-cutout.gif" alt="Cutout layout"><br><b>Cutout</b> · Playful<br><sub>Uneven type and album-colour labels, built word by word</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-portal.gif" alt="Portal layout"><br><b>Portal</b> · Playful<br><sub>The sung word in a pill, earlier words drifting away</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-cutout.webp" alt="Cutout layout"><br><b>Cutout</b> · Playful<br><sub>Uneven type and album-colour labels, built word by word</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-portal.webp" alt="Portal layout"><br><b>Portal</b> · Playful<br><sub>The sung word in a pill, earlier words drifting away</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-mosaic.gif" alt="Mosaic layout"><br><b>Mosaic</b> · Playful<br><sub>A collage of huge words, colour bars and single letters</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-fable.gif" alt="Fable layout"><br><b>Fable</b> · Playful<br><sub>A new shape and accent every line</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-mosaic.webp" alt="Mosaic layout"><br><b>Mosaic</b> · Playful<br><sub>A collage of huge words, colour bars and single letters</sub></td>
+    <td width="50%" align="center"><img src="docs/media/layout-fable.webp" alt="Fable layout"><br><b>Fable</b> · Playful<br><sub>A new shape and accent every line</sub></td>
   </tr>
 </table>
 
@@ -104,7 +104,7 @@ Each layout sets the words in its own way, from calm and spacious to bold and pl
 
 ### Japanese, Chinese and Korean readings
 
-[![A Japanese lyric with its romaji reading underneath, each syllable of the reading filling in as it is sung](docs/media/readings-japanese.gif)](docs/media/readings-japanese.mp4)
+[![A Japanese lyric with its romaji reading underneath, each syllable of the reading filling in as it is sung](docs/media/readings-japanese.webp)](docs/media/readings-japanese.mp4)
 
 Show a reading under the lyrics, or instead of them: romaji for Japanese, pinyin for Mandarin (with or without tone marks), Revised Romanisation for Korean, and Latin letters for other scripts. Cantonese readings come from files you import. The reading fills in syllable by syllable with the word above it, in every layout.
 
@@ -112,13 +112,25 @@ Lyrics in a language you don't read can also be **translated on your Mac**, with
 
 ### Floating lyrics over your apps
 
-[![Lyrics floating over an open TextEdit note, line by line as the song plays](docs/media/floating-lyrics.gif)](docs/media/floating-lyrics.mp4)
+[![Lyrics floating over an open TextEdit note, line by line as the song plays](docs/media/floating-lyrics.webp)](docs/media/floating-lyrics.mp4)
 
 Choose **Floating over apps** (in **Settings › Lyric style**, or the **Floating** button in the menu bar) and the lyrics move into a see-through window above every app, full-screen ones included. Put them in a corner, the centre, under the menu bar or above the Dock, on the display you choose, or drag them anywhere with **Edit position**, and give them their own style, size and shade. Clicks pass straight through, the lyrics fade while the pointer is over them, and they hide when nothing is playing.
 
+### Discord and listening along
+
+Show your friends what you're listening to, line by line. With **Discord** on, your Discord profile shows the lyric being sung right now, updating as the song plays, with the album cover and a progress bar.
+
+- **The lyric, the song or the artist**: choose what your status shows. Lyrics can run a moment ahead of the music (2 seconds by default), so friends read each line as you hear it.
+- **Instrumental breaks** show "♪ Instrumental", and a paused song says so, or the status clears, as you prefer.
+- **A Play this song button** opens the same song on Spotify, Apple Music, YouTube Music and more, whichever app your friends use. A **Get Lunalyr** button sits beside it.
+- **It just works with the Discord app**: open Discord before or after Lunalyr and the status appears; Lunalyr keeps within Discord's limits so updates aren't dropped.
+- **Listen along**: let friends follow what you play, in time, on their own Spotify or Music, or in a web page with the lyrics lit line by line, joining from a button on your Discord profile. Lunalyr doesn't run a server to pass the music between you, so this needs one you set up yourself, for free on Cloudflare; [`relay/README.md`](relay/README.md) walks through it. Until you add one, listen-along stays hidden and nothing connects.
+
+Turn it on in **Settings › Discord & lyric card** (it's off until you do).
+
 ### An opening title for every song
 
-[![A new song starting: its title, artist and album appear low on the left beside the album cover, then make way for the first line](docs/media/opening-title.gif)](docs/media/opening-title.mp4)
+[![A new song starting: its title, artist and album appear low on the left beside the album cover, then make way for the first line](docs/media/opening-title.webp)](docs/media/opening-title.mp4)
 
 As a song starts, its title, artist and album appear low on the left beside the cover, like the title card of a music video, with a reading under Japanese, Chinese or Korean titles. It leaves before the first line is sung, and the song's credits follow.
 
@@ -139,8 +151,8 @@ Apple Music's **animated album covers** can play behind the lyrics too.
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/media/background-visualiser.mp4"><img src="docs/media/background-visualiser.gif" alt="A visualiser moving with the music behind the lyrics"></a></td>
-    <td width="50%"><a href="docs/media/background-music-video.mp4"><img src="docs/media/background-music-video.gif" alt="The song's music video playing behind the lyrics"></a></td>
+    <td width="50%"><a href="docs/media/background-visualiser.mp4"><img src="docs/media/background-visualiser.webp" alt="A visualiser moving with the music behind the lyrics"></a></td>
+    <td width="50%"><a href="docs/media/background-music-video.mp4"><img src="docs/media/background-music-video.webp" alt="The song's music video playing behind the lyrics"></a></td>
   </tr>
   <tr>
     <td align="center"><b>Visualiser</b></td>
@@ -206,11 +218,6 @@ Lunalyr only reads a player that is already open; it never opens one itself.
 - **`lunalyr://` links**: `lunalyr://toggle`, `lunalyr://floating`, `lunalyr://card` and `lunalyr://settings`.
 
 When you use one of these while the wallpaper is hidden, a small confirmation appears under the menu bar.
-
-### Discord and listening along
-
-- **Discord**: show the line being sung, or just the song, on your Discord profile, with the album cover and a progress bar (off by default).
-- **Listen along**: let friends follow what you play, in time, on their own Spotify or Music, or in a web page with the lyrics lit line by line. Lunalyr doesn't run a server to pass the music between you, so this needs one you set up yourself, for free on Cloudflare; [`relay/README.md`](relay/README.md) walks through it. Until you add one, listen-along stays hidden and nothing connects.
 
 ### Accessibility
 
