@@ -147,6 +147,7 @@ whose lines are Lunalyr's own, is ported.
 | `AudioReactiveController.swift` | 80 / 803 | `Core/Visualisers/Capture/SystemAudioController.cs`, `Shell/Visualisers/SystemAudioService.cs` | **Re-implemented from a behaviour description** (demand, health, route changes, failures waiting for the user or playback), own structure |
 | `AudioCaptureEnvironment.swift`, `SystemAudioCapture.swift`, `ScreenAudioCapture.swift`, `AudioOutputActivity.swift` | 2, 91, 41, 0 | `Platform/Audio/WasapiLoopback.cs`, `OutputActivityMeter.cs` | Not ported (Core Audio taps, ScreenCaptureKit and process lists have no Windows counterpart); Windows' own WASAPI loopback and the endpoint peak meter, written from Microsoft's documentation |
 | `WebVisualizer*.swift` | 0 | — | Out of scope (the web scenes; stored Wavefield Original, Wavecore and Light 3D read as their native stand-ins) |
+| `VisualizerPreferences.swift` (the colour choices), `WebVisualizerView.scenePalette`, `VisualizerSceneControls.swift` / `VisualizerColoursPicker` | 0, 0, 1 (the SwiftUI line) | `Shell/Settings/AppSettings.Visualisers.cs` (`WavefieldColours`, `WavecoreColours`), `Render/Visualisers/VisualiserHost.cs` (`VisualiserSettings.AlbumColours`), `App/Settings/WallpaperPage.Visualiser.cs` | Faithful port (14 Nov 2026), on the native scenes that stand in for the web ones; checked again at `79b84db`. The key facts in `Settings.swift` lines 280–290 are Lunalyr's (`aa22c91`, `4765504`) |
 
 Consulted for facts or behaviour only (nothing translated):
 
@@ -204,6 +205,16 @@ with the tests that had been left out as page scraping. Blame-checked again at `
 `MusicVideoOffsetTests.swift` have no `a99fd65` lines; nothing was re-implemented from behaviour. Windows' own and
 written fresh: the guardrail (`YouTubeSearchPage.Inspect`: a consent, bot-check, sign-in or captcha page, a redirect or
 a page without data is never worked around), the Data API key as the fallback, and the "Search YouTube with" setting.
+
+## Low power visuals and the music video's still (14 Nov 2026)
+
+Checked at `next/integration` `79b84db` with `git blame -w -M -C --line-porcelain`:
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/Settings/Pages/PerformancePage.swift` (Low power visuals, Follow Low Power Mode, the leaf captions) | 0 | `App/Settings/SettingsPages.cs` (`PerformancePage`), `Shell/Settings/PowerCopy.cs`, `AppSettings.Power.cs` | Faithful port of the rows and words (Windows' energy saver for macOS Low Power Mode) |
+| `Sources/Settings/Settings.swift`, `effectiveMode(_:under:)` | its lines are Verso-attributed | `Shell/Wallpaper/WallpaperPower.cs` | **Re-implemented from behaviour**: Your wallpaper is never replaced; a patterns rule shows Line patterns for all but Colour only; a colour-only rule shows Colour only; otherwise the chosen type (heavy effects narrowed to light ones where the effect is picked) |
+| `Sources/MusicVideo/MusicVideoView.swift` (`YouTubeThumbnail`) | 0 | `Core/MusicVideo/YouTubeThumbnail.cs`, `Shell/AppController.MusicVideoStill.cs`, `Render/Backgrounds/MusicVideoLayer.cs` | Faithful port of the URLs and their order; the drawing is Direct2D, written fresh |
 
 ## Lyric cards (milestone 7)
 

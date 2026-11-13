@@ -13,7 +13,8 @@ namespace Lunalyr.App.Settings;
 // The wallpaper-types hook (WallpaperPage.cs): the Mac's Visualiser and Music response sections (WallpaperPage.swift's
 // VisualiserSceneSection and MusicResponseSection, VisualizerSceneControls.swift; Lunalyr's own lines). Windows has
 // one capture method and no capture permission, so the Mac's "Capture method", "Open Privacy Settings…" and "Try
-// Compatibility Capture" have no counterpart; its web scenes and their options are not in this port.
+// Compatibility Capture" have no counterpart. Its web scenes are not in this port; the colour choice of the two that
+// stand in for them natively (Wavefield, Fosfora Aurora) is, and their other options are not (docs/APP-SHELL.md).
 internal static partial class WallpaperPage
 {
     static partial void AddVisualiserSections(StackPanel sections, SettingsContext ctx, ref bool added)
@@ -32,10 +33,14 @@ internal static partial class WallpaperPage
         ctx.OnRefresh(s => scene.Description = s.Visualizer().Detail());
         page.Children.Add(scene);
 
-        page.Children.Add(Card("Colours", "Star Trails’ sky: the album cover’s colours, or the original violet nebula.", "",
-                Combo(ctx, [new SettingsChoice("album", "Album cover"), new SettingsChoice("original", "Original Star Trails")],
-                    s => s.StarTrailsColours, (s, v) => s with { StarTrailsColours = v }, width: 220))
-            .ShowWhen(ctx, s => s.Visualizer() == VisualizerStyle.StarTrails));
+        // Colours: the album cover's or the scene's own (the Mac's VisualizerSceneControls and VisualizerColoursPicker).
+        // Wavefield and Fosfora Aurora take the Mac's Wavefield Original and Wavecore choices, the scenes they stand in for.
+        AddColours(page, ctx, "Star Trails’ sky: the album cover’s colours, or the original violet nebula.", "Original Star Trails",
+            s => s.StarTrailsColours, (s, v) => s with { StarTrailsColours = v }, s => s.Visualizer() == VisualizerStyle.StarTrails);
+        AddColours(page, ctx, "The album cover’s colours, or Wavefield’s own heatmap.", "Original Wavefield",
+            s => s.WavefieldColours, (s, v) => s with { WavefieldColours = v }, s => s.Visualizer().IsWavefield());
+        AddColours(page, ctx, "The album cover’s colours, or Fosfora’s own rainbow of ribbons.", "Original Fosfora Aurora",
+            s => s.WavecoreColours, (s, v) => s with { WavecoreColours = v }, s => s.Visualizer() == VisualizerStyle.FosforaAurora);
 
         var punch = Slider(ctx, VisualizerPreferences.PunchMinimum, VisualizerPreferences.PunchMaximum, 0.05,
             v => Calm() ? "Off" : Percent(v), s => s.VisualizerPunch, (s, v) => s with { VisualizerPunch = v }, "Off", "Strong",
@@ -147,6 +152,13 @@ internal static partial class WallpaperPage
             packets.Text = $"{audio?.Packets ?? 0} audio packets";
         });
     }
+
+    /// <summary>A scene's "Colours" menu, shown while that scene is chosen.</summary>
+    private static void AddColours(StackPanel page, SettingsContext ctx, string description, string original,
+        Func<AppSettings, string> get, Func<AppSettings, string, AppSettings> set, Func<AppSettings, bool> shown) =>
+        page.Children.Add(Card("Colours", description, "",
+                Combo(ctx, [new SettingsChoice("album", "Album cover"), new SettingsChoice("original", original)], get, set, width: 220))
+            .ShowWhen(ctx, shown));
 
     private static (StackPanel Panel, ProgressBar Bar) Meter(string name)
     {

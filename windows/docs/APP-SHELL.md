@@ -401,6 +401,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `audioSensitivity` | `1` | 0.3–3, Music response › Sensitivity | `custom.audioSensitivity` |
 | `visualizerPunch` | `1` | 0–2, Visualiser › Beat punch (off while Animation effects are off) | `custom.visualizerPunch` |
 | `starTrailsColours` | `"album"` | `album` or `original`, Visualiser › Colours (Star Trails) | `custom.starTrailsColours` |
+| `wavefieldColours` | `"album"` | `album` or `original` (anything else reads as `album`), Visualiser › Colours (Wavefield and Wavefield Sphere): `original` draws them with no album palette, in Wavefield's own heatmap | `custom.wavefieldColours` |
+| `wavecoreColours` | `"album"` | `album` or `original` (anything else reads as `album`), Visualiser › Colours (Fosfora Aurora): `original` draws it with no album palette, in its own rainbow | `custom.wavecoreColours` |
 | `musicVideoFallback` | `"auto"` | "Without a video": any type but `musicVideo` (anything else reads as `auto`); choosing Music video stores the type it replaced here | `custom.musicVideoFallback` |
 | `musicVideoOnline` | `false` | "Search YouTube for videos" (sends the title and artist to YouTube: its results page, or the Data API with the owner's key) | `custom.musicVideoOnline` |
 | `musicVideoSearch` | `"site"` | "Search YouTube with": `site`, "Search YouTube’s site (no key)", the results page as on the Mac, with the owner's key (if any) as the fallback; or `apiKey`, "Use my API key", the Data API only. Anything else reads as `site` | Windows only |
@@ -1077,12 +1079,26 @@ per track for the session. See [compositions/matching.md](compositions/matching.
   catalogue has entries), Visualiser (the hook, or a placeholder), Your wallpaper (what it does, and that the preview
   can't show it), Image or video (File with "Choose…", the file's name or "missing, choose it again", Placement with
   the Mac's four placements and captions, the note on videos), Colour only (Album gradient).
+- **Visualiser** (`WallpaperPage.Visualiser.cs`): Scene; Colours, "Album cover" or "Original <scene>", for Star Trails
+  (`starTrailsColours`), Wavefield and Wavefield Sphere (`wavefieldColours`) and Fosfora Aurora (`wavecoreColours`);
+  Beat punch with the calm caption. On the Mac the last two keys colour its web scenes Wavefield Original and Wavecore
+  and the native scenes standing in for them (`WebVisualizerView.scenePalette`: "original" passes no album palette);
+  Windows' Wavefield, Wavefield Sphere and Fosfora Aurora are those stand-ins, so the choice is offered on them and
+  works the same way (no palette: the shaders' own colours, as with no cover). The scene's other options belong to
+  the Mac's web scenes, which Windows doesn't have, and aren't offered: Wavefield preset (`custom.wavefieldPreset`, the
+  web engine's preset list; the native Wavefield has none), Projection (`custom.wavefieldProjection`: the Mac's stand-in
+  for "Sphere" is Wavefield Sphere, which is its own scene in Windows' menu), Light 3D's Colours
+  (`custom.light3DColours`; Light 3D reads as Star Trails, whose own Colours row applies) and "Heavy scenes on main
+  display only" (`custom.visualizerHeavyScenesOnMainDisplay`: it keeps a web scene's WebKit process to one display;
+  Windows draws every scene natively, one renderer for every display). Previews of each Colours choice:
+  `docs/previews/visualisers/<scene>-colours.png` (`tools/VisualiserPreview --colours`).
 - **Legibility:** Automatic text backing (caption by type, as the Mac's), and "Text backing" 0–100% when it is off.
   The Mac's "Shade under the menu bar" has no Windows counterpart (the taskbar draws its own material) and isn't offered.
 - **Adjustments** (hidden for Your wallpaper): Motion speed 0.2–2× and Colour richness 40–180% (not for Image or video),
   Darkening 0–200%, Pattern visibility 0–100% (Line patterns), Reset Adjustments (also resets Covers › Softening, as on
   the Mac; disabled while all are as Lunalyr comes). Everything applies at once on the wallpaper and the preview.
-  The Mac's Increase Contrast floor under Darkening and its power-saving banner have no Windows setting behind them yet.
+  The Mac's Increase Contrast floor under Darkening has no Windows setting behind it yet. Its power-saving banner isn't
+  on this page: Performance says what power saving is doing (see "Power saving").
 
 ### Your wallpaper
 

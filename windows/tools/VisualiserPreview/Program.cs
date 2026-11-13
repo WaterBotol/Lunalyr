@@ -1,4 +1,4 @@
-// VisualiserPreview <out-dir> [--style <raw>] [--size WxH] [--adapter <name>] [--costs] [--limiter]
+// VisualiserPreview <out-dir> [--style <raw>] [--size WxH] [--adapter <name>] [--costs] [--limiter] [--colours]
 //
 // Renders every visualiser scene from recorded synthetic sound to PNGs (a 2 × 2 sheet per scene: silence, a beat, a
 // sweep, loud noise), checks the photosensitivity limiter against a jump to loud noise with Reduce Motion on, and with
@@ -85,6 +85,38 @@ if (args.Contains("--loopback-check"))
     }
     var stopped = System.Diagnostics.Stopwatch.StartNew();
     Console.WriteLine($"Stopped cleanly ({stopped.ElapsedMilliseconds} ms after the last read).");
+    return;
+}
+
+if (args.Contains("--colours"))
+{
+    // Visualiser › Colours through the wallpaper's own layer: each scene with the choice, drawn for a dusky cover with
+    // "Album cover" (left) and "Original" (right), from the beat signal. Sound is synthetic; nothing is captured.
+    var dusk = new AlbumWallpaperPalette([.. new[] { (0.62, 0.70, 0.55), (0.78, 0.55, 0.62), (0.94, 0.58, 0.80), (0.08, 0.78, 0.90), (0.50, 0.62, 0.66),
+        (0.62, 0.70, 0.55), (0.78, 0.55, 0.62), (0.94, 0.58, 0.80), (0.08, 0.78, 0.90) }.Select(c => new Double3(c.Item1, c.Item2, c.Item3))]);
+    var palette = PaletteMapper.FromAlbum(dusk);
+    foreach (var style in new[] { VisualizerStyle.Wavefield, VisualizerStyle.WavefieldSphere, VisualizerStyle.FosforaAurora, VisualizerStyle.StarTrails })
+    {
+        var sheet = new byte[width * 2 * height * 4];
+        for (var k = 0; k < 2; k++)
+        {
+            var album = k == 0;
+            var settings = VisualiserSettings.Default with
+            {
+                Style = style, WavefieldAlbumColours = album, FosforaAlbumColours = album, StarTrailsAlbumColours = album,
+            };
+            var sound = style.IsWavefield() ? Synth.Sweep() : Synth.Beat();
+            var host = new VisualiserHost(() => settings, new FixedSound(sound));
+            using var surface = new OffscreenSurface(width, height, 1, hardware: true);
+            using var layer = new VisualiserLayerFactory(host, new Lunalyr.Render.Backgrounds.BackgroundOptions { Grain = false }).Create();
+            surface.Prepare(layer);
+            for (var frame = 0; frame < 30; frame++) surface.Draw(layer, new SceneSnapshot { Palette = palette }, 14 + frame / 30.0);
+            var pixels = surface.ReadPixels();
+            Blit(pixels, sheet, k * width, 0);
+            Console.WriteLine($"{style.Title(),-18} {(album ? "album" : "original"),-8} mean luminance {Mean(pixels):0.000}");
+        }
+        File.WriteAllBytes(Path.Combine(outDir, $"{style.RawValue()}-colours.png"), VisualiserStill.Png(sheet, width * 2, height));
+    }
     return;
 }
 
@@ -192,6 +224,14 @@ void Limiter(VisualizerStyle[] scenes)
     File.WriteAllText(Path.Combine(outDir, "limiter.csv"), csv.ToString());
     File.WriteAllText(Path.Combine(outDir, "limiter.md"), summary.ToString());
     Console.Write(summary);
+}
+
+/// <summary>The same reading at every moment.</summary>
+sealed class FixedSound(AudioSnapshot sound) : IVisualiserSound
+{
+    public AudioSnapshot Latest() => sound;
+
+    public double Now => 1_000;
 }
 
 /// <summary>One recorded reading until a moment, another after it; the clock is set by the caller.</summary>

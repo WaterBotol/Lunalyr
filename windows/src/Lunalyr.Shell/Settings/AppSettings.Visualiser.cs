@@ -11,6 +11,11 @@ public sealed partial record AppSettings
         VisualizerStyle = VisualizerStyles.Parse(settings.VisualizerStyle).RawValue(),
         AudioSensitivity = InRange(settings.AudioSensitivity, SensitivityMin, SensitivityMax, 1),
         VisualizerPunch = VisualizerPreferences.ClampedPunch(settings.VisualizerPunch),
-        StarTrailsColours = settings.StarTrailsColours == "original" ? "original" : "album",
+        StarTrailsColours = SceneColours(settings.StarTrailsColours),
+        WavefieldColours = SceneColours(settings.WavefieldColours),
+        WavecoreColours = SceneColours(settings.WavecoreColours),
     };
+
+    /// <summary>A scene's colours: "original" or, for anything else, "album" (the Mac's VisualizerSceneColours).</summary>
+    private static string SceneColours(string? value) => value == "original" ? "original" : "album";
 }

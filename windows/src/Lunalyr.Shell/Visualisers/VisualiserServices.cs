@@ -79,5 +79,7 @@ public static class VisualiserServices
         Sensitivity = app.AudioSensitivity,
         Punch = app.VisualizerPunch,
         StarTrailsAlbumColours = app.StarTrailsColours != "original",
+        WavefieldAlbumColours = app.WavefieldColours != "original",
+        FosforaAlbumColours = app.WavecoreColours != "original",
     };
 }
