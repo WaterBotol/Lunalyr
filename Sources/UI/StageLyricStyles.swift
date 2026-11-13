@@ -700,7 +700,7 @@ struct StageLyricView: View {
     //
     // One strip of type that slides along as words are sung: big, round, hard
     // shadowed words, with the little ones ("the", "of") as small paper
-    // labels in the row between them. Words that slide toward an edge of the
+    // labels riding on the shoulder of the word before. Words that slide toward an edge of the
     // stage fade out whole rather than being cut off mid-letter.
 
     private static let little: Set<String> = [
@@ -715,11 +715,14 @@ struct StageLyricView: View {
         Self.little.contains(text.lowercased().trimmingCharacters(in: .punctuationCharacters)) && text.count <= 5
     }
 
-    /// Where Broadside puts each word's centre: every word in one row, a
-    /// little word as a small paper label in the gap between the big words
-    /// either side of it (never on top of one), and the strip glided so the
-    /// line builds up centred until it is wider than the stage; after that
-    /// the newest word stays near the right, the line read back to its left.
+    /// Where Broadside puts each word's centre: the big words in one row, a
+    /// little word as a small paper label riding on the shoulder of the big
+    /// word before it (above its letters, flush with its end, never on top of
+    /// them), and the strip glided so the line builds up centred until it is
+    /// wider than the stage; after that the newest big word stays near the
+    /// right, the line read back to its left. A label does not move the strip,
+    /// so the word it rides on stays in view with it: in the row, a label took
+    /// room that pushed that word off a small stage, leaving the label alone.
     /// `slots` is the room each big word's reading takes under it (0 for
     /// none): the word itself is what sits on the strip's line, its reading below.
     static func broadsidePlaces(_ measured: [CGSize], little: [Bool], slots: [CGFloat], moves: [Double], unit: CGFloat,
@@ -729,23 +732,34 @@ struct StageLyricView: View {
         var xs = [CGFloat](repeating: 0, count: measured.count)
         var ys = [CGFloat](repeating: bounds.midY, count: measured.count)
         var cursor: CGFloat = 0
+        var previousBig: Int?
         for index in measured.indices {
             let width = measured[index].width
+            if isLittle(index), let prior = previousBig {
+                // On the word's shoulder: just clear of the top of its letters.
+                let wordHeight = measured[prior].height - slot(prior)
+                xs[index] = xs[prior] + measured[prior].width / 2 - width / 2
+                ys[index] = bounds.midY - wordHeight * 0.36 - unit * 0.06 - measured[index].height / 2
+                continue
+            }
             xs[index] = cursor + width / 2
-            ys[index] = bounds.midY + (isLittle(index) ? 0 : slot(index) / 2)
-            // A label sits a little closer in, so it reads as part of the phrase.
-            let label = isLittle(index) || isLittle(index + 1)
-            cursor += width + unit * (label ? 0.28 : 0.45)
+            ys[index] = bounds.midY + slot(index) / 2
+            cursor += width + unit * 0.45
+            previousBig = index
         }
-        // Where the strip stands once each word has arrived: the words so far
-        // centred while they fit, then the newest word's end held clear of
-        // the right edge, where the edge fade starts.
+        // Where the strip stands once each big word has arrived: the words so
+        // far centred while they fit, then the newest word's end held clear of
+        // the right edge, where the edge fade starts. A label keeps the stop
+        // of the word it rides on.
         let margin = bounds.width * broadsideMargin + unit * broadsideFadeSpan + unit * 0.1
-        let stops: [CGFloat] = measured.indices.map { index in
+        let firstLeft = (xs.first ?? 0) - (measured.first?.width ?? 0) / 2
+        var stops = [CGFloat](repeating: 0, count: measured.count)
+        for index in measured.indices {
+            if isLittle(index), index > 0 { stops[index] = stops[index - 1]; continue }
             let half = measured[index].width / 2
-            let row = xs[index] + half - (xs.first ?? 0) + (measured.first?.width ?? 0) / 2
+            let row = xs[index] + half - firstLeft
             let shift = min(max(0, row / 2 - half), max(0, bounds.width / 2 - margin - half))
-            return xs[index] - shift
+            stops[index] = xs[index] - shift
         }
         var camera = stops.first ?? 0
         for index in stops.indices where index > 0 {
@@ -763,7 +777,10 @@ struct StageLyricView: View {
 
     /// How visible a Broadside word is from where its box sits: 1 well inside
     /// the stage, fading to 0 as either end reaches the margin.
-    static func broadsideEdgeFade(_ frame: CGRect, stageWidth: CGFloat, unit: CGFloat) -> Double {
+    /// `lead` widens the box to the left: a label passes it the width of the
+    /// word it rides on (estimated), so it leaves with that word, not after it.
+    static func broadsideEdgeFade(_ frame: CGRect, stageWidth: CGFloat, unit: CGFloat, lead: CGFloat = 0) -> Double {
+        let frame = CGRect(x: frame.minX - lead, y: frame.minY, width: frame.width + lead, height: frame.height)
         let margin = stageWidth * broadsideMargin
         let span = max(unit * broadsideFadeSpan, 1)
         let left = (frame.minX - margin) / span
@@ -808,6 +825,12 @@ struct StageLyricView: View {
         }
         let u = unit
         let stageWidth = stageSize.width
+        // How far a label's word reaches left of the label (about half an em a
+        // character), so the label fades out with the word it rides on.
+        let rides: [CGFloat] = runs.indices.map { index in
+            guard little[index], index > 0 else { return 0 }
+            return max(0, CGFloat(runs[anchor[index]].text.count) * bigSize * 0.5 - smallSize * 2)
+        }
         return StageLayout(place: { measured, bounds in
             Self.broadsidePlaces(measured, little: little, slots: slots, moves: moves, unit: u, in: bounds)
         }) {
@@ -831,7 +854,7 @@ struct StageLyricView: View {
                         .opacity(min(1, a * 1.6) * keep[run.id])
                         .visualEffect { label, box in
                             label.opacity(Self.broadsideEdgeFade(box.frame(in: .named(Self.broadsideSpace)),
-                                                                 stageWidth: stageWidth, unit: u))
+                                                                 stageWidth: stageWidth, unit: u, lead: rides[run.id]))
                         }
                 } else {
                     let tile = tiled(run)
