@@ -497,12 +497,27 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         CATransaction.setDisableActions(true)
         playerLayer.frame = bounds
         CATransaction.commit()
+        updateGravity()
     }
 
-    /// Filled (cropped) or whole (fitted, clear around it so the backdrop
-    /// shows).
+    /// Filled (cropped) or whole (the width matched, clear above and below
+    /// so the backdrop shows).
     func setFraming(_ framing: MusicVideoFraming) {
-        let gravity = framing.videoGravity
+        self.framing = framing
+        updateGravity()
+    }
+
+    private var framing: MusicVideoFraming = .fill
+    private var sizeObservation: NSKeyValueObservation?
+
+    /// The picture's shape, once the item knows it.
+    private var contentAspect: CGFloat? {
+        guard let size = player.currentItem?.presentationSize, size.width > 0, size.height > 0 else { return nil }
+        return size.width / size.height
+    }
+
+    private func updateGravity() {
+        let gravity = framing.videoGravity(contentAspect: contentAspect, in: bounds.size)
         guard playerLayer.videoGravity != gravity else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -514,6 +529,9 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         guard self.url != url else { return }
         self.url = url
         let item = AVPlayerItem(url: url)
+        sizeObservation = item.observe(\.presentationSize, options: [.new]) { _, _ in
+            DispatchQueue.main.async { [weak self] in self?.updateGravity() }
+        }
         statusObservation = item.observe(\.status, options: [.new]) { item, _ in
             guard item.status == .failed else { return }
             DispatchQueue.main.async {
@@ -584,6 +602,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         player.replaceCurrentItem(with: nil)
         statusObservation = nil
         readyObservation = nil
+        sizeObservation = nil
     }
 }
 

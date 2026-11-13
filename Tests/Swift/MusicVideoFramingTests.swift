@@ -91,10 +91,31 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertGreaterThan(MusicVideoFraming.whole.backdropShare(aspect: hd, in: tall), 0.6)
     }
 
-    func testWholeFitsByHeightWhenTheVideoIsNarrower() {
-        let rect = MusicVideoFraming.whole.rect(aspect: 4.0 / 3.0, in: wide)
-        XCTAssertEqual(rect.height, wide.height * MusicVideoFraming.wholeBleed, accuracy: 0.01)
-        XCTAssertLessThan(rect.width, wide.width)
+    func testWholeMatchesTheWidthEvenWhenTheVideoIsNarrower() {
+        for screen in [laptop, wide, tall] {
+            let rect = MusicVideoFraming.whole.rect(aspect: 4.0 / 3.0, in: screen)
+            XCTAssertEqual(rect.width, screen.width * MusicVideoFraming.wholeBleed, accuracy: 0.01,
+                           "the picture's width is the screen's, \(screen)")
+            XCTAssertEqual(rect.width / rect.height, 4.0 / 3.0, accuracy: 0.001)
+            XCTAssertEqual(rect.midY, screen.height / 2, accuracy: 0.001, "centred; top and bottom lose alike")
+        }
+        let onLaptop = MusicVideoFraming.whole.rect(aspect: 4.0 / 3.0, in: laptop)
+        XCTAssertGreaterThan(onLaptop.height, laptop.height, "4:3 on a 16:10 screen runs past the top and bottom")
+        XCTAssertEqual(MusicVideoFraming.whole.backdropShare(aspect: 4.0 / 3.0, in: laptop), 0, accuracy: 0.0001,
+                       "no side bands")
+        let cinema = MusicVideoFraming.whole.rect(aspect: 2.39, in: laptop)
+        XCTAssertLessThan(cinema.height, laptop.height, "a wider picture leaves bands above and below")
+    }
+
+    func testLibraryGravityMatchesTheWidth() {
+        let whole = MusicVideoFraming.whole
+        XCTAssertEqual(whole.videoGravity(contentAspect: hd, in: laptop), .resizeAspect, "wider: bands above and below")
+        XCTAssertEqual(whole.videoGravity(contentAspect: 4.0 / 3.0, in: laptop), .resizeAspectFill,
+                       "taller: width matched, top and bottom cut")
+        XCTAssertEqual(whole.videoGravity(contentAspect: nil, in: laptop), .resizeAspect, "unknown yet")
+        XCTAssertEqual(whole.videoGravity(contentAspect: hd, in: tall), .resizeAspect)
+        XCTAssertEqual(MusicVideoFraming.fill.videoGravity(contentAspect: hd, in: laptop), .resizeAspectFill)
+        XCTAssertEqual(MusicVideoFraming.fill.videoGravity(contentAspect: nil, in: laptop), .resizeAspectFill)
     }
 
     func testFillCoversTheScreenAndYouTubeCropsMore() {
@@ -124,8 +145,6 @@ final class MusicVideoFramingTests: XCTestCase {
     }
 
     func testLibraryGravity() {
-        XCTAssertEqual(MusicVideoFraming.fill.videoGravity, .resizeAspectFill)
-        XCTAssertEqual(MusicVideoFraming.whole.videoGravity, .resizeAspect)
         XCTAssertEqual(MusicVideoFraming.fill.bleedScale, 1)
         XCTAssertTrue(MusicVideoFraming.whole.showsBackdrop)
         XCTAssertFalse(MusicVideoFraming.fill.showsBackdrop)
