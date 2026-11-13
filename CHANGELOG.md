@@ -12,6 +12,8 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [2.0.1] - 2026-11-13
+
 ### Added
 - Update reminders: when a new version is out, Lunalyr's menu-bar icon turns into a violet circle with a down arrow, and clicking it opens the panel with "Lunalyr x.y is available", **Update…** (Sparkle's window, with what's new) and **Later** (back to the usual moon until the next day's check). Settings › General says an update is waiting too, with **Update…** in place of Check for Updates….
 - Settings › General › "Check for updates automatically" (on by default).
@@ -625,7 +627,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.1
 [2.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.0
 [1.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v1.0.0
 [0.6.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v0.6.0
