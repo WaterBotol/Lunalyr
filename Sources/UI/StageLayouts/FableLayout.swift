@@ -6,13 +6,15 @@ import SwiftUI
 // A storybook page per line. The page is set in a shape chosen for the line
 // (an arc, a stair, a wave or a plain centred block) and each phrase (`StagePhrases`)
 // is one line of type on it, so the page breaks where the singer breathes.
-// Words are written in with a pen stroke as they are sung: a function word in
-// a flick, a content word by its length, a held word slowly over the time it
-// is sung, a quick run in one stroke across the group. Each phrase's focal word
-// also settles onto its baseline, and the line's one important word gets its
-// accent (corner brackets or a star) as its stroke ends. A long line turns the
-// page by phrase: a page holds at most two phrases, and the old page folds
-// away about its spine as the next is begun. Nothing moves once written.
+// Words land playfully, by role: each phrase's focal word makes the big
+// landing (it pops up from its foot with a swing, or drops in from above,
+// alternating phrase by phrase), the line's hero word lands biggest of all,
+// content words hop up into place, and little words are written in with a
+// flick of the pen; a held word is written slowly over the time it is sung,
+// and a quick run hops in as one group. A long line turns the page by
+// phrase: a page holds at most two phrases, and the old page folds away about
+// its spine before the next is begun. Nothing moves once landed, and nothing
+// decorates a word (no stars, brackets or underlines).
 
 extension StageLyricView {
     /// Fable's entry point, called by the dispatcher (`StageLyricView.layout`).
@@ -33,10 +35,11 @@ extension StageLyricView {
         let marginY = max(unit * 0.5, stage.height * 0.05)
         let available = CGSize(width: max(1, stage.width - 2 * marginX), height: max(1, stage.height - 2 * marginY))
         let pages = plan.pages.indices.filter { Self.fablePageShown($0, plan: plan, at: time, exitStart: exitStart) }
+        let seed = seed
         return ZStack {
             ForEach(pages, id: \.self) { index in
                 let turn = Self.fablePageTurn(index, plan: plan, at: time, exitStart: exitStart)
-                fablePage(plan.pages[index], plan: plan, style: style, runs: runs)
+                fablePage(plan.pages[index], plan: plan, style: style, runs: runs, seed: seed)
                     // One shadow for the page, not one per word.
                     .compositingGroup()
                     .shadow(color: .black.opacity(0.3), radius: max(3, unit * 0.08), y: 2)
@@ -54,46 +57,50 @@ extension StageLyricView {
         .frame(width: stage.width, height: stage.height)
     }
 
-    private func fablePage(_ page: FablePlan.Page, plan: FablePlan, style: FableStyle, runs: [StageRun]) -> some View {
+    private func fablePage(_ page: FablePlan.Page, plan: FablePlan, style: FableStyle, runs: [StageRun],
+                           seed: Int) -> some View {
         FableLayout(shape: style.shape, rows: page.rowSlots, rightToLeft: plan.rightToLeft,
                     gap: unit * 0.1, rowGap: unit * 0.1) {
             // The plan is made from these runs, so every id is one of them.
             ForEach(page.runs, id: \.self) { id in
-                fableWord(runs[id], plan: plan, style: style, runs: runs)
+                fableWord(runs[id], plan: plan, runs: runs, seed: seed)
             }
         }
     }
 
     @ViewBuilder
-    private func fableWord(_ run: StageRun, plan: FablePlan, style: FableStyle, runs: [StageRun]) -> some View {
+    private func fableWord(_ run: StageRun, plan: FablePlan, runs: [StageRun], seed: Int) -> some View {
         let role = plan.roles[run.id]
         let size = Self.fableSize(role, wordCount: runs.count, unit: unit)
-        let stroke = plan.strokes[run.id]
-        let written = Self.fableWritten(stroke, at: time)
+        let written = Self.fableWritten(plan.strokes[run.id], at: time)
         let entrance = chosenEntrance(run, progress: StageMotion.arrival(run.start, at: time), size: size)
-        let native = entrance.native
+        let native = entrance.native && !reduceMotion
         let shown = time >= run.start - StageMotion.lead
         // Reduce Motion, or another entrance chosen: a fade on the word's beat instead of the stroke.
         let fade = Easing.smoothstep((time - (run.start - StageMotion.lead)) / WallpaperMotion.reducedDissolve)
-        let ink = reduceMotion || !native ? 1 : written
-        let settle = reduceMotion || !native ? 0 : Self.fableSettle(run, role: role, at: time)
-        let accent = run.id == plan.accent ? Self.fableAccent(stroke, at: time, reduceMotion: reduceMotion) : 0
+        let phrase = plan.phraseOfRun.indices.contains(run.id) ? plan.phraseOfRun[run.id] : 0
+        let landing = FableLanding.forPhrase(phrase, seed: seed)
+        let clock = plan.clocks.indices.contains(run.id) ? plan.clocks[run.id] : run.start
+        let pose = native ? Self.fablePose(run, role: role, landing: landing, lineTimed: plan.lineTimed, clock: clock,
+                                           at: time)
+            : FablePose()
+        let side: Double = plan.rightToLeft ? -1 : 1
         let live = Self.torqueLive(run, runs: runs, at: time)
-        fableFace(run, size: size, style: style, accent: accent, live: live, rightToLeft: plan.rightToLeft,
-                  sample: sample(run, of: runs.count))
-            .modifier(FableStroke(progress: ink, rightToLeft: plan.rightToLeft))
-            .offset(y: size * CGFloat(settle))
-            .rotation3DEffect(.degrees(native ? 0 : entrance.fold), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
-            .rotationEffect(.degrees(native ? 0 : entrance.spin), anchor: .bottom)
-            .scaleEffect(native ? 1 : entrance.scale)
-            .offset(native ? .zero : entrance.offset)
-            .opacity(shown ? (reduceMotion || !native ? fade : 1) : 0)
+        fableFace(run, size: size, live: live, sample: sample(run, of: runs.count))
+            .modifier(FableStroke(progress: native && plan.writes[run.id] ? written : 1, rightToLeft: plan.rightToLeft))
+            .scaleEffect(CGFloat(pose.scale), anchor: .bottom)
+            .rotationEffect(.degrees(pose.spin * side), anchor: .bottom)
+            .offset(y: size * CGFloat(pose.lift))
+            .rotation3DEffect(.degrees(entrance.native ? 0 : entrance.fold), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
+            .rotationEffect(.degrees(entrance.native ? 0 : entrance.spin), anchor: .bottom)
+            .scaleEffect(entrance.native ? 1 : entrance.scale)
+            .offset(entrance.native ? .zero : entrance.offset)
+            .opacity(shown ? (native ? 1 : fade) : 0)
     }
 
-    /// A word with its reading under it and, on the line's accent word, the accent.
+    /// A word with its reading under it.
     @ViewBuilder
-    private func fableFace(_ run: StageRun, size: CGFloat, style: FableStyle, accent: Double, live: Double,
-                           rightToLeft: Bool, sample: LyricInkSample) -> some View {
+    private func fableFace(_ run: StageRun, size: CGFloat, live: Double, sample: LyricInkSample) -> some View {
         let tile = tiled(run)
         let tight = LyricScript.keepsSyllables(run.text)
         let reading = Self.revealedReading(of: run, in: readings, at: time, colour: sample.rest.opacity(0.9))
@@ -106,7 +113,6 @@ extension StageLyricView {
         }
         .lineLimit(1).fixedSize()
         .background { tileBackground(tile, size: size) }
-        .overlay { if accent > 0.001 { fableAccent(style.accent, size: size, shown: accent, rightToLeft: rightToLeft) } }
         VStack(spacing: size * 0.06) {
             word
             if let reading {
@@ -116,44 +122,22 @@ extension StageLyricView {
                     .lineLimit(1).fixedSize()
             }
         }
-        // Room for the accent, inside the word's own measured box.
-        .padding(.horizontal, size * (tight ? 0.18 : 0.24))
-        .padding(.vertical, size * 0.16)
-    }
-
-    @ViewBuilder
-    private func fableAccent(_ accent: FableStyle.Accent, size: CGFloat, shown: Double, rightToLeft: Bool) -> some View {
-        let colour = ink.tileColour
-        let pop = reduceMotion ? 1 : CGFloat(StageMotion.fableOut(shown))
-        switch accent {
-        case .brackets:
-            FableBrackets(arm: size * 0.22)
-                .stroke(colour, style: StrokeStyle(lineWidth: max(2, size * 0.05), lineCap: .round, lineJoin: .round))
-                .padding(.horizontal, -size * 0.16).padding(.vertical, -size * 0.04)
-                // The brackets close in on the word.
-                .scaleEffect(1.25 - 0.25 * pop)
-                .opacity(min(1, shown * 2))
-        case .star:
-            Star4().fill(colour)
-                .frame(width: size * 0.42, height: size * 0.42)
-                .scaleEffect(pop)
-                .opacity(min(1, shown * 2))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: rightToLeft ? .topLeading : .topTrailing)
-                .offset(x: (rightToLeft ? -1 : 1) * size * 0.22, y: -size * 0.12)
-        }
+        // Room for the landings, inside the word's own measured box.
+        .padding(.horizontal, size * (tight ? 0.12 : 0.18))
+        .padding(.vertical, size * 0.14)
     }
 
     // MARK: Sizes and motion (pure functions of time)
 
-    /// A word's size by its role: the line's accent word largest, little
+    /// A word's size by its role: the line's hero word largest, little
     /// words smallest. A line of one or two words is all set large.
     static func fableSize(_ role: FableRole, wordCount: Int, unit: CGFloat) -> CGFloat {
-        if wordCount <= 2 { return unit * 1.75 }
+        if wordCount <= 2 { return unit * 2.0 }
         switch role {
-        case .accent: return unit * 1.75
-        case .focal: return unit * 1.4
-        case .content: return unit * 1.15
-        case .function: return unit * 0.85
+        case .hero: return unit * 2.0
+        case .focal: return unit * 1.6
+        case .content: return unit * 1.3
+        case .function: return unit * 0.95
         }
     }
 
@@ -164,30 +148,50 @@ extension StageLyricView {
         return Easing.smoothstep((time - stroke.start) / max(0.01, stroke.length))
     }
 
-    /// How far a phrase's focal word still sits below its baseline (a share
-    /// of its size), settling with the out-ease as it is written.
-    static func fableSettle(_ run: StageRun, role: FableRole, at time: Double) -> Double {
-        guard role == .focal || role == .accent else { return 0 }
-        let p = (time - (run.start - StageMotion.lead)) / (2.4 * StageMotion.fableUnit)
-        return 0.2 * (1 - StageMotion.fableOut(p))
-    }
-
-    /// How far the line's accent has come on, 0...1: it snaps on just after
-    /// its word's stroke ends (a step under Reduce Motion, then a fade).
-    static func fableAccent(_ stroke: FablePlan.Stroke, at time: Double, reduceMotion: Bool) -> Double {
-        let start = stroke.start + stroke.length + 0.6 * StageMotion.fableUnit
-        if reduceMotion { return Easing.smoothstep((time - start) / WallpaperMotion.reducedDissolve) }
-        return min(1, max(0, (time - start) / (2 * StageMotion.fableUnit)))
+    /// A word's landing at `time`: how far above (negative) or below its
+    /// place it is (a share of its size), its scale and its swing (degrees,
+    /// about its foot). The focal words make the big landing (the line's hero
+    /// biggest, `landing` deciding which), content words hop up, function
+    /// words do not move: the pen writes them in. All on the out-ease.
+    static func fablePose(_ run: StageRun, role: FableRole, landing: FableLanding, lineTimed: Bool,
+                          clock: Double? = nil, at time: Double) -> FablePose {
+        let onset = run.start - StageMotion.lead
+        guard time >= onset, !lineTimed else { return FablePose() }
+        let unit = StageMotion.fableUnit
+        switch role {
+        case .hero, .focal:
+            let big = role == .hero
+            let p = (time - onset) / ((big ? 4.5 : 3.5) * unit)
+            let left = 1 - StageMotion.fableOut(p)
+            switch landing {
+            case .pop:
+                return FablePose(lift: 0, scale: 1 - (big ? 0.6 : 0.45) * left, spin: -(big ? 18 : 12) * left)
+            case .drop:
+                return FablePose(lift: -(big ? 0.6 : 0.45) * left, scale: 1 + (big ? 0.12 : 0.08) * left, spin: 6 * left)
+            }
+        case .content:
+            let p = (time - (min(clock ?? run.start, run.start) - StageMotion.lead)) / (2.5 * unit)
+            return FablePose(lift: 0.5 * (1 - StageMotion.fableOut(p)), scale: 1, spin: 0)
+        case .function:
+            return FablePose()
+        }
     }
 
     /// How far page `index` has turned away, 0...1: when the next page is
     /// begun, or when the line leaves. A cross-fade under Reduce Motion.
     static func fablePageTurn(_ index: Int, plan: FablePlan, at time: Double, exitStart: Double) -> Double {
         var start = Double.infinity
-        if plan.pages.indices.contains(index + 1) { start = plan.pages[index + 1].turnStart }
-        if exitStart.isFinite { start = min(start, exitStart) }
+        var length = StageMotion.fableTurn
+        if plan.pages.indices.contains(index + 1) {
+            start = plan.pages[index + 1].turnStart
+            length = plan.pages[index + 1].turnLength
+        }
+        if exitStart.isFinite, exitStart < start {
+            start = exitStart
+            length = StageMotion.fableTurn
+        }
         guard start.isFinite else { return 0 }
-        return StageMotion.fableIn((time - start) / StageMotion.fableTurn)
+        return StageMotion.fableIn((time - start) / length)
     }
 
     /// Whether page `index` is drawn at `time`: from its first word's beat
@@ -201,8 +205,8 @@ extension StageLyricView {
     // MARK: The plan (per line, cached)
 
     enum FableRole: Equatable {
-        /// The line's one important word: it wears the accent.
-        case accent
+        /// The line's one important word: the biggest word and landing.
+        case hero
         /// A phrase's focal word.
         case focal
         case content
@@ -219,6 +223,9 @@ extension StageLyricView {
             /// Its first onset, and when the page before it starts to turn away.
             var start: Double
             var turnStart: Double
+            /// How long the page before takes to turn away: shorter on a fast
+            /// line, so it is gone before this page's first word lands.
+            var turnLength: Double = StageMotion.fableTurn
 
             var rowSlots: [[Int]] { rows.map { row in row.compactMap { runs.firstIndex(of: $0) } } }
         }
@@ -232,12 +239,22 @@ extension StageLyricView {
         var pages: [Page]
         var roles: [FableRole]
         var strokes: [Stroke]
-        /// The run that wears the line's accent.
-        var accent: Int?
+        /// The line's hero word.
+        var hero: Int?
+        /// The phrase each run belongs to, by run id.
+        var phraseOfRun: [Int]
+        /// Whether each run is written in by the pen (function words, held
+        /// words written as they are sung, and every word of a line-timed
+        /// line); the others land with their own move and no stroke.
+        var writes: [Bool]
+        /// When each run's landing starts: its own onset, or the first onset
+        /// of the quick run it belongs to (the run hops in as one group).
+        var clocks: [Double] = []
         var lineTimed: Bool
         var rightToLeft: Bool
 
-        static let empty = FablePlan(pages: [], roles: [], strokes: [], accent: nil, lineTimed: false, rightToLeft: false)
+        static let empty = FablePlan(pages: [], roles: [], strokes: [], hero: nil, phraseOfRun: [], writes: [], lineTimed: false,
+                                    rightToLeft: false)
     }
 
     private struct FableKey: Hashable {
@@ -253,7 +270,7 @@ extension StageLyricView {
 
     private static let fableCache = FableCache()
 
-    /// The line's plan: pages, roles, strokes and accent. Cached per line.
+    /// The line's plan: pages, roles, strokes and hero. Cached per line.
     static func fablePlan(_ runs: [StageRun]) -> FablePlan {
         let key = FableKey(texts: runs.map(\.text), starts: runs.map(\.start), ends: runs.map(\.end))
         fableCache.lock.lock()
@@ -274,9 +291,9 @@ extension StageLyricView {
     static func makeFablePlan(_ runs: [StageRun], phrasing: StagePhrasing) -> FablePlan {
         guard !runs.isEmpty, phrasing.words.count == runs.count else { return .empty }
         let infos = phrasing.words
-        let accent = fableAccentRun(runs, phrasing: phrasing)
+        let hero = fableHeroRun(runs, phrasing: phrasing)
         let roles: [FableRole] = infos.map { info in
-            if info.run == accent { return .accent }
+            if info.run == hero { return .hero }
             if info.isFocal { return .focal }
             return info.isFunction ? .function : .content
         }
@@ -291,12 +308,27 @@ extension StageLyricView {
             if let previous = pages.last {
                 let lastLanded = previous.runs.map { runs[$0].start }.max() ?? start
                 let early = start - StageMotion.lead - StageMotion.fableTurnLead
-                turnStart = min(start - StageMotion.lead, max(early, lastLanded + 2 * StageMotion.fableUnit))
+                // Never before the old page's last word has landed, and gone
+                // before this page's first word lands.
+                let landed = lastLanded + StageMotion.fableUnit
+                turnStart = min(start - StageMotion.lead - StageMotion.fableUnit, max(early, landed))
+                let room = start - StageMotion.lead - turnStart
+                let length = min(StageMotion.fableTurn, max(StageMotion.fableUnit, room))
+                pages.append(FablePlan.Page(phrases: group, runs: ids, rows: rows, start: start, turnStart: turnStart,
+                                            turnLength: length))
+                continue
             }
             pages.append(FablePlan.Page(phrases: group, runs: ids, rows: rows, start: start, turnStart: turnStart))
         }
-        return FablePlan(pages: pages, roles: roles, strokes: strokes, accent: accent, lineTimed: phrasing.lineTimed,
-                         rightToLeft: phrasing.rightToLeft)
+        var clocks = runs.map(\.start)
+        for (index, info) in infos.enumerated() {
+            guard let group = info.runGroup else { continue }
+            let members = infos.indices.filter { infos[$0].runGroup == group && infos[$0].phrase == info.phrase }
+            clocks[index] = members.map { runs[$0].start }.min() ?? runs[index].start
+        }
+        return FablePlan(pages: pages, roles: roles, strokes: strokes, hero: hero, phraseOfRun: infos.map(\.phrase),
+                         writes: infos.map { phrasing.lineTimed || $0.isFunction || $0.isHeld },
+                         clocks: clocks, lineTimed: phrasing.lineTimed, rightToLeft: phrasing.rightToLeft)
     }
 
     /// Phrases gathered into pages: at most two phrases and eight runs a
@@ -325,9 +357,9 @@ extension StageLyricView {
         return pages
     }
 
-    /// The line's accent word: the phrase focal held longest (ties: the
+    /// The line's hero word: the phrase focal held longest (ties: the
     /// later one); on a line-timed line, the longest focal word.
-    static func fableAccentRun(_ runs: [StageRun], phrasing: StagePhrasing) -> Int? {
+    static func fableHeroRun(_ runs: [StageRun], phrasing: StagePhrasing) -> Int? {
         var best: Int?
         for phrase in phrasing.phrases {
             let id = phrase.focal
@@ -359,7 +391,7 @@ extension StageLyricView {
             switch roles[index] {
             case .function: length = unit
             case .content: length = min(4 * unit, max(1.5 * unit, Double(run.text.count) * 0.3 * unit))
-            case .focal, .accent: length = min(4 * unit, max(2.5 * unit, Double(run.text.count) * 0.4 * unit))
+            case .focal, .hero: length = min(4 * unit, max(2.5 * unit, Double(run.text.count) * 0.4 * unit))
             }
             if info.isHeld { length = max(length, min(1.2, info.duration * 0.85)) }
             if let group = info.runGroup, runs.indices.contains(index + 1), phrasing.words[index + 1].runGroup == group {
@@ -425,31 +457,44 @@ struct FableStroke: ViewModifier {
     }
 }
 
-/// One Fable line's look: the shape its phrases are set in and the accent
-/// its important word wears. Chosen by the line, so the same line looks the
-/// same on every render; neighbouring lines never share a shape, the accent
-/// alternates, and all eight pairings come round before any repeats.
+/// One Fable line's look: the shape its phrases are set in. Chosen by the
+/// line, so the same line looks the same on every render; neighbouring lines
+/// never share a shape, and the order shifts each lap so the run of shapes
+/// does not repeat every four lines.
 struct FableStyle: Equatable {
     enum Shape: Int, CaseIterable {
         case arc, stair, wave, block
     }
 
-    enum Accent: Int, CaseIterable {
-        case brackets, star
-    }
-
     var shape: Shape
-    var accent: Accent
 
     static func forLine(_ seed: Int) -> FableStyle {
         let n = Shape.allCases.count
         // Floor division, so negative seeds keep the pattern too.
         let lap = seed >= 0 ? seed / n : -((-seed + n - 1) / n)
-        func wrap(_ value: Int, _ count: Int) -> Int { ((value % count) + count) % count }
-        // The shape moves on one more each lap, so the pairings shift.
-        return FableStyle(shape: Shape(rawValue: wrap(seed + lap, n)) ?? .arc,
-                          accent: Accent(rawValue: wrap(seed, Accent.allCases.count)) ?? .brackets)
+        let index = (((seed + lap) % n) + n) % n
+        return FableStyle(shape: Shape(rawValue: index) ?? .arc)
     }
+}
+
+/// How a phrase's focal word lands: popping up from its foot with a swing,
+/// or dropping in from above. Phrases alternate, and the line's seed decides
+/// which comes first, so neighbouring phrases (and lines) differ.
+enum FableLanding: Equatable {
+    case pop, drop
+
+    static func forPhrase(_ phrase: Int, seed: Int) -> FableLanding {
+        ((phrase + seed) % 2 + 2) % 2 == 0 ? .pop : .drop
+    }
+}
+
+/// A Fable word's landing pose (`StageLyricView.fablePose`).
+struct FablePose: Equatable {
+    /// Below (positive) or above (negative) its place, as a share of its size.
+    var lift: Double = 0
+    var scale: Double = 1
+    /// Degrees about its foot.
+    var spin: Double = 0
 }
 
 /// Lays a Fable page out: one row per phrase, words on a shared baseline that
@@ -552,24 +597,5 @@ struct FableLayout: Layout {
             }
         }
         return Arrangement(size: box.size, frames: frames)
-    }
-}
-
-/// Four corner marks round a word.
-struct FableBrackets: Shape {
-    var arm: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let a = min(arm, rect.width / 2, rect.height / 2)
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + a)); path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.minX + a, y: rect.minY))
-        path.move(to: CGPoint(x: rect.maxX - a, y: rect.minY)); path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + a))
-        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - a)); path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX - a, y: rect.maxY))
-        path.move(to: CGPoint(x: rect.minX + a, y: rect.maxY)); path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - a))
-        return path
     }
 }

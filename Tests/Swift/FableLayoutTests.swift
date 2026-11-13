@@ -216,7 +216,7 @@ final class FableRenderTests: XCTestCase {
         }
     }
 
-    /// A run of consecutive lines, as a contact sheet: each in its own shape and accent.
+    /// A run of consecutive lines, as a contact sheet: each in its own shape.
     func testWriteVarietySheet() throws {
         guard ProcessInfo.processInfo.environment["LUNALYR_STAGE_SNAPSHOT_DIR"] != nil else { return }
         let settings = Self.settings()
@@ -237,24 +237,31 @@ final class FableRenderTests: XCTestCase {
 
 /// Fable's per-line variety, its page layout and its phrase choreography,
 /// without rendering. (The redesign of 14 Nov 2026 replaced the old pins:
-/// five shapes and five accents with width-wrapped rows became four shapes,
-/// two accents and one row per phrase; the underline, ring and tile accents
-/// and the random per-word entrances are gone.)
+/// five shapes and five accents with width-wrapped rows became four shapes
+/// and one row per phrase; the accents (underline, ring, tile, star,
+/// brackets) and the random per-word entrances are gone, and the landings
+/// follow each word's role.)
 @MainActor
 final class FableStyleTests: XCTestCase {
     typealias Word = LyricsFetcher.Word
 
-    func testNeighbouringLinesNeverShareShapeAndAccentsAlternate() {
+    func testNeighbouringLinesNeverShareAShape() {
         for seed in -60...400 {
-            let this = FableStyle.forLine(seed), next = FableStyle.forLine(seed + 1)
-            XCTAssertNotEqual(this.shape, next.shape, "lines \(seed) and \(seed + 1) share a shape")
-            XCTAssertNotEqual(this.accent, next.accent, "lines \(seed) and \(seed + 1) share an accent")
+            XCTAssertNotEqual(FableStyle.forLine(seed).shape, FableStyle.forLine(seed + 1).shape,
+                              "lines \(seed) and \(seed + 1) share a shape")
         }
+        XCTAssertEqual(Set((0..<4).map { FableStyle.forLine($0).shape }).count, 4, "Every shape comes round")
     }
 
-    func testEveryPairingComesRoundBeforeAnyRepeats() {
-        let styles = (0..<8).map { FableStyle.forLine($0) }
-        XCTAssertEqual(Set(styles.map { "\($0.shape)-\($0.accent)" }).count, 8)
+    /// Neighbouring phrases land differently, and so does a line's first
+    /// phrase from the line before's.
+    func testNeighbouringPhrasesLandDifferently() {
+        for seed in -10...10 {
+            for phrase in 0..<6 {
+                XCTAssertNotEqual(FableLanding.forPhrase(phrase, seed: seed), FableLanding.forPhrase(phrase + 1, seed: seed))
+            }
+            XCTAssertNotEqual(FableLanding.forPhrase(0, seed: seed), FableLanding.forPhrase(0, seed: seed + 1))
+        }
     }
 
     func testStyleIsTheLinesOwn() {
@@ -308,14 +315,14 @@ final class FableStyleTests: XCTestCase {
     }
 
     /// The review videos' long line: three phrases on two pages, turned at
-    /// the pause before "until"; one accent, on the held word.
+    /// the pause before "until"; the held word is the hero.
     func testLongLineTurnsThePageAtThePause() {
         let (plan, runs) = plan(StagePhrasesTests.mixed)
         XCTAssertEqual(plan.pages.map(\.phrases), [[0, 1], [2]])
         XCTAssertEqual(plan.pages[0].rows.map { $0.map { runs[$0].text } },
                        [["and", "we", "keep", "running"], ["through", "the", "city", "lights"]], "One row per phrase")
-        XCTAssertEqual(plan.accent.map { runs[$0].text }, "running", "The accent goes to the longest-held focal word")
-        XCTAssertEqual(plan.roles.filter { $0 == .accent }.count, 1, "One accent per line")
+        XCTAssertEqual(plan.hero.map { runs[$0].text }, "running", "The hero is the longest-held focal word")
+        XCTAssertEqual(plan.roles.filter { $0 == .hero }.count, 1, "One hero per line")
         // The old page turns before the next is begun, never before its own last word has landed.
         let turn = plan.pages[1].turnStart
         XCTAssertLessThanOrEqual(turn, runs[8].start - StageMotion.lead)
@@ -358,16 +365,47 @@ final class FableStyleTests: XCTestCase {
         XCTAssertEqual(StageLyricView.fableWritten(plan.strokes[4], at: plan.strokes[4].start + plan.strokes[4].length), 1)
     }
 
-    /// Only focal words settle; the accent comes on after its word is written.
-    func testFocalWordsSettleAndTheAccentFollows() {
+    /// The big landing belongs to the focal words (the hero's is biggest);
+    /// content words hop, function words do not move; all land and hold still.
+    func testLandingsFollowTheRoles() {
         let (plan, runs) = plan(StagePhrasesTests.mixed)
-        let accent = plan.accent ?? 0
-        XCTAssertGreaterThan(StageLyricView.fableSettle(runs[accent], role: .accent, at: runs[accent].start), 0)
-        XCTAssertEqual(StageLyricView.fableSettle(runs[accent], role: .accent, at: runs[accent].start + 1), 0, accuracy: 1e-9)
-        XCTAssertEqual(StageLyricView.fableSettle(runs[5], role: .function, at: runs[5].start), 0)
-        let stroke = plan.strokes[accent]
-        XCTAssertEqual(StageLyricView.fableAccent(stroke, at: stroke.start + stroke.length, reduceMotion: false), 0)
-        XCTAssertEqual(StageLyricView.fableAccent(stroke, at: stroke.start + stroke.length + 0.5, reduceMotion: false), 1)
+        func pose(_ id: Int, _ dt: Double, _ landing: FableLanding = .pop) -> FablePose {
+            StageLyricView.fablePose(runs[id], role: plan.roles[id], landing: landing, lineTimed: false,
+                                     at: runs[id].start + dt)
+        }
+        XCTAssertEqual(plan.roles[3], .hero)
+        XCTAssertEqual(plan.roles[7], .focal)
+        XCTAssertLessThan(pose(3, 0).scale, pose(7, 0).scale, "The hero pops from smaller")
+        XCTAssertLessThan(pose(3, 0).spin, pose(7, 0).spin, "and swings further")
+        XCTAssertLessThan(pose(7, 0, .drop).lift, 0, "A drop comes from above")
+        XCTAssertGreaterThan(pose(6, 0).lift, 0, "A content word hops up")
+        XCTAssertEqual(pose(6, 0).scale, 1)
+        XCTAssertEqual(pose(5, 0), FablePose(), "A function word is only written in")
+        XCTAssertTrue(plan.writes[5], "the: written by the pen")
+        XCTAssertTrue(plan.writes[3], "running: held, so written as it is sung")
+        XCTAssertFalse(plan.writes[6], "city: lands with its hop, no stroke")
+        for id in runs.indices {
+            XCTAssertEqual(pose(id, 0.6).lift, 0, accuracy: 1e-9, "\(runs[id].text) has landed")
+            XCTAssertEqual(pose(id, 0.6).scale, 1, accuracy: 1e-9)
+            XCTAssertEqual(pose(id, 0.6).spin, 0, accuracy: 1e-9)
+        }
+    }
+
+    /// A fast line (12 words in 2 s): every page has turned away before the
+    /// next page's first word lands, and never before its own last word.
+    func testFastLinePagesNeverOverlap() {
+        let words = StagePhrasesTests.even("I can't stop now we run run run into the night so fast", step: 0.17)
+        let (plan, runs) = plan(words)
+        XCTAssertGreaterThan(plan.pages.count, 1)
+        for index in plan.pages.indices.dropFirst() {
+            let page = plan.pages[index]
+            let lastOld = plan.pages[index - 1].runs.map { runs[$0].start }.max() ?? 0
+            XCTAssertGreaterThanOrEqual(page.turnStart, min(lastOld, page.start - StageMotion.lead - 0.1) - 1e-9)
+            let gone = page.turnStart + page.turnLength
+            XCTAssertLessThanOrEqual(gone, page.start - StageMotion.lead + 1e-9, "page \(index - 1) still showing")
+            XCTAssertFalse(StageLyricView.fablePageShown(index - 1, plan: plan, at: page.start - StageMotion.lead,
+                                                         exitStart: .infinity))
+        }
     }
 
     /// A line-timed line is one page, its phrases written in together.

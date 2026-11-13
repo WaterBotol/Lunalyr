@@ -77,13 +77,16 @@ final class TorqueLayoutTests: XCTestCase {
                                       lineTimed: false, at: runs[id].start + dt, arrived: true, reduceMotion: false)
         }
         XCTAssertGreaterThan(pose(3, 0).wring, 30, "running arrives wrung")
-        XCTAssertEqual(pose(6, 0).wring, 0, "city is not wrung")
+        XCTAssertLessThan(pose(6, 0).wring, pose(3, 0).wring * 0.6, "city is wrung less far")
         XCTAssertGreaterThan(pose(6, 0).rise, 0, "city rises")
+        XCTAssertGreaterThan(pose(3, 0).scale, 1.1, "running lands with a punch")
+        XCTAssertEqual(pose(6, 0).scale, 1)
         XCTAssertEqual(pose(5, 0).wring, 0)
         XCTAssertEqual(pose(5, 0).rise, 0, "the only appears")
         for id in [3, 5, 6] {
             XCTAssertEqual(pose(id, 1.5).wring, 0, accuracy: 1e-9, "\(runs[id].text) has landed")
             XCTAssertEqual(pose(id, 1.5).rise, 0, accuracy: 1e-9)
+            XCTAssertEqual(pose(id, 1.5).scale, 1, accuracy: 1e-9)
         }
         // Not before its beat; at once under Reduce Motion.
         XCTAssertEqual(pose(6, -0.1).opacity, 0)

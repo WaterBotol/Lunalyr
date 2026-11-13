@@ -35,9 +35,9 @@ extension StageLyricView {
     /// A Torque word's size in units, by its role: size carries the hierarchy.
     static func torqueSize(_ role: TorqueRole, unit: CGFloat) -> CGFloat {
         switch role {
-        case .focal: return unit * 2.0
-        case .content: return unit * 1.2
-        case .function: return unit * 0.84
+        case .focal: return unit * 2.4
+        case .content: return unit * 1.7
+        case .function: return unit * 1.1
         }
     }
 
@@ -45,8 +45,8 @@ extension StageLyricView {
     static func torqueDepth(_ role: TorqueRole) -> CGFloat {
         switch role {
         case .focal: return 0.10
-        case .content: return 0.055
-        case .function: return 0
+        case .content: return 0.075
+        case .function: return 0.05
         }
     }
 
@@ -54,8 +54,8 @@ extension StageLyricView {
     static func torqueSteps(_ role: TorqueRole) -> Int {
         switch role {
         case .focal: return 7
-        case .content: return 4
-        case .function: return 0
+        case .content: return 5
+        case .function: return 3
         }
     }
 
@@ -75,6 +75,8 @@ extension StageLyricView {
             ForEach(visible, id: \.self) { index in
                 let angle = (Double(index) - rho) * 90 * direction + swing * direction
                 torqueFace(plan.faces[index], plan: plan, runs: runs, shown: shown.count, stage: stage)
+                    // Each face is set a little tipped, the other way from its neighbours.
+                    .rotationEffect(.degrees(reduceMotion ? 0 : (plan.faces[index].flushTrailing ? 4 : -4)))
                     .compositingGroup()
                     .shadow(color: .black.opacity(0.28), radius: max(3, unit * 0.1), y: unit * 0.05)
                     .modifier(TorqueTurn(angle: angle, available: available))
@@ -148,6 +150,7 @@ extension StageLyricView {
             .padding(.bottom, size * Self.torqueDepth(role) * 1.4)
         }
         .modifier(TorqueTurn(angle: native ? pose.wring * Double(side) : 0, available: nil))
+        .scaleEffect(native ? CGFloat(pose.scale) : 1)
         .offset(y: native ? size * CGFloat(pose.rise) : 0)
         .rotation3DEffect(.degrees(native ? 0 : entrance.fold), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
         .rotationEffect(.degrees(native ? 0 : entrance.spin))
@@ -166,6 +169,8 @@ extension StageLyricView {
         var rise: Double = 0
         var depth: Double = 1
         var opacity: Double = 1
+        /// The punch: a focal word lands a little large and settles.
+        var scale: Double = 1
     }
 
     static func torquePose(_ run: StageRun, role: TorqueRole, clock: Double, held: Double, lineTimed: Bool,
@@ -181,6 +186,7 @@ extension StageLyricView {
             // The biggest word takes the longest: 4 units.
             let p = (time - onset) / (4 * unit)
             pose.wring = StageMotion.torqueWringAngle * (1 - StageMotion.torqueOut(p))
+            pose.scale = 1 + 0.22 * (1 - StageMotion.torqueOut(p))
             pose.opacity = min(1, (time - onset) / unit)
             // The thick edge follows the word in, and keeps deepening while it is held.
             let edge = StageMotion.torqueOut((time - onset - unit) / (2 * unit))
@@ -191,11 +197,13 @@ extension StageLyricView {
             let start = min(clock, run.start) - StageMotion.lead
             let p = (time - start) / (2 * unit)
             pose.rise = 0.3 * (1 - StageMotion.torqueOut(p))
+            // The same twist, smaller: content words are wrung half as far.
+            pose.wring = StageMotion.torqueWringAngle * 0.45 * (1 - StageMotion.torqueOut(p))
             pose.opacity = min(1, (time - onset) / (0.5 * unit))
             pose.depth = min(1, max(0, StageMotion.torqueOut((time - onset - 0.5 * unit) / (2 * unit))))
         case .function:
             pose.opacity = min(1, (time - onset) / unit)
-            pose.depth = 0
+            pose.depth = min(1, max(0, StageMotion.torqueOut((time - onset) / (2 * unit))))
         }
         return pose
     }
