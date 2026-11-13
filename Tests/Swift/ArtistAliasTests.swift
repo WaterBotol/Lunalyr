@@ -96,4 +96,44 @@ final class ArtistAliasTests: XCTestCase {
         XCTAssertEqual(calls, 3)
         XCTAssertEqual(Stub.requests, 0)
     }
+
+    func testKnowsWhereTheArtistIsFrom() async throws {
+        let yoasobi = Data(#"{"artists":[{"name":"YOASOBI","score":100,"country":"JP","area":{"name":"Japan"}},{"name":"ikura","score":51,"country":"JP"}]}"#.utf8)
+        XCTAssertEqual(ArtistAliases.country(try reply(yoasobi), for: "YOASOBI"), "JP")
+        // A city for an area, and no country: not known.
+        let wallows = Data(#"{"artists":[{"name":"Wallows","score":100,"area":{"name":"Los Angeles"}}]}"#.utf8)
+        XCTAssertNil(ArtistAliases.country(try reply(wallows), for: "Wallows"))
+        let area = Data(#"{"artists":[{"name":"Our Band","score":100,"area":{"name":"South Korea"}}]}"#.utf8)
+        XCTAssertEqual(ArtistAliases.country(try reply(area), for: "Our Band"), "KR")
+        // Two artists of the name: nothing is guessed.
+        let two = Data(#"{"artists":[{"name":"Aurora","score":100,"country":"NO"},{"name":"Aurora","score":100,"country":"JP"}]}"#.utf8)
+        XCTAssertNil(ArtistAliases.country(try reply(two), for: "Aurora"))
+
+        Stub.body = yoasobi
+        let aliases = ArtistAliases(folder: folder, session: session)
+        let eastAsian = await aliases.isEastAsian("YOASOBI")
+        XCTAssertTrue(eastAsian)
+        _ = await aliases.names(for: "YOASOBI")
+        XCTAssertEqual(Stub.requests, 1, "one request answers both")
+        Stub.body = wallows
+        let western = await aliases.isEastAsian("Wallows")
+        XCTAssertFalse(western)
+    }
+
+    func testAnEntryStoredBeforeCountriesIsAskedAgainOnlyForTheCountry() async throws {
+        // As stored before the country was kept.
+        let stored = #"{"\#(LyricQuery.normalize("Kenshi Yonezu"))":{"names":["米津玄师"],"storedAt":\#(Date().timeIntervalSinceReferenceDate)}}"#
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data(stored.utf8).write(to: folder.appendingPathComponent("ArtistAliases.json"))
+        Stub.body = Data(#"{"artists":[{"name":"米津玄師","score":100,"country":"JP","aliases":[{"name":"Kenshi Yonezu","locale":"en"}]}]}"#.utf8)
+        let aliases = ArtistAliases(folder: folder, session: session)
+        let names = await aliases.names(for: "Kenshi Yonezu")
+        XCTAssertEqual(names, ["米津玄师"])
+        XCTAssertEqual(Stub.requests, 0)
+        let eastAsian = await aliases.isEastAsian("Kenshi Yonezu")
+        XCTAssertTrue(eastAsian)
+        XCTAssertEqual(Stub.requests, 1)
+        _ = await aliases.isEastAsian("Kenshi Yonezu")
+        XCTAssertEqual(Stub.requests, 1)
+    }
 }

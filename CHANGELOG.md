@@ -12,6 +12,12 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Fixed
+- NetEase Cloud Music (and AMLL, which finds songs through it) found nothing after the first song: NetEase's tracking cookie, sent back with later searches, made it answer with unrelated popular songs. Lunalyr no longer sends or keeps NetEase cookies.
+- Lyrics+ answers timed only by line (Apple Music has no word timing for some songs, such as "Pleaser" by Wallows) were thrown away as "no lyrics". They are now kept as line timing, and still rank as Apple Music's lyrics.
+- Japanese, Korean and Chinese songs listed under an English title (such as "Racing into the Night" by YOASOBI, for 夜に駆ける) could show the English version's lyrics, because a match under the English title stopped the search under the original one. When the artist sings in Japanese, Korean or Chinese (by the genre, the artist's or album's name, or the artist's country on MusicBrainz), Lyrics+, LRCLIB and the other services are now searched under the original title too, and lyrics in the song's own language win. The original title is found more often: Apple's catalogue is searched in Japan too, and lengths may differ by up to 2%, as for matching recordings. Songs by other artists no longer look up an original title at all.
+- Lyrics chosen automatically are looked up again once, as the choice may now differ.
+
 ## [2.0.1] - 2026-11-13
 
 ### Added

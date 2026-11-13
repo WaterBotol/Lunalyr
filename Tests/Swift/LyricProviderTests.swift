@@ -107,6 +107,59 @@ final class LyricProviderTests: XCTestCase {
         XCTAssertEqual(Mirror.store.count(names[1]), 2)
     }
 
+    /// A `"type": "Line"` reply in the shape Lyrics+ sends for a song Apple
+    /// times only by line (checked against a live reply; invented lines):
+    /// each entry a line's start, length and text, with no `syllabus`.
+    static let lineReply = #"""
+    {"type":"Line","metadata":{"source":"Apple","songWriters":["Our Writer"],"leadingSilence":"0",
+     "agents":{"v1":{"type":"person","name":"Our Artist","alias":"v1"}},
+     "songParts":[{"name":"Verse","time":800,"duration":9000,"divIndex":0}],"language":"en","totalDuration":"3:00.000"},
+     "lyrics":[
+      {"time":800,"duration":3200,"text":"Walking home along the river","element":{"key":"L1","singer":"v1","songPartIndex":0}},
+      {"time":4100,"duration":3100,"text":"Counting lights across the water","element":{"key":"L2","singer":"v1","songPartIndex":0}},
+      {"time":7300,"duration":2500,"text":"  ","element":{"key":"L3","singer":"v1","songPartIndex":0}},
+      {"time":9900,"duration":3000,"text":"Every one a little closer","element":{"key":"L4","singer":"v1","songPartIndex":0}}]}
+    """#
+
+    func testLyricsPlusKeepsAReplyTimedOnlyByLine() async throws {
+        let names = hosts(1), session = session()
+        defer { session.invalidateAndCancel() }
+        Mirror.store.set(names[0], .init(status: 200, body: Self.lineReply))
+        let hit = try await KPoeLyricsProvider.lookup(title: "Our Song", artist: "Our Artist", album: nil, duration: 180,
+                                                      hosts: names.map { "https://" + $0 }, session: session)
+        // Used to be "no lyrics": only lines with syllables were kept.
+        let lines = try XCTUnwrap(hit?.lines)
+        XCTAssertEqual(lines.map(\.text), ["Walking home along the river", "Counting lights across the water", "Every one a little closer"])
+        XCTAssertEqual(lines.map(\.start), [0.8, 4.1, 9.9])
+        XCTAssertEqual(lines[0].end, 4.0, accuracy: 1e-9)
+        XCTAssertTrue(lines.allSatisfy { $0.words.isEmpty && !$0.wordTimed && !$0.isInstrumental })
+        // Line timing, and still Apple's lyrics (ranked as Apple Music's).
+        XCTAssertEqual(LyricsFetcher.precision(lines), "Line-synced")
+        let result = LyricsFetcher.Result.synced(lines, .init(precision: "Line-synced", source: "Apple" + LyricsFetcher.lyricsPlusSuffix))
+        XCTAssertEqual(LyricsFetcher.rankedTiming(result), 1)
+        XCTAssertEqual(hit?.source, "Apple")
+        XCTAssertTrue(LyricsFetcher.isAppleRelay(provenanceSource: (hit?.source ?? "") + LyricsFetcher.lyricsPlusSuffix))
+    }
+
+    func testLyricsPlusKeepsALineWithoutSyllablesInAWordTimedReply() async throws {
+        let names = hosts(1), session = session()
+        defer { session.invalidateAndCancel() }
+        // A line with no `duration` ends where the next one starts.
+        Mirror.store.set(names[0], .init(status: 200, body: #"""
+        {"type":"Word","metadata":{"source":"Apple"},"lyrics":[
+         {"time":1000,"duration":2000,"text":"Sing along","syllabus":[{"time":1000,"duration":900,"text":"Sing "},{"time":2000,"duration":1000,"text":"along"}]},
+         {"time":3500,"text":"Hum the rest"},
+         {"time":6000,"duration":2000,"text":"Sing again","syllabus":[{"time":6000,"duration":900,"text":"Sing "},{"time":7000,"duration":1000,"text":"again"}]}]}
+        """#))
+        let hit = try await KPoeLyricsProvider.lookup(title: "Our Song", artist: "Our Artist", album: nil, duration: 180,
+                                                      hosts: names.map { "https://" + $0 }, session: session)
+        let lines = try XCTUnwrap(hit?.lines)
+        XCTAssertEqual(lines.map(\.wordTimed), [true, false, true])
+        XCTAssertEqual(lines[1].end, 6.0, accuracy: 1e-9)
+        XCTAssertEqual(lines[1].endFromNextLine, true)
+        XCTAssertEqual(LyricsFetcher.precision(lines), "Mixed timing")
+    }
+
     func testLyricsPlusKeepsTheSyllablesOfAnUnspacedLineApart() async throws {
         // Syllables as Lyrics+ sends them, each timed, written together
         // unless a space ends the one before. Invented lines.
@@ -161,11 +214,19 @@ final class LyricProviderTests: XCTestCase {
             private var replies: [String: Mirror.Reply] = [:]
             func set(_ path: String, _ reply: Mirror.Reply) { lock.withLock { replies[path] = reply } }
             func reply(_ path: String) -> Mirror.Reply { lock.withLock { replies[path] ?? Mirror.Reply(status: 500, body: "") } }
+            private var cookies: [Bool] = []
+            /// Whether each request would carry or keep cookies.
+            func record(_ request: URLRequest) {
+                lock.withLock { cookies.append(request.httpShouldHandleCookies || request.value(forHTTPHeaderField: "Cookie") != nil) }
+            }
+            var cookieRequests: Int { lock.withLock { cookies.filter { $0 }.count } }
+            var requests: Int { lock.withLock { cookies.count } }
         }
         static let store = Store()
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
         override func startLoading() {
+            Self.store.record(request)
             let reply = Self.store.reply(request.url?.path ?? "")
             let response = HTTPURLResponse(url: request.url!, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: [:])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -202,6 +263,10 @@ final class LyricProviderTests: XCTestCase {
         XCTAssertEqual(found?.metadataReported, true)
         NetEase.store.set("/api/song/lyric", .init(status: 502, body: ""))
         await fails("A failed lyric request is an outage")
+        // NetEase's tracking cookie, sent back, turns search into a list of
+        // unrelated popular songs: no request carries or keeps cookies.
+        XCTAssertGreaterThan(NetEase.store.requests, 0)
+        XCTAssertEqual(NetEase.store.cookieRequests, 0)
     }
 
     /// Answers Kugou by host and path, as the live service did when checked,

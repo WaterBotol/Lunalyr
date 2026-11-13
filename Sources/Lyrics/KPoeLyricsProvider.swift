@@ -7,7 +7,10 @@ import Foundation
 ///
 /// Preferred over NetEase because it returns `"type": "Word"` with a
 /// `syllabus` array per line: real per-syllable timing sourced from Apple,
-/// so the highlight matches what the user hears in their own app.
+/// so the highlight matches what the user hears in their own app. Songs
+/// Apple times only by line come back as `"type": "Line"`, each entry a
+/// line's start, length and text with no `syllabus`; those are kept as
+/// line timing.
 enum KPoeLyricsProvider {
     /// Mirrors are tried in order; community nodes come and go.
     static let hosts = [
@@ -25,7 +28,7 @@ enum KPoeLyricsProvider {
         var artist: String?
     }
 
-    /// Returns nil when a node answers that it has no word-timed lyrics for
+    /// Returns nil when a node answers that it has no timed lyrics for
     /// the song and one other healthy mirror, asked while time allows,
     /// agrees or cannot answer. Nodes run the same service with different
     /// upstream access, so one node's "nothing" is checked once; a node that
@@ -157,8 +160,17 @@ enum KPoeLyricsProvider {
         }
     }
 
+    /// The reply's lines: word-timed where an entry has syllables, line-timed
+    /// where it has none (a `"type": "Line"` reply, or a line Apple did not
+    /// time by syllable). A line-timed reply used to be dropped as "no
+    /// lyrics", though it is Apple's own line timing.
     private static func hit(from payload: Response) -> Hit? {
-        let lines = (payload.lyrics ?? []).compactMap { convert($0) }.filter { !$0.words.isEmpty }
+        let entries = (payload.lyrics ?? []).sorted { $0.time < $1.time }
+        var lines: [LyricsFetcher.Line] = []
+        for (index, entry) in entries.enumerated() {
+            guard let line = convert(entry, next: entries.dropFirst(index + 1).first?.time) else { continue }
+            lines.append(line)
+        }
         guard !lines.isEmpty else { return nil }
         // The node reports which upstream it pulled from, e.g. "Apple" or
         // "Lyrics+ (via Apple with QQ)"; keep just the leading name.
@@ -176,20 +188,23 @@ enum KPoeLyricsProvider {
 
     // MARK: - Conversion
 
-    private static func convert(_ entry: Entry) -> LyricsFetcher.Line? {
+    /// One entry as a line. `next` is the following entry's start, which
+    /// ends a line whose own length is missing.
+    private static func convert(_ entry: Entry, next: Double?) -> LyricsFetcher.Line? {
         let start = entry.time / 1000
-        let end = (entry.time + max(entry.duration, 1)) / 1000
-        let text = entry.text.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return nil }
+        let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, start.isFinite, start >= 0 else { return nil }
+        let length = entry.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let fromNext = length == nil && next.map { $0 > entry.time } == true
+        let end = length.map { (entry.time + $0) / 1000 } ?? next.map { max($0, entry.time + 1) / 1000 } ?? start + 0.001
 
         var words: [LyricsFetcher.Word] = []
         if let syllabus = entry.syllabus, !syllabus.isEmpty {
             words = self.words(syllabus, lineEnd: end)
         }
-        guard !words.isEmpty else { return nil }
-
         return LyricsFetcher.Line(
-            start: start, end: end, text: text, words: words, isInstrumental: false, wordTimed: true
+            start: start, end: end, endFromNextLine: fromNext ? true : nil, text: text, words: words,
+            isInstrumental: false, wordTimed: !words.isEmpty
         )
     }
 
@@ -320,7 +335,7 @@ enum KPoeLyricsProvider {
 
     private struct Entry: Decodable {
         var time: Double
-        var duration: Double
+        var duration: Double?
         var text: String
         var syllabus: [Syllable]?
     }
