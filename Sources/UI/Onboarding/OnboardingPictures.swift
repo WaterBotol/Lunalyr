@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Pictures for the music-video and extras steps
+// MARK: - Pictures for the music-video step and the desktop player
 //
 // Small, flat, drawn from the sample song and the sample wallpaper, so they
 // look the same in light and dark (they are pictures of a desktop) and need
@@ -117,35 +117,5 @@ struct MiniDesktopPlayer: View {
         .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.control, style: .continuous)
             .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
         .environment(\.colorScheme, .dark)
-    }
-}
-
-/// Floating lyrics in miniature: a line over an app's window, on its soft
-/// shade, with the desktop behind.
-struct MiniFloatingLyrics: View {
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            SampleWallpaper()
-            // An app's window, running off the picture's lower right.
-            VStack(spacing: 0) {
-                Rectangle().fill(Color(white: 0.86)).frame(height: LunalyrDesign.Spacing.small + LunalyrDesign.Spacing.xSmall)
-                Rectangle().fill(Color(white: 0.97))
-            }
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: LunalyrDesign.Radius.tag, style: .continuous))
-            .padding(.top, LunalyrDesign.Spacing.small)
-            .padding(.leading, LunalyrDesign.Spacing.xxLarge)
-            .padding(.bottom, -LunalyrDesign.Spacing.small)
-            Text("gold across the bay")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, LunalyrDesign.Spacing.small + LunalyrDesign.Spacing.xSmall)
-                .padding(.vertical, LunalyrDesign.Spacing.xSmall)
-                .background(Capsule().fill(.black.opacity(0.55)))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .offset(y: LunalyrDesign.Spacing.small)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.control, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.control, style: .continuous)
-            .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
     }
 }

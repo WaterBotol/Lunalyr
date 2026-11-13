@@ -33,136 +33,31 @@ struct SampleWallpaper: View {
     }
 }
 
-/// Two lines of the sample song, lit word by word as Lunalyr lights them:
-/// sung words bright, the word being sung glowing, the rest waiting. Moves
-/// on its own unless Reduce Motion is on (or the view is drawn for a
-/// snapshot), when it holds mid-line.
-struct SampleLyric: View {
+/// The sample song's two lines, which the look step's layout thumbnails set
+/// (the welcome shows a recording of the real thing instead).
+enum SampleLyric {
     static let lines = [["Static", "on", "the", "radio,"], ["gold", "across", "the", "bay"]]
-    private static let words = lines.flatMap { $0 }.count
-    /// Where a still picture holds: "Static on the" sung, "radio," being sung.
-    private static let held = 3
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.lunalyrRendersLiveContent) private var live
-    @Environment(\.controlActiveState) private var activeState
-    @State private var started = Date()
-    /// Set once the sample has played twice: it then rests on the full lines.
-    @State private var finished = false
-
-    /// A word every 0.45 s: eight words, then a breath with the lines full.
-    static let beat: TimeInterval = 0.45
-    static let cycle = words + 4
-    /// How many times it plays before resting.
-    static let plays = 2
-
-    /// How many words are sung `elapsed` seconds in; all of them once it has
-    /// played `plays` times.
-    static func sung(after elapsed: TimeInterval) -> Int {
-        let beats = Int(max(0, elapsed) / beat)
-        guard beats < plays * cycle else { return words }
-        return min(beats % cycle, words)
-    }
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size.width * 0.064
-            Group {
-                if live && !reduceMotion && !finished && activeState != .inactive {
-                    TimelineView(.periodic(from: started, by: Self.beat)) { context in
-                        lines(sung: Self.sung(after: context.date.timeIntervalSince(started)), size: size)
-                    }
-                } else if live && !reduceMotion {
-                    // Played out, or the window is in the background: the full lines, still.
-                    lines(sung: Self.words, size: size)
-                } else {
-                    lines(sung: Self.held, size: size)
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-        }
-        .task(id: live && !reduceMotion) {
-            guard live && !reduceMotion else { return }
-            try? await Task.sleep(for: .seconds(Double(Self.plays * Self.cycle) * Self.beat))
-            if !Task.isCancelled { finished = true }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private func lines(sung: Int, size: CGFloat) -> some View {
-        VStack(spacing: size * 0.28) {
-            ForEach(Self.lines.indices, id: \.self) { index in
-                let start = Self.lines[..<index].reduce(0) { $0 + $1.count }
-                line(Self.lines[index], firstWord: start, sung: sung)
-            }
-        }
-        .font(AppFont.display(size))
-        .multilineTextAlignment(.center)
-        .shadow(color: .black.opacity(0.25), radius: size * 0.3, y: size * 0.06)
-        .animation(LunalyrDesign.Motion.quick, value: sung)
-    }
-
-    private func line(_ words: [String], firstWord: Int, sung: Int) -> some View {
-        words.indices.reduce(Text("")) { text, index in
-            let number = firstWord + index
-            let word = Text((index == 0 ? "" : " ") + words[index])
-            // The word being sung is the brightest; sung words settle just below it.
-            if number < sung { return text + word.foregroundStyle(Color.white.opacity(0.92)) }
-            if number == sung { return text + word.foregroundStyle(Color.white) }
-            return text + word.foregroundStyle(Color.white.opacity(0.36))
-        }
-    }
 }
 
-/// The welcome's picture: the desktop as Lunalyr draws it, in miniature,
-/// with the app's icon resting on its lower edge.
+/// The welcome's picture: a recording of the real desktop with Lunalyr's
+/// lyrics on it, with the app's icon resting on its lower edge. (The glass
+/// logo opening plays before it, over the whole window: `OnboardingIntro`.)
 struct WelcomeHero: View {
     var width: CGFloat = LunalyrDesign.Onboarding.heroWidth
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The liquid-glass opening is on screen (`WelcomeGlass`).
-    @State private var intro = false
-
-    private static let desktop = CGSize(width: 1470, height: 956)
 
     var body: some View {
-        ZStack {
-            PreviewStage(desktop: Self.desktop) {
-                ZStack {
-                    SampleWallpaper()
-                    SampleLyric()
-                }
+        OnboardingClipView(clip: .hero, cornerRadius: LunalyrDesign.Radius.preview)
+            .frame(width: width, height: width / OnboardingClip.aspect)
+            .overlay(alignment: .bottom) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 72, height: 72)
+                    .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                    .offset(y: 30)
             }
-            if intro, let url = WelcomeGlass.url {
-                // The opening, in a dark stage the preview's size and shape;
-                // it ends on the plain logo, then the preview fades in.
-                WelcomeGlassVideo(url: url) { endIntro() }
-                    .clipShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.preview, style: .continuous))
-                    .transition(.opacity)
-            }
-        }
-        .frame(width: width, height: width * Self.desktop.height / Self.desktop.width)
-        .overlay(alignment: .bottom) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 72, height: 72)
-                .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-                .offset(y: 30)
-                .opacity(intro ? 0 : 1)
-        }
-        .padding(.bottom, 30)
-        .accessibilityHidden(true)
-        .onAppear {
-            guard WelcomeGlass.shouldPlay(reduceMotion: reduceMotion, alreadyPlayed: WelcomeGlass.played) else { return }
-            WelcomeGlass.played = true
-            intro = true
-        }
-    }
-
-    private func endIntro() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + WelcomeGlass.hold) {
-            withAnimation(.easeInOut(duration: WelcomeGlass.fade)) { intro = false }
-        }
+            .padding(.bottom, 30)
+            .accessibilityHidden(true)
     }
 }
 
