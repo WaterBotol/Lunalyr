@@ -465,7 +465,9 @@ enum SpokenTypography {
             let filler = ["a", "an", "the", "i", "in", "of", "to", "and", "or", "it", "is", "my", "me", "you"].contains(voice)
             let hash = word.text.utf8.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1)) &* 1099511628211 }
             let hero = !filler && (word.text.count >= 5 || word.end - word.start > 0.65)
-            let columnSize = key.baseSize * (hero ? 0.88 : filler ? 0.62 : 0.74)
+            // Three clear steps, so a column has a rhythm of large and
+            // small words rather than near-equal ones.
+            let columnSize = key.baseSize * (hero ? 0.96 : filler ? 0.56 : 0.70)
             // A word with its reading under it is set a little smaller, so
             // the pair reads as one unit rather than a word and a half.
             let compact: CGFloat = key.readings[word.presentationID] == nil ? 1 : 0.88

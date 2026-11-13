@@ -4,17 +4,18 @@ import SwiftUI
 /// cannot bound wide glyphs, custom typefaces or the Cutout label padding.
 enum WordStageFit {
     static func scale(ink: CGSize, stage: CGSize, centre: CGPoint,
-                      scale: Double, angle: Double, margin: CGFloat) -> CGFloat {
+                      scale: Double, angle: Double, margin: CGFloat, marginY: CGFloat? = nil) -> CGFloat {
         guard ink.width.isFinite, ink.height.isFinite, stage.width.isFinite, stage.height.isFinite,
               centre.x.isFinite, centre.y.isFinite, scale.isFinite, angle.isFinite, margin.isFinite,
+              (marginY ?? margin).isFinite,
               ink.width > 0, ink.height > 0, stage.width > 0, stage.height > 0, scale > 0 else { return 0 }
         let radians = angle * .pi / 180
         let cosine = CGFloat(abs(cos(radians))), sine = CGFloat(abs(sin(radians)))
         let rotatedWidth = ink.width * cosine + ink.height * sine
         let rotatedHeight = ink.height * cosine + ink.width * sine
-        let inset = max(0, margin)
+        let inset = max(0, margin), insetY = max(0, marginY ?? margin)
         let clearanceX = max(0, min(centre.x, stage.width - centre.x) - inset)
-        let clearanceY = max(0, min(centre.y, stage.height - centre.y) - inset)
+        let clearanceY = max(0, min(centre.y, stage.height - centre.y) - insetY)
         return min(1, clearanceX * 2 / max(1, rotatedWidth * CGFloat(scale)),
             clearanceY * 2 / max(1, rotatedHeight * CGFloat(scale)))
     }
@@ -61,15 +62,37 @@ struct SpokenTypographyView: View {
     /// move briskly, slow ones glide, and overlapping steps add their
     /// velocities instead of restarting from rest. With Reduce Motion each
     /// step is a short dissolve instead (`stacks`).
+    ///
+    /// Each layout keeps one motion personality for the roll. Spoken is
+    /// calm: a critically damped glide of 350-600 ms with no overshoot.
+    /// Cascade is bold but controlled: the seeded spring (fast, at most a
+    /// few per cent over). Cutout is playful: a livelier spring that runs
+    /// about 12% past and settles back. Every one lands well inside
+    /// `LyricLayerCache.rollingHandover`.
     static func cursor(_ prepared: [SpokenTypography.Word], time: Double, intensity: Double,
-                       reduceMotion: Bool) -> Double {
+                       reduceMotion: Bool, composition: LyricComposition = .cascade) -> Double {
         var total = 0.0
         for word in prepared {
             let age = time - word.source.start
             total += reduceMotion ? Easing.smoothstep(age / WallpaperMotion.reducedDissolve)
-                : vc_rolling_handoff(age, word.cadence, word.seed, intensity)
+                : handoff(age, word: word, intensity: intensity, composition: composition)
         }
         return total
+    }
+
+    /// One onset's share of the roll (see `cursor`).
+    static func handoff(_ age: Double, word: SpokenTypography.Word, intensity: Double,
+                        composition: LyricComposition) -> Double {
+        let cadence = word.cadence.isFinite ? word.cadence : 0.4
+        switch composition {
+        case .spoken:
+            return vc_settle(age, min(0.6, max(0.35, cadence * 0.9)))
+        case .cutout:
+            let rise = min(0.30, max(0.15, cadence * 0.5))
+            return vc_spring_step(age, VCSpring(omega: 3.36 / rise, zeta: 0.55))
+        default:
+            return vc_rolling_handoff(age, word.cadence, word.seed, intensity)
+        }
     }
 
     /// Where the stack is drawn, and how strongly. In motion: once, at the
@@ -94,7 +117,8 @@ struct SpokenTypographyView: View {
         let intensity = max(energy, OrganicMotion.vocalIntensity(words, at: time))
         let style: Int32 = composition == .spoken ? 0 : composition == .cascade ? 1 : 2
         GeometryReader { geometry in
-            let cursor = Self.cursor(prepared, time: time, intensity: intensity, reduceMotion: reduceMotion)
+            let cursor = Self.cursor(prepared, time: time, intensity: intensity, reduceMotion: reduceMotion,
+                                     composition: composition)
             let stacks = Self.stacks(cursor: cursor, reduceMotion: reduceMotion)
             ZStack {
                 ForEach(stacks.indices, id: \.self) { index in
@@ -116,9 +140,13 @@ struct SpokenTypographyView: View {
         let stage = CGSize(width: geometry.size.width, height: max(1, geometry.size.height - bottomInset))
         // Rank 0 -- the word in focus -- sits here; every other word is
         // stacked above or below it by measured size (`RollingStack`).
+        // Cutout's labels are tall, and the words already sung stack above
+        // the one in focus, so its focus sits a little lower to keep the
+        // collage off the top edge.
+        let focusHeight: CGFloat = composition == .cutout ? 0.59 : 0.54
         let anchor = CGPoint(x: stage.width * 0.5,
-                             y: stage.height * 0.54 + CGFloat(vc_rolling_baseline(style, 0)) * baseSize)
-        return RollingStackLayout(anchor: anchor, gap: baseSize * 0.16) {
+                             y: stage.height * focusHeight + CGFloat(vc_rolling_baseline(style, 0)) * baseSize)
+        return RollingStackLayout(anchor: anchor, gap: baseSize * Self.gap(composition)) {
             ForEach(prepared) { word in
                 let rank = position - 1 - Double(word.index)
                 if rank >= -2 && rank <= 5.2 {
@@ -138,10 +166,33 @@ struct SpokenTypographyView: View {
         .frame(width: geometry.size.width, height: geometry.size.height)
     }
 
+    /// The clear space between neighbouring words, in type sizes. Cutout's
+    /// labels are tilted blocks, so they get more air or their corners
+    /// nearly meet.
+    static func gap(_ composition: LyricComposition) -> CGFloat {
+        // One spacing unit is 8 pt at the gallery's 46 pt type.
+        let unit: CGFloat = 8 / 46
+        return composition == .cutout ? 2 * unit : unit
+    }
+
     /// A rolling window can show words from more than one line.
     static func highlight(_ word: SpokenTypography.Word, lineEnd: Double, time: Double,
                           reduceMotion: Bool) -> LyricHighlightTiming.Pose {
         LyricHighlightTiming.pose(time: time, onset: word.source.start, release: lineEnd, reduceMotion: reduceMotion)
+    }
+
+    /// Cutout's labels: the highlight's own tile at the same lightness and
+    /// hue, with its chroma eased back in OKLab, so a stack of labels on a
+    /// dark stage reads as coloured paper rather than a row of warnings.
+    /// Lightness is kept, so the text set on it stays as legible.
+    static func calmLabel(_ tile: OKLab) -> OKLab {
+        OKLab(l: tile.l, chroma: tile.chroma * 0.78, hue: tile.hue)
+    }
+
+    private var labelColour: Color {
+        if let tone = ink.highlight { return Perceptual.color(Self.calmLabel(tone.tile)) }
+        // A tile set without its tone is drawn as given.
+        return ink.tile == nil ? Perceptual.color(Self.calmLabel(LyricHighlight.fallback.tile)) : ink.tileColour
     }
 
     private func token(_ token: SpokenTypography.Word, next: Int?, rank: Double, size: CGSize, arrival: WordArrival,
@@ -156,7 +207,9 @@ struct SpokenTypographyView: View {
         let hero = composition == .cascade && token.hero && !colours.sweeps
         let sung = RollingTokenState.sweep(token, time: time)
         let entrance = state.slot, scale = state.scale, angle = state.angle
-        let stageMargin = baseSize * 0.22
+        // Title-safe: kept about 5% in from every edge of the stage.
+        let stageMargin = max(baseSize * 0.22, size.width * 0.05)
+        let stageMarginY = max(baseSize * 0.22, size.height * 0.05)
         let reveal = RollingTokenState.partReveal(token, time: time, composition: composition,
             runOpacity: presentation.opacity, intensity: intensity, reduceMotion: reduceMotion)
         // Cutout's label: one width rule before and after the onset, a
@@ -166,8 +219,11 @@ struct SpokenTypographyView: View {
         // the tile "Cutout · Highlight" presses in behind a word as it is
         // sung, drawn out to a label's size around the word without moving
         // or resizing it.
+        // Used with restraint: only the word in focus wears its label; as
+        // it steps back the label lifts away and it is plain type again.
         let tile: RollingUnit.Tile? = token.tile
-            ? .init(width: RollingUnit.tileWidth(arrival: presentation.arrival, reduceMotion: reduceMotion), opacity: 1)
+            ? .init(width: RollingUnit.tileWidth(arrival: presentation.arrival, reduceMotion: reduceMotion),
+                    opacity: RollingUnit.labelHold(rank: rank))
             : highlight.isVisible
             ? .init(width: CGFloat(highlight.width), opacity: highlight.opacity, reach: RollingUnit.labelReach,
                     textSwitch: ink.tileTextSwitch) : nil
@@ -184,7 +240,8 @@ struct SpokenTypographyView: View {
                            tile: tile, tileText: ink.tileText)
             .background {
                 if let tile {
-                    CutoutTile(colour: ink.tileColour, width: tile.width, rightToLeft: token.rightToLeft)
+                    CutoutTile(colour: token.tile ? labelColour : ink.tileColour, width: tile.width,
+                               rightToLeft: token.rightToLeft)
                         .padding(.horizontal, -tile.reach.width)
                         .padding(.vertical, -tile.reach.height)
                         .opacity(tile.opacity)
@@ -202,7 +259,7 @@ struct SpokenTypographyView: View {
                                       height: geometry.size.height + 2 * abs(entrance.entrance.height))
                 return ink.scaleEffect(WordStageFit.scale(ink: envelope, stage: size,
                     centre: CGPoint(x: placed.midX, y: placed.midY), scale: scale * max(1, Double(entrance.entranceScale)),
-                    angle: abs(angle) + abs(entrance.turn) + entrance.tilt, margin: stageMargin))
+                    angle: abs(angle) + abs(entrance.turn) + entrance.tilt, margin: stageMargin, marginY: stageMarginY))
             }
             .scaleEffect(CGFloat(scale))
             .rotationEffect(.degrees(angle))
@@ -246,11 +303,20 @@ struct RollingTokenState {
         let focus = exp(-rank * rank * 2.4)
         // Hold against the time-based fade while the tile is lit. The
         // stage still fades words as they scroll off the top.
-        let visible = max(pose.opacity, highlightOpacity * vc_rolling_rank_opacity(rank))
+        let visible = max(pose.opacity * recede(rank, composition: composition),
+                          highlightOpacity * vc_rolling_rank_opacity(rank))
         let shown = presentation.opacity * (presentation.preview ? 1 : visible)
         // Settled words keep a slow float; the word in focus breathes instead.
-        let drift = vc_idle_drift(token.seed, time, reduceMotion ? 0 : 0.55 * (1 - focus))
-        let columnShift = composition == .spoken ? 0 : -stageWidth * 0.13
+        // Settled words hold still while they are read; only the word in
+        // focus breathes (in its pose).
+        let drift = vc_idle_drift(token.seed, time, 0)
+        // Cascade is a flush column on the left third (the right third for
+        // a right-to-left line): big words on the axis, small ones tucked
+        // in a little. Cutout's collage sits a little left of centre.
+        let direction: CGFloat = token.rightToLeft ? -1 : 1
+        let columnShift: CGFloat = composition == .spoken ? 0
+            : composition == .cascade ? -stageWidth * 0.19 * direction : -stageWidth * 0.16
+        let indent: CGFloat = composition == .cascade && !token.hero ? baseSize * 0.34 * direction : 0
         let scale = pose.scale * drift.scale
         let angle = pose.angle + drift.angle
         // The entrance exactly as WordEntrance will draw it: its travel,
@@ -263,16 +329,30 @@ struct RollingTokenState {
         // Where the stack puts this word comes from its measured size; the
         // breath and float ride on top as a small lift inside the gap.
         let slot = RollingStack.Slot(rank: rank, scale: scale, angle: angle,
-            dx: columnShift + CGFloat(pose.x + drift.x) * baseSize,
+            dx: columnShift + indent + CGFloat(pose.x + drift.x) * baseSize,
             lift: CGFloat(pose.y - vc_rolling_baseline(style, rank) + drift.y) * baseSize,
             entrance: travel.offset, turn: travel.turn, entranceScale: travel.scale,
-            tilt: token.tile && !reduceMotion ? 1.2 : 0, shown: shown)
+            tilt: token.tile && !reduceMotion ? 1.2 : 0, shown: shown,
+            align: composition == .cascade ? direction : 0)
         return RollingTokenState(presentation: presentation, pose: pose, shown: shown, focus: focus, scale: scale,
                                  angle: angle, maxTurn: maxTurn, slot: slot)
     }
 }
 
 extension RollingTokenState {
+    /// Words already sung step back in two tiers, so the word being sung
+    /// is plainly the one in front: the last word at about three quarters,
+    /// the one before at a little over half. Cascade and Cutout, whose
+    /// units are taller, retire them sooner too, before they reach the top
+    /// of the stage. A held highlight is not dimmed (see `make`).
+    static func recede(_ rank: Double, composition: LyricComposition) -> Double {
+        let back = min(max(rank, 0), 1) * 0.26 + min(max(rank - 1, 0), 1) * 0.16
+        guard composition != .spoken else { return 1 - back }
+        let retire = composition == .cutout ? Easing.smoothstep((rank - 1.4) / 1.0)
+            : Easing.smoothstep((rank - 1.7) / 1.2)
+        return (1 - back) * (1 - retire)
+    }
+
     /// A glued run's syllables or characters arriving one by one, as a
     /// scattered run's do: each token's opacity, relative to the run's own,
     /// over its share of the word (see `TokenReveal`). A run of Chinese or
@@ -317,6 +397,12 @@ struct RollingUnit: View {
     /// fades in with its word instead of being pressed on.
     static func tileWidth(arrival: Double, reduceMotion: Bool) -> CGFloat {
         reduceMotion ? 1 : CGFloat(min(1.06, max(0.05, arrival)))
+    }
+
+    /// How much of a Cutout label is left as its word steps back from focus:
+    /// whole until it is a third of the way to the next rank, gone by then.
+    static func labelHold(rank: Double) -> Double {
+        1 - Easing.smoothstep((rank - 0.35) / 0.65)
     }
 
     /// A label's padding past an unlabelled word's, so a highlight tile
@@ -380,7 +466,14 @@ struct RollingUnit: View {
                 if let readingWidth { reading.wrapping(at: readingWidth) } else { reading }
             }
         }
-        .padding(.horizontal, token.tile ? 11 : 2).padding(.vertical, token.tile ? 3 : 0)
+        .padding(.horizontal, token.tile ? Self.tilePadding(token.pointSize).width : 2)
+        .padding(.vertical, token.tile ? Self.tilePadding(token.pointSize).height : 0)
+    }
+
+    /// A Cutout label's padding around its word: in proportion to the
+    /// type, so a label on a large stage is not a tight sliver.
+    static func tilePadding(_ pointSize: CGFloat) -> CGSize {
+        CGSize(width: max(11, pointSize * 0.26), height: max(3, pointSize * 0.08))
     }
 
     /// Where a unit's tile has pressed in, at its strength.
@@ -434,6 +527,9 @@ enum RollingStack {
         var tilt: Double = 0
         /// How visible the unit is; not used for placement.
         var shown = 1.0
+        /// Which edge sits on the anchor's column: 0 centres the unit, 1
+        /// puts its leading (left) edge there, -1 its right edge.
+        var align: CGFloat = 0
     }
 
     /// The largest entrance turn for a unit, in degrees: the ends of the
@@ -451,7 +547,7 @@ enum RollingStack {
             }
         }
         let readingWidth = reading.map { width($0, pointSize * 0.56) } ?? 0
-        let unitWidth = max(width(text, pointSize), readingWidth) + (tile ? 22 : 4)
+        let unitWidth = max(width(text, pointSize), readingWidth) + (tile ? 2 * RollingUnit.tilePadding(pointSize).width : 4)
         let unitHeight = pointSize * 1.3 + (reading == nil ? 0 : pointSize * 0.75)
         let ratio = min(1, 0.6 * unitHeight / max(1, unitWidth))
         return min(12, asin(ratio) * 180 / .pi)
@@ -496,7 +592,8 @@ enum RollingStack {
             origin = stack[members.count - 1] + CGFloat(slots[last].rank) * (extent(sizes[last], slots[last]) + gap)
         }
         for (k, member) in members.enumerated() {
-            result[member] = CGPoint(x: anchor.x + slots[member].dx,
+            let flush = slots[member].align * sizes[member].width * CGFloat(max(0, slots[member].scale)) / 2
+            result[member] = CGPoint(x: anchor.x + slots[member].dx + flush,
                                      y: anchor.y + stack[k] - origin + slots[member].lift)
         }
         return result
@@ -535,12 +632,13 @@ struct RollingStackLayout: Layout {
 extension RollingStack {
     /// The fit the stage applies to a placed unit (see `WordStageFit`), with
     /// the same inputs the unit's view uses.
-    static func fit(size: CGSize, slot: Slot, centre: CGPoint, stage: CGSize, margin: CGFloat) -> CGFloat {
+    static func fit(size: CGSize, slot: Slot, centre: CGPoint, stage: CGSize, margin: CGFloat,
+                    marginY: CGFloat? = nil) -> CGFloat {
         let envelope = CGSize(width: size.width + 2 * abs(slot.entrance.width),
                               height: size.height + 2 * abs(slot.entrance.height))
         return WordStageFit.scale(ink: envelope, stage: stage, centre: centre,
             scale: slot.scale * max(1, Double(slot.entranceScale)),
-            angle: abs(slot.angle) + abs(slot.turn) + slot.tilt, margin: margin)
+            angle: abs(slot.angle) + abs(slot.turn) + slot.tilt, margin: margin, marginY: marginY)
     }
 
     /// One unit as the layout placed it.

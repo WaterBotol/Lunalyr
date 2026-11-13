@@ -265,17 +265,22 @@ VCWordPose vc_rolling_pose(int style, double rank, double age, double duration,
         p.scale = .70+.34*focus;
         p.angle = sin(phase+h*.6)*fmin(h, 1)*2.4;
     } else if (style == 1) {
-        /* Uneven, flowing column: differences in type do the emphasis. */
-        p.x = sin(rank*.72+phase*.12)*.28;
+        /* A flush column (the stage sets each word's indent): differences
+           in type do the emphasis, and the word being sung steps forward
+           while the words behind it settle back a size. Nothing here varies
+           with rank, so the column does not snake as it rolls. */
+        p.x = 0;
         p.y = .35-separation;
-        p.scale = .94+.10*focus;
-        p.angle = sin(phase)*1.3*(1-focus);
+        p.scale = .80+.30*focus;
+        p.angle = sin(phase)*.8*(1-focus);
     } else {
-        /* Labels travel into a loose collage rather than a masked ticker. */
-        p.x = sin(rank*.72+phase*.25)*.53;
+        /* Labels travel into a loose collage rather than a masked ticker:
+           each keeps its own offset and tilt, with only a gentle drift as
+           the stack rolls, and the word being sung is a size up. */
+        p.x = sin(phase*1.3)*.42+sin(rank*.72)*.12;
         p.y = .30-separation;
-        p.scale = .94+.10*focus;
-        p.angle = sin(phase+rank*.28)*(1.6+2.5*(1-focus));
+        p.scale = .80+.26*focus;
+        p.angle = sin(phase+rank*.18)*(1.4+1.6*(1-focus));
     }
     if (!reduced && age >= 0) {
         /* Noise, not a sine: zero at the onset (no step), never periodic, and
