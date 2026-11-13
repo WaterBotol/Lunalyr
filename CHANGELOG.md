@@ -12,6 +12,8 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [2.0.2] - 2026-11-13
+
 ### Fixed
 - NetEase Cloud Music (and AMLL, which finds songs through it) found nothing after the first song: NetEase's tracking cookie, sent back with later searches, made it answer with unrelated popular songs. Lunalyr no longer sends or keeps NetEase cookies.
 - Lyrics+ answers timed only by line (Apple Music has no word timing for some songs, such as "Pleaser" by Wallows) were thrown away as "no lyrics". They are now kept as line timing, and still rank as Apple Music's lyrics.
@@ -634,7 +636,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.2
 [2.0.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.1
 [2.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.0
 [1.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v1.0.0

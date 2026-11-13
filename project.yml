@@ -27,8 +27,8 @@ targets:
       properties:
         CFBundleDisplayName: Lunalyr
         CFBundleName: Lunalyr
-        CFBundleShortVersionString: 2.0.1
-        CFBundleVersion: "23"
+        CFBundleShortVersionString: 2.0.2
+        CFBundleVersion: "24"
         LSUIElement: true
         NSHumanReadableCopyright: © 2026
         NSAppleEventsUsageDescription: Lunalyr reads the playing song and its position from Music, Spotify, VLC, Swinsian, VOX or a web player in your browser to show its lyrics, and controls playback only when you use its buttons. Enabled lyric services receive song metadata.
