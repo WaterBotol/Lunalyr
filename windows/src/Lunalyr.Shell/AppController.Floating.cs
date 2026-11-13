@@ -82,8 +82,9 @@ public sealed partial class AppController
                 : null;
             if (options == _floatSent) return;
             _floatSent = options;
+            // Handed over under the gate, so two threads can never send their options in the opposite order.
+            _renderer.SetFloating(options);
         }
-        _renderer.SetFloating(options);
     }
 
     /// <summary>The Mac's <c>visibilityInput</c>: what the window's rule needs, with how long the song has been paused.</summary>

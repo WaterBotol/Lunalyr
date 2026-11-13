@@ -280,16 +280,16 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         if (_applied is null || Resolve(_applied) is not { } rect) return;
         bool monitorChanged = previous is null || previous.DeviceName != _display!.Monitor.DeviceName || previous.Dpi != _display.Monitor.Dpi;
         if (rect == _rect && !monitorChanged) return;
-        Move(rect);
+        Move(rect, handOver: monitorChanged);
     }
 
-    private void Move(MBox rect)
+    /// <param name="handOver">The window went to another monitor (or scale): its swap chain follows even at the same size.</param>
+    private void Move(MBox rect, bool handOver = false)
     {
         bool resized = rect.Width != _rect.Width || rect.Height != _rect.Height;
-        var oldMonitor = _display?.Monitor;
         _rect = rect;
         SetWindowPos(_hwnd, 0, (int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-        if (resized || !ReferenceEquals(oldMonitor, _display?.Monitor)) HandOver();
+        if (resized || handOver) HandOver();
     }
 
     /// <summary>Tells the renderer the window's size and monitor (its swap chain follows).</summary>

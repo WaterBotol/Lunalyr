@@ -30,7 +30,8 @@ public static class FloatingShots
     public static void Run(string output, IRenderLayerFactory lyricFactory, IReadOnlyDictionary<string, Func<SceneSnapshot>> fixtures,
                            bool warp, string? onlyScreen)
     {
-        Screen[] screens = [new("2560x1440-125", 2560, 1440, 1.25f), new("3200x2000-200", 3200, 2000, 2f)];
+        // The external display, the built-in panel at the 200% the brief names, and at the 125% this PC runs it at.
+        Screen[] screens = [new("2560x1440-125", 2560, 1440, 1.25f), new("3200x2000-200", 3200, 2000, 2f), new("3200x2000-125", 3200, 2000, 1.25f)];
         var shots = new List<Shot>();
         // Every preset place, light app behind, medium text.
         foreach (var placement in FloatingPlacements.Presets)
@@ -42,7 +43,9 @@ public static class FloatingShots
         shots.Add(new Shot("medium-edit-nothing-playing", "nolyrics", 0, Editing: true, Placeholder: true, Dark: true));
         shots.Add(new Shot("medium-reduce-transparency", "english", 12.9, Reduce: true));
         shots.Add(new Shot("medium-no-shade", "english", 12.9, Backdrop: 0));
-        shots.Add(new Shot("opening-title", "opening", 2.4, Dark: true));
+        // The opening title through its moments, over a dark app (the Mac's OpeningTitlePreviewTests f-floating-* frames).
+        foreach (var (label, time) in OpeningFixtures.CardMoments(OpeningFixtures.HumanNature()))
+            shots.Add(new Shot($"opening-{label}", "opening", time, Dark: true));
 
         foreach (var screen in screens)
         {
