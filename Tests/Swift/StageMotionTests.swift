@@ -77,43 +77,9 @@ final class StageMotionTests: XCTestCase {
         XCTAssertEqual(previous ?? 1, 0, "The old word ends fully restyled")
     }
 
-    // MARK: L3, L12: Torque's stack
-
-    private func torquePlaces(_ line: [StageRun], at t: Double, unit: CGFloat = 40) -> [CGPoint] {
-        let shown = StageLyricView.shownRuns(line, at: t)
-        let state = StageLyricView.torqueState(shown, at: t, speed: 1, seed: 3, reduceMotion: false)
-        let measured = shown.map { _ in CGSize(width: unit * 4, height: unit * 2 * 1.2) }
-        return StageLyricView.torqueStack(measured, state, seed: 3, in: CGRect(x: 0, y: 0, width: 960, height: 520))
-    }
-
-    func testTorqueStackNeverJumpsWhenAWordIsAdded() {
-        let line = runs(8, step: 0.5)
-        for run in line.dropFirst() {
-            let onset = run.start - StageMotion.lead
-            let before = torquePlaces(line, at: onset - 0.0005)
-            let after = torquePlaces(line, at: onset + 0.0005)
-            for index in before.indices {
-                XCTAssertLessThan(abs(after[index].y - before[index].y), 1,
-                                  "Word \(index) jumped when \(run.text) was added")
-            }
-        }
-    }
-
-    func testTorqueLongLinesStayOnTheStage() {
-        let line = runs(18, step: 0.5)
-        var newest: [CGFloat] = []
-        for count in [4, 10, 18] {
-            let t = line[count - 1].start + 0.45
-            let places = torquePlaces(line, at: t)
-            XCTAssertEqual(places.count, count)
-            let y = places[count - 1].y
-            XCTAssertLessThan(y, 520, "The newest word ran off the bottom at word \(count)")
-            newest.append(y)
-        }
-        // It used to sink by about 2.4 type sizes between word 4 and word 10.
-        XCTAssertLessThan(abs(newest[1] - newest[0]), 40 * 0.6)
-        XCTAssertLessThan(abs(newest[2] - newest[1]), 40 * 0.3, "Settles once old words fade")
-    }
+    // MARK: L3, L12: Torque
+    // Torque's column (it replaced the stack these tests pinned) is tested
+    // in TorqueLayoutTests: its turn never jumps and at most two faces show.
 
     // MARK: L3: Hinge's corner
 
