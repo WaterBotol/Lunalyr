@@ -24,6 +24,7 @@ enum AMLLLyricsProvider {
         try Task.checkCancellation()
         guard let song = matched else {
             if let failure = recorder.failure { throw failure }
+            LyricTrace.note("AMLL: NetEase found no song, so there is no file to read")
             return nil
         }
         var text: String?
@@ -36,8 +37,13 @@ enum AMLLLyricsProvider {
                 try Task.checkCancellation()
             }
         }
-        guard let text else { return nil }
-        return candidate(ttml: text, song: song, query: query)
+        guard let text else {
+            LyricTrace.note("AMLL: no TTML file for NetEase song \(song.id)")
+            return nil
+        }
+        let found = candidate(ttml: text, song: song, query: query)
+        LyricTrace.candidate(found, query: query, message: "AMLL file for NetEase song \(song.id)")
+        return found
     }
 
     /// Kept apart from the network so tests can feed it a file.

@@ -40,7 +40,9 @@ enum KPoeLyricsProvider {
         var failures: [String] = []
         let began = Date()
         var emptyHanded: [String] = [], checked = false
-        for host in await health.ordered(hosts) {
+        let ordered = await health.ordered(hosts)
+        if LyricTrace.isOn, ordered != hosts { LyricTrace.note("Lyrics+ mirrors in order (resting ones last or skipped): \(ordered)") }
+        for host in ordered {
             try Task.checkCancellation()
             if !emptyHanded.isEmpty {
                 // One second opinion, from a mirror that is not resting, and
@@ -48,7 +50,16 @@ enum KPoeLyricsProvider {
                 guard !checked, await health.isHealthy(host), Date().timeIntervalSince(began) < secondOpinionWindow else { break }
                 checked = true
             }
-            switch await attempt(host: host, title: title, artist: artist, album: album, duration: duration, session: session) {
+            let outcome = await attempt(host: host, title: title, artist: artist, album: album, duration: duration, session: session)
+            if LyricTrace.isOn {
+                switch outcome {
+                case .lyrics(let hit): LyricTrace.note("Lyrics+ \(host): \(hit.lines.count) lines from \(hit.source)")
+                case .notFound: LyricTrace.note("Lyrics+ \(host): no lyrics")
+                case .abort(let error): LyricTrace.note("Lyrics+ \(host): aborted (\(LyricTrace.describe(error)))")
+                case .failed(let reason, let rest): LyricTrace.note("Lyrics+ \(host): failed (\(reason)); rests \(Int(rest)) s")
+                }
+            }
+            switch outcome {
             case .lyrics(let hit):
                 await health.answered(host)
                 for node in emptyHanded { await health.failed(node, rest: 600) }
@@ -117,7 +128,7 @@ enum KPoeLyricsProvider {
         request.timeoutInterval = 4
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await LyricTrace.data(session, for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             // These nodes serve a gzip body under `content-type:
             // application/json` with no `Content-Encoding` header, so

@@ -164,9 +164,15 @@ actor OriginalTitles {
     /// none other than the one listed, or it could not be found.
     func original(for query: LyricQuery) async -> Found? {
         guard query.hasArtist, query.duration > 0, !LyricLanguage.hasNative(query.title),
-              storefront != Self.original.country else { return nil }
+              storefront != Self.original.country else {
+            LyricTrace.note("original title not looked up (storefront \(storefront), or nothing to look up)")
+            return nil
+        }
         let key = Self.key(query)
-        if let entry = load()[key], clock().timeIntervalSince(entry.storedAt) < Self.lifetime { return entry.found }
+        if let entry = load()[key], clock().timeIntervalSince(entry.storedAt) < Self.lifetime {
+            LyricTrace.note("original title from its cache: " + (entry.found.map { "“\($0.title)”" } ?? "none"))
+            return entry.found
+        }
         if let running = inFlight[key] { return await running.value ?? nil }
         let task = Task { await self.request(query) }
         inFlight[key] = task
@@ -182,10 +188,16 @@ actor OriginalTitles {
     private func request(_ query: LyricQuery) async -> Found?? {
         let term = ArtworkProvider.primaryArtist(query.artist) + " " + query.title
         guard let listed = await fetch("search", ["term": term, "entity": "song", "country": storefront, "limit": "15"]) else { return nil }
-        guard let match = Self.match(listed, query: query), let id = match.trackId else { return .some(nil) }
+        LyricTrace.results("iTunes \(storefront) search", returned: listed.count, read: listed.count)
+        guard let match = Self.match(listed, query: query), let id = match.trackId else {
+            LyricTrace.note("iTunes: no catalogue entry with this title, artist and length (±3 s)")
+            return .some(nil)
+        }
         guard let local = await fetch("lookup", ["id": String(id), "country": Self.original.country,
                                                   "lang": Self.original.language]) else { return nil }
-        return .some(Self.originalName(local.first { $0.trackId == id }, query: query))
+        let name = Self.originalName(local.first { $0.trackId == id }, query: query)
+        LyricTrace.note("iTunes JP name for “\(match.trackName ?? "")”: " + (name.map { "“\($0.title)”" } ?? "the same, or not native script"))
+        return .some(name)
     }
 
     struct Reply: Decodable { var results: [Song] }
@@ -233,7 +245,7 @@ actor OriginalTitles {
         var parts = URLComponents(string: "https://itunes.apple.com/" + path)!
         parts.queryItems = parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         guard let url = parts.url,
-              let (data, response) = try? await session.data(for: URLRequest(url: url, timeoutInterval: 4)),
+              let (data, response) = try? await LyricTrace.data(session, for: URLRequest(url: url, timeoutInterval: 4)),
               (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 2_000_000,
               let reply = try? JSONDecoder().decode(Reply.self, from: data) else { return nil }
         return reply.results
@@ -273,23 +285,56 @@ extension LyricsFetcher {
     static func withOriginalTitle(_ id: LyricSourceID, query: LyricQuery, titles: OriginalTitles = .shared,
                                   enabled: Bool = OriginalTitles.enabled,
                                   search: (LyricQuery) async throws -> LyricCandidate?) async throws -> LyricCandidate? {
+        LyricTrace.emit(LyricTraceEvent(kind: .variant, message: "listed title", query: LyricTraceQuery(query)))
         let first = try await search(query)
         guard enabled, originalTitleSources.contains(id), query.hasArtist, query.duration > 0,
               !LyricLanguage.hasNative(query.title),
               VersionTags.tags(query.title).isDisjoint(with: VersionTags.languages),
-              !usable(first, query: query) else { return first }
-        guard let original = await titles.original(for: query) else { return first }
+              !usable(first, query: query) else {
+            if LyricTrace.isOn {
+                let why = !enabled ? "original-title search is off"
+                    : !originalTitleSources.contains(id) ? "this source is not searched under original titles"
+                    : !query.hasArtist ? "no artist" : query.duration <= 0 ? "no duration"
+                    : LyricLanguage.hasNative(query.title) ? "title already in native script"
+                    : !VersionTags.tags(query.title).isDisjoint(with: VersionTags.languages) ? "title names a language version"
+                    : "listed-title answer is usable"
+                LyricTrace.candidate(first, query: query, kind: .variantResult, message: "kept; no original-title search: " + why)
+            }
+            return first
+        }
+        LyricTrace.candidate(first, query: query, kind: .variantResult,
+                             message: first == nil ? "nothing under the listed title: looking up the original title"
+                                : "not usable (language version or Latin-only lyrics): looking up the original title")
+        guard let original = await titles.original(for: query) else {
+            LyricTrace.note("no original title found (iTunes JP): listed-title answer kept")
+            return first
+        }
         try Task.checkCancellation()
         var other = query
         other.title = original.title
         other.album = original.album ?? query.album
-        guard var found = try await search(other),
-              VersionTags.mismatch(other, title: found.title).isEmpty,
-              !found.metadataReported || LyricQuery.similarity(found.title, original.title) >= 0.65,
-              LyricLanguage.script(of: found) != .latin else { return first }
-        found.title = query.title
-        found.viaOriginalTitle = true
-        return found
+        return try await LyricTrace.within(variant: "original title “\(original.title)”") {
+            LyricTrace.emit(LyricTraceEvent(kind: .variant, message: "original title", query: LyricTraceQuery(other)))
+            let second = try await search(other)
+            guard var found = second,
+                  VersionTags.mismatch(other, title: found.title).isEmpty,
+                  !found.metadataReported || LyricQuery.similarity(found.title, original.title) >= 0.65,
+                  LyricLanguage.script(of: found) != .latin else {
+                if LyricTrace.isOn {
+                    let why = second.map { found in
+                        !VersionTags.mismatch(other, title: found.title).isEmpty ? "another version under the original title"
+                            : found.metadataReported && LyricQuery.similarity(found.title, original.title) < 0.65 ? "title too far from the original"
+                            : "lyrics in Latin script only"
+                    } ?? "nothing under the original title"
+                    LyricTrace.candidate(second, query: other, kind: .variantResult, message: "discarded: \(why); listed-title answer kept")
+                }
+                return first
+            }
+            LyricTrace.candidate(found, query: other, kind: .variantResult, message: "used; recorded under the listed title")
+            found.title = query.title
+            found.viaOriginalTitle = true
+            return found
+        }
     }
 
     /// Whether a source's answer under the listed title can stand: it names

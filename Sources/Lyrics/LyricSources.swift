@@ -470,7 +470,7 @@ enum LyricHTTP {
         var request = URLRequest(url: url, timeoutInterval: 6)
         request.setValue("Lunalyr/0.4.6 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
         if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await LyricTrace.data(session, for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw Failure(message: "Service response: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
         }
@@ -486,7 +486,7 @@ enum LyricHTTP {
         guard let url = URL(string: address) else { throw Failure(message: "Invalid service address") }
         var request = URLRequest(url: url, timeoutInterval: 8)
         request.setValue("Lunalyr/0.5 (personal desktop lyrics)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await LyricTrace.data(session, for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw Failure(message: "Service response: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
         }

@@ -36,7 +36,10 @@ actor ArtistAliases {
     func names(for artist: String) async -> [String] {
         let key = LyricQuery.normalize(artist)
         guard !key.isEmpty else { return [] }
-        if let entry = load()[key], clock().timeIntervalSince(entry.storedAt) < Self.lifetime { return entry.names }
+        if let entry = load()[key], clock().timeIntervalSince(entry.storedAt) < Self.lifetime {
+            LyricTrace.note("artist aliases from their cache: \(entry.names)")
+            return entry.names
+        }
         if let running = inFlight[key] { return await running.value ?? [] }
         let task = Task { await self.request(artist) }
         inFlight[key] = task
@@ -61,10 +64,13 @@ actor ArtistAliases {
         guard let url = parts.url else { return nil }
         var call = URLRequest(url: url, timeoutInterval: 4)
         call.setValue("Lunalyr/1.0 (desktop lyrics app)", forHTTPHeaderField: "User-Agent")
-        guard let (data, response) = try? await session.data(for: call),
+        guard let (data, response) = try? await LyricTrace.data(session, for: call),
               (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_000_000,
               let reply = try? JSONDecoder().decode(Reply.self, from: data) else { return nil }
-        return Self.pick(reply, for: artist)
+        let names = Self.pick(reply, for: artist)
+        LyricTrace.results("MusicBrainz artists", returned: reply.artists.count, read: reply.artists.count)
+        LyricTrace.note("MusicBrainz aliases for “\(artist)”: \(names)")
+        return names
     }
 
     struct Reply: Decodable {
@@ -137,13 +143,31 @@ extension LyricsFetcher {
     static func withAliases(_ id: LyricSourceID, query: LyricQuery, aliases: ArtistAliases = .shared, enabled: Bool = ArtistAliases.enabled,
                             search: (LyricQuery) async throws -> LyricCandidate?) async throws -> LyricCandidate? {
         let first = try await search(query)
-        guard enabled, ArtistAliases.catalogues.contains(id), query.hasArtist, !ArtistAliases.isOtherScript(query.artist) else { return first }
+        guard enabled, ArtistAliases.catalogues.contains(id), query.hasArtist, !ArtistAliases.isOtherScript(query.artist) else {
+            if LyricTrace.isOn, enabled, ArtistAliases.catalogues.contains(id) {
+                LyricTrace.note(query.hasArtist ? "no alias search: artist already in native script" : "no alias search: no artist")
+            }
+            return first
+        }
         if let first, !first.metadataReported || query.artistScore(first.artist) >= 0.65 { return first }
-        for name in await aliases.names(for: query.artist) {
+        LyricTrace.candidate(first, query: query, kind: .variantResult,
+                             message: first == nil ? "nothing under the library artist: trying aliases" : "only another artist: trying aliases")
+        let names = await aliases.names(for: query.artist)
+        if names.isEmpty { LyricTrace.note("no artist aliases to try") }
+        for name in names {
             try Task.checkCancellation()
             var other = query
             other.artist = name
-            guard var found = try await search(other), LyricQuery.similarity(found.artist, name) >= 0.65 else { continue }
+            let result = try await LyricTrace.within(variant: "artist alias “\(name)”") { () -> LyricCandidate? in
+                LyricTrace.emit(LyricTraceEvent(kind: .variant, message: "artist alias", query: LyricTraceQuery(other)))
+                let found = try await search(other)
+                let fits = found.map { LyricQuery.similarity($0.artist, name) >= 0.65 } ?? false
+                LyricTrace.candidate(found, query: other, kind: .variantResult,
+                                     message: fits ? "used; recorded under the library artist"
+                                        : found == nil ? "nothing under this alias" : "discarded: another artist")
+                return fits ? found : nil
+            }
+            guard var found = result else { continue }
             found.artist = query.artist
             return found
         }
