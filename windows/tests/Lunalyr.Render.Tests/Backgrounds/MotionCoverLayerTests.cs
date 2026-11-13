@@ -82,10 +82,11 @@ public sealed class MotionCoverLayerTests
         using var surface = new OffscreenSurface(160, 96);
         using var layer = new MotionCoverLayerFactory(Clip, null, WallpaperPlacement.Fill).Create();
         surface.Prepare(layer);
-        var t = Play(surface, layer, Scene with { Adjustments = new WallpaperAdjustments { Softening = 0 } });
+        // At the default Softening, so the blurred path is the one shown moving.
+        var t = Play(surface, layer, Scene);
         Assert.True(((IFirstFrameLayer)layer).HasFirstFrame);
         var first = surface.ReadPixels();
-        Play(surface, layer, Scene with { Adjustments = new WallpaperAdjustments { Softening = 0 } }, t, more: 12);
+        Play(surface, layer, Scene, t, more: 12);
         var later = surface.ReadPixels();
         Assert.True(first.Where((v, i) => i % 4 != 3).Average(v => (double)v) > 8, "the cover shows, darkened but not black");
         Assert.True(MeanDifference(first, later) > 1, "the cover moves");

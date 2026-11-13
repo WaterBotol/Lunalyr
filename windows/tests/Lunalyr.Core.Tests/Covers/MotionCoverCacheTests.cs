@@ -52,6 +52,22 @@ public sealed class MotionCoverCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task AnAskThatIsCancelledLeavesTheDownloadToTheNext()
+    {
+        var release = new TaskCompletionSource();
+        var handler = new FixtureHandler().Set("mvod.itunes.apple.com/a/cover_768x768_-.mp4", new Reply(200, Mp4(), Wait: release.Task));
+        var cache = Cache(handler);
+        using var skipped = new CancellationTokenSource();
+        var first = cache.GetAsync(Video, skipped.Token);
+        var second = cache.GetAsync(Video, TestContext.Current.CancellationToken);
+        await skipped.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        release.SetResult();
+        Assert.NotNull(await second);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public async Task OnlyApplesHttpsMp4FilesAreFetched()
     {
         var handler = new FixtureHandler { Fallback = new Reply(200, Mp4()) };

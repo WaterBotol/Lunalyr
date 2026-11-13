@@ -316,4 +316,27 @@ public sealed class MotionCoverTests : IAsyncDisposable
         Assert.Equal(path, again.Files?.Square);
         Assert.Single(handler.Requests, u => u.AbsolutePath.EndsWith(".mp4", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void TheSettingsPreviewDrawsTheCoverItIsHanded()
+    {
+        // A file that can't play, so the layer shows the song's still cover: a red one, unlike the album colours.
+        var pixels = new byte[32 * 32 * 4];
+        for (var i = 0; i < pixels.Length; i += 4) (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = (30, 30, 230, 255);
+        var scene = new Render.Scene.SceneSnapshot { Cover = new Core.Colour.CoverArt(32, 32, pixels) };
+        byte[] Draw(bool handed)
+        {
+            using var renderer = new Rendering.SettingsPreviewRenderer(160, 90,
+                Rendering.WallpaperLayers.Factories(ReadingServices.Basic.WordBreaker), hardware: false);
+            if (handed) renderer.Use(new MotionCoverLayerFactory(Path.Combine(_folder, "missing.mp4"), null, Core.Colour.WallpaperPlacement.Fill));
+            var frame = new byte[160 * 90 * 4];
+            renderer.Render(scene, "motion", "editorial", double.NaN, false, wallSeconds: 1, frame);
+            return frame;
+        }
+        var centre = (45 * 160 + 80) * 4;
+        var cover = Draw(handed: true);
+        Assert.True(cover[centre + 2] > cover[centre + 1] + 20, "the preview shows the cover's red");
+        var without = Draw(handed: false);
+        Assert.False(without.AsSpan().SequenceEqual(cover), "without the cover's layer the preview falls back to the album colours");
+    }
 }

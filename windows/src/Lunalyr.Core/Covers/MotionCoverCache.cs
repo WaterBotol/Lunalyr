@@ -74,7 +74,8 @@ public sealed class MotionCoverCache
     /// <summary>
     /// The local file for <paramref name="video"/>: the cached one, or downloaded now. Null when it can't be had (not an
     /// accepted address, not HTTP 200, too large, not an MP4, or the connection failed). Two calls for the same address
-    /// share one download.
+    /// share one download. A caller's cancellation stops only its own wait: the download (bounded by
+    /// <see cref="DownloadTimeout"/>) finishes into the cache, so skipping away and back never loses it.
     /// </summary>
     public Task<string?> GetAsync(Uri video, CancellationToken cancellationToken = default)
     {
@@ -82,15 +83,18 @@ public sealed class MotionCoverCache
         if (!Accepts(video)) return Task.FromResult<string?>(null);
         if (Cached(video) is { } cached) return Task.FromResult<string?>(cached);
         var path = PathFor(video);
+        Task<string?> download;
         lock (_gate)
         {
-            if (_downloads.TryGetValue(path, out var running)) return running;
-            var task = DownloadAsync(video, path, cancellationToken);
-            _downloads[path] = task;
-            _ = task.ContinueWith(_ => { lock (_gate) _downloads.Remove(path); }, CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            return task;
+            if (!_downloads.TryGetValue(path, out download!))
+            {
+                download = DownloadAsync(video, path, CancellationToken.None);
+                _downloads[path] = download;
+                _ = download.ContinueWith(_ => { lock (_gate) _downloads.Remove(path); }, CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
         }
+        return download.WaitAsync(cancellationToken);
     }
 
     private async Task<string?> DownloadAsync(Uri video, string path, CancellationToken ct)
