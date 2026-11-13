@@ -81,5 +81,13 @@ public sealed class StartupAndPackagingOptionsTests
     }
 
     [Fact]
+    public void YouTubeSearchFlagOpensThePickerForChecks()
+    {
+        Assert.True(ShellOptions.Parse(["--youtube-search", "--quiet-windows"]).OpenYouTubeSearch);
+        Assert.False(ShellOptions.Parse([]).OpenYouTubeSearch);
+        Assert.Empty(ShellOptions.Parse(["--youtube-search"]).Problems);
+    }
+
+    [Fact]
     public void AutomaticUpdateChecksAreOnByDefault() => Assert.True(new AppSettings().AutomaticUpdateChecks);
 }

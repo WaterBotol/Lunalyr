@@ -49,11 +49,11 @@ public sealed partial class TrayFlyout
             }
         };
         _searchVideo = new HyperlinkButton { Content = "Search YouTube…", Padding = new Thickness(0, 2, 0, 2) };
-        ToolTipService.SetToolTip(_searchVideo, "Search YouTube for this song and pick the video to use (in Settings)");
+        ToolTipService.SetToolTip(_searchVideo, "Search YouTube for this song and pick the video to use");
         _searchVideo.Click += (_, _) =>
         {
             Hide();
-            _host.OpenSettingsPage("wallpaper");
+            _host.OpenMusicVideoSearch();
         };
         links.Children.Add(_openVideo);
         links.Children.Add(_searchVideo);

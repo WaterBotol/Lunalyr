@@ -36,6 +36,7 @@ public static class OnboardingGate
         if (options.QuitAfterSeconds is not null) return (false, "--seconds (a check)");
         if (options.OpenSettings) return (false, options.SettingsPage is null ? "--settings" : "--settings-page");
         if (options.OpenLyricCard) return (false, "--lyric-card");
+        if (options.OpenYouTubeSearch) return (false, "--youtube-search");
         if (options.Login) return (false, "--login (started at sign-in, quietly)");
         return (true, "first run");
     }

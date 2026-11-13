@@ -206,15 +206,17 @@ public sealed class TrayFlyoutTests
     }
 
     [Fact]
-    public void SearchYouTubeIsOffWhilePlaybackIsOffForTheRun()
+    public void SearchYouTubeOpensThePickerWhileASongPlays()
     {
+        // The Mac's picker window, not the browser: nothing outside Lunalyr opens, so a run without playback has it too.
         var off = TrayFlyoutState.From(Inputs(Playing(), blocked: "--demo"));
-        Assert.False(off.SearchEnabled);
-        Assert.Equal("Off for this run (--demo).", off.SearchNote);
+        Assert.True(off.SearchEnabled);
+        Assert.Null(off.SearchNote);
 
         var on = TrayFlyoutState.From(Inputs(Playing()));
         Assert.True(on.SearchEnabled);
         Assert.Null(on.SearchNote);
+        Assert.Equal("Search YouTube…", FlyoutText.SearchYouTube);
     }
 
     // ---- Windows: the wallpaper's quick controls ----
