@@ -23,4 +23,7 @@ public sealed record WallpaperAdjustments
 
     /// <summary>"Pattern visibility", 0...1 (the Mac's <c>patternOpacity</c>): how strongly a line pattern shows over its field.</summary>
     public double PatternOpacity { get; init; } = 0.85;
+
+    /// <summary>Covers › "Softening", 0...25 points (the Mac's <c>motionBlur</c>): the blur over an animated cover.</summary>
+    public double Softening { get; init; } = 5;
 }

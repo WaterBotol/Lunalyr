@@ -60,6 +60,8 @@ public sealed partial class AppController
                 return video ?? BackgroundLayerFor(settings with { BackgroundMode = settings.MusicVideoFallback });
             }
         }
+        // Match the music: an animated cover, when the album has one, wins (AppController.MotionArtwork.cs).
+        if (settings.BackgroundMode == "auto" && MotionLayerFor(settings) is { } motion) return motion;
         // Match the music, GPU effects, Line patterns.
         TrackCharacter? song;
         lock (_gate) song = _wallpaperCharacter;

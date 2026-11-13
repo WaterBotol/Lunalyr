@@ -335,6 +335,7 @@ public sealed partial class AppController : IAsyncDisposable
         ApplyLayoutSettings(old, settings);
         ApplyCustomWallpaper(old, settings);
         MusicVideoSettingsChanged(old, settings);
+        ApplyMotionSettings(old, settings);
         if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
             _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
@@ -413,6 +414,7 @@ public sealed partial class AppController : IAsyncDisposable
             _lookupCts?.Cancel();
             CancelOnlineRetryLocked();
             CancelArtworkLocked();
+            CancelMotionLookupLocked();
         }
 
         Monitor.SessionChanged -= OnSessionChanged;
@@ -446,6 +448,7 @@ public sealed partial class AppController : IAsyncDisposable
             CancelLookupLocked();
             _retriedWhileOnline = false;
             CancelArtworkLocked();
+            CancelMotionLookupLocked();
             _tools = LyricToolsState.Empty;
             if (session is null) _palette = PaletteMapper.Fallback;
             _cover = null;
@@ -466,6 +469,7 @@ public sealed partial class AppController : IAsyncDisposable
 
         _player.Info(session is null ? "No player is sharing what it plays." : $"Following {session.SourceApp.DisplayName} ({session.SourceAppUserModelId}).");
         MusicVideoTrackChanging(nothingPlaying: session is null);
+        UpdateMotionArtwork();
         PublishScene();
         RaiseStatusChanged();
     }
@@ -475,6 +479,7 @@ public sealed partial class AppController : IAsyncDisposable
         if (Monitor.Track is not { } track) return;
         // The cover's colours load beside the lyric lookup (and even when lookups are off).
         BeginArtwork(track, Monitor.Session);
+        UpdateMotionArtwork();
         ForgetLyricTools();
         MusicVideoTrackChanging(nothingPlaying: false);
         lock (_gate)
@@ -668,6 +673,7 @@ public sealed partial class AppController : IAsyncDisposable
                         ? "The track has no length (a stream or radio), so lyrics aren't looked up unless one appears."
                         : "The player gave no position for this track yet, so lyrics can't follow it.");
                     ShowStatus(generation, now);
+                    if (reading.HasTimeline) SetMotionStream(track, true);
                 }
 
                 await Task.Delay(_options.LateTimelinePoll, _options.TimeProvider, ct).ConfigureAwait(false);
@@ -678,6 +684,7 @@ public sealed partial class AppController : IAsyncDisposable
             {
                 _lyricLog.Info("The player's timeline arrived: looking the song up.");
                 ShowStatus(generation, StatusText.LookingUp);
+                SetMotionStream(track, false);
             }
 
             // The genre hints at the language sung (LyricLanguage), as on the Mac.

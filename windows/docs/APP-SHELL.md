@@ -378,9 +378,10 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `patternOpacity` | `0.85` | 0–1, "Pattern visibility" | `patternOpacity` |
 | `textBackingAutomatic` | `true` | "Automatic text backing" | `custom.textBackingAutomatic` |
 | `textBacking` | `0.35` | 0–1, "Text backing" when not automatic | `custom.textBacking` |
-| `useMotionArtwork` | `true` | Covers › Use animated covers (kept; not drawn on Windows yet) | `useMotionArtwork` |
-| `motionPlacement` | `"fill"` | Covers › Placement (kept; waits with animated covers) | `motionPlacement` |
-| `motionBlur` | `5` | 0–25, Covers › Softening (kept; Reset Adjustments puts it back) | `motionBlur` |
+| `useMotionArtwork` | `true` | Covers › Use animated covers (Match the music, Apple Music songs) | `useMotionArtwork` |
+| `motionPlacement` | `"fill"` | Covers › Placement: `fill`, `fillTop`, `fillBottom`, `fit` | `motionPlacement` |
+| `motionBlur` | `5` | 0–25, Covers › Softening (reaches the cover through the scene; Reset Adjustments puts it back) | `motionBlur` |
+| `motionExclusions` | `[]` | Covers › Excluded albums: each the artist and album in lower case, joined by a vertical bar | `motionExclusions` |
 | `visualizerStyle` | `"silk"` | Wallpaper › Visualiser › Scene: `silk`, `aurora`, `tunnel`, `curtainAurora`, `fosforaAurora`, `wavefield`, `wavefieldSphere`, `starTrails`, `colourStrata`, `overprint`; the Mac's web scenes read as their native stand-ins (`wavefieldOriginal` → `wavefield`, `wavecore` → `fosforaAurora`, `light3D` → `starTrails`), anything else as `silk` | `custom.visualizerStyle` |
 | `audioReactiveEnabled` | `false` | Wallpaper › Music response › System audio: WASAPI loopback of the default output, analysed in memory only (`--demo` uses a built-in signal and never captures) | `custom.audioReactiveEnabled` |
 | `audioSensitivity` | `1` | 0.3–3, Music response › Sensitivity | `custom.audioSensitivity` |
@@ -669,24 +670,58 @@ nothing is drawn. Lunalyr never reads or changes the wallpaper; the automatic ba
 
 ### Covers
 
-Settings › Covers keeps the Mac's page: "Use animated covers" with Placement and Softening. **Animated covers are not
-drawn on Windows yet**, and the rows say so. The claim that they need Apple's API is wrong: the Mac finds them through
-the public iTunes search, the album's public music.apple.com page (its `serialized-server-data`) and Apple's HLS
-playlists, with no developer key, so Windows could do the same (Media Foundation plays the MP4 renditions). Not built
-this milestone. Placement and Softening keep their saved values (shown, not changeable); Softening is part of Reset
-Adjustments.
+Apple Music's animated album covers play behind the lyrics in Match the music, as on the Mac (milestone 6, branch
+`m6/motion-artwork`; details and measurements in docs/milestones/M6.md, "Animated covers"). Previews:
+`docs/previews/motion-artwork/`.
+
+- **The page** (`App/Settings/CoversPage.cs`, the Mac's `CoversPage.swift`; words in `SettingsCopy`, tested):
+  - "Use animated covers", then either the banner "Covers play with Match the music" with "Use Match the music" (while
+    another type is chosen) or one line saying what covers are doing for the playing song (`SettingsCopy.CoverStatus`:
+    off, paused for power, not looked up in this run, play an album in Apple Music, only Apple Music's songs, radio
+    streams, excluded, checking, none found, Apple unreachable, available). Under Windows' Animation effects off: "…
+    animated covers hold their first frame."
+  - Framing: Placement (the Mac's four, with their captions) and Softening (0–25, "None" or a percentage). Both apply at
+    once: a placement change hands over a new layer; Softening reaches the layer through the scene, so a drag never
+    restarts the video.
+  - "Exclude this album" for the song being looked up (with "artist · album"), and "Excluded albums" with an Allow
+    button each (`motionExclusions`). The Mac's Edit › Undo for Allow has no Windows counterpart.
+- **Where covers come from** (`Lunalyr.Core.Covers`): `MotionArtworkFinder` asks the public iTunes search (album, then
+  song; Windows' region's storefront, then the US one), reads the first matching album page's
+  `serialized-server-data`, and resolves each rendition's HLS playlist to the one progressive MP4 Apple publishes
+  (a byte-range playlist over a single unencrypted file; an `#EXT-X-KEY` playlist is never used). Plain HTTPS GETs with
+  Lunalyr's own User-Agent; no key, token, cookie or sign-in. Answers are cached per album for the session (256), and
+  an album Apple answered without a cover is remembered for the session; a failure to reach Apple isn't.
+- **Playing it** (`Shell/Covers/MotionCovers.cs`, `AppController.MotionArtwork.cs`): the chosen rendition is downloaded
+  once into `{data}\AnimatedCovers` (`MotionCoverCache`: 40 MB per file, 200 MB in all, least recently used first out,
+  written to a `.part` file and kept only if it is an MP4), checked to open with a video track, and handed to the
+  renderer as the `motion` layer. Media Foundation's Source Reader has no HLS source on Windows (it refuses a `.m3u8`
+  with `MF_E_UNSUPPORTED_BYTESTREAM_TYPE`), so a cover Apple publishes only as segmented HLS counts as none.
+- **When:** looked up only with the setting on, in Match the music, for a song (not a stream) playing in Apple Music
+  (or iTunes), not excluded, and never under `--demo` or `--no-network`. The cover stays across the songs of an album
+  and until a different answer arrives. It is drawn instead of Match the music's effect or pattern, except while power
+  saving holds the wallpaper to patterns or colour only (`SetPowerConstraint`, from the engine's status).
+- **Drawing** (`Render/Backgrounds/MotionCoverLayer.cs`): the imported-video layer's decoder (GPU, muted, looping,
+  paused with the wallpaper, first frame under Reduce Motion) with the album gradient beneath, the cover placed and
+  softened, a faint album tint, an even shade (40% × Darkening), a round shade darkest in the middle, and the text
+  backing (which counts that shade). The song's still cover stands in until the first frame and if the video can't
+  play. A portrait display plays the tall rendition when it is a single MP4. The settings preview is handed the same
+  layer (`AppController.MotionCover`), as it is the imported one.
 
 ### Checks
 
 - `--demo --data <folder>` with `backgroundMode` (and `wallpaperPath` for Image or video) in that folder's
   `settings.json`; `tools/peek-desktop.ps1` captures the desktop with PrintWindow, never showing or activating a window
   (`-Thumbnail` for the DWM thumbnail, shown unactivated).
-- `--settings-page wallpaper --theme dark --quiet-windows` and `tools/capture-window.ps1` for the pages (not yet seen
-  to give a rendered capture: the displays were off; UI Automation read the pages' rows).
+- `--settings-page wallpaper --theme dark --quiet-windows` and `tools/capture-window.ps1` for the pages. With
+  `"wallpaperPaused": true` in the folder's `settings.json` no wallpaper surface is attached, so a running Lunalyr's
+  wallpaper is left alone. The Covers page gave rendered captures this way (`docs/previews/motion-artwork/covers-page-*`),
+  though later runs in the same session captured a blank window whatever the page or settings (the displays were off;
+  UI Automation, read only, still lists the rows).
 - `tools/LayerPreview -wallpaper <file> -placements fill,fillTop,fillBottom,fit` draws the imported layer offscreen (a
   video plays in real time to each `-times` mark); `-layer desktop` draws Your wallpaper (keeping alpha);
   `-adjust speed=…,vividness=…,darkening=…,backing=…` draws the adjustments; `-bench <seconds>` measures a picture or
-  video wallpaper at 60 fps.
+  video wallpaper at 60 fps. `-motion` draws the file as an animated cover instead (`-cover <still>` gives the album's
+  colours and still cover, `-adjust softening=0..25`, `-reduce-motion`).
 - `tools/WallpaperTestMedia <folder>` makes invented test media (a 6 s H.264 gradient clip with no audio track, and
   pictures, one turned by its EXIF orientation); `… <folder> clip` makes the unit tests' fixture.
 
