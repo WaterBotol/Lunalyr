@@ -56,6 +56,16 @@ public sealed partial class OriginalTitles
 
     public const string OriginalLanguage = "ja_jp";
 
+    /// <summary>
+    /// The lookup rule answers are stored under. 2 (13 Nov 2026) adds the artist's native-script entry and Japan's
+    /// title search; a "none" stored by rule 1 (no "rule" field) is asked again, a title found by it still stands.
+    /// </summary>
+    public const int CurrentRule = 2;
+
+    /// <summary>MusicBrainz countries whose artists mostly sing in Chinese, Japanese or Korean.</summary>
+    public static IReadOnlySet<string> EastAsianCountries { get; } =
+        new HashSet<string>(["JP", "KR", "CN", "TW", "HK", "MO"], StringComparer.OrdinalIgnoreCase);
+
     private readonly string _file;
     private readonly IOriginalTitleCatalogue _catalogue;
     private readonly string _storefront;
@@ -105,7 +115,7 @@ public sealed partial class OriginalTitles
     /// <summary>The original title (and album) of the playing song, null when it has none other than the one listed, or it could not be found.</summary>
     public async Task<OriginalTitle?> OriginalAsync(LyricQuery query, CancellationToken cancellationToken = default)
     {
-        if (!query.HasArtist || query.Duration <= 0 || LyricLanguage.HasNative(query.Title) || _storefront == OriginalCountry)
+        if (!query.HasArtist || query.Duration <= 0 || LyricLanguage.HasNative(query.Title))
         {
             return null;
         }
@@ -113,7 +123,9 @@ public sealed partial class OriginalTitles
         Task<(bool Answered, OriginalTitle? Found)> request;
         lock (_gate)
         {
-            if (Load().TryGetValue(key, out var entry) && _time.GetUtcNow() - entry.StoredAt < Lifetime)
+            // A "none" found by an earlier rule is asked again: the later rules look further.
+            if (Load().TryGetValue(key, out var entry) && _time.GetUtcNow() - entry.StoredAt < Lifetime
+                && (entry.Found is not null || entry.Rule >= CurrentRule))
             {
                 return entry.Found is { } found ? new OriginalTitle(found.Title, found.Album) : null;
             }
@@ -148,23 +160,62 @@ public sealed partial class OriginalTitles
         }
     }
 
-    /// <summary>Not answered when a request failed; answered with null when the song has no other title.</summary>
+    /// <summary>
+    /// Not answered when a request failed; answered with null when the song has no other title. The Mac's order
+    /// (next/integration 1cdde21, ported from the Mac session's description): (a) this storefront's entry with the listed
+    /// title, read again from the Japanese storefront by id, is final; (b) else the artist's first entry in that same
+    /// reply that is native-script and of the playing length (<see cref="NativeEntry"/>); (c) else the Japanese
+    /// storefront searched by the title alone, with the same rule. A Japanese storefront goes straight to (c).
+    /// </summary>
     private async Task<(bool Answered, OriginalTitle? Found)> RequestAsync(LyricQuery query)
     {
-        var term = PrimaryArtist(query.Artist) + " " + query.Title;
-        if (await AskAsync(token => _catalogue.SearchAsync(term, _storefront, token)).ConfigureAwait(false) is not { } listed)
+        if (_storefront != OriginalCountry)
+        {
+            var term = PrimaryArtist(query.Artist) + " " + query.Title;
+            if (await AskAsync(token => _catalogue.SearchAsync(term, _storefront, token)).ConfigureAwait(false) is not { } listed)
+            {
+                return (false, null);
+            }
+            if (Match(listed, query) is { TrackId: { } id })
+            {
+                if (await AskAsync(token => _catalogue.LookupAsync(id, OriginalCountry, OriginalLanguage, token)).ConfigureAwait(false) is not { } local)
+                {
+                    return (false, null);
+                }
+                // The same catalogue entry decides: an English recording that Japan also lists in English has no other title.
+                return (true, OriginalName(local.FirstOrDefault(song => song.TrackId == id), query));
+            }
+            if (NativeEntry(listed, query) is { } native)
+            {
+                return (true, native);
+            }
+        }
+        // Japan's storefront lists the song under its Japanese title, which an English title may still find.
+        if (await AskAsync(token => _catalogue.SearchAsync(query.Title, OriginalCountry, token)).ConfigureAwait(false) is not { } japanese)
         {
             return (false, null);
         }
-        if (Match(listed, query) is not { TrackId: { } id })
+        return (true, NativeEntry(japanese, query));
+    }
+
+    /// <summary>
+    /// The artist's first entry for the playing version (the same version tags) whose name is in native script and
+    /// whose length is within max(3 s, 2%) of the playing one; an entry without a length doesn't count. Its name is the
+    /// song's original title.
+    /// </summary>
+    public static OriginalTitle? NativeEntry(IEnumerable<CatalogueSong> results, LyricQuery query)
+    {
+        var tags = VersionTags.Tags(query.Title);
+        var tolerance = Math.Max(3, query.Duration * 0.02);
+        var song = results.FirstOrDefault(song => song.TrackName?.Trim() is { Length: > 0 } name && LyricLanguage.HasNative(name)
+            && VersionTags.Tags(name).SetEquals(tags) && ArtistMatches(song.ArtistName, query.Artist)
+            && song.TrackTimeMillis is { } millis && millis > 0 && Math.Abs(millis / 1000.0 - query.Duration) <= tolerance);
+        if (song is null)
         {
-            return (true, null);
+            return null;
         }
-        if (await AskAsync(token => _catalogue.LookupAsync(id, OriginalCountry, OriginalLanguage, token)).ConfigureAwait(false) is not { } local)
-        {
-            return (false, null);
-        }
-        return (true, OriginalName(local.FirstOrDefault(song => song.TrackId == id), query));
+        var album = song.CollectionName?.Trim();
+        return new OriginalTitle(song.TrackName!.Trim(), string.IsNullOrEmpty(album) ? null : album);
     }
 
     /// <summary>Asks the catalogue in the next free slot, a <see cref="DefaultSpacing"/> after the last request.</summary>
@@ -280,16 +331,19 @@ public sealed partial class OriginalTitles
     /// <summary>
     /// A source's answer, searched again under the song's original title (<see cref="OriginalAsync"/>) when the listed
     /// title found nothing usable: no match, a language version ("English Version") the title does not name, or, for
-    /// an East Asian genre, lyrics in Latin script only. A match found that way is recorded under the listed title (it
-    /// is the same song) and marked <see cref="LyricCandidate.ViaOriginalTitle"/>. A title that names a language
-    /// version, or is already in native script, is not searched again.
+    /// an East Asian artist (<see cref="IsEastAsianAsync"/>), lyrics in Latin script only. A match found that way is
+    /// recorded under the listed title (it is the same song) and marked <see cref="LyricCandidate.ViaOriginalTitle"/>.
+    /// A title that names a language version, or is already in native script, is not searched again.
     /// </summary>
+    /// <param name="aliases">Where the artist's MusicBrainz country is read (cached with the artist's other names); null to judge by genre and script alone.</param>
     public static async ValueTask<LyricCandidate?> WithOriginalTitleAsync(LyricSourceId source, LyricQuery query, OriginalTitles? titles,
-        bool enabled, Func<LyricQuery, CancellationToken, ValueTask<LyricCandidate?>> search, CancellationToken cancellationToken = default)
+        bool enabled, Func<LyricQuery, CancellationToken, ValueTask<LyricCandidate?>> search, CancellationToken cancellationToken = default,
+        ArtistAliases? aliases = null)
     {
         var first = await search(query, cancellationToken).ConfigureAwait(false);
         if (titles is null || !enabled || !Sources.Contains(source) || !query.HasArtist || query.Duration <= 0
-            || LyricLanguage.HasNative(query.Title) || VersionTags.Tags(query.Title).Overlaps(VersionTags.Languages) || Usable(first, query))
+            || LyricLanguage.HasNative(query.Title) || VersionTags.Tags(query.Title).Overlaps(VersionTags.Languages)
+            || await UsableAsync(first, query, aliases, cancellationToken).ConfigureAwait(false))
         {
             return first;
         }
@@ -311,9 +365,10 @@ public sealed partial class OriginalTitles
 
     /// <summary>
     /// Whether a source's answer under the listed title can stand: it names no language version the song does not,
-    /// and, for an East Asian genre, its lyrics are not in Latin script only.
+    /// and, for an East Asian artist, its lyrics are not in Latin script only.
     /// </summary>
-    private static bool Usable(LyricCandidate? candidate, LyricQuery query)
+    private static async ValueTask<bool> UsableAsync(LyricCandidate? candidate, LyricQuery query, ArtistAliases? aliases,
+        CancellationToken cancellationToken)
     {
         if (candidate is null)
         {
@@ -323,7 +378,26 @@ public sealed partial class OriginalTitles
         {
             return false;
         }
-        return !(LyricLanguage.IsEastAsianGenre(query.Genre) && LyricLanguage.ScriptOf(candidate) == SungScript.Latin);
+        return LyricLanguage.ScriptOf(candidate) != SungScript.Latin
+            || !await IsEastAsianAsync(query, aliases, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether the playing artist most likely sings in Chinese, Japanese or Korean: an East Asian genre, an artist or
+    /// album written in native script, or a MusicBrainz country of Japan, Korea, China, Taiwan, Hong Kong or Macau
+    /// (asked last, and only when <paramref name="aliases"/> is given; kept 30 days with the artist's other names).
+    /// The Mac's rule (next/integration 1cdde21), ported from the Mac session's description.
+    /// </summary>
+    public static async ValueTask<bool> IsEastAsianAsync(LyricQuery query, ArtistAliases? aliases, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (LyricLanguage.IsEastAsianGenre(query.Genre) || LyricLanguage.HasNative(query.Artist) || LyricLanguage.HasNative(query.Album))
+        {
+            return true;
+        }
+        return aliases is not null && query.HasArtist
+            && await aliases.CountryAsync(query.Artist, cancellationToken).ConfigureAwait(false) is { } country
+            && EastAsianCountries.Contains(country);
     }
 
     private Dictionary<string, OriginalTitleEntryDto> Load()
@@ -356,6 +430,7 @@ public sealed partial class OriginalTitles
             {
                 Found = found is null ? null : new OriginalTitleDto { Title = found.Title, Album = found.Album },
                 StoredAt = now,
+                Rule = CurrentRule,
             };
             if (all.Count > MaxEntries)
             {
@@ -389,6 +464,10 @@ internal sealed class OriginalTitleEntryDto
 
     [JsonPropertyName("storedAt")]
     public DateTimeOffset StoredAt { get; set; }
+
+    /// <summary>The rule the answer was found by (<see cref="OriginalTitles.CurrentRule"/>); 1 when absent.</summary>
+    [JsonPropertyName("rule")]
+    public int Rule { get; set; } = 1;
 }
 
 internal sealed class OriginalTitleDto

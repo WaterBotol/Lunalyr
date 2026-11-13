@@ -56,13 +56,17 @@ public static class LyricAgreementRules
         return result;
     }
 
-    /// <summary>Sung lines, normalised for comparison.</summary>
+    /// <summary>
+    /// Sung lines, normalised for comparison: credits and headers are not sung, so they never count for or against
+    /// agreement (the Mac's 1cdde21). Synced lines had them flagged when the match was built; plain text has them
+    /// left out here.
+    /// </summary>
     public static IReadOnlyList<string> Text(LyricCandidate candidate)
     {
         IEnumerable<string> raw = candidate.Result switch
         {
             LyricResult.Synced synced => synced.Lines.Where(line => !line.IsInstrumental).Select(line => line.Text),
-            LyricResult.Plain plain => plain.Lines,
+            LyricResult.Plain plain => Parsing.LyricCredits.SungLines(plain.Lines, candidate.Title, candidate.Artist),
             _ => [],
         };
         return [.. raw.Select(LyricQuery.Normalize).Where(text => text.Length > 0)];

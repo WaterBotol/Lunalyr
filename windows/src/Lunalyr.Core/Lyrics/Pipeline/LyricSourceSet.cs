@@ -10,7 +10,8 @@ namespace Lunalyr.Core.Lyrics.Pipeline;
 /// <see cref="LyricCandidateBuilder"/>, and the Chinese catalogues are asked again under the artist's other names
 /// when the library's name found nothing (<see cref="ArtistAliases"/>). A song listed under an English title is
 /// searched again under its original one when the listed title found nothing usable (<see cref="OriginalTitles"/>,
-/// around the artist-name search, as on the Mac). A source without a provider has nothing.
+/// around the artist-name search, as on the Mac); the artist's MusicBrainz country, kept with its other names, helps
+/// tell whether Latin-only lyrics can be the song's. A source without a provider has nothing.
 /// </summary>
 public sealed class LyricSourceSet
 {
@@ -76,7 +77,7 @@ public sealed class LyricSourceSet
     private ValueTask<LyricCandidate?> FetchAsync(ILyricSource source, LyricQuery query, string folder, CancellationToken ct) =>
         OriginalTitles.WithOriginalTitleAsync(source.Id, query, _titles, UsesOriginalTitles,
             (titled, outer) => ArtistAliases.WithAliasesAsync(source.Id, titled, _aliases, UsesArtistAliases,
-                (asked, token) => AskAsync(source, asked, folder, token), outer), ct);
+                (asked, token) => AskAsync(source, asked, folder, token), outer), ct, _aliases);
 
     private async ValueTask<LyricCandidate?> AskAsync(ILyricSource source, LyricQuery query, string folder, CancellationToken ct)
     {

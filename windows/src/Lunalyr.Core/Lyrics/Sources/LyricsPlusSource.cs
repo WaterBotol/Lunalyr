@@ -137,7 +137,8 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
     }
 
     /// <summary>
-    /// The lyrics in a node's reply, or null when it has none: at least one line with text and a syllable with text.
+    /// The lyrics in a node's reply, or null when it has none: at least one line with text. A "type":"Line" reply has no
+    /// syllables and still counts, as line timing (the Mac's next/integration 1cdde21).
     /// </summary>
     private static RawLyrics? Read(byte[] body)
     {
@@ -145,7 +146,7 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
         {
             using var document = LyricHttpClient.ParseJson(Service, body);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || !root.Items("lyrics").Any(HasSyllables))
+            if (root.ValueKind != JsonValueKind.Object || !root.Items("lyrics").Any(HasText))
             {
                 return null;
             }
@@ -170,8 +171,7 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
         }
     }
 
-    private static bool HasSyllables(JsonElement line) =>
-        !string.IsNullOrWhiteSpace(line.Str("text")) && line.Items("syllabus").Any(s => !string.IsNullOrWhiteSpace(s.Str("text")));
+    private static bool HasText(JsonElement line) => !string.IsNullOrWhiteSpace(line.Str("text"));
 
     /// <summary>A metadata name: a non-empty string, or a list of names joined with ", ".</summary>
     private static string? Name(JsonElement? metadata, string key)
