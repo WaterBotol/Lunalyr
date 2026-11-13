@@ -145,3 +145,11 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Discord status | unit (27 Mac tests, fake pipe) + live against a stand-in pipe (handshake, activity, clear) | `docs/previews/m7-merged/discord-standin-frames.txt` |
 | Lyric cards (PNG, GIF, MP4 with sound) | unit + previews + AOT export, mixes decoded and measured; window live via `--lyric-card` and the link | `docs/previews/lyric-cards/`, `docs/previews/m7-merged/card-from-link-dark.png` |
 | Real Discord, real key presses, song recording (WASAPI loopback), Save/Copy pickers | needs the owner | Test Build 7 README |
+
+## Milestone 8: packaging, updates and polish
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Onboarding: flow, endings (first run vs again), copy, first-run gate, `onboardingDone`, `--onboarding-capture` parsing | unit (7 Mac tests ported, 11 of Windows' own; 28 cases) | `tests/Lunalyr.Shell.Tests/Onboarding/WelcomeTests.cs` |
+| Onboarding window: six steps in light and dark, App theme opposite to Windows, never foreground under `--quiet-windows` | PC (`--onboarding-capture` with `--demo`; log says foreground: False) | `docs/previews/onboarding/` (`…-apptheme-light-on-dark-windows.png`: the App theme setting light while Windows is dark, no `--theme`) |
+| Onboarding shown by itself on a real first run (empty data folder, no flags), Show Welcome… from Settings, Enter/Esc/Alt+Left, Narrator, real high contrast | needs the owner (a first run without `--demo` would draw a wallpaper over the desktop; keys and Narrator need the keyboard and sound) | APP-SHELL.md "Onboarding" |

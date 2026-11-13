@@ -35,8 +35,9 @@ internal static class GeneralPage
         PackagingRows.AddUpdates(page, ctx, version, packaging);
 
         Section(page, "Welcome");
+        // The first-run welcome again (docs/APP-SHELL.md, "Onboarding"): the same steps; finishing just closes.
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",
-            Button("Show Welcome…", () => { }), notYet: SettingsCopy.LaterBuild));
+            Button("Show Welcome…", () => App.CurrentHost?.ShowWelcomeAgain())));
 
         Section(page, "Tray & shortcuts");
         ExtrasSections.AddTrayLyric(page, ctx);
