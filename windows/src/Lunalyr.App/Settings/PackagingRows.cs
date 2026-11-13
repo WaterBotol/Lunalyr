@@ -61,10 +61,11 @@ internal static class PackagingRows
         var shortVersion = version.Split('+')[0];
         if (hooks is null)
         {
-            page.Children.Add(Card($"Lunalyr {shortVersion}", UpdateCopy.Unconfigured, "", Button("Check for Updates", () => { })));
+            page.Children.Add(Card($"Lunalyr {shortVersion}", UpdateCopy.Unconfigured, "", Button("Check for Updates", () => { }, name: "Check for Updates")));
             return;
         }
-        var button = Button("Check for Updates", hooks.UpdateAction);
+        // Named for what it does (the card would otherwise name it "Lunalyr 0.8.0"); the status is its help text.
+        var button = Button("Check for Updates", hooks.UpdateAction, name: "Check for Updates");
         var card = Card($"Lunalyr {shortVersion}", "", "", button);
         var progress = new ProgressBar { Minimum = 0, Maximum = 1, IsIndeterminate = false, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 4) };
         AutomationProperties.SetName(progress, "Update download");
@@ -75,6 +76,7 @@ internal static class PackagingRows
             var state = hooks.Updates.State;
             card.Description = state.Status;
             button.Content = UpdateCopy.Button(state);
+            AutomationProperties.SetName(button, UpdateCopy.Button(state));
             button.IsEnabled = UpdateCopy.ButtonEnabled(state);
             progress.Visibility = state.Phase is UpdatePhase.Downloading or UpdatePhase.Checking ? Visibility.Visible : Visibility.Collapsed;
             progress.IsIndeterminate = state.Phase == UpdatePhase.Checking;
