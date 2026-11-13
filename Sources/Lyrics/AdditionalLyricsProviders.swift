@@ -18,10 +18,27 @@ enum AdditionalLyricsProviders {
             return (hit, LyricsFetcher.namesRecording(source, title: f.title, artist: f.artist, duration: f.duration, query: query) ? 1 : 0, f.score)
         }.sorted { ($0.passes, $0.score) > ($1.passes, $1.score) }.map(\.hit)
     }
+    /// Records a catalogue search for the lookup trace: what came back, what scored, and what will be read.
+    private static func trace<Hit>(_ label: String, returned: Int, scored ordered: [Hit], read: Int, query: LyricQuery, _ source: LyricSourceID,
+                                   _ fields: (Hit) -> (title: String, artist: String, duration: Double?, score: Double)) {
+        guard LyricTrace.isOn else { return }
+        LyricTrace.results(label, returned: returned, read: min(read, ordered.count))
+        for (index, hit) in ordered.enumerated() {
+            let f = fields(hit)
+            let passes = LyricsFetcher.namesRecording(source, title: f.title, artist: f.artist, duration: f.duration, query: query)
+            LyricTrace.hit(LyricTraceHit(title: f.title, artist: f.artist, duration: f.duration, score: f.score,
+                                         titleSimilarity: LyricQuery.similarity(query.title, f.title), artistSimilarity: query.artistScore(f.artist),
+                                         verdict: (index < read ? "read" : "not read") + (passes ? "" : " · fails the recording check")))
+        }
+        if returned > ordered.count { LyricTrace.note("\(returned - ordered.count) result(s) scored 0 and were dropped") }
+    }
     private static func candidate(_ source: LyricSourceID, lrc: String, query: LyricQuery,
                                   title: String, artist: String, duration: Double?) -> LyricCandidate? {
         let lines = LyricsFetcher.parseLRC(LyricHTTP.text(lrc), trackDuration: query.duration)
-        guard !lines.isEmpty else { return nil }
+        guard !lines.isEmpty else {
+            LyricTrace.note("\(source.title): lyrics for “\(title)” held no timed lines")
+            return nil
+        }
         let enhanced = lines.contains { $0.wordTimed }
         let precision = LyricsFetcher.precision(lines)
         let provenance = LyricsFetcher.Provenance(precision: precision, source: source.title)
@@ -42,7 +59,9 @@ enum AdditionalLyricsProviders {
             let value = score(query,title:title,artist:singers,duration:duration)
             return value > 0 ? (song,title,singers,duration,value) : nil
         }
-        for hit in ordered(ranked, .qqMusic, query: query, { ($0.title, $0.artist, $0.duration, $0.score) }).prefix(3) {
+        let qqOrdered = ordered(ranked, .qqMusic, query: query, { ($0.title, $0.artist, $0.duration, $0.score) })
+        trace("QQ search", returned: songs.count, scored: qqOrdered, read: 3, query: query, .qqMusic) { ($0.title, $0.artist, $0.duration, $0.score) }
+        for hit in qqOrdered.prefix(3) {
             try Task.checkCancellation()
             guard let mid = hit.song["songmid"] as? String else { continue }
             let payload = try await LyricHTTP.json("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg",
@@ -69,13 +88,16 @@ enum AdditionalLyricsProviders {
             let value = score(query,title:title,artist:artist,duration:duration)
             return value > 0 ? (song,title,artist,duration,value) : nil
         }
-        for hit in ordered(ranked, .kugou, query: query, { ($0.title, $0.artist, $0.duration, $0.score) }).prefix(2) {
+        let kugouOrdered = ordered(ranked, .kugou, query: query, { ($0.title, $0.artist, $0.duration, $0.score) })
+        trace("Kugou search", returned: songs.count, scored: kugouOrdered, read: 2, query: query, .kugou) { ($0.title, $0.artist, $0.duration, $0.score) }
+        for hit in kugouOrdered.prefix(2) {
             try Task.checkCancellation()
             guard let hash = hit.song["hash"] as? String else { continue }
             let search = try await LyricHTTP.json("https://lyrics.kugou.com/search",
                 ["ver":"1","man":"yes","client":"pc","keyword":query.title+" "+query.artist,
                  "duration":String(Int(query.duration*1000)),"hash":hash], session: session)
             let candidates = search["candidates"] as? [[String:Any]] ?? []
+            LyricTrace.results("Kugou lyric candidates for “\(hit.title)”", returned: candidates.count, read: min(candidates.count, 2))
             for item in candidates.prefix(2) {
                 try Task.checkCancellation()
                 guard let id = LyricHTTP.string(item["id"]), let key = item["accesskey"] as? String else { continue }
@@ -113,7 +135,9 @@ extension AdditionalLyricsProviders {
             let value = score(query, title: title, artist: artist, duration: duration)
             return value > 0 ? (String(id), title, artist, duration, value) : nil
         }
-        for hit in ordered(ranked, .kuwo, query: query, { ($0.1, $0.2, $0.3, $0.4) }).prefix(2) {
+        let kuwoOrdered = ordered(ranked, .kuwo, query: query, { ($0.1, $0.2, $0.3, $0.4) })
+        trace("Kuwo search", returned: songs.count, scored: kuwoOrdered, read: 2, query: query, .kuwo) { ($0.1, $0.2, $0.3, $0.4) }
+        for hit in kuwoOrdered.prefix(2) {
             let json = try await LyricHTTP.json("https://www.kuwo.cn/openapi/v1/www/lyric/getlyric", ["musicId": hit.0], referer: "https://www.kuwo.cn/", session: session)
             guard let data = json["data"] as? [String: Any], let rows = data["lrclist"] as? [[String: Any]] else { continue }
             let lrc = rows.compactMap { row -> String? in

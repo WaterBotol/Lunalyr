@@ -98,7 +98,12 @@ enum NetEaseLyricsProvider {
         let hits = (result.songs ?? []).map {
             SearchHit(id: $0.id, name: $0.name, artists: ($0.artists ?? []).map(\.name), duration: $0.duration)
         }
-        guard let match = bestSong(hits, title: title, artist: artist, duration: duration) else { return nil }
+        LyricTrace.results("NetEase search", returned: hits.count, read: hits.count)
+        guard let match = bestSong(hits, title: title, artist: artist, duration: duration) else {
+            LyricTrace.note("NetEase: no search result passed (title ≥ 0.75, artist ≥ 0.65, length within 8 s)")
+            return nil
+        }
+        LyricTrace.note("NetEase: picked song \(match.id) “\(match.title)” by \(match.artist)")
         recorder?.song = match
         return match.id
     }
@@ -117,12 +122,17 @@ enum NetEaseLyricsProvider {
             let titleMatch = LyricQuery.similarity(title, song.name)
             let artistMatch = query.hasArtist
                 ? names.map { LyricQuery.similarity(artist, $0) }.reduce(LyricQuery.similarity(artist, credit), max) : 1
-            guard titleMatch >= 0.75, artistMatch >= 0.65 else { continue }
-            // An entry without a length cannot be told apart from other edits.
             let length = song.duration.map { Double($0) / 1000 }.flatMap { $0 > 0 ? $0 : nil }
-            guard duration <= 0 || length != nil else { continue }
+            func trace(_ verdict: @autoclosure () -> String) {
+                LyricTrace.hit(LyricTraceHit(title: song.name, artist: credit, duration: length, titleSimilarity: titleMatch,
+                                             artistSimilarity: artistMatch, verdict: verdict()))
+            }
+            guard titleMatch >= 0.75, artistMatch >= 0.65 else { trace(titleMatch < 0.75 ? "title < 0.75" : "artist < 0.65"); continue }
+            // An entry without a length cannot be told apart from other edits.
+            guard duration <= 0 || length != nil else { trace("no length"); continue }
             let delta = duration > 0 ? length.map { abs($0 - duration) } ?? 0 : 0
-            guard duration <= 0 || delta < 8 else { continue }
+            guard duration <= 0 || delta < 8 else { trace("length off by \(Int(delta)) s (≥ 8)"); continue }
+            trace("eligible (length \(delta <= max(3, duration * 0.02) ? "fits" : "off by \(Int(delta)) s"))")
             let fits = duration <= 0 || delta <= max(3, duration * 0.02)
             let key: [Double] = [fits ? 1 : 0, titleMatch, artistMatch, -delta]
             if let current = best, !current.key.lexicographicallyPrecedes(key) { continue }
@@ -137,7 +147,9 @@ enum NetEaseLyricsProvider {
         // rv=-1 adds `romalrc`, NetEase's own romanised lines (romaji, Korean).
         guard let url=URL(string:"https://music.163.com/api/song/lyric?id=\(id)&lv=1&kv=1&tv=-1&yv=1&rv=-1"),
               let data=await get(url) else {return nil}
-        return try? JSONDecoder().decode(LyricResponse.self,from:data)
+        let payload = try? JSONDecoder().decode(LyricResponse.self,from:data)
+        LyricTrace.note("NetEase lyric payload for \(id): yrc \(payload?.yrc?.lyric?.isEmpty == false ? "yes" : "no"), lrc \(payload?.lrc?.lyric?.isEmpty == false ? "yes" : "no")")
+        return payload
     }
 
     private static func get(_ url: URL) async -> Data? {
@@ -147,7 +159,7 @@ enum NetEaseLyricsProvider {
         request.setValue("https://music.163.com/", forHTTPHeaderField: "Referer")
         request.timeoutInterval = 6
         do {
-            let (data, response) = try await (recorder?.session ?? .shared).data(for: request)
+            let (data, response) = try await LyricTrace.data(recorder?.session ?? .shared, for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 recorder?.failure = LyricHTTP.Failure(message: "NetEase: HTTP \(status). The service may be temporarily unavailable.")
