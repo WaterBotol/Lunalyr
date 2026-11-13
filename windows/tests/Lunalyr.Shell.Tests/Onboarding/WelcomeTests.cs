@@ -236,6 +236,25 @@ public sealed class WelcomeTests
         Assert.Empty(spotify.Commands); // listing players sends them nothing
     }
 
+    [Fact]
+    public void ThePlayersStepMarksTheChosenPlayerAndLeavesTheOthersUnread()
+    {
+        var time = new ManualTimeProvider();
+        using var sessions = new FakeMediaSessionSource();
+        var spotify = sessions.Add(new FakeMediaSession("Spotify.exe", time).SetPlayback(PlaybackStatus.Paused));
+        var edge = sessions.Add(new FakeMediaSession("MSEdge", time).SetPlayback(PlaybackStatus.Playing));
+        var rows = OnboardingPlayers.Rows(sessions, "spotify");
+        Assert.True(rows[0].Followed); // Windows calls Edge current; Spotify is the one chosen
+        Assert.Equal("Paused · Lunalyr follows this one now", rows[0].Status);
+        Assert.False(rows[1].Followed);
+        Assert.Equal("Not followed: Lunalyr follows Spotify only", rows[1].Status);
+        Assert.Equal(0, edge.Reads);
+        Assert.Equal(["Microsoft Edge"], OnboardingPlayers.Rows(sessions, "automatic").Where(r => r.Followed).Select(r => r.Name));
+        Assert.DoesNotContain(OnboardingPlayers.Rows(sessions, "appleMusic"), r => r.Followed); // not sharing anything
+        Assert.Equal("Automatic follows whichever player is playing. Choosing one means Lunalyr never reads the others.", OnboardingCopy.FollowCaption);
+        Assert.Empty(spotify.Commands);
+    }
+
     // ---- When it shows ----
 
     [Fact]

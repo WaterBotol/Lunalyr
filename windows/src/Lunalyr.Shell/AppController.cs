@@ -142,6 +142,8 @@ public sealed record AppStatus
 public sealed partial class AppController : IAsyncDisposable
 {
     private readonly IMediaSessionSource _source;
+    // The sessions the player choice lets Lunalyr follow (Settings › Music players › Player): the monitor's source.
+    private readonly FollowedSessionSource _followed;
     private readonly ILyricLookup _lyrics;
     private readonly IWallpaperRenderer _renderer;
     private readonly SongOffsets _offsets;
@@ -216,8 +218,12 @@ public sealed partial class AppController : IAsyncDisposable
         _status = new AppStatus { WallpaperPaused = _settings.WallpaperPaused, PlaybackCommandsBlocked = guard.Reason };
         // The scrub preview stands in for the player's clock on the wallpaper only (LineBeingSung keeps ReadClock).
         _clockReader = ReadRendererClock;
-        Monitor = new NowPlayingMonitor(source, _options.TimeProvider, _options.Clock, message => _player.Debug(message));
+        _followed = new FollowedSessionSource(source, _settings.Player, log: message => _player.Info(message));
+        Monitor = new NowPlayingMonitor(_followed, _options.TimeProvider, _options.Clock, message => _player.Debug(message));
     }
+
+    /// <summary>The player followed (<see cref="PlayerChoice"/>), as the monitor applies it.</summary>
+    public string FollowedPlayer => _followed.Choice;
 
     /// <summary>The now-playing monitor the controller follows (read-only).</summary>
     public NowPlayingMonitor Monitor { get; }
@@ -358,6 +364,7 @@ public sealed partial class AppController : IAsyncDisposable
         MusicVideoSettingsChanged(old, settings);
         ApplyMotionSettings(old, settings);
         ApplyLyricsHidden(old, settings);
+        if (old.Player != settings.Player) _followed.SetChoice(settings.Player);
         if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
             || old.RotateLayouts != settings.RotateLayouts)
             PublishLayers();
@@ -448,6 +455,7 @@ public sealed partial class AppController : IAsyncDisposable
         Monitor.PlaybackChanged -= OnPlaybackChanged;
         if (_connectivity is not null) _connectivity.Restored -= OnConnectivityRestored;
         Monitor.Dispose();
+        _followed.Dispose(); // the inner source belongs to whoever made it
         DisposeFloating();
         try
         {

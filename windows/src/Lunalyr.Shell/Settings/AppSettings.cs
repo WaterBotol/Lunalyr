@@ -210,6 +210,7 @@ public sealed partial record AppSettings
             RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
+            Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
         }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating().NormalizedExtras()
             .NormalizedDiscord();
     }

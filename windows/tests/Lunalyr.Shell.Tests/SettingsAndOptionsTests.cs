@@ -61,7 +61,7 @@ public sealed class AppSettingsTests
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
             "spotifyClientId",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
-            "showControlsOnHover", "desktopPlayerTimeMode",
+            "showControlsOnHover", "desktopPlayerTimeMode", "player",
             "noLyrics",
             "albumGradientWallpaper", "shaderStyle", "patternStyle", "wallpaperPath", "wallpaperName", "wallpaperPlacement",
             "effectSpeed", "vividness", "scrimStrength", "patternOpacity", "motionBlur", "textBackingAutomatic", "textBacking",
@@ -87,6 +87,30 @@ public sealed class AppSettingsTests
         Assert.Equal("lift", reopened.Current.WordArrival);
         Assert.Equal(-0.25, reopened.Current.LyricOffset);
         Assert.True(reopened.Current.WallpaperPaused);
+    }
+
+    // Ported from SpotifyPlayerTests.swift: testThePlayerChoiceIsRememberedUnderACustomKey (the key without "custom.",
+    // as every key here; the Mac's publisher assertions are the controller's ApplySettings, tested in AppControllerTests).
+    [Fact]
+    public async Task ThePlayerChoiceIsRememberedUnderItsKey()
+    {
+        using var temp = new TempFolder();
+        await using (var store = AppSettingsStore.Open(temp.Path, Logger.Null))
+        {
+            Assert.Equal("automatic", store.Current.Player);
+            store.Update(s => s with { Player = "spotify" });
+            Assert.True(await store.FlushAsync());
+        }
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(temp.Path, "settings.json"), TestContext.Current.CancellationToken)).RootElement;
+        Assert.Equal("spotify", json.GetProperty("player").GetString());
+        await using (var reopened = AppSettingsStore.Open(temp.Path, Logger.Null))
+            Assert.Equal("spotify", reopened.Current.Player);
+
+        await File.WriteAllTextAsync(Path.Combine(temp.Path, "settings.json"), """{ "schemaVersion": 1, "player": "winamp" }""",
+            TestContext.Current.CancellationToken);
+        await using (var unknown = AppSettingsStore.Open(temp.Path, Logger.Null))
+            Assert.Equal("automatic", unknown.Current.Player);
     }
 
     [Fact]

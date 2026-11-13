@@ -96,9 +96,8 @@ internal sealed partial class OnboardingWindow
         followTexts.Children.Add(Caption(OnboardingCopy.FollowCaption));
         AutomationProperties.SetAccessibilityView(followTexts, AccessibilityView.Raw);
         follow.Children.Add(followTexts);
-        // Settings › Music players' choice, which this build can't change yet: shown as it is, not offered.
-        var combo = FixedCombo("Automatic");
-        combo.MinWidth = 140;
+        // Settings › Music players' Player, the same setting: the list above marks the player it follows.
+        var combo = PlayerChoiceCombo.Build(ctx, _host.SharingPlayers, width: 140);
         combo.VerticalAlignment = VerticalAlignment.Center;
         AutomationProperties.SetName(combo, OnboardingCopy.Follow);
         AutomationProperties.SetHelpText(combo, OnboardingCopy.FollowCaption);
@@ -118,12 +117,12 @@ internal sealed partial class OnboardingWindow
         list.Children.Add(title);
         var rows = new StackPanel { Spacing = 8 };
         list.Children.Add(rows);
-        ctx.OnRefresh(_ =>
+        ctx.OnRefresh(s =>
         {
             WatchPlayers();
             rows.Children.Clear();
             var sessions = _host.MediaSessions;
-            var found = OnboardingPlayers.Rows(sessions);
+            var found = OnboardingPlayers.Rows(sessions, s.Player);
             if (found.Count == 0)
             {
                 rows.Children.Add(Caption(sessions is null ? OnboardingCopy.StartingPlayers : OnboardingCopy.NoPlayers));
