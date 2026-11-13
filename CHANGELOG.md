@@ -12,6 +12,10 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+
+- Scattered, Editorial, Constellation, Constellation + Editorial and Echo each have their own composition now: one focal word per line set larger, Scattered's rows step loose of each other, Editorial sets a small kicker over a headline word in the second face on a fixed left edge, Constellation spreads its stars wider apart with visible links, Constellation + Editorial hangs its satellites around a central word, and Echo's repeats recede in clear steps above the line and reflect below it.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed
