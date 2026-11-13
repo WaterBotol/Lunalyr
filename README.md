@@ -360,7 +360,7 @@ Make sure Lunalyr is in your Applications folder and was opened from there. An a
 <details>
 <summary><b>Lunalyr uses a lot of CPU, GPU or battery</b></summary>
 
-In **Settings › Performance**, choose 30 fps, turn on **Low power visuals**, and consider **Pause fully covered wallpapers**. Visualisers, music videos and GPU effects cost more than line patterns, Colour only or Your wallpaper. Close Settings when you are not using it, because its live preview renders too.
+In **Settings › Performance**, choose 30 fps, turn on **Low power visuals**, and consider **Pause fully covered wallpapers**. Visualisers, music videos and animated effects cost more than line patterns, Colour only or Your wallpaper. Close Settings when you are not using it, because its live preview renders too.
 
 </details>
 
@@ -402,7 +402,7 @@ Bug reports, ideas and pull requests are welcome. Start with [CONTRIBUTING.md](C
 
 ## Acknowledgements
 
-Lunalyr is built on [Verso](https://github.com/AkkiCode06/verso) by Akki ([AkkiCode06](https://github.com/AkkiCode06)), which provides its lyric engine, compositions and GPU effects. Verso's original README is kept in [docs/upstream](docs/upstream/README.md).
+Lunalyr is built on [Verso](https://github.com/AkkiCode06/verso) by Akki ([AkkiCode06](https://github.com/AkkiCode06)), which provides its lyric engine, layouts and animated effects. Verso's original README is kept in [docs/upstream](docs/upstream/README.md).
 
 Lunalyr also relies on:
 
