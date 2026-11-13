@@ -781,7 +781,7 @@ final class LyricsFetcher {
                       titles: OriginalTitles = .shared, otherNames: Bool = ArtistAliases.enabled) async throws -> LyricCandidate? {
         try Task.checkCancellation()
         func original(_ search: (LyricQuery) async throws -> LyricCandidate?) async throws -> LyricCandidate? {
-            try await withOriginalTitle(id, query: query, titles: titles, enabled: otherNames, search: search)
+            try await withOriginalTitle(id, query: query, titles: titles, aliases: aliases, enabled: otherNames, search: search)
         }
         func alias(_ q: LyricQuery, _ search: (LyricQuery) async throws -> LyricCandidate?) async throws -> LyricCandidate? {
             try await withAliases(id, query: q, aliases: aliases, enabled: otherNames, search: search)

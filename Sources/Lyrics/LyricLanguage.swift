@@ -114,12 +114,22 @@ enum LyricLanguage {
 
 /// A song's title in its original language ("夜に駆ける"), for a song Apple
 /// Music lists under an English or romanised one ("Racing into the Night"),
-/// from Apple's public catalogue: the song is found in this Mac's storefront
-/// by title, artist and length, then the same catalogue entry is read from
-/// the Japanese storefront.
+/// from Apple's public catalogue:
+/// 1. this Mac's storefront is searched for the artist and title. The entry
+///    under the listed title, of the playing length, is read from the
+///    Japanese storefront, and its name there is the answer (the same name:
+///    there is no other). Apple's search also finds a song by its English
+///    title where the storefront lists it under the native one, so the
+///    artist's first entry for the playing version, when its name is native
+///    and its length fits, is the answer too.
+/// 2. Without either, the Japanese storefront is searched for the title,
+///    and its first entry by the artist for the playing version is taken in
+///    the same way. A storefront in Japan starts here.
+/// Lengths fit within 3 s, or 2% for a long song, as recordings are matched.
 ///
 /// Asked only when a lyric service found nothing usable under the listed
-/// title (`LyricsFetcher.withOriginalTitle`). Only the title and artist are
+/// title, or only Latin-script lyrics for an East Asian artist
+/// (`LyricsFetcher.withOriginalTitle`). Only the title and artist are
 /// sent, as for cover art. Requests are spaced a second apart, every
 /// answer, "none" too, is kept on disk for 30 days, and sources asking at
 /// once share one request.
@@ -155,17 +165,21 @@ actor OriginalTitles {
         self.clock = clock
     }
 
+    /// v2: the Japanese storefront is searched too, and lengths fit within
+    /// 2% (answers stored before, "none" among them, are asked again).
     static func key(_ query: LyricQuery) -> String {
-        [LyricQuery.normalize(query.title), LyricQuery.normalize(query.artist), String(Int(query.duration.rounded()))]
+        ["v2", LyricQuery.normalize(query.title), LyricQuery.normalize(query.artist), String(Int(query.duration.rounded()))]
             .joined(separator: "|")
     }
+
+    /// How far a catalogue entry's length may be from the playing one's.
+    static func tolerance(_ duration: Double) -> Double { max(3, duration * 0.02) }
 
     /// The original title (and album) of the playing song, nil when it has
     /// none other than the one listed, or it could not be found.
     func original(for query: LyricQuery) async -> Found? {
-        guard query.hasArtist, query.duration > 0, !LyricLanguage.hasNative(query.title),
-              storefront != Self.original.country else {
-            LyricTrace.note("original title not looked up (storefront \(storefront), or nothing to look up)")
+        guard query.hasArtist, query.duration > 0, !LyricLanguage.hasNative(query.title) else {
+            LyricTrace.note("original title not looked up: nothing to look up")
             return nil
         }
         let key = Self.key(query)
@@ -186,18 +200,40 @@ actor OriginalTitles {
 
     /// Nil when a request failed; `.some(nil)` when the song has no other title.
     private func request(_ query: LyricQuery) async -> Found?? {
-        let term = ArtworkProvider.primaryArtist(query.artist) + " " + query.title
-        guard let listed = await fetch("search", ["term": term, "entity": "song", "country": storefront, "limit": "15"]) else { return nil }
-        LyricTrace.results("iTunes \(storefront) search", returned: listed.count, read: listed.count)
-        guard let match = Self.match(listed, query: query), let id = match.trackId else {
-            LyricTrace.note("iTunes: no catalogue entry with this title, artist and length (±3 s)")
-            return .some(nil)
+        let window = Int(Self.tolerance(query.duration).rounded())
+        var failed = false
+        if storefront != Self.original.country {
+            let term = ArtworkProvider.primaryArtist(query.artist) + " " + query.title
+            if let listed = await fetch("search", ["term": term, "entity": "song", "country": storefront, "limit": "15"]) {
+                LyricTrace.results("iTunes \(storefront) search", returned: listed.count, read: listed.count)
+                if let match = Self.match(listed, query: query), let id = match.trackId {
+                    guard let local = await fetch("lookup", ["id": String(id), "country": Self.original.country,
+                                                              "lang": Self.original.language]) else { return nil }
+                    let name = Self.originalName(local.first { $0.trackId == id }, query: query)
+                    LyricTrace.note("iTunes JP name for “\(match.trackName ?? "")”: " + (name.map { "“\($0.title)”" } ?? "the same, or not native script"))
+                    return .some(name)
+                }
+                if let found = Self.nativeMatch(listed, query: query) {
+                    LyricTrace.note("iTunes \(storefront): the song is listed as “\(found.title)”")
+                    return .some(found)
+                }
+                LyricTrace.note("iTunes \(storefront): no catalogue entry with this title, artist and length (±\(window) s)")
+            } else {
+                failed = true
+            }
+            guard !Task.isCancelled else { return nil }
         }
-        guard let local = await fetch("lookup", ["id": String(id), "country": Self.original.country,
-                                                  "lang": Self.original.language]) else { return nil }
-        let name = Self.originalName(local.first { $0.trackId == id }, query: query)
-        LyricTrace.note("iTunes JP name for “\(match.trackName ?? "")”: " + (name.map { "“\($0.title)”" } ?? "the same, or not native script"))
-        return .some(name)
+        // Japan's own storefront knows a Japanese song by its English title too.
+        guard let local = await fetch("search", ["term": query.title, "entity": "song", "country": Self.original.country,
+                                                 "lang": Self.original.language, "limit": "25"]) else { return nil }
+        LyricTrace.results("iTunes \(Self.original.country) search", returned: local.count, read: local.count)
+        if let found = Self.nativeMatch(local, query: query) {
+            LyricTrace.note("iTunes JP: the song is listed as “\(found.title)”")
+            return .some(found)
+        }
+        LyricTrace.note("iTunes JP: no entry by this artist under another name, of this length (±\(window) s)")
+        // A failed first search is asked again next time rather than remembered as "none".
+        return failed ? nil : .some(nil)
     }
 
     struct Reply: Decodable { var results: [Song] }
@@ -210,7 +246,7 @@ actor OriginalTitles {
     }
 
     /// The catalogue entry for the playing song: the same title and artist,
-    /// and the length nearest the playing one, within 3 s.
+    /// and the length nearest the playing one, within `tolerance`.
     static func match(_ results: [Song], query: LyricQuery) -> Song? {
         results.filter { song in
             guard let name = song.trackName, song.trackId != nil,
@@ -218,12 +254,29 @@ actor OriginalTitles {
                   VersionTags.tags(name) == VersionTags.tags(query.title),
                   ArtworkProvider.artistMatches(song.artistName, wanted: query.artist) else { return false }
             guard let millis = song.trackTimeMillis, millis > 0 else { return true }
-            return abs(Double(millis) / 1000 - query.duration) <= 3
+            return abs(Double(millis) / 1000 - query.duration) <= tolerance(query.duration)
         }.min { distance($0, query) < distance($1, query) }
     }
 
     private static func distance(_ song: Song, _ query: LyricQuery) -> Double {
-        song.trackTimeMillis.map { abs(Double($0) / 1000 - query.duration) } ?? 3
+        song.trackTimeMillis.map { abs(Double($0) / 1000 - query.duration) } ?? tolerance(query.duration)
+    }
+
+    /// The song a search found by its listed title though the catalogue
+    /// names it in native script: the first entry by the artist that names
+    /// the playing version (other versions, "English Version" among them,
+    /// are passed over), when its name is native and its length fits. Only
+    /// the first counts, as the search ranks the song it matched by name
+    /// first; a later entry may be another song of the artist's.
+    static func nativeMatch(_ results: [Song], query: LyricQuery) -> Found? {
+        let wanted = VersionTags.tags(query.title)
+        guard let first = results.first(where: { song in
+                  guard let name = song.trackName, song.trackId != nil else { return false }
+                  return ArtworkProvider.artistMatches(song.artistName, wanted: query.artist) && VersionTags.tags(name) == wanted
+              }),
+              let millis = first.trackTimeMillis, millis > 0,
+              abs(Double(millis) / 1000 - query.duration) <= tolerance(query.duration) else { return nil }
+        return originalName(first, query: query)
     }
 
     /// The entry's name in the original storefront, when it is another name
@@ -276,35 +329,60 @@ extension LyricsFetcher {
     static let originalTitleSources: Set<LyricSourceID> = [.lrclib, .netEase, .qqMusic, .kugou, .kuwo, .lyricsPlus, .amll]
 
     /// A source's answer, searched again under the song's original title
-    /// (`OriginalTitles`) when the listed title found nothing usable: no
-    /// match, a language version ("English Version") the title does not
-    /// name, or, for an East Asian genre, lyrics in Latin script only. A
-    /// match found that way is recorded under the listed title (it is the
-    /// same song) and marked `viaOriginalTitle`. A title that names a
-    /// language version, or is already in native script, is not searched again.
+    /// (`OriginalTitles`) when the listed title found nothing usable: a
+    /// language version ("English Version") the title does not name, or,
+    /// for an East Asian genre, lyrics in Latin script only. For an artist
+    /// who sings in Chinese, Japanese or Korean (`eastAsianArtist`) it is
+    /// searched again too when the listed title found nothing, or only
+    /// lyrics in Latin script (an English version under the English title
+    /// many storefronts list the song by), unless they are Apple's own,
+    /// relayed by Lyrics+, for the listed entry. Other artists' songs are
+    /// not searched again for want of a match. A match found that way, in
+    /// the song's own script, is used instead: it is recorded under the
+    /// listed title (it is the same song) and marked `viaOriginalTitle`, so
+    /// the other sources' Latin-only lyrics rank as another language's
+    /// (`LyricLanguage.expected`). A title that names a language version, or
+    /// is already in native script, is not searched again.
     static func withOriginalTitle(_ id: LyricSourceID, query: LyricQuery, titles: OriginalTitles = .shared,
-                                  enabled: Bool = OriginalTitles.enabled,
+                                  aliases: ArtistAliases = .shared, enabled: Bool = OriginalTitles.enabled,
                                   search: (LyricQuery) async throws -> LyricCandidate?) async throws -> LyricCandidate? {
         LyricTrace.emit(LyricTraceEvent(kind: .variant, message: "listed title", query: LyricTraceQuery(query)))
         let first = try await search(query)
-        guard enabled, originalTitleSources.contains(id), query.hasArtist, query.duration > 0,
-              !LyricLanguage.hasNative(query.title),
-              VersionTags.tags(query.title).isDisjoint(with: VersionTags.languages),
-              !usable(first, query: query) else {
+        func keep(_ why: @autoclosure () -> String) -> LyricCandidate? {
             if LyricTrace.isOn {
-                let why = !enabled ? "original-title search is off"
-                    : !originalTitleSources.contains(id) ? "this source is not searched under original titles"
-                    : !query.hasArtist ? "no artist" : query.duration <= 0 ? "no duration"
-                    : LyricLanguage.hasNative(query.title) ? "title already in native script"
-                    : !VersionTags.tags(query.title).isDisjoint(with: VersionTags.languages) ? "title names a language version"
-                    : "listed-title answer is usable"
-                LyricTrace.candidate(first, query: query, kind: .variantResult, message: "kept; no original-title search: " + why)
+                LyricTrace.candidate(first, query: query, kind: .variantResult, message: "kept; no original-title search: " + why())
             }
             return first
         }
-        LyricTrace.candidate(first, query: query, kind: .variantResult,
-                             message: first == nil ? "nothing under the listed title: looking up the original title"
-                                : "not usable (language version or Latin-only lyrics): looking up the original title")
+        guard enabled, originalTitleSources.contains(id), query.hasArtist, query.duration > 0,
+              !LyricLanguage.hasNative(query.title),
+              VersionTags.tags(query.title).isDisjoint(with: VersionTags.languages) else {
+            return keep(!enabled ? "original-title search is off"
+                : !originalTitleSources.contains(id) ? "this source is not searched under original titles"
+                : !query.hasArtist ? "no artist" : query.duration <= 0 ? "no duration"
+                : LyricLanguage.hasNative(query.title) ? "title already in native script"
+                : "title names a language version")
+        }
+        let reason: String
+        if usable(first, query: query) {
+            guard let first, LyricLanguage.script(of: first) == .latin, !isAppleRelay(first) else {
+                return keep("listed-title answer is usable")
+            }
+            guard await eastAsianArtist(query, aliases: aliases) else {
+                return keep("listed-title answer is usable (no sign the artist sings in Chinese, Japanese or Korean)")
+            }
+            try Task.checkCancellation()
+            reason = "Latin-script lyrics, for an East Asian artist: looking up the original title"
+        } else if first == nil {
+            guard await eastAsianArtist(query, aliases: aliases) else {
+                return keep("nothing under the listed title, and no sign the artist sings in Chinese, Japanese or Korean")
+            }
+            try Task.checkCancellation()
+            reason = "nothing under the listed title: looking up the original title"
+        } else {
+            reason = "not usable (language version or Latin-only lyrics): looking up the original title"
+        }
+        LyricTrace.candidate(first, query: query, kind: .variantResult, message: reason)
         guard let original = await titles.original(for: query) else {
             LyricTrace.note("no original title found (iTunes JP): listed-title answer kept")
             return first
@@ -335,6 +413,19 @@ extension LyricsFetcher {
             found.viaOriginalTitle = true
             return found
         }
+    }
+
+    /// Whether the artist sings in Chinese, Japanese or Korean, as far as
+    /// the song or MusicBrainz says: an East Asian genre, an artist or album
+    /// name in native script, or an artist MusicBrainz places in Japan,
+    /// Korea, China, Taiwan or Hong Kong (`ArtistAliases.isEastAsian`, one
+    /// request per artist, shared with the alias search and kept 30 days).
+    static func eastAsianArtist(_ query: LyricQuery, aliases: ArtistAliases) async -> Bool {
+        if LyricLanguage.eastAsianGenre(query.genre) || LyricLanguage.hasNative(query.artist)
+            || LyricLanguage.hasNative(query.album ?? "") { return true }
+        let found = await aliases.isEastAsian(query.artist)
+        LyricTrace.note("MusicBrainz: “\(query.artist)” " + (found ? "is an East Asian artist" : "is not known as an East Asian artist"))
+        return found
     }
 
     /// Whether a source's answer under the listed title can stand: it names

@@ -175,18 +175,31 @@ final class LanguageVersionTests: XCTestCase {
 
     // MARK: - Original title
 
+    /// iTunes (searches in Japan answered apart when `searchJP` is set) and
+    /// MusicBrainz, whose requests are counted apart.
     private final class Catalogue: URLProtocol {
         nonisolated(unsafe) static var search = Data()
+        nonisolated(unsafe) static var searchJP: Data?
         nonisolated(unsafe) static var lookup = Data()
+        nonisolated(unsafe) static var brainz = Data()
         nonisolated(unsafe) static var asked: [URL] = []
+        nonisolated(unsafe) static var brainzAsked = 0
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
         override func startLoading() {
             let url = request.url!
-            Catalogue.asked.append(url)
+            let body: Data
+            if url.host == "musicbrainz.org" {
+                Catalogue.brainzAsked += 1
+                body = Catalogue.brainz
+            } else {
+                Catalogue.asked.append(url)
+                let japan = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "country" && $0.value == "jp" } == true
+                body = url.path == "/lookup" ? Catalogue.lookup : japan ? Catalogue.searchJP ?? Catalogue.search : Catalogue.search
+            }
             client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!,
                                 cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: url.path == "/lookup" ? Catalogue.lookup : Catalogue.search)
+            client?.urlProtocol(self, didLoad: body)
             client?.urlProtocolDidFinishLoading(self)
         }
         override func stopLoading() {}
@@ -215,17 +228,30 @@ final class LanguageVersionTests: XCTestCase {
     {"resultCount":1,"results":[{"trackId":1001,"artistName":"YOASOBI","trackName":"Racing into the Night","trackTimeMillis":258000}]}
     """.utf8)
 
+    /// MusicBrainz's answers (trimmed): an artist placed in Japan, and one in the US.
+    static let japaneseArtist = Data(#"{"artists":[{"name":"YOASOBI","score":100,"country":"JP","area":{"name":"Japan"},"aliases":[{"name":"요아소비","locale":"ko"}]}]}"#.utf8)
+    static let westernArtist = Data(#"{"artists":[{"name":"YOASOBI","score":100,"area":{"name":"Los Angeles"}}]}"#.utf8)
+
     private var folder: URL!
     private var titles: OriginalTitles!
+    private var aliases: ArtistAliases!
+
+    private func session() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [Catalogue.self]
+        return URLSession(configuration: config)
+    }
 
     override func setUp() {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [Catalogue.self]
-        titles = OriginalTitles(folder: folder, session: URLSession(configuration: config), storefront: "us", spacing: 0)
+        titles = OriginalTitles(folder: folder, session: session(), storefront: "us", spacing: 0)
+        aliases = ArtistAliases(folder: folder, session: session())
         Catalogue.asked = []
+        Catalogue.brainzAsked = 0
         Catalogue.search = Self.listed
+        Catalogue.searchJP = nil
         Catalogue.lookup = Self.original
+        Catalogue.brainz = Self.japaneseArtist
     }
     override func tearDown() { try? FileManager.default.removeItem(at: folder) }
 
@@ -244,9 +270,7 @@ final class LanguageVersionTests: XCTestCase {
         XCTAssertEqual(lookup.queryItems?.first { $0.name == "lang" }?.value, "ja_jp")
         // Remembered, also on disk: asked once.
         _ = await titles.original(for: query("racing into the  NIGHT"))
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [Catalogue.self]
-        let reopened = OriginalTitles(folder: folder, session: URLSession(configuration: config), storefront: "us", spacing: 0)
+        let reopened = OriginalTitles(folder: folder, session: session(), storefront: "us", spacing: 0)
         let again = await reopened.original(for: query("Racing into the Night"))
         XCTAssertEqual(again?.title, "夜に駆ける")
         XCTAssertEqual(Catalogue.asked.count, 2)
@@ -265,14 +289,14 @@ final class LanguageVersionTests: XCTestCase {
         Catalogue.lookup = Self.original
         let far = await titles.original(for: other)
         XCTAssertNil(far)
-        XCTAssertEqual(Catalogue.asked.count, 3, "searched, but no entry of that length")
+        XCTAssertEqual(Catalogue.asked.count, 4, "searched here and in Japan, but no entry of that length")
     }
 
     func testFallbackSearchesUnderTheJapaneseTitle() async throws {
         nonisolated(unsafe) var asked: [String] = []
         let playing = query("Racing into the Night")
         let japanese = candidate(.lrclib, Self.japanese, title: "夜に駆ける", words: true)
-        let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: playing, titles: titles, enabled: true) { q in
+        let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: playing, titles: titles, aliases: aliases, enabled: true) { q in
             asked.append(q.title)
             return q.title == "夜に駆ける" ? japanese : nil
         }
@@ -287,14 +311,14 @@ final class LanguageVersionTests: XCTestCase {
         let japanese = candidate(.kugou, Self.japanese, title: "夜に駆ける", words: true)
         // "English Version" under the listed title.
         let tagged = candidate(.kugou, Self.english, title: "Racing into the Night (English Version)", words: true)
-        var found = try await LyricsFetcher.withOriginalTitle(.kugou, query: query("Racing into the Night"), titles: titles, enabled: true) { q in
+        var found = try await LyricsFetcher.withOriginalTitle(.kugou, query: query("Racing into the Night"), titles: titles, aliases: aliases, enabled: true) { q in
             q.title == "夜に駆ける" ? japanese : tagged
         }
         XCTAssertTrue(found?.viaOriginalTitle == true)
         // English lyrics with no tag, for a J-Pop song.
         let untagged = candidate(.kugou, Self.english, title: "Racing into the Night", words: true)
         found = try await LyricsFetcher.withOriginalTitle(.kugou, query: query("Racing into the Night", genre: "J-Pop"),
-                                                          titles: titles, enabled: true) { q in
+                                                          titles: titles, aliases: aliases, enabled: true) { q in
             q.title == "夜に駆ける" ? japanese : untagged
         }
         XCTAssertTrue(found?.viaOriginalTitle == true)
@@ -304,16 +328,16 @@ final class LanguageVersionTests: XCTestCase {
     func testFallbackAsksNothingWhenTheListedTitleFoundTheSong() async throws {
         let japanese = candidate(.netEase, Self.japanese, title: "Racing into the Night", words: true)
         let first = try await LyricsFetcher.withOriginalTitle(.netEase, query: query("Racing into the Night", genre: "J-Pop"),
-                                                              titles: titles, enabled: true) { _ in japanese }
+                                                              titles: titles, aliases: aliases, enabled: true) { _ in japanese }
         XCTAssertFalse(first?.viaOriginalTitle == true)
         // English lyrics for a song that names its English version are wanted.
         nonisolated(unsafe) var searches = 0
         let second = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Idol (English Version)", genre: "J-Pop"),
-                                                               titles: titles, enabled: true) { _ in searches += 1; return nil }
+                                                               titles: titles, aliases: aliases, enabled: true) { _ in searches += 1; return nil }
         XCTAssertNil(second)
         // Not a source searched again, or the setting is off.
-        _ = try await LyricsFetcher.withOriginalTitle(.lyricsOVH, query: query("Racing into the Night"), titles: titles, enabled: true) { _ in nil }
-        _ = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Racing into the Night"), titles: titles, enabled: false) { _ in nil }
+        _ = try await LyricsFetcher.withOriginalTitle(.lyricsOVH, query: query("Racing into the Night"), titles: titles, aliases: aliases, enabled: true) { _ in nil }
+        _ = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Racing into the Night"), titles: titles, aliases: aliases, enabled: false) { _ in nil }
         XCTAssertEqual(searches, 1)
         XCTAssertEqual(Catalogue.asked.count, 0)
     }
@@ -321,10 +345,131 @@ final class LanguageVersionTests: XCTestCase {
     func testFallbackKeepsTheFirstAnswerWhenTheOriginalTitleFindsOnlyEnglish() async throws {
         let english = candidate(.lrclib, Self.english, title: "夜に駆ける", words: true)
         let first = candidate(.lrclib, Self.english, title: "Racing into the Night (English Version)", words: true)
-        let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Racing into the Night"), titles: titles, enabled: true) { q in
+        let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Racing into the Night"), titles: titles, aliases: aliases, enabled: true) { q in
             q.title == "夜に駆ける" ? english : first
         }
         XCTAssertEqual(found?.title, "Racing into the Night (English Version)")
         XCTAssertFalse(found?.viaOriginalTitle == true)
+    }
+
+    // MARK: - East Asian artists listed under an English title
+
+    /// iTunes answers in the shapes the live catalogue gave (trimmed; ids and
+    /// lengths invented): where the storefront lists the song natively,
+    /// search finds it by its English title, first.
+    static let listedNatively = Data("""
+    {"resultCount":3,"results":[
+     {"trackId":2001,"artistName":"YOASOBI","collectionName":"夜に駆ける - Single","trackName":"夜に駆ける","trackTimeMillis":259500},
+     {"trackId":2002,"artistName":"YOASOBI","collectionName":"E-SIDE","trackName":"Into The Night (English Version)","trackTimeMillis":259000},
+     {"trackId":2003,"artistName":"Someone Else","collectionName":"Night","trackName":"Racing into the Night","trackTimeMillis":258000}]}
+    """.utf8)
+    /// A storefront that lists neither: a live take first, then covers.
+    static let notListed = Data("""
+    {"resultCount":3,"results":[
+     {"trackId":3001,"artistName":"YOASOBI","collectionName":"Into The Night - From THE FIRST TAKE - Single","trackName":"Into The Night - From THE FIRST TAKE","trackTimeMillis":248000},
+     {"trackId":2002,"artistName":"YOASOBI","collectionName":"E-SIDE","trackName":"Into The Night (English Version)","trackTimeMillis":259000},
+     {"trackId":2003,"artistName":"Someone Else","collectionName":"Night","trackName":"Racing into the Night","trackTimeMillis":258000}]}
+    """.utf8)
+    /// Japan's storefront searched by the English title alone.
+    static let japanByTitle = Data("""
+    {"resultCount":3,"results":[
+     {"trackId":4001,"artistName":"Another Band","collectionName":"Racing Into The Night","trackName":"Racing Into The Night","trackTimeMillis":206000},
+     {"trackId":2002,"artistName":"YOASOBI","collectionName":"E-SIDE","trackName":"Into The Night (English Version)","trackTimeMillis":259000},
+     {"trackId":2001,"artistName":"YOASOBI","collectionName":"夜に駆ける - Single","trackName":"夜に駆ける","trackTimeMillis":259500}]}
+    """.utf8)
+
+    func testFindsTheSongWhereTheStorefrontListsItUnderItsNativeName() async {
+        Catalogue.search = Self.listedNatively
+        let found = await titles.original(for: query("Racing into the Night"))
+        XCTAssertEqual(found, OriginalTitles.Found(title: "夜に駆ける", album: "夜に駆ける - Single"))
+        XCTAssertEqual(Catalogue.asked.count, 1, "no second request")
+    }
+
+    func testSearchesJapanWhenThisStorefrontHasNoEntry() async throws {
+        Catalogue.search = Self.notListed
+        Catalogue.searchJP = Self.japanByTitle
+        let found = await titles.original(for: query("Racing into the Night"))
+        XCTAssertEqual(found?.title, "夜に駆ける")
+        XCTAssertEqual(Catalogue.asked.count, 2)
+        let japan = try XCTUnwrap(URLComponents(url: Catalogue.asked[1], resolvingAgainstBaseURL: false))
+        XCTAssertEqual(japan.path, "/search")
+        XCTAssertEqual(japan.queryItems?.first { $0.name == "country" }?.value, "jp")
+        XCTAssertEqual(japan.queryItems?.first { $0.name == "term" }?.value, "Racing into the Night")
+        // A Mac in Japan is no longer turned away: it searches Japan directly.
+        Catalogue.asked = []
+        let japanese = OriginalTitles(folder: folder.appendingPathComponent("jp"), session: session(), storefront: "jp", spacing: 0)
+        let there = await japanese.original(for: query("Racing into the Night"))
+        XCTAssertEqual(there?.title, "夜に駆ける")
+        XCTAssertEqual(Catalogue.asked.count, 1)
+    }
+
+    func testOnlyTheArtistsFirstEntryForThePlayingVersionCounts() {
+        func song(_ id: Int, _ name: String, _ seconds: Double, artist: String = "YOASOBI") -> OriginalTitles.Song {
+            .init(trackId: id, trackName: name, artistName: artist, collectionName: nil, trackTimeMillis: Int(seconds * 1000))
+        }
+        // Another song of the artist's first: not guessed from a later entry.
+        XCTAssertNil(OriginalTitles.nativeMatch([song(1, "ハルカ", 243), song(2, "夜に駆ける", 258)], query: query("Racing into the Night")))
+        // Other versions are passed over; a length too far off is not the song.
+        XCTAssertEqual(OriginalTitles.nativeMatch([song(1, "夜に駆ける (Live)", 300), song(2, "夜に駆ける", 260)],
+                                                  query: query("Racing into the Night"))?.title, "夜に駆ける")
+        XCTAssertNil(OriginalTitles.nativeMatch([song(2, "夜に駆ける", 252)], query: query("Racing into the Night")))
+        // Another artist's song, or a Latin name, is not an original title.
+        XCTAssertNil(OriginalTitles.nativeMatch([song(2, "夜に駆ける", 258, artist: "Someone Else")], query: query("Racing into the Night")))
+        XCTAssertNil(OriginalTitles.nativeMatch([song(2, "Yoru ni kakeru", 258)], query: query("Racing into the Night")))
+        // Lengths fit within 3 s, or 2% of a long song, as recordings are matched.
+        var long = query("Racing into the Night")
+        long.duration = 400
+        XCTAssertNotNil(OriginalTitles.match([song(5, "Racing into the Night", 407)], query: long))
+        XCTAssertNil(OriginalTitles.match([song(5, "Racing into the Night", 409)], query: long))
+        XCTAssertNotNil(OriginalTitles.match([song(5, "Racing into the Night", 263)], query: query("Racing into the Night")))
+        XCTAssertNil(OriginalTitles.match([song(5, "Racing into the Night", 264)], query: query("Racing into the Night")))
+    }
+
+    func testAnEnglishVersionUnderTheListedTitleGivesWayForAnEastAsianArtist() async throws {
+        // LRCLIB's exact match under the English title is the English recording, untagged.
+        let english = candidate(.lrclib, Self.english, title: "Racing into the Night", words: true)
+        let japanese = candidate(.lrclib, Self.japanese, title: "夜に駆ける", words: true)
+        let playing = query("Racing into the Night")
+        let found = try await LyricsFetcher.withOriginalTitle(.lrclib, query: playing, titles: titles, aliases: aliases, enabled: true) { q in
+            q.title == "夜に駆ける" ? japanese : english
+        }
+        XCTAssertEqual(Catalogue.brainzAsked, 1)
+        XCTAssertTrue(found?.viaOriginalTitle == true)
+        XCTAssertEqual(LyricLanguage.script(of: try XCTUnwrap(found)), .native)
+        // Another source's English lyrics now rank as another language's.
+        let other = candidate(.kugou, Self.english, title: "Racing into the Night", words: true)
+        let ranked = LyricsFetcher.ranked([other, try XCTUnwrap(found)], query: playing, options: options)
+        XCTAssertEqual(ranked.first?.source, .lrclib)
+        XCTAssertTrue(ranked.last?.languageMismatch == true)
+    }
+
+    func testWesternArtistsAreNotSearchedUnderAnOriginalTitle() async throws {
+        Catalogue.brainz = Self.westernArtist
+        let english = candidate(.lrclib, Self.english, title: "Racing into the Night", words: true)
+        // Apple's own lyrics, relayed by Lyrics+, for the listed entry: nothing is asked at all.
+        let relay = LyricCandidate(source: .lyricsPlus, result: english.result.relabelled("Apple" + LyricsFetcher.lyricsPlusSuffix),
+                                   title: "Racing into the Night", artist: "YOASOBI", duration: nil, score: 0)
+        _ = try await LyricsFetcher.withOriginalTitle(.lyricsPlus, query: query("Racing into the Night"), titles: titles,
+                                                      aliases: aliases, enabled: true) { _ in relay }
+        XCTAssertEqual(Catalogue.brainzAsked, 0)
+        // Latin-script lyrics, or none, for an artist MusicBrainz places elsewhere: no catalogue search.
+        let kept = try await LyricsFetcher.withOriginalTitle(.lrclib, query: query("Racing into the Night"), titles: titles,
+                                                             aliases: aliases, enabled: true) { _ in english }
+        XCTAssertEqual(kept?.title, "Racing into the Night")
+        let none = try await LyricsFetcher.withOriginalTitle(.netEase, query: query("Racing into the Night"), titles: titles,
+                                                             aliases: aliases, enabled: true) { _ in nil }
+        XCTAssertNil(none)
+        XCTAssertEqual(Catalogue.asked.count, 0, "no iTunes request")
+        XCTAssertEqual(Catalogue.brainzAsked, 1, "one MusicBrainz request for the artist, kept")
+    }
+}
+
+private extension LyricsFetcher.Result {
+    /// The same lines under another source label.
+    func relabelled(_ source: String) -> LyricsFetcher.Result {
+        switch self {
+        case .synced(let lines, let p): return .synced(lines, .init(precision: p.precision, source: source))
+        case .plain(let lines, let p): return .plain(lines, .init(precision: p.precision, source: source))
+        }
     }
 }

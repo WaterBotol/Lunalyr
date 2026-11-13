@@ -94,7 +94,12 @@ final class LyricSourceOptions: ObservableObject {
         /// timing (`LyricsFetcher.isPhraseTimed`); Apple's lyrics relayed by
         /// Lyrics+ rank as Apple Music's.
         /// v15: a Lyrics+ mirror's "qApple" is Apple's lyrics too.
-        static let cachePolicy = "v15"
+        /// v16: Lyrics+ answers timed only by line are kept (as Apple's line
+        /// timing); an East Asian artist's song listed under an English title
+        /// is searched under its original title even when Latin-script
+        /// lyrics (an English version) were found, and NetEase search works
+        /// again (no cookies).
+        static let cachePolicy = "v16"
         /// Keys the cached online choice. Only settings that change which
         /// online result wins take part: local sources are always evaluated
         /// afresh.

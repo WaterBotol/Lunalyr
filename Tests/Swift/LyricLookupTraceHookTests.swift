@@ -132,13 +132,15 @@ final class LyricLookupTraceHookTests: XCTestCase {
     func testRecordsTheOriginalTitleVariantAndWhyTheListedAnswerWasPassedOver() async throws {
         let recorder = LyricLookupTraceRecorder()
         let titles = OriginalTitles(folder: folder, session: Stub.session, storefront: "us", spacing: 0)
-        let racing = LyricQuery(title: "Racing into the Night", artist: "YOASOBI", album: nil, duration: 258)
+        let aliases = ArtistAliases(folder: folder, session: Stub.session)
+        var racing = LyricQuery(title: "Racing into the Night", artist: "YOASOBI", album: nil, duration: 258)
+        racing.genre = "J-Pop"
         let japanese = LyricCandidate(source: .lrclib, result: .plain(Array(repeating: "沈むように溶けてゆくように", count: 6),
                                                                       .init(precision: "Not synced", source: "LRCLIB")),
                                       title: "夜に駆ける", artist: "YOASOBI", duration: 258, score: 90)
         let found = try await LyricTrace.$tracer.withValue(recorder) {
             try await LyricTrace.within(source: .lrclib) {
-                try await LyricsFetcher.withOriginalTitle(.lrclib, query: racing, titles: titles, enabled: true) { q in
+                try await LyricsFetcher.withOriginalTitle(.lrclib, query: racing, titles: titles, aliases: aliases, enabled: true) { q in
                     q.title == "夜に駆ける" ? japanese : nil
                 }
             }
