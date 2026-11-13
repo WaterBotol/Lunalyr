@@ -357,6 +357,18 @@ public class LyricCardExportTests
         Assert.Equal(13.0 / 3, LyricCardLayout.Weight(["沈むように溶けてゆくように"]), 9);
     }
 
+    // The Mac's cards draw a line and its reading, never a translation: Show translations under lyrics (on in the
+    // wallpaper's style the card copies) doesn't reach them.
+    [Fact]
+    public void ACardNeverDrawsATranslation()
+    {
+        var content = Content(CardAspect.Portrait);
+        var translated = content.Pages[0].Animation! with { Line = content.Pages[0].Animation!.Line with { Translation = "Pero ignoré tu llamada" } };
+        var look = Lunalyr.Render.Cards.CardLook.ForCard(PaletteMapper.Fallback, null, LyricStyle.Default with { Translations = true });
+        var scene = Lunalyr.Render.Cards.CardPageScene.For(translated, content, look);
+        Assert.False(scene.Scene.Style.Translations);
+    }
+
     // Windows' own: after its first frame a GIF holds only what changed, transparent elsewhere; read back, every frame is
     // the whole picture again (as a browser composes it).
     [Fact]
