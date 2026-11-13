@@ -304,7 +304,7 @@ final class StageReadingTests: XCTestCase {
     }
 
     /// Broadside keeps its words on one line: a reading hangs below its
-    /// word, and a label lies across the word, not its reading.
+    /// word, and a label rides above the word itself, not its reading.
     func testBroadsideKeepsWordsOnTheLine() {
         let bounds = CGRect(x: 0, y: 0, width: 1000, height: 400)
         let slot: CGFloat = 40
@@ -314,9 +314,16 @@ final class StageReadingTests: XCTestCase {
                                                     unit: 40, in: bounds)
         XCTAssertEqual(places[0].y - slot / 2, bounds.midY, accuracy: 0.01, "The word, not its reading, sits on the line")
         XCTAssertEqual(places[2].y, bounds.midY, accuracy: 0.01)
-        XCTAssertEqual(places[1].y, bounds.midY + 100 * 0.2, accuracy: 0.01, "The label lies across the word")
-        let plain = StageLyricView.broadsidePlaces(measured.map { CGSize(width: $0.width, height: 100) }, little: little,
-                                                   slots: [0, 0, 0], moves: [1, 1, 1], unit: 40, in: bounds)
+        // The label rides on the shoulder of the word before: above its
+        // letters (it used to lie across them), flush with its end.
+        XCTAssertLessThanOrEqual(places[1].y + 15, bounds.midY - 100 * 0.36, "The label is clear of the word's letters")
+        XCTAssertEqual(places[1].x + 30, places[0].x + 100, accuracy: 0.01, "The label is flush with the word's end")
+        // Without the reading, the label sits in the same place: it rides on
+        // the word, not on the word and its reading. (The label keeps its own
+        // height, which now sets how far above the word its centre sits.)
+        let plainSizes = [CGSize(width: 200, height: 100), measured[1], CGSize(width: 220, height: 100)]
+        let plain = StageLyricView.broadsidePlaces(plainSizes, little: little, slots: [0, 0, 0], moves: [1, 1, 1],
+                                                   unit: 40, in: bounds)
         XCTAssertEqual(plain[1].y, places[1].y, accuracy: 0.01)
     }
 
