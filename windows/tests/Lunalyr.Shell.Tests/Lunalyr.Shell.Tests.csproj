@@ -19,5 +19,9 @@
     <Compile Include="..\Shared\**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- The silent GSMTC stand-in the now-playing tests already use. -->
     <Compile Include="..\Lunalyr.Platform.Windows.Tests\NowPlaying\FakeMediaSessionSource.cs" Link="Fakes\FakeMediaSessionSource.cs" />
+    <!-- Animated covers end to end: the replies recorded from Apple's public pages, and the silent generated clip as the
+         downloaded video. -->
+    <None Include="..\Lunalyr.Core.Tests\Fixtures\MotionArtwork\*" Link="Fixtures\MotionArtwork\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\clip.mp4" Link="Fixtures\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

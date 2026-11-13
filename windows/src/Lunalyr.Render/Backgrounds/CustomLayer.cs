@@ -40,7 +40,7 @@ public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer
 {
     private protected readonly WallpaperPlacement Placement;
     private protected readonly Logger Log;
-    private protected readonly string Path;
+    private protected string Path;
     private readonly WallpaperShadeDrawer _shade;
     private protected Vector2 Size;
     private protected float Scale = 1;
@@ -92,10 +92,19 @@ public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer
         {
             Fail(ex);
         }
-        _shade.Draw(frame, Luminance, scrim: true, grain: false);
+        _shade.Draw(frame, Luminance, scrim: DrawsScrim, grain: false, stageShade: StageShade(frame.Scene));
     }
 
     private protected abstract void DrawContent(in FrameContext frame);
+
+    /// <summary>Whether the shared top-to-bottom scrim is drawn (a layer with a shade of its own leaves it out).</summary>
+    private protected virtual bool DrawsScrim => true;
+
+    /// <summary>The shade a layer lays at the stage itself, for the automatic text backing; null: the scrim's.</summary>
+    private protected virtual double? StageShade(SceneSnapshot scene) => null;
+
+    /// <summary>The darkening the scene asks for ("Darkening" times the options').</summary>
+    private protected double Darkening(SceneSnapshot scene) => _shade.Darkening(scene);
 
     private protected abstract void Fail(Exception ex);
 

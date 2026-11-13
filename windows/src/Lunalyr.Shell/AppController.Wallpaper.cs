@@ -53,6 +53,8 @@ public sealed partial class AppController
             case "visualizer":
                 return WallpaperCatalog.VisualiserLayerFor(settings);
         }
+        // Match the music: an animated cover, when the album has one, wins (AppController.MotionArtwork.cs).
+        if (settings.BackgroundMode == "auto" && MotionLayerFor(settings) is { } motion) return motion;
         // Match the music, GPU effects, Line patterns (and Music video, not in this build, as Match the music).
         TrackCharacter? song;
         lock (_gate) song = _wallpaperCharacter;

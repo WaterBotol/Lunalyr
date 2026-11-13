@@ -91,6 +91,7 @@ public sealed partial record AppSettings
         Darkening = ScrimStrength,
         ManualBacking = TextBackingAutomatic ? null : TextBacking,
         PatternOpacity = PatternOpacity,
+        Softening = MotionBlur,
     };
 
     /// <summary>
