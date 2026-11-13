@@ -72,6 +72,31 @@ public class LyricCardBackgroundTests
         Assert.True(At(background.FrameAt(0.35), 32, 12).R > 200);
     }
 
+    // Windows' own: the GIF writer stores only the rectangle that changed. A repeated frame (a held line), a single
+    // changed pixel and a change in the far corner all encode, keep their delays, and read back over the frame before.
+    [Fact]
+    public async Task UnchangedAndTinyChangesEncodeAndReadBack()
+    {
+        using var media = new CardMedia();
+        var red = Solid(64, 255, 0, 0);
+        var dot = (byte[])red.Clone();
+        dot[(10 * 64 + 20) * 4 + 1] = 255; // (20, 10) turns yellow
+        var corner = (byte[])dot.Clone();
+        corner[(63 * 64 + 63) * 4] = 255; // (63, 63) turns magenta
+        var path = media.File("held.gif");
+        File.WriteAllBytes(path, CardImages.EncodeGif([(red, 0.1), (red, 0.1), (dot, 0.1), (corner, 0.1), (corner, 0.1)], 64, 64, Token)!);
+        using var background = await Load(path);
+        Assert.Equal(CardBackgroundKind.AnimatedImage, background.Info.Kind);
+        Assert.Equal(0.5, background.Info.Duration, 3);
+        Assert.True(At(background.FrameAt(0.15), 32, 12).R > 200);
+        var shown = background.FrameAt(0.25);
+        Assert.True(At(shown, 20, 10) is { R: > 200, G: > 200 });
+        Assert.True(At(shown, 32, 12) is { R: > 200, G: < 60 });
+        var last = background.FrameAt(0.45);
+        Assert.True(At(last, 63, 63) is { R: > 200, B: > 200 });
+        Assert.True(At(last, 20, 10) is { R: > 200, G: > 200 });
+    }
+
     // Ported from LyricCardBackgroundTests.swift: testAVideoBackgroundPlaysUnderTheLyrics
     [Fact]
     public async Task AVideoBackgroundPlaysUnderTheLyrics()

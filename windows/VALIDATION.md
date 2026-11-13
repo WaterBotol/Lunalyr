@@ -130,3 +130,18 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Floating lyrics (M7) | unit (27 Mac tests) + live window flags + back buffer | `docs/previews/floating/`, `docs/previews/live-m6/floating-backbuffer.png` |
 | Line setup sliced across frames | offscreen bench before/after | `docs/measurements/line-setup/` |
 | Real YouTube, system audio, 280 Hz monitor, full-screen apps | needs the owner | Test Build 6 README |
+
+## Milestone 7: floating lyrics, shortcuts and links, Discord and tray lyric, lyric cards
+
+2922 tests (2921 pass, 1 skipped opt-in) at Test Build 7. Report: [docs/milestones/M7.md](docs/milestones/M7.md).
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Floating lyrics | unit (27 Mac tests) + live window flags + back buffer | `docs/previews/floating/` |
+| Global shortcuts | unit + live `WM_HOTKEY` posted (no key pressed) | M7.md "Shortcuts, links and HUD" |
+| `lunalyr://` links (first and second launch) | unit (command-line oddities) + **live** on Test Build 7 (`card`, `toggle` ×2) | `docs/previews/m7-merged/` |
+| Action HUD | unit + live bitmaps via `--hud-capture`, window flags | `docs/previews/m7-merged/hud-*.png` |
+| Tray lyric strip | unit (10 Mac tests) + live line and paused note, never foreground | `docs/previews/m7-merged/strip-*.png` |
+| Discord status | unit (27 Mac tests, fake pipe) + live against a stand-in pipe (handshake, activity, clear) | `docs/previews/m7-merged/discord-standin-frames.txt` |
+| Lyric cards (PNG, GIF, MP4 with sound) | unit + previews + AOT export, mixes decoded and measured; window live via `--lyric-card` and the link | `docs/previews/lyric-cards/`, `docs/previews/m7-merged/card-from-link-dark.png` |
+| Real Discord, real key presses, song recording (WASAPI loopback), Save/Copy pickers | needs the owner | Test Build 7 README |
