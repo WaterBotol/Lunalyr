@@ -47,4 +47,4 @@ Out of scope:
 - Audio for the visualisers is analysed in memory. Nothing is recorded or uploaded, and the microphone is never used.
 - The TTML parser refuses external entities and DTD declarations, and limits input size and nesting depth.
 
-More detail on privacy is in the [README](README.md#privacy).
+More detail on privacy is in [PRIVACY.md](PRIVACY.md).
