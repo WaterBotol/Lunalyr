@@ -1,6 +1,7 @@
 using System.Globalization;
 using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Ranking;
+using Lunalyr.Core.Tests.Lyrics.Sources;
 
 namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 
@@ -62,13 +63,60 @@ public class KPoeParsingTests
         Assert.Equal("Word-by-word", LyricTimingRules.Precision(lines));
     }
 
+    // A line without syllables was dropped until the Mac's 1cdde21 ("Line only" was a row here); it is now a line-timed line.
     [Theory]
     [InlineData("""{"lyrics":[]}""")]
-    [InlineData("""{"lyrics":[{"time":0,"duration":10,"text":"Line only"}]}""")]
+    [InlineData("""{"lyrics":[{"time":0,"duration":10,"text":"   "}]}""")]
     [InlineData("""{"lyrics":[{"time":"0","duration":10,"text":"Bad","syllabus":[]}]}""")]
+    [InlineData("""{"lyrics":[{"time":0,"duration":"10","text":"Bad"}]}""")]
     [InlineData("not json")]
-    public void RepliesWithoutWordTimedLinesOfferNothing(string json)
+    public void RepliesWithoutLinesOfferNothing(string json)
     {
         Assert.Null(KPoeJsonParser.Parse(json));
+    }
+
+    // ---- "type":"Line" replies (the Mac's next/integration 1cdde21, from the Mac session's description) ----------
+
+    /// <summary>
+    /// Recorded for Wallows' "Pleaser" (lyricsplus.binimum.org, 13 Nov 2026; lyric text invented): Apple's lyrics at
+    /// line timing, with empty syllable lists. They are kept as line timing, with estimated words, and still come from
+    /// Apple.
+    /// </summary>
+    [Fact]
+    public void ALineReplyIsKeptAsLineTiming()
+    {
+        var hit = KPoeJsonParser.Parse(Fixtures.Text("lyricsplus/pleaser-line.json"), 187.896);
+        Assert.NotNull(hit);
+        Assert.Equal("Apple", hit.Source); // the node says "qApple"
+        Assert.Equal("Pleaser", hit.Title);
+        Assert.Equal(8, hit.Lines.Count);
+        Assert.All(hit.Lines, line => Assert.False(line.WordTimed));
+        Assert.All(hit.Lines, line => Assert.NotEmpty(line.Words));
+        Assert.Equal((0.808, 4.056), (hit.Lines[0].Start, hit.Lines[0].End));
+        Assert.Equal("Line-synced", LyricTimingRules.Precision(hit.Lines));
+    }
+
+    [Fact]
+    public void ALineWithoutADurationEndsAtTheNextEntry()
+    {
+        const string json = """{"type":"Line","lyrics":[{"time":1000,"text":"First line here"},{"time":4000,"duration":null,"text":"Second line here"},{"time":9000,"text":"Third line here"}]}""";
+        var lines = KPoeJsonParser.Parse(json, 30)!.Lines;
+        Assert.Equal([4.0, 9.0, 30.0], lines.Select(line => line.End));
+        Assert.All(lines, line => Assert.True(line.EndFromNextLine));
+        // Without the track's length, the last line runs 4 s, as an LRC file's does.
+        Assert.Equal(13.0, KPoeJsonParser.Parse(json)!.Lines[^1].End);
+    }
+
+    [Fact]
+    public void AWordReplyWithALineWithoutSyllablesIsMixedTiming()
+    {
+        static string Timed(string text, int start) => string.Create(CultureInfo.InvariantCulture,
+            $$"""{"time":{{start}},"duration":2000,"text":"{{text}}","syllabus":[{"time":{{start}},"duration":900,"text":"{{text.Split(' ')[0]}} "},{"time":{{start + 1000}},"duration":900,"text":"{{text.Split(' ')[1]}}"}]}""");
+        var json = """{"type":"Word","metadata":{"source":"Apple"},"lyrics":[""" + string.Join(",", Timed("Sing along", 1000), Timed("Hold on", 4000),
+            Timed("Let go", 7000), """{"time":10000,"duration":2500,"text":"A line with no syllables","syllabus":[]}""", Timed("Come back", 13000)) + "]}";
+        var lines = KPoeJsonParser.Parse(json)!.Lines;
+        Assert.Equal(5, lines.Count);
+        Assert.Equal([true, true, true, false, true], lines.Select(line => line.WordTimed));
+        Assert.Equal("Mixed timing", LyricTimingRules.Precision(lines));
     }
 }

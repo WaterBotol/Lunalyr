@@ -5,38 +5,55 @@
 //   * The reply has "lyrics": [{time, duration, text, syllabus: [{time, duration, text}]}] in milliseconds, and
 //     "metadata" naming the upstream ("Apple (via Lyrics+)") and, on some nodes, the matched title and artist (as a
 //     string or a list of strings, under "title"/"name" and "artist"/"artists"/"artistName").
-//   * A line runs from time to time + max(duration, 1) ms. Lines with no text after trimming, or no syllables, are
-//     dropped; a reply with no lines left has nothing to offer. A malformed entry makes the reply unreadable.
+//   * A line runs from time to time + max(duration, 1) ms. Lines with no text after trimming are dropped; a reply with
+//     no lines left has nothing to offer. A malformed entry makes the reply unreadable.
 //   * A syllable holds from its time to time + max(duration, 1) ms, and at least 0.06 s unless that passes the end
 //     of its line.
 // Lunalyr's own rule (cache policy v8) is ported as written: syllables written together join into the word they
 // spell, except Han, kana, Hangul and Thai syllables, which stay timed tokens of their own (LyricScript.Words).
+//
+// Line replies (the Mac's next/integration 1cdde21, cache policy v16 there, v19 here; ported from the Mac session's
+// description): a "type":"Line" reply carries entries with time, duration and text and no syllables. They are kept as
+// line timing, with estimated words, instead of being dropped. An entry without a duration ends where the next entry
+// starts; the last one ends with the track, or 4 s after it starts (the LRC parser's rule; the description doesn't say).
+// A word reply with a line that has no syllables keeps that line at line timing, so the reply ranks as mixed timing.
 
 using System.Text.Json;
+using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Lyrics.Parsing;
 
-/// <summary>What a Lyrics+ node returned: word-timed lines, the upstream it pulled them from, and the recording it matched.</summary>
+/// <summary>What a Lyrics+ node returned: its lines (word- or line-timed), the upstream it pulled them from, and the recording it matched.</summary>
 public sealed record KPoeHit(IReadOnlyList<LyricLine> Lines, string Source, string? Title, string? Artist);
 
 public static class KPoeJsonParser
 {
-    /// <summary>The node's word-timed lines, or null when the reply is unreadable or has none.</summary>
-    public static KPoeHit? Parse(string json)
+    private sealed record Entry(double Time, double? Duration, string Text, List<(double Time, double Duration, string Text)> Syllables);
+
+    /// <summary>The node's lines, or null when the reply is unreadable or has none.</summary>
+    /// <param name="json">The reply body.</param>
+    /// <param name="trackDuration">The playing track's length in seconds, which ends a last line that has no duration; 0 when unknown.</param>
+    /// <param name="distribute">Spreads estimated words over a line without syllables; the built-in splitting when null.</param>
+    public static KPoeHit? Parse(string json, double trackDuration = 0, WordDistributor? distribute = null)
     {
         try
         {
             using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 32 });
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
-            var lines = new List<LyricLine>();
+            var entries = new List<Entry>();
             if (root.TryGetProperty("lyrics", out var lyrics) && lyrics.ValueKind != JsonValueKind.Null)
             {
-                foreach (var entry in lyrics.EnumerateArray())
+                foreach (var item in lyrics.EnumerateArray())
                 {
-                    if (!TryEntry(entry, out var line)) return null;
-                    if (line is not null) lines.Add(line);
+                    if (!TryEntry(item, out var entry)) return null;
+                    entries.Add(entry!);
                 }
+            }
+            var lines = new List<LyricLine>();
+            for (var index = 0; index < entries.Count; index++)
+            {
+                if (Line(entries, index, trackDuration, distribute) is { } line) lines.Add(line);
             }
             if (lines.Count == 0) return null;
             string? source = null, title = null, artist = null;
@@ -60,14 +77,20 @@ public static class KPoeJsonParser
         }
     }
 
-    /// <summary>False when the entry is malformed; <paramref name="line"/> is null when it is well formed but has nothing to show.</summary>
-    private static bool TryEntry(JsonElement entry, out LyricLine? line)
+    /// <summary>False when the entry is malformed: no numeric time, no text, a duration that is not a number, or a malformed syllable.</summary>
+    private static bool TryEntry(JsonElement item, out Entry? entry)
     {
-        line = null;
-        if (entry.ValueKind != JsonValueKind.Object || !Number(entry, "time", out var time) || !Number(entry, "duration", out var duration)
-            || !entry.TryGetProperty("text", out var textElement) || textElement.ValueKind != JsonValueKind.String) return false;
+        entry = null;
+        if (item.ValueKind != JsonValueKind.Object || !Number(item, "time", out var time)
+            || !item.TryGetProperty("text", out var textElement) || textElement.ValueKind != JsonValueKind.String) return false;
+        double? duration = null;
+        if (item.TryGetProperty("duration", out var durationElement) && durationElement.ValueKind != JsonValueKind.Null)
+        {
+            if (!Number(item, "duration", out var value)) return false;
+            duration = value;
+        }
         var syllables = new List<(double Time, double Duration, string Text)>();
-        if (entry.TryGetProperty("syllabus", out var syllabus) && syllabus.ValueKind != JsonValueKind.Null)
+        if (item.TryGetProperty("syllabus", out var syllabus) && syllabus.ValueKind != JsonValueKind.Null)
         {
             foreach (var syllable in syllabus.EnumerateArray())
             {
@@ -76,14 +99,37 @@ public static class KPoeJsonParser
                 syllables.Add((at, length, piece.GetString()!));
             }
         }
-        var start = time / 1000;
-        var end = (time + Math.Max(duration, 1)) / 1000;
-        var text = TextRules.TrimSpaces(textElement.GetString()!);
-        if (text.Length == 0 || syllables.Count == 0) return true;
-        var words = Words(syllables, end);
-        if (words.Count == 0) return true;
-        line = new LyricLine { Start = start, End = end, Text = text, Words = words, WordTimed = true };
+        entry = new Entry(time, duration, textElement.GetString()!, syllables);
         return true;
+    }
+
+    /// <summary>
+    /// Entry <paramref name="index"/> as a line: word-timed from its syllables, else timed by its window with estimated
+    /// words. Null when it has no text.
+    /// </summary>
+    private static LyricLine? Line(List<Entry> entries, int index, double trackDuration, WordDistributor? distribute)
+    {
+        var entry = entries[index];
+        var text = TextRules.TrimSpaces(entry.Text);
+        if (text.Length == 0) return null;
+        var start = entry.Time / 1000;
+        double end;
+        if (entry.Duration is { } duration)
+        {
+            end = (entry.Time + Math.Max(duration, 1)) / 1000;
+        }
+        else
+        {
+            // No duration: the line lasts until the next entry starts.
+            var next = entries.Skip(index + 1).FirstOrDefault(later => later.Time > entry.Time);
+            end = next is not null ? next.Time / 1000 : Math.Max(trackDuration, start + 4);
+        }
+        if (entry.Syllables.Count > 0 && Words(entry.Syllables, end) is { Count: > 0 } words)
+        {
+            return new LyricLine { Start = start, End = end, Text = text, Words = words, WordTimed = true };
+        }
+        var line = LyricLines.MakeLine(text, start, end, distribute);
+        return entry.Duration is null ? line with { EndFromNextLine = true } : line;
     }
 
     /// <summary>
