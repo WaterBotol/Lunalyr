@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+- Mosaic, Torque and Fable layouts reworked: Mosaic's words land on the lower right third and settle into a flush-left stack read top to bottom, its colour bar now wipes in with its word (no lone bar) in a calmer colour, and letter-by-letter words keep one size; Torque's stack has open leading, keeps a clear margin, holds older words still, shows at most four, and turns away upwards at a line change instead of sinking onto the next line; Fable's words in a row share a baseline.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed
