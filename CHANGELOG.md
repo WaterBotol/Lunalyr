@@ -18,6 +18,8 @@ When merging, keep every entry and combine duplicate headings.
 - Spoken, Cascade and Cutout: words already sung step back so the sung word leads; Cascade is a steady flush column with clearer large and small sizes; Cutout's labels get more room, scale with the type and stay clear of the top of the stage.
 - Mosaic, Torque and Fable layouts reworked: Mosaic's words land on the lower right third and settle into a flush-left stack read top to bottom, its colour bar now wipes in with its word (no lone bar) in a calmer colour, and letter-by-letter words keep one size; Torque's stack has open leading, keeps a clear margin, holds older words still, shows at most four, and turns away upwards at a line change instead of sinking onto the next line; Fable's words in a row share a baseline.
 - Hinge, Broadside and Portal layouts reworked: Hinge's leading words stay readable in the corner and its exit folds without squashing; Broadside builds its line centred, keeps little words as labels between the big ones and fades words out whole inside a 5% margin instead of cutting them at the edge; Portal's earlier words climb above the live pill as a still, evenly spaced trail of plain type instead of piling up.
+### Added
+- The welcome opens with Lunalyr's logo forming as a drop of liquid glass (made with ReactDrops' Liquid Glass Logo from Lunalyr's own logo; silent). It plays once, then the wallpaper preview fades in; Reduce Motion skips it.
 
 ## [2.0.2] - 2026-11-13
 
