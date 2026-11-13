@@ -74,6 +74,8 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
 
     public void ReplaceLayer(IRenderLayerFactory factory) => _engine.ReplaceLayer(factory);
 
+    public void SetFloating(Lunalyr.Platform.Desktop.FloatingLyricsOptions options) => _engine.SetFloating(options);
+
     public void SetClock(Func<(double Seconds, bool Playing)> clock) => _engine.SongClock = clock;
 
     public void SetFrameRate(int framesPerSecond) => _engine.SetFrameRate(framesPerSecond switch

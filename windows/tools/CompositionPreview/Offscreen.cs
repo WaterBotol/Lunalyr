@@ -57,6 +57,8 @@ public sealed class Offscreen : IDisposable
     public string AdapterName { get; } = "";
     public ID2D1DeviceContext Dc { get; }
     public IDWriteFactory DWrite { get; }
+    public ID2D1Bitmap1 Target => _target;
+    public ID2D1Factory1 Factory => _factory;
 
     /// <summary>Draws one frame of <paramref name="layer"/> over a plain background.</summary>
     public void Render(IRenderLayer layer, SceneSnapshot scene, double songSeconds, double wallSeconds, float scale,

@@ -39,6 +39,21 @@ public readonly record struct ViewportMetrics(double BaseSize, SizeD Stage, doub
         var user = double.IsFinite(sizeFraction) && sizeFraction > 0 ? sizeFraction / NeutralSizeFraction : 1;
         return new ViewportMetrics(baseSize, new SizeD(width * 0.80, height * 0.72), Math.Clamp(user, 0.7, 1.5));
     }
+
+    /// <summary>
+    /// A text size set outright (the floating lyrics' own, in points) instead of one following the screen: the stage
+    /// then fills nearly the whole window, 94% × 88% (the Mac's <c>LyricViewportMetrics(size:textSize:)</c>).
+    /// </summary>
+    public static ViewportMetrics ForText(double width, double height, double scale, double textSize,
+                                          double sizeFraction = NeutralSizeFraction)
+    {
+        if (!double.IsFinite(textSize) || textSize <= 0) return For(width, height, scale, sizeFraction);
+        if (!double.IsFinite(scale) || scale <= 0) scale = 1;
+        if (!double.IsFinite(width) || width < 0) width = 0;
+        if (!double.IsFinite(height) || height < 0) height = 0;
+        var user = double.IsFinite(sizeFraction) && sizeFraction > 0 ? sizeFraction / NeutralSizeFraction : 1;
+        return new ViewportMetrics(textSize * scale, new SizeD(width * 0.94, height * 0.88), Math.Clamp(user, 0.7, 1.5));
+    }
 }
 
 /// <summary>How a line (with its readings) is scaled to the stage. No mask: it only ever shrinks or grows as a whole.</summary>

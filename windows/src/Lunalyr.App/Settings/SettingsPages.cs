@@ -57,6 +57,10 @@ internal static class ReadingsPage
     {
         var page = Page();
         Section(page, "Romanisation");
+        // Display belongs to a lyric style (LyricStyleProfiles): say which one while the lyrics float.
+        var styleNote = Caption("");
+        ctx.OnRefresh(s => styleNote.Text = FloatingCopy.EditingNote(s.Surface) ?? "");
+        page.Children.Add(styleNote.ShowWhen(ctx, s => s.IsFloating));
         page.Children.Add(Card("Display", "Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.", "",
             Combo(ctx, SettingsCopy.ReadingDisplays, s => s.RomanizationDisplay, (s, v) => s with { RomanizationDisplay = v }, width: 200)));
         page.Children.Add(Card("Language",

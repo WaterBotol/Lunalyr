@@ -1,4 +1,5 @@
 using Lunalyr.Core.Logging;
+using Lunalyr.Platform.Desktop;
 using Lunalyr.Render.Scene;
 
 namespace Lunalyr.Shell.Rendering;
@@ -42,6 +43,13 @@ public interface IWallpaperRenderer : IDisposable
     /// changes); the background on screen crossfades into it. Renderers that can't ignore it.
     /// </summary>
     void ReplaceLayer(IRenderLayerFactory factory) { }
+
+    /// <summary>
+    /// The floating lyrics (milestone 7): with <see cref="FloatingLyricsOptions.Enabled"/> the wallpaper draws no lyrics
+    /// and a window over every app shows them when <see cref="FloatingLyricsOptions.Shown"/>. Renderers without a
+    /// window ignore it.
+    /// </summary>
+    void SetFloating(FloatingLyricsOptions options) { }
 }
 
 /// <summary>
@@ -100,6 +108,17 @@ public sealed class NullWallpaperRenderer(Logger? logger = null) : IWallpaperRen
     public List<IRenderLayerFactory> Replaced { get; } = [];
 
     public void ReplaceLayer(IRenderLayerFactory factory) => Replaced.Insert(0, factory);
+
+    /// <summary>The floating lyrics' options last handed over, and how many times.</summary>
+    public FloatingLyricsOptions Floating { get; private set; } = FloatingLyricsOptions.Off;
+
+    public int FloatingUpdates { get; private set; }
+
+    public void SetFloating(FloatingLyricsOptions options)
+    {
+        Floating = options;
+        FloatingUpdates++;
+    }
 
     public void SetFrameRate(int framesPerSecond)
     {

@@ -2,7 +2,7 @@
 //
 //   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken|scattered|...]
 //                      [-reveal automatic|fade|lift|pop|orbit|glide|unfold|cutoutFold|cutoutSlide|cutoutHighlight|satinRibbon|splitInk|mix]
-//                      [-shot fixture@seconds ...] [-reduce] [-bench] [-warp]
+//                      [-shot fixture@seconds ...] [-reduce] [-bench] [-warp] [-floating [-screen 2560|3200]]
 //
 // Compositions: editorial, spoken, cascade, cutout, scattered, constellation, constellationEditorial, echo, and the
 // stage layouts hinge, broadside, portal, mosaic, torque, fable. With -reveal, every fixture uses that word entrance
@@ -31,6 +31,8 @@ var bench = false;
 var reduce = false;
 var warp = false;
 var opening = false;
+var floating = false;
+string? screenFilter = null;
 var shots = new List<(string Fixture, double Time)>();
 for (var i = 0; i < args.Length; i++)
 {
@@ -51,6 +53,8 @@ for (var i = 0; i < args.Length; i++)
             return;
         case "warp": warp = true; break;
         case "opening": opening = true; break;
+        case "floating": floating = true; break;
+        case "screen": screenFilter = Next(); break;
         case "probe":
             using (var probeStage = new Offscreen(64, 64)) Probe.Run(probeStage);
             return;
@@ -101,6 +105,16 @@ if (shots.Count == 0)
         ("japanesewords", 12.8), ("japanesewords", 16.5), ("japaneseinstead", 12.8), ("credits", 1.6), ("credits", 5.5), ("credits", 10.5),
         ("highlight", 12.9), ("highlight", 15.9),
     ]);
+}
+
+if (floating)
+{
+    // The floating lyrics window over a stand-in desktop on this PC's two displays (FloatingShots.cs). Files:
+    // <screen>-<shot>.png. -only picks the layout (Editorial by default); -screen 2560 or 3200 picks one display.
+    var lyricFactory = factories.FirstOrDefault(factory => factory.Id == (only ?? "editorial")) ?? factories[0];
+    var floatingFixtures = new Dictionary<string, Func<SceneSnapshot>>(fixtures) { ["opening"] = () => OpeningFixtures.HumanNature() };
+    FloatingShots.Run(output, lyricFactory, floatingFixtures, warp, screenFilter);
+    return;
 }
 
 using var stage = new Offscreen(width, height, warp);

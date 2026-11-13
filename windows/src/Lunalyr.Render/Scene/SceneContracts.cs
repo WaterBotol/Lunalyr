@@ -198,6 +198,13 @@ public sealed record LyricStyle
     /// </summary>
     public Lunalyr.Core.Motion.NoLyricsDisplay NoLyrics { get; init; } = Lunalyr.Core.Motion.NoLyricsDisplay.Notice;
 
+    /// <summary>
+    /// The floating lyrics' text size in points, set only on the floating window's scene (the engine derives it); null
+    /// on the wallpaper and in previews of it, where the size follows the screen. With it the stage fills nearly the
+    /// whole window (<c>ViewportMetrics.ForText</c>) and the opening title takes the middle, compact.
+    /// </summary>
+    public double? FloatingTextSize { get; init; }
+
     /// <summary>The reveal id composition <paramref name="compositionId"/> uses.</summary>
     public string RevealFor(string compositionId) =>
         RevealByLayout.TryGetValue(compositionId, out var reveal) ? reveal : Reveal;
@@ -255,6 +262,12 @@ public readonly struct FrameContext
     /// The opening title is brief for a song joined part-way. 0 when not set.
     /// </summary>
     public double SongJoined { get; init; }
+
+    /// <summary>
+    /// The lyrics are not drawn on this surface: they float over the apps instead (the Mac's <c>drawsLyrics</c> false).
+    /// A background's text backing then stays away, as there is nothing to back.
+    /// </summary>
+    public bool LyricsElsewhere { get; init; }
 }
 
 /// <summary>

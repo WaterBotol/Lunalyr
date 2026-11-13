@@ -21,7 +21,9 @@ internal sealed class LayerSlot(string id, IRenderLayer layer)
 internal sealed class RenderSurface(int index, SurfaceWindow window)
 {
     public int Index { get; } = index;
-    public SurfaceWindow Window { get; } = window;
+    /// <summary>The window; the floating surface's changes size and monitor in place (same handle).</summary>
+    public SurfaceWindow Window { get; set; } = window;
+    public bool IsFloating => Window.Mode == AttachMode.Floating;
     public int Width => Window.Width;
     public int Height => Window.Height;
     public float Scale => Window.Monitor.Scale;
@@ -41,6 +43,8 @@ internal sealed class RenderSurface(int index, SurfaceWindow window)
     // Layers.
     public LayerCrossfade<LayerSlot>? Backgrounds;
     public LayerSlot? Lyric;
+    /// <summary>The floating window's shade, stage shadow and edit chrome (the floating surface only).</summary>
+    public Floating.FloatingFrameDrawer? FloatingDrawer;
     public readonly List<LayerCrossfade<LayerSlot>.Drawn> Drawn = new(4);
 
     // Pacing and state.

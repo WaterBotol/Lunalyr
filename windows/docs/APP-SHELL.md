@@ -26,10 +26,11 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--settings` | Open the settings window (a second launch does this anyway). |
 | `--no-network` | No lyric lookups at all (status "Lyric lookups are off for this run"). The lyric service is still built; only its lookups are refused. For checks, so a launch doesn't send the song playing to lyric services. |
 | `--demo` | Follow a silent built-in demo player instead of the system's players (see "Demo mode"). Implies `--no-network` and `--no-playback`; uses `%LOCALAPPDATA%\Lunalyr\Demo` unless `--data` is given. |
-| `--settings-page <page>` | Open settings at a page: `general`, `lyric-style`, `readings`, `timing`, `wallpaper`, `covers`, `players`, `performance` or `about` (any part of the page's name). Implies `--settings`; a second launch forwards it, so checks (and other surfaces) can open a page. |
+| `--settings-page <page>` | Open settings at a page: `general`, `lyric-style`, `readings`, `timing`, `wallpaper`, `covers`, `players`, `performance` or `about` (any part of the page's name); `floating` opens Lyric style at its Floating lyrics section. Implies `--settings`; a second launch forwards it, so checks (and other surfaces) can open a page. |
 | `--theme <light\|dark\|system>` | How Lunalyr's own windows look for this run only (for screenshots). Nothing is saved and Windows' setting is never touched; a second launch can change it in the running instance. |
 | `--quiet-windows` | For checks while someone works at the PC: the settings window opens without being activated and at the bottom of the z-order, so it never takes the foreground or the keyboard. Capture it with `tools/capture-window.ps1` (PrintWindow). Not forwarded to a running instance. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
+| `--floating-capture <file>` | On quitting, write the floating lyrics window's back buffer as a PNG (the engine draws a frame for it even while hidden or with the displays off) and log the window's style and extended style, and whether it is the foreground window. For checks. |
 | `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
@@ -414,6 +415,14 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `showControlsOnHover` | `true` | the desktop player comes up where the pointer rests on the desktop | `custom.showControlsOnHover` |
 | `desktopPlayerTimeMode` | `"remaining"` | the seek bar's right-hand time: `remaining` or `total` (anything else reads as `remaining`) | `custom.desktopPlayer.timeMode` |
 | `noLyrics` | `"notice"` | "When none are found" (Timing › Without synced lyrics): `notice` (a short note that fades after 4 s), `trackName` (the song's title and artist), `nothing`; unknown values reset to `notice` | `noLyrics` |
+| `lyricsSurface` | `"desktop"` | `desktop` (on the wallpaper), `floating` (over every app). Never both. Changing it swaps the lyric style (see "Floating lyrics") | `custom.lyricsSurface` |
+| `floatingTextSize` | `44` | 22–110 points; Small 30, Medium 44, Large 64 | `custom.floating.textSize` |
+| `floatingBackdrop` | `0.6` | 0–1, "Shade behind lyrics" | `custom.floating.backdrop` |
+| `floatingFadeUnderPointer` | `true` | fade to 18% while the pointer is over them | `custom.floating.fadeUnderPointer` |
+| `floatingPlacement` | `"bottom"` | `topLeft`, `top`, `topRight`, `centre`, `bottomLeft`, `bottom`, `bottomRight`, `custom` | `custom.floating.placement` |
+| `floatingDisplay` | `""` | a display's lasting key (its DisplayConfig device path), `""` = the main display; a display not connected falls back to the main one | `custom.floating.display` |
+| `floatingFrames`, `floatingSizes` | `{}` | display key → `[x, y, width, height]` in points, relative to the display, y up (the Mac's convention): the frame dragged into place, and the size the presets keep | `custom.floating.frames`, `custom.floating.sizes` |
+| `lyricStyleDesktop`, `lyricStyleFloating` | absent | the other surface's lyric style while one is in use: the style keys below, as stored (written once the surface has been switched) | `custom.lyricStyle.desktop`, `custom.lyricStyle.floating` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
 Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
@@ -546,9 +555,9 @@ theme. The window opens at Lyric style (or `--settings-page`).
   style, frame rate, pauses, readings, and a new lookup when the sources change. The window logs which keys it changed
   ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
 - **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
-  milestone 6" (visualisers, music video), "…milestone 7" (floating lyrics, tray lyric, shortcuts, Discord, lyric
-  cards), "…milestone 8" (launch at login, updates), "Arrives in a later build" for the rest. Launch
-  at login writes nothing anywhere.
+  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, shortcuts, Discord, lyric cards; floating
+  lyrics are live since milestone 7, see "Floating lyrics"), "…milestone 8" (launch at login, updates), "Arrives in a
+  later build" for the rest. Launch at login writes nothing anywhere.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
   (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.
@@ -565,6 +574,61 @@ theme. The window opens at Lyric style (or `--settings-page`).
   every entrance plays as a simple fade, as the wallpaper and the preview do.
 - **App theme** (General): follow Windows, light or dark, for Lunalyr's windows only (`Root.RequestedTheme` and the
   title bar's caption buttons). `--theme` overrides it for one run.
+
+## Floating lyrics (milestone 7)
+
+The Mac's floating lyrics (`FloatingLyrics.swift`, `FloatingLyricsController.swift`, `FloatingLyricsView.swift`,
+`FloatingLyricsSection.swift`): the lyrics in a see-through window over every app instead of on the wallpaper, with
+their own style. Details, checks and what wasn't seen live: [milestones/M7.md](milestones/M7.md).
+
+- **Either/or.** `lyricsSurface` is `desktop` or `floating`, never both. While floating, the wallpapers keep their
+  background (picture, video, visualiser…) but draw no lyric layer and no text backing; the settings preview still
+  shows the style being edited (`LyricsPlacement.DrawsLyrics`). Pause wallpaper freezes the wallpapers
+  (`PerformanceOptions.PauseWallpaper`) and leaves the floating lyrics running, as on the Mac; the renderer stops for
+  a pause only while the lyrics are on the desktop.
+- **Two styles.** `LyricStyleProfiles` keeps the lyric style per surface. The app's ordinary keys always hold the
+  style in use; switching stores it as `lyricStyleDesktop` / `lyricStyleFloating` and loads the other. The first switch
+  to Floating starts from the desktop's style with `lyricScale` 1 (Floating has its own text size). Style keys:
+  `fontChoice`, `fontFamily`, `lyricComposition`, `constellationSpread`, `constellationLinkOpacity`, `wordArrival`,
+  `wordArrivalByStyle`, `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `rotateLayouts`,
+  `creditsLayer`, `openingTitle`, `openingTitleCover`, `romanizationDisplay`, `lyricHighlightMode`,
+  `lyricHighlightCustom` (the Mac's list where Windows has the setting).
+- **When it shows** (`FloatingVisibility`, ported): Floating chosen and a song with lyrics (timed and not all
+  instrumental, or plain) playing; a pause keeps it up for 10 s; none found, nothing playing or still looking hide it.
+  Edit position shows it even with nothing playing ("Lyrics appear here"). It fades in and out over 0.25 s (at once
+  under Reduce Motion) and to 18% while the pointer is over it (`floatingFadeUnderPointer`, a 250 ms poll of the
+  pointer, only while it shows).
+- **The window** (`Platform/Desktop/FloatingWindowHost.cs`, its own thread): a `WS_POPUP` with `WS_EX_NOACTIVATE`,
+  `WS_EX_TOOLWINDOW` (never in Alt+Tab or the taskbar), `WS_EX_TOPMOST` (re-asserted when another window comes to the
+  front and every 2 s while shown, so it stays over full-screen apps), `WS_EX_NOREDIRECTIONBITMAP` (DirectComposition,
+  per-pixel alpha) and `WS_EX_LAYERED | WS_EX_TRANSPARENT` (click-through). Shown with `SWP_NOACTIVATE |
+  SWP_SHOWWINDOW`, moved with `SWP_NOACTIVATE`, `WM_MOUSEACTIVATE` answers `MA_NOACTIVATE`: nothing it does takes the
+  foreground or the keyboard. Per-monitor DPI v2; it re-places itself on display, DPI and work-area changes.
+- **Its surface** (`RenderEngine.Floating.cs`): one more surface on the render thread, with a composition swap chain on
+  the GPU that drives its monitor (the engine's own `AcquireGpu`/`CreateSwapChain`), resized in place
+  (`ResizeBuffers`) when the window is, moved to another GPU with its monitor, recovered after device loss, and kept
+  through wallpaper rebuilds. It follows the frame-rate cap and power saving; it hides only with its window or the
+  screens (`SurfaceActivity.ForFloating`): covering windows and full-screen apps are under it. It draws the lyric
+  composition chosen for the wallpaper on a scene with `LyricStyle.FloatingTextSize` (`ViewportMetrics.ForText`: the
+  text size in points, the stage 94% × 88% of the window) and a palette judged against the shade
+  (`FloatingBackdrop.Luminance`). `FloatingFrameDrawer` adds the shade (black at 72% × strength, fading out 22% in
+  from the sides and 30% from top and bottom; with transparency effects off a nearly solid rounded panel), one soft
+  shadow for the whole stage, and edit mode's chrome. The opening title is compact and centred in the window, and the
+  interlude dots wait for it.
+- **Place** (`FloatingFrame`, `FloatingDisplay`): seven presets 24 points inside the work area (so clear of the taskbar
+  on any edge; an auto-hidden taskbar's edge is reserved too, read with `ABM_GETAUTOHIDEBAREX`), sized from the text size
+  (`19 × text` wide, `4.6 × text` tall) unless a size was set by hand on that display. Custom: **Edit position…** makes
+  the window take the pointer (never the keyboard): drag it to move, drag the corner grip to resize, **Done** (in the
+  window or in settings) locks it again; the frame is kept per display (`floatingFrames`). Closing settings ends edit
+  position; it is never saved. **Reset size** forgets frames and sizes.
+- **Settings › Lyric style:** "Show lyrics" (On the desktop / Floating over apps, with the Mac's caption naming the
+  style being edited), then the Floating lyrics section: Size (Small, Medium, Large), Text size, Shade behind lyrics,
+  Fade when the pointer is over them, Place (a small screen with its taskbar and a spot per preset, and Custom),
+  Display (only with more than one; names from DisplayConfig, "Main display" first), Edit position… / Done and Reset
+  size. Lyric size hides while floating; Readings says it changes the Floating style.
+- **Not built:** the Mac's menu-bar "Floating" toggle, `lunalyr://floating` and the Shortcuts action (links aren't
+  handled on Windows yet; the tray flyout has no such tile), and the Hide lyrics / mirroring input
+  (`lyricsVisible` is always true).
 
 ## Wallpaper types (milestone 6)
 

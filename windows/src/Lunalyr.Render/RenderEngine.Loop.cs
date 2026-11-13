@@ -118,6 +118,7 @@ public sealed partial class RenderEngine
             if (now >= _nextHousekeeping) Housekeeping(now);
             ReleaseHeldFades(now);
             UpdateStates(now);
+            UpdateFloatingFade(now);
 
             // Which surfaces draw now, and when the next gated one is due.
             if (_due.Length < _surfaces.Count) _due = new RenderSurface[_surfaces.Count];
@@ -241,24 +242,29 @@ public sealed partial class RenderEngine
         for (int i = 0; i < _surfaces.Count; i++)
         {
             var s = _surfaces[i];
-            var (state, reason) = s.Window.Mode == Platform.Desktop.AttachMode.Windowed
-                ? SurfaceActivity.ForWindow(system, desktop?.WindowVisible ?? true)
-                : SurfaceActivity.ForWallpaper(system, aligned && i < desktop!.Monitors.Count ? desktop.Monitors[i] : default,
-                    perf.PauseWhenCovered, perf.PauseWallpaper);
+            var (state, reason) = s.Window.Mode switch
+            {
+                Platform.Desktop.AttachMode.Windowed => SurfaceActivity.ForWindow(system, desktop?.WindowVisible ?? true),
+                // Over every app: never covered, never paused with the wallpaper; hidden only with its window or the screens.
+                Platform.Desktop.AttachMode.Floating => SurfaceActivity.ForFloating(system, _floatingShown),
+                _ => SurfaceActivity.ForWallpaper(system, aligned && i < desktop!.Monitors.Count ? desktop.Monitors[i] : default,
+                    perf.PauseWhenCovered, perf.PauseWallpaper),
+            };
             var plan = FramePacing.Plan(s.Window.Monitor.RefreshHz, rate);
             if (plan != s.Plan || rate != s.Rate)
             {
                 s.Plan = plan;
                 s.Rate = rate;
                 s.NextDue = now;
-                _log.Debug($"Surface {i}: {rate} at {s.Window.Monitor.RefreshHz} Hz -> sync interval {plan.SyncInterval}"
+                _log.Debug($"{(s.IsFloating ? "Floating lyrics" : $"Surface {i}")}: {rate} at {s.Window.Monitor.RefreshHz} Hz -> sync interval {plan.SyncInterval}"
                     + (plan.IsGated ? $", every {plan.GatePeriod * 1000:0.0} ms" : ""));
                 changed = true;
             }
             if (state != s.State || reason != s.Reason)
             {
-                _log.Info(state == SurfaceState.Drawing ? $"Surface {i} ({s.Window.Monitor.DeviceName}) drawing"
-                    : $"Surface {i} ({s.Window.Monitor.DeviceName}) {state.ToString().ToLowerInvariant()}: {reason}");
+                var name = s.IsFloating ? "Floating lyrics" : $"Surface {i}";
+                _log.Info(state == SurfaceState.Drawing ? $"{name} ({s.Window.Monitor.DeviceName}) drawing"
+                    : $"{name} ({s.Window.Monitor.DeviceName}) {state.ToString().ToLowerInvariant()}: {reason}");
                 s.State = state;
                 s.Reason = reason;
                 s.NeedsFrame = true;
@@ -320,19 +326,27 @@ public sealed partial class RenderEngine
             DeltaSeconds = double.IsNaN(s.LastFrameWall) ? 0 : Math.Clamp(now - s.LastFrameWall, 0, 0.25),
             AheadWork = _aheadWork,
             SongJoined = _songJoined,
+            LyricsElsewhere = _lyricsFloat && !s.IsFloating,
         };
         dc.Target = s.Target;
         dc.BeginDraw();
-        // Opaque black beneath, as the Mac's window is, unless a see-through background is on screen.
-        bool seeThrough = s.SeeThrough && ShowsSeeThrough(s);
-        dc.Clear(seeThrough ? new Color4(0, 0, 0, 0) : new Color4(0, 0, 0, 1));
-        s.Backgrounds?.Layers(now, _options.BackgroundFadeSeconds, s.Drawn, IsOpaque);
-        foreach (var d in s.Drawn)
-            // A background still loading is drawn unseen, so it can load (a video starts decoding when first drawn).
-            if (d.Opacity > 0) DrawLayer(s, d.Layer, frame, d.Opacity);
-            else if (d.Layer.Layer is IFirstFrameLayer { HasFirstFrame: false }) DrawLayer(s, d.Layer, frame, 0.001);
-        var lyricOpacity = LyricFocusOpacity;
-        if (s.Lyric is not null && lyricOpacity > 0.001) DrawLayer(s, s.Lyric, frame, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
+        if (s.IsFloating)
+        {
+            DrawFloating(s, frame);
+        }
+        else
+        {
+            // Opaque black beneath, as the Mac's window is, unless a see-through background is on screen.
+            bool seeThrough = s.SeeThrough && ShowsSeeThrough(s);
+            dc.Clear(seeThrough ? new Color4(0, 0, 0, 0) : new Color4(0, 0, 0, 1));
+            s.Backgrounds?.Layers(now, _options.BackgroundFadeSeconds, s.Drawn, IsOpaque);
+            foreach (var d in s.Drawn)
+                // A background still loading is drawn unseen, so it can load (a video starts decoding when first drawn).
+                if (d.Opacity > 0) DrawLayer(s, d.Layer, frame, d.Opacity);
+                else if (d.Layer.Layer is IFirstFrameLayer { HasFirstFrame: false }) DrawLayer(s, d.Layer, frame, 0.001);
+            var lyricOpacity = LyricFocusOpacity;
+            if (s.Lyric is not null && lyricOpacity > 0.001) DrawLayer(s, s.Lyric, frame, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
+        }
         var result = dc.EndDraw();
         if (result.Failure)
         {
@@ -474,13 +488,16 @@ public sealed partial class RenderEngine
 
     private void QueueCapture(CaptureRequest request)
     {
-        if (request.MonitorIndex < 0 || request.MonitorIndex >= _surfaces.Count)
+        // Monitor index: the wallpapers come first; the floating surface (if any) is last and has its own capture.
+        int wallpapers = _surfaces.Count(x => !x.IsFloating);
+        var s = request.MonitorIndex == FloatingCaptureIndex ? _surfaces.FirstOrDefault(x => x.IsFloating)
+            : request.MonitorIndex >= 0 && request.MonitorIndex < wallpapers ? _surfaces[request.MonitorIndex] : null;
+        if (s is null)
         {
             request.Completion.TrySetException(new ArgumentOutOfRangeException("monitorIndex", request.MonitorIndex,
-                $"There are {_surfaces.Count} surface(s)."));
+                $"There are {wallpapers} wallpaper surface(s){(request.MonitorIndex == FloatingCaptureIndex ? " and no floating lyrics window" : "")}."));
             return;
         }
-        var s = _surfaces[request.MonitorIndex];
         if (s.Dead || s.Swap is null)
         {
             request.Completion.TrySetException(new InvalidOperationException("That surface has no swap chain right now."));
@@ -494,6 +511,9 @@ public sealed partial class RenderEngine
     private void CreateSurfaces(IReadOnlyList<SurfaceWindow> windows, int generation)
     {
         if (_stopping) return;
+        // The floating lyrics live through a rebuild of the wallpapers (an Explorer restart, a display change).
+        var floating = _surfaces.FirstOrDefault(x => x.IsFloating);
+        if (floating is not null) _surfaces.Remove(floating);
         TearDownSurfaces();
         _surfaceGeneration = generation;
         Interlocked.Increment(ref _rebuilds);
@@ -512,13 +532,14 @@ public sealed partial class RenderEngine
             var background = NewSlot(_backgroundId);
             // A wallpaper fades in from its black window once it can draw (the Mac's first-layer fade).
             s.Backgrounds = background is null ? null : new LayerCrossfade<LayerSlot>(background, ready: HasFirstFrame(background), fadingInAt: now);
-            s.Lyric = _lyricId is null ? null : NewSlot(_lyricId);
+            s.Lyric = _lyricId is null || _lyricsFloat ? null : NewSlot(_lyricId);
             CreateLayerResources(s);
             _surfaces.Add(s);
             _log.Info($"Surface {i}: {s.Window.Monitor.DeviceName} {s.Width}x{s.Height} @{s.Window.Monitor.Dpi} dpi "
                 + $"{s.Window.Monitor.RefreshHz} Hz on {s.Gpu?.Name ?? "no GPU"}{(s.AdapterDrivesMonitor ? "" : " (fallback adapter)")}"
                 + (s.Hdr ? ", HDR" : ""));
         }
+        if (floating is not null) _surfaces.Add(floating);
         _lastFrameAt = double.NaN;
         UpdateStates(now);
         // A paused wallpaper can't run its fade-in: its still frame shows the background at once.
@@ -574,7 +595,8 @@ public sealed partial class RenderEngine
     private void CreateSwapChain(RenderSurface s)
     {
         var gpu = s.Gpu!;
-        bool composed = !WindowSwapChains;
+        // The floating lyrics are see-through by nature: always a composition swap chain.
+        bool composed = !WindowSwapChains || s.IsFloating;
         var desc = new SwapChainDescription1
         {
             Width = (uint)s.Width, Height = (uint)s.Height, Format = Format.B8G8R8A8_UNorm,
@@ -622,6 +644,7 @@ public sealed partial class RenderEngine
     private void ReleaseGpu(RenderSurface s)
     {
         foreach (var slot in s.AllLayers()) ReleaseSlotResources(slot);
+        s.FloatingDrawer?.ReleaseResources();
         if (s.Gpu is { } gpu) gpu.Dc.Target = null;
         s.Target?.Dispose();
         s.Target = null;
@@ -706,6 +729,18 @@ public sealed partial class RenderEngine
         double now = Now();
         foreach (var s in _surfaces)
         {
+            if (s.IsFloating)
+            {
+                // The floating window draws the lyric only, on its own shade.
+                if (lyricChanged)
+                {
+                    if (s.Lyric is { } was) DisposeSlot(was);
+                    s.Lyric = lyricId is null ? null : NewSlot(lyricId);
+                    CreateLayerResources(s);
+                    s.NeedsFrame = true;
+                }
+                continue;
+            }
             if (backgroundChanged && NewSlot(backgroundId) is { } slot)
             {
                 if (s.Backgrounds is null)
@@ -724,7 +759,7 @@ public sealed partial class RenderEngine
             if (lyricChanged)
             {
                 if (s.Lyric is { } old) DisposeSlot(old);
-                s.Lyric = lyricId is null ? null : NewSlot(lyricId);
+                s.Lyric = lyricId is null || _lyricsFloat ? null : NewSlot(lyricId);
             }
             CreateLayerResources(s);
             s.NeedsFrame = true;
@@ -867,8 +902,9 @@ public sealed partial class RenderEngine
 
     private void PublishStatus()
     {
-        var status = new SurfaceStatus[_surfaces.Count];
-        for (int i = 0; i < status.Length; i++) status[i] = _surfaces[i].Status();
+        // The wallpapers only: the floating lyrics never draw a visualiser, so they never keep system audio running.
+        var status = _surfaces.Where(x => !x.IsFloating).Select(x => x.Status()).ToArray();
+        FloatingStatus = _surfaces.FirstOrDefault(x => x.IsFloating)?.Status();
         _status = status;
         var handler = StatusChanged;
         if (handler is null) return;

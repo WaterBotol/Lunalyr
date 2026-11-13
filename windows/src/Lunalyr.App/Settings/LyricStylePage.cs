@@ -18,16 +18,14 @@ internal static class LyricStylePage
     private const string Automatic = AppSettings.AllLayoutsKey;
 
     public static StackPanel Build(SettingsContext ctx, Func<IReadOnlyList<string>> installedFonts, Func<bool> reduceMotion,
-                                   UIElement? preview)
+                                   UIElement? preview, FloatingHooks floating)
     {
         var page = Page();
         if (preview is not null) page.Children.Add(preview);
 
-        // ---- Show lyrics ----
-        Section(page, "Show lyrics");
-        page.Children.Add(Card("On the desktop", "Editing the Desktop style. The lyrics sit on the wallpaper, under your windows.", ""));
-        page.Children.Add(Card("Floating lyrics", "Lyrics floating over your apps, with their own style.", "", FixedToggle(false),
-            notYet: SettingsCopy.Milestone7));
+        // ---- Show lyrics: on the desktop or floating, and which one's style the rest edits ----
+        FloatingLyricsSection.AddSurface(page, ctx);
+        FloatingLyricsSection.AddFloating(page, ctx, floating);
 
         // ---- Layout ----
         Section(page, "Layout");
@@ -59,8 +57,10 @@ internal static class LyricStylePage
             "", FixedToggle(true), notYet: SettingsCopy.LaterBuild));
         page.Children.Add(Card("Add Editorial typography", "Mixes in a second, contrasting typeface.", "", FixedToggle(false),
             notYet: SettingsCopy.LaterBuild));
+        // Floating has its own size (Floating lyrics, above).
         page.Children.Add(Card("Lyric size", null, "",
-            Slider(ctx, 0.7, 1.5, 0.01, SettingsCopy.Percent, s => s.LyricScale, (s, v) => s with { LyricScale = Math.Round(v, 2) })));
+            Slider(ctx, 0.7, 1.5, 0.01, SettingsCopy.Percent, s => s.LyricScale, (s, v) => s with { LyricScale = Math.Round(v, 2) }))
+            .ShowWhen(ctx, s => !s.IsFloating));
 
         // ---- Typeface ----
         Section(page, "Typeface");

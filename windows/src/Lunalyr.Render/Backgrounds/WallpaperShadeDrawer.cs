@@ -139,7 +139,8 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         if ((manual is not null) != _backingManual) BuildBacking(_dc, manual is not null);
         if (scrim && strength > 0) dc.FillRectangle(whole, _scrim!);
 
-        var presence = Presence(StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
+        // Lyrics floating over the apps leave nothing on this stage to back.
+        var presence = Presence(frame.LyricsElsewhere ? 0 : StageShows(frame.Scene, frame.WallSeconds), frame.WallSeconds);
         var amount = BackingAmount(frame, fieldLuminance, scrim ? strength : 0, manual, stageShade) * presence;
         if (amount > WallpaperShade.MinimumBacking)
             dc.DrawBitmap(_backing!, whole, (float)Math.Min(1, amount), InterpolationMode.Linear, null, null);
