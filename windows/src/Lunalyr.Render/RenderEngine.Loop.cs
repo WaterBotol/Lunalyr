@@ -326,6 +326,7 @@ public sealed partial class RenderEngine
             DeltaSeconds = double.IsNaN(s.LastFrameWall) ? 0 : Math.Clamp(now - s.LastFrameWall, 0, 0.25),
             AheadWork = _aheadWork,
             SongJoined = _songJoined,
+            IsMainDisplay = s.Window.Monitor.IsPrimary && !s.IsFloating,
             LyricsElsewhere = _lyricsFloat && !s.IsFloating,
         };
         dc.Target = s.Target;

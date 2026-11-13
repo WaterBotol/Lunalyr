@@ -85,6 +85,7 @@ public sealed partial class TrayFlyout : Window
         _timer.Tick += (_, _) => RefreshLive();
 
         SetUpStaticContent();
+        SetUpMusicVideo();
         ApplyTheme();
     }
 
@@ -325,6 +326,7 @@ public sealed partial class TrayFlyout : Window
             ReadingsToggle.IsChecked = state.ReadingsOn;
             CreditsToggle.IsChecked = state.CreditsOn;
             PausedNote.Visibility = state.WallpaperPaused ? Visibility.Visible : Visibility.Collapsed;
+            RefreshMusicVideo();
         }
         finally
         {
@@ -340,6 +342,7 @@ public sealed partial class TrayFlyout : Window
         ShowLyric(state);
         ShowTransport(state);
         ShowCover();
+        RefreshMusicVideoLive();
     }
 
     private void ShowTransport(TrayFlyoutState state)

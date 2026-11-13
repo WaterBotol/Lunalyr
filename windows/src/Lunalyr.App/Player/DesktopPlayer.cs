@@ -235,7 +235,8 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             inHotZone: !held && !blocked && inZone && previous != display.Id);
         if (intentReady && previous is null && BusyFullScreen()) intentReady = false;
         var dragging = _interaction.Dragging && held;
-        var holds = previous is not null && PlayerDismissGuard.Holds(dragging, _interaction.SearchFocused, _interaction.LastClick, now, blocked);
+        // Align mode keeps the card up too (the Mac's pinnedOpen while aligning).
+        var holds = previous is not null && (PlayerDismissGuard.Holds(dragging, _interaction.SearchFocused, _interaction.LastClick, now, blocked) || Aligning);
         var active = HoverPolicy.Decide(stepped, previous, intentReady, holds);
         if (active is { } a)
         {
@@ -444,10 +445,10 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         UpdateModel(now);
         if (_rise.Moving(now) || _rise.Value(now) != 0) Place(now);
         var animating = _reveal.Moving(now) || _rise.Moving(now) || _record.Moving(now) || _thickness.Moving(now) || _active.Moving(now)
-            || _capsules.Moving(now) || _titles.Moving(now) || _note.Moving(now) || _scrub.IsDragging;
+            || _capsules.Moving(now) || _titles.Moving(now) || _note.Moving(now) || _scrub.IsDragging || _alignDragging;
         if (_dirty || animating || _scrub.Version != _drawnVersion) Draw();
         // Quick while anything moves; while shown, often enough for the elapsed time (and the key's capsule) to tick.
-        StartFrames(animating ? 16u : _model.DisplayedPlaying || _scrub.Flashing ? 100u : 250u);
+        StartFrames(animating ? 16u : _model.DisplayedPlaying || _scrub.Flashing || Aligning ? 100u : 250u);
     }
 
     // Made once: a frame allocates no delegate.
@@ -611,6 +612,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         m.TitleAlpha = _titles.Value(now);
         m.NoteAlpha = _note.Value(now);
         m.PressedPart = _pressed;
+        UpdateAlign(now);
         // What UI Automation reads changes at most once a second (the time, the line) or on a press: a few times a
         // second is plenty, and the frames in between build nothing for it.
         if (now - _automationAt >= 0.25)

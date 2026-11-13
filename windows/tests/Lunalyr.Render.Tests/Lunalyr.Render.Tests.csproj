@@ -21,4 +21,8 @@
     <!-- The silent generated clip (no audio track) of the imported-video tests, for the animated cover's layer. -->
     <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\clip.mp4" Link="Fixtures\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The music video sync checks read the frame number back from tools/WallpaperTestMedia's time-coded clip. -->
+    <None Include="..\Lunalyr.Platform.Windows.Tests\Fixtures\Wallpaper\timecode.mp4" Link="Fixtures\timecode.mp4" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

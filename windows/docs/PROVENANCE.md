@@ -174,3 +174,20 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C` (13 Nov 2026):
 | `Sources/NowPlaying/NowPlayingMonitor.swift` (`updateMotionArtwork`), `PlayerConnection.swift` (`allowsMotionLookup`) | 3 (closing braces) | `Shell/AppController.MotionArtwork.cs` | Faithful port of the gate and the hold-across-an-album rule |
 | `Sources/Settings/Pages/CoversPage.swift` | 1 / 113 (an `@Environment` declaration) | `App/Settings/CoversPage.cs`, `SettingsCopy.CoverStatus` | Faithful port of the page's rows and words (WinUI controls; "Music" reads "Apple Music") |
 | `Sources/Settings/LunalyrWorkspace.swift` (`coverLookupSkipped`, `coverIdlePrompt`, `reduceMotionCovers`) | 0 | `SettingsCopy.CoverStatus` | Faithful port, Windows' wording for Reduce Motion |
+
+## Music video (milestone 6)
+
+Checked at `next/integration` `79b84db` with `git blame -w -M -C`:
+
+| Mac file | Lines | `a99fd65` (Verso import) | Lunalyr's own |
+|---|---|---|---|
+| `Sources/MusicVideo/*.swift` (14 files) | 5,257 | 2: two SwiftUI `@Environment(\.accessibilityReduceMotion)` declarations in `MusicVideoSearchWindow.swift` (not translated) | everything else |
+| `Sources/Settings/MusicVideoSettings.swift`, `Sources/Player/VideoAlignRow.swift` | 571 | 0 | all |
+| `Sources/Settings/Settings.swift` (the music video keys) | | 0 in those lines | the four keys and the fallback rule |
+| `Tests/Swift/MusicVideo*Tests.swift` (9 files) | 3,580 | 0 | all |
+
+The rules and tests are ported faithfully (`src/Lunalyr.Core/MusicVideo/`). The SwiftUI, AVPlayer and WKWebView views are
+platform code, written fresh for Direct2D and WebView2. Left out on purpose because they aren't official YouTube means:
+the results-page reader, the still-image check (and its pasted-still note) and the undocumented caption calls. Not kept
+for YouTube because its API policies don't allow covering the player's interface: the 1.25× overscan and the frozen
+frame (`MusicVideoFreeze.swift`'s long-pause rule alone is ported, as `MusicVideoIdlePlayer`). See docs/milestones/M6.md, "Music video".

@@ -264,6 +264,10 @@ public readonly struct FrameContext
     public double SongJoined { get; init; }
 
     /// <summary>
+    /// This surface is on the main display (the primary monitor). Only that one has YouTube's player window beneath it, so
+    /// the music video's YouTube layer is see-through there alone. False offscreen.
+    /// </summary>
+    public bool IsMainDisplay { get; init; }
     /// The lyrics are not drawn on this surface: they float over the apps instead (the Mac's <c>drawsLyrics</c> false).
     /// A background's text backing then stays away, as there is nothing to back.
     /// </summary>

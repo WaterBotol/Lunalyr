@@ -52,10 +52,17 @@ public sealed partial class AppController
                 return CustomWallpaperStore.IsAvailable(settings.WallpaperPath) ? "custom" : FallbackBackground;
             case "visualizer":
                 return WallpaperCatalog.VisualiserLayerFor(settings);
+            case "musicVideo":
+            {
+                // The video (or the album colours while it is looked for), else the type chosen as "Without a video".
+                string? video = null;
+                MusicVideoBackground(settings, ref video);
+                return video ?? BackgroundLayerFor(settings with { BackgroundMode = settings.MusicVideoFallback });
+            }
         }
         // Match the music: an animated cover, when the album has one, wins (AppController.MotionArtwork.cs).
         if (settings.BackgroundMode == "auto" && MotionLayerFor(settings) is { } motion) return motion;
-        // Match the music, GPU effects, Line patterns (and Music video, not in this build, as Match the music).
+        // Match the music, GPU effects, Line patterns.
         TrackCharacter? song;
         lock (_gate) song = _wallpaperCharacter;
         return Pick(settings, song ?? TrackCharacter.Neutral).LayerId ?? FallbackBackground;

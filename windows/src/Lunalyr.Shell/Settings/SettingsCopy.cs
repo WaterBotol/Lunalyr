@@ -203,7 +203,7 @@ public static class SettingsCopy
         new("desktop", "Your wallpaper", "Your wallpaper", "", "Keep your own wallpaper and show lyrics and instrumental cues over it."),
         new("custom", "Imported image or video", "Image or video", "", "A picture or video of your own behind the lyrics."),
         new("musicVideo", "Music video", "Music video", "",
-            "The song’s music video behind the lyrics, muted and in time with the song.", Milestone6Later),
+            "The song’s music video behind the lyrics, muted and in time with the song."),
     ];
 
     /// <summary>The type the Wallpaper page shows as chosen for a stored <c>backgroundMode</c> (normalised first).</summary>
