@@ -616,6 +616,9 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         };
         var aliases = new YoasobiAliases();
         var playing = new LyricQuery("Racing into the Night", "YOASOBI", null, 261.013);
+        // With no genre, YOASOBI counts as East Asian once its MusicBrainz country is known. A lookup never waits for it
+        // (that held every new artist's lyrics back): an earlier song by the artist learned it, as here.
+        await new ArtistAliases(_cache.Path, aliases).CountryAsync("YOASOBI", Ct);
 
         // A search (every source answers), so the ranking of all three can be read.
         var report = await Service(handler, aliases: aliases, storefront: "au").LookupAsync(playing, Everything, force: true, cancellationToken: Ct);
