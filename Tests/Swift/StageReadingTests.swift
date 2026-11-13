@@ -270,37 +270,28 @@ final class StageReadingTests: XCTestCase {
         XCTAssertEqual(read.shrink, plain.shrink)
     }
 
-    /// Torque stacks a word's reading with it, and a stack too tall for the
-    /// stage keeps the word being sung (at its foot) on the stage.
-    func testTorqueStackMakesRoomForReadings() {
-        let runs = StageRun.make(Self.words(["one", "two", "three"], step: 0.5), glue: [false, false, false])
-        var state = StageLyricView.torqueState(runs, at: 5, speed: 1, seed: 3, reduceMotion: true)
-        let rest = StageLyricView.torqueRestSize(unit: 40)
-        let slot = StageLyricView.torqueReadingSlot(rest)
-        let bounds = CGRect(x: 0, y: 0, width: 800, height: 600)
+    /// Torque sets a word's reading with it in its row, so a row with
+    /// readings is taller and the rows below it move down; a face too big
+    /// for the stage is scaled to fit it whole.
+    func testTorqueFaceMakesRoomForReadings() {
         let plainSizes = [CGSize](repeating: CGSize(width: 200, height: 100), count: 3)
-        let plain = StageLyricView.torqueStack(plainSizes, state, seed: 3, in: bounds)
-        state.slots = [slot, slot, slot]
-        let read = StageLyricView.torqueStack(plainSizes.map { CGSize(width: $0.width, height: $0.height + slot) }, state,
-                                              seed: 3, in: bounds)
-        XCTAssertGreaterThan(read[2].y - read[1].y, plain[2].y - plain[1].y, "Neighbours move apart for the reading")
-        XCTAssertGreaterThanOrEqual(read[2].y - read[1].y,
-                                    ((100 * 0.82 + slot * 1.2) * state.scales[1] + (100 * 0.82 + slot * 1.2) * state.scales[2]) / 2 - 0.5)
-        // Too tall for a short stage: the newest word stays whole on it.
-        let short = CGRect(x: 0, y: 0, width: 800, height: 220)
-        let tall = StageLyricView.torqueStack(plainSizes.map { CGSize(width: $0.width, height: $0.height + slot) }, state,
-                                              seed: 3, in: short)
-        XCTAssertLessThanOrEqual(tall[2].y + (100 * 0.82 + slot * 1.2) * state.scales[2] / 2, short.maxY + 0.5)
-        // The view gives a tall stack the room it needs, then scales it to the stage.
-        state.slots = []
-        let plainHeight = StageLyricView.torqueHeight(plainSizes, state, restSize: rest)
-        state.slots = [slot, slot, slot]
-        let readHeight = StageLyricView.torqueHeight(plainSizes.map { CGSize(width: $0.width, height: $0.height + slot) }, state,
-                                                     restSize: rest)
-        XCTAssertGreaterThan(readHeight, plainHeight)
-        var layout = StageLayout(place: { _, _ in [] })
-        layout.needs = { _ in CGSize(width: 0, height: readHeight) }
-        XCTAssertEqual(layout.needs?([]).height, readHeight)
+        let rows = [[0, 1], [2]]
+        let baselines: [CGFloat] = [80, 80, 80]
+        let plain = TorqueFaceLayout.arrange(plainSizes, baselines: baselines, rows: rows, trailing: false,
+                                             rightToLeft: false, wordGap: 10, rowGap: 0)
+        let slot: CGFloat = 50
+        let readSizes = plainSizes.map { CGSize(width: $0.width, height: $0.height + slot) }
+        let read = TorqueFaceLayout.arrange(readSizes, baselines: baselines, rows: rows, trailing: false,
+                                            rightToLeft: false, wordGap: 10, rowGap: 0)
+        XCTAssertGreaterThan(read.frames[2].minY, plain.frames[2].minY, "The row below moves down for the reading")
+        XCTAssertGreaterThanOrEqual(read.frames[2].minY, read.frames[0].maxY - 0.5, "Nothing overlaps a reading")
+        XCTAssertGreaterThan(read.size.height, plain.size.height)
+        // Too tall for a short stage: fitted whole.
+        let available = CGSize(width: 800, height: 120)
+        let fitted = TorqueTurn.transform(angle: 0, size: read.size, available: available)
+        let box = CGRect(origin: .zero, size: read.size).applying(fitted)
+        XCTAssertLessThanOrEqual(box.height, available.height + 0.5)
+        XCTAssertEqual(box.midY, read.size.height / 2, accuracy: 0.5, "Fitted about its centre")
     }
 
     /// Broadside keeps its words on one line: a reading hangs below its
