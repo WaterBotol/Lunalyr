@@ -4,7 +4,7 @@ using static Lunalyr.Core.Tests.MusicVideo.Sources;
 namespace Lunalyr.Core.Tests.MusicVideo;
 
 // Ported from MusicVideoSearchTests.swift: Search YouTube…. Every seam is faked; no test reaches the network, plays
-// anything, or touches the real settings. The Mac's request-address and page-parsing tests become the Data API's.
+// anything, or touches the real settings. As on the Mac, YouTube's results page is faked.
 public sealed class MusicVideoSearchTests
 {
     private readonly MusicVideoWorld _world = new();
@@ -46,45 +46,64 @@ public sealed class MusicVideoSearchTests
 
     // Ported from MusicVideoSearchTests.swift: testFreeTextQueryIsSentAsTypedWithoutOfficialMusicVideo
     [Fact]
-    public async Task FreeTextQueryIsSentAsTypedWithoutOfficialMusicVideo()
+    public void FreeTextQueryIsSentAsTypedWithoutOfficialMusicVideo()
     {
-        var http = new FakeHttp();
-        MusicVideoWorld.ServeOfficialPage(http);
-        await _world.Resolver(http: http).SearchResultsAsync("  The Weeknd Blinding Lights live  ", TestContext.Current.CancellationToken);
-        Assert.Equal(YouTubeDataApi.Host, http.Urls[0].Host);
-        Assert.Equal(ApiFixtures.SearchPath, http.Urls[0].AbsolutePath);
-        Assert.Equal("The Weeknd Blinding Lights live", FakeHttp.QueryOf(http.Urls[0]));
-        Assert.IsType<MusicVideoSearchOutcome.Failed>(await _world.Resolver(http: http).SearchResultsAsync("   ", TestContext.Current.CancellationToken));
-        Assert.Equal("The Weeknd Blinding Lights official music video", YouTubeSearch.Query("Blinding Lights", "The Weeknd"));
+        var url = YouTubeSearchPage.RequestUrl("  The Weeknd Blinding Lights live  ")!;
+        Assert.Equal("www.youtube.com", url.Host);
+        Assert.Equal("/results", url.AbsolutePath);
+        Assert.Equal("?search_query=The%20Weeknd%20Blinding%20Lights%20live", url.Query);
+        Assert.Equal("The Weeknd Blinding Lights live", FakeHttp.SearchQueryOf(url));
+        Assert.Null(YouTubeSearchPage.RequestUrl("   "));
+        // The automatic lookup's query is unchanged.
+        var automatic = YouTubeSearchPage.RequestUrl("Blinding Lights", "The Weeknd");
+        Assert.Equal("The Weeknd Blinding Lights official music video", FakeHttp.SearchQueryOf(automatic));
     }
 
     // Ported from MusicVideoSearchTests.swift: testQueryWithSymbolsIsEncoded
     [Fact]
     public void QueryWithSymbolsIsEncoded()
     {
-        var url = YouTubeDataApi.SearchUrl("AC/DC T.N.T. & more #1");
+        var url = YouTubeSearchPage.RequestUrl("AC/DC T.N.T. & more #1")!;
         Assert.DoesNotContain(" ", url.AbsoluteUri);
-        Assert.Equal("AC/DC T.N.T. & more #1", FakeHttp.QueryOf(url));
+        Assert.Equal("AC/DC T.N.T. & more #1", FakeHttp.SearchQueryOf(url));
     }
 
-    // Ported from MusicVideoSearchTests.swift: testViewsAndUploadAgeAreReadFromEachShape (the API's counts and dates, shown
-    // as YouTube shows them)
+    /// <summary>
+    /// The Mac's SearchFixtures.page: a results page with view counts and upload ages in each of the shapes YouTube uses:
+    /// simpleText, runs, short and long counts, or none.
+    /// </summary>
+    internal const string MacSearchPage = """
+        <html><script>var ytInitialData = {"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":
+        {"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[
+        {"videoRenderer":{"videoId":"4NRXx6U8ABQ","title":{"runs":[{"text":"The Weeknd - Blinding Lights (Official Video)"}]},
+         "ownerText":{"runs":[{"text":"TheWeekndVEVO"}]},"lengthText":{"simpleText":"4:22"},
+         "viewCountText":{"simpleText":"1,034,567,890 views"},"shortViewCountText":{"simpleText":"1B views"},
+         "publishedTimeText":{"simpleText":"5 years ago"}}},
+        {"videoRenderer":{"videoId":"fHI8X4OXluQ","title":{"runs":[{"text":"Blinding Lights (Lyrics)"}]},
+         "ownerText":{"runs":[{"text":"Lyrics Hub"}]},"lengthText":{"simpleText":"3:20"},
+         "viewCountText":{"runs":[{"text":"12,345"},{"text":" views"}]},
+         "publishedTimeText":{"runs":[{"text":"3 weeks ago"}]}}},
+        {"videoRenderer":{"videoId":"J7p4bzqLvCw","title":{"runs":[{"text":"Blinding Lights (Live)"}]},
+         "ownerText":{"runs":[{"text":"The Weeknd"}]},
+         "ownerBadges":[{"metadataBadgeRenderer":{"style":"BADGE_STYLE_TYPE_VERIFIED_ARTIST"}}]}}
+        ]}}]}}}}};</script></html>
+        """;
+
+    // Ported from MusicVideoSearchTests.swift: testViewsAndUploadAgeAreReadFromEachShape
     [Fact]
-    public void ViewsAndUploadAgeAreReadFromTheApi()
+    public void ViewsAndUploadAgeAreReadFromEachShape()
     {
-        var merged = YouTubeDataApi.Merge(
-            YouTubeDataApi.ParseSearch(ApiFixtures.Search(("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"),
-                ("fHI8X4OXluQ", "Blinding Lights (Lyrics)", "Lyrics Hub"), ("J7p4bzqLvCw", "Blinding Lights (Live)", "The Weeknd"))),
-            YouTubeDataApi.ParseVideos(ApiFixtures.Videos(("4NRXx6U8ABQ", "PT4M22S", 1_034_567_890, true), ("fHI8X4OXluQ", "PT3M20S", 12_345, true))),
-            MusicVideoWorld.Start);
-        Assert.Equal(["4NRXx6U8ABQ", "fHI8X4OXluQ", "J7p4bzqLvCw"], merged.Select(r => r.VideoId));
-        Assert.Equal("1B views", merged[0].Views);
-        Assert.Equal(262, merged[0].Duration);
-        Assert.Equal("12K views", merged[1].Views);
-        Assert.Equal("6 years ago", merged[0].Uploaded);
-        Assert.Null(merged[2].Views);
-        Assert.Null(merged[2].Duration);
-        Assert.False(merged[2].VerifiedArtist);
+        var results = YouTubeSearchPage.Results(MacSearchPage);
+        Assert.Equal(["4NRXx6U8ABQ", "fHI8X4OXluQ", "J7p4bzqLvCw"], results.Select(r => r.VideoId));
+        Assert.Equal("1B views", results[0].Views);
+        Assert.Equal("5 years ago", results[0].Uploaded);
+        Assert.Equal(262, results[0].Duration);
+        Assert.Equal("12,345 views", results[1].Views);
+        Assert.Equal("3 weeks ago", results[1].Uploaded);
+        Assert.Null(results[2].Views);
+        Assert.Null(results[2].Uploaded);
+        Assert.Null(results[2].Duration);
+        Assert.True(results[2].VerifiedArtist);
     }
 
     // Ported from MusicVideoSearchTests.swift: testResultsDefaultToNoViewsOrAge
@@ -150,12 +169,12 @@ public sealed class MusicVideoSearchTests
         Assert.Equal(results[0].VideoId, rows[0].VideoId);
     }
 
-    // Ported from MusicVideoSearchTests.swift: testRowLabelsAndThumbnail (the still is the one the API returned)
+    // Ported from MusicVideoSearchTests.swift: testRowLabelsAndThumbnail
     [Fact]
     public void RowLabelsAndThumbnail()
     {
         var result = new YouTubeVideoResult("4NRXx6U8ABQ", "Blinding Lights (Official Video)", "The Weeknd", true, 201, "1B views",
-            "5 years ago", "https://i.ytimg.com/vi/4NRXx6U8ABQ/mqdefault.jpg");
+            "5 years ago");
         var row = new MusicVideoSearchRow(result, 200, null);
         Assert.Equal("3:21", row.DurationText);
         Assert.Equal("1B views · 5 years ago", row.Details);
@@ -163,7 +182,8 @@ public sealed class MusicVideoSearchTests
             row.AccessibilityLabel);
         Assert.Equal("https://i.ytimg.com/vi/4NRXx6U8ABQ/mqdefault.jpg", row.ThumbnailUrl);
         Assert.Equal("Untitled video", new MusicVideoSearchRow(new YouTubeVideoResult("4NRXx6U8ABQ", "", ""), null, null).Title);
-        Assert.Null(new MusicVideoSearchRow(new YouTubeVideoResult("4NRXx6U8ABQ", "", ""), null, null).ThumbnailUrl);
+        // Windows: an ID that isn't YouTube's gets no address at all.
+        Assert.Null(new MusicVideoSearchRow(new YouTubeVideoResult("../../x", "", ""), null, null).ThumbnailUrl);
     }
 
     // Ported from MusicVideoSearchTests.swift: testQueryIsPrefilledWithArtistAndTitleAndSearchedOnOpen
@@ -235,7 +255,8 @@ public sealed class MusicVideoSearchTests
         Assert.Equal(MusicVideoSearchModel.SearchPhase.Results, model.Phase);
     }
 
-    // Windows' own: without a key (or with one YouTube refused) the picker says so instead of searching.
+    // Windows' own: "Use my API key" without a key (or with one YouTube refused) says so instead of searching, and so does a
+    // run with no page search and no key (--demo, --no-network). YouTube's site needs no key.
     [Fact]
     public async Task WithoutAKeyThePickerAsksForOne()
     {
@@ -246,8 +267,28 @@ public sealed class MusicVideoSearchTests
         Assert.Equal(MusicVideoSearchModel.SearchPhase.NeedsKey, model.Phase);
         Assert.False(model.KeyRejected);
         var http = new FakeHttp();
-        Assert.IsType<MusicVideoSearchOutcome.NeedsKey>(await _world.Resolver(http: http, key: null).SearchResultsAsync("x", TestContext.Current.CancellationToken));
+        MusicVideoWorld.ServeOfficialPage(http);
+        var ct = TestContext.Current.CancellationToken;
+        Assert.IsType<MusicVideoSearchOutcome.NeedsKey>(await _world.Resolver(http: http, mode: MusicVideoSearchMode.ApiKey).SearchResultsAsync("x", ct));
+        Assert.IsType<MusicVideoSearchOutcome.NeedsKey>(await _world.Resolver(http: http, page: false).SearchResultsAsync("x", ct));
         Assert.Empty(http.Urls);
+        Assert.IsType<MusicVideoSearchOutcome.Results>(await _world.Resolver(http: http).SearchResultsAsync("x", ct));
+    }
+
+    // Windows' own: a page that isn't results says so (the picker's calm note), apart from a passing failure.
+    [Fact]
+    public async Task AnUnavailablePageIsToldApartFromAFailure()
+    {
+        var source = new FakeSearching(Song) { Outcome = new MusicVideoSearchOutcome.Failed(Unavailable: true) };
+        var model = new MusicVideoSearchModel(source);
+        model.Prepare();
+        await model.SettleAsync();
+        Assert.Equal(MusicVideoSearchModel.SearchPhase.Failed, model.Phase);
+        Assert.True(model.Unavailable);
+        source.Outcome = new MusicVideoSearchOutcome.Failed();
+        model.Search();
+        await model.SettleAsync();
+        Assert.False(model.Unavailable);
     }
 
     // Ported from MusicVideoSearchTests.swift: testNothingPlayingSearchesNothing
@@ -324,28 +365,30 @@ public sealed class MusicVideoSearchTests
     public async Task ResolverSearchSendsOnlyTheQueryAndCachesNothing()
     {
         var http = new FakeHttp();
-        MusicVideoWorld.ServeSearch(http, ("4NRXx6U8ABQ", "a", "b"), ("fHI8X4OXluQ", "c", "d"), ("J7p4bzqLvCw", "e", "f"));
+        http.ByPath[PageFixtures.Path] = new FakeHttp.Reply(200, System.Text.Encoding.UTF8.GetBytes(MacSearchPage));
         var resolver = _world.Resolver(http: http);
         var outcome = Assert.IsType<MusicVideoSearchOutcome.Results>(await resolver.SearchResultsAsync("The Weeknd Blinding Lights", TestContext.Current.CancellationToken));
         Assert.Equal(3, outcome.Videos.Count);
-        Assert.Equal([ApiFixtures.SearchPath, ApiFixtures.VideosPath], http.Paths);
-        Assert.Equal("The Weeknd Blinding Lights", FakeHttp.QueryOf(http.Urls[0]));
+        Assert.Single(http.Urls);
+        Assert.Equal("The Weeknd Blinding Lights", FakeHttp.SearchQueryOf(http.Urls[0]));
         Assert.Equal(0, resolver.Cache.Count);
         Assert.Single(resolver.RateLimit.Sent);
     }
 
-    // Ported from MusicVideoSearchTests.swift: testResolverSearchStates
+    // Ported from MusicVideoSearchTests.swift: testResolverSearchStates (Windows: the consent page is also marked as
+    // unavailable, and stands the page down, so the rest runs on a fresh resolver)
     [Fact]
     public async Task ResolverSearchStates()
     {
         var http = new FakeHttp();
         var resolver = _world.Resolver(http: http);
-        http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(200, "<html>Before you continue to YouTube</html>"u8.ToArray());
+        http.ByPath[PageFixtures.Path] = new FakeHttp.Reply(200, "<html>Before you continue to YouTube</html>"u8.ToArray());
         Assert.IsType<MusicVideoSearchOutcome.Failed>(await resolver.SearchResultsAsync("x", TestContext.Current.CancellationToken));
-        http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(200, """{"items":[]}"""u8.ToArray());
+        resolver = _world.Resolver(http: http);
+        http.ByPath[PageFixtures.Path] = new FakeHttp.Reply(200, "<script>var ytInitialData = {\"contents\":{}};</script>"u8.ToArray());
         var none = Assert.IsType<MusicVideoSearchOutcome.Results>(await resolver.SearchResultsAsync("x", TestContext.Current.CancellationToken));
         Assert.Empty(none.Videos);
-        http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(429, [], new() { ["Retry-After"] = "120" });
+        http.ByPath[PageFixtures.Path] = new FakeHttp.Reply(429, [], new() { ["Retry-After"] = "120" });
         Assert.IsType<MusicVideoSearchOutcome.RateLimited>(await resolver.SearchResultsAsync("x", TestContext.Current.CancellationToken));
         var sentBefore = http.Urls.Count;
         Assert.IsType<MusicVideoSearchOutcome.RateLimited>(await resolver.SearchResultsAsync("x", TestContext.Current.CancellationToken));

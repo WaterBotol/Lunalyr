@@ -1,8 +1,8 @@
 // Windows' own: YouTube search through the official YouTube Data API v3 (search.list, then videos.list for lengths, view
-// counts and embeddability), with an API key the owner supplies. The Mac reads youtube.com's results page with a browser's
-// User-Agent; that is scraping and is not ported. Nothing here runs without a key, and nothing at all under --demo or
-// --no-network (the app never builds the client then). Not verified live: the development rules forbid calling YouTube,
-// so this runs only against fixtures shaped like the API's documented replies.
+// counts and embeddability), with an API key the owner supplies. The fallback when YouTube's own results page (the Mac's
+// way, YouTubeSearchPage.cs) isn't available, and the owner's choice under "Use my API key". Nothing here runs without a
+// key, and nothing at all under --demo or --no-network (the app never builds the client then). Not verified live: it
+// runs only against fixtures shaped like the API's documented replies.
 
 using System.Globalization;
 using System.Net;
@@ -186,7 +186,7 @@ public sealed class YouTubeDataApi(IMusicVideoHttp http, Func<string?> apiKey, F
                 item.TryGetProperty("snippet", out var snippet);
                 var title = snippet.ValueKind == JsonValueKind.Object ? Decode(String(snippet, "title")) : "";
                 var channel = snippet.ValueKind == JsonValueKind.Object ? Decode(String(snippet, "channelTitle")) : "";
-                found.Add(new YouTubeVideoResult(videoId, title, channel, ThumbnailUrl: Thumbnail(snippet),
+                found.Add(new YouTubeVideoResult(videoId, title, channel,
                     Uploaded: snippet.ValueKind == JsonValueKind.Object ? String(snippet, "publishedAt") : null));
             }
             return found;
@@ -321,20 +321,6 @@ public sealed class YouTubeDataApi(IMusicVideoHttp http, Func<string?> apiKey, F
         };
         var whole = Math.Max(1, (int)Math.Floor(amount));
         return $"{whole} {unit}{(whole == 1 ? "" : "s")} ago";
-    }
-
-    /// <summary>The medium (320 × 180) still the API returned, else the default one; only an https address.</summary>
-    private static string? Thumbnail(JsonElement snippet)
-    {
-        if (snippet.ValueKind != JsonValueKind.Object || !snippet.TryGetProperty("thumbnails", out var thumbnails)
-            || thumbnails.ValueKind != JsonValueKind.Object) return null;
-        foreach (var size in new[] { "medium", "high", "default" })
-        {
-            if (thumbnails.TryGetProperty(size, out var entry) && entry.ValueKind == JsonValueKind.Object
-                && String(entry, "url") is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https")
-                return url;
-        }
-        return null;
     }
 
     private static string? String(JsonElement element, string name) =>

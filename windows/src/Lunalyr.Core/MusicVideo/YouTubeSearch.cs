@@ -1,6 +1,6 @@
 // The official-video ranking, ported from the Mac's MusicVideoCore.swift (YouTubeSearchPage.officialVideos, channel(isOf:),
-// lengthSeconds; Lunalyr's own code). The Mac fills it by reading youtube.com's results page; that is scraping, so
-// Windows fills it from the YouTube Data API (YouTubeDataApi.cs) and the page reader is not ported.
+// lengthSeconds; Lunalyr's own code). Filled, as on the Mac, from YouTube's own results page (YouTubeSearchPage.cs), or
+// from the YouTube Data API with the owner's key (YouTubeDataApi.cs) when that page isn't available or the owner prefers it.
 
 using System.Globalization;
 using Lunalyr.Core.Lyrics;
@@ -9,15 +9,14 @@ namespace Lunalyr.Core.MusicVideo;
 
 /// <summary>One video in a search's results.</summary>
 /// <param name="VerifiedArtist">
-/// The channel carries YouTube's verified-artist badge. The Mac reads it from the results page; the Data API has no field
-/// for it, so on Windows it is always false and the channel's name (or VEVO) has to show it is the artist's.
+/// The channel carries YouTube's verified-artist badge (the music note), from the results page's <c>ownerBadges</c>. The
+/// Data API has no field for it, so its results never carry it.
 /// </param>
 /// <param name="Duration">The video's length in seconds, when known.</param>
 /// <param name="Views">YouTube-style view count ("12M views"), when known.</param>
 /// <param name="Uploaded">How long ago it was uploaded ("3 years ago"), when known.</param>
-/// <param name="ThumbnailUrl">The still the API returned for it (never built by hand), or null.</param>
 public sealed record YouTubeVideoResult(string VideoId, string Title, string Channel, bool VerifiedArtist = false,
-    double? Duration = null, string? Views = null, string? Uploaded = null, string? ThumbnailUrl = null);
+    double? Duration = null, string? Views = null, string? Uploaded = null);
 
 public static class YouTubeSearch
 {

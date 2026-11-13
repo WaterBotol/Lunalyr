@@ -13,7 +13,7 @@ namespace Lunalyr.App.Hosting;
 // The Music video wallpaper type (docs/APP-SHELL.md, "Music video"). Built after the controller, as the visualisers are.
 // - Per-song state (offsets, links, chosen files, the lookup cache) lives in {data}\music-video.json.
 // - YouTube is built only when nothing forbids it this run: never under --demo or --no-network (nothing may reach
-//   YouTube: no Data API client, no key store, no player), and the player not under --no-playback either (it plays a
+//   YouTube: no results-page search, no Data API client, no key store, no player), and the player not under --no-playback either (it plays a
 //   video stream, muted). A saved link in a test data folder therefore loads nothing.
 internal sealed partial class AppHost
 {
@@ -40,7 +40,10 @@ internal sealed partial class AppHost
             _musicVideoHttp = new MusicVideoHttpClient();
             api = new YouTubeDataApi(_musicVideoHttp, () => keys.Key);
         }
-        var resolver = new MusicVideoResolver(files, new MediaFoundationPlayability(), api, new MusicVideoCache(storage), new MusicVideoLinks(storage));
+        // YouTube's results page first, the Mac's way (no key); the owner's key as the fallback, or alone under "Use my API key".
+        var resolver = new MusicVideoResolver(files, new MediaFoundationPlayability(), api, new MusicVideoCache(storage), new MusicVideoLinks(storage),
+            page: _musicVideoHttp,
+            searchMode: () => _settings.Current.MusicVideoSearch == "apiKey" ? MusicVideoSearchMode.ApiKey : MusicVideoSearchMode.Site);
         var video = new MusicVideoController(resolver, new MusicVideoOffsets(storage), controller.ReadSongPosition, controller.MusicVideoLyrics,
             files: files)
         {
@@ -69,7 +72,7 @@ internal sealed partial class AppHost
         MusicVideoUi.Http = _musicVideoHttp;
         MusicVideoUi.OpenUrl = PlaybackGuard.Process.Reason is null ? url => ShellUrlLauncher.Instance.Launch(new Uri(url)) : null;
         MusicVideoUi.Search = new MusicVideoSearchModel(new ControllerSearching(video));
-        _log.Info($"Music video: video files on; YouTube {(playerOff is null ? $"on (search {(keys!.HasKey ? "has" : "needs")} an API key)" : $"off for this run ({playerOff})")}.");
+        _log.Info($"Music video: video files on; YouTube {(playerOff is null ? $"on (search: {(_settings.Current.MusicVideoSearch == "apiKey" ? "your API key" : "YouTube's site")}, an API key {(keys!.HasKey ? "is" : "isn't")} set)" : $"off for this run ({playerOff})")}.");
     }
 
     private void StopMusicVideo()

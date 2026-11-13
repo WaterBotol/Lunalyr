@@ -188,6 +188,19 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C`:
 
 The rules and tests are ported faithfully (`src/Lunalyr.Core/MusicVideo/`). The SwiftUI, AVPlayer and WKWebView views are
 platform code, written fresh for Direct2D and WebView2. Left out on purpose because they aren't official YouTube means:
-the results-page reader, the still-image check (and its pasted-still note) and the undocumented caption calls. Not kept
+the still-image check (and its pasted-still note) and the undocumented caption calls. Not kept
 for YouTube because its API policies don't allow covering the player's interface: the 1.25× overscan and the frozen
 frame (`MusicVideoFreeze.swift`'s long-pause rule alone is ported, as `MusicVideoIdlePlayer`). See docs/milestones/M6.md, "Music video".
+
+**Search the Mac's way (13 Nov 2026, the owner's decision):** the results-page reader is now ported faithfully, with no
+API key: `MusicVideoCore.swift`'s `YouTubeSearchPage` (request address, `ytInitialData` parsing, the verified-artist
+badge, the off-thread read) → `Core/MusicVideo/YouTubeSearchPage.cs`; `MusicVideoSearch.swift`'s `requestURL(query:)` and
+row thumbnail → the same file and `MusicVideoSearchModel.cs`; `MusicVideoServices.swift`'s `URLSessionMusicVideoHTTP`
+(the WebKit User-Agent for youtube.com, `Accept-Language`, no cookies) → `Platform/MusicVideo/MusicVideoServices.cs`;
+`MusicVideoResolver.swift`'s `searchYouTube`, `searchResults` and `fetch` → `Core/MusicVideo/MusicVideoResolver.cs`;
+with the tests that had been left out as page scraping. Blame-checked again at `79b84db`: `MusicVideoCore.swift`,
+`MusicVideoServices.swift`, `MusicVideoResolver.swift`, `MusicVideoSearch.swift`, `MusicVideoController.swift`,
+`MusicVideoSettings.swift`, `MusicVideoTests.swift`, `MusicVideoSearchTests.swift`, `MusicVideoMatchTests.swift` and
+`MusicVideoOffsetTests.swift` have no `a99fd65` lines; nothing was re-implemented from behaviour. Windows' own and
+written fresh: the guardrail (`YouTubeSearchPage.Inspect`: a consent, bot-check, sign-in or captcha page, a redirect or
+a page without data is never worked around), the Data API key as the fallback, and the "Search YouTube with" setting.

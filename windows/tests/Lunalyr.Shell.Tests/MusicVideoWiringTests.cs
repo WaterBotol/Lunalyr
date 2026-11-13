@@ -201,6 +201,17 @@ public sealed class MusicVideoWiringTests : IAsyncDisposable
         Assert.Equal(AppSettings.BackgroundModes.Where(m => m != "musicVideo"), AppSettings.MusicVideoFallbacks);
     }
 
+    // Windows' own: YouTube's site is searched by default (no key); "Use my API key" is the other choice; anything else
+    // reads as the site.
+    [Fact]
+    public void YouTubeIsSearchedOnItsSiteUnlessTheOwnerChoosesTheKey()
+    {
+        Assert.Equal("site", new AppSettings().Normalized().MusicVideoSearch);
+        Assert.Equal("apiKey", new AppSettings { MusicVideoSearch = "apiKey" }.Normalized().MusicVideoSearch);
+        Assert.Equal("site", new AppSettings { MusicVideoSearch = "something else" }.Normalized().MusicVideoSearch);
+        Assert.Equal(["site", "apiKey"], AppSettings.MusicVideoSearchModes);
+    }
+
     [Fact]
     public void DimmingAndBlurStayInTheMacsRanges()
     {

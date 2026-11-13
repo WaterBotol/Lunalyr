@@ -4,7 +4,7 @@ using static Lunalyr.Core.Tests.MusicVideo.Sources;
 namespace Lunalyr.Core.Tests.MusicVideo;
 
 // Ported from MusicVideoTests.swift. Every seam is faked: no test reaches the network, a player, a file or the real
-// settings. Where the Mac reads youtube.com's results page, these serve the YouTube Data API's reply with the same videos.
+// settings. As on the Mac, YouTube's results page is faked (MusicVideoFakes.cs).
 public sealed class MusicVideoTests
 {
     private readonly MusicVideoWorld _world = new();
@@ -46,7 +46,8 @@ public sealed class MusicVideoTests
         Assert.Equal(Found(YouTube("4NRXx6U8ABQ")), online);
     }
 
-    // Ported from MusicVideoTests.swift: testYouTubeSearchSendsOnlyTitleAndArtist (Windows: the Data API, the key in a header)
+    // Ported from MusicVideoTests.swift: testYouTubeSearchSendsOnlyTitleAndArtist (without the still check, which isn't
+    // ported, the results page is the only request: no i.ytimg.com frames)
     [Fact]
     public async Task YouTubeSearchSendsOnlyTitleAndArtist()
     {
@@ -54,11 +55,10 @@ public sealed class MusicVideoTests
         MusicVideoWorld.ServeOfficialPage(http);
         var result = await _world.Resolver(http: http).ResolveAsync(Song, online: true, TestContext.Current.CancellationToken);
         Assert.Equal(Found(YouTube("4NRXx6U8ABQ")), result);
-        Assert.All(http.Urls, u => Assert.Equal(YouTubeDataApi.Host, u.Host));
-        Assert.Equal(ApiFixtures.SearchPath, http.Urls[0].AbsolutePath);
-        Assert.Equal("The Weeknd Blinding Lights official music video", FakeHttp.QueryOf(http.Urls[0]));
-        Assert.All(http.Urls, u => Assert.DoesNotContain(MusicVideoWorld.ApiKey, u.ToString()));
-        Assert.All(http.Headers, h => Assert.Equal(MusicVideoWorld.ApiKey, h[YouTubeDataApi.KeyHeader]));
+        Assert.Equal(YouTubeSearchPage.Host, http.Urls[0].Host);
+        Assert.Equal([YouTubeSearchPage.Host], http.Urls.Select(u => u.Host));
+        Assert.Equal("The Weeknd Blinding Lights official music video", FakeHttp.SearchQueryOf(http.Urls[0]));
+        Assert.Empty(http.Headers[0]);
     }
 
     // Ported from MusicVideoTests.swift: testPastedLinkComesAfterTheLibraryAndNeedsNoSearch
@@ -78,12 +78,12 @@ public sealed class MusicVideoTests
         Assert.Null(new MusicVideoLinks(_world.Storage).VideoId(Song.Key));
     }
 
-    // Ported from MusicVideoTests.swift: testChangedPageFormatIsAFailureNotAMiss (Windows: a reply that isn't the API's)
+    // Ported from MusicVideoTests.swift: testChangedPageFormatIsAFailureNotAMiss
     [Fact]
-    public async Task UnreadableReplyIsAFailureNotAMiss()
+    public async Task ChangedPageFormatIsAFailureNotAMiss()
     {
         var http = new FakeHttp();
-        http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(200, "<html>Before you continue</html>"u8.ToArray());
+        http.ByPath[PageFixtures.Path] =new FakeHttp.Reply(200, "<html>Before you continue</html>"u8.ToArray());
         var resolver = _world.Resolver(http: http);
         Assert.Equal(Missing(MusicVideoMiss.LookupFailed), await resolver.ResolveAsync(Song, online: true, TestContext.Current.CancellationToken));
         Assert.Null(resolver.Cache.Lookup(Song.Key, MusicVideoWorld.Start));
@@ -177,7 +177,7 @@ public sealed class MusicVideoTests
     public async Task TooManyRequestsBacksOff()
     {
         var http = new FakeHttp();
-        http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(429, [], new() { ["Retry-After"] = "120" });
+        http.ByPath[PageFixtures.Path] = new FakeHttp.Reply(429, [], new() { ["Retry-After"] = "120" });
         double time = 0;
         var resolver = _world.Resolver(http: http, clock: () => time);
         Assert.Equal(Missing(MusicVideoMiss.RateLimited), await resolver.ResolveAsync(Song, online: true, TestContext.Current.CancellationToken));
@@ -221,19 +221,38 @@ public sealed class MusicVideoTests
         Assert.False(YouTubeVideoId.IsValid("4NRXx6U8AB<"));
     }
 
-    // Ported from MusicVideoTests.swift: testYouTubeSearchPrefersTheOfficialVideo (the results come from the API's reply)
+    // Ported from MusicVideoTests.swift: testYouTubeSearchPrefersTheOfficialVideo
     [Fact]
     public void YouTubeSearchPrefersTheOfficialVideo()
     {
-        var results = YouTubeDataApi.ParseSearch(ApiFixtures.Search(
+        var results = YouTubeSearchPage.Results(System.Text.Encoding.UTF8.GetString(PageFixtures.SearchPage(
             ("CCCCCCCCCCC", "Blinding Lights (Live at the Grammys)", "The Weeknd"),
             ("DDDDDDDDDDD", "The Weeknd - Blinding Lights (Audio)", "The Weeknd - Topic"),
             ("EEEEEEEEEEE", "The Weeknd - Blinding Lights", "TheWeekndVEVO"),
-            ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO")));
+            ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))));
         Assert.Equal(4, results.Count);
         Assert.Equal("4NRXx6U8ABQ", YouTubeSearch.OfficialVideo(results, "Blinding Lights", "The Weeknd")?.VideoId);
         Assert.Null(YouTubeSearch.OfficialVideo(results, "Save Your Tears", "The Weeknd"));
-        Assert.Throws<YouTubeApiException>(() => YouTubeDataApi.ParseSearch("<html>consent</html>"u8.ToArray()));
+        Assert.Empty(YouTubeSearchPage.Results("<html>consent</html>"));
+    }
+
+    // Ported from MusicVideoTests.swift: testSearchPageIsReadOffTheMainActor (Windows: off the calling thread, on the
+    // thread pool; the call is made from a thread of its own so the two can be told apart)
+    [Fact]
+    public void SearchPageIsReadOffTheMainActor()
+    {
+        var page = PageFixtures.SearchPage(("4NRXx6U8ABQ", "Blinding Lights (Official Video)", "The Weeknd"));
+        IReadOnlyList<YouTubeVideoResult> results = [];
+        var caller = new Thread(() =>
+        {
+            var me = Environment.CurrentManagedThreadId;
+            results = YouTubeSearchPage.ResultsOffThreadAsync(page, html =>
+                Environment.CurrentManagedThreadId == me || !Thread.CurrentThread.IsThreadPoolThread ? [] : YouTubeSearchPage.Results(html))
+                .GetAwaiter().GetResult();
+        });
+        caller.Start();
+        caller.Join();
+        Assert.Equal(["4NRXx6U8ABQ"], results.Select(r => r.VideoId));
     }
 
     // ---- Position mapping and drift ----

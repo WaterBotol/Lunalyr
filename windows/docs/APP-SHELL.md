@@ -390,7 +390,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `visualizerPunch` | `1` | 0–2, Visualiser › Beat punch (off while Animation effects are off) | `custom.visualizerPunch` |
 | `starTrailsColours` | `"album"` | `album` or `original`, Visualiser › Colours (Star Trails) | `custom.starTrailsColours` |
 | `musicVideoFallback` | `"auto"` | "Without a video": any type but `musicVideo` (anything else reads as `auto`); choosing Music video stores the type it replaced here | `custom.musicVideoFallback` |
-| `musicVideoOnline` | `false` | "Search YouTube for videos" (sends the title and artist to the YouTube Data API, with the owner's key) | `custom.musicVideoOnline` |
+| `musicVideoOnline` | `false` | "Search YouTube for videos" (sends the title and artist to YouTube: its results page, or the Data API with the owner's key) | `custom.musicVideoOnline` |
+| `musicVideoSearch` | `"site"` | "Search YouTube with": `site`, "Search YouTube’s site (no key)", the results page as on the Mac, with the owner's key (if any) as the fallback; or `apiKey`, "Use my API key", the Data API only. Anything else reads as `site` | Windows only |
 | `musicVideoDim` | `0.35` | 0–0.85, "Video dimming" | `custom.musicVideoDim` |
 | `musicVideoBlur` | `0` | 0–24 points, "Video blur" | `custom.musicVideoBlur` |
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
@@ -755,34 +756,60 @@ WallpaperPage.MusicVideo.cs`, `App/Player/*Align*.cs`, `App/Tray/TrayFlyout.Musi
    be shown says so and falls back.
 2. **A YouTube link** pasted for the song, or picked in Search YouTube…; played even with search off.
 3. **With "Search YouTube for videos" on** (off by default): the cached answer (found videos for 60 days, "nothing
-   official" for a week, 500 songs at most), else one **YouTube Data API v3** search, "artist title official music
-   video" (`search.list`, embeddable videos only, 12 results, then `videos.list` for lengths and views), ranked as the
-   Mac ranks: this song by exact title (`MusicVideoTitleMatch`), from the artist's own or VEVO channel, never "- Topic",
-   live, fan, lyric, audio or other excluded uploads; "official music video" first, and an official video as long as
-   the song ahead of the rest. Rate limited (2 s apart, 8 a minute; 429 backs off as asked, a used-up daily quota until
-   midnight Pacific), and a lookup skipped past sends nothing. A refused video makes way for the song's next official
-   one (three at most), then "can't be embedded" is remembered.
+   official" for a week, 500 songs at most), else one search for "artist title official music video", **the Mac's way
+   by default** ("Search YouTube with" › "Search YouTube’s site (no key)", `musicVideoSearch`):
+   - **YouTube's results page** (`YouTubeSearchPage`, the Mac's): one plain GET of
+     `https://www.youtube.com/results?search_query=…` with the Mac's WebKit User-Agent and `Accept-Language: en`, no
+     cookies, no redirects followed, nothing cached on disk; the videos in its `ytInitialData` (title, channel, the
+     verified-artist badge, length, views, age), read off the calling thread.
+   - **The owner's YouTube Data API key** (`YouTubeDataApi`) is the fallback, asked once, when the page fails, is busy
+     (429/503) or isn't available (below), and is the only search under "Use my API key" (`search.list`, embeddable
+     videos only, 12 results, then `videos.list` for lengths and views; the Data API has no verified badge).
+   
+   Either way ranked as the Mac ranks: this song by exact title (`MusicVideoTitleMatch`), from the artist's own or VEVO
+   channel or one with the verified-artist badge, never "- Topic", live, fan, lyric, audio or other excluded uploads;
+   "official music video" first, and an official video as long as the song ahead of the rest. A page with no videos is
+   a failure, not "nothing official" (the Mac's rule), and isn't cached. Rate limited as on the Mac (2 s apart, 8 a
+   minute; 429 backs off as asked, up to an hour, or a minute); the Data API has its own limiter, the same spacing with
+   a used-up daily quota waiting until midnight Pacific, so neither stops the other. A lookup held back by Lunalyr's
+   own spacing (not by YouTube) is "too many lookups" and never spends the key. A lookup skipped past sends nothing.
+   A refused video makes way for the song's next official one (three at most), then "can't be embedded" is
+   remembered.
+   
+   **The guardrail (the owner's rule): YouTube's bot, consent, sign-in and PO-token protections are never worked
+   around.** A reply that isn't a results page is "unavailable": a consent page ("Before you continue"), a "confirm
+   you're not a bot" page, a sign-in wall, a captcha, Google's /sorry/ page, a 403, any redirect (where it points says
+   which), or a page without `ytInitialData`. The page is parsed first, so a real results page (whose scripts mention
+   sign-in, consent and captcha) is never mistaken for one. Then: no retry, no other User-Agent, no cookies, nothing
+   solved; the page isn't asked again for 15 minutes (`PageStandDown`), the key (if set) is asked instead, and
+   otherwise Settings and the picker say "YouTube’s search isn’t available right now." (the automatic lookup reports
+   the Mac's "lookup failed", retried once by the controller as on the Mac, which sends nothing during the stand-down).
 4. Otherwise the type chosen as **"Without a video"** (`musicVideoFallback`, the type Music video replaced), with a
    note in Settings only. A song change shows the album colours (the `musicVideo` layer with no file) while its video is
    looked for, for up to 3 s.
 
-**What isn't ported, because the Mac's means aren't official:** reading youtube.com's results page (`ytInitialData`)
-with a browser's User-Agent; the "verified artist" badge (only that page shows it, so a label's channel never counts on
-Windows); the still-image check (it reads YouTube's undocumented numbered stills, `1.jpg`–`3.jpg`), so a found video is
-used without it, and the Mac's note for a pasted still-image upload is dropped; the player's undocumented caption calls
-(`unloadModule`, `setOption`); building thumbnail addresses by hand (only stills the API returned are shown).
+**Ported since (the owner's decision, 13 Nov 2026: search the Mac's way, without a key):** the results-page reader, its
+User-Agent and failure rules, the verified-artist badge, and the result rows' thumbnails built by hand
+(`https://i.ytimg.com/vi/<id>/mqdefault.jpg`, as the Mac's picker builds them).
+
+**What isn't ported, because the Mac's means aren't official:** the still-image check (it reads YouTube's undocumented
+numbered stills, `1.jpg`–`3.jpg`, for up to three candidates of each automatic lookup), so a found video is used
+without it, and the Mac's note for a pasted still-image upload is dropped; the player's undocumented caption calls
+(`unloadModule`, `setOption`); the Mac's `YouTubeThumbnail` (the large still for the settings preview and Reduce Motion,
+which isn't part of search).
 
 **Not kept for YouTube, because YouTube's API policies don't allow obscuring, cropping or covering the embedded player's
 interface:** the Mac's 1.25× overscan (it draws the player larger and clips it, to push YouTube's title bar and logo off
 screen) and its frozen frame (it hides a paused player and lays a picture of its last frame in its place). Video files
 keep both: they fill the screen (cropping the edges, with the blur's small overscan) and hold their frame when paused.
 
-**The YouTube Data API key** is the owner's own: Google Cloud Console › a project › enable "YouTube Data API v3" ›
+**The YouTube Data API key** is optional (YouTube's site needs none) and the owner's own: Google Cloud Console › a project › enable "YouTube Data API v3" ›
 Credentials › API key (restricted to that API). Pasted in Settings › Wallpaper › Music video › YouTube Data API key; kept
 in `{data}\MusicVideo\youtube-key.bin`, encrypted with DPAPI for the Windows user (never in `settings.json`, never
 logged), and sent only in the `X-Goog-Api-Key` header to `www.googleapis.com`. Each automatic search costs about 101 of
-the default 10,000 daily quota units (to confirm for the owner's project). Without a key, Search YouTube says so; a
-refused key says so and isn't retried until it changes.
+the default 10,000 daily quota units (to confirm for the owner's project), and is spent only under "Use my API key" or
+when the site isn't available. Under "Use my API key" without a key, Search YouTube says so; a refused key says so and
+isn't retried until it changes.
 
 **Playing it, silently:**
 - **A file:** the `musicVideo` layer decodes it on a worker thread (video stream only, on the surface's GPU when it can)
@@ -814,8 +841,10 @@ video's own bar; drag (fine below the bar or with Alt), ← → 0.1 s (Shift 1 s
 to the estimate. Align mode keeps the card up.
 
 **Settings › Wallpaper › Music video:** the status note, Open video on YouTube, Search YouTube for videos and its
-privacy caption, the API key, Without a video, this song's Video file / YouTube link / Search YouTube… (results with the
-API's stills, length, channel, views and age; a click uses one; Back to automatic), Video timing (−5, −0.5, +0.5, +5,
+privacy caption (the Mac's words), Search YouTube with ("Search YouTube’s site (no key)", the default, or "Use my API
+key") and what each does, the API key (optional; opened by itself only under "Use my API key" without a key), Without a
+video, this song's Video file / YouTube link / Search YouTube… (results with their stills, length, channel, views and
+age; a click uses one; Back to automatic; "YouTube’s search isn’t available right now." for a wall), Video timing (−5, −0.5, +0.5, +5,
 Reset, Tap to sync), Video dimming, Video blur. The Mac's "Show the video on" isn't offered: the renderer draws one
 background on every display.
 

@@ -1,5 +1,6 @@
-// Fakes for the music video tests: no test reaches the network, a player, a file or the real settings. The Mac's tests
-// fake youtube.com's results page; these fake the YouTube Data API's documented reply shapes with the same videos.
+// Fakes for the music video tests: no test reaches the network, a player, a file or the real settings. As on the Mac, they
+// fake YouTube's results page (PageFixtures, the Mac's Fixtures.searchPage, plus the pages recorded in Fixtures/YouTube);
+// the Data API fallback's tests fake its documented reply shapes (ApiFixtures).
 
 using System.Text;
 using System.Text.Json;
@@ -43,15 +44,43 @@ internal sealed class FakeHttp : IMusicVideoHttp
         return Task.FromResult(new MusicVideoHttpReply(reply.Status, reply.Body, reply.Headers));
     }
 
-    /// <summary>The search's <c>q</c>, decoded.</summary>
-    public static string? QueryOf(Uri url)
+    /// <summary>The Data API search's <c>q</c>, decoded.</summary>
+    public static string? QueryOf(Uri url) => Parameter(url, "q");
+
+    /// <summary>The results page's <c>search_query</c>, decoded.</summary>
+    public static string? SearchQueryOf(Uri url) => Parameter(url, "search_query");
+
+    private static string? Parameter(Uri url, string name)
     {
         foreach (var pair in url.Query.TrimStart('?').Split('&'))
         {
-            if (pair.StartsWith("q=", StringComparison.Ordinal)) return Uri.UnescapeDataString(pair[2..]);
+            if (pair.StartsWith(name + "=", StringComparison.Ordinal)) return Uri.UnescapeDataString(pair[(name.Length + 1)..]);
         }
         return null;
     }
+}
+
+/// <summary>YouTube's results page: the Mac's fixture builder, and the pages recorded for these tests.</summary>
+internal static class PageFixtures
+{
+    public const string Path = YouTubeSearchPage.Path;
+
+    /// <summary>The Mac's Fixtures.searchPage: a results page with these videos, in order.</summary>
+    public static byte[] SearchPage(params (string Id, string Title, string Channel)[] videos)
+    {
+        var renderers = string.Join(",", videos.Select(v =>
+            "{\"videoRenderer\":{\"videoId\":\"" + v.Id + "\",\"title\":{\"runs\":[{\"text\":\"" + v.Title + "\"}]},\n"
+            + " \"ownerText\":{\"runs\":[{\"text\":\"" + v.Channel + "\"}]}}}"));
+        return Encoding.UTF8.GetBytes(
+            "<html><script>var ytInitialData = {\"contents\":{\"twoColumnSearchResultsRenderer\":{\"primaryContents\":\n"
+            + "{\"sectionListRenderer\":{\"contents\":[{\"itemSectionRenderer\":{\"contents\":[" + renderers + "]}}]}}}}};</script></html>");
+    }
+
+    /// <summary>A page recorded from youtube.com, or a hand-made wall page (Fixtures/YouTube/README.md).</summary>
+    public static byte[] Recorded(string name) =>
+        File.ReadAllBytes(System.IO.Path.Combine(AppContext.BaseDirectory, "Fixtures", "YouTube", name));
+
+    public static string RecordedText(string name) => Encoding.UTF8.GetString(Recorded(name));
 }
 
 internal static class ApiFixtures
@@ -187,29 +216,55 @@ internal sealed class MusicVideoWorld
 
     public const string LocalPath = @"C:\Music\Music Videos\Blinding Lights.mp4";
 
+    /// <summary>The parse seam: the real reader when null, or a test's.</summary>
+    public Func<byte[], Task<IReadOnlyList<YouTubeVideoResult>>>? Parse { get; set; }
+
+    /// <summary>
+    /// A resolver over <paramref name="http"/>: YouTube's results page with no key, as on the Mac, unless a test passes a
+    /// <paramref name="key"/> (the Data API fallback) or <see cref="MusicVideoSearchMode.ApiKey"/>.
+    /// </summary>
     public MusicVideoResolver Resolver(FakeLibrary? library = null, FakePlayability? playability = null, FakeHttp? http = null,
-        Func<double>? clock = null, string? key = ApiKey, Func<double, CancellationToken, Task>? sleep = null) =>
-        new(library ?? new FakeLibrary(), playability ?? new FakePlayability(),
-            new YouTubeDataApi(http ?? new FakeHttp(), () => key, () => Start), new MusicVideoCache(Storage),
+        Func<double>? clock = null, string? key = null, Func<double, CancellationToken, Task>? sleep = null,
+        MusicVideoSearchMode mode = MusicVideoSearchMode.Site, bool page = true)
+    {
+        var client = http ?? new FakeHttp();
+        return new(library ?? new FakeLibrary(), playability ?? new FakePlayability(),
+            new YouTubeDataApi(client, () => key, () => Start), new MusicVideoCache(Storage),
             new MusicVideoLinks(Storage), now: () => Start, uptime: clock ?? (() => Time),
             sleep: sleep ?? ((seconds, _) =>
             {
                 Time += seconds;
                 return Task.CompletedTask;
-            }));
+            }), page: page ? client : null, searchMode: () => mode, parse: Parse);
+    }
+
+    /// <summary>A resolver that searches the Data API only ("Use my API key"), with the test key.</summary>
+    public MusicVideoResolver ApiResolver(FakeHttp http, Func<double>? clock = null) =>
+        Resolver(http: http, clock: clock, key: ApiKey, mode: MusicVideoSearchMode.ApiKey);
 
     public MusicVideoController Controller(MusicVideoResolver resolver, Func<(double, bool)>? songClock = null,
         Func<MusicVideoSong, IReadOnlyList<MusicVideoLyricLine>?>? lyrics = null, Func<double>? uptime = null) =>
         new(resolver, new MusicVideoOffsets(Storage), songClock, lyrics, uptime ?? (() => 0));
 
     /// <summary>The Mac's officialPage(): a lyric upload, then the official video.</summary>
-    public static void ServeOfficialPage(FakeHttp http) =>
-        http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(200, ApiFixtures.Search(
-            ("BBBBBBBBBBB", "The Weeknd - Blinding Lights (Lyrics)", "Lyrics Hub"),
-            ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "The Weeknd")));
+    public static readonly (string Id, string Title, string Channel)[] OfficialVideos =
+    [
+        ("BBBBBBBBBBB", "The Weeknd - Blinding Lights (Lyrics)", "Lyrics Hub"),
+        ("4NRXx6U8ABQ", "The Weeknd - Blinding Lights (Official Video)", "The Weeknd"),
+    ];
 
+    /// <summary>The Mac's officialPage(), on YouTube's results page.</summary>
+    public static void ServeOfficialPage(FakeHttp http) => ServeSearch(http, OfficialVideos);
+
+    /// <summary>A results page with these videos (the Mac's replies["www.youtube.com"]).</summary>
     public static void ServeSearch(FakeHttp http, params (string Id, string Title, string Channel)[] videos) =>
+        http.ByPath[PageFixtures.Path] = new FakeHttp.Reply(200, PageFixtures.SearchPage(videos));
+
+    /// <summary>The same videos from the Data API (its search only; the details request gets a 404 and is done without).</summary>
+    public static void ServeApiSearch(FakeHttp http, params (string Id, string Title, string Channel)[] videos) =>
         http.ByPath[ApiFixtures.SearchPath] = new FakeHttp.Reply(200, ApiFixtures.Search(videos));
+
+    public static void ServeApiOfficial(FakeHttp http) => ServeApiSearch(http, OfficialVideos);
 }
 
 internal static class Sources
