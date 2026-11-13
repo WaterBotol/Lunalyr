@@ -20,8 +20,9 @@ public sealed class SpreadSetupRenderTests : IDisposable
     private const int Width = 960, Height = 540;
     private const float Scale = 1;
     private readonly Offscreen _stage = new(Width, Height);
-    // A device of its own for the layer compared: Direct2D's glyph cache is shared by a device, and two layers baking
-    // into one cache move each other's glyphs (a pixel by a step), whichever way their lines are set.
+    // A device of its own for the layer compared: two layers baking on one device move a few of each other's pixels by a
+    // step (Direct2D keeps state across bakes on a device), whichever way their lines are set. On two devices, two
+    // layers setting lines the old way draw exactly the same frames here.
     private readonly Offscreen _other = new(Width, Height);
     private readonly Sink _sink = new();
     private readonly Logger _logger;

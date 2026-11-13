@@ -10,9 +10,11 @@
 //
 // -hashes FILE writes a SHA-256 of the frame every tenth of a second of the same play-through at 30 frames a second, to
 // compare two builds pixel for pixel (same adapter, same size). With the environment variable LUNALYR_KEEP_FRAMES=DIR it
-// also keeps those frames (raw BGRA); with LUNALYR_AGAINST_FRAMES=DIR it prints how far each frame is from the one kept
-// there (how many channel values differ, by how many steps at most). Direct2D is not bit-stable from run to run: two
-// runs of one build already differ by a step in a few pixels of some frames, so compare against more than one run.
+// also keeps one frame a second (raw BGRA); with LUNALYR_AGAINST_FRAMES=DIR it prints how far each of those is from the
+// one kept there (how many channel values differ, by how many steps at most). Direct2D is not bit-stable from run to
+// run: two runs of one build already differ by a step in a few pixels of some frames, so compare more than one run.
+//
+// LUNALYR_SETUP_TRACE=1 makes -setup print every pass with more than 4 ms of setup (the warm-up's too, marked).
 
 using System.Diagnostics;
 using System.Globalization;
@@ -32,6 +34,9 @@ namespace Lunalyr.Tools.CompositionPreview;
 internal static class SetupBench
 {
     private sealed record Song(string Name, SceneSnapshot Scene, double Duration);
+
+    /// <summary>Which play-through is running (for the trace).</summary>
+    private static string _run = "";
 
     private sealed record RunStats(double SetupMax, double SetupP50, int SetupFrames, double FrameP50, double FrameP99,
                                    double FrameMax, int Over4, int Over16, double[] NewSongMs, double[] NewSongSetupMs);
@@ -71,9 +76,14 @@ internal static class SetupBench
         foreach (var factory in factories)
         {
             if (only is not null && factory.Id != only) continue;
+            _run = "warm-up";
             Play(stage, factory, playlist, scale, surfaces, null);
             var results = new List<RunStats>();
-            for (var r = 0; r < runs; r++) results.Add(Play(stage, factory, playlist, scale, surfaces, null));
+            for (var r = 0; r < runs; r++)
+            {
+                _run = $"run {r + 1}";
+                results.Add(Play(stage, factory, playlist, scale, surfaces, null));
+            }
             double Median(Func<RunStats, double> pick)
             {
                 var values = results.Select(pick).Order().ToArray();
@@ -102,7 +112,8 @@ internal static class SetupBench
                 var pixels = stage.Pixels();
                 file.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"{factory.Id} {song} {t:0.000} {Convert.ToHexString(SHA256.HashData(pixels))}"));
-                // -keep DIR keeps the frames themselves (raw BGRA) to compare two builds pixel by pixel (-against DIR).
+                // Frames kept (one a second) to compare two runs pixel by pixel; see the header.
+                if (frame % 30 != 0) return;
                 var name = string.Create(CultureInfo.InvariantCulture, $"{factory.Id}-{song}-{t:00.000}.bgra");
                 if (Environment.GetEnvironmentVariable("LUNALYR_KEEP_FRAMES") is { } keep) File.WriteAllBytes(Path.Combine(keep, name), pixels);
                 if (Environment.GetEnvironmentVariable("LUNALYR_AGAINST_FRAMES") is { } against && File.Exists(Path.Combine(against, name)))
@@ -165,7 +176,7 @@ internal static class SetupBench
                     frames.Add(pass);
                     if (setup > 0) setups.Add(setup);
                     if (setup > 4 && Environment.GetEnvironmentVariable("LUNALYR_SETUP_TRACE") is not null)
-                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  {factory.Id} song {s} at {t:0.000} s: setup {setup:0.0} ms, pass {pass:0.0} ms"));
+                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  {factory.Id} {_run}, song {s} at {t:0.000} s: setup {setup:0.0} ms, pass {pass:0.0} ms"));
                     if (t < 1.5 && pass > songWorst) { songWorst = pass; songWorstSetup = setup; }
                     afterFrame?.Invoke(s, f, t);
                 }

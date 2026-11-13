@@ -138,6 +138,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     // Setting lines up a slice at a time: a line is laid out when it is needed (or 1.5 s ahead) and its text baked
     // within the pass's allowance (AheadWork) over the next frames, or at the latest when it is first drawn.
     private bool _spreads = true;
+
+    /// <summary>A line (or credit) was laid out ahead this frame.</summary>
+    private bool _laidOutAhead;
     private bool _aheadOpen;
     private long _aheadStart;
     private long _aheadDeadline;
@@ -228,6 +231,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         Frame++;
         _aheadWork = frame.AheadWork;
         _aheadOpen = false;
+        _laidOutAhead = false;
         var dc = frame.Dc;
         var saved = dc.Transform;
         try
@@ -257,8 +261,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 _statusText = null;
             }
             DrawOpening(dc, opening, frame);
-            // What is left of the pass's allowance bakes what has been laid out ahead.
-            if (Kit is { HasPending: true } kit && BeginAhead()) kit.RunPending(_aheadDeadline);
+            // What is left of the pass's allowance bakes what has been laid out ahead; a frame that laid a line out
+            // leaves its baking to the next (a slice begun near the end of the allowance would run past it).
+            if (Kit is { HasPending: true } kit && !_laidOutAhead && BeginAhead()) kit.RunPending(_aheadDeadline);
             EndAhead();
             Trim();
         }
@@ -468,6 +473,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             && time > lines[upcoming].Start - 1.5 && !_plans.ContainsKey(upcoming) && !_phrases.ContainsKey(upcoming)
             && !StagePrepared(upcoming) && BeginAhead())
         {
+            _laidOutAhead = true;
             if (Rules.FillsStage) { PrepareStage(upcoming); return; }
             _ = lines[upcoming].WordTimed ? Plan(upcoming) : Phrase(upcoming);
         }
@@ -481,7 +487,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
         if (_aheadOpen) return now < _aheadDeadline;
-        var remaining = _aheadWork?.Remaining ?? AheadWork.AllowanceTicks;
+        var remaining = _aheadWork?.Open() ?? AheadWork.AllowanceTicks;
         if (remaining <= 0) return false;
         _aheadOpen = true;
         _aheadStart = now;

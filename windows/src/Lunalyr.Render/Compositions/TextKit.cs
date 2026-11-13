@@ -239,8 +239,9 @@ internal sealed class TextKit : IDisposable
 
     /// <summary>
     /// Bakes <paramref name="ink"/> now, if it is still waiting (it is about to be drawn), with every bake queued before
-    /// it: bakes always run in the order they were asked for, as they did when each was made at once, so Direct2D's
-    /// glyph cache (shared by the device, and where a glyph sits in it can move a pixel by a step) fills the same way.
+    /// it: bakes always run in the order they were asked for, as they did when each was made at once. A precaution:
+    /// Direct2D keeps state across bakes on a device (its glyph cache among it), and two layers baking into one device
+    /// were seen to move each other's pixels by a step; on a device of its own, a layer baking out of order was not.
     /// </summary>
     internal void Complete(Ink ink)
     {

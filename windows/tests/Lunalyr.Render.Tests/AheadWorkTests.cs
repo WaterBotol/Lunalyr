@@ -30,4 +30,27 @@ public sealed class AheadWorkTests
         Assert.Equal(AheadWork.AllowanceTicks, work.Remaining);
         Assert.True(AheadWork.Allowance < TimeSpan.FromMilliseconds(4));
     }
+
+    [Fact]
+    public void SurfacesWithWorkShareTheAllowance()
+    {
+        var work = new AheadWork();
+        work.NewPass();
+        // One monitor alone has all of it.
+        Assert.Equal(AheadWork.AllowanceTicks, work.Open());
+        work.NewPass();
+        Assert.Equal(AheadWork.AllowanceTicks, work.Open());
+        Assert.Equal(AheadWork.AllowanceTicks, work.Open());  // a second monitor finds work too: it shares from the next pass
+        work.NewPass();
+        var half = AheadWork.AllowanceTicks / 2;
+        Assert.Equal(half, work.Open());
+        work.Spend(half);
+        Assert.Equal(half, work.Open());
+        work.Spend(AheadWork.AllowanceTicks);
+        work.NewPass();
+        Assert.Equal(half, work.Open());
+        work.NewPass();
+        // Only one had work in the pass before: it has all of it again.
+        Assert.Equal(AheadWork.AllowanceTicks, work.Open());
+    }
 }

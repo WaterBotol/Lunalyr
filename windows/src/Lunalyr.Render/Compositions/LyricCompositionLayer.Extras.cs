@@ -163,7 +163,16 @@ internal abstract partial class LyricCompositionLayer
         foreach (var cue in _cues)
         {
             var level = CreditCues.Level(cue, time);
-            if (!(level > 0.004)) continue;
+            if (!(level > 0.004))
+            {
+                // Spreading setup, a credit is set up to 1.5 s before it arrives, as the lines are.
+                if (SpreadsSetup && time < cue.Start && time > cue.Start - 1.5 && !_creditPlans.ContainsKey(cue.Id) && BeginAhead())
+                {
+                    CreditPlan(cue, box);
+                    _laidOutAhead = true;
+                }
+                continue;
+            }
             var plan = CreditPlan(cue, box);
             var exit = LayerExit.Pose(LayerExitKind.Credit, CreditCues.ExitProgress(cue, time), box.Height, cue.Top, ReduceMotion);
             var scale = plan.Fit * exit.Scale;
