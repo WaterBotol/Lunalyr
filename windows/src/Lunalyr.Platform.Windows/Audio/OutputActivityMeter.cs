@@ -23,6 +23,22 @@ public sealed class OutputActivityMeter : IDisposable
 
     public OutputActivityMeter(Logger? logger = null) => _log = (logger ?? Logger.Null).App;
 
+    /// <summary>The default output's current peak level (0–1), or null when it can't be read. For measurements.</summary>
+    public float? Peak()
+    {
+        lock (_lock)
+        {
+            if (_broken) return null;
+            try
+            {
+                Refresh();
+                if (_meter is null) return null;
+                return _meter.GetPeakValue(out var peak) >= 0 ? peak : null;
+            }
+            catch (Exception) { return null; }
+        }
+    }
+
     /// <summary>
     /// Whether the default output is playing anything now; null when it can't be read (counted as playing by the
     /// capture rules). Follows a change of default device on the next read.

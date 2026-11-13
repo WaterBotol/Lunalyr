@@ -71,6 +71,8 @@ public sealed class SongClock
     private MediaTimeline? _lastSnapshot;
     private MediaTimeline? _previousTrackSnapshot;
     private bool _timestampSuspect;
+    private readonly WholeSecondPhase _phase = new();
+    private bool _correctsWholeSeconds;
 
     // Track changes: when the last one was (null: none since the session started) and whether the current timeline
     // arrived after it (so it belongs to the track the metadata now describes).
@@ -109,6 +111,16 @@ public sealed class SongClock
 
     public SongClockOptions Options => _options;
 
+    /// <summary>
+    /// Whether the followed player is known to cut its position to whole seconds (Apple Music for Windows), so the
+    /// clock recovers the lost fraction (<see cref="WholeSecondPhase"/>). Off for every other player.
+    /// </summary>
+    public bool CorrectsWholeSeconds
+    {
+        get { lock (_gate) return _correctsWholeSeconds; }
+        set { lock (_gate) { _correctsWholeSeconds = value; _phase.Restart(); } }
+    }
+
     public TimeSpan Position => Read().Position;
 
     public bool IsPlaying => Read().IsPlaying;
@@ -146,6 +158,7 @@ public sealed class SongClock
             if (playing != _playing || rate != _rate)
             {
                 Rebase(now);
+                _phase.Restart();
                 if (playing != _playing) _lastStatusChangeTimestamp = now;
                 _playing = playing;
                 _rate = rate;
@@ -210,6 +223,11 @@ public sealed class SongClock
 
             if (_playing)
                 position += age * _rate;
+
+            // A player that cuts its position to whole seconds (Apple Music for Windows) is put back where it really is.
+            var snapshotTimestamp = now - (long)(age.TotalSeconds * _time.TimestampFrequency);
+            if (_correctsWholeSeconds)
+                position += _phase.Correct(timeline.RelativePosition, snapshotTimestamp, _time.TimestampFrequency, _playing, _rate);
 
             if (duration is { } d && position > d)
             {
@@ -313,6 +331,7 @@ public sealed class SongClock
             }
 
             ResetTrackCore(now);
+            _phase.Restart();
             _trackChangeTimestamp = now;
         }
     }
@@ -332,6 +351,7 @@ public sealed class SongClock
         lock (_gate)
         {
             ResetTrackCore(now);
+            _phase.Restart();
             _previousTrackSnapshot = null;
             _trackChangeTimestamp = null;
             _status = PlaybackStatus.Closed;

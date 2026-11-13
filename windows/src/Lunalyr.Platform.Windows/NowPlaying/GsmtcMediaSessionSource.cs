@@ -263,7 +263,8 @@ internal sealed class GsmtcMediaSession : IMediaSession
         {
             var p = await Raw.TryGetMediaPropertiesAsync().AsTask(cancellationToken).ConfigureAwait(false);
             if (p is null) return null;
-            return new MediaTrackInfo(
+            // Apple Music for Windows joins "Artist — Album" in the artist field: split it back.
+            return AppleMusicWindowsMetadata.Normalize(new MediaTrackInfo(
                 p.Title ?? "",
                 p.Artist ?? "",
                 p.AlbumTitle ?? "",
@@ -273,7 +274,7 @@ internal sealed class GsmtcMediaSession : IMediaSession
                 p.AlbumTrackCount,
                 p.Thumbnail is not null,
                 p.PlaybackType is { } type ? (CorePlaybackType)(int)type : CorePlaybackType.Unknown,
-                p.Genres?.FirstOrDefault(genre => !string.IsNullOrWhiteSpace(genre))?.Trim() ?? "");
+                p.Genres?.FirstOrDefault(genre => !string.IsNullOrWhiteSpace(genre))?.Trim() ?? ""), SourceApp.Kind);
         }
         catch (OperationCanceledException)
         {

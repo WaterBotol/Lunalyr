@@ -139,6 +139,8 @@ public sealed class NowPlayingMonitor : IDisposable
             if (current is not null) Subscribe(current);
 
             Clock.ResetSession();
+            // Apple Music for Windows cuts its position to whole seconds: let the clock put the fraction back.
+            Clock.CorrectsWholeSeconds = current?.SourceApp.Kind == MediaSourceKind.AppleMusic;
             if (current is null)
             {
                 _playback = MediaPlaybackInfo.Closed;
