@@ -140,19 +140,21 @@ public static class LyricStyleProfiles
 {
     /// <summary>
     /// Every setting that belongs to a lyric style, as <c>settings.json</c> names it: the Mac's list where Windows has
-    /// the setting (its colour modes, backing-vocal switches, translations, Editorial typography, randomised fonts and
-    /// next-word previews have no Windows setting yet), plus Windows' one-for-all <c>wordArrival</c>.
+    /// the setting (translations have no Windows setting yet), plus Windows' one-for-all <c>wordArrival</c>.
     /// </summary>
     public static IReadOnlyList<string> Keys { get; } =
     [
         // Settings
         "fontChoice", "fontFamily", "lyricComposition", "constellationSpread", "constellationLinkOpacity",
-        "wordArrival", "wordArrivalByStyle", "wordEntranceMix", "echoStrength", "lyricScale", "showInterludes",
-        // Layout rotation, credits, the opening title
-        "rotateLayouts", "creditsLayer", "openingTitle", "openingTitleCover",
+        "wordRevealByStyle", "wordArrival", "wordArrivalByStyle", "nextWordPreviewByStyle", "nextWordPreviewLead",
+        "wordEntranceMix", "echoStrength", "lyricScale", "showInterludes",
+        "editorialTypography", "editorialAmount", "randomizeLyricFonts",
+        // Layout rotation, backing vocals, credits, the opening title
+        "rotateLayouts", "backingVocalsLayer", "backingVocalStyle", "creditsLayer", "openingTitle", "openingTitleCover",
         // Readings shown
         "romanizationDisplay",
-        // Highlight colours
+        // Text and highlight colours
+        "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom",
         "lyricHighlightMode", "lyricHighlightCustom",
     ];
 

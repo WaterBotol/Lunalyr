@@ -78,6 +78,10 @@ public sealed class AppSettingsTests
             "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
             // Updates and the first-run welcome (milestone 8)
             "automaticUpdateChecks", "onboardingDone",
+            // The last of the Lyric style page: backing vocals, typography, colour, word reveal and remembered styles
+            "backingVocalsLayer", "backingVocalStyle", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
+            "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "wordRevealByStyle",
+            "nextWordPreviewByStyle", "nextWordPreviewLead", "styleMemoryEnabled", "styleMemorySongs", "styleMemoryArtists",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

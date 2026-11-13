@@ -425,6 +425,21 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
 | `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |
 | `lyricHighlightCustom` | `"#FF92A3"` | `#RRGGBB` | `custom.lyricHighlightCustom` |
+| `backingVocalsLayer` | `true` | "Backing vocals in the background": bracketed backing words of word-timed lines lifted out of the lead and drawn small and soft behind it; off keeps them in the line | `custom.backingVocalsLayer` |
+| `backingVocalStyle` | `""` | "Backing vocals animate like": `scattered`, `constellation`, `constellationEditorial`, `echo`, `editorial`, or `""` for the lead's layout (Spoken, Cascade, Cutout and the stage layouts then take Editorial); also the layout credits animate in | `custom.backingVocalStyle` |
+| `editorialTypography` | `false` | "Add Editorial typography": a second, contrasting face in every layout | `custom.editorialTypography` |
+| `editorialAmount` | `1` | "Editorial amount", 0–1: how many words take the second face (with the switch on; Editorial and Constellation + Editorial use 1 otherwise) | `custom.editorialAmount` |
+| `randomizeLyricFonts` | `false` | "Randomise lyric fonts": each synced word takes one of four typefaces that come with Windows (see "Lyric style extras") | `custom.randomizeLyricFonts` |
+| `lyricColourMode` | `"albumDrift"` | `albumDrift`, `sungSweep`, `musicReactive`, `customGradient`; the old `static` reads as `albumDrift` | `custom.lyricColourMode` |
+| `lyricColourSpeed` | `1` | "Colour speed", 0.25–2, for the drifting modes | `custom.lyricColourSpeed` |
+| `lyricColourStrength` | `1` | "Colour strength", 0 (neutral) – 2 (vivid) | `custom.lyricColourStrength` |
+| `lyricColourCustom` | `["#F9D29D","#F28FAD","#9AD0F5"]` | the custom gradient's two to four `#RRGGBB` colours (bad ones dropped, missing ones from the defaults) | `custom.lyricColourCustom` |
+| `wordRevealByStyle` | `{}` | "Reveal sung words" per composition id (`automatic`: every layout Match the music picks); a missing layout reveals. Locked on where the layout (Spoken, Cascade, Cutout) or the entrance (the Cutouts and swipes, or a mix with one) needs it | `custom.wordRevealByStyle` |
+| `nextWordPreviewByStyle` | `{}` | "Faint next-word preview" per composition id, keyed as `wordRevealByStyle`; a missing layout previews | `custom.nextWordPreviewByStyle` |
+| `nextWordPreviewLead` | `0.45` | "Preview lead", seconds, 0.15–1.25 (also when the opening title leaves and the instrumental dots hand over) | `custom.nextWordPreviewLead` |
+| `styleMemoryEnabled` | `true` | "Use remembered styles" | `custom.styleMemory.enabled` |
+| `styleMemorySongs` | `{}` | layout and colour remembered per recording: SHA-256 of `"song\|"` + the recording key → `{"composition", "colour"}` (either may be missing) | `custom.styleMemory.songs` |
+| `styleMemoryArtists` | `{}` | the same per artist: SHA-256 of `"artist\|"` + the lower-cased artist name | `custom.styleMemory.artists` |
 | `rotateLayouts` | `true` | Match the music steps through a rotation (off: by the song's character) | `custom.rotateLayouts` |
 | `rotateLayoutCounts` | `{}` | composition → songs in a row, 0–5 (missing = 1) | `custom.rotateLayoutCounts` |
 | `rotateLayoutsCursor` | `0` | where the rotation got to (saved by the app) | `custom.rotateLayoutsCursor` |
@@ -714,10 +729,13 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
 - **Two styles.** `LyricStyleProfiles` keeps the lyric style per surface. The app's ordinary keys always hold the
   style in use; switching stores it as `lyricStyleDesktop` / `lyricStyleFloating` and loads the other. The first switch
   to Floating starts from the desktop's style with `lyricScale` 1 (Floating has its own text size). Style keys:
-  `fontChoice`, `fontFamily`, `lyricComposition`, `constellationSpread`, `constellationLinkOpacity`, `wordArrival`,
-  `wordArrivalByStyle`, `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `rotateLayouts`,
-  `creditsLayer`, `openingTitle`, `openingTitleCover`, `romanizationDisplay`, `lyricHighlightMode`,
-  `lyricHighlightCustom` (the Mac's list where Windows has the setting).
+  `fontChoice`, `fontFamily`, `lyricComposition`, `constellationSpread`, `constellationLinkOpacity`,
+  `wordRevealByStyle`, `wordArrival`, `wordArrivalByStyle`, `nextWordPreviewByStyle`, `nextWordPreviewLead`,
+  `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `editorialTypography`, `editorialAmount`,
+  `randomizeLyricFonts`, `rotateLayouts`, `backingVocalsLayer`, `backingVocalStyle`, `creditsLayer`, `openingTitle`,
+  `openingTitleCover`, `romanizationDisplay`, `lyricColourMode`, `lyricColourSpeed`, `lyricColourStrength`,
+  `lyricColourCustom`, `lyricHighlightMode`, `lyricHighlightCustom` (the Mac's list where Windows has the setting;
+  translations have none yet). Remembered styles are not part of a style: they belong to the music.
 - **When it shows** (`FloatingVisibility`, ported): Floating chosen and a song with lyrics (timed and not all
   instrumental, or plain) playing; a pause keeps it up for 10 s; none found, nothing playing or still looking hide it.
   Edit position shows it even with nothing playing ("Lyrics appear here"). It fades in and out over 0.25 s (at once

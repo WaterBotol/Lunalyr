@@ -96,30 +96,33 @@ public class FloatingSettingsTests
     // ---- Two separate styles ----
 
     // Ported from FloatingLyricsTests.swift: testFloatingStyleIsSeededOnceFromTheDesktop (the Mac's serif font is
-    // Windows' installed family; its colour mode has no Windows setting yet)
+    // Windows' installed family; its Static white, now read as Album drift, is Album drift here)
     [Fact]
     public void FloatingStyleIsSeededOnceFromTheDesktop()
     {
         var s = new AppSettings
         {
             LyricComposition = "echo", LyricScale = 1.3, FontChoice = "installed", FontFamily = "Georgia", LyricHighlightMode = "album",
+            LyricColourMode = "sungSweep",
         };
         s = Switch(s, LyricsSurface.Floating);
         Assert.Equal("echo", s.LyricComposition); // Floating starts from the desktop's style
         Assert.Equal("installed", s.FontChoice);
         Assert.Equal("Georgia", s.FontFamily);
         Assert.Equal("album", s.LyricHighlightMode);
+        Assert.Equal("sungSweep", s.LyricColourMode);
         Assert.Equal(1, s.LyricScale); // Floating's size is its own text size
 
         // Change the desktop's style: the floating one, already seeded, keeps its own.
-        s = Switch(s, LyricsSurface.Desktop) with { LyricComposition = "portal", LyricHighlightMode = "complement" };
+        s = Switch(s, LyricsSurface.Desktop) with { LyricComposition = "portal", LyricHighlightMode = "complement", LyricColourMode = "albumDrift" };
         s = Switch(s, LyricsSurface.Floating);
         Assert.Equal("echo", s.LyricComposition); // seeding happens once
         Assert.Equal("album", s.LyricHighlightMode);
+        Assert.Equal("sungSweep", s.LyricColourMode);
     }
 
-    // Ported from FloatingLyricsTests.swift: testChangingFloatingNeverChangesTheDesktop (without the colour mode and
-    // the backing-vocal switch, which Windows has no setting for yet)
+    // Ported from FloatingLyricsTests.swift: testChangingFloatingNeverChangesTheDesktop (the backing switch the desktop
+    // never set reads as its default, on: Windows writes every setting)
     [Fact]
     public void ChangingFloatingNeverChangesTheDesktop()
     {
@@ -128,6 +131,7 @@ public class FloatingSettingsTests
         {
             LyricComposition = "scattered", LyricScale = 0.8, ShowInterludes = false,
             WordArrivalByStyle = new Dictionary<string, string> { ["scattered"] = "pop" }, LyricHighlightMode = "custom",
+            LyricColourMode = "customGradient", BackingVocalsLayer = false,
         };
 
         s = Switch(s, LyricsSurface.Desktop);
@@ -136,6 +140,8 @@ public class FloatingSettingsTests
         Assert.True(s.ShowInterludes);
         Assert.Empty(s.WordArrivalByStyle);
         Assert.Equal("complement", s.LyricHighlightMode);
+        Assert.Equal("albumDrift", s.LyricColourMode);
+        Assert.True(s.BackingVocalsLayer);
 
         // And the floating style is still there when it comes back.
         s = Switch(s, LyricsSurface.Floating);
@@ -144,6 +150,8 @@ public class FloatingSettingsTests
         Assert.False(s.ShowInterludes);
         Assert.Equal("pop", s.WordArrivalByStyle["scattered"]);
         Assert.Equal("custom", s.LyricHighlightMode);
+        Assert.Equal("customGradient", s.LyricColourMode);
+        Assert.False(s.BackingVocalsLayer);
     }
 
     // Ported from FloatingLyricsTests.swift: testChangingTheDesktopNeverChangesFloating

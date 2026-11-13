@@ -205,6 +205,57 @@ public sealed record LyricStyle
     /// </summary>
     public double? FloatingTextSize { get; init; }
 
+    // ---- The last of the Lyric style page: backing vocals, typography, colour, reveal and preview ----
+
+    /// <summary>
+    /// Bracketed backing words of word-timed lines are lifted out of the lead and drawn small and soft behind it (the
+    /// Mac's <c>custom.backingVocalsLayer</c>). Off, they stay in the line as sung.
+    /// </summary>
+    public bool BackingVocals { get; init; } = true;
+
+    /// <summary>
+    /// The composition id backing words (and credits) animate in, one of Scattered, Constellation, Constellation +
+    /// Editorial, Echo and Editorial (the Mac's <c>custom.backingVocalStyle</c>); null follows the lead's layout.
+    /// </summary>
+    public string? BackingStyle { get; init; }
+
+    /// <summary>"Add Editorial typography": a second, contrasting face in every layout (the Mac's <c>custom.editorialTypography</c>).</summary>
+    public bool EditorialTypography { get; init; }
+
+    /// <summary>How many words take the second face with <see cref="EditorialTypography"/>, 0–1 (the Mac's <c>custom.editorialAmount</c>).</summary>
+    public double EditorialAmount { get; init; } = 1;
+
+    /// <summary>Synced words take a mix of typefaces, picked per word (the Mac's <c>custom.randomizeLyricFonts</c>).</summary>
+    public bool RandomFonts { get; init; }
+
+    /// <summary>How the lyric text is coloured (the Mac's <c>custom.lyricColourMode</c>).</summary>
+    public Lunalyr.Core.Colour.LyricColourMode ColourMode { get; init; } = Lunalyr.Core.Colour.LyricColourModes.DefaultMode;
+
+    /// <summary>How fast the drifting colours move, 0.25–2 (the Mac's <c>custom.lyricColourSpeed</c>).</summary>
+    public double ColourSpeed { get; init; } = 1;
+
+    /// <summary>Neutral (0) to vivid (2) (the Mac's <c>custom.lyricColourStrength</c>).</summary>
+    public double ColourStrength { get; init; } = 1;
+
+    /// <summary>The custom gradient's colours, <c>#RRGGBB</c> (the Mac's <c>custom.lyricColourCustom</c>).</summary>
+    public ValueList ColourCustom { get; init; } = new(Lunalyr.Core.Colour.LyricColourOptions.DefaultCustom);
+
+    /// <summary>Composition ids whose sung words are not revealed one by one ("Reveal sung words" off). Empty by default.</summary>
+    public ValueList NoWordReveal { get; init; } = ValueList.Empty;
+
+    /// <summary>Composition ids without the faint next-word preview. Empty by default.</summary>
+    public ValueList NoNextWordPreview { get; init; } = ValueList.Empty;
+
+    /// <summary>Seconds before a word its faint preview appears, 0.15–1.25 (the Mac's <c>custom.nextWordPreviewLead</c>).</summary>
+    public double PreviewLead { get; init; } = 0.45;
+
+    /// <summary>How composition <paramref name="kind"/> reveals its words and previews the next one.</summary>
+    public Lunalyr.Core.Motion.WordRevealOptions RevealOptionsFor(Lunalyr.Core.Compositions.CompositionKind kind)
+    {
+        var id = Lunalyr.Core.Compositions.CompositionTraits.Id(kind);
+        return new(!NoWordReveal.Contains(id), !NoNextWordPreview.Contains(id), PreviewLead);
+    }
+
     /// <summary>The reveal id composition <paramref name="compositionId"/> uses.</summary>
     public string RevealFor(string compositionId) =>
         RevealByLayout.TryGetValue(compositionId, out var reveal) ? reveal : Reveal;

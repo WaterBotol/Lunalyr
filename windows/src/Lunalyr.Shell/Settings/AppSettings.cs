@@ -211,7 +211,7 @@ public sealed partial record AppSettings
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
         }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating().NormalizedExtras()
-            .NormalizedDiscord();
+            .NormalizedDiscord().NormalizedLyricExtras();
     }
 
     /// <summary>What the lyric lookup asks: the configured order (unknown names dropped, new sources appended) and the switched-on set.</summary>
@@ -241,7 +241,7 @@ public sealed partial record AppSettings
         RomanizationSaved);
 
     /// <summary>The renderer's view of the lyric settings.</summary>
-    public LyricStyle Style() => WithLyricToolsStyle(WithWindowStyle(new()
+    public LyricStyle Style() => WithLyricExtrasStyle(WithLyricToolsStyle(WithWindowStyle(new()
     {
         FontFamily = FontChoice == "installed" && !string.IsNullOrWhiteSpace(FontFamily) ? FontFamily.Trim() : LyricStyle.Default.FontFamily,
         SizeFraction = (float)(LyricStyle.Default.SizeFraction * (double.IsFinite(LyricScale) ? Math.Clamp(LyricScale, 0.5, 2) : 1)),
@@ -258,7 +258,7 @@ public sealed partial record AppSettings
             Core.Lyrics.Readings.RomanizationDisplay.Replace => ReadingPlacement.Instead,
             _ => ReadingPlacement.Below,
         },
-    }));
+    })));
 
     /// <summary>
     /// The scene contract names reveals "softFocus", "floatUp"…, but the Mac's stored values are "fade", "lift"…:
