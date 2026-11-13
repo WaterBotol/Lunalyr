@@ -104,6 +104,28 @@ public sealed class ArtistAliases
     public async Task<string?> CountryAsync(string artist, CancellationToken cancellationToken = default) =>
         (await LookUpAsync(artist, needsCountry: true, cancellationToken).ConfigureAwait(false))?.Country is { Length: > 0 } country ? country : null;
 
+    /// <summary>
+    /// The country already stored for <paramref name="artist"/> (fresh, from an earlier lookup), "" when MusicBrainz
+    /// named none, or null when it hasn't been asked yet. Never sends a request.
+    /// </summary>
+    public string? KnownCountry(string artist)
+    {
+        var key = LyricQuery.Normalize(artist);
+        if (key.Length == 0) return "";
+        lock (_gate)
+        {
+            return Load().TryGetValue(key, out var entry) && _time.GetUtcNow() - entry.StoredAt < Lifetime ? entry.Country : null;
+        }
+    }
+
+    /// <summary>Asks MusicBrainz for <paramref name="artist"/>'s country without waiting, so a later lookup knows it.</summary>
+    public void LearnCountryInBackground(string artist) =>
+        _ = Task.Run(async () =>
+        {
+            try { await CountryAsync(artist).ConfigureAwait(false); }
+            catch (Exception) { /* a failed request is simply asked again next time */ }
+        });
+
     private async Task<Found?> LookUpAsync(string artist, bool needsCountry, CancellationToken cancellationToken)
     {
         var key = LyricQuery.Normalize(artist);

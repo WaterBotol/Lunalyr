@@ -305,6 +305,9 @@ public sealed class OriginalTitleTests : IDisposable
         var english = Candidate(Lrclib, LanguageVersionTests.English, "Racing into the Night", words: true);
         var search = new CountingAliasSearch("musicbrainz/artist-yoasobi.json");
         var aliases = new ArtistAliases(_folder.Path, search);
+        // The artist's country isn't waited for (that held every new artist's lyrics back): learned in the background,
+        // it counts from the next lookup on.
+        await aliases.CountryAsync("YOASOBI", Ct);
         var found = await OriginalTitles.WithOriginalTitleAsync(Lrclib, Query("Racing into the Night"), Titles(), enabled: true,
             (q, _) => Answer(q.Title == "夜に駆ける" ? japanese : english), Ct, aliases);
         Assert.True(found?.ViaOriginalTitle);
@@ -326,13 +329,18 @@ public sealed class OriginalTitleTests : IDisposable
         Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "米津玄師", null, 200), null, Ct));
         Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "Someone", "夜に駆ける - Single", 200), null, Ct));
         Assert.Equal(0, yoasobi.Count); // genre and script are read first
+        // An artist not asked about yet isn't waited for: no for now, and its country is learned in the background.
+        Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "YOASOBI", null, 200), aliases, Ct));
+        await aliases.CountryAsync("YOASOBI", Ct); // joins the background request already in flight
         Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "YOASOBI", null, 200), aliases, Ct));
         Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Other", "yoasobi", null, 200), aliases, Ct));
         Assert.Equal(1, yoasobi.Count); // kept with the artist's other names
         Assert.Contains("\"country\":\"JP\"", File.ReadAllText(Path.Combine(_folder.Path, "ArtistAliases.json")), StringComparison.Ordinal);
 
         var american = new CountingAliasSearch(null, """{"artists":[{"name":"Wallows","score":100,"country":"US","aliases":[]}]}""");
-        Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Pleaser", "Wallows", null, 188), new ArtistAliases(_folder.Path, american), Ct));
+        var wallows = new ArtistAliases(_folder.Path, american);
+        await wallows.CountryAsync("Wallows", Ct);
+        Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Pleaser", "Wallows", null, 188), wallows, Ct));
         Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Pleaser", "Wallows", null, 188), null, Ct));
     }
 

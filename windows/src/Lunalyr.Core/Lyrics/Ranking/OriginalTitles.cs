@@ -395,9 +395,14 @@ public sealed partial class OriginalTitles
         {
             return true;
         }
-        return aliases is not null && query.HasArtist
-            && await aliases.CountryAsync(query.Artist, cancellationToken).ConfigureAwait(false) is { } country
-            && EastAsianCountries.Contains(country);
+        if (aliases is null || !query.HasArtist) return false;
+        // The country is only used once it is known: waiting for MusicBrainz here held every new artist's Latin lyrics
+        // back by up to 4 s (plain lyrics.ovh text showed first; measured 13 Nov 2026). An unknown country is asked for
+        // in the background, so the next song by this artist knows it.
+        if (aliases.KnownCountry(query.Artist) is { } known) return EastAsianCountries.Contains(known);
+        aliases.LearnCountryInBackground(query.Artist);
+        await Task.CompletedTask.ConfigureAwait(false);
+        return false;
     }
 
     private Dictionary<string, OriginalTitleEntryDto> Load()
