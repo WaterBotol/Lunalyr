@@ -16,6 +16,7 @@ When merging, keep every entry and combine duplicate headings.
 
 - Scattered, Editorial, Constellation, Constellation + Editorial and Echo each have their own composition now: one focal word per line set larger, Scattered's rows step loose of each other, Editorial sets a small kicker over a headline word in the second face on a fixed left edge, Constellation spreads its stars wider apart with visible links, Constellation + Editorial hangs its satellites around a central word, and Echo's repeats recede in clear steps above the line and reflect below it.
 - Spoken, Cascade and Cutout: words already sung step back so the sung word leads; Cascade is a steady flush column with clearer large and small sizes; Cutout's labels get more room, scale with the type and stay clear of the top of the stage.
+- Mosaic, Torque and Fable layouts reworked: Mosaic's words land on the lower right third and settle into a flush-left stack read top to bottom, its colour bar now wipes in with its word (no lone bar) in a calmer colour, and letter-by-letter words keep one size; Torque's stack has open leading, keeps a clear margin, holds older words still, shows at most four, and turns away upwards at a line change instead of sinking onto the next line; Fable's words in a row share a baseline.
 
 ## [2.0.2] - 2026-11-13
 
