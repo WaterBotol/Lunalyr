@@ -429,6 +429,21 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `showInterludes` | `true` | three dots during instrumental breaks | `custom.showInterludes` |
 | `lyricHighlightMode` | `"complement"` | `complement`, `album`, `custom` (highlight tiles) | `custom.lyricHighlightMode` |
 | `lyricHighlightCustom` | `"#FF92A3"` | `#RRGGBB` | `custom.lyricHighlightCustom` |
+| `backingVocalsLayer` | `true` | "Backing vocals in the background": bracketed backing words of word-timed lines lifted out of the lead and drawn small and soft behind it; off keeps them in the line | `custom.backingVocalsLayer` |
+| `backingVocalStyle` | `""` | "Backing vocals animate like": `scattered`, `constellation`, `constellationEditorial`, `echo`, `editorial`, or `""` for the lead's layout (Spoken, Cascade, Cutout and the stage layouts then take Editorial); also the layout credits animate in | `custom.backingVocalStyle` |
+| `editorialTypography` | `false` | "Add Editorial typography": a second, contrasting face in every layout | `custom.editorialTypography` |
+| `editorialAmount` | `1` | "Editorial amount", 0–1: how many words take the second face (with the switch on; Editorial and Constellation + Editorial use 1 otherwise) | `custom.editorialAmount` |
+| `randomizeLyricFonts` | `false` | "Randomise lyric fonts": each synced word takes one of four typefaces that come with Windows (see "Lyric style extras") | `custom.randomizeLyricFonts` |
+| `lyricColourMode` | `"albumDrift"` | `albumDrift`, `sungSweep`, `musicReactive`, `customGradient`; the old `static` reads as `albumDrift` | `custom.lyricColourMode` |
+| `lyricColourSpeed` | `1` | "Colour speed", 0.25–2, for the drifting modes | `custom.lyricColourSpeed` |
+| `lyricColourStrength` | `1` | "Colour strength", 0 (neutral) – 2 (vivid) | `custom.lyricColourStrength` |
+| `lyricColourCustom` | `["#F9D29D","#F28FAD","#9AD0F5"]` | the custom gradient's two to four `#RRGGBB` colours (bad ones dropped, missing ones from the defaults) | `custom.lyricColourCustom` |
+| `wordRevealByStyle` | `{}` | "Reveal sung words" per composition id (`automatic`: every layout Match the music picks); a missing layout reveals. Locked on where the layout (Spoken, Cascade, Cutout) or the entrance (the Cutouts and swipes, or a mix with one) needs it | `custom.wordRevealByStyle` |
+| `nextWordPreviewByStyle` | `{}` | "Faint next-word preview" per composition id, keyed as `wordRevealByStyle`; a missing layout previews | `custom.nextWordPreviewByStyle` |
+| `nextWordPreviewLead` | `0.45` | "Preview lead", seconds, 0.15–1.25 (also when the opening title leaves and the instrumental dots hand over) | `custom.nextWordPreviewLead` |
+| `styleMemoryEnabled` | `true` | "Use remembered styles" | `custom.styleMemory.enabled` |
+| `styleMemorySongs` | `{}` | layout and colour remembered per recording: SHA-256 of `"song\|"` + the recording key → `{"composition", "colour"}` (either may be missing) | `custom.styleMemory.songs` |
+| `styleMemoryArtists` | `{}` | the same per artist: SHA-256 of `"artist\|"` + the lower-cased artist name | `custom.styleMemory.artists` |
 | `rotateLayouts` | `true` | Match the music steps through a rotation (off: by the song's character) | `custom.rotateLayouts` |
 | `rotateLayoutCounts` | `{}` | composition → songs in a row, 0–5 (missing = 1) | `custom.rotateLayoutCounts` |
 | `rotateLayoutsCursor` | `0` | where the rotation got to (saved by the app) | `custom.rotateLayoutsCursor` |
@@ -639,7 +654,8 @@ theme. The window opens at Lyric style (or `--settings-page`).
     always rank first, with LRCLIB after Music's own lyrics"), so Windows has neither key nor switch; the Ranking card
     carries the Mac's ranking text (`LyricSourceSnapshot.RankingText`).
 - **Live preview** (`SettingsPreview`, `Lunalyr.Shell.Rendering.SettingsPreviewRenderer`): at the top of Lyric style,
-  the scene on the wallpaper (the controller's scene, clock, background and the composition Match the music chose)
+  the scene on the wallpaper (the controller's scene, clock, background and the composition it draws: the chosen one,
+  the one remembered for the music, or Match the music's)
   drawn by the wallpaper's own layers into a 640×360 offscreen surface on its own thread at 15 fps, laid out as a
   1080-line display, read back into a `WriteableBitmap`. It draws only while Lyric style shows and the window is
   visible, and lets its device go when you leave the page. About 5% of one core while showing; about 100 MB more
@@ -748,10 +764,13 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
 - **Two styles.** `LyricStyleProfiles` keeps the lyric style per surface. The app's ordinary keys always hold the
   style in use; switching stores it as `lyricStyleDesktop` / `lyricStyleFloating` and loads the other. The first switch
   to Floating starts from the desktop's style with `lyricScale` 1 (Floating has its own text size). Style keys:
-  `fontChoice`, `fontFamily`, `lyricComposition`, `constellationSpread`, `constellationLinkOpacity`, `wordArrival`,
-  `wordArrivalByStyle`, `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `rotateLayouts`,
-  `creditsLayer`, `openingTitle`, `openingTitleCover`, `romanizationDisplay`, `lyricHighlightMode`,
-  `lyricHighlightCustom` (the Mac's list where Windows has the setting).
+  `fontChoice`, `fontFamily`, `lyricComposition`, `constellationSpread`, `constellationLinkOpacity`,
+  `wordRevealByStyle`, `wordArrival`, `wordArrivalByStyle`, `nextWordPreviewByStyle`, `nextWordPreviewLead`,
+  `wordEntranceMix`, `echoStrength`, `lyricScale`, `showInterludes`, `editorialTypography`, `editorialAmount`,
+  `randomizeLyricFonts`, `rotateLayouts`, `backingVocalsLayer`, `backingVocalStyle`, `creditsLayer`, `openingTitle`,
+  `openingTitleCover`, `romanizationDisplay`, `lyricColourMode`, `lyricColourSpeed`, `lyricColourStrength`,
+  `lyricColourCustom`, `lyricHighlightMode`, `lyricHighlightCustom` (the Mac's list where Windows has the setting;
+  translations have none yet). Remembered styles are not part of a style: they belong to the music.
 - **When it shows** (`FloatingVisibility`, ported): Floating chosen and a song with lyrics (timed and not all
   instrumental, or plain) playing; a pause keeps it up for 10 s; none found, nothing playing or still looking hide it.
   Edit position shows it even with nothing playing ("Lyrics appear here"). It fades in and out over 0.25 s (at once
@@ -1358,6 +1377,57 @@ Apple Music's animated album covers play behind the lyrics in Match the music, a
   colours and still cover, `-adjust softening=0..25`, `-reduce-motion`).
 - `tools/WallpaperTestMedia <folder>` makes invented test media (a 6 s H.264 gradient clip with no audio track, and
   pictures, one turned by its EXIF orientation); `… <folder> clip` makes the unit tests' fixture.
+
+## Lyric style extras
+
+The last rows of Lyric style, live on the desktop and in floating lyrics (both draw with the same composition layers
+and take the style of the surface showing). Keys in the table above; each joins the per-surface style except
+remembered styles, which belong to the music.
+
+- **Backing vocals in the background** (`backingVocalsLayer`): bracketed words of word-timed lines are lifted out of
+  the lead (`BackingVocals.Split`) and drawn small and soft in the band below it (`BackingVocalLayout`), in every
+  layout: the lead, rolling (`RollingSong(liftsBacking:)`) and stage layouts. Off, they stay in the line as sung,
+  brackets and all. **Backing vocals animate like** (`backingVocalStyle`): Scattered, Constellation, Constellation +
+  Editorial, Echo or Editorial; "The lead’s layout" keeps the lead's where it can (Spoken, Cascade, Cutout and the stage
+  layouts take Editorial). Credits animate in the same layout.
+- **Add Editorial typography** and **Editorial amount** (`editorialTypography`, `editorialAmount`): Editorial's wider
+  size range and its second, contrasting face (Georgia, else Cambria) in every layout, the Mac's constants
+  (`EditorialSetting.Metrics`, Spoken's every-third word, the stage layouts' `Chance(…, 60) < 0.34`). Off, Editorial and
+  Constellation + Editorial keep theirs at 1.
+- **Randomise lyric fonts** (`randomizeLyricFonts`): each synced word takes one of four faces by its seed, the Mac's
+  sans, serif, slab and soft, as Windows has them: Segoe UI Variable Display, Georgia (else Cambria or Times New
+  Roman), Rockwell (it comes with Office; else Roboto Slab or Bahnschrift) and Candara (else Corbel). Weights stay as
+  the layout has them; a word's reading takes its face. The typeface still sets titles, unsynced lyrics and Echo's
+  repeats.
+- **Colour** (`lyricColourMode`, `lyricColourStrength`, `lyricColourSpeed`, `lyricColourCustom`): the settled ink is
+  worked out in the mode, strength and custom colours (`LyricInks.Settled`), settled again when any of them or the
+  cover changes; the speed scales the drift. Album drift is as before. **Sung sweep**: white words fill with the
+  cover's contrasting colour from their leading edge as they are sung (a second label in the sung colour drawn over
+  the sung part, `SungSweep`); a line sung as one fills over its estimated words' time; the stage layouts draw their
+  sung words in it. Not drawn yet: the Mac's underline for a sweep washed out to white on a bright wallpaper.
+  **Music reactive**: a line takes the cover's colours brighter and deeper by its loudest moment
+  (`OrganicMotion.VocalIntensity`), from six settled inks; the Mac follows the voice frame by frame (or live audio),
+  Windows bakes a line's colours when it is set, so they hold for the line. Reduce Motion holds the rest level.
+  **Custom gradient**: two to four colours (swatches with Windows' colour picker, a remove button while there are more
+  than two, Add colour up to four), drifting through each line.
+  Lyric cards take the text colour too (`LyricCardPainter` settles its ink from the style): a still card is drawn in
+  the sung colour under Sung sweep (`tools/LyricCardPreview <folder> -colour <mode>` draws one still).
+- **Reveal sung words**, **Faint next-word preview** and **Preview lead** (`wordRevealByStyle`,
+  `nextWordPreviewByStyle`, `nextWordPreviewLead`): per layout, for the layout chosen or every one Match the music
+  picks; they reach the renderer as `LyricStyle.NoWordReveal`, `NoNextWordPreview` and `PreviewLead`
+  (`RevealOptionsFor(kind)`). The reveal is locked on, with the reason under it, where the layout or the entrance
+  needs it.
+- **Remember a style** (`styleMemoryEnabled`, `styleMemorySongs`, `styleMemoryArtists`): "For this song" or "For
+  <artist>" keeps the layout and text colour chosen above; a song's own wins over its artist's. While that music plays
+  the controller works the style, the layout and Match the music's choice out from the settings as the music sees
+  them (`StyleMemory.Applied`; a remembered "automatic" means Match the music over a chosen layout): the artist's from
+  the moment the song is known, the song's once its length is (the key is the recording's, as the song offsets').
+  Under Layout and Colour a note says what is remembered, with Update and Forget; "This song uses" offers Update with
+  the choices above and Forget; Forget all asks first. "Next layout" (the shortcut, `lunalyr://`) steps a remembered
+  layout on in place ("Layout for this song: Editorial"). Not ported: the lyric card's use of a remembered style.
+- **Checks.** `tools/CompositionPreview -style name=value … -tag word` draws each option on and off offscreen
+  (`backing=off`, `backingStyle=echo`, `editorial=0.5`, `fonts=random`, `colour=sungSweep`, `strength=0`, `speed=2`,
+  `custom=#RRGGBB,#RRGGBB`, `reveal=off`, `preview=off`, `lead=1.0`).
 
 ## Lyric tools
 

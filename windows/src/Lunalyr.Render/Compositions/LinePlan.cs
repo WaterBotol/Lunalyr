@@ -13,6 +13,8 @@ namespace Lunalyr.Render.Compositions;
 internal sealed class RunInk : IDisposable
 {
     public required Ink Label { get; init; }
+    /// <summary>The label in the colour a sweep fills it with as it is sung ("Sung sweep"); null when the ink doesn't sweep.</summary>
+    public Ink? Sung { get; init; }
     public Ink? Reading { get; init; }
     /// <summary>Where each token's share of the reading falls along it, so it fills in as the run is sung; null when
     /// the reading shows whole.</summary>
@@ -30,6 +32,7 @@ internal sealed class RunInk : IDisposable
     public void Dispose()
     {
         Label.Dispose();
+        Sung?.Dispose();
         Reading?.Dispose();
     }
 }
@@ -109,7 +112,7 @@ internal readonly record struct PlanSpec(
     double Spacing, double LineSpacing, LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
     LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false,
-    double TranslationSize = 0);
+    double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false);
 
 internal static class LinePlans
 {
@@ -124,7 +127,7 @@ internal static class LinePlans
     {
         var typography = EditorialSetting.Layout(words, glue, spec.BaseSize, spec.MinimumSize, spec.LineIndex, spec.WordTimed,
                                                  spec.Editorial, runReadings, 1, spec.Connections, spec.Spread,
-                                                 spec.EvenRunsAlternate);
+                                                 spec.EvenRunsAlternate, spec.EditorialAmount);
         var locale = TextKit.LocaleFor(string.Concat(words.Select(word => word.Text)));
         var count = typography.Runs.Count;
         var labels = new IDWriteTextLayout[count];
@@ -138,14 +141,18 @@ internal static class LinePlans
             {
                 var run = typography.Runs[r];
                 var metrics = run.Metrics;
-                var face = metrics.AlternateFace ? Face.Contrast : metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular;
-                labels[r] = kit.Layout(run.Label, face, (float)metrics.Size, locale, run.RightToLeft);
+                // "Randomise lyric fonts": each run takes one of the mix's faces by its seed (its weight as it would have it),
+                // ahead of the second face; its reading takes the same one.
+                var mix = spec.RandomFonts ? (int)(run.Seed % TextKit.MixFaces) : -1;
+                var face = mix >= 0 ? metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular
+                    : metrics.AlternateFace ? Face.Contrast : metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular;
+                labels[r] = kit.Layout(run.Label, face, (float)metrics.Size, locale, run.RightToLeft, mix: mix);
                 var label = labels[r].Metrics;
                 double width = label.Width, height = label.Height;
                 if (!string.IsNullOrWhiteSpace(run.Reading))
                 {
-                    readings[r] = kit.Layout(run.Reading!, metrics.AlternateFace ? Face.Contrast : Face.Quiet,
-                                             (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false);
+                    readings[r] = kit.Layout(run.Reading!, mix < 0 && metrics.AlternateFace ? Face.Contrast : Face.Quiet,
+                                             (float)(metrics.Size * 0.56), TextKit.LocaleFor(run.Reading!), false, mix: mix);
                     slices[r] = ReadingSlices.Measure(readings[r]!, run.Reading, runShares is not null && r < runShares.Count ? runShares[r] : null);
                     var reading = readings[r]!.Metrics;
                     width = Math.Max(width, reading.Width);
@@ -201,12 +208,15 @@ internal static class LinePlans
                 var colour = sample is { } rest ? LyricInks.Vector(rest.Rest) : spec.Colour;
                 var readingColour = sample is { } read ? LyricInks.Vector(read.Reading) : spec.ReadingColour;
                 var label = kit.Bake(labels[r], colour, raster, spec.Shadow);
+                // "Sung sweep": the same label in the colour the word fills with as it is sung.
+                Ink? sung = sample is { Sweeps: true } sweep ? kit.Bake(labels[r], LyricInks.Vector(sweep.Sung), raster, ShadowSpec.None) : null;
                 Ink? reading = readings[r] is { } layout ? kit.Bake(layout, readingColour, raster, spec.Shadow) : null;
                 var unit = units[r];
                 var labelHeight = labels[r].Metrics.Height;
                 runs[r] = new RunInk
                 {
                     Label = label,
+                    Sung = sung,
                     Reading = reading,
                     ReadingSlices = reading is null ? null : slices[r],
                     LabelOffset = new Vector2(0, (float)(-unit.Height / 2 + labelHeight / 2)),

@@ -38,6 +38,15 @@ try
     var english = Scene(DemoSongs.Songs[0], readings);
     var japanese = Scene(DemoSongs.Songs[1], readings);
     var style = LyricStyle.Default with { Readings = ReadingPlacement.Below };
+    // -colour <mode>: only the English portrait still, in that text colour (cards take the Lyric style's colour).
+    if (Array.IndexOf(args, "-colour") is var at and >= 0 && at + 1 < args.Length)
+    {
+        var mode = LyricColourModes.SavedChoice(args[at + 1]) ?? LyricColourModes.DefaultMode;
+        var coloured = LyricCardBuilder.Build(english, Pick(english, "Hold me"), "editorial", CardAspect.Portrait,
+                                              style with { ColourMode = mode }, reduceMotion: false);
+        Save($"still-english-{mode.RawValue()}.png", exporter.Still(coloured, 0.4));
+        return;
+    }
 
     // The English song's "Hold me (oh oh) through the night" (backing vocals) and the two lines after it; the Japanese
     // song's first three lines.

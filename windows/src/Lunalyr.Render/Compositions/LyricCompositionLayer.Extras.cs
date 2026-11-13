@@ -189,9 +189,9 @@ internal abstract partial class LyricCompositionLayer
         if (_creditPlans.TryGetValue(cue.Id, out var found)) return found;
         // Credits are not sung: "Remix (Night Edit) by: …" keeps its brackets in the line rather than losing them to
         // backing vocals. They are set as backing vocals are (the lead's composition when it sets words loose or links
-        // them, else Editorial).
+        // them, else Editorial, or the one chosen for backing vocals).
         var glue = new bool[cue.Words.Count];
-        var kind = BackingKind(Kind);
+        var kind = BackingFor(Kind);
         var plan = BuildPlan(cue.Words, glue, BaseSize * 0.72, _creditSeed + cue.Id, cue.Start, wordTimed: true,
                              editorial: kind.HasEditorialTypography(), null, null, new LineFit(box, 1, 1), box.Width,
                              kind: kind, lineEnd: cue.End);

@@ -237,3 +237,21 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C --line-porcelai
 | `Sources/Extras/LunalyrExtras.swift` (mirroring) | 2: the screen observer that re-reads mirroring on a display change | `LunalyrExtras` (state machine, faithful), `Platform/Desktop/DisplayMirroring.cs`, the tray's `WM_DISPLAYCHANGE` | The observer **re-implemented from behaviour**; the rest faithful |
 | `Sources/UI/LyricLayerView.swift` (translations), `LyricExtrasInspector.swift` (`TranslationSection`), `OnboardingSteps.swift` (the checkbox) | 0 in the lines used (the nearby constellation density scale is Verso and isn't used) | `Core/Compositions/LineTranslations.cs`, `Render/Compositions/LyricCompositionLayer.Translations.cs`, `LinePlan`, `StageLayer`, `SpokenLayer` | Faithful port |
 | `LyricExtrasTests.swift`, `RollingStackTests.swift`, `LyricReviewFixesTests.swift` | 4 each, imports only | the tests named in the commits | Ported tests keep the Mac's inputs |
+
+## Lyric style extras: what was checked and how each part went
+
+Blame (`-w -M -C`) run on each Mac range read; nothing from an `a99fd65` line was translated.
+
+| Mac file (range) | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `LyricTypography.swift` (`ScatteredTypography.metrics` editorial amount, `SpokenTypography` alternate) | 165 in the file, none in the ranges ported (`aa22c91`) | `EditorialSetting.Metrics`, `SpokenLayer.SetUnit` | Faithful port of the Lunalyr lines |
+| `Settings.swift` (`lyricFont` random faces; `revealsWords`, `previewsNextWord`, `wordRevealLock`) | the two dictionaries' declarations | `TextKit` mix faces, `AppSettings.LyricExtras.cs` | Lunalyr lines ported; of the Verso-declared dictionaries only the key names are kept |
+| `StageLyricStyles.swift` (`font`, `readingFont`) | 0 in range (`fba5bab`, `a9d4758`) | `StageLayer.FacesFor` | Faithful port |
+| `BackingVocals.swift` | 3 / file, none ported | `LyricCompositionLayer.BackingKind(lead, chosen)` | Faithful port |
+| `ScatteredLyricText.swift` (`SungText`, `LyricSweepMask`, tint) | 6 in 695–715, incl. line 704's progress expression | `LinePlan` sung label, `LyricCompositionLayer.DrawWordTimed` | Tint and the drawing order ported from the `aa22c91` lines; the progress formula taken from `SpokenTypographyView.swift` 301 (`aa22c91`), not from line 704 |
+| `SpokenTypographyView.swift` 147–215, 299–310 | 4 in 147–215 (braces, the entrance modifier, the shadow), none of them ported | `SungSweep.Progress(RollingWord)`, `SpokenLayer` sung label | Faithful port |
+| `WordPresentation.swift` 161–164 (`LyricPhraseTiming.sweep`) | 0 | `LyricPhraseTiming.Sweep` (already ported), reused | Reused |
+| `LyricExtrasOptions.swift` (`LyricColourOptions`, `StyleMemory`) | 1 / file | `LyricColourOptions`, `StyleMemory.cs` | Faithful port |
+| `LyricLayerView.swift` 125–150, 672–682 (remembered colour and composition) | 0 | `AppController.StyleMemory.cs`, `StyleMemory.Applied` | Behaviour ported into the controller |
+| `LunalyrExtras.swift` 445–470 (`cycleLayout`) | 0 | `LunalyrExtras.CycleLayout`, `StyleMemory.CycledRemembered` | Faithful port |
+| `LyricExtrasInspector.swift` 1–260, `LyricStylePage.swift` 1–300 | 0, 1 (a SwiftUI environment line) | `LyricStylePage.cs`, `LyricStyleCopy.cs` | Rows rebuilt with `SettingsKit`, copy ported |

@@ -161,6 +161,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     /// <summary>The reading shares of the line being built, by run id: a run's reading is measured share by share as it
     /// is baked.</summary>
     private ReadingShares?[]? _baking;
+    /// <summary>The seed of the line being built (its row, as <see cref="StageLine.Seed"/>): picks its words' faces.</summary>
+    private long _bakingSeed;
     private ID2D1SolidColorBrush? _brush;
     private ID2D1StrokeStyle? _round;
     private ID2D1PathGeometry? _star;
@@ -241,7 +243,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var set = WordReadingsOf(row);
         if (set is { Replaced: true }) { words = set.Words; glue = set.Glue; }
         IReadOnlyList<BackingGroup> groups = [];
-        if (source.WordTimed)
+        if (source.WordTimed && StyleShown.BackingVocals)
         {
             var split = BackingVocals.Split(words, glue);
             if (split.Backing.Count > 0) { words = split.Main; glue = split.MainGlue; groups = split.Backing; }
@@ -259,6 +261,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         for (var i = 0; i < words.Count; i++) starts[i] = words[i].Start;
         StageLine line;
         _baking = shares;
+        _bakingSeed = row;
         try
         {
             line = Build(new StageSource(row, source, runs, readings, StageShared.LineSpeed(starts), source.Start, shares));
@@ -285,13 +288,16 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         if (groups.Count > 0)
         {
             var box = BackingVocalLayout.Box(Stage);
+            // In Editorial's typography, or the layout chosen for backing vocals.
+            CompositionKind? chosen = StyleShown.BackingStyle is null ? null : BackingFor(Kind);
             var plans = new BackingPlan[groups.Count];
             for (var g = 0; g < groups.Count; g++)
             {
                 var group = groups[g];
                 var plan = BuildPlan(group.Words, group.Glue, Unit * 0.5, row + group.Id,
                                      group.Words.Count > 0 ? group.Words[0].Start : source.Start, wordTimed: true,
-                                     editorial: true, null, null, new LineFit(box, 1, 1), box.Width);
+                                     editorial: chosen?.HasEditorialTypography() ?? true, null, null, new LineFit(box, 1, 1), box.Width,
+                                     kind: chosen);
                 plans[g] = new BackingPlan(group, plan);
             }
             line.Backing = plans;
@@ -494,6 +500,23 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     protected ShadowSpec Shadow(double alpha, double radius, double drop) => new((float)alpha, Points(radius) * 0.5f, Points(drop));
 
     /// <summary>
+    /// The faces a run's word and reading are set in: with "Add Editorial typography", about a third of the words (by the
+    /// amount set) take the contrasting face, the same words every time for a line; with "Randomise lyric fonts", each
+    /// word one of the mix's faces by its seed (the Mac's StageLyricStyles font and readingFont, Lunalyr's own).
+    /// </summary>
+    private (Face Word, Face Reading, int Mix) FacesFor(StageRun? run, WordSpec spec)
+    {
+        if (run is null || spec.LabelIsReading || spec.Face == Face.Quiet) return (spec.Face, Face.Quiet, -1);
+        var style = StyleShown;
+        var seed = _bakingSeed;
+        if (style.RandomFonts) return (spec.Face, Face.Quiet, (int)((ulong)Math.Abs(seed + run.Id) % TextKit.MixFaces));
+        var amount = double.IsFinite(style.EditorialAmount) ? Math.Clamp(style.EditorialAmount, 0, 1) : 1;
+        var alternate = style.EditorialTypography && StageShared.Chance(seed, run.Id, 60) < 0.34
+            && StageShared.Chance(seed, run.Id, 61) < amount;
+        return alternate ? (Face.Contrast, Face.Contrast, -1) : (spec.Face, Face.Quiet, -1);
+    }
+
+    /// <summary>
     /// Bakes <paramref name="text"/> (a run, or any text with <paramref name="run"/>'s parts) as <paramref name="spec"/>
     /// sets it: the word shrunk to its maximum width (never below its minimum scale), its reading under it.
     /// </summary>
@@ -504,7 +527,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var rightToLeft = ScriptDirection.IsRightToLeft(text);
         var locale = TextKit.LocaleFor(text);
         var size = spec.Size;
-        var label = kit.Layout(text, spec.Face, (float)size, locale, rightToLeft);
+        var (face, readingFace, mix) = FacesFor(run, spec);
+        var label = kit.Layout(text, face, (float)size, locale, rightToLeft, mix: mix);
         try
         {
             var width = label.Metrics.Width;
@@ -512,7 +536,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             {
                 size *= Math.Max(spec.MinimumScale, spec.MaxWidth / width);
                 label.Dispose();
-                label = kit.Layout(text, spec.Face, (float)size, locale, rightToLeft);
+                label = kit.Layout(text, face, (float)size, locale, rightToLeft, mix: mix);
             }
             var labels = new Ink[spec.Colours.Length];
             for (var i = 0; i < labels.Length; i++) labels[i] = kit.Bake(label, spec.Colours[i], spec.Raster, spec.Shadow);
@@ -525,12 +549,12 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             {
                 var readingSize = spec.ReadingSize;
                 var readingLocale = TextKit.LocaleFor(reading);
-                var layout = kit.Layout(reading, Face.Quiet, (float)readingSize, readingLocale, false);
+                var layout = kit.Layout(reading, readingFace, (float)readingSize, readingLocale, false, mix: mix);
                 if (layout.Metrics.Width > spec.ReadingMaxWidth && layout.Metrics.Width > 0)
                 {
                     var shrunk = readingSize * Math.Max(0.5, spec.ReadingMaxWidth / layout.Metrics.Width);
                     layout.Dispose();
-                    layout = kit.Layout(reading, Face.Quiet, (float)shrunk, readingLocale, false);
+                    layout = kit.Layout(reading, readingFace, (float)shrunk, readingLocale, false, mix: mix);
                 }
                 using (layout)
                 {

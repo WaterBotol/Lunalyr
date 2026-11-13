@@ -1,4 +1,6 @@
+using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
+using Lunalyr.Shell;
 using Lunalyr.Shell.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -10,16 +12,20 @@ namespace Lunalyr.App.Settings;
 
 /// <summary>
 /// Lyric style (the Mac's LyricStylePage): where lyrics show, the layout and Match the music's rotation, the opening
-/// title and credits, size, typeface, colours, word entrances and the custom mix, the constellations' and Echo's own
-/// sliders, and instrumental breaks.
+/// title, credits and backing vocals, Editorial typography, size, typeface and mixed fonts, text and highlight colours,
+/// word entrances, the reveal and the next-word preview, the constellations' and Echo's own sliders, instrumental breaks
+/// and remembered styles.
 /// </summary>
 internal static class LyricStylePage
 {
     private const string Automatic = AppSettings.AllLayoutsKey;
 
     public static StackPanel Build(SettingsContext ctx, Func<IReadOnlyList<string>> installedFonts, Func<bool> reduceMotion,
-                                   UIElement? preview, FloatingHooks floating)
+                                   UIElement? preview, FloatingHooks floating, Func<AppController?> controller)
     {
+        // The song playing, for remembered styles: its query (once its length is known) and artist.
+        PlayingSong Playing() => new(controller()?.CurrentQuery, controller()?.Status.Artist);
+
         var page = Page();
         if (preview is not null) page.Children.Add(preview);
 
@@ -33,6 +39,7 @@ internal static class LyricStylePage
             Combo(ctx, SettingsCopy.Layouts, s => s.LyricComposition, (s, v) => s with { LyricComposition = v }));
         ctx.OnRefresh(s => layoutCard.Description = SettingsCopy.Layouts.FirstOrDefault(c => c.Value == s.LyricComposition)?.Detail ?? "");
         page.Children.Add(layoutCard);
+        page.Children.Add(RememberedNote(ctx, Playing, StyleAspect.Layout));
 
         page.Children.Add(Card("Change layout every song",
                 "Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.",
@@ -52,11 +59,19 @@ internal static class LyricStylePage
         page.Children.Add(Card("Show credits in the background",
             "Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.",
             "", Toggle(ctx, s => s.CreditsLayer, (s, v) => s with { CreditsLayer = v })));
-        page.Children.Add(Card("Backing vocals in the background",
-            "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead. Always on in this build.",
-            "", FixedToggle(true), notYet: SettingsCopy.LaterBuild));
-        page.Children.Add(Card("Add Editorial typography", "Mixes in a second, contrasting typeface.", "", FixedToggle(false),
-            notYet: SettingsCopy.LaterBuild));
+        page.Children.Add(Card("Backing vocals in the background", LyricStyleCopy.BackingVocals, "",
+            Toggle(ctx, s => s.BackingVocalsLayer, (s, v) => s with { BackingVocalsLayer = v })));
+        page.Children.Add(Indented(Card("Backing vocals animate like", null, null,
+                Combo(ctx, LyricStyleCopy.BackingChoices, s => s.BackingVocalStyle, (s, v) => s with { BackingVocalStyle = v })))
+            .ShowWhen(ctx, s => s.BackingVocalsLayer));
+        var editorial = Card("Add Editorial typography", LyricStyleCopy.EditorialTypography, "",
+            Toggle(ctx, s => s.EditorialTypography, (s, v) => s with { EditorialTypography = v }));
+        ctx.OnRefresh(s => editorial.Description = LyricStyleCopy.EditorialNote(SettingsCopy.Kind(s.LyricComposition)) is { } note
+            ? $"{LyricStyleCopy.EditorialTypography} {note}" : LyricStyleCopy.EditorialTypography);
+        page.Children.Add(editorial);
+        page.Children.Add(Indented(Card("Editorial amount", null, null,
+                Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent, s => s.EditorialAmount, (s, v) => s with { EditorialAmount = Math.Round(v, 2) })))
+            .ShowWhen(ctx, s => s.EditorialTypography));
         // Floating has its own size (Floating lyrics, above).
         page.Children.Add(Card("Lyric size", null, "",
             Slider(ctx, 0.7, 1.5, 0.01, SettingsCopy.Percent, s => s.LyricScale, (s, v) => s with { LyricScale = Math.Round(v, 2) }))
@@ -64,19 +79,35 @@ internal static class LyricStylePage
 
         // ---- Typeface ----
         Section(page, "Typeface");
-        page.Children.Add(Card("Randomise lyric fonts", "Words use a mix of built-in typefaces.", "", FixedToggle(false),
-            notYet: SettingsCopy.LaterBuild));
+        page.Children.Add(Card("Randomise lyric fonts", LyricStyleCopy.Randomise, "",
+            Toggle(ctx, s => s.RandomizeLyricFonts, (s, v) => s with { RandomizeLyricFonts = v })));
         var typeface = Card("Typeface", null, "",
             Combo(ctx, SettingsCopy.FontChoices, s => s.FontChoice, (s, v) => s with { FontChoice = v }));
-        ctx.OnRefresh(s => typeface.Description = SettingsCopy.FontChoices.FirstOrDefault(c => c.Value == s.FontChoice)?.Detail ?? "");
+        ctx.OnRefresh(s =>
+        {
+            var detail = SettingsCopy.FontChoices.FirstOrDefault(c => c.Value == s.FontChoice)?.Detail ?? "";
+            typeface.Description = s.RandomizeLyricFonts ? $"{detail} {LyricStyleCopy.RandomisedTypeface}".Trim() : detail;
+        });
         page.Children.Add(typeface);
         page.Children.Add(Card("Font family", "Type to jump to a family installed on this PC.", null, FontList(ctx, installedFonts))
             .ShowWhen(ctx, s => s.FontChoice == "installed"));
 
         // ---- Colours ----
         Section(page, "Colours");
-        page.Children.Add(Card("Colour", "The lyrics drift through the album’s colours.", "", FixedCombo("Album drift"),
-            notYet: SettingsCopy.LaterBuild));
+        var colour = Card("Colour", null, "",
+            Combo(ctx, LyricStyleCopy.ColourChoices, s => s.ColourMode.RawValue(), (s, v) => s with { LyricColourMode = v }));
+        ctx.OnRefresh(s => colour.Description = $"{LyricStyleCopy.ColourDetail(s.ColourMode)} {LyricStyleCopy.ColourBacking}");
+        page.Children.Add(colour);
+        page.Children.Add(RememberedNote(ctx, Playing, StyleAspect.Colour));
+        page.Children.Add(Indented(Card("Colour strength", null, null,
+            Slider(ctx, LyricColourOptions.StrengthMin, LyricColourOptions.StrengthMax, 0.01, SettingsCopy.Percent,
+                s => s.LyricColourStrength, (s, v) => s with { LyricColourStrength = Math.Round(v, 2) }, "Neutral", "Vivid"))));
+        page.Children.Add(Indented(Card("Colour speed", null, null,
+                Slider(ctx, LyricColourOptions.SpeedMin, LyricColourOptions.SpeedMax, 0.01, SettingsCopy.Percent,
+                    s => s.LyricColourSpeed, (s, v) => s with { LyricColourSpeed = Math.Round(v, 2) }, "Slow", "Lively")))
+            .ShowWhen(ctx, s => s.ColourMode.Drifts()));
+        page.Children.Add(Indented(Card("Your colours", null, null, CustomColours(ctx)))
+            .ShowWhen(ctx, s => s.ColourMode == LyricColourMode.CustomGradient));
         var highlight = Card("Highlight colour", null, "",
             Combo(ctx, SettingsCopy.HighlightModes, s => s.LyricHighlightMode, (s, v) => s with { LyricHighlightMode = v }));
         ctx.OnRefresh(s => highlight.Description = (SettingsCopy.HighlightModes.FirstOrDefault(c => c.Value == s.LyricHighlightMode)?.Detail ?? "")
@@ -87,6 +118,21 @@ internal static class LyricStylePage
 
         // ---- Word entrances ----
         Section(page, "Word entrances");
+        var revealToggle = new ToggleSwitch { OnContent = "On", OffContent = "Off", MinWidth = 0 };
+        var reveal = Card("Reveal sung words", LyricStyleCopy.RevealSungWords, "", revealToggle);
+        ctx.OnRefresh(s =>
+        {
+            revealToggle.IsOn = s.RevealsWordsForControls();
+            var reason = LyricStyleCopy.RevealLockReason(s.RevealLockForControls());
+            revealToggle.IsEnabled = reason is null;
+            reveal.Description = reason is null ? LyricStyleCopy.RevealSungWords : $"{LyricStyleCopy.RevealSungWords} {reason}";
+            AutomationProperties.SetHelpText(revealToggle, reveal.Description);
+        });
+        revealToggle.Toggled += (_, _) =>
+        {
+            if (revealToggle.IsEnabled) ctx.Update(s => s.WithRevealsWordsForControls(revealToggle.IsOn));
+        };
+        page.Children.Add(reveal);
         var entrance = new ComboBox { MinWidth = 260 };
         var entranceCard = Card("Entrance", null, "", entrance);
         string[] shownFor = [""];
@@ -118,10 +164,13 @@ internal static class LyricStylePage
         page.Children.Add(entranceCard);
         page.Children.Add(Expander("Custom mix", "Each word takes one of the entrances ticked here.", "", MixList(ctx), expanded: true)
             .ShowWhen(ctx, s => s.EntranceForControls() == "mix"));
-        page.Children.Add(Card("Reveal sung words", "Words appear one by one as they are sung.", "", FixedToggle(true),
-            notYet: SettingsCopy.LaterBuild));
-        page.Children.Add(Card("Faint next-word preview", "A faint preview of each word just before it is sung.", "", FixedToggle(true),
-            notYet: SettingsCopy.LaterBuild));
+        page.Children.Add(Card("Faint next-word preview", LyricStyleCopy.NextWordPreview, "",
+            Toggle(ctx, s => s.PreviewsNextWordForControls(), (s, v) => s.WithPreviewsNextWordForControls(v))));
+        page.Children.Add(Indented(Card("Preview lead", "How long before each word its faint preview appears.", null,
+                Slider(ctx, AppSettings.PreviewLeadMin, AppSettings.PreviewLeadMax, 0.05, LyricStyleCopy.Seconds,
+                    s => s.NextWordPreviewLead, (s, v) => s with { NextWordPreviewLead = Math.Round(v / 0.05) * 0.05 },
+                    spoken: LyricStyleCopy.SpokenPreviewLead)))
+            .ShowWhen(ctx, s => s.PreviewsNextWordForControls()));
 
         // ---- The layouts' own controls ----
         Section(page, "Constellation").ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation" or "constellationEditorial");
@@ -149,9 +198,206 @@ internal static class LyricStylePage
 
         // ---- Remember a style ----
         Section(page, "Remember a style");
-        page.Children.Add(Card("Use remembered styles", "Saves a layout and colour for a song or artist. A song’s own wins.", "",
-            FixedToggle(false), notYet: SettingsCopy.LaterBuild));
+        page.Children.Add(Card("Use remembered styles", "A layout and text colour kept for a song or an artist wins while it plays.", "",
+            Toggle(ctx, s => s.StyleMemoryEnabled, (s, v) => s with { StyleMemoryEnabled = v })));
+        AddMemory(page, ctx, Playing);
         return page;
+    }
+
+    /// <summary>The song playing: its query once its length is known (what a style is remembered for), and its artist.</summary>
+    private readonly record struct PlayingSong(Core.Lyrics.LyricQuery? Song, string? Artist);
+
+    /// <summary>A row set in under the one it belongs to.</summary>
+    private static Card Indented(Card card)
+    {
+        card.Margin = new Thickness(36, 0, 0, 0);
+        return card;
+    }
+
+    /// <summary>
+    /// Under the Layout or Colour picker while a style remembered for the music playing overrides it: what it uses, with
+    /// Update (the choice above, remembered there instead) and Forget (this part of the memory dropped). The Mac's
+    /// RememberedStyleNote.
+    /// </summary>
+    private static Card RememberedNote(SettingsContext ctx, Func<PlayingSong> playing, StyleAspect aspect)
+    {
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var card = Indented(Card("Remembered", LyricStyleCopy.RememberedDetail, null, buttons));
+        (RememberedStyle Style, StyleScope Scope, Core.Lyrics.LyricQuery Song)? shown = null;
+        var update = Button("Update", () =>
+        {
+            if (shown is not { } active) return;
+            ctx.Update(s =>
+            {
+                var style = aspect == StyleAspect.Layout ? active.Style with { Composition = s.LyricComposition }
+                    : active.Style with { Colour = s.ColourMode.RawValue() };
+                return StyleMemory.Remember(s, style, active.Song, active.Scope);
+            });
+        });
+        var forget = Button("Forget", () =>
+        {
+            if (shown is { } active) ctx.Update(s => StyleMemory.ForgetPart(s, active.Song, active.Scope, active.Style, aspect));
+        });
+        buttons.Children.Add(update);
+        buttons.Children.Add(forget);
+        ctx.OnRefresh(s =>
+        {
+            var now = playing();
+            shown = null;
+            if (now.Song is { } song && StyleMemory.Remembered(s, song, now.Artist) is { } active
+                && StyleMemory.RememberedName(aspect, active.Style) is { } name)
+            {
+                shown = (active.Style, active.Scope, song);
+                card.Title = LyricStyleCopy.RememberedTitle(active.Scope, name);
+                var scope = StyleMemory.ScopeName(active.Scope);
+                AutomationProperties.SetName(update, $"Remember the choice above for this {scope} instead");
+                AutomationProperties.SetName(forget, $"Use the choice above for this {scope} too");
+            }
+            card.Visibility = shown is null ? Visibility.Collapsed : Visibility.Visible;
+        });
+        return card;
+    }
+
+    /// <summary>
+    /// What is remembered for the song playing, or buttons to remember the choices above for it or its artist, and Forget
+    /// all (the Mac's LyricStyleMemorySection).
+    /// </summary>
+    private static void AddMemory(StackPanel page, SettingsContext ctx, Func<PlayingSong> playing)
+    {
+        Core.Lyrics.LyricQuery? song = null;
+        (RememberedStyle Style, StyleScope Scope)? active = null;
+
+        // A style remembered for the song playing: what it uses, Update and Forget.
+        var activeButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var activeCard = Card("This song uses", LyricStyleCopy.MemoryInUse, null, activeButtons);
+        activeButtons.Children.Add(Button("Update with the choices above", () =>
+        {
+            if (song is { } now && active is { } kept) ctx.Update(s => StyleMemory.Remember(s, StyleMemory.Chosen(s), now, kept.Scope));
+        }));
+        activeButtons.Children.Add(Button("Forget", () =>
+        {
+            if (song is { } now && active is { } kept) ctx.Update(s => StyleMemory.Forget(s, now, kept.Scope));
+        }));
+        page.Children.Add(activeCard);
+
+        // Nothing remembered yet: remember the choices above for the song or its artist.
+        var rememberButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var rememberCard = Card("Remember this style", LyricStyleCopy.MemorySaves, null, rememberButtons);
+        rememberButtons.Children.Add(Button("For this song", () =>
+        {
+            if (song is { } now) ctx.Update(s => StyleMemory.Remember(s, StyleMemory.Chosen(s), now, StyleScope.Song));
+        }, "Remember for this song"));
+        var forArtist = Button("For the artist", () =>
+        {
+            if (song is { } now) ctx.Update(s => StyleMemory.Remember(s, StyleMemory.Chosen(s), now, StyleScope.Artist));
+        });
+        rememberButtons.Children.Add(forArtist);
+        page.Children.Add(rememberCard);
+
+        var nothing = Caption(LyricStyleCopy.MemoryNothingPlaying);
+        nothing.Margin = new Thickness(1, 2, 0, 2);
+        page.Children.Add(nothing);
+
+        // Forget all, after a question.
+        var confirm = new StackPanel { Spacing = 12, MaxWidth = 320 };
+        var question = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var flyout = new Flyout { Content = confirm };
+        confirm.Children.Add(question);
+        confirm.Children.Add(Button("Forget all", () =>
+        {
+            flyout.Hide();
+            ctx.Update(StyleMemory.ForgetAll);
+        }, "Forget every remembered style"));
+        var forgetAll = new Button { Content = "Forget all", Flyout = flyout };
+        AutomationProperties.SetName(forgetAll, "Forget every remembered style");
+        var countCard = Card("Remembered styles", null, null, forgetAll);
+        page.Children.Add(countCard);
+
+        ctx.OnRefresh(s =>
+        {
+            var now = playing();
+            song = now.Song;
+            active = song is null ? null : StyleMemory.Remembered(s, song, now.Artist);
+            activeCard.Visibility = active is null ? Visibility.Collapsed : Visibility.Visible;
+            rememberCard.Visibility = song is not null && active is null ? Visibility.Visible : Visibility.Collapsed;
+            nothing.Visibility = song is null ? Visibility.Visible : Visibility.Collapsed;
+            if (active is { } kept)
+            {
+                activeCard.Title = $"This {StyleMemory.ScopeName(kept.Scope)} uses {StyleMemory.Describe(kept.Style)}";
+                activeCard.Description = LyricStyleCopy.MemoryInUse;
+            }
+            var artist = song?.Artist ?? "";
+            forArtist.Content = string.IsNullOrWhiteSpace(artist) ? "For the artist" : $"For {artist}";
+            AutomationProperties.SetName(forArtist, string.IsNullOrWhiteSpace(artist) ? "Remember for the artist" : $"Remember for {artist}");
+            forArtist.IsEnabled = !string.IsNullOrWhiteSpace(artist);
+            rememberCard.Description = string.IsNullOrWhiteSpace(artist) && song is not null
+                ? $"{LyricStyleCopy.MemorySaves} {LyricStyleCopy.MemoryNoArtist}" : LyricStyleCopy.MemorySaves;
+            int songs = s.StyleMemorySongs?.Count ?? 0, artists = s.StyleMemoryArtists?.Count ?? 0;
+            countCard.Visibility = songs + artists > 0 ? Visibility.Visible : Visibility.Collapsed;
+            countCard.Description = StyleMemory.RememberedCount(songs, artists);
+            question.Text = $"Forget every remembered style? {StyleMemory.RememberedCount(songs, artists)}. Those songs and artists then use the choices above.";
+        });
+    }
+
+    /// <summary>
+    /// The custom gradient's colours: a swatch per colour that opens Windows' colour picker, a remove button while there
+    /// are more than two, and Add colour up to four.
+    /// </summary>
+    private static StackPanel CustomColours(SettingsContext ctx)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var shown = "";
+        ctx.OnRefresh(s =>
+        {
+            var colours = LyricColourOptions.Sanitised(s.LyricColourCustom ?? []);
+            var key = string.Join(",", colours);
+            if (key == shown) return;
+            shown = key;
+            row.Children.Clear();
+            for (var i = 0; i < colours.Count; i++)
+            {
+                var index = i;
+                var hex = colours[i];
+                var swatch = new Border
+                {
+                    Width = 28, Height = 20, Style = Resource<Style>("SettingsSwatch"), Background = new SolidColorBrush(Parse(hex)),
+                };
+                var button = new Button { Content = swatch };
+                AutomationProperties.SetName(button, $"Colour {index + 1}");
+                AutomationProperties.SetItemStatus(button, hex);
+                ToolTipService.SetToolTip(button, hex);
+                var picker = new ColorPicker
+                {
+                    IsAlphaEnabled = false, IsMoreButtonVisible = false, IsColorSliderVisible = true, IsColorChannelTextInputVisible = true,
+                    IsHexInputVisible = true, ColorSpectrumShape = ColorSpectrumShape.Ring, Color = Parse(hex),
+                };
+                AutomationProperties.SetName(picker, $"Colour {index + 1}");
+                var flyout = new Flyout { Content = picker, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+                button.Flyout = flyout;
+                // Saved when the picker closes, so dragging across the spectrum doesn't write a file per step.
+                flyout.Closed += (_, _) =>
+                {
+                    var c = picker.Color;
+                    ctx.Update(s => s.WithCustomColour(index, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
+                };
+                row.Children.Add(button);
+                if (colours.Count > 2)
+                {
+                    var remove = new Button { Content = new FontIcon { Glyph = "", FontSize = 12 }, Padding = new Thickness(8, 6, 8, 6) };
+                    AutomationProperties.SetName(remove, $"Remove colour {index + 1}");
+                    ToolTipService.SetToolTip(remove, "Remove this colour");
+                    remove.Click += (_, _) => ctx.Update(s => s.WithCustomColourRemoved(index));
+                    row.Children.Add(remove);
+                }
+            }
+            if (colours.Count < 4)
+            {
+                var add = Button("Add colour", () => ctx.Update(s => s.WithCustomColourAdded()));
+                ToolTipService.SetToolTip(add, "Add another colour to the gradient");
+                row.Children.Add(add);
+            }
+        });
+        return row;
     }
 
     /// <summary>A number box per layout in the rotation (0–5 songs in a row).</summary>
@@ -281,12 +527,13 @@ internal static class LyricStylePage
         };
         return button;
 
-        static Windows.UI.Color Parse(string hex)
-        {
-            var text = (hex ?? "").Trim().TrimStart('#');
-            if (text.Length == 6 && uint.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out var rgb))
-                return Windows.UI.Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
-            return Windows.UI.Color.FromArgb(255, 0xFF, 0x92, 0xA3);
-        }
+    }
+
+    private static Windows.UI.Color Parse(string hex)
+    {
+        var text = (hex ?? "").Trim().TrimStart('#');
+        if (text.Length == 6 && uint.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out var rgb))
+            return Windows.UI.Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+        return Windows.UI.Color.FromArgb(255, 0xFF, 0x92, 0xA3);
     }
 }

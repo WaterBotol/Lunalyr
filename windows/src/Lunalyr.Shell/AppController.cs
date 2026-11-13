@@ -325,7 +325,7 @@ public sealed partial class AppController : IAsyncDisposable
             _settings = settings;
             Volatile.Write(ref _globalOffset, settings.LyricOffset);
             generation = _generation;
-            var style = settings.Style();
+            var style = Effective(settings).Style();
             if (style != _scene.Style)
             {
                 _scene = _scene with { Style = style };
@@ -359,19 +359,20 @@ public sealed partial class AppController : IAsyncDisposable
             if (old.WallpaperPaused != settings.WallpaperPaused) _status = _status with { WallpaperPaused = settings.WallpaperPaused };
         }
 
-        ApplyLayoutSettings(old, settings);
+        // The layout as the music playing sees it: a remembered one wins over the chosen one.
+        var (oldLayout, newLayout) = (Effective(old).LyricComposition, Effective(settings).LyricComposition);
+        ApplyLayoutSettings(old, settings, oldLayout != newLayout);
         ApplyCustomWallpaper(old, settings);
         MusicVideoSettingsChanged(old, settings);
         ApplyMotionSettings(old, settings);
         ApplyLyricsHidden(old, settings);
         if (old.Player != settings.Player) _followed.SetChoice(settings.Player);
-        if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || old.LyricComposition != settings.LyricComposition
+        if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || oldLayout != newLayout
             || old.RotateLayouts != settings.RotateLayouts)
             PublishLayers();
         // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
         // otherwise when they arrive. Other settings changes never decide it.
-        if (settings.LyricComposition == AutomaticComposition
-            && (old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts))
+        if (newLayout == AutomaticComposition && (oldLayout != newLayout || old.RotateLayouts != settings.RotateLayouts))
             ChooseLayout(onlyWhenSettled: true);
         if (old.AnimationRate != settings.AnimationRate) _renderer.SetFrameRate(settings.AnimationRate);
         if (RendererRuns(old) != RendererRuns(settings))
@@ -623,7 +624,8 @@ public sealed partial class AppController : IAsyncDisposable
                 Palette = _palette,
                 Title = track.Title,
                 Artist = track.Artist,
-                Style = _settings.Style(),
+                // The artist's remembered style applies from the start; the song's own once its length is known.
+                Style = Effective(_settings).Style(),
                 Adjustments = _settings.Adjustments(),
                 Status = disabled is null ? StatusText.LookingUp : StatusText.LookupsOff,
                 NoneFound = disabled is not null,
@@ -726,6 +728,7 @@ public sealed partial class AppController : IAsyncDisposable
             }
 
             // The genre hints at the language sung (LyricLanguage), as on the Mac.
+            bool restyled, relayout;
             var query = new LyricQuery(track.Title, track.Artist, track.AlbumTitle.Length > 0 ? track.AlbumTitle : null, duration.TotalSeconds)
             {
                 Genre = track.Genre.Length > 0 ? track.Genre : null,
@@ -733,11 +736,17 @@ public sealed partial class AppController : IAsyncDisposable
             lock (_gate)
             {
                 if (generation != _generation) return;
+                var layoutBefore = Effective(_settings).LyricComposition;
                 _query = query;
                 Volatile.Write(ref _recordingKey, query.RecordingKey);
                 _status = _status with { Duration = duration.TotalSeconds };
                 _scene = _scene with { Duration = duration.TotalSeconds };
+                // The song's own remembered style, now that its recording is known.
+                restyled = RestyleForSongLocked();
+                relayout = Effective(_settings).LyricComposition != layoutBefore;
             }
+            if (relayout) PublishLayers();
+            if (restyled) PublishScene();
 
             MusicVideoSongKnown(track, duration.TotalSeconds);
 

@@ -6,6 +6,7 @@
 // from docs/compositions/spoken.md and cascade-cutout.md.
 
 using System.Numerics;
+using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Logging;
 using Lunalyr.Core.Lyrics;
@@ -22,6 +23,8 @@ namespace Lunalyr.Render.Compositions;
 internal sealed class SpokenUnit : IDisposable
 {
     public required Ink Label { get; init; }
+    /// <summary>The word in the colour "Sung sweep" fills it with as it is sung; null when the ink doesn't sweep.</summary>
+    public Ink? Sung { get; init; }
     public Ink? Reading { get; init; }
     /// <summary>Where each token's share of a glued word's reading falls along it, so it fills in as the word is
     /// sung; null when the reading shows whole.</summary>
@@ -38,6 +41,7 @@ internal sealed class SpokenUnit : IDisposable
     public void Dispose()
     {
         Label.Dispose();
+        Sung?.Dispose();
         Reading?.Dispose();
         Tile?.Dispose();
         LabelOnTile?.Dispose();
@@ -87,7 +91,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     protected override void OnLyrics(IReadOnlyList<LyricLine> lines, SceneSnapshot scene)
     {
         // Word-by-word readings where the scene has them, each line's reading string otherwise.
-        _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings);
+        _song = new RollingSong(lines, Breaker, scene.WordReadings, ReadingDisplay, scene.Readings, scene.Style.BackingVocals);
         _trackSeed = (int)(RollingWords.Fnv1a((scene.Title ?? "") + "\u001f" + (scene.Artist ?? "")) & 0x7FFF_FFFF);
     }
 
@@ -222,6 +226,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 if (tile.IsVisible) DrawTileRect(dc, world, tileRect, tile, token.RightToLeft, opacity);
                 unit.Label.Draw(dc, labelWorld, scale, (float)opacity, blur,
                                 GlowSpec.None, 1, reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft, clip);
+                // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's RollingUnit tint).
+                if (unit.Sung is { } sung && !tile.IsVisible && !clip.IsSet && SungSweep.Progress(token, time) is var tint and > 0)
+                {
+                    var (from, to) = SungSweep.Span(unit.Label.Box.X, tint, token.RightToLeft);
+                    sung.DrawBetween(dc, labelWorld, scale, (float)opacity, blur, (float)from, (float)to,
+                                     reveal.IsEmpty ? default : AsSpan(token.Boundaries), reveal, token.RightToLeft);
+                }
                 var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
                 var reading = state.Presentation.Preview ? null : unit.Reading;
                 reading?.Draw(dc, readingWorld, scale, (float)opacity, blur, GlowSpec.None, 1, readingBoundaries, readingShares, clip: clip);
@@ -381,7 +392,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     private SpokenUnit SetUnit(RollingWord token)
     {
         var kit = Kit!;
-        var (label, reading, width, height) = Layout(kit, token, Stage.Width, Scale);
+        // "Add Editorial typography": about a third of the words, by the amount set, take the contrasting face (the Mac's
+        // SpokenTypography); "Randomise lyric fonts" gives each word one of the mix's faces by its seed.
+        var style = StyleShown;
+        var amount = double.IsFinite(style.EditorialAmount) ? Math.Clamp(style.EditorialAmount, 0, 1) : 1;
+        var alternate = style.EditorialTypography && token.Hash % 3 == 1 && (double)((token.Hash / 300) % 100) < amount * 100;
+        var mix = style.RandomFonts ? (int)(token.Seed % TextKit.MixFaces) : -1;
+        var (label, reading, width, height) = Layout(kit, token, Stage.Width, Scale, alternate, mix);
         using var _ = label;
         using var __ = reading;
         var labelBox = label.Metrics;
@@ -395,6 +412,9 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         // Cascade's held words take the highlight's hue as type of their own.
         if (Kind == CompositionKind.Cascade && token.Hero && !colours.Sweeps && ink.Accent is { } accent) rest = accent;
         var labelInk = kit.Bake(label, LyricInks.Vector(rest), raster, shadow);
+        // "Sung sweep" (not on Cascade's held words, which keep the highlight's hue, nor on Cutout's labels).
+        var sungInk = colours.Sweeps && !token.Tile && !(Kind == CompositionKind.Cascade && token.Hero)
+            ? kit.Bake(label, LyricInks.Vector(colours.Sung), raster, ShadowSpec.None) : null;
         var readingInk = reading is null ? null : kit.Bake(reading, LyricInks.Vector(colours.Reading), raster, shadow);
         var slices = reading is null ? null : ReadingSlices.Measure(reading, token.Reading, token.Shares);
         Ink? tile = null, labelOnTile = null, readingOnTile = null;
@@ -412,6 +432,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         return new SpokenUnit
         {
             Label = labelInk,
+            Sung = sungInk,
             Reading = readingInk,
             ReadingSlices = slices,
             LabelOffset = new Vector2(0, (float)(-content / 2 + labelBox.Height / 2)),
@@ -429,14 +450,17 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// Cascade or Cutout word that is not a hero, the regular one), its reading under it (wrapping at 80% of the
     /// stage), 2 points of padding at each side, or 11 by 3 round a Cutout label. The caller disposes the layouts.
     /// </summary>
+    /// <param name="alternate">Set in Editorial's contrasting face ("Add Editorial typography").</param>
+    /// <param name="mix">One of "Randomise lyric fonts" faces, or −1.</param>
     internal static (IDWriteTextLayout Label, IDWriteTextLayout? Reading, double Width, double Height) Layout(
-        TextKit kit, RollingWord token, double stageWidth, float scale)
+        TextKit kit, RollingWord token, double stageWidth, float scale, bool alternate = false, int mix = -1)
     {
         var size = (float)token.PointSize;
-        var label = kit.Layout(token.Source.Text, token.Heavy ? Face.Heavy : Face.Regular, size,
-                               TextKit.LocaleFor(token.Source.Text), token.RightToLeft);
+        var face = mix < 0 && alternate ? Face.Contrast : token.Heavy ? Face.Heavy : Face.Regular;
+        var label = kit.Layout(token.Source.Text, face, size, TextKit.LocaleFor(token.Source.Text), token.RightToLeft, mix: mix);
         var reading = token.Reading is { } text
-            ? kit.Layout(text, Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false, (float)(stageWidth * 0.8))
+            ? kit.Layout(text, mix < 0 && alternate ? Face.Contrast : Face.Quiet, size * 0.56f, TextKit.LocaleFor(text), false,
+                         (float)(stageWidth * 0.8), mix)
             : null;
         double width = label.Metrics.Width, height = label.Metrics.Height;
         if (reading is not null)
@@ -478,8 +502,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                     var group = groups[g];
                     var plan = BuildPlan(group.Words, group.Glue, LineBase * 0.5, _trackSeed + group.Id,
                                          group.Words.Count > 0 ? group.Words[0].Start : 0, wordTimed: true,
-                                         editorial: true, null, null, new LineFit(box, 1, 1), box.Width,
-                                         kind: BackingKind(Kind));
+                                         editorial: BackingFor(Kind).HasEditorialTypography(), null, null, new LineFit(box, 1, 1), box.Width,
+                                         kind: BackingFor(Kind));
                     plans[g] = new BackingPlan(group, plan);
                 }
                 _backing[row] = plans;

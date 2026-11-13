@@ -104,10 +104,12 @@ public static class EditorialSetting
     /// <param name="connections">The constellations: words scattered to different heights, heroes larger, the rest smaller.</param>
     /// <param name="spread">The constellations' Spread setting (1 by default).</param>
     /// <param name="evenRunsAlternate">Constellation + Editorial: the second face goes to every other run rather than every third by hash.</param>
+    /// <param name="editorialAmount">How much of the editorial range and second face ("Editorial amount", 0–1), with <paramref name="editorial"/>.</param>
     public static EditorialLine Layout(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue, double baseSize,
                                        double minimumSize, int lineIndex, bool wordTimed, bool editorial,
                                        IReadOnlyList<string?>? readings = null, double moodIntensity = 1,
-                                       bool connections = false, double spread = 1, bool evenRunsAlternate = false)
+                                       bool connections = false, double spread = 1, bool evenRunsAlternate = false,
+                                       double editorialAmount = 1)
     {
         ArgumentNullException.ThrowIfNull(words);
         ArgumentNullException.ThrowIfNull(glue);
@@ -142,7 +144,7 @@ public static class EditorialSetting
             var (start, end) = ranges[r];
             var source = sources[r];
             var metrics = Metrics(r, source, average, setting, baseSize, minimumSize, wordTimed, editorial, moodIntensity,
-                                  connections, spread, fullness, evenRunsAlternate);
+                                  connections, spread, fullness, evenRunsAlternate, editorialAmount);
             var order = ranges.Count > 1 ? r / span : 0.5;
             var runCadence = r + 1 < ranges.Count ? Math.Max(0.05, sources[r + 1].Start - source.Start)
                 : Math.Max(source.End - source.Start, 0.12);
@@ -216,7 +218,7 @@ public static class EditorialSetting
     public static RunMetrics Metrics(int index, LyricWord word, double averageDuration, LineSetting setting, double baseSize,
                                      double minimumSize, bool wordTimed, bool editorial, double moodIntensity = 1,
                                      bool connections = false, double spread = 1, double fullness = 1,
-                                     bool evenRunsAlternate = false)
+                                     bool evenRunsAlternate = false, double editorialAmount = 1)
     {
         var hash = RunHash(word.Text, index);
         var held = wordTimed ? Held(word, averageDuration) : 0;
@@ -225,11 +227,14 @@ public static class EditorialSetting
         var size = hero ? baseSize * (0.58 + 0.30 * setting.SizeContrast * held + 0.05 * jitter)
             : baseSize * (0.64 + 0.06 * jitter);
         var alternate = false;
-        if (editorial)
+        // "Editorial amount" (Lunalyr's own, ported from the Mac's ScatteredTypography.metrics): the range widens and the
+        // second face spreads with it; at 1 every eligible run takes it, as Editorial always has.
+        var amount = double.IsFinite(editorialAmount) ? Math.Clamp(editorialAmount, 0, 1) : 1;
+        if (editorial && amount > 0)
         {
-            size *= 1 + 0.10 * (hero ? 1 : jitter);
+            size *= 1 + 0.10 * amount * (hero ? 1 : jitter);
             var eligible = evenRunsAlternate ? index % 2 == 0 : (hash / 10_000) % 3 == 0;
-            alternate = !hero && eligible;
+            alternate = !hero && eligible && (double)((hash / 700_000) % 100) < amount * 100;
         }
         if (!wordTimed)
             return new RunMetrics(Math.Max(baseSize * 0.68, minimumSize), false, 0, 0, false, alternate);

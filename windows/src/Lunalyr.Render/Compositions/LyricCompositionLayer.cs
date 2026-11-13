@@ -42,8 +42,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     protected CompositionKind Kind { get; }
     protected IWordBreaker Breaker { get; }
-    protected StageRules Rules { get; }
-    protected WordRevealOptions Options { get; } = new();
+    protected StageRules Rules { get; private set; }
+    /// <summary>How this composition reveals sung words and previews the next one (the scene's style, per layout).</summary>
+    protected WordRevealOptions Options { get; private set; } = new();
     protected TextKit? Kit { get; private set; }
     protected Vector2 SurfaceSize { get; private set; }
     protected float Scale { get; private set; } = 1;
@@ -61,9 +62,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     // The lyric ink (the Mac's Album drift): settled once per palette, then drifted by song time.
     private Palette? _inkPalette;
-    private (string Mode, string Custom) _inkHighlight;
+    private LyricStyle? _inkStyle;
     private LyricInk _ink = LyricInk.White;
     private InkSettling? _settling;
+    /// <summary>"Music reactive": an ink per voice level (<see cref="LyricInks.ReactiveLevels"/>), settled when first needed.</summary>
+    private readonly LyricInk?[] _reactive = new LyricInk?[LyricInks.ReactiveLevels];
+    /// <summary>"Music reactive": each line's loudest moment, by row, worked out once per song.</summary>
+    private readonly Dictionary<int, int> _lineLevels = [];
 
     /// <summary>The scene's settled ink (see <see cref="InkSettling"/>), waited for here the first time it is needed.</summary>
     private LyricInk SettledInk
@@ -87,9 +92,37 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     /// </summary>
     protected LyricInk InkAt(double songSeconds)
     {
-        var ink = SettledInk;
-        ink.Phase = LyricInks.DriftPhase(songSeconds, ReduceMotion);
+        var style = StyleShown;
+        // "Music reactive": each line takes the cover's colours brighter and deeper as its singing grows, by its loudest
+        // moment (the Mac follows the voice frame by frame; here a line's colours are baked when it is set).
+        var ink = style.ColourMode == LyricColourMode.MusicReactive && SceneShown is { } scene ? ReactiveInk(scene, songSeconds) : SettledInk;
+        ink.Phase = LyricInks.DriftPhase(songSeconds, ReduceMotion, style.ColourSpeed);
         return ink;
+    }
+
+    private LyricInk ReactiveInk(SceneSnapshot scene, double songSeconds)
+    {
+        var level = ReduceMotion ? LyricInks.ReactiveLevel(LyricInks.ReactiveRest) : LineLevel(songSeconds);
+        return _reactive[level] ??= LyricInks.Settled(scene.Palette, scene.Style, level / (double)(LyricInks.ReactiveLevels - 1));
+    }
+
+    /// <summary>The voice level of the line sung at <paramref name="songSeconds"/>: its loudest word onset, or the rest level.</summary>
+    private int LineLevel(double songSeconds)
+    {
+        var lines = Sheet?.Lines;
+        if (lines is null) return LyricInks.ReactiveLevel(LyricInks.ReactiveRest);
+        var row = -1;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].Start > songSeconds + 0.001) break;
+            row = i;
+        }
+        if (row < 0 || !lines[row].WordTimed || lines[row].Words.Count == 0) return LyricInks.ReactiveLevel(LyricInks.ReactiveRest);
+        if (_lineLevels.TryGetValue(row, out var known)) return known;
+        var words = lines[row].Words;
+        var loudest = 0.0;
+        foreach (var word in words) loudest = Math.Max(loudest, OrganicMotion.VocalIntensity(words, word.Start));
+        return _lineLevels[row] = LyricInks.ReactiveLevel(loudest);
     }
 
     /// <summary>
@@ -299,14 +332,17 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // Each word's entrance comes from the choice (a mix picks per word); "Cutout · Highlight" adds a tile and the
         // words still enter as the layout has them enter.
         Choice = scene.Style.EntranceFor(Kind);
+        // "Reveal sung words", the faint next-word preview and its lead, as the style sets them for this layout.
+        Options = scene.Style.RevealOptionsFor(Kind);
+        Rules = Rules with { RevealsWords = Options.RevealsWords, PreviewsNextWord = Options.PreviewsNextWord, PreviewLead = Options.PreviewLead };
         Arrival = Choice.For(Kind, 0).Motion(Kind);
-        var highlight = (scene.Style.HighlightMode, scene.Style.HighlightCustom);
         if ((!ReferenceEquals(_inkPalette, scene.Palette) && !(_inkPalette is not null && LyricInks.SameInk(_inkPalette, scene.Palette)))
-            || highlight != _inkHighlight)
+            || _inkStyle is null || !LyricInks.SameInk(_inkStyle, scene.Style))
         {
             // Worked out off the render thread; it is waited for only when first needed.
             _settling = new InkSettling(scene.Palette, scene.Style);
-            _inkHighlight = highlight;
+            _inkStyle = scene.Style;
+            Array.Clear(_reactive);
             _inkPalette = scene.Palette;
             var stops = new Double3[scene.Palette.ArtworkStops.Count];
             for (var i = 0; i < stops.Length; i++)
@@ -319,6 +355,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         }
         // Status text and plain lyrics keep the palette's still text colour; timed words take the drifting ink.
         TextColour = scene.Palette.Text;
+        _lineLevels.Clear();
         if (scene.Lyrics is LyricResult.Synced synced)
         {
             Sheet = LyricSheet.Build(synced.Lines, !LyricPauseTiming.IsQQ(synced.Provenance.Source));
@@ -539,6 +576,31 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     internal static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
         or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Editorial;
 
+    /// <summary>
+    /// The composition a backing group (or a credit) animates in: the one chosen under "Backing vocals animate like", else
+    /// <see cref="BackingKind(CompositionKind)"/> (the Mac's <c>BackingVocals.style(forLead:chosen:)</c>).
+    /// </summary>
+    internal static CompositionKind BackingKind(CompositionKind lead, string? chosen) => chosen switch
+    {
+        "scattered" => CompositionKind.Scattered,
+        "constellation" => CompositionKind.Constellation,
+        "constellationEditorial" => CompositionKind.ConstellationEditorial,
+        "echo" => CompositionKind.Echo,
+        "editorial" => CompositionKind.Editorial,
+        _ => BackingKind(lead),
+    };
+
+    /// <summary>
+    /// How much of Editorial's typography a line gets: "Editorial amount" with "Add Editorial typography" on, else all of it
+    /// where the composition has it of its own (<paramref name="own"/>) and none elsewhere (the Mac's
+    /// <c>ScatteredTypography.metrics</c>).
+    /// </summary>
+    protected double EditorialAmountFor(bool own) =>
+        StyleShown.EditorialTypography ? (double.IsFinite(StyleShown.EditorialAmount) ? Math.Clamp(StyleShown.EditorialAmount, 0, 1) : 1) : own ? 1 : 0;
+
+    /// <summary>The composition this scene's backing groups animate in, for lead <paramref name="lead"/>.</summary>
+    protected CompositionKind BackingFor(CompositionKind lead) => BackingKind(lead, StyleShown.BackingStyle);
+
     private void DrawLine(ID2D1DeviceContext dc, in DrawnLine drawn, double time, double offset)
     {
         var lines = Sheet!.Lines;
@@ -657,7 +719,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         IReadOnlyList<LyricWord> words = set?.Words ?? line.Words;
         IReadOnlyList<bool> mainGlue = glue;
         var groups = Array.Empty<BackingGroup>() as IReadOnlyList<BackingGroup>;
-        if (line.WordTimed)
+        // "Backing vocals in the background" off: bracketed backing words stay in the line.
+        if (line.WordTimed && StyleShown.BackingVocals)
         {
             var split = BackingVocals.Split(words, glue);
             if (split.Backing.Count > 0)
@@ -732,8 +795,9 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
         var connections = wordTimed && planKind.HasConnections();
+        var editorialAmount = EditorialAmountFor(editorial);
         var spec = new PlanSpec(
-            BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorial,
+            BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorialAmount > 0,
             Heavy: heavy, MaxWidth: maxWidth, Spacing: baseSize * ConstellationLayout.Spacing(connections),
             LineSpacing: baseSize * 0.30, Fit: fit,
             RasterBoost: wordTimed ? 1.12 : 1.0,
@@ -741,14 +805,15 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: baseSize * 0.38,
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
             Connections: connections, Spread: StyleShown.ConstellationSpread,
-            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial,
+            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial, EditorialAmount: editorialAmount,
+            RandomFonts: StyleShown.RandomFonts,
             TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
         {
             var box = BackingVocalLayout.Box(Stage);
-            var backingKind = BackingKind(planKind);
+            var backingKind = BackingFor(planKind);
             var backingConnections = backingKind.HasConnections();
             var backing = new BackingPlan[groups.Count];
             for (var g = 0; g < groups.Count; g++)
@@ -757,7 +822,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 var sub = LinePlans.Build(Kit!, group.Words, group.Glue, spec with
                 {
                     BaseSize = baseSize * 0.5, LineIndex = backingSeed + group.Id,
-                    Editorial = backingKind.HasEditorialTypography(), Heavy = false,
+                    Editorial = EditorialAmountFor(backingKind.HasEditorialTypography()) > 0,
+                    EditorialAmount = EditorialAmountFor(backingKind.HasEditorialTypography()), Heavy = false,
                     MaxWidth = box.Width, Spacing = baseSize * 0.5 * ConstellationLayout.Spacing(backingConnections),
                     LineSpacing = baseSize * 0.5 * 0.30, Fit = new LineFit(box, 1, 1), Connections = backingConnections,
                     EvenRunsAlternate = backingKind == CompositionKind.ConstellationEditorial,
@@ -957,6 +1023,17 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: false);
             ink.Label.Draw(dc, labelWorld, (float)scale, (float)visibility, blur, glow, shadow,
                            run.Boundaries, tokenOpacities, run.RightToLeft, clip);
+            // "Sung sweep": the sung colour fills the word from its leading edge as it is sung (the Mac's SungText).
+            if (ink.Sung is { } sung && !tiles && !clip.IsSet)
+            {
+                var tint = SungSweep.Progress(run, tokens, time);
+                if (tint > 0)
+                {
+                    var (from, to) = SungSweep.Span(ink.Label.Box.X, tint, run.RightToLeft);
+                    sung.DrawBetween(dc, labelWorld, (float)scale, (float)visibility, blur, (float)from, (float)to,
+                                     run.Boundaries, tokenOpacities, run.RightToLeft);
+                }
+            }
             if (tiles) DrawRunTiles(dc, segments!, ink.Label, labelWorld, size, run.RightToLeft, time, visibility, overlay: true);
             if (ink.Reading is { } reading)
             {
@@ -1284,6 +1361,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         // The line itself (in preview: only its first word, where it will be).
         DrawPhraseRuns(dc, plan, phrase, entranceScale, alpha * opacity, blur, firstRunOnly: previewing ? previewOpacity : null,
                        hidesFirstRun: holdsFirstRun, readings: !previewing, cropLeft, cropRight);
+        // "Sung sweep": a line sung as one fills with the sung colour over its time, from its leading edge.
+        if (!previewing && plan.Runs.Length > 0 && plan.Runs[0].Sung is not null && SungSweep.Progress(line, time) is var tint and > 0)
+        {
+            var (from, to) = SungSweep.Span(width, tint, plan.Typography.RightToLeft);
+            DrawPhraseRuns(dc, plan, phrase, entranceScale, alpha * opacity, blur, firstRunOnly: null, hidesFirstRun: holdsFirstRun,
+                           readings: false, Math.Max(cropLeft, from + width / 2), Math.Min(cropRight, to + width / 2), sung: true);
+        }
         if (!previewing && LyricSwipe.Shows(motion, progress, ReduceMotion))
         {
             var origin = plan.BlockOrigin;
@@ -1302,7 +1386,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     private static void DrawPhraseRuns(ID2D1DeviceContext dc, LinePlan plan, in Matrix3x2 content, double scale, double opacity,
                                        float blur, double? firstRunOnly, bool hidesFirstRun, bool readings,
-                                       double cropLeft, double cropRight)
+                                       double cropLeft, double cropRight, bool sung = false)
     {
         var origin = plan.BlockOrigin;
         for (var r = 0; r < plan.Runs.Length; r++)
@@ -1315,6 +1399,14 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             var clip = double.IsNegativeInfinity(cropLeft) && double.IsPositiveInfinity(cropRight) ? InkClip.None
                 : new InkClip((float)(cropLeft - ink.Centre.X), (float)(cropRight - ink.Centre.X));
             var local = Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y)) * content;
+            if (sung)
+            {
+                // The sung colour, over the label, only inside the crop.
+                if (ink.Sung is { } fill && !(clip.IsSet && !(clip.Right > clip.Left)))
+                    fill.DrawBetween(dc, Matrix3x2.CreateTranslation(ink.LabelOffset) * local, (float)scale, (float)alpha, blur,
+                                     clip.IsSet ? clip.Left : float.NegativeInfinity, clip.IsSet ? clip.Right : float.PositiveInfinity);
+                continue;
+            }
             ink.Label.Draw(dc, Matrix3x2.CreateTranslation(ink.LabelOffset) * local, (float)scale, (float)alpha, blur, GlowSpec.None, 1, clip: clip);
             if (readings && firstRunOnly is null && ink.Reading is { } reading)
                 reading.Draw(dc, Matrix3x2.CreateTranslation(ink.ReadingOffset) * local, (float)scale, (float)alpha, blur, GlowSpec.None, 1, clip: clip);
