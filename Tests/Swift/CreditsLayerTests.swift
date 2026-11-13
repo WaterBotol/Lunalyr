@@ -83,7 +83,7 @@ final class CreditsLayerTests: XCTestCase {
         }
     }
 
-    func testALoneTitleOnlyCountsAheadOfCredits() {
+    func testALoneTitleCountsOnlyAtTheStart() {
         func line(_ text: String, _ start: Double) -> LyricsFetcher.Line {
             LyricsFetcher.Line(start: start, end: start + 2, text: text, words: [], isInstrumental: false)
         }
@@ -91,8 +91,13 @@ final class CreditsLayerTests: XCTestCase {
         XCTAssertEqual(heading.map { $0.credit == true }, [true, true, false])
         let chorus = LyricCredits.flagging([line("Hello", 0), line("Human Nature", 5), line("Hello again", 9)], title: "Human Nature", artist: "Yot Club")
         XCTAssertTrue(chorus.allSatisfy { $0.credit != true })
+        // Opening the lyrics alone, the title is a header unless it is sung
+        // as a line again later (`CreditBlockTests`).
         let bare = LyricCredits.flagging([line("Human Nature", 0), line("Hello", 5)], title: "Human Nature", artist: "Yot Club")
-        XCTAssertTrue(bare.allSatisfy { $0.credit != true })
+        XCTAssertEqual(bare.map { $0.credit == true }, [true, false])
+        let sung = LyricCredits.flagging([line("Human Nature", 0), line("Hello", 5), line("Human Nature", 9)],
+                                         title: "Human Nature", artist: "Yot Club")
+        XCTAssertTrue(sung.allSatisfy { $0.credit != true })
     }
 
     /// The old opening "Title - Artist" cue is gone: the opening title

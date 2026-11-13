@@ -42,7 +42,7 @@ enum LyricCredits {
         func nextSung(after index: Int) -> Int? {
             result.indices.dropFirst(index + 1).first { !result[$0].isInstrumental || result[$0].credit == true }
         }
-        var inCredits = true
+        var inCredits = true, sungYet = false
         for index in result.indices {
             if result[index].credit == true { inCredits = true; continue }
             if result[index].isInstrumental { continue }
@@ -64,7 +64,18 @@ enum LyricCredits {
                result[next].credit == true || isCredit(result[next].text, inCredits: true) || names.isHeading(result[next].text) {
                 credit = true
             }
-            if credit { inCredits = true; convert(index) } else { inCredits = false }
+            // The opening line is the artist alone, or the title alone when
+            // the title is not sung as a line later on: a header ("周杰伦").
+            if !credit, !sungYet, names.isLeadingHeader(text, later: result[(index + 1)...].lazy.map(\.text)) { credit = true }
+            if credit { inCredits = true; convert(index) } else { inCredits = false; sungYet = true }
+        }
+        // Credits closing the song ("吉他：张三" after the last lyric).
+        var index = result.count - 1
+        while index > 0, result[..<index].contains(where: { !$0.isInstrumental }) {
+            if result[index].isInstrumental { index -= 1; continue }
+            guard isCredit(result[index].text, inCredits: true) else { break }
+            convert(index)
+            index -= 1
         }
         return markingTitleHeader(result)
     }
@@ -89,12 +100,22 @@ enum LyricCredits {
         let primaryArtist: String
 
         init(title: String, artist: String) {
-            self.title = LyricQuery.normalize(title)
-            self.artist = LyricQuery.normalize(artist)
+            self.title = Self.normalize(title)
+            self.artist = Self.normalize(artist)
             // "Yot Club & Someone", "A, B", "A feat. B": the first name.
             let first = artist.components(separatedBy: CharacterSet(charactersIn: ",&;/、")).first ?? artist
             let lead = first.components(separatedBy: " feat").first?.components(separatedBy: " ft").first ?? first
-            self.primaryArtist = LyricQuery.normalize(lead)
+            self.primaryArtist = Self.normalize(lead)
+        }
+
+        private static let simplified = StringTransform("Hant-Hans")
+
+        /// `LyricQuery.normalize`, with traditional Chinese folded into
+        /// simplified, so "周杰倫" names the same artist as "周杰伦".
+        static func normalize(_ text: String) -> String {
+            let plain = LyricQuery.normalize(text)
+            guard LyricScript.keepsSyllables(plain) else { return plain }
+            return plain.applyingTransform(simplified, reverse: false) ?? plain
         }
 
         private var usable: Bool { !title.isEmpty }
@@ -102,7 +123,7 @@ enum LyricCredits {
         /// A line carrying both the title and the artist and little else.
         func isHeading(_ text: String) -> Bool {
             guard usable, !primaryArtist.isEmpty else { return false }
-            let line = LyricQuery.normalize(text)
+            let line = Self.normalize(text)
             guard line.count <= title.count + artist.count + 14,
                   Self.contains(line, title), Self.contains(line, primaryArtist) else { return false }
             return true
@@ -111,8 +132,21 @@ enum LyricCredits {
         /// A line that is only the title, or only the artist.
         func isLoneName(_ text: String) -> Bool {
             guard usable else { return false }
-            let line = LyricQuery.normalize(text)
+            let line = Self.normalize(text)
             return !line.isEmpty && (line == title || line == artist || line == primaryArtist)
+        }
+
+        /// The song's first line, when it only names the song: the artist
+        /// alone, or the title alone unless the title is sung as a line of
+        /// its own later (`later`, the lines after it), when it may be sung
+        /// at the start too. "Title - Artist" and the like are `isHeading`.
+        func isLeadingHeader<Lines: Sequence>(_ text: String, later: Lines) -> Bool where Lines.Element == String {
+            guard usable else { return false }
+            let line = Self.normalize(text)
+            guard !line.isEmpty else { return false }
+            if line != title, line == artist || line == primaryArtist { return true }
+            guard line == title else { return false }
+            return !later.contains { Self.normalize($0) == line }
         }
 
         /// Whole-word containment on normalised text.
@@ -129,6 +163,10 @@ enum LyricCredits {
         let names = TrackNames(title: title, artist: artist)
         func blank(_ text: String) -> Bool { text.trimmingCharacters(in: .whitespaces).isEmpty }
         var index = lines.firstIndex { !blank($0) } ?? lines.count
+        // The song's names alone heading the lyrics ("周杰伦", "晴天 - 周杰伦").
+        if index < lines.count, names.isHeading(lines[index]) || names.isLeadingHeader(lines[index], later: lines[(index + 1)...]) {
+            return droppingLeadingCredits(Array(lines[(index + 1)...].drop(while: blank)), title: title, artist: artist)
+        }
         // "Title - Artist" heading right above the credits.
         if index < lines.count, lines[index].contains(" - ") || lines[index].contains(" – ") || names.isHeading(lines[index]),
            let next = lines[(index + 1)...].first(where: { !blank($0) }), isCredit(next, inCredits: true) {
@@ -195,7 +233,12 @@ enum LyricCredits {
         "策劃", "企划", "企劃", "宣传", "宣傳", "推广", "推廣", "营销", "營銷", "封面", "设计", "設計",
         "摄影", "攝影", "视觉", "視覺", "后期", "後期", "美术", "美術", "文案", "音乐", "音樂", "总监",
         "總監", "艺人", "藝人", "经纪", "經紀", "项目", "項目", "执行", "執行", "助理", "指导", "指導",
-        "声乐", "聲樂", "鸣谢", "鳴謝", "艺术", "藝術", "작사", "작곡", "편곡", "프로듀서", "MV", "OP", "SP", "ISRC",
+        "声乐", "聲樂", "鸣谢", "鳴謝", "艺术", "藝術", "混音室", "混音師", "混音师",
+        // Japanese and Korean credits.
+        "ギター", "エレキギター", "アコースティックギター", "ベース", "ドラム", "ドラムス", "キーボード", "ピアノ",
+        "ストリングス", "コーラス", "プロデューサー", "プロデュース", "ミックス", "マスタリング", "レコーディング",
+        "エンジニア", "작사", "작곡", "편곡", "프로듀서", "기타", "베이스", "드럼", "키보드", "피아노", "코러스",
+        "믹싱", "마스터링", "녹음", "MV", "OP", "SP", "ISRC",
     ]
     /// Terms that only qualify the role after them: "电" + "吉他", "架子" + "鼓",
     /// "总" + "监制", "特别" + "鸣谢".
@@ -215,7 +258,8 @@ enum LyricCredits {
     private static let everyday: Set<String> = [
         "音乐", "音樂", "鼓", "和声", "和聲", "合声", "合聲", "和音", "人声", "人聲", "合唱", "伴唱", "主唱", "演唱",
         "童声", "童聲", "吉他", "贝斯", "貝斯", "钢琴", "鋼琴", "键盘", "鍵盤", "弦乐", "弦樂", "提琴", "笛子", "口琴",
-        "二胡", "古筝", "古箏", "琵琶",
+        "二胡", "古筝", "古箏", "琵琶", "ギター", "ベース", "ドラム", "ドラムス", "キーボード", "ピアノ", "コーラス",
+        "기타", "베이스", "드럼", "키보드", "피아노", "코러스",
     ]
 
     private static let roleTerms = roles.map(Array.init)
@@ -296,6 +340,22 @@ enum LyricCredits {
         return words.count == 1 && englishEveryday.contains(words[0]) ? .everyday : .specific
     }
 
+    /// A word cut where it changes between a syllable script (Han, kana,
+    /// Hangul) and letters of another, such as Latin.
+    private static func scriptRuns(_ word: Substring) -> [String] {
+        var runs: [String] = [], current = "", currentKeeps: Bool?
+        for character in word {
+            let keeps = LyricScript.keepsSyllables(String(character))
+            if let previous = currentKeeps, previous != keeps, character.isLetter {
+                runs.append(current); current = ""
+            }
+            if character.isLetter || currentKeeps == nil { currentKeeps = keeps }
+            current.append(character)
+        }
+        if !current.isEmpty { runs.append(current) }
+        return runs
+    }
+
     private static let particles: Set<String> = ["van", "von", "de", "da", "di", "del", "der", "den", "du", "la", "le", "y"]
     /// Pronouns and particles of sung Chinese that names do not contain.
     private static let sungCharacters = Set("我你妳他她它们們的了吗嗎呢吧啊哦喔啦呀么麼着著过過")
@@ -311,7 +371,8 @@ enum LyricCredits {
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard !items.isEmpty, items.count <= 12 else { return false }
         return items.allSatisfy { item in
-            let words = item.split(whereSeparator: \.isWhitespace).map(String.init)
+            // "蔡科俊Again": a Han name run straight into a Latin one is two.
+            let words = item.split(whereSeparator: \.isWhitespace).flatMap(scriptRuns)
             guard words.count <= 5, words.contains(where: { !particles.contains($0.lowercased()) }) else { return false }
             return words.allSatisfy { word in
                 guard LyricScript.keepsSyllables(word) else {
