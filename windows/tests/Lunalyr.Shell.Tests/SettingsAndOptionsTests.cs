@@ -80,7 +80,7 @@ public sealed class AppSettingsTests
             "lyricCardComposition", "lyricCardLinesBefore", "lyricCardLinesAfter", "lyricCardAspect", "lyricCardFormats",
             "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
             // Updates and the first-run welcome (milestone 8)
-            "automaticUpdateChecks", "onboardingDone",
+            "automaticUpdateChecks", "onboardingDone", "onBattery",
             // The last of the Lyric style page: backing vocals, typography, colour, word reveal and remembered styles
             "backingVocalsLayer", "backingVocalStyle", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
             "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "wordRevealByStyle",

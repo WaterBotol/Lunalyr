@@ -164,4 +164,19 @@ public sealed class PowerSavingShellTests : IAsyncDisposable
         controller.SetPowerConstraint(null);
         Assert.Equal($"shader.{heavy}", _renderer.Layers.Background);
     }
+
+    [Theory]
+    [InlineData("full", PowerFallback.Full)]
+    [InlineData("lightEffects", PowerFallback.LightEffects)]
+    [InlineData("patterns", PowerFallback.Patterns)]
+    [InlineData("colourOnly", PowerFallback.ColourOnly)]
+    [InlineData("nonsense", PowerFallback.LightEffects)]
+    [InlineData(null, PowerFallback.LightEffects)]
+    public void OnBatteryReachesTheRendererAndDefaultsToLighterEffects(string? value, PowerFallback expected)
+    {
+        Assert.Equal("lightEffects", new AppSettings().OnBattery);
+        Assert.Equal(PowerFallback.LightEffects, new AppSettings().Performance().OnBattery);
+        Assert.Equal(expected, (new AppSettings() with { OnBattery = value! }).Performance().OnBattery);
+        Assert.Equal(["full", "lightEffects", "patterns", "colourOnly"], PowerCopy.OnBatteryChoices.Select(c => c.Value));
+    }
 }

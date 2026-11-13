@@ -13,6 +13,18 @@ public static class PowerCopy
     public const string FollowEnergySaver =
         "While Windows’ energy saver is on, the wallpaper shows Line patterns at no more than 30 fps, as Low power visuals does.";
 
+    /// <summary>Under "On battery".</summary>
+    public const string OnBatteryCaption = "What the wallpaper eases off to while this PC runs on battery.";
+
+    /// <summary>"On battery"'s choices, in Windows' own words (the Mac's titles are Verso lines).</summary>
+    public static IReadOnlyList<SettingsChoice> OnBatteryChoices { get; } =
+    [
+        new("full", "Everything stays on"),
+        new("lightEffects", "Lighter effects only"),
+        new("patterns", "Line patterns instead"),
+        new("colourOnly", "Album colours only"),
+    ];
+
     /// <summary>
     /// What power saving is doing now, or null when nothing: the frame rate it holds down, and a rule other than Low
     /// power visuals (whose switch already says so) that is in force. The Mac's two leaf captions, in its order.

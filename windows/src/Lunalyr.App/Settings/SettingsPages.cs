@@ -159,6 +159,9 @@ internal static class PerformancePage
         // The Mac's "Follow macOS Low Power Mode" (key pauseOnBatterySaver): the same easing off while Energy saver is on.
         page.Children.Add(Card("Follow energy saver", PowerCopy.FollowEnergySaver, "",
             Toggle(ctx, s => s.PauseOnBatterySaver, (s, v) => s with { PauseOnBatterySaver = v })));
+        // The Mac's "On battery" menu (custom.onBattery), with Windows' own wording.
+        page.Children.Add(Card("On battery", PowerCopy.OnBatteryCaption, "",
+            Combo(ctx, PowerCopy.OnBatteryChoices, s => s.OnBattery, (s, v) => s with { OnBattery = v }, width: 220)));
         // What power saving is doing now (the Mac's leaf captions): only while it changes something.
         var power = Caption("");
         page.Children.Add(power);
