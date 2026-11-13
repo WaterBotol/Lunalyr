@@ -32,6 +32,8 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
 | `--floating-capture <file>` | On quitting, write the floating lyrics window's back buffer as a PNG (the engine draws a frame for it even while hidden or with the displays off) and log the window's style and extended style, and whether it is the foreground window. For checks. |
 | `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). `align`: the music video's align mode drawn as it looks mid-song (film button lit, the video's bar, Reset/Cancel/Done), for captures; nothing is changed. |
+| `--ticker-capture <file>` | On quitting, write the tray lyric strip's last frame as a PNG and log its styles and whether it is the foreground window. For checks. |
+| `--discord-pipe <prefix>` | Discord status dials `\\.\pipe\<prefix>0…9` instead of Discord's own pipes, and runs even under `--demo` and `--no-network`: for checks against a pipe of one's own. A prefix starting with "discord" is refused. Not forwarded to a running instance. |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
 ## Demo mode (`--demo`)
@@ -91,7 +93,8 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
 Placeholder monochrome icon drawn in code (a crescent and a lyric line; white on a dark taskbar, near-black on a
 light one). Tooltip: "Lunalyr", the song, the status, "Wallpaper paused". Right-click menu: the song (disabled),
 Open settings, Pause wallpaper / Resume wallpaper, Quit Lunalyr. Left-click (or Enter/Space on the focused icon) opens
-the tray flyout, and closes it again. No balloons (they make a sound).
+the tray flyout, and closes it again. No balloons (they make a sound). The line being sung can show beside the clock
+(Settings › General › Lyric by the tray; see "Tray lyric and Discord status").
 
 ## Tray flyout
 
@@ -428,6 +431,14 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `floatingPlacement` | `"bottom"` | `topLeft`, `top`, `topRight`, `centre`, `bottomLeft`, `bottom`, `bottomRight`, `custom` | `custom.floating.placement` |
 | `floatingDisplay` | `""` | a display's lasting key (its DisplayConfig device path), `""` = the main display; a display not connected falls back to the main one | `custom.floating.display` |
 | `floatingFrames`, `floatingSizes` | `{}` | display key → `[x, y, width, height]` in points, relative to the display, y up (the Mac's convention): the frame dragged into place, and the size the presets keep | `custom.floating.frames`, `custom.floating.sizes` |
+| `trayLyric` | `false` | the line being sung in a strip beside the taskbar's clock (see "Tray lyric and Discord status") | `custom.menuBarLyric` (the menu-bar line; Windows has no menu bar) |
+| `trayLyricLength` | `36` | 16–64 characters, "Longest line" | `custom.menuBarLyricLength` |
+| `discordPresence` | `false` | show what is playing on Discord (Rich Presence) | `custom.discordPresence` |
+| `discordStatusText` | `"lyric"` | `lyric`, `song`, `artist`: what the status under the name shows | `custom.discordStatusText` |
+| `discordLyric`, `discordCover`, `discordButton`, `discordProgress` | `true` | show the current lyric, the album cover, a Get Lunalyr button, the progress bar | `custom.discordLyric`, `custom.discordCover`, `custom.discordButton`, `custom.discordProgress` |
+| `discordSongButton` | absent | a Play this song button; while absent it follows `discordCover` | `custom.discordSongButton` |
+| `discordPaused` | `false` | keep showing while paused | `custom.discordPaused` |
+| `discordLyricLead` | `2.5` | 0–6 seconds the line runs ahead of the music | `custom.discordLyricLead` |
 | `lyricStyleDesktop`, `lyricStyleFloating` | absent | the other surface's lyric style while one is in use: the style keys below, as stored (written once the surface has been switched) | `custom.lyricStyle.desktop`, `custom.lyricStyle.floating` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
@@ -561,8 +572,9 @@ theme. The window opens at Lyric style (or `--settings-page`).
   style, frame rate, pauses, readings, and a new lookup when the sources change. The window logs which keys it changed
   ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
 - **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
-  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, shortcuts, Discord, lyric cards; floating
-  lyrics are live since milestone 7, see "Floating lyrics"), "…milestone 8" (launch at login, updates), "Arrives in a
+  milestone 6" (visualisers, music video), "…milestone 7" (shortcuts, lyric cards; floating lyrics, the tray lyric
+  and Discord status are live since milestone 7, see "Floating lyrics" and "Tray lyric and Discord status"),
+  "…milestone 8" (launch at login, updates), "Arrives in a
   later build" for the rest. Launch at login writes nothing anywhere.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
@@ -635,6 +647,106 @@ their own style. Details, checks and what wasn't seen live: [milestones/M7.md](m
 - **Not built:** the Mac's menu-bar "Floating" toggle, `lunalyr://floating` and the Shortcuts action (links aren't
   handled on Windows yet; the tray flyout has no such tile), and the Hide lyrics / mirroring input
   (`lyricsVisible` is always true).
+
+## Tray lyric and Discord status (milestone 7)
+
+Settings › General's "Tray & shortcuts" and "Discord & lyric card" rows for these two are live. Both are **off by
+default**. Checks and ported tests: [milestones/M7.md](milestones/M7.md), "Discord and tray lyric".
+
+### Tray lyric (the Mac's menu-bar line)
+
+The Mac shows the line being sung as text in the menu bar, beside Lunalyr's icon (`MenuBarLyricTicker.swift`).
+Windows can't put text in the notification area: an icon there is a 16-pixel image, and nothing else may draw inside
+the taskbar. The stand-ins were:
+
+| Option | Why not (or why) |
+|---|---|
+| The tray icon's tooltip | Seen only while the pointer rests on the icon, after Windows' hover delay; the Mac's line is there all the time. The tooltip keeps saying the song and the status. |
+| Text drawn over the taskbar | Explorer owns the taskbar; a window over it covers pinned apps or the overflow, whose width Lunalyr can't know (Windows 11's taskbar is XAML inside Explorer). |
+| The taskbar thumbnail | Lunalyr has no taskbar button (it lives in the tray), and a thumbnail shows only on hover. |
+| **A small strip beside the clock** (chosen) | Always visible like the Mac's line, never in the way: click-through, never activated, out of Alt+Tab, and only as wide as the song's widest line. |
+
+- **The strip** (`App/Ticker/TrayTickerWindow.cs`, its own thread): a `WS_POPUP` with `WS_EX_LAYERED |
+  WS_EX_TRANSPARENT` (clicks go to whatever is under it), `WS_EX_NOACTIVATE`, `WS_EX_TOOLWINDOW` and `WS_EX_TOPMOST`;
+  shown with `SWP_NOACTIVATE`, `WM_MOUSEACTIVATE` answers `MA_NOACTIVATE`, `WM_NCHITTEST` `HTTRANSPARENT`. Drawn with
+  Direct2D and DirectWrite (Segoe UI Variable Text, 13 points, `TickerFont`) into a bitmap it owns and handed to
+  `UpdateLayeredWindow` only when something changes, never on a frame loop: a rounded pill in the taskbar's light or
+  dark (Windows' `SystemUsesLightTheme`, read only), 28 points tall.
+- **Place:** the corner of the main taskbar's display nearest the clock, 8 points clear of the taskbar and the edge
+  (`TrayLyricTicker.Place`): bottom right for a taskbar at the bottom or right, top right for one at the top, bottom
+  left for one on the left. An auto-hidden taskbar's edge is kept clear too. It moves with display, DPI and work-area
+  changes.
+- **What it shows** (`TrayTickerModel`, the Mac's `refresh`): the line being sung on the wallpaper's clock (both
+  offsets), readings in its place when they replace the lyrics, ♪ between lines and in breaks, a line too wide for
+  "Longest line" in two halves (the second from its first sung word), dimmed while the music is paused, "Wallpaper
+  paused" with Segoe Fluent Icons' pause glyph while the wallpaper is, and a quiet ♪ for 2 s between songs before it
+  leaves. Its width is set once per song from its widest line, so it never jumps while lines change.
+- **When it wakes:** once per change (the next line, the second half, a finished line giving way to ♪), at least every
+  2 s while playing to catch a scrub, every 2 s while the music is paused, and never otherwise: no song, no timed
+  lyrics, a paused wallpaper or sleeping displays (`GUID_CONSOLE_DISPLAY_STATE`) leave it waiting for a change. The
+  wake is a one-shot coalescable timer with the Mac's tolerance (0.03 s for a line start). The new line rolls up into
+  place over 0.32 s (ease-out), a 0.18 s cross-fade with Windows' "Animation effects" off; lines closer than 0.3 s swap
+  without the roll.
+- **Full-screen apps:** like the Mac's menu bar, it hides while a full-screen app, a game or presentation mode has the
+  screen (`SHQueryUserNotificationState`, checked on each change and every 2 s while shown or hidden behind one, never
+  while the displays sleep) and comes back after. Topmost is set when it shows and not re-asserted, so menus, the tray
+  flyout (which opens in the same corner) and other pop-ups opened later cover it.
+- **Settings:** `trayLyric` (off) and `trayLyricLength` (16–64 characters, 36; an average character of the font turns
+  it into points). The Mac's menu on the item (Hide lyrics, Pause, Copy card, Tap to sync, Hide this line) isn't
+  ported: the strip takes no clicks, and the tray icon has its own menu and flyout.
+
+### Discord status (Rich Presence)
+
+The Mac's `DiscordPresence.swift`: the song and the line being sung on the user's Discord profile, with "Play this
+song" and "Get Lunalyr" buttons for others (Discord never shows a person their own).
+
+- **The connection** (`Core/Extras/DiscordTransport.cs`): Discord's desktop app listens on the named pipes
+  `\\.\pipe\discord-ipc-0` … `9` (the Mac's `$TMPDIR/discord-ipc-N` sockets). `DiscordPipeDialer` lists `\\.\pipe\`
+  (which opens nothing) and connects to the first that answers; the handshake is opcode 0 `{"v":1,"client_id":…}`,
+  Discord answers READY (with the user's display name for the status row), then each update is opcode 1
+  `SET_ACTIVITY` with Lunalyr's process ID; an empty activity clears it. Frames are a little-endian opcode and length,
+  then JSON. One reader per connection answers PING, logs ERROR and closes on CLOSE or a broken frame. No library,
+  no sign-in, no secret.
+- **Restarts:** the last activity is kept; a Discord that starts later, or comes back after quitting, is looked for
+  every 20 s (the first look straight after it went) and shown it at once; a write that
+  finds Discord gone dials again immediately. The status row says "Waiting for Discord" (with "Open the Discord desktop
+  app; Lunalyr connects once it's running.") or "Connected as {name}".
+- **What is shown** (`DiscordPresence.Activity`, the Mac's rules and words): Listening; details "Title · Artist"
+  ("Paused · …" while paused); the status the line read 2.5 s ahead ("Lyric lead", 0–6 s), "♪ Instrumental" in intros
+  and breaks, or the song or artist by choice; the album on hover; the cover (or Lunalyr's icon); the progress bar
+  (kept still unless the song was scrubbed). Every text field is cut to Discord's 128 UTF-16 units between whole
+  characters; a button Discord would refuse is dropped rather than losing the whole activity.
+- **Play this song:** a song.link page (`https://song.link/i/{Apple ID}`) that lists the song on every service. Windows'
+  media sessions carry no Spotify track ID, so the link always comes from Apple's public search (the Mac's
+  `CatalogueMatches`, `https://itunes.apple.com/search?term={artist} {title}&media=music&entity=song&limit=8`, the
+  title and artist only, the generic User-Agent, 6 s), and only from a result whose title and first-named artist are
+  the song's own. The cover comes from the same search (a looser match is fine for it). A song is searched for once
+  (the last 256 kept); a miss is asked again after 10 minutes. With the cover and the song button both off, nothing is
+  sent to Apple. The song button follows "Show the album cover" until it is changed (`discordSongButton` is unset).
+- **Rate limit:** Discord takes five updates in twenty seconds. Lines are spaced at least 5 s apart and use four; the
+  fifth is kept for a new song, a pause or a clear. It checks every 0.5 s while playing (or while an update is held
+  back), every 5 s otherwise.
+- **Clears:** when the music pauses (unless "Keep showing while paused"), when nothing plays, when the switch is turned
+  off (the clear is sent, then the pipe is closed) and when Lunalyr quits (the same, bounded to a few seconds).
+- **Off for the run** under `--demo` and `--no-network` (invented or private songs must not reach a profile; the row
+  says so), unless `--discord-pipe` points it at a pipe of one's own for checks. Apple's search is never built under
+  either.
+- **Settings:** `discordPresence` (off), `discordStatusText`, `discordLyric`, `discordCover`, `discordButton`,
+  `discordSongButton`, `discordProgress`, `discordPaused`, `discordLyricLead`; the Mac's keys without `custom.`. Rows:
+  the switch, then Connection, Status shows, Show the current lyric, Show the album cover, Show the progress bar, Show
+  a Play this song button, Show a Get Lunalyr button, Keep showing while paused and Lyric lead, with the Mac's captions
+  (the longer ones as tooltips).
+- **The Discord application:** the presence is shown as the Mac's application, ID `1568919234367717506` (its name and
+  the "Listening to …" title come from the Developer Portal; the pictures are links, so no assets need uploading).
+  Windows can use it as is if the owner owns that application; nothing else is needed (Rich Presence over the local
+  pipe takes no secret, redirect or approval). For a separate Windows application, create one at
+  <https://discord.com/developers/applications> named as the profile should read and change
+  `DiscordPresence.ApplicationId`. The Get Lunalyr button and the icon point at the Mac's GitHub repository.
+- **Not ported:** listen-along's Join party, join requests and the Listen along button (Windows has no listen-along);
+  the Mac's advert guard (`!track.isAdvert`): nothing on Windows marks a media session's track as an advert (the
+  desktop player never picks its advert row either), so an advert a player reports as a song is shown as one.
+- **What counts as listening:** Windows follows any app that shares what it plays (browsers, podcast apps), where the
+  Mac follows Music and Spotify, so whatever the followed session plays is shown as "Listening".
 
 ## Wallpaper types (milestone 6)
 
