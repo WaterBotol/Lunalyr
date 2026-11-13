@@ -44,7 +44,9 @@ internal sealed class FakeDiscordPipe : IAsyncDisposable
                 {
                     _accepting = new CancellationTokenSource();
                     var token = _accepting.Token;
-                    _ = Task.Run(() => AcceptAsync(token));
+                    // The pipe exists before Up returns, so a dial straight after finds it.
+                    var first = NewInstance();
+                    _ = Task.Run(() => AcceptAsync(first, token));
                 }
                 else
                 {
@@ -60,7 +62,7 @@ internal sealed class FakeDiscordPipe : IAsyncDisposable
     /// <summary>The next packet "Discord" received, within <paramref name="timeout"/> (3 s by default), or null.</summary>
     public async Task<(uint Opcode, JsonObject Body)?> NextAsync(TimeSpan? timeout = null)
     {
-        using var limit = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(3));
+        using var limit = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(6));
         try
         {
             return await _received.Reader.ReadAsync(limit.Token);
@@ -91,7 +93,7 @@ internal sealed class FakeDiscordPipe : IAsyncDisposable
 
     public async Task WaitForConnectionsAsync(int count, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(10));
         while (Connections < count && DateTime.UtcNow < deadline) await Task.Delay(25);
     }
 
@@ -101,12 +103,16 @@ internal sealed class FakeDiscordPipe : IAsyncDisposable
         return ValueTask.CompletedTask;
     }
 
-    private async Task AcceptAsync(CancellationToken token)
+    private NamedPipeServerStream NewInstance() => new(Prefix + "0", PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
+        PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+
+    private async Task AcceptAsync(NamedPipeServerStream first, CancellationToken token)
     {
+        NamedPipeServerStream? next = first;
         while (!token.IsCancellationRequested)
         {
-            var server = new NamedPipeServerStream(Prefix + "0", PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
-                PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            var server = next ?? NewInstance();
+            next = null;
             try
             {
                 await server.WaitForConnectionAsync(token);

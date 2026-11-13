@@ -70,7 +70,7 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
     private int _pixelWidth, _pixelHeight;
     private float _scale = 1;
     private nint _powerNotify;
-    private bool _visible, _screensAsleep, _hiddenForFullScreen;
+    private bool _visible, _screensAsleep, _hiddenForFullScreen, _guardArmed;
     private TickerShown? _from, _to;
     private double _animationStart = double.NegativeInfinity, _animationLength, _lastTransition = double.NegativeInfinity;
     private bool _animating;
@@ -258,6 +258,7 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
                     if (asleep != _screensAsleep)
                     {
                         _screensAsleep = asleep;
+                        if (asleep) DisarmGuard();
                         Update(force: !asleep);
                     }
                 }
@@ -295,7 +296,7 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
         if (_hiddenForFullScreen)
         {
             Hide();
-            SetCoalescableTimer(_hwnd, TimerGuard, GuardMs, 0, GuardMs / 10);
+            ArmGuard();
             return;
         }
 
@@ -324,6 +325,7 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
             }
         }
         Show();
+        ArmGuard();
     }
 
     /// <summary>One-shot: each wake re-reads the line and aims the next one (the Mac's tolerance keeps line starts close).</summary>
@@ -336,17 +338,36 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
         SetCoalescableTimer(_hwnd, TimerWake, ms, 0, tolerance);
     }
 
-    /// <summary>Hides behind full-screen apps, stays on top otherwise; every 2 s while it shows or waits behind one.</summary>
+    private void ArmGuard()
+    {
+        if (_guardArmed || _screensAsleep) return;
+        _guardArmed = true;
+        SetCoalescableTimer(_hwnd, TimerGuard, GuardMs, 0, GuardMs / 10);
+    }
+
+    private void DisarmGuard()
+    {
+        if (!_guardArmed) return;
+        _guardArmed = false;
+        KillTimer(_hwnd, TimerGuard);
+    }
+
+    /// <summary>Hides behind full-screen apps and comes back after: every 2 s while it shows or waits behind one, never while the displays sleep.</summary>
     private void Guard()
     {
+        if (_screensAsleep)
+        {
+            DisarmGuard();
+            return;
+        }
         var fullScreen = FullScreenAppShowing();
         if (fullScreen != _hiddenForFullScreen)
         {
             Update(force: true);
             return;
         }
-        if (_visible) SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-        else if (!_hiddenForFullScreen) KillTimer(_hwnd, TimerGuard);
+        // Topmost is not re-asserted: menus, the tray flyout and other pop-ups opened later stay above the strip.
+        if (!_visible && !_hiddenForFullScreen) DisarmGuard();
     }
 
     private void Show()
@@ -354,7 +375,6 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
         if (_visible) return;
         SetWindowPos(_hwnd, HWND_TOPMOST, _position.X, _position.Y, _pixelWidth, _pixelHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
         _visible = true;
-        SetCoalescableTimer(_hwnd, TimerGuard, GuardMs, 0, GuardMs / 10);
         _log.Info($"Tray lyric shown: {_pixelWidth}x{_pixelHeight} at {_position.X},{_position.Y}.");
     }
 
@@ -365,7 +385,7 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
         ShowWindow(_hwnd, SW_HIDE);
         _visible = false;
         _to = null;
-        if (!_hiddenForFullScreen) KillTimer(_hwnd, TimerGuard);
+        if (!_hiddenForFullScreen) DisarmGuard();
         _log.Info(_hiddenForFullScreen ? "Tray lyric hidden behind a full-screen app." : "Tray lyric hidden.");
     }
 

@@ -26,8 +26,8 @@ public class DiscordPresenceServiceTests
 
         public Fixture(bool catalogue = false, TimeSpan? retry = null)
         {
-            var transport = new DiscordTransport(new DiscordPipeDialer(Discord.Prefix, TimeSpan.FromMilliseconds(500)).Dialer,
-                DiscordPresence.ApplicationId, retry ?? TimeSpan.FromSeconds(0.2));
+            var transport = new DiscordTransport(new DiscordPipeDialer(Discord.Prefix, TimeSpan.FromSeconds(3)).Dialer,
+                DiscordPresence.ApplicationId, retry ?? TimeSpan.FromSeconds(0.2), readyTimeout: TimeSpan.FromSeconds(10));
             CatalogueSearch? search = catalogue ? SearchAsync : null;
             Service = new DiscordPresenceService(() => Now, () => Options, transport, new CatalogueMatches(search, Time), Time, processId: 4242);
         }

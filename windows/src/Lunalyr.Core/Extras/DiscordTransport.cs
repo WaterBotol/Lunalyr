@@ -36,6 +36,7 @@ public sealed class DiscordTransport : IAsyncDisposable
     private readonly DiscordDialer _dial;
     private readonly string _clientId;
     private readonly TimeSpan _retryInterval;
+    private readonly TimeSpan _readyTimeout;
     private readonly TimeProvider _time;
     private readonly CategoryLogger _log;
     private readonly Channel<Func<Task>> _queue = Channel.CreateUnbounded<Func<Task>>(new UnboundedChannelOptions { SingleReader = true });
@@ -53,9 +54,10 @@ public sealed class DiscordTransport : IAsyncDisposable
     private bool _disposed;
 
     public DiscordTransport(DiscordDialer dial, string clientId, TimeSpan? retryInterval = null, TimeProvider? timeProvider = null,
-        Logger? logger = null)
+        Logger? logger = null, TimeSpan? readyTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(dial);
+        _readyTimeout = readyTimeout ?? ReadyTimeout;
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         _dial = dial;
         _clientId = clientId;
@@ -258,7 +260,7 @@ public sealed class DiscordTransport : IAsyncDisposable
         var connection = new Connection(stream);
         var hello = DiscordPresence.Frame(DiscordPresence.Opcode.Handshake, DiscordPresence.HandshakePayload(_clientId));
         if (await WriteAsync(connection, hello).ConfigureAwait(false)
-            && await ReadPacketAsync(connection, ReadyTimeout).ConfigureAwait(false) is { } reply
+            && await ReadPacketAsync(connection, _readyTimeout).ConfigureAwait(false) is { } reply
             && reply.Opcode == (uint)DiscordPresence.Opcode.Frame
             && DiscordPresence.EventFromFrame(reply.Body) is DiscordEvent.Ready ready)
         {

@@ -102,11 +102,24 @@ public sealed class DiscordPresenceService : IAsyncDisposable
     /// <summary>Something that may change the activity happened (the song, playback, the lyrics, the settings).</summary>
     public void Update()
     {
+        if (!IsRunning) return;
+        // Read outside the gate: the controller takes its own lock, and its events call in here from its threads.
+        ExtrasNow now;
+        try
+        {
+            now = _read();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Debug($"Discord status: couldn't read the song ({ex.Message}).");
+            now = ExtrasNow.Nothing;
+        }
+        var options = _options();
         lock (_gate)
         {
             if (!_running) return;
-            var heldBack = !SendIfChanged();
-            ScheduleTimer(DiscordPresence.TickFor(_read().Playing, heldBack));
+            var heldBack = !SendIfChanged(now, options);
+            ScheduleTimer(DiscordPresence.TickFor(now.Playing, heldBack));
         }
     }
 
@@ -151,9 +164,9 @@ public sealed class DiscordPresenceService : IAsyncDisposable
     }
 
     /// <summary>Sends the activity if it changed; false when a change is held back for Discord's rate limit.</summary>
-    private bool SendIfChanged()
+    private bool SendIfChanged(ExtrasNow current, DiscordOptions options)
     {
-        var playing = CurrentPlaying();
+        var playing = CurrentPlaying(current, options);
         if (_sentBefore && _lastSent == playing) return true;
         // Within Discord's limit; a new song, a pause or a clear goes first. Held back, the latest goes on a later tick.
         var now = _time.GetUtcNow();
@@ -167,10 +180,8 @@ public sealed class DiscordPresenceService : IAsyncDisposable
     }
 
     /// <summary>What Discord shows now, or null for nothing (no song, or paused without "Keep showing while paused").</summary>
-    private DiscordPlaying? CurrentPlaying()
+    private DiscordPlaying? CurrentPlaying(ExtrasNow now, DiscordOptions options)
     {
-        var now = _read();
-        var options = _options();
         if (!now.HasTrack || !(now.Playing || options.ShowsWhenPaused)) return null;
         var title = now.Title!;
         var position = double.IsFinite(now.Position) ? now.Position : 0;

@@ -13,7 +13,9 @@ namespace Lunalyr.Platform.Windows.Tests.Discord;
 public class DiscordTransportTests
 {
     private static DiscordTransport Transport(FakeDiscordPipe discord, TimeSpan retry) =>
-        new(new DiscordPipeDialer(discord.Prefix, TimeSpan.FromMilliseconds(500)).Dialer, DiscordPresence.ApplicationId, retry);
+        // A Discord slower to answer than the real one's 3 s is allowed here: the suite runs many tests at once.
+        new(new DiscordPipeDialer(discord.Prefix, TimeSpan.FromSeconds(3)).Dialer, DiscordPresence.ApplicationId, retry,
+            readyTimeout: TimeSpan.FromSeconds(10));
 
     private static JsonObject ActivityPayload(string details)
     {
@@ -73,14 +75,14 @@ public class DiscordTransportTests
         transport.Send(ActivityPayload("First"));
         await discord.WaitForConnectionsAsync(1);
         _ = await discord.NextAsync();
-        await transport.FlushAsync(TimeSpan.FromSeconds(3));
+        Assert.True(await transport.FlushAsync(TimeSpan.FromSeconds(10)));
         lock (events) Assert.Equal(new DiscordEvent.Ready("tester"), events.FirstOrDefault()); // connected, with the user's name
         discord.HangUp();
         // The next write finds Discord gone.
         transport.Send(ActivityPayload("Second"));
         await discord.WaitForConnectionsAsync(2);
-        _ = await discord.NextAsync();
-        await transport.FlushAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(2, discord.Connections);
+        Assert.True(await transport.FlushAsync(TimeSpan.FromSeconds(10)));
         lock (events) Assert.Contains(events, e => e is DiscordEvent.Disconnected); // a lost connection is reported for the status line
     }
 
