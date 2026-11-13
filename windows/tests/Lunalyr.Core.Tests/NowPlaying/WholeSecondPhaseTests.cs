@@ -111,6 +111,22 @@ public sealed class WholeSecondPhaseTests
     }
 
     [Fact]
+    public void AppleMusicsOneTickLagIsAddedWhilePlaying()
+    {
+        var time = new ManualTimeProvider();
+        var clock = new SongClock(time) { ReportLag = SongClock.AppleMusicReportLag };
+        clock.UpdatePlayback(PlaybackStatus.Playing, 1.0);
+        clock.UpdateTimeline(new MediaTimeline(TimeSpan.Zero, TimeSpan.FromSeconds(278), TimeSpan.FromSeconds(40.25),
+            time.UtcNow, TimeSpan.Zero, TimeSpan.FromSeconds(278)));
+        Assert.Equal(41.25, clock.Position.TotalSeconds, 3);
+        // Paused, the player's position is taken as it is.
+        clock.UpdatePlayback(PlaybackStatus.Paused, 1.0);
+        clock.UpdateTimeline(new MediaTimeline(TimeSpan.Zero, TimeSpan.FromSeconds(278), TimeSpan.FromSeconds(50.25),
+            time.UtcNow, TimeSpan.Zero, TimeSpan.FromSeconds(278)));
+        Assert.Equal(50.25, clock.Position.TotalSeconds, 3);
+    }
+
+    [Fact]
     public void OtherPlayersAreNotCorrected()
     {
         var time = new ManualTimeProvider();

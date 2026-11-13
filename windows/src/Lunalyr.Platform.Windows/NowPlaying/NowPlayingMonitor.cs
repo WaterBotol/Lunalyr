@@ -140,7 +140,10 @@ public sealed class NowPlayingMonitor : IDisposable
 
             Clock.ResetSession();
             // Apple Music for Windows cuts its position to whole seconds: let the clock put the fraction back.
-            Clock.CorrectsWholeSeconds = current?.SourceApp.Kind == MediaSourceKind.AppleMusic;
+            var appleMusic = current?.SourceApp.Kind == MediaSourceKind.AppleMusic;
+            Clock.CorrectsWholeSeconds = appleMusic;
+            // …and it publishes the position from its previous tick, about a second behind the sound.
+            Clock.ReportLag = appleMusic ? SongClock.AppleMusicReportLag : TimeSpan.Zero;
             if (current is null)
             {
                 _playback = MediaPlaybackInfo.Closed;

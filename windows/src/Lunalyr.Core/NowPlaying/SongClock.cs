@@ -111,10 +111,6 @@ public sealed class SongClock
 
     public SongClockOptions Options => _options;
 
-    /// <summary>
-    /// Whether the followed player is known to cut its position to whole seconds (Apple Music for Windows), so the
-    /// clock recovers the lost fraction (<see cref="WholeSecondPhase"/>). Off for every other player.
-    /// </summary>
     /// <summary>For diagnostics: whether the whole-second correction is on, the last fraction it added, and how sure it is.</summary>
     public (bool Active, double LastFraction, double? Uncertainty) WholeSecondState
     {
@@ -122,12 +118,35 @@ public sealed class SongClock
     }
 
     private double _lastFraction;
+    private TimeSpan _reportLag;
 
+    /// <summary>
+    /// Whether the followed player is known to cut its position to whole seconds (Apple Music for Windows), so the
+    /// clock recovers the lost fraction (<see cref="WholeSecondPhase"/>). Off for every other player.
+    /// </summary>
     public bool CorrectsWholeSeconds
     {
         get { lock (_gate) return _correctsWholeSeconds; }
         set { lock (_gate) { _correctsWholeSeconds = value; _phase.Restart(); } }
     }
+
+    /// <summary>
+    /// How far behind the sound the followed player's playing position is when it is published, added while playing.
+    /// Apple Music for Windows hands out the position from its previous ~1 s tick (<see cref="AppleMusicReportLag"/>);
+    /// zero for every other player.
+    /// </summary>
+    public TimeSpan ReportLag
+    {
+        get { lock (_gate) return _reportLag; }
+        set { lock (_gate) _reportLag = value; }
+    }
+
+    /// <summary>
+    /// Apple Music for Windows' lag, measured on 13 Nov 2026 with Tap to Sync on laptop speakers once the whole-second
+    /// correction had settled: +1.11, +0.98 and +0.91 s on three songs from three lyric sources (with the 0.16 s lyric
+    /// lead already applied), about one of its 1.02 s timeline ticks.
+    /// </summary>
+    public static readonly TimeSpan AppleMusicReportLag = TimeSpan.FromSeconds(1.0);
 
     public TimeSpan Position => Read().Position;
 
@@ -240,6 +259,8 @@ public sealed class SongClock
                 _lastFraction = fraction.TotalSeconds;
                 position += fraction;
             }
+            if (_playing)
+                position += _reportLag;
 
             if (duration is { } d && position > d)
             {
