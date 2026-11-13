@@ -1,11 +1,12 @@
-// "Sung sweep": how far the sung colour has filled a word, ported from the Mac's ScatteredLyricText (the word's tint
-// is its progress through its own time when the ink sweeps), RollingTokenState.sweep (a run of parts fills part by
-// part, by each part's share of the label) and LyricPhraseTiming.sweep (a line sung as one fills over its estimated
-// words' time). Lunalyr's own lines.
+// "Sung sweep": how far the sung colour has filled a word. Ported from the Mac's SpokenTypographyView.swift
+// (RollingTokenState.sweep and its progress(_:), aa22c91: a word fills over its own time, a run of parts part by part by
+// each part's share of the label) and ScatteredLyricText.swift's SungText tint (aa22c91: the tint is that progress when
+// the ink sweeps). Scattered's own progress expression (ScatteredLyricText.swift line 704) is on an a99fd65 line and was
+// not used; the same formula comes from the Spoken lines above. A line sung as one uses LyricPhraseTiming.Sweep, which
+// Windows already had.
 
 using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
-using Lunalyr.Core.Lyrics.Timing;
 
 namespace Lunalyr.Core.Colour;
 
@@ -45,12 +46,7 @@ public static class SungSweep
     }
 
     /// <summary>How far a line has filled: to its end when word-timed, else over its estimated words' time.</summary>
-    public static double Progress(LyricLine line, double time)
-    {
-        ArgumentNullException.ThrowIfNull(line);
-        var end = line.WordTimed ? line.End : EstimatedWords.EstimatedSweepEnd(line);
-        return Math.Min(1, Math.Max(0, (time - line.Start) / Math.Max(0.001, end - line.Start)));
-    }
+    public static double Progress(LyricLine line, double time) => Motion.LyricPhraseTiming.Sweep(line, time);
 
     /// <summary>
     /// The span of a label <paramref name="width"/> wide (centred on 0) the sung colour covers at <paramref name="tint"/>,

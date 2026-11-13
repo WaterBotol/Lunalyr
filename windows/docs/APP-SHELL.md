@@ -1335,6 +1335,8 @@ remembered styles, which belong to the music.
   Windows bakes a line's colours when it is set, so they hold for the line. Reduce Motion holds the rest level.
   **Custom gradient**: two to four colours (swatches with Windows' colour picker, a remove button while there are more
   than two, Add colour up to four), drifting through each line.
+  Lyric cards take the text colour too (`LyricCardPainter` settles its ink from the style): a still card is drawn in
+  the sung colour under Sung sweep (`tools/LyricCardPreview <folder> -colour <mode>` draws one still).
 - **Reveal sung words**, **Faint next-word preview** and **Preview lead** (`wordRevealByStyle`,
   `nextWordPreviewByStyle`, `nextWordPreviewLead`): per layout, for the layout chosen or every one Match the music
   picks; they reach the renderer as `LyricStyle.NoWordReveal`, `NoNextWordPreview` and `PreviewLead`

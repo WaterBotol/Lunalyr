@@ -187,4 +187,5 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Floating lyrics take the same options | PC (offscreen, `CompositionPreview -floating -style …`) | `docs/previews/lyric-style-extras/floating-{base,sweep-editorial}.png` |
 | Remembered styles applied while the music plays, remembered/forgotten at once, "Next layout" cycles them in place | unit (silent fakes) | `AppControllerStyleMemoryTests`, `LunalyrExtrasTests.TestCyclingChangesARememberedLayoutInPlace`, `LyricStyleExtrasTests.ARememberedStyleReplacesTheChosenLayoutAndColour` |
 | Lyric style page rows live, light and dark (with an artist's remembered style in the dark run) | PC (`--demo --quiet-windows --settings-page lyric-style --theme …`, Release AOT, UI Automation scroll + PrintWindow, own PIDs only) | `docs/previews/settings/lyric-style-extras-{light,dark}-{025,050,075,100}.png` |
+| Lyric cards follow the text colour (mode, strength, custom colours) | PC (offscreen, `LyricCardPreview -colour`) | `docs/previews/lyric-style-extras/card-{albumDrift,sungSweep}.png` |
 | Remembered style on lyric cards | not ported | — |
