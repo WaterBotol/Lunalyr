@@ -15,6 +15,9 @@ internal static class GeneralPage
                                    Lunalyr.App.Hosting.PackagingHooks? packaging = null)
     {
         var page = Page();
+        if (packaging?.SettingsProblem is { } problem)
+            page.Children.Add(new InfoBar { Severity = InfoBarSeverity.Warning, IsClosable = true, IsOpen = true,
+                Title = "Your settings file couldn’t be read", Message = problem });
         Section(page, "Appearance");
         var theme = Card("App theme", "How Lunalyr’s own windows look. It doesn’t change your wallpaper or Windows’ own setting.", "",
             Combo(ctx, SettingsCopy.AppThemes, s => s.AppTheme, (s, v) => s with { AppTheme = v }, width: 200));

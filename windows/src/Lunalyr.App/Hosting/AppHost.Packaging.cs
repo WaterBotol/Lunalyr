@@ -7,8 +7,9 @@ using Lunalyr.Shell.Updates;
 namespace Lunalyr.App.Hosting;
 
 /// <summary>What Settings › General's Startup and Updates rows work with (milestone 8).</summary>
+/// <param name="SettingsProblem">What went wrong reading the settings at start-up (restored or reset), or null.</param>
 internal sealed record PackagingHooks(LaunchAtLoginSwitch LaunchAtLogin, UpdateService Updates, Action UpdateAction,
-                                      Action OpenStartupApps);
+                                      Action OpenStartupApps, string? SettingsProblem);
 
 /// <summary>Launch at login and updates (docs/PACKAGING.md).</summary>
 internal sealed partial class AppHost
@@ -20,7 +21,7 @@ internal sealed partial class AppHost
 
     public PackagingHooks? Packaging => _updates is null || _launchAtLogin is null
         ? null
-        : new(_launchAtLogin, _updates, UpdateAction, OpenStartupApps);
+        : new(_launchAtLogin, _updates, UpdateAction, OpenStartupApps, _settings.LoadReport.UserMessage);
 
     /// <summary>Why this run may not change launch at login or check for updates (a test run), or null.</summary>
     private string? TestRun => _options.Demo ? "--demo" : _options.DataRoot is not null ? "--data" : null;
@@ -53,6 +54,11 @@ internal sealed partial class AppHost
         // The first automatic check waits until start-up has settled; then it is looked at hourly (it runs once a day).
         if (_updates.State.Phase == UpdatePhase.Idle)
             _updateTimer = new Timer(_ => CheckAutomatically(), null, TimeSpan.FromMinutes(2), TimeSpan.FromHours(1));
+
+        // A damaged settings file was restored from its backup or reset: say so once where it's seen, and on the
+        // General page for the rest of the run (it used to reach only the log).
+        if (_settings.LoadReport.UserMessage is not null)
+            ShowHud("Lunalyr couldn’t read its settings", "exclamationmark.triangle");
 
         if (_options.UpdatedTo is { } updated)
         {
