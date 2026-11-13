@@ -80,7 +80,8 @@ public sealed partial class TrayFlyout
         MusicVideoPanel.Children.Add(BuildAlign());
 
         // Tap to sync takes a plain key pressed in the panel while it waits (as in Settings).
-        Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, e) =>
+        // Before any control sees it (PreviewKeyDown): Space or Enter on a focused button never taps and presses it too.
+        Root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler((_, e) =>
         {
             if (Video is not { } video) return;
             if (video.IsAligning && AlignKey(video, e.Key)) e.Handled = true;

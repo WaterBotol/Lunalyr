@@ -164,8 +164,11 @@ internal static partial class WallpaperPage
         void Refresh()
         {
             var settings = ctx.Current;
-            note.Text = MusicVideoController.Note(video.Status, settings.MusicVideoOnline,
-                SettingsCopy.WallpaperTypes.First(t => t.Value == settings.MusicVideoFallback).Title) ?? "";
+            var fallbackTitle = SettingsCopy.WallpaperTypes.First(t => t.Value == settings.MusicVideoFallback).Title;
+            note.Text = video.Status is MusicVideoStatus.Showing { Source: MusicVideoSource.YouTube } shown && MusicVideoUi.YouTubeOffReason is { } off
+                // A YouTube video was found (a pasted link), but its player isn't made this run: the fallback draws.
+                ? $"The video for “{shown.Title}” is on YouTube, and YouTube's player is off for this run ({off}). Showing {fallbackTitle} instead."
+                : MusicVideoController.Note(video.Status, settings.MusicVideoOnline, fallbackTitle) ?? "";
             note.Visibility = note.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             open.Visibility = video.ShowingYouTubeId is not null && MusicVideoUi.OpenUrl is not null ? Visibility.Visible : Visibility.Collapsed;
             var hasSong = video.HasSong;
@@ -195,7 +198,9 @@ internal static partial class WallpaperPage
         ctx.OnRefresh(_ => Refresh());
 
         // Tap to sync takes a plain key pressed anywhere in this window while it waits (the Mac watches its own windows).
-        sections.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, e) =>
+        // Taken before any control sees it (PreviewKeyDown, as the Tap to sync panel does), so Space or Enter on the focused
+        // Tap button never taps and then presses the button too.
+        sections.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler((_, e) =>
         {
             if (video.TapState is not MusicVideoTapState.Armed) return;
             var typing = e.OriginalSource is TextBox or PasswordBox;

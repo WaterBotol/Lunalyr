@@ -347,7 +347,6 @@ internal sealed partial class CardPainter : IDisposable
         if (m.Align is not null)
         {
             DrawAlign(dc, m);
-            DrawAlignButton(dc, m);
             return;
         }
 

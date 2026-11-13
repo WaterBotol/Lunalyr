@@ -53,7 +53,8 @@ internal sealed unsafe partial class DesktopPlayer
     {
         var m = _model;
         if (m.Pane != PlayerPane.Song) return null;
-        if (m.MusicVideoOffered && CardLayout.AlignButtonRect.Contains(x, y)) return CardPart.AlignButton;
+        // While aligning, Done ends it (the film button would sit on Cancel).
+        if (m.MusicVideoOffered && m.Align is null && CardLayout.AlignButtonRect.Contains(x, y)) return CardPart.AlignButton;
         if (m.Align is not { } display) return null;
         if (CardLayout.BarHitRect.Contains(x, y)) return CardPart.AlignBar;
         if (display.Origin == MusicVideoOffsetOrigin.Manual && CardLayout.AlignResetRect.Contains(x, y)) return CardPart.AlignReset;
@@ -167,7 +168,7 @@ internal sealed unsafe partial class DesktopPlayer
             order.Add(CardPart.AlignCancel);
             order.Add(CardPart.AlignDone);
         }
-        if (m.MusicVideoOffered) order.Add(CardPart.AlignButton);
+        else if (m.MusicVideoOffered) order.Add(CardPart.AlignButton);
     }
 
     /// <summary>What Narrator reads for an align part, or null for another part.</summary>

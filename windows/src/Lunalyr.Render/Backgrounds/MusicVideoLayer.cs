@@ -582,9 +582,9 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         try
         {
             var inputs = _feed.Read();
-            // Only a desktop surface has the player's window beneath it (the engine passes AheadWork there); the settings
-            // preview, drawn offscreen, shows the album colours or the frozen frame instead of black.
-            if (!inputs.PlayerVisible || frame.AheadWork is null)
+            // Only the main display's desktop surface has the player's window beneath it (the engine passes AheadWork and
+            // IsMainDisplay there): other displays and the offscreen settings preview show the album colours or the frozen frame.
+            if (!inputs.PlayerVisible || frame.AheadWork is null || !frame.IsMainDisplay)
             {
                 var frozen = _feed.FrozenFrame;
                 if (frozen is not null && !ReferenceEquals(frozen, _frozen)) Upload(dc, frozen);

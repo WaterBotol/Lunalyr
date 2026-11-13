@@ -88,6 +88,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         };
         _session.OnEffect = effect => _ui.TryEnqueue(() => Perform(effect));
         video.Changed += () => _ui.TryEnqueue(Follow);
+        // The loop rests once a paused, covered or hidden wallpaper has paused the video; these wake it again.
+        engine.StatusChanged += (_, _) => _ui.TryEnqueue(FollowPause);
         _ui.TryEnqueue(Follow);
     }
 
@@ -152,9 +154,15 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
                 _controller = controller;
             }
             if (_controller is null) return;
-            Perform(_session.Attach(videoId));
+            // A song change while WebView2 was being made: the video wanted now, not the one asked for then.
+            if (_videoId is not { } current) return;
+            Perform(_session.Attach(current));
             _loop.Start();
-            _placement ??= Repeat(2, Place);
+            _placement ??= Repeat(2, () =>
+            {
+                Place();
+                FollowPause();
+            });
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException or FileNotFoundException)
         {
@@ -328,6 +336,13 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         _loop.SetSurfacePaused(SurfacePaused());
         _hold = hold;
         _freeze.NoteHold(hold);
+    }
+
+    /// <summary>Tells the sync loop whether the wallpaper is paused, covered or hidden (from outside the loop, which may rest).</summary>
+    private void FollowPause()
+    {
+        if (_disposed || _videoId is null || _controller is null) return;
+        _loop.SetSurfacePaused(SurfacePaused());
     }
 
     private bool SurfacePaused()
