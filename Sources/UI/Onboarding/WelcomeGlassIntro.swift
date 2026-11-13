@@ -1,11 +1,12 @@
 import AVFoundation
 import SwiftUI
 
-/// The welcome's opening: Lunalyr's logo forming as a drop of liquid glass
+/// Onboarding's opening: Lunalyr's logo forming as a drop of liquid glass
 /// (`WelcomeGlass.mp4`, made with ReactDrops' Liquid Glass Logo from our own
-/// logo; the video has no sound track and is played muted regardless). It
-/// plays once per launch, then the welcome's wallpaper preview takes over.
-/// Reduce Motion, and the unit-test host, skip it.
+/// logo; the video has no sound track and is played muted regardless), big
+/// and centred on a black window. It plays once per launch, then the window
+/// cross-fades into the welcome step. A click or Return skips it; Reduce
+/// Motion, and the unit-test host, skip it altogether.
 enum WelcomeGlass {
     static let resource = "WelcomeGlass"
     /// After the video ends, its last frame (the plain logo) holds this long
@@ -23,9 +24,57 @@ enum WelcomeGlass {
         !reduceMotion && !alreadyPlayed && !isUnitTesting && hasVideo
     }
 
-    /// Set once the intro has played in this launch (Back to the welcome
-    /// shows the preview straight away).
+    /// Set once the intro has played in this launch (Back to the welcome,
+    /// or onboarding shown again, goes straight to the step).
     @MainActor static var played = false
+
+    /// The logo's glass tile takes about this share of the 1080 x 1080 frame
+    /// (the rest is black around it)...
+    static let tileShare: CGFloat = 0.55
+    /// ...and is shown about this share of the window's height.
+    static let tileHeightShare: CGFloat = 0.5
+
+    /// The video's side in a window of `size`: big enough for the tile to
+    /// fill half the window's height, never larger than the window.
+    static func videoSide(in size: CGSize) -> CGFloat {
+        min(size.height * tileHeightShare / tileShare, min(size.width, size.height))
+    }
+
+    /// Whether the window opens on the intro: on the welcome step, and only
+    /// where `shouldPlay` allows.
+    @MainActor static func opensOnIntro(step: OnboardingFlow.Step, reduceMotion: Bool, alreadyPlayed: Bool,
+                                        isUnitTesting: Bool = AppRuntime.isUnitTesting,
+                                        hasVideo: Bool = WelcomeGlass.url != nil) -> Bool {
+        step == .welcome && shouldPlay(reduceMotion: reduceMotion, alreadyPlayed: alreadyPlayed,
+                                       isUnitTesting: isUnitTesting, hasVideo: hasVideo)
+    }
+}
+
+/// The opening over the whole window: black, the video big in the middle.
+/// The whole window is one button: a click or Return skips to the welcome.
+struct WelcomeGlassOpening: View {
+    let url: URL
+    /// The video ended (or couldn't load).
+    let onFinish: () -> Void
+    let skip: () -> Void
+
+    var body: some View {
+        Button(action: skip) {
+            GeometryReader { proxy in
+                let side = WelcomeGlass.videoSide(in: proxy.size)
+                WelcomeGlassVideo(url: url, onFinish: onFinish)
+                    .frame(width: side, height: side)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+            }
+            .background(Color.black)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
+        .ignoresSafeArea()
+        .accessibilityLabel("Skip the opening")
+        .environment(\.colorScheme, .dark)
+    }
 }
 
 /// The video, muted, played once from the start; tells `onFinish` when it
