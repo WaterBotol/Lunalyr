@@ -22,8 +22,7 @@ internal static partial class WallpaperPage
     {
         var page = Page();
 
-        // ---- The type ----
-        Section(page, "Wallpaper");
+        // ---- The type (no heading: the page's title already says Wallpaper) ----
         async void Import()
         {
             if (importer.Importing) return;
