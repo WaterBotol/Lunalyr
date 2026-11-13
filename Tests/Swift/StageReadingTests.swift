@@ -255,19 +255,14 @@ final class StageReadingTests: XCTestCase {
 
     // MARK: Fitted
 
-    /// Hinge counts its readings when it fits the corner to the stage.
-    func testHingeFitCountsReadings() {
-        let texts = ["君の", "名前を", "呼んで", "夜空に", "消えた", "君を", "探して"]
-        let weights = [CGFloat](repeating: 1, count: texts.count)
+    /// Hinge counts its readings when it sizes a page's focal word.
+    func testHingeFocalSizeCountsReadings() {
         let stage = Self.stage
-        let plain = StageLyricView.hingeFit(texts, weights: weights, settle: 1, unit: Self.base, stage: stage)
-        let none = StageLyricView.hingeFit(texts, weights: weights, settle: 1, unit: Self.base, stage: stage,
-                                           readings: [String?](repeating: nil, count: texts.count))
-        let read = StageLyricView.hingeFit(texts, weights: weights, settle: 1, unit: Self.base, stage: stage,
-                                           readings: ["kimi no", "namae wo", "yonde", "yozora ni", "kieta", "kimi wo", "sagashite"])
-        XCTAssertEqual(plain.fit, none.fit, "No readings, no change")
-        XCTAssertLessThan(read.fit, plain.fit, "The corner with its readings is set smaller to fit")
-        XCTAssertEqual(read.shrink, plain.shrink)
+        let plain = StageLyricView.hingeFocalSize(slabs: [(true, true, false, false)], held: true, unit: Self.base * 1.5,
+                                                  stageHeight: stage.height)
+        let read = StageLyricView.hingeFocalSize(slabs: [(true, true, true, true)], held: true, unit: Self.base * 1.5,
+                                                 stageHeight: stage.height)
+        XCTAssertLessThan(read, plain, "A page with readings sets its focal word smaller to fit")
     }
 
     /// Torque stacks a word's reading with it, and a stack too tall for the
@@ -303,28 +298,23 @@ final class StageReadingTests: XCTestCase {
         XCTAssertEqual(layout.needs?([]).height, readHeight)
     }
 
-    /// Broadside keeps its words on one line: a reading hangs below its
-    /// word, and a label rides above the word itself, not its reading.
-    func testBroadsideKeepsWordsOnTheLine() {
-        let bounds = CGRect(x: 0, y: 0, width: 1000, height: 400)
-        let slot: CGFloat = 40
-        let measured = [CGSize(width: 200, height: 100 + slot), CGSize(width: 60, height: 30), CGSize(width: 220, height: 100)]
-        let little = [false, true, false]
-        let places = StageLyricView.broadsidePlaces(measured, little: little, slots: [slot, 0, 0], moves: [1, 1, 1],
-                                                    unit: 40, in: bounds)
-        XCTAssertEqual(places[0].y - slot / 2, bounds.midY, accuracy: 0.01, "The word, not its reading, sits on the line")
-        XCTAssertEqual(places[2].y, bounds.midY, accuracy: 0.01)
-        // The label rides on the shoulder of the word before: above its
-        // letters (it used to lie across them), flush with its end.
-        XCTAssertLessThanOrEqual(places[1].y + 15, bounds.midY - 100 * 0.36, "The label is clear of the word's letters")
-        XCTAssertEqual(places[1].x + 30, places[0].x + 100, accuracy: 0.01, "The label is flush with the word's end")
-        // Without the reading, the label sits in the same place: it rides on
-        // the word, not on the word and its reading. (The label keeps its own
-        // height, which now sets how far above the word its centre sits.)
-        let plainSizes = [CGSize(width: 200, height: 100), measured[1], CGSize(width: 220, height: 100)]
-        let plain = StageLyricView.broadsidePlaces(plainSizes, little: little, slots: [0, 0, 0], moves: [1, 1, 1],
-                                                   unit: 40, in: bounds)
-        XCTAssertEqual(plain[1].y, places[1].y, accuracy: 0.01)
+    /// Broadside's labels ride their big word: a little word is never an
+    /// item of its own on the strip's line, and it tucks close to its word.
+    func testBroadsideLabelsRideTheirWord() {
+        let words = StagePhrasesTests.mixed
+        let runs = StageRun.make(words, glue: [Bool](repeating: false, count: words.count))
+        let phrasing = StagePhrases.analyse(runs)
+        let items = StageLyricView.broadsideItems(phrasing, unit: 40)
+        for (index, item) in items.enumerated() where item.isLabel {
+            let host = try? XCTUnwrap(item.host)
+            XCTAssertEqual(host, item.prefix ? index + 1 : index - 1, "A label sits beside its word")
+            XCTAssertLessThan(item.size, items[host ?? 0].size * 0.4)
+        }
+        let widths = [CGFloat](repeating: 100, count: items.count)
+        let strip = StageLyricView.broadsideStrip(widths, items: items, unit: 40)
+        for (index, item) in items.enumerated() where item.isLabel && item.prefix {
+            XCTAssertLessThan(strip.lefts[index + 1] - (strip.lefts[index] + 100), 40 * 0.5)
+        }
     }
 
     /// Portal keeps a pill, reading and all, inside the stage.

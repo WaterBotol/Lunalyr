@@ -5,251 +5,408 @@ import SwiftUI
 
 extension StageLyricView {
     /// Hinge's entry point, called by the dispatcher (`StageLyricView.layout`):
-    /// `runs` is the whole line, `shown` the runs that have arrived.
+    /// `runs` is the whole line; every page is typeset from the start, and a
+    /// word shows from its own onset, so `shown` is not needed.
     func hingeBody(runs: [StageRun], shown: [StageRun]) -> some View {
-        hinge(shown, total: runs.count)
+        hinge(runs)
     }
 
-    /// Hinge leaves Reduce Motion to the shared dissolve between steps
-    /// when false (`StageLyricView.reducedDissolve`).
-    static let hingeOwnsReduceMotion = false
+    /// Hinge draws Reduce Motion itself: no turns or swings, the pages and
+    /// words cross-fade (see `hingeInstances`).
+    static let hingeOwnsReduceMotion = true
 
     // MARK: Hinge
     //
-    // Picture the corner of a cube seen from a slant. Text sits on its two
-    // adjacent faces: the first two words as a tight pair, then the third as a
-    // big bar on the left face, and from the fourth on a tall column down the
-    // right face, each word a little bigger than the one above. Both faces
-    // meet at the vertical edge in the middle and fall away from it in
-    // perspective. When the line ends the faces swing shut edge-on.
+    // An open book seen straight on. The spine is a vertical axis; each
+    // phrase (`StagePhrases`) is one page of heavy caps: its focal word set
+    // huge and flush to the spine, the words before it a small line of type
+    // along the page's head, the words after it a small line at its foot.
+    // The page being sung is the right-hand page (left, for a right-to-left
+    // line). When the next phrase starts, the page turns over on the spine
+    // and lands, dimmed, on the other side; the new phrase is set on the
+    // fresh page beneath it, and the page before is covered. One axis, one
+    // move at two scales: the focal word swings open on the spine as it is
+    // sung, the page turns on it at each phrase, and the line leaves with a
+    // last turn. Small words ink in place (content words with a short slide
+    // away from the spine, function words with none); a quick run slides as
+    // one group. A held focal word grows a little from the spine as it is held.
 
-    /// A Hinge column word's type size (the column's j-th word, at rest).
-    static func hingeColumnFont(_ j: Int, unit u: CGFloat) -> CGFloat { u * min(2.8, 1.2 + 0.24 * CGFloat(j)) }
+    /// Which side of the spine a page sits on.
+    enum HingeSide: Equatable { case left, right }
 
-    /// How much the whole Hinge corner is scaled to fit the stage, and how
-    /// much its column has shrunk. Every word counts by its weight (how far
-    /// it has arrived), so neither steps as a word is added.
-    /// `readings` are the words' readings ("Below lyrics"), counted in the
-    /// height and width they add, so a corner with them is shrunk to fit too.
-    /// How much more room than its own height a reading takes in Hinge's
-    /// column and pair, whose words overlap their neighbours' leading
-    /// (and the column is drawn 10% taller than measured).
-    static let hingeReadingRoom: CGFloat = 1.4
-
-    /// The size Hinge's pair sizes its readings from: larger than the pair's
-    /// own type, which is shown small once it is pushed into the corner.
-    static func hingePairReadingBase(unit u: CGFloat) -> CGFloat { u * 0.95 * 1.4 }
-
-    /// How much Hinge's pair shrinks as the bar pushes it into the corner.
-    static let hingePairTuck: CGFloat = 0.2
-
-    static func hingeFit(_ texts: [String], weights: [CGFloat], settle: Double, unit u: CGFloat,
-                         stage: CGSize, readings: [String?] = []) -> (fit: CGFloat, shrink: CGFloat) {
-        let columnCount = max(0, min(texts.count, weights.count) - 3)
-        let columnWeights = (0..<columnCount).map { weights[$0 + 3] }
-        let shrink = CGFloat(StageMotion.hingeColumnShrink(Double(columnWeights.reduce(0, +))))
-        func reading(_ index: Int) -> String? { readings.indices.contains(index) ? readings[index] : nil }
-        /// The room a word's reading adds below it, and the reading's width.
-        func readingRoom(_ index: Int, font: CGFloat) -> (height: CGFloat, width: CGFloat) {
-            guard let text = reading(index), !text.isEmpty else { return (0, 0) }
-            return (readingSlot(font), CGFloat(text.count) * readingSize(font) * 0.55)
-        }
-        let heightSum = (0..<columnCount).map { j -> CGFloat in
-            let font = hingeColumnFont(j, unit: u)
-            // A column word takes its line's height (about 1.2 of its size) less
-            // the 10% it overlaps, drawn 10% taller: counted as 0.95 of its size
-            // the corner was fitted too large, and a long column ran off the foot.
-            return (font * 1.12 + readingRoom(j + 3, font: font).height * hingeReadingRoom) * shrink * columnWeights[j]
-        }.reduce(0, +)
-        // The whole corner grows to fill the stage once it has a bar to hang from.
-        let barReading = texts.count > 2 ? readingRoom(2, font: u * 1.6) : (height: 0, width: 0)
-        let barWidth: CGFloat = texts.count > 2 ? max(CGFloat(texts[2].count) * u * 1.7 * 0.66, barReading.width) : 0
-        var columnWidth: CGFloat = 0
-        for j in 0..<columnCount {
-            let font = hingeColumnFont(j, unit: u)
-            let word = CGFloat(texts[j + 3].count) * font * 0.66
-            let width = max(word, readingRoom(j + 3, font: font).width) * shrink * 0.84 * columnWeights[j]
-            columnWidth = max(columnWidth, width)
-        }
-        let widest: CGFloat = max(barWidth, columnWidth)
-        let structureWidth: CGFloat = max(2 * widest + u * 0.3, u * 3)
-        // The pair's readings stack above the bar, with the pair at its
-        // corner size (a little over half its own).
-        let pairReadings = (0..<min(2, texts.count)).map {
-            readingRoom($0, font: hingePairReadingBase(unit: u)).height * hingeReadingRoom * 0.8
-        }.reduce(0, +)
-        // The pair stays readable in the corner (`hingePairTuck`), so it needs more room above the bar.
-        let structureHeight = max(heightSum, u * 2.4 + barReading.height) + u * 1.2 + pairReadings
-        let fill: CGFloat = min(2.0, stage.width * 0.8 / structureWidth, stage.height * 0.78 / structureHeight)
-        let fitHeight: CGFloat = min(1, stage.height * 0.7 / max(heightSum + u * 1.2 + pairReadings, 1))
-        let grow: CGFloat = (max(fill, 1) - 1) * CGFloat(settle)
-        return (fitHeight * (1 + grow), shrink)
+    /// How a word arrives on its page (from its role in `StagePhrasing`).
+    enum HingeEntrance: Equatable {
+        /// The focal word: it swings open on the spine.
+        case swing
+        /// A content word or a member of a quick run: inks with a short slide away from the spine.
+        case slide
+        /// A function word: inks in place.
+        case ink
     }
 
-    func hinge(_ runs: [StageRun], total: Int) -> some View {
-        let speed = lineSpeed
-        let arrivals = runs.map { arrive($0, speed: speed) }
-        // Each word takes its room as it arrives, so nothing jumps at an onset.
-        let weights = arrivals.map { CGFloat(StageMotion.weight($0)) }
-        let barStart = runs.count > 2 ? runs[2].start : .infinity
-        // How far the bar has settled from huge to its place, and how far the
-        // pair has been pushed to the corner.
-        let hasBar = runs.count > 2
-        let settle = reduceMotion ? (hasBar ? 1 : 0) : Easing.smoothstep((time - barStart - 0.25) / 0.5)
-        let pushed = !hasBar ? 0 : reduceMotion ? 1 : Easing.smoothstep((time - barStart + 0.05) / 0.4)
-        let columnCount = max(0, runs.count - 3)
-        let columnWeights = (0..<columnCount).map { weights[$0 + 3] }
+    static func hingeEntrance(_ info: StageWordInfo) -> HingeEntrance {
+        if info.isFocal { return .swing }
+        if info.isFunction, info.runGroup == nil { return .ink }
+        return .slide
+    }
+
+    /// The phrases on each page: one phrase a page for a word-timed line; a
+    /// line-timed line opens as one spread, its phrases split over two pages.
+    static func hingePages(_ phrasing: StagePhrasing) -> [[Int]] {
+        let count = phrasing.phrases.count
+        guard count > 0 else { return [] }
+        if phrasing.lineTimed, count > 1 {
+            let half = (count + 1) / 2
+            return [Array(0..<half), Array(half..<count)]
+        }
+        return (0..<count).map { [$0] }
+    }
+
+    /// The spine's x: the stage's centre for a spread, at the left third
+    /// (right third, right-to-left) when the line is a single page.
+    static func hingeSpine(width: CGFloat, single: Bool, rightToLeft: Bool) -> CGFloat {
+        guard single else { return width / 2 }
+        let margin = width * StageMotion.hingeMargin
+        let x = margin + (width - 2 * margin) * 0.3
+        return rightToLeft ? width - x : x
+    }
+
+    /// The room a page has between the spine's gutter and the 5% margin.
+    static func hingePageWidth(width: CGFloat, spine: CGFloat, side: HingeSide, unit u: CGFloat) -> CGFloat {
+        let margin = width * StageMotion.hingeMargin
+        let gutter = u * StageMotion.hingeGutter
+        let room = side == .right ? width - margin - spine - gutter : spine - margin - gutter
+        return max(u * 2, room)
+    }
+
+    /// The small type of a page's head and foot lines.
+    static func hingeSmallSize(unit u: CGFloat) -> CGFloat { u * 0.62 }
+
+    /// The focal word's type size on a page: larger for a held focal word,
+    /// and never so large that the page (its slabs, their small lines and
+    /// every reading) is taller than 88% of the stage.
+    /// `slabs` gives, per slab: whether it has a head line, a foot line, a
+    /// reading under the focal word, and a reading under any small word.
+    static func hingeFocalSize(slabs: [(head: Bool, foot: Bool, focalReading: Bool, smallReading: Bool)], held: Bool,
+                               unit u: CGFloat, stageHeight: CGFloat) -> CGFloat {
+        let small = hingeSmallSize(unit: u)
+        let smallLine = small * 1.2
+        var fixed: CGFloat = 0
+        var perFocal: CGFloat = 0
+        for slab in slabs {
+            let lines = CGFloat((slab.head ? 1 : 0) + (slab.foot ? 1 : 0))
+            fixed += lines * (smallLine + (slab.smallReading ? readingSlot(small) : 0)) + u * 0.12
+            // A reading under the focal word is about 0.6 of its size (`readingSlot`).
+            perFocal += 1.18 + (slab.focalReading ? readingSlot(100) / 100 : 0)
+        }
+        fixed += CGFloat(max(0, slabs.count - 1)) * u * 0.5
+        let fits = (stageHeight * 0.88 - fixed) / max(perFocal, 0.1)
+        let wanted = u * (held ? 3.0 : 2.5)
+        return max(u * 0.9, min(wanted, fits))
+    }
+
+    /// How far each page has turned over, 0 (flat on its own side) to 1
+    /// (flat on the other side, read). A page turns as the next page's first
+    /// word is about to be sung, the last page as the line leaves; a
+    /// line-timed spread opens from the spine at once, then turns its last
+    /// page as it leaves. Eased in and out: a page is a big, heavy thing.
+    static func hingeTurns(pageStarts: [Double], lineTimed: Bool, exitStart: Double, at time: Double,
+                           speed: Double) -> [Double] {
+        let count = pageStarts.count
+        guard count > 0 else { return [] }
+        let pace = 1 + (min(3, max(1, speed)) - 1) * 0.4
+        let span = StageMotion.hingeTurn / pace
+        func turning(from start: Double, span: Double) -> Double {
+            hingeEaseInOut((time - start) / span)
+        }
+        let exit = turning(from: exitStart, span: StageMotion.hingeTurn)
+        if lineTimed {
+            let first = pageStarts.min() ?? 0
+            return (0..<count).map { k in
+                let open = hingeEaseOut((time - (first - StageMotion.lead) - StageMotion.hingeSpreadStagger * Double(k))
+                                        / StageMotion.hingeSwing)
+                let onOwnSide = k == count - 1
+                if onOwnSide { return time >= exitStart ? exit : 0.5 - 0.5 * open }
+                return 0.5 + 0.5 * open
+            }
+        }
+        return (0..<count).map { k in
+            if k + 1 < count {
+                return turning(from: pageStarts[k + 1] - StageMotion.lead - StageMotion.hingeTurnLead, span: span)
+            }
+            return exit
+        }
+    }
+
+    /// One drawn copy of a page: on its own side (`back` false) or turned over.
+    struct HingeInstance: Equatable, Identifiable {
+        var page: Int
+        var back: Bool
+        /// The page's angle about the spine, in degrees (0 flat).
+        var angle: Double
+        var opacity: Double
+        var z: Double
+        var id: Int { page * 2 + (back ? 1 : 0) }
+    }
+
+    /// The drawn copies of each page at its turn, faded edge-on so no page
+    /// is seen squashed to a sliver, dimmed once read, and gone once the
+    /// next page lands on it. `exitPage` is the page turned by the line's
+    /// exit: it fades out as it lands rather than staying to be read.
+    /// Under Reduce Motion a turn is a cross-fade between the two sides.
+    /// `begun` says which pages have their first word sung (a page not yet
+    /// begun is not drawn); nil takes every page as begun.
+    static func hingeInstances(turns: [Double], begun: [Bool]? = nil, exitPage: Int?,
+                               reduceMotion: Bool) -> [HingeInstance] {
+        var result: [HingeInstance] = []
+        for k in turns.indices {
+            if let begun, begun.indices.contains(k), !begun[k] { continue }
+            let turn = min(max(turns[k], 0), 1)
+            let next = k + 1 < turns.count ? min(max(turns[k + 1], 0), 1) : 0
+            let covered = Easing.smoothstep((next - 0.55) / 0.35)
+            let leaving = k == exitPage
+            func backOpacity(_ landed: Double) -> Double {
+                leaving ? 1 - landed : 1 - (1 - StageMotion.hingeReadDim) * landed
+            }
+            if reduceMotion {
+                // A step at the turn's start, cross-faded.
+                let mix = turn <= 0 ? 0 : turn >= 1 ? 1 : Easing.smoothstep(turn / 0.3)
+                let front = (1 - mix) * (1 - covered)
+                let back = mix * backOpacity(mix) * (1 - covered)
+                if front > 0.001 { result.append(HingeInstance(page: k, back: false, angle: 0, opacity: front, z: 1)) }
+                if back > 0.001 { result.append(HingeInstance(page: k, back: true, angle: 0, opacity: back, z: 0)) }
+                continue
+            }
+            let degrees = 180 * turn
+            let edgeOn = abs(cos(degrees * .pi / 180))
+            let visible = Easing.smoothstep((edgeOn - 0.1) / 0.35)
+            let moving = turn > 0 && turn < 1
+            if turn < 0.5 {
+                let opacity = visible * (1 - covered)
+                if opacity > 0.001 {
+                    result.append(HingeInstance(page: k, back: false, angle: degrees, opacity: opacity, z: moving ? 2 : 1))
+                }
+            } else {
+                let landed = Easing.smoothstep((turn - 0.5) / 0.5)
+                let opacity = visible * backOpacity(landed) * (1 - covered)
+                if opacity > 0.001 {
+                    result.append(HingeInstance(page: k, back: true, angle: degrees - 180, opacity: opacity, z: moving ? 2 : 0))
+                }
+            }
+        }
+        return result
+    }
+
+    /// A word's pose as it arrives: its ink (opacity), its slide away from
+    /// the spine (in type units), its swing (degrees, 0 flat) and its growth
+    /// while held. Each lands on the word's onset; `groupStart` is when the
+    /// quick run it belongs to starts to slide (its own onset otherwise).
+    static func hingePose(_ entrance: HingeEntrance, start: Double, groupStart: Double, held: Double?, at time: Double,
+                          speed: Double, reduceMotion: Bool)
+        -> (ink: Double, slide: CGFloat, swing: Double, grow: CGFloat) {
+        let age = time - (start - StageMotion.lead)
+        if reduceMotion {
+            return (Easing.smoothstep(age / WallpaperMotion.reducedDissolve), 0, 0, 1)
+        }
+        let pace = 1 + (min(3, max(1, speed)) - 1) * 0.5
+        switch entrance {
+        case .ink:
+            return (Easing.smoothstep(age / (StageMotion.hingeInk / pace)), 0, 0, 1)
+        case .slide:
+            let travel = hingeEaseOut((time - (groupStart - StageMotion.lead)) / (StageMotion.hingeSlide / pace))
+            return (Easing.smoothstep(age / (StageMotion.hingeInk / pace)), CGFloat(1 - travel), 0, 1)
+        case .swing:
+            let open = hingeEaseOut(age / (StageMotion.hingeSwing / pace))
+            var grow: CGFloat = 1
+            if let held, held > 0 {
+                grow = 1 + StageMotion.hingeHeldGrowth * CGFloat(hingeEaseInOut((time - start) / held))
+            }
+            return (min(1, open * 2.5), 0, StageMotion.hingeSwingAngle * (1 - open), grow)
+        }
+    }
+
+    /// Ease-out (exponential): arrivals.
+    static func hingeEaseOut(_ x: Double) -> Double {
+        let t = min(max(x, 0), 1)
+        return t >= 1 ? 1 : 1 - pow(2, -10 * t)
+    }
+
+    /// Ease-in-out (cubic): turns, and a held word's growth.
+    static func hingeEaseInOut(_ x: Double) -> Double {
+        let t = min(max(x, 0), 1)
+        return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+    }
+
+    func hinge(_ runs: [StageRun]) -> some View {
+        let phrasing = phrasing(runs)
+        let pages = Self.hingePages(phrasing)
+        let rtl = phrasing.rightToLeft
         let u = unit
-        let (fit, shrink) = Self.hingeFit(runs.map(\.text), weights: weights, settle: settle, unit: u, stage: stageSize,
-                                          readings: runs.map { Self.reading(of: $0, in: readings) })
-        // Type is set at its resting size and scaled, so no word is
-        // re-shaped every frame; the layout scales what it measured to match.
-        func columnFont(_ j: Int) -> CGFloat { Self.hingeColumnFont(j, unit: u) }
-        func columnSize(_ j: Int) -> CGFloat { columnFont(j) * shrink }
-        func columnScale(_ j: Int) -> CGFloat { shrink * (1 + 0.3 * (1 - CGFloat(arrivals[j + 3]))) }
-        let pairWeight = runs.count > 1 ? weights[1] : 0
-        // Pushed into the corner the pair stays about half the bar's size, big
-        // enough to read, rather than shrinking to a caption.
-        let pairScale = (1 + (1.3 / 0.95 - 1) * (1 - pairWeight)) * (1 - Self.hingePairTuck * CGFloat(pushed))
-        let barScale = (3.4 - 1.8 * CGFloat(settle)) / 1.6
-        let firstColumn = columnCount > 0 ? columnWeights[0] : 0
-        // The faces swing shut as the words fold away, all within the line's exit.
-        let close = reduceMotion ? 0 : vc_settle(time - exitStart, StageMotion.hingeClose)
-        // Only a little: shut all the way, the faces crushed every word into a
-        // sliver at the edge. The words fold themselves away.
-        let faceAngle = reduceMotion ? 0.0 : 52 + (64 - 52) * close
-        let leftRuns = runs.filter { $0.id < 3 }
-        let rightRuns = runs.filter { $0.id >= 3 }
-        let stage = stageSize
-        // The room each word's reading takes under it, at the word's resting
-        // size: the layout counts it apart from the word, which overlaps
-        // its neighbours' leading where a reading cannot.
-        let slots: [CGFloat] = runs.map { run in
-            guard Self.reading(of: run, in: readings) != nil else { return 0 }
-            return Self.readingSlot(run.id < 2 ? Self.hingePairReadingBase(unit: u)
-                                    : run.id == 2 ? u * 1.6 : Self.hingeColumnFont(run.id - 3, unit: u))
+        let width = stageSize.width, height = stageSize.height
+        let spine = Self.hingeSpine(width: width, single: pages.count == 1, rightToLeft: rtl)
+        // The side a page is sung on, and the side it turns over to.
+        let own: HingeSide = rtl ? .left : .right
+        let other: HingeSide = rtl ? .right : .left
+        let speed = lineSpeed
+        let starts: [Double] = pages.map { page in page.map { phrasing.phrases[$0].start }.min() ?? 0 }
+        let turns = Self.hingeTurns(pageStarts: starts, lineTimed: phrasing.lineTimed, exitStart: exitStart, at: time,
+                                    speed: speed)
+        let exitPage: Int? = time >= exitStart && !pages.isEmpty ? pages.count - 1 : nil
+        let begun = starts.map { phrasing.lineTimed || time >= $0 - StageMotion.lead }
+        let instances = Self.hingeInstances(turns: turns, begun: begun, exitPage: exitPage, reduceMotion: reduceMotion)
+            .sorted { $0.z < $1.z }
+        // A turn swings the page's free edge up out of the stage, over the spine.
+        let sign: Double = rtl ? -1 : 1
+        return ZStack(alignment: .topLeading) {
+            ForEach(instances) { instance in
+                let side = instance.back ? other : own
+                let room = Self.hingePageWidth(width: width, spine: spine, side: side, unit: u)
+                let gutter = u * StageMotion.hingeGutter
+                let pageWidth = room + gutter
+                let minX = side == .right ? spine : spine - pageWidth
+                hingePage(pages[instance.page], runs: runs, phrasing: phrasing, side: side, room: room,
+                          live: !instance.back, speed: speed)
+                    .padding(side == .right ? .leading : .trailing, gutter)
+                    .frame(width: pageWidth, height: height, alignment: side == .right ? .leading : .trailing)
+                    .rotation3DEffect(.degrees(reduceMotion ? 0 : sign * instance.angle), axis: (x: 0, y: 1, z: 0),
+                                      anchor: side == .right ? .leading : .trailing, perspective: 0.45)
+                    .opacity(instance.opacity)
+                    .offset(x: minX)
+            }
         }
-        let room = Self.hingeReadingRoom
-        let face: (Bool) -> AnyView = { isLeft in
-            let items = isLeft ? leftRuns : rightRuns
-            return AnyView(StageLayout(place: { measured, bounds in
-                let edge = bounds.midX
-                let gap = u * 0.12
-                if isLeft {
-                    let barSize = measured.count > 2
-                        ? CGSize(width: measured[2].width * barScale, height: measured[2].height * barScale) : .zero
-                    let totalColumn = rightRuns.indices.map {
-                        (columnSize($0) * 0.95 + slots[$0 + 3] * room * shrink) * columnWeights[$0]
-                    }.reduce(0, +)
-                    // The bar moves up beside the column as its first word arrives.
-                    let top = bounds.midY - (u + (totalColumn / 2 - u) * firstColumn)
-                    var centres = [CGPoint](repeating: CGPoint(x: edge / 2, y: bounds.midY), count: measured.count)
-                    // The bar is placed by its word; its reading hangs below.
-                    let barSlot = measured.count > 2 ? slots[2] * barScale : 0
-                    let barWord = barSize.height - barSlot
-                    if measured.count > 2 {
-                        let settledX = edge - gap - barSize.width / 2
-                        let settledY = bounds.midY + (top + barWord * 0.45 - bounds.midY) * firstColumn
-                        centres[2] = CGPoint(x: edge / 2 + (settledX - edge / 2) * settle, y: bounds.midY + (settledY - bounds.midY) * settle)
-                    }
-                    // The pair's words overlap a little; their readings do not.
-                    func pairRoom(_ index: Int) -> CGFloat {
-                        guard measured.indices.contains(index) else { return pairRoom(0) }
-                        return (measured[index].height - slots[index]) * 0.78 + slots[index] * room
-                    }
-                    let pairRead = slots.prefix(2).contains { $0 > 0 }
-                    let pairHeight = measured.isEmpty ? 0 : (pairRead ? (pairRoom(0) + pairRoom(1)) / 2 : pairRoom(0)) * pairScale
-                    let home = CGPoint(x: edge / 2, y: bounds.midY)
-                    // A reading under the pair's lower word lifts the pair clear of the bar.
-                    let lowerSlot = measured.count > 1 ? slots[1] * room * pairScale : 0
-                    // In the corner the pair sits just above the bar's capitals,
-                    // flush with the bar's end at the hinge edge, as one block of type.
-                    let pairWord = measured.isEmpty ? 0 : (measured[0].height - slots[0]) * pairScale
-                    let cornerY = measured.count > 2
-                        ? centres[2].y - barWord * 0.29 - u * 0.1 - pairWord * 0.58 - lowerSlot : home.y
-                    let spotY = home.y + (cornerY - home.y) * pushed
-                    func pairX(_ index: Int) -> CGFloat {
-                        guard measured.count > 2 else { return home.x }
-                        return home.x + (edge - gap - measured[index].width * pairScale / 2 - home.x) * pushed
-                    }
-                    let split = pairHeight * 0.5 * pairWeight
-                    if !measured.isEmpty { centres[0] = CGPoint(x: pairX(0), y: spotY - split) }
-                    if measured.count > 1 { centres[1] = CGPoint(x: pairX(1), y: spotY + split * (1 - 0.25 * pushed)) }
-                    if measured.count > 2 { centres[2].y += barSlot / 2 }
-                    return centres
-                }
-                let heights = measured.indices.map {
-                    ((measured[$0].height - slots[$0 + 3]) * 0.9 + slots[$0 + 3] * room) * columnScale($0) * columnWeights[$0]
-                }
-                var cursor = bounds.midY - heights.reduce(0, +) / 2
-                return measured.indices.map { index in
-                    defer { cursor += heights[index] }
-                    return CGPoint(x: edge + gap + measured[index].width * columnScale(index) / 2, y: cursor + heights[index] / 2)
-                }
-            }) {
-                ForEach(items) { run in
-                    let sample = sample(run, of: total)
-                    let a = arrivals[run.id]
-                    let isPair = run.id < 2, isBar = run.id == 2
-                    let fontSize: CGFloat = isPair ? u * 0.95 : isBar ? u * 1.6 : columnFont(run.id - 3)
-                    let scale: CGFloat = isPair ? pairScale : isBar ? barScale : columnScale(run.id - 3)
-                    let size = fontSize * scale
-                    let tile = tiled(run)
-                    // Words fold away oldest first.
-                    // Squared, so each fold starts gently and speeds up as it goes (an exit eases in).
-                    let settleOut = reduceMotion ? 0
-                        : StageMotion.hingeFold(order: Double(run.id) / Double(max(total - 1, 1)), at: time, exitStart: exitStart)
-                    let out = settleOut * settleOut
-                    let widest = stage.width * 0.4 / max(scale, 0.05)
-                    // The reading hangs from the word's hinge side, as the word does.
-                    // The bar arrives huge and settles into place; its reading
-                    // comes once it is nearly there, rather than swing in huge.
-                    withReading(run, size: isPair ? Self.hingePairReadingBase(unit: u) : fontSize,
-                                colour: isPair ? sample.reading.opacity(0.95) : sample.reading,
-                                alignment: isPair ? .center : isLeft ? .trailing : .leading, maxWidth: widest,
-                                shown: isBar ? Easing.smoothstep((settle - 0.5) / 0.5) : 1) {
-                        word(run, tile ? ink.tileText : isPair ? sample.rest.opacity(0.95) : sample.sung, uppercase: true)
-                            .font(font(fontSize, hero: true, id: run.id))
-                            .lineLimit(1).minimumScaleFactor(0.35).frame(maxWidth: widest)
-                            .background { tileBackground(tile, size: fontSize) }
-                    }
-                        .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: 7, y: 2)
-                        .scaleEffect(x: scale * (isBar || isPair ? 1 : 0.86), y: scale * (isBar || isPair ? 1 : 1.1))
-                        // Each word unfolds from the edge like a panel on a hinge, with a
-                        // little spring; on the way out they fold shut one after another.
-                        .blur(radius: reduceMotion ? 0 : size * 0.08 * (1 - min(a, 1)))
-                        .rotation3DEffect(.degrees(reduceMotion ? 0 : (isLeft ? 1 : -1) * (84 * (1 - a) - 80 * out)),
-                                          axis: (x: 0, y: 1, z: 0), anchor: isLeft ? .trailing : .leading, perspective: 0.6)
-                        // Gone before it is edge-on, so no word is seen squashed thin.
-                        .opacity(min(1, a * 1.6) * (1 - Easing.smoothstep(out / 0.7)))
-                }
-            })
+        .frame(width: width, height: height, alignment: .topLeading)
+    }
+
+    /// One page: its slabs (one phrase each) stacked, flush to the spine.
+    /// `live` is false on a page that has turned over: its words are drawn
+    /// settled (they were all sung before it turned).
+    private func hingePage(_ page: [Int], runs: [StageRun], phrasing: StagePhrasing, side: HingeSide, room: CGFloat,
+                           live: Bool, speed: Double) -> some View {
+        let u = unit
+        let alignment: HorizontalAlignment = side == .right ? .leading : .trailing
+        let slabs = page.map { phrasing.phrases[$0] }
+        let shape = slabs.map { phrase -> (head: Bool, foot: Bool, focalReading: Bool, smallReading: Bool) in
+            let others = phrase.runs.filter { $0 != phrase.focal }
+            return (phrase.focal > phrase.runs.lowerBound, phrase.focal < phrase.runs.upperBound - 1,
+                    Self.reading(of: runs[phrase.focal], in: readings) != nil,
+                    others.contains { Self.reading(of: runs[$0], in: readings) != nil })
         }
-        return ZStack {
-            face(true)
-                .rotation3DEffect(.degrees(faceAngle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.8)
-            face(false)
-                .rotation3DEffect(.degrees(-faceAngle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.8)
+        let held = slabs.count == 1 && phrasing.words.indices.contains(slabs[0].focal) && phrasing.words[slabs[0].focal].isHeld
+        let focalSize = Self.hingeFocalSize(slabs: shape, held: held, unit: u, stageHeight: stageSize.height)
+        return VStack(alignment: alignment, spacing: u * 0.5) {
+            ForEach(slabs, id: \.index) { phrase in
+                VStack(alignment: alignment, spacing: u * 0.06) {
+                    if phrase.focal > phrase.runs.lowerBound {
+                        hingeLine(Array(phrase.runs.lowerBound..<phrase.focal), runs: runs, phrasing: phrasing, side: side,
+                                  room: room, live: live, speed: speed)
+                    }
+                    hingeWord(runs[phrase.focal], runs: runs, phrasing: phrasing, size: focalSize, side: side, room: room, live: live,
+                              speed: speed)
+                    if phrase.focal < phrase.runs.upperBound - 1 {
+                        hingeLine(Array((phrase.focal + 1)..<phrase.runs.upperBound), runs: runs, phrasing: phrasing,
+                                  side: side, room: room, live: live, speed: speed)
+                    }
+                }
+            }
         }
-        // Looked at from a little above.
-        .rotation3DEffect(.degrees(reduceMotion ? 0 : 9), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
-        .scaleEffect(fit)
-        // Reduce Motion: nothing folds, so the line fades out as every other line does.
-        .opacity(reduceMotion ? 1 - leave : 1)
+    }
+
+    /// A small line of type at a page's head or foot, in reading order.
+    private func hingeLine(_ ids: [Int], runs: [StageRun], phrasing: StagePhrasing, side: HingeSide, room: CGFloat,
+                           live: Bool, speed: Double) -> some View {
+        let small = Self.hingeSmallSize(unit: unit)
+        let ordered = phrasing.rightToLeft ? Array(ids.reversed()) : ids
+        return HStack(alignment: .top, spacing: small * 0.34) {
+            ForEach(ordered, id: \.self) { id in
+                hingeWord(runs[id], runs: runs, phrasing: phrasing, size: small, side: side, room: room, live: live, speed: speed)
+            }
+        }
+        .frame(maxWidth: room, alignment: side == .right ? .leading : .trailing)
+    }
+
+    /// One word, set in caps at `size`, arriving by its role.
+    private func hingeWord(_ run: StageRun, runs: [StageRun], phrasing: StagePhrasing, size: CGFloat, side: HingeSide, room: CGFloat,
+                           live: Bool, speed: Double) -> some View {
+        let info = phrasing.words.indices.contains(run.id) ? phrasing.words[run.id] : nil
+        let entrance = info.map(Self.hingeEntrance) ?? .ink
+        let shrink: CGFloat = (info?.isFocal ?? false) ? 0.3 : 0.5
+        let groupStart: Double = {
+            guard let group = info?.runGroup else { return run.start }
+            return phrasing.words.filter { $0.runGroup == group && runs.indices.contains($0.run) }
+                .map { runs[$0.run].start }.min() ?? run.start
+        }()
+        let held: Double? = info.flatMap { $0.isHeld ? $0.duration : nil }
+        let pose: (ink: Double, slide: CGFloat, swing: Double, grow: CGFloat) = phrasing.lineTimed || !live
+            ? (time >= run.start - StageMotion.lead ? 1 : 0, 0, 0, held == nil ? 1 : 1 + StageMotion.hingeHeldGrowth)
+            : Self.hingePose(entrance, start: run.start, groupStart: groupStart, held: held, at: time, speed: speed,
+                             reduceMotion: reduceMotion)
+        let sample = sample(run, of: phrasing.words.count)
+        let tile = tiled(run)
+        let towardSpine: CGFloat = side == .right ? -1 : 1
+        let spineAnchor: UnitPoint = side == .right ? .leading : .trailing
+        let swingSign: Double = side == .right ? 1 : -1
+        return HingeCap(limit: room) {
+            withReading(run, size: size, colour: sample.reading, alignment: side == .right ? .leading : .trailing,
+                        maxWidth: room) {
+                word(run, tile ? ink.tileText : sample.sung, uppercase: true)
+                    .font(font(size, hero: true, id: run.id))
+                    .lineLimit(1).minimumScaleFactor(shrink)
+                    .background { tileBackground(tile, size: size) }
+            }
+        }
+        .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: max(2, size * 0.06), y: 2)
+        .scaleEffect(pose.grow, anchor: spineAnchor)
+        .rotation3DEffect(.degrees(swingSign * pose.swing), axis: (x: 0, y: 1, z: 0), anchor: spineAnchor,
+                          perspective: 0.5)
+        .offset(x: towardSpine * pose.slide * unit * StageMotion.hingeSlideDistance)
+        .opacity(pose.ink)
+    }
+
+}
+
+/// Hinge: a word at its own width, never wider than `limit` (its page):
+/// a word too wide is offered the limit and shrinks to it. Its reading
+/// is then measured under the word, not across the whole page.
+struct HingeCap: Layout {
+    var limit: CGFloat
+
+    private func width(_ subview: LayoutSubview) -> CGFloat {
+        min(subview.sizeThatFits(.unspecified).width, limit)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        return subview.sizeThatFits(ProposedViewSize(width: width(subview), height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let subview = subviews.first else { return }
+        subview.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center,
+                      proposal: ProposedViewSize(width: width(subview), height: nil))
     }
 }
 
 extension StageMotion {
-    /// Hinge's faces swinging shut, and the extra delay of its last word's fold.
-    static let hingeClose = 0.6
-    static let hingeFoldStagger = 0.24
-
-    /// Hinge: the column shrinks by 15% as its seventh word arrives, not at once.
-    static func hingeColumnShrink(_ arrived: Double) -> Double { 1 - 0.15 * Easing.smoothstep(arrived - 6) }
-
-    /// Hinge: how far one word has folded shut. Oldest first; all of them are
-    /// shut by the end of the line's exit span.
-    static func hingeFold(order: Double, at time: Double, exitStart: Double) -> Double {
-        vc_settle(time - exitStart - hingeFoldStagger * min(1, max(0, order)), WallpaperMotion.lineExit)
-    }
+    /// Hinge: a page turning over on the spine (also the line's exit).
+    static let hingeTurn = 0.62
+    /// Hinge: a page starts to turn this long before the next page's first word arrives.
+    static let hingeTurnLead = 0.12
+    /// Hinge: the focal word swinging open on the spine.
+    static let hingeSwing = 0.48
+    /// Hinge: the focal word's starting angle, standing out of the page.
+    static let hingeSwingAngle = 72.0
+    /// Hinge: a small word inking in, and a content word's slide.
+    static let hingeInk = 0.12
+    static let hingeSlide = 0.24
+    /// Hinge: the slide, in type units.
+    static let hingeSlideDistance: CGFloat = 0.22
+    /// Hinge: how much a held focal word grows over its held time.
+    static let hingeHeldGrowth: CGFloat = 0.045
+    /// Hinge: the two pages of a line-timed spread open this far apart.
+    static let hingeSpreadStagger = 0.08
+    /// Hinge: a page once read (turned over), and the 5% safe margin, and
+    /// the gutter on each side of the spine (in type units).
+    static let hingeReadDim = 0.38
+    static let hingeMargin: CGFloat = 0.05
+    static let hingeGutter: CGFloat = 0.18
 }
