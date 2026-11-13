@@ -150,6 +150,7 @@ internal sealed partial class AppHost
         _tray.OnError = ex => ReportCrash(ex, "window procedure", fatal: false);
         _tray.Create();
         StartExtras();
+        StartPackaging();
         _tray.SetTooltip("Lunalyr — starting…");
         _tray.AddIcon();
         StartPlayer();
@@ -465,6 +466,8 @@ internal sealed partial class AppHost
             ThemeOverride = theme;
             _app?.ApplyTheme();
         }
+        // A sign-in start of a copy already running opens nothing (--login).
+        if (forwarded.Login && !forwarded.OpenSettings) return;
         if (forwarded.Links.Count == 0 || forwarded.OpenSettings) OpenSettingsPage(forwarded.SettingsPage);
     }
 
@@ -508,6 +511,7 @@ internal sealed partial class AppHost
         _quitTimer?.Dispose();
         StopPlayer();
         StopExtras();
+        StopPackaging();
         _tray.Dispose();
         var clean = Task.Run(async () =>
         {

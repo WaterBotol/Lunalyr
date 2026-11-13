@@ -333,6 +333,7 @@ internal sealed unsafe class ActionHudWindow : IDisposable
         "film" => "",
         "waveform" => "",
         "macwindow" => "",
+        "arrow.down.circle" => "",
         "person.2" => "",
         _ => "",
     };

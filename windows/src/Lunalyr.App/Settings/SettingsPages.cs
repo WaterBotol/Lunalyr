@@ -11,7 +11,8 @@ namespace Lunalyr.App.Settings;
 internal static class GeneralPage
 {
     public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
-                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null)
+                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null,
+                                   Lunalyr.App.Hosting.PackagingHooks? packaging = null)
     {
         var page = Page();
         Section(page, "Appearance");
@@ -25,12 +26,10 @@ internal static class GeneralPage
         page.Children.Add(theme);
 
         Section(page, "Startup");
-        page.Children.Add(Card("Launch at login", "Start Lunalyr in the tray when you sign in to Windows.", "", FixedToggle(false),
-            notYet: SettingsCopy.Milestone8));
+        PackagingRows.AddStartup(page, ctx, packaging);
 
         Section(page, "Updates");
-        page.Children.Add(Card($"Lunalyr {version.Split('+')[0]}", "Lunalyr checks for new versions and installs them when you agree.", "",
-            Button("Check for Updates…", () => { }), notYet: SettingsCopy.Milestone8));
+        PackagingRows.AddUpdates(page, ctx, version, packaging);
 
         Section(page, "Welcome");
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",

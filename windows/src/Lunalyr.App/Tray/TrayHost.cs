@@ -22,7 +22,7 @@ internal sealed unsafe class TrayHost : IDisposable
     public const nuint ActivationMagic = 0x4C554E41;
 
     private const uint IconId = 1;
-    private const int MenuOpenSettings = 1, MenuTogglePause = 2, MenuQuit = 3;
+    private const int MenuOpenSettings = 1, MenuTogglePause = 2, MenuQuit = 3, MenuInstallUpdate = 4;
 
     private static TrayHost? s_instance;
 
@@ -63,6 +63,11 @@ internal sealed unsafe class TrayHost : IDisposable
 
     /// <summary>The disabled first line of the menu ("Song — Artist") and whether the wallpaper is paused.</summary>
     public Func<(string NowPlaying, bool Paused)>? DescribeMenu { get; set; }
+
+    /// <summary>The menu item for an update ready to install ("Restart to update to Lunalyr 0.9.0"), or null.</summary>
+    public Func<string?>? DescribeUpdate { get; set; }
+
+    public Action? InstallUpdate { get; set; }
 
     /// <summary>A system setting changed (<c>WM_SETTINGCHANGE</c>, broadcast to top-level windows): read what matters again.</summary>
     public Action? SettingChanged { get; set; }
@@ -303,6 +308,8 @@ internal sealed unsafe class TrayHost : IDisposable
             Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
             Win32.AppendMenu(menu, Win32.MF_STRING, MenuOpenSettings, "Open settings");
             Win32.AppendMenu(menu, Win32.MF_STRING, MenuTogglePause, paused ? "Resume wallpaper" : "Pause wallpaper");
+            // A downloaded, verified update waits for the user's word (milestone 8).
+            if (DescribeUpdate?.Invoke() is { } update) Win32.AppendMenu(menu, Win32.MF_STRING, MenuInstallUpdate, MenuText(update));
             Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
             Win32.AppendMenu(menu, Win32.MF_STRING, MenuQuit, "Quit Lunalyr");
             // The menu closes when clicking elsewhere only if our window is in front first.
@@ -315,6 +322,7 @@ internal sealed unsafe class TrayHost : IDisposable
                 case MenuOpenSettings: OpenSettings?.Invoke(); break;
                 case MenuTogglePause: TogglePause?.Invoke(); break;
                 case MenuQuit: Quit?.Invoke(); break;
+                case MenuInstallUpdate: InstallUpdate?.Invoke(); break;
             }
         }
         finally
