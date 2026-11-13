@@ -163,6 +163,7 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Launch at login on this PC (sign out and in) | needs the owner (writes the real Run value) | — |
 | Settings › General Startup and Updates rows | PC (`--demo --quiet-windows --settings-page general`, PrintWindow) | `docs/previews/m8/general-*.png` |
 | Updates: signed feed (ECDSA P-256), wrong key / changed feed / insecure URL / redirect to http refused, download size cap, checksum, payload version, Authenticode once signed, once-a-day automatic checks, reuse and removal of downloads, test runs never check | unit (fake HTTP server, made-up keys, `ManualTimeProvider`) | `tests/Lunalyr.Install.Tests/UpdateFeedTests.cs`, `tests/Lunalyr.Shell.Tests/Updates/UpdateServiceTests.cs` |
+| Update feed and key built in and read under Native AOT | PC: an AOT publish with `-p:LunalyrUpdateFeed=https://updates.example.invalid/…` and a throwaway key logged "Updates: checking updates.example.invalid." under `--demo` (which sends nothing); the throwaway build and key were deleted | — |
 | Updates end to end against a real server | not possible yet: no feed published (needs the owner's OK and a place for it) | `docs/PACKAGING.md` "Publishing an update" |
 | Code signing | prepared, not done (needs the owner's certificate) | `tools/Packaging/sign.ps1`, `build-installer.ps1 -Thumbprint` |
 | Settings writes atomic | unit (existing: temp file, flush, `File.Replace` with `.bak`) | `src/Lunalyr.Platform.Windows/Settings/AtomicFile.cs`, its tests |
