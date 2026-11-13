@@ -15,8 +15,11 @@ Read this whole file before doing anything. These rules come from the owner and 
 - **Tests never touch** the owner's real settings or data folders, the real network, media sessions or permission
   prompts. Use temp folders, fakes and recorded fixtures checked into the repo.
 - **Network while developing:** you may make a *few* real HTTP requests to public lyric APIs only to record fixtures,
-  with a generic User-Agent (`Lunalyr/0.1 (Windows port; dev)`), never including any personal data. Never call
-  YouTube, and never work around any service's bot, caption or PO-token protection.
+  with a generic User-Agent (`Lunalyr/0.1 (Windows port; dev)`), never including any personal data. The only
+  YouTube request allowed is a *few* GETs of `https://www.youtube.com/results?search_query=…` to record search
+  fixtures (the owner chose the Mac's page search, 13 Nov 2026), sent as the app sends them. Never open YouTube in a
+  browser or WebView, never load a player or embed, and never work around any service's bot, consent, caption or
+  PO-token protection: a wall means "unavailable".
 - **No Verso code (closed-source requirement).** Read `C:\dev\Lunalyr-Windows-2\docs\PROVENANCE.md`.
   Before translating any Swift file, run in the reference checkout:
   `git -C C:\dev\lunalyr-mac-ref blame -w -M -C --line-porcelain <file> | Select-String '^[0-9a-f]{40} '` and check
