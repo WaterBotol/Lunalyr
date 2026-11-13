@@ -904,7 +904,7 @@ final class LyricsFetcher {
                 if let data = try await requestLRCLIB("get",parameters:parameters,session:session), let exact = try? JSONDecoder().decode(Response.self,from:data) { payloads.append(exact) }
             } catch is CancellationError { throw CancellationError() }
             catch { exactError = error }
-            LyricTrace.results("LRCLIB exact (get)", returned: payloads.count, read: payloads.count)
+            if LyricTrace.isOn, !Task.isCancelled { LyricTrace.results("LRCLIB exact (get)", returned: payloads.count, read: payloads.count) }
         } else {
             LyricTrace.note("LRCLIB exact skipped: no artist")
         }
@@ -925,7 +925,9 @@ final class LyricsFetcher {
             return false
         }
         if !exactTimed {
-            LyricTrace.note(payloads.isEmpty ? "LRCLIB exact found nothing: searching" : "LRCLIB exact has no sound timing: searching too")
+            if LyricTrace.isOn, !Task.isCancelled {
+                LyricTrace.note(payloads.isEmpty ? "LRCLIB exact found nothing: searching" : "LRCLIB exact has no sound timing: searching too")
+            }
             let search = query.hasArtist ? ["track_name":query.title,"artist_name":query.artist] : ["track_name":query.title]
             do {
                 if let data = try await requestLRCLIB("search",parameters:search,session:session),

@@ -153,11 +153,12 @@ final class LyricLookupTraceHookTests: XCTestCase {
     }
 
     func testRequestAddressesLoseKeysAndTokens() {
-        let url = URL(string: "https://lyrics.kugou.com/download?id=1&accesskey=ABC&fmt=krc&token=T&api_key=K&g_tk=5381")
+        let url = URL(string: "https://lyrics.kugou.com/download?id=1&accesskey=ABC&fmt=krc&token=T&api_key=K&g_tk=5381&keyword=Lemon")
         let shown = LyricTrace.redacted(url)
-        XCTAssertFalse(shown.contains("ABC") || shown.contains("=T") || shown.contains("=K"))
-        XCTAssertTrue(shown.contains("accesskey=REDACTED"))
-        XCTAssertTrue(shown.contains("id=1") && shown.contains("fmt=krc") && shown.contains("g_tk=5381"))
+        XCTAssertFalse(shown.contains("ABC") || shown.contains("=T&") || shown.contains("=K"))
+        XCTAssertTrue(shown.contains("accesskey=REDACTED") && shown.contains("token=REDACTED") && shown.contains("api_key=REDACTED"))
+        // Search terms and harmless parameters stay readable.
+        XCTAssertTrue(shown.contains("id=1") && shown.contains("fmt=krc") && shown.contains("g_tk=5381") && shown.contains("keyword=Lemon"))
     }
 
     // MARK: - Off by default

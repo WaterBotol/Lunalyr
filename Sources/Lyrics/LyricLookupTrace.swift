@@ -96,10 +96,12 @@ enum LyricTrace {
     /// replaced, so a trace can be shared.
     static func redacted(_ url: URL?) -> String {
         guard let url, var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url?.absoluteString ?? "" }
-        let secret = ["key", "token", "secret", "sig", "auth", "password", "session", "cookie"]
+        // A name that is, or ends in, one of these ("accesskey", "api_key"); "keyword" stays readable.
+        let endings = ["key", "token", "secret", "signature", "password", "auth", "cookie", "session"]
         parts.queryItems = parts.queryItems?.map { item in
             let name = item.name.lowercased()
-            return secret.contains(where: name.contains) ? URLQueryItem(name: item.name, value: "REDACTED") : item
+            let hidden = name == "sig" || endings.contains { name.hasSuffix($0) }
+            return hidden ? URLQueryItem(name: item.name, value: "REDACTED") : item
         }
         parts.user = nil
         parts.password = nil
