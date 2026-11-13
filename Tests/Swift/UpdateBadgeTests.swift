@@ -132,7 +132,7 @@ final class UpdateBadgeTests: XCTestCase {
         }
         plain.isTemplate = true
         XCTAssertTrue(MenuBarView.badgedIcon(from: plain, paused: false, updateAvailable: false) === plain)
-        let badged = MenuBarView.badgedIcon(from: plain, paused: false, updateAvailable: true)
+        let badged = MenuBarView.badgedIcon(from: plain, paused: false, updateAvailable: true, style: .dot)
         XCTAssertTrue(badged.isTemplate, "the system colours it like the plain icon, in light and dark menu bars")
         XCTAssertEqual(badged.size, plain.size)
         XCTAssertEqual(badged.accessibilityDescription, "Lunalyr, update available")
@@ -152,6 +152,34 @@ final class UpdateBadgeTests: XCTestCase {
         XCTAssertTrue(changed.allSatisfy { $0.column >= 16 && $0.row < 20 })
         XCTAssertGreaterThan(after[4][32], 200, "the dot itself is solid")
         XCTAssertTrue(after[30][4] == before[30][4] && after[30][4] > 200, "the mark itself is untouched")
+    }
+
+    @MainActor
+    func testTheShippedUpdateIconIsADifferentIconInColour() throws {
+        XCTAssertEqual(MenuBarView.updateIconStyle, .arrowMoon)
+        let plain = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            NSColor.black.setFill()
+            rect.fill()
+            return true
+        }
+        plain.isTemplate = true
+        for paused in [false, true] {
+            let icon = MenuBarView.badgedIcon(from: plain, paused: paused, updateAvailable: true, style: .arrowMoon)
+            XCTAssertFalse(icon.isTemplate, "drawn in its own colours on any menu bar")
+            XCTAssertEqual(icon.size, plain.size)
+            XCTAssertTrue(icon.representations.contains { $0.pixelsWide == 36 })
+            let bitmap = try XCTUnwrap(icon.representations.compactMap { $0 as? NSBitmapImageRep }.first { $0.pixelsWide == 36 })
+            // Not the moon: its corners are clear, where the plain one is ink.
+            XCTAssertEqual(bitmap.colorAt(x: 0, y: 35)?.alphaComponent ?? 1, 0, accuracy: 0.01)
+            // The violet disc, and the white arrow on it.
+            let violet = try XCTUnwrap(bitmap.colorAt(x: paused ? 6 : 8, y: paused ? 18 : 18)?.usingColorSpace(.sRGB))
+            XCTAssertGreaterThan(violet.blueComponent, violet.greenComponent + 0.2, "\(violet)")
+            XCTAssertEqual(violet.alphaComponent, 1, accuracy: 0.01)
+            let arrow = try XCTUnwrap(bitmap.colorAt(x: paused ? 14 : 16, y: paused ? 14 : 18)?.usingColorSpace(.sRGB))
+            XCTAssertGreaterThan(arrow.greenComponent, 0.95, "the arrow is white: \(arrow)")
+            // The bite out of the upper right.
+            XCTAssertEqual(bitmap.colorAt(x: 33, y: 2)?.alphaComponent ?? 1, 0, accuracy: 0.01)
+        }
     }
 
     /// The icon's alpha at 2x, a row of pixels at a time, top row first.

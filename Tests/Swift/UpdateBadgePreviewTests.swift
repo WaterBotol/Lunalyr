@@ -3,9 +3,10 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// Renders the update badge to PNGs: the menu-bar icon plain, with the
-/// update dot, and with the dot and the pause badge, on a light and a dark
-/// menu bar at 2x (coloured as macOS colours a template image there); the
+/// Renders the update badge to PNGs: the menu-bar icon plain, with an
+/// update waiting (`MenuBarView.updateIconStyle`), with that and the pause
+/// badge, and paused alone, on a light and a dark
+/// menu bar at 2x and 6x (a template coloured as macOS colours it there); the
 /// panel's update row alone; the whole panel with it, light and dark; and
 /// Settings › General with an update waiting. Preview only: no updater
 /// starts, nothing is fetched, no window opens on screen.
@@ -25,19 +26,23 @@ final class UpdateBadgePreviewTests: XCTestCase {
         let icon = try XCTUnwrap(NSImage(named: "MenuBarIconTemplate"))
         icon.size = NSSize(width: 18, height: 18)
         icon.isTemplate = true
-        let variants = [
-            ("plain", icon),
-            ("update", MenuBarView.badgedIcon(from: icon, paused: false, updateAvailable: true)),
-            ("update-paused", MenuBarView.badgedIcon(from: icon, paused: true, updateAvailable: true)),
-        ]
-        for dark in [false, true] {
-            let bar = dark ? "dark" : "light"
-            for (name, image) in variants {
-                try DesktopPlayerPreviewTests.write(try menuBar([image], dark: dark),
-                                                    to: folder.appendingPathComponent("icon-\(name)-\(bar).png"))
+        // At 2x, as on a Retina menu bar, and at 6x to see the detail.
+        for scale in [2, 6] as [CGFloat] {
+            let variants: [(String, NSImage)] = [
+                ("plain", icon),
+                ("update", MenuBarView.badgedIcon(from: icon, paused: false, updateAvailable: true, scales: [scale])),
+                ("update-paused", MenuBarView.badgedIcon(from: icon, paused: true, updateAvailable: true, scales: [scale])),
+                ("paused", MenuBarView.badgedIcon(from: icon, paused: true, updateAvailable: false, scales: [scale])),
+            ]
+            for dark in [false, true] {
+                let bar = dark ? "dark" : "light", suffix = "@\(Int(scale))x"
+                for (name, image) in variants.prefix(3) {
+                    try DesktopPlayerPreviewTests.write(try menuBar([image], dark: dark, scale: scale),
+                                                        to: folder.appendingPathComponent("icon-\(name)-\(bar)\(suffix).png"))
+                }
+                try DesktopPlayerPreviewTests.write(try menuBar(variants.map(\.1), dark: dark, scale: scale),
+                                                    to: folder.appendingPathComponent("icons-side-by-side-\(bar)\(suffix).png"))
             }
-            try DesktopPlayerPreviewTests.write(try menuBar(variants.map(\.1), dark: dark),
-                                                to: folder.appendingPathComponent("icons-side-by-side-\(bar).png"))
         }
 
         for look in [UISnapshotRenderer.Look.light, .dark] {
@@ -71,8 +76,8 @@ final class UpdateBadgePreviewTests: XCTestCase {
     /// A strip of menu bar at 2x with the icons on it, each drawn the way
     /// macOS draws a template image there: its alpha, in the bar's text
     /// colour.
-    private func menuBar(_ icons: [NSImage], dark: Bool) throws -> CGImage {
-        let scale: CGFloat = 2, point = CGSize(width: 18, height: 18), gap: CGFloat = 16
+    private func menuBar(_ icons: [NSImage], dark: Bool, scale: CGFloat) throws -> CGImage {
+        let point = CGSize(width: 18, height: 18), gap: CGFloat = 16
         let size = CGSize(width: gap + CGFloat(icons.count) * (point.width + gap), height: 24)
         let context = try XCTUnwrap(CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale),
                                               bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -88,6 +93,12 @@ final class UpdateBadgePreviewTests: XCTestCase {
             let mask = try XCTUnwrap(icon.cgImage(forProposedRect: &rect, context: nil,
                                                   hints: [.ctm: NSAffineTransform(transform: AffineTransform(scale: scale))]))
             context.saveGState()
+            guard icon.isTemplate else {
+                // In colour: drawn as it is.
+                context.draw(mask, in: rect)
+                context.restoreGState()
+                continue
+            }
             context.clip(to: rect, mask: try alphaMask(mask))
             context.setFillColor(ink)
             context.fill(rect)

@@ -7,7 +7,7 @@ struct VersoApp: App {
     @StateObject private var nowPlaying = NowPlayingMonitor.shared
     /// For the icon, which says when the wallpaper is paused.
     @StateObject private var extras = LunalyrExtras.shared
-    /// For the icon, which carries a dot while an update waits.
+    /// For the icon, which changes while an update waits.
     @StateObject private var updates = AppUpdates.shared
 
     var body: some Scene {
@@ -18,7 +18,10 @@ struct VersoApp: App {
                 .environmentObject(nowPlaying)
         } label: {
             let paused = extras.wallpaperPaused, update = updates.badge.showsBadge
-            Image(nsImage: Self.icon(paused: paused, updateAvailable: update))
+            let icon = Self.icon(paused: paused, updateAvailable: update)
+            // The update icon is in colour: drawn as it is, not as a template.
+            Image(nsImage: icon)
+                .renderingMode(icon.isTemplate ? .template : .original)
                 .accessibilityLabel(MenuBarView.accessibilityLabel(paused: paused, updateAvailable: update))
         }
         .menuBarExtraStyle(.window)

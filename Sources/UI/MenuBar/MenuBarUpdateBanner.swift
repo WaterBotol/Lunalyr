@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// The top of the menu-bar panel while the daily check has found an update
-/// (the icon carries a dot meanwhile): "Lunalyr 2.1.0 is available", with
-/// Update…, which shows Sparkle's update window, and Later, which takes the
-/// dot and this row away until the next daily check. Settings › General
+/// (the icon is a violet arrow meanwhile): "Lunalyr 2.1.0 is available", with
+/// Update…, which shows Sparkle's update window, and Later, which brings the
+/// moon back and takes this row away until the next daily check. Settings › General
 /// keeps saying it until the update is installed or skipped.
 struct MenuBarUpdateBanner: View {
     @Model(\.updates) private var updates

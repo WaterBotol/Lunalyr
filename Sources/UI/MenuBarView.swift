@@ -113,20 +113,35 @@ struct MenuBarView: View {
         badgedIcon(from: icon, paused: true, updateAvailable: false)
     }
 
+    /// How the icon says an update is waiting. One line picks it:
+    /// `updateIconStyle`.
+    enum UpdateIconStyle: CaseIterable {
+        /// The moon with a small template dot in its upper right corner.
+        case dot
+        /// A different icon altogether: a violet disc with a bite out of
+        /// its upper right, like the moon, and a white arrow pointing down.
+        /// In colour, so it isn't a template.
+        case arrowMoon
+    }
+
+    static let updateIconStyle: UpdateIconStyle = .arrowMoon
+
     /// The menu-bar icon for the moment: plain, with the pause badge (lower
-    /// right), with the update dot (upper right), or both.
+    /// right), with an update waiting (`style`), or both.
     ///
-    /// The update dot is a solid disc cut out of the mark by a clear ring,
-    /// like a notification dot, and like the rest of the icon a template:
-    /// a coloured dot can't follow the menu bar, which on recent macOS takes
-    /// its light or dark from the wallpaper -- Lunalyr's own wallpaper,
-    /// often dark album art behind a light-mode menu bar.
-    static func badgedIcon(from icon: NSImage, paused: Bool, updateAvailable: Bool) -> NSImage {
+    /// `.dot` stays a template, so the system colours it like the plain
+    /// icon. `.arrowMoon` is in colour, not a template: a saturated violet
+    /// with white on it reads on a light and a dark menu bar alike, which
+    /// matters as recent macOS takes the bar's light or dark from the
+    /// wallpaper. Drawn at `scales` (1x and 2x for the menu bar).
+    static func badgedIcon(from icon: NSImage, paused: Bool, updateAvailable: Bool,
+                           style: UpdateIconStyle = updateIconStyle, scales: [CGFloat] = [1, 2]) -> NSImage {
         guard paused || updateAvailable else { return icon }
+        let coloured = updateAvailable && style == .arrowMoon
         let image = NSImage(size: icon.size)
-        // Drawn once into bitmaps of its own, at 1x and 2x: the badge is cut
-        // out with a clearing blend, which must never reach the menu bar.
-        for scale in [1, 2] as [CGFloat] {
+        // Drawn once into bitmaps of its own: the badges are cut out with a
+        // clearing blend, which must never reach the menu bar.
+        for scale in scales {
             guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(icon.size.width * scale),
                                                 pixelsHigh: Int(icon.size.height * scale), bitsPerSample: 8,
                                                 samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -138,15 +153,54 @@ struct MenuBarView: View {
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = context
             let rect = CGRect(origin: .zero, size: icon.size)
-            icon.draw(in: rect)
-            if paused { drawBadge(in: rect, context: context.cgContext) }
-            if updateAvailable { drawUpdateDot(in: rect, context: context.cgContext) }
+            let cg = context.cgContext
+            if coloured {
+                drawArrowMoon(in: rect, paused: paused, context: cg)
+                if paused { drawBadge(in: rect, colour: updateColour, context: cg) }
+            } else {
+                icon.draw(in: rect)
+                if paused { drawBadge(in: rect, colour: nil, context: cg) }
+                if updateAvailable { drawUpdateDot(in: rect, context: cg) }
+            }
             NSGraphicsContext.restoreGraphicsState()
             image.addRepresentation(bitmap)
         }
-        image.isTemplate = true
+        image.isTemplate = !coloured
         image.accessibilityDescription = accessibilityLabel(paused: paused, updateAvailable: updateAvailable)
         return image
+    }
+
+    /// Lunalyr's violet, as it fills under white in dark mode: light enough
+    /// to stand out on a dark menu bar, deep enough for white on it and to
+    /// show on a light one.
+    static let updateColour: CGColor = (LunalyrAccent.fill(dark: true, increaseContrast: false)
+        .usingColorSpace(.sRGB) ?? .systemPurple).cgColor
+
+    /// The `.arrowMoon` icon: the disc, its moon bite and the arrow. Smaller
+    /// and up to the left with the pause badge, which takes the lower right.
+    private static func drawArrowMoon(in rect: CGRect, paused: Bool, context: CGContext) {
+        let unit = rect.width / 18
+        let radius = (paused ? 6.6 : 7.6) * unit
+        let centre = paused ? CGPoint(x: rect.minX + 7.4 * unit, y: rect.minY + 10.4 * unit)
+                            : CGPoint(x: rect.midX - 0.4 * unit, y: rect.midY - 0.4 * unit)
+        context.setFillColor(updateColour)
+        context.fillEllipse(in: CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2))
+        // The bite, as the crescent's.
+        let bite = radius * 0.6, offset = radius * 0.92
+        context.setBlendMode(.clear)
+        context.fillEllipse(in: CGRect(x: centre.x + offset - bite, y: centre.y + offset - bite, width: bite * 2, height: bite * 2))
+        context.setBlendMode(.normal)
+        // The arrow, a little left of centre to clear the bite.
+        let x = centre.x - radius * 0.06, y = centre.y - radius * 0.02
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        let shaft = radius * 0.15
+        context.fill(CGRect(x: x - shaft, y: y - radius * 0.02, width: shaft * 2, height: radius * 0.6))
+        context.beginPath()
+        context.move(to: CGPoint(x: x - radius * 0.46, y: y + radius * 0.04))
+        context.addLine(to: CGPoint(x: x + radius * 0.46, y: y + radius * 0.04))
+        context.addLine(to: CGPoint(x: x, y: y - radius * 0.56))
+        context.closePath()
+        context.fillPath()
     }
 
     /// What VoiceOver says for the status item.
@@ -168,17 +222,23 @@ struct MenuBarView: View {
         context.fillEllipse(in: dot)
     }
 
-    private static func drawBadge(in rect: CGRect, context: CGContext) {
-        let diameter = (rect.width * 0.5).rounded()
+    /// The pause badge: a disc set apart by a clear ring, with the pause
+    /// bars cut out of it (template), or white on `colour`.
+    private static func drawBadge(in rect: CGRect, colour: CGColor?, context: CGContext) {
+        let diameter = (rect.width * (colour == nil ? 0.5 : 0.46)).rounded()
         let badge = CGRect(x: rect.maxX - diameter, y: rect.minY, width: diameter, height: diameter)
         // A clear ring sets the badge apart from the mark beneath it.
         context.setBlendMode(.clear)
         context.fillEllipse(in: badge.insetBy(dx: -1.25, dy: -1.25))
         context.setBlendMode(.normal)
-        context.setFillColor(NSColor.black.cgColor)
+        context.setFillColor(colour ?? NSColor.black.cgColor)
         context.fillEllipse(in: badge)
-        // The pause bars, cut out of the disc.
-        context.setBlendMode(.clear)
+        // The pause bars.
+        if colour == nil {
+            context.setBlendMode(.clear)
+        } else {
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+        }
         let bar = CGSize(width: max(1, diameter * 0.16), height: diameter * 0.46)
         for centre in [badge.midX - diameter * 0.15, badge.midX + diameter * 0.15] {
             context.fill(CGRect(x: centre - bar.width / 2, y: badge.midY - bar.height / 2, width: bar.width, height: bar.height))
