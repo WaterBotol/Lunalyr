@@ -42,8 +42,7 @@ internal static class GeneralPage
 
         Section(page, "Discord & lyric card");
         ExtrasSections.AddDiscord(page, ctx, discord);
-        page.Children.Add(Card("Lyric cards", "Save or copy a lyric as a picture, GIF or video.", "",
-            Button("Make a Lyric Card…", () => { }), notYet: SettingsCopy.Milestone7));
+        LyricCardRows.Add(page, ctx);
         return page;
     }
 }

@@ -78,6 +78,12 @@ public sealed record ShellOptions
     public string? FloatingCapturePath { get; init; }
 
     /// <summary>
+    /// <c>--lyric-card</c>: open the lyric card window once Lunalyr is up (for checks; with <c>--quiet-windows</c> it opens
+    /// unactivated at the bottom, like the settings window). Not forwarded to a running instance.
+    /// </summary>
+    public bool OpenLyricCard { get; init; }
+
+    /// <summary>
     /// <c>--ticker-capture &lt;file&gt;</c>: on quitting, write the tray lyric strip's last frame as a PNG and log the
     /// strip's styles and whether it is the foreground window. For checks.
     /// </summary>
@@ -147,6 +153,9 @@ public sealed record ShellOptions
                     break;
                 case "--quiet-windows":
                     options = options with { QuietWindows = true };
+                    break;
+                case "--lyric-card":
+                    options = options with { OpenLyricCard = true };
                     break;
                 case "--demo":
                     // Silent and offline by definition: no real player is followed and nothing is looked up.

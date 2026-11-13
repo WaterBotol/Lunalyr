@@ -74,6 +74,8 @@ public sealed class AppSettingsTests
             // Discord status and the tray lyric (discordSongButton is written only once it is set)
             "discordPresence", "discordStatusText", "discordLyric", "discordCover", "discordButton", "discordProgress", "discordPaused",
             "discordLyricLead", "trayLyric", "trayLyricLength",
+            "lyricCardComposition", "lyricCardLinesBefore", "lyricCardLinesAfter", "lyricCardAspect", "lyricCardFormats",
+            "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

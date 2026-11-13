@@ -19,12 +19,6 @@ internal sealed partial class AppHost
     /// <summary>The global shortcuts, for the settings page (null until the tray window exists).</summary>
     public GlobalHotkeys? Hotkeys => _hotkeys;
 
-    /// <summary>
-    /// Opens the lyric card window for the line playing; false when this build has none. The lyric card part of
-    /// milestone 7 sets it; until then the card shortcut and <c>lunalyr://card</c> say cards aren't in this build.
-    /// </summary>
-    internal Func<bool>? OpenLyricCard { get; set; }
-
     /// <summary>Builds the extras on the tray's window. Links given at launch wait until start-up has finished.</summary>
     private void StartExtras()
     {
@@ -32,7 +26,13 @@ internal sealed partial class AppHost
         {
             NudgeSync = delta => _controller?.NudgeSongOffset(delta),
             HasSong = () => _controller?.Status.Title is not null,
-            OpenLyricCard = () => OpenLyricCard?.Invoke() ?? false,
+            // The card shortcut and lunalyr://card open the lyric card window (AppHost.LyricCards.cs).
+            OpenLyricCard = () =>
+            {
+                if (_quitting || _app is null) return false;
+                OpenLyricCard();
+                return true;
+            },
             ToggleTapSync = ToggleTapSync,
             OpenSettings = OpenSettings,
             PauseChanged = paused =>

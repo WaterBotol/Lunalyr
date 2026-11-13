@@ -68,12 +68,17 @@ public partial class App : Application
     }
 
     /// <summary>The run's look changed (<c>--theme</c> from a second launch).</summary>
-    internal void ApplyTheme() => _window?.ApplyTheme();
+    internal void ApplyTheme()
+    {
+        _window?.ApplyTheme();
+        _lyricCard?.ApplyTheme();
+    }
 
     /// <summary>The controller's status changed: refresh what the window shows.</summary>
     internal void RefreshStatus()
     {
         _window?.RefreshStatus();
         _flyout?.RefreshIfOpen();
+        RefreshLyricCard();
     }
 }

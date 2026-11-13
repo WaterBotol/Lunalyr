@@ -204,3 +204,13 @@ with the tests that had been left out as page scraping. Blame-checked again at `
 `MusicVideoOffsetTests.swift` have no `a99fd65` lines; nothing was re-implemented from behaviour. Windows' own and
 written fresh: the guardrail (`YouTubeSearchPage.Inspect`: a consent, bot-check, sign-in or captcha page, a redirect or
 a page without data is never worked around), the Data API key as the fallback, and the "Search YouTube with" setting.
+
+## Lyric cards (milestone 7)
+
+Checked at `next/integration` `79b84db` with `git blame -w -M -C --line-porcelain`: `LyricCard.swift` and
+`LyricCardExport.swift` have 3 lines each from `a99fd65` (imports and a blank line git traces to `RomanizationPane.swift`),
+`LunalyrExtras.swift` 2 (a screen observer, not card code), `LyricExtrasTests.swift` 4 (imports). `LyricCardBackground`,
+`LyricCardLength`, `LyricCardMix`, `LyricCardPopout`, `LyricCardSongAudio`, `SongAudioRecorder`, `LunalyrMark`, `Star4`
+every `LyricCard*Tests.swift`, and the card rows' wording in `LyricExtrasInspector.swift` (lines 413–430) and
+`MenuBarWallpaperControls.swift` (lines 105–109) have none. Everything was ported faithfully; nothing was re-implemented from behaviour.
+Details: docs/milestones/M7.md, "Lyric cards".
