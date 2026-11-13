@@ -409,7 +409,8 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
 | `animationRate` | `60` | `15`, `30`, `60`, `0` = follow the display | `custom.animationRate` (Mac default 30) |
 | `pauseWhenCovered` | `true` | | `custom.pauseWhenCovered` |
-| `pauseOnBatterySaver` | `true` | | nearest: `respectLowPower` |
+| `pauseOnBatterySaver` | `true` | Performance › Follow energy saver: while Windows’ energy saver is on, power saving applies as for Low power visuals (the key keeps its old name) | nearest: `respectLowPower` |
+| `lowPowerVisuals` | `false` | Performance › Low power visuals: every type but Your wallpaper and Colour only shows Line patterns, at no more than 30 fps (see "Power saving") | `custom.lowPowerVisuals` |
 | `pauseWhenFullScreen` | `true` | | Windows only |
 | `lyricOffset` | `0` | seconds, ±3; positive shows lyrics earlier | `custom.lyricOffset` |
 | `repairQQGaps` | `true` | "Treat long pauses as instrumental" | `custom.repairQQGaps` |
@@ -601,6 +602,16 @@ theme. The window opens at Lyric style (or `--settings-page`).
 - **Settings that couldn't be read.** When `settings.json` is damaged and the backup (or the defaults) is used, the
   action HUD says "Lunalyr couldn’t read its settings" once at start-up and General shows a warning bar with the
   store's message, naming the kept `settings.json.corrupt-…` file (milestone 8; before, only the log said so).
+- **Power saving** (Performance › Low power visuals and Follow energy saver; the battery rule, inexpensive effects
+  only, has no row yet and keeps the Mac's default). The renderer works out the rule in force (`PowerPolicy`) and holds
+  the frame rate at 30 fps at most; the controller draws what that rule allows (`WallpaperPower.EffectiveMode`,
+  re-implemented from the Mac's `effectiveMode(_:under:)`, which is Verso-attributed): Line patterns for every type but
+  Your wallpaper and Colour only (Low power visuals, Energy saver), Colour only for all but Your wallpaper (a "Colour
+  only" battery rule), and the chosen type otherwise, with a pinned or matched heavy GPU effect swapped for a light one.
+  The chosen type is kept and returns when power saving ends; YouTube's player closes while power saving shows another
+  type; animated covers and System audio pause as before. Under Performance a caption says what power saving is doing
+  (the frame rate held, or a rule other than Low power visuals in force). Until 14 Nov 2026 Energy saver only held the
+  frame rate (the row said it paused the wallpaper, which it never did) and the visualiser showed the album colours.
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
   (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.

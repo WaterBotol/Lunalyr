@@ -192,19 +192,7 @@ internal sealed partial class AppHost
         return new EngineWallpaperRenderer(engine, Log);
     }
 
-    private static PerformanceOptions PerformanceFrom(AppSettings s) => PerformanceOptions.Default with
-    {
-        FrameRate = s.AnimationRate switch
-        {
-            15 => FrameRateCap.Fps15,
-            30 => FrameRateCap.Fps30,
-            60 => FrameRateCap.Fps60,
-            _ => FrameRateCap.Display,
-        },
-        PauseWhenCovered = s.PauseWhenCovered,
-        FollowEnergySaver = s.PauseOnBatterySaver,
-        PauseWallpaper = s.WallpaperPaused,
-    };
+    private static PerformanceOptions PerformanceFrom(AppSettings s) => s.Performance();
 
     // ---- Start-up ----
 

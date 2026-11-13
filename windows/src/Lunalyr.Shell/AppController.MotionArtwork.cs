@@ -69,17 +69,21 @@ public sealed partial class AppController
         UpdateMotionArtwork();
     }
 
-    /// <summary>Power saving in force (from the renderer): falling back to patterns or colour only pauses animated covers, as on the Mac.</summary>
+    /// <summary>
+    /// Power saving in force (from the renderer): falling back to patterns or colour only pauses animated covers, as on
+    /// the Mac, and the wallpaper draws what power saving allows (<see cref="Wallpaper.WallpaperPower"/>).
+    /// </summary>
     public void SetPowerConstraint(PowerConstraint? power)
     {
         var paused = power is { Fallback: PowerFallback.Patterns or PowerFallback.ColourOnly };
         lock (_gate)
         {
-            if (_disposed || (_motionPowerPaused == paused && _motionPowerReason == power?.Reason)) return;
+            if (_disposed || _power == power) return;
+            _power = power;
             _motionPowerPaused = paused;
             _motionPowerReason = power?.Reason;
         }
-        if (_motionFiles is not null) PublishLayers();
+        PublishLayers();
         RaiseStatusChanged();
     }
 

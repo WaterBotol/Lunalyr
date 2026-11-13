@@ -164,7 +164,7 @@ public sealed partial class SettingsWindow : Window
             "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion),
             "Covers" => CoversPage.Build(_ctx, () => _host.Controller, () => _host.ReduceMotion),
             "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.Spotify, () => _host.SpotifyOffReason),
-            "Performance" => PerformancePage.Build(_ctx),
+            "Performance" => PerformancePage.Build(_ctx, () => _host.Controller),
             _ => new TextBlock { Text = page },
         };
 

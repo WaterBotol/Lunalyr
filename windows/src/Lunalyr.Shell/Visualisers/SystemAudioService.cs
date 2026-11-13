@@ -111,8 +111,8 @@ public sealed class SystemAudioService : IDisposable
             var s = settings();
             var chosen = s.BackgroundMode == "visualizer";
             var power = _power;
-            var replaced = power is { Fallback: PowerFallback.Patterns or PowerFallback.ColourOnly };
-            var powerPause = AudioCaptureGate.PowerPause(chosen, !replaced, "colour only",
+            var shown = Wallpaper.WallpaperPower.EffectiveMode("visualizer", power);
+            var powerPause = AudioCaptureGate.PowerPause(chosen, shown == "visualizer", Wallpaper.WallpaperPower.Title(shown),
                 power?.Kind == PowerConstraintKind.LowPowerVisuals, power?.Kind == PowerConstraintKind.EnergySaver,
                 power?.Kind == PowerConstraintKind.Battery);
             // The demo's signal stands in for System audio whenever a visualiser shows; nothing is captured.

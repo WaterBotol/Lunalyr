@@ -124,7 +124,7 @@ internal static partial class WallpaperPage
             toggle.IsEnabled = !waitsForVisualiser && audio?.Demo != true;
             waits.Text = audio?.Demo == true
                 ? "This run (--demo) uses a built-in signal instead of System audio; nothing is captured."
-                : waitsForVisualiser ? "Available once Visualisers return; power saving is showing colour only for now." : "";
+                : waitsForVisualiser ? $"Available once Visualisers return; power saving is showing {VisualiserServices.ShownForPower} for now." : "";
             waits.Visibility = waits.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             var live = s.AudioReactiveEnabled || audio?.Demo == true;
             sensitivity.IsHitTestVisible = live;

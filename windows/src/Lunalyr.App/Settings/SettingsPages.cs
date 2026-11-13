@@ -113,15 +113,33 @@ internal static class PlayersPage
 /// <summary>Performance: frame rate and when the wallpaper pauses.</summary>
 internal static class PerformancePage
 {
-    public static StackPanel Build(SettingsContext ctx)
+    public static StackPanel Build(SettingsContext ctx, Func<AppController?>? controller = null)
     {
         var page = Page();
         Section(page, "Rendering and power");
         page.Children.Add(Card("Frame rate", "How smoothly the wallpaper moves. Lower rates use less power.", "",
             Combo(ctx, SettingsCopy.FrameRates, s => s.AnimationRate.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 (s, v) => s with { AnimationRate = int.Parse(v, System.Globalization.CultureInfo.InvariantCulture) }, width: 200)));
-        page.Children.Add(Card("Pause while energy saver is on", "The wallpaper holds still while Windows’ energy saver (battery saver) is on.", "",
+        // The Mac's Low power visuals (custom.lowPowerVisuals): Line patterns at no more than 30 fps while on.
+        page.Children.Add(Card("Low power visuals", PowerCopy.LowPowerVisuals, "",
+            Toggle(ctx, s => s.LowPowerVisuals, (s, v) => s with { LowPowerVisuals = v })));
+        // The Mac's "Follow macOS Low Power Mode" (key pauseOnBatterySaver): the same easing off while Energy saver is on.
+        page.Children.Add(Card("Follow energy saver", PowerCopy.FollowEnergySaver, "",
             Toggle(ctx, s => s.PauseOnBatterySaver, (s, v) => s with { PauseOnBatterySaver = v })));
+        // What power saving is doing now (the Mac's leaf captions): only while it changes something.
+        var power = Caption("");
+        page.Children.Add(power);
+        void Follow(object? sender, EventArgs e) => ctx.QueueRefresh();
+        if (controller?.Invoke() is { } app)
+        {
+            app.StatusChanged += Follow;
+            ctx.Detached += () => app.StatusChanged -= Follow;
+        }
+        ctx.OnRefresh(s =>
+        {
+            power.Text = PowerCopy.InEffect(s, controller?.Invoke()?.Power) ?? "";
+            power.Visibility = power.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        });
         var covered = Card("Pause fully covered wallpapers", null, "",
             Toggle(ctx, s => s.PauseWhenCovered, (s, v) => s with { PauseWhenCovered = v }));
         ctx.OnRefresh(s => covered.Description = s.PauseWhenCovered
@@ -131,7 +149,6 @@ internal static class PerformancePage
         page.Children.Add(Card("Pause behind full-screen apps and games",
             "Always on: a game or full-screen app pauses the wallpaper on its display, so it never shares the graphics card with it.",
             "", FixedToggle(true)));
-        page.Children.Add(Card("Low power visuals", "Caps Line patterns at 30 fps.", "", FixedToggle(false), notYet: SettingsCopy.LaterBuild));
 
         Section(page, "Desktop");
         // The Mac's Performance › Desktop switch (custom.showControlsOnHover), live: the card follows at once.
