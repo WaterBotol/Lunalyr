@@ -51,6 +51,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private nint _surface;
     private CoreWebView2Environment? _environment;
     private CoreWebView2Controller? _controller;
+    private CoreWebView2? _core;
     private bool _opening;
     private string? _videoId;
     private string? _pageVideo;
@@ -174,7 +175,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     private void Configure(CoreWebView2Controller controller)
     {
-        var core = controller.CoreWebView2;
+        // Held for as long as the controller lives: the event handlers below are registered through this projection
+        // object, and if it were collected its handlers would go with it while WebView2 still calls them (a crash to
+        // address 0 inside WebView2's window procedure, seen live on 13 Nov 2026).
+        var core = _core = controller.CoreWebView2;
         // Muted before anything loads: the video must never be heard.
         core.IsMuted = true;
         var settings = core.Settings;
@@ -477,6 +481,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         Show(false);
         _controller?.Close();
         _controller = null;
+        _core = null; // only once the controller is closed: no more events can come
     }
 
     public void Dispose()
