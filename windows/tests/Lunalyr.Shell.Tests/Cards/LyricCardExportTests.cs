@@ -210,4 +210,190 @@ public class LyricCardExportTests
         Assert.True(Centre(["אני", "אוהב"]) > 0.5);
         Assert.True(Centre(["I", "love"]) < 0.5);
     }
+
+    private static Lunalyr.Core.Colour.CoverArt Painted(int width, int height, Func<double, double, (double R, double G, double B)> colour)
+    {
+        var pixels = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var (r, g, b) = colour(x, y);
+                var o = (y * width + x) * 4;
+                pixels[o] = (byte)Math.Round(b * 255);
+                pixels[o + 1] = (byte)Math.Round(g * 255);
+                pixels[o + 2] = (byte)Math.Round(r * 255);
+                pixels[o + 3] = 255;
+            }
+        return new Lunalyr.Core.Colour.CoverArt(width, height, pixels);
+    }
+
+    private static Lunalyr.Shell.Cards.LyricCardJob WithCover(LyricCardContent content, Lunalyr.Core.Colour.CoverArt cover) => new()
+    {
+        Content = content,
+        Look = Lunalyr.Render.Cards.CardLook.ForCard(Lunalyr.Render.Cards.CardLook.PaletteFor(cover), cover, LyricStyle.Default),
+    };
+
+    /// <summary>The bounds of pixels brighter than <paramref name="threshold"/> in every channel, in a rectangle of a BGRA frame.</summary>
+    private static (int Width, int Height, int MaxX) WhiteBounds(byte[] bgra, int width, int top, int bottom, int left, int right, double threshold)
+    {
+        int minX = int.MaxValue, maxX = -1, minY = int.MaxValue, maxY = -1;
+        for (var y = top; y < bottom; y += 2)
+            for (var x = left; x < right; x += 2)
+            {
+                var o = (y * width + x) * 4;
+                if (bgra[o + 2] / 255.0 <= threshold || bgra[o + 1] / 255.0 <= threshold || bgra[o] / 255.0 <= threshold) continue;
+                minX = Math.Min(minX, x); maxX = Math.Max(maxX, x); minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
+            }
+        return maxX < 0 ? (0, 0, -1) : (maxX - minX + 1, maxY - minY + 1, maxX);
+    }
+
+    private static List<byte[]> GifFrames(Lunalyr.Shell.Cards.LyricCardJob job)
+    {
+        var frames = new List<byte[]>();
+        Assert.True(CardMedia.Exporter().RenderFrames(job, 0.5, LyricCardFrames.GifCadence, LyricCardFrames.GifFrameBudget(job.Content.Pages.Count), null,
+            (pixels, _, _) =>
+            {
+                frames.Add((byte[])pixels.Clone());
+                return true;
+            }, cancellationToken: TestContext.Current.CancellationToken));
+        return frames;
+    }
+
+    // Ported from LyricExtrasTests.swift: testLongLinkedGIFKeepsTheFullCoverAndLyricsAtBothEnds (the GIF's first and last
+    // frames as drawn, before the GIF's palette would blur the colours measured; the lyrics' check adapted, see below)
+    [Fact]
+    public void LongLinkedGifKeepsTheFullCoverAndLyricsAtBothEnds()
+    {
+        // A dusk gradient at 50 degrees with a warm disc in the middle, 160 x 120.
+        var cover = Painted(160, 120, (x, y) =>
+        {
+            double dx = x - 80, dy = y - 60;
+            if (dx * dx + dy * dy < 37 * 37) return (1, 0.76, 0.51);
+            var t = Math.Clamp((x * Math.Cos(50 * Math.PI / 180) + (120 - y) * Math.Sin(50 * Math.PI / 180)) / 195, 0, 1);
+            return t < 0.5 ? (0.19 + 0.8 * t, 0.15 + 0.16 * t, 0.40 + 0.12 * t) : (0.59 + 0.68 * (t - 0.5), 0.23 + 0.62 * (t - 0.5), 0.46 - 0.2 * (t - 0.5));
+        });
+        var labels = "Tonight I never thought you would end up waiting with me for this long again".Split(' ');
+        var words = labels.Select((label, i) => new LyricWord(label, 11 + i * 0.26, 11 + i * 0.26 + 0.24)).ToList();
+        var line = new LyricLine { Start = 10, End = 15, Text = string.Join(' ', labels), Words = words, WordTimed = true };
+        var content = new LyricCardContent
+        {
+            Pages = [new CardPage(labels, CardAnimation.Create(line, CompositionKind.ConstellationEditorial, 1))],
+            Title = "Where the Night Begins", Artist = "June Arcade & Noa Vale", HasArtwork = true, ReduceMotion = true,
+        };
+        var frames = GifFrames(WithCover(content, cover));
+        const int width = 540;
+        foreach (var (frame, index) in new[] { (frames[0], 0), (frames[^1], frames.Count - 1) })
+        {
+            double Red(int x, int y) => frame[(y * width + x) * 4 + 2] / 255.0;
+            Assert.True(Red(75, 593) > 0.85, "inside the cover");
+            Assert.True(Red(75, 654) < 0.60, "below the cover");
+            Assert.True(WhiteBounds(frame, width, 561, 598, 132, 456, 0.65).Width > 200, "the song title sits beside the cover at the bottom");
+            Assert.True(WhiteBounds(frame, width, 598, 632, 132, 456, 0.6).Width > 160, "the artist credit sits below the title");
+            Assert.True(WhiteBounds(frame, width, 628, 652, 445, 516, 0.55).MaxX > 475, "the signature sits at the bottom");
+            // Adapted: the lyrics are only checked to be there (at 0.35, over 20 pixels). The Mac fits its laid-out graph to the
+            // card (up to 2.6 times); Windows' constellation layouts lay theirs out to fill the stage they are given, which
+            // on a portrait card is a narrow column, so the Mac's 310-pixel width isn't reached; and Windows' Reduce Motion
+            // entrance is still fading the first word in on the first frame.
+            var lyrics = WhiteBounds(index == 0 ? frames[Math.Min(3, frames.Count - 1)] : frame, width, 42, 523, 15, 525, 0.35).Width;
+            Assert.True(lyrics > 20, $"lyric ink {lyrics} px wide on frame {index}");
+        }
+    }
+
+    // Ported from LyricExtrasTests.swift: testRollingGIFFocusWordIsLargeEvenWithACover
+    [Fact]
+    public void RollingGifFocusWordIsLargeEvenWithACover()
+    {
+        var cover = Painted(120, 120, (_, _) => (0.12, 0.08, 0.30));
+        var word = new LyricWord("Light", 10, 11.2);
+        var line = new LyricLine { Start = 10, End = 11.2, Text = word.Text, Words = [word], WordTimed = true };
+        var content = new LyricCardContent
+        {
+            Pages = [new CardPage([word.Text], CardAnimation.Create(line, CompositionKind.Spoken, 0))],
+            Title = "A Song", Artist = "An Artist", HasArtwork = true, ReduceMotion = true,
+        };
+        var frames = GifFrames(WithCover(content, cover));
+        var ink = WhiteBounds(frames[8], 540, 165, 540, 30, 510, 0.72);
+        Assert.True(ink.Height >= 42, $"text ink {ink.Height} px high in the 540 px wide card");
+        Assert.True(ink.Width >= 350, $"the focus word, {ink.Width} px wide, should fill most of the 540 px card");
+    }
+
+    // Ported from LyricRunReadingTests.swift: testACardsColoursComeFromTheCoverItShows
+    [Fact]
+    public void ACardsColoursComeFromTheCoverItShows()
+    {
+        // No cover yet: the neutral colours.
+        Assert.Equal(Lunalyr.Core.Colour.AlbumWallpaperPalette.Fallback.ArtworkStops,
+                     Lunalyr.Render.Cards.CardLook.AlbumOf(PaletteMapper.Fallback).ArtworkStops);
+        // A red cover gives red stops.
+        var stops = Lunalyr.Render.Cards.CardLook.PaletteFor(Painted(64, 64, (_, _) => (0.85, 0.1, 0.1))).Accents;
+        Assert.NotEmpty(stops);
+        foreach (var stop in stops)
+        {
+            Assert.True(stop.X > stop.Y * 2, $"{stop}");
+            Assert.True(stop.X > stop.Z * 2, $"{stop}");
+        }
+    }
+
+    // Ported from LyricRunReadingTests.swift: testEchoAndCardsSetTheLineAsItReads (the card's half)
+    [Fact]
+    public void CardsSetTheLineAsItReads()
+    {
+        string[] characters = ["君", "の", "声", "が", "沈", "む", "よ", "う", "に"];
+        var spaced = new LyricLine
+        {
+            Start = 0, End = characters.Length * 0.3, Text = "君の声が 沈むように", WordTimed = true,
+            Words = characters.Select((c, i) => new LyricWord(c, i * 0.3, i * 0.3 + 0.3)).ToList(),
+        };
+        Assert.Equal(["君の声が", "沈むように"], Lunalyr.Shell.Cards.LyricCardBuilder.Words(spaced, null));
+        // Latin syllables come together as their words; punctuation stays.
+        var tonight = new LyricLine
+        {
+            Start = 0, End = 2, Text = "So beautiful, tonight", WordTimed = true,
+            Words = [new("So", 0, 0.3), new("beau", 0.3, 0.6), new("ti", 0.6, 0.9), new("ful", 0.9, 1.2), new(",", 1.2, 1.2), new("tonight", 1.2, 2)],
+        };
+        Assert.Equal(["So", "beautiful,", "tonight"], Lunalyr.Shell.Cards.LyricCardBuilder.Words(tonight, null));
+        // A card counts an unspaced line by its length, not as one word.
+        Assert.Equal(3, LyricCardLayout.Weight(["I", "love", "you"]));
+        Assert.Equal(13.0 / 3, LyricCardLayout.Weight(["沈むように溶けてゆくように"]), 9);
+    }
+
+    // Windows' own: after its first frame a GIF holds only what changed, transparent elsewhere; read back, every frame is
+    // the whole picture again (as a browser composes it).
+    [Fact]
+    public void AGifsLaterFramesHoldOnlyWhatChanged()
+    {
+        using var media = new CardMedia();
+        const int size = 96;
+        byte[] Frame(int block)
+        {
+            var pixels = new byte[size * size * 4];
+            for (var y = 0; y < size; y++)
+                for (var x = 0; x < size; x++)
+                {
+                    var o = (y * size + x) * 4;
+                    var inBlock = block >= 0 && x >= block && x < block + 20 && y >= 30 && y < 50;
+                    pixels[o] = (byte)(inBlock ? 240 : 40 + x);
+                    pixels[o + 1] = (byte)(inBlock ? 240 : 30 + y);
+                    pixels[o + 2] = (byte)(inBlock ? 240 : 90);
+                    pixels[o + 3] = 255;
+                }
+            return pixels;
+        }
+        var frames = new[] { Frame(-1), Frame(10), Frame(10), Frame(50) };
+        var path = media.File("delta.gif");
+        File.WriteAllBytes(path, CardImages.EncodeGif([.. frames.Select(f => (f, 0.1))], size, size, TestContext.Current.CancellationToken)!);
+        var info = CardImages.ReadGif(path)!;
+        Assert.Equal((size, size), (info.Frames[0].Width, info.Frames[0].Height));
+        Assert.True(info.Frames[1].Width <= 20 && info.Frames[1].Height <= 20, $"{info.Frames[1]}");
+        Assert.Equal((1, 1), (info.Frames[2].Width, info.Frames[2].Height)); // nothing changed
+        Assert.All(info.Frames, f => Assert.Equal(0.1, f.Delay, 2));
+        using var read = AnimatedPicture.Open(path)!;
+        for (var i = 0; i < frames.Length; i++)
+        {
+            var art = read.Frame(i);
+            var worst = 0;
+            for (var p = 0; p < art.Pixels.Length; p++) worst = Math.Max(worst, Math.Abs(art.Pixels[p] - frames[i][p]));
+            Assert.True(worst < 40, $"frame {i} differs by {worst}");
+        }
+    }
 }

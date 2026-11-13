@@ -211,5 +211,6 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C --line-porcelai
 `LyricCardExport.swift` have 3 lines each from `a99fd65` (imports and a blank line git traces to `RomanizationPane.swift`),
 `LunalyrExtras.swift` 2 (a screen observer, not card code), `LyricExtrasTests.swift` 4 (imports). `LyricCardBackground`,
 `LyricCardLength`, `LyricCardMix`, `LyricCardPopout`, `LyricCardSongAudio`, `SongAudioRecorder`, `LunalyrMark`, `Star4`
-and every `LyricCard*Tests.swift` have none. Everything was ported faithfully; nothing was re-implemented from behaviour.
+every `LyricCard*Tests.swift`, and the card rows' wording in `LyricExtrasInspector.swift` (lines 413–430) and
+`MenuBarWallpaperControls.swift` (lines 105–109) have none. Everything was ported faithfully; nothing was re-implemented from behaviour.
 Details: docs/milestones/M7.md, "Lyric cards".

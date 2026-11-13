@@ -14,10 +14,10 @@ internal static class LyricCardRows
 {
     public static void Add(StackPanel page, SettingsContext ctx)
     {
-        page.Children.Add(Card(LyricCardCopy.LayoutTitle, "The layout a card is drawn in; it can also be changed in the card window.", "",
+        page.Children.Add(Card(LyricCardCopy.LayoutTitle, "The layout a card is drawn in; it can also be changed in the card window.", "\uF0E2",
             Combo(ctx, LyricCardCopy.Layouts, s => s.CardComposition ?? "", (s, v) => s with { LyricCardComposition = v }, width: 220)));
         var open = Button(LyricCardCopy.OpenTitle, () => App.CurrentHost?.OpenLyricCard());
-        var card = Card(LyricCardCopy.RowTitle, $"{LyricCardCopy.RowCaption} {LyricCardCopy.RowMore}", "E91B", open);
+        var card = Card(LyricCardCopy.RowTitle, $"{LyricCardCopy.RowCaption} {LyricCardCopy.RowMore}", "\uE91B", open);
         page.Children.Add(card);
         var reason = Caption(LyricCardCopy.NeedsSong);
         page.Children.Add(reason);

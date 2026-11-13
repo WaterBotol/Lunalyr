@@ -33,28 +33,146 @@ public sealed unsafe class GifWriter : IDisposable
     public int Height { get; }
     public int Frames { get; private set; }
 
-    /// <summary>Adds a frame (opaque BGRA, rows top first) shown for <paramref name="delay"/> seconds.</summary>
+    /// <summary>
+    /// Adds a frame (opaque BGRA, rows top first) shown for <paramref name="delay"/> seconds. After the first, only the
+    /// rectangle that changed is written, its unchanged pixels transparent over the frame before (frames are never
+    /// disposed), so a card's still backdrop is stored once: the GIF of a full-size card stays a few megabytes.
+    /// </summary>
     public void Add(ReadOnlySpan<byte> bgra, double delay)
     {
+        var previous = _previous;
+        int left = 0, top = 0, right = Width, bottom = Height;
+        if (previous is not null)
+        {
+            (left, top, right, bottom) = Changed(bgra, previous);
+            if (right <= left)
+            {
+                // Nothing changed: one transparent pixel carries the delay.
+                (left, top, right, bottom) = (0, 0, 1, 1);
+            }
+        }
+        int w = right - left, h = bottom - top;
+        var region = new byte[w * h * 4];
+        for (var y = 0; y < h; y++) bgra.Slice(((top + y) * Width + left) * 4, w * 4).CopyTo(region.AsSpan(y * w * 4));
+
         using var frame = _encoder.CreateNewFrame(out var properties);
         frame.Initialize(properties);
         properties?.Dispose();
-        frame.SetSize((uint)Width, (uint)Height);
+        frame.SetSize((uint)w, (uint)h);
         IWICBitmap bitmap;
-        fixed (byte* data = bgra)
-            bitmap = _wic.CreateBitmapFromMemory((uint)Width, (uint)Height, PixelFormat.Format32bppBGRA, (uint)(Width * 4), (uint)(Width * Height * 4), data);
+        fixed (byte* data = region)
+            bitmap = _wic.CreateBitmapFromMemory((uint)w, (uint)h, PixelFormat.Format32bppBGRA, (uint)(w * 4), (uint)region.Length, data);
         using var owned = bitmap;
         using var palette = _wic.CreatePalette();
-        palette.InitializeFromBitmap(bitmap, 256, false);
-        using var converter = _wic.CreateFormatConverter();
-        converter.Initialize(bitmap, PixelFormat.Format8bppIndexed, BitmapDitherType.ErrorDiffusion, palette, 0, BitmapPaletteType.Custom);
+        var transparent = previous is not null;
+        palette.InitializeFromBitmap(bitmap, transparent ? 255u : 256u, false);
+        var colours = new uint[256];
+        palette.GetColors(256, colours, out var count);
+        if (transparent)
+        {
+            // The last entry is the transparent one.
+            colours[count] = 0;
+            count++;
+            palette.InitializeCustom(colours, count);
+        }
         var indexed = PixelFormat.Format8bppIndexed;
         frame.SetPixelFormat(ref indexed);
         frame.SetPalette(palette);
-        using (var writer = frame.MetadataQueryWriter) CardImages.SetFrame(writer.NativePointer, delay);
-        frame.WriteSource(converter);
+        using (var writer = frame.MetadataQueryWriter)
+        {
+            CardImages.SetFrame(writer.NativePointer, delay);
+            CardImages.SetPlace(writer.NativePointer, left, top, transparent ? (int)count - 1 : null);
+        }
+        // Ordered (Bayer) dithering against the frame's own palette: smooth gradients with a pattern that stays put from
+        // frame to frame. WIC's error diffusion changed every pixel of every frame (a full-size card was 59 MB), none at
+        // all left hard bands in the album gradient, and WIC's ordered dithers take only its fixed palettes.
+        var indices = Indexed(region, w, h, colours, transparent ? (int)count - 1 : (int)count, previous, left, top);
+        fixed (byte* data = indices) frame.WritePixels((uint)h, (uint)w, (uint)indices.Length, data);
         frame.Commit();
         Frames++;
+        _previous ??= new byte[Width * Height * 4];
+        bgra[..(Width * Height * 4)].CopyTo(_previous);
+    }
+
+    private byte[]? _previous;
+
+    /// <summary>The rectangle (left, top, right, bottom) where <paramref name="frame"/> differs from <paramref name="previous"/>; empty when it doesn't.</summary>
+    private (int Left, int Top, int Right, int Bottom) Changed(ReadOnlySpan<byte> frame, byte[] previous)
+    {
+        int left = Width, top = Height, right = 0, bottom = 0;
+        for (var y = 0; y < Height; y++)
+        {
+            var row = frame.Slice(y * Width * 4, Width * 4);
+            var before = previous.AsSpan(y * Width * 4, Width * 4);
+            if (row.SequenceEqual(before)) continue;
+            var first = 0;
+            while (first < Width && row.Slice(first * 4, 4).SequenceEqual(before.Slice(first * 4, 4))) first++;
+            var last = Width - 1;
+            while (last > first && row.Slice(last * 4, 4).SequenceEqual(before.Slice(last * 4, 4))) last--;
+            left = Math.Min(left, first);
+            right = Math.Max(right, last + 1);
+            top = Math.Min(top, y);
+            bottom = y + 1;
+        }
+        return right <= left ? (0, 0, 0, 0) : (left, top, right, bottom);
+    }
+
+    private static readonly byte[] Bayer8 =
+    [
+        0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54, 22,
+        3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21,
+    ];
+
+    /// <summary>
+    /// A region as palette indices, Bayer-dithered by about a palette step (nearest colours looked up by 15-bit key). With
+    /// <paramref name="previous"/>, pixels unchanged since it take the transparent index (the last of the palette).
+    /// </summary>
+    private byte[] Indexed(byte[] bgra, int w, int h, uint[] colours, int usable, byte[]? previous, int left, int top)
+    {
+        var n = Math.Max(1, usable);
+        var lookup = new short[32768];
+        Array.Fill(lookup, (short)-1);
+        var indices = new byte[w * h];
+        const int spread = 20;
+        for (var y = 0; y < h; y++)
+        {
+            for (var x = 0; x < w; x++)
+            {
+                var o = (y * w + x) * 4;
+                if (previous is not null)
+                {
+                    var p = ((top + y) * Width + left + x) * 4;
+                    if (previous[p] == bgra[o] && previous[p + 1] == bgra[o + 1] && previous[p + 2] == bgra[o + 2])
+                    {
+                        indices[y * w + x] = (byte)usable;
+                        continue;
+                    }
+                }
+                // The pattern follows the card, not the region, so it stays put from frame to frame.
+                var offset = (Bayer8[((top + y) & 7) * 8 + ((left + x) & 7)] - 31.5) * spread / 64;
+                int r = Math.Clamp((int)(bgra[o + 2] + offset), 0, 255), g = Math.Clamp((int)(bgra[o + 1] + offset), 0, 255),
+                    b = Math.Clamp((int)(bgra[o] + offset), 0, 255);
+                var key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+                var index = lookup[key];
+                if (index < 0)
+                {
+                    int cr = (r & ~7) + 4, cg = (g & ~7) + 4, cb = (b & ~7) + 4;
+                    var best = int.MaxValue;
+                    for (var i = 0; i < n; i++)
+                    {
+                        var c = colours[i];
+                        int dr = (int)((c >> 16) & 0xFF) - cr, dg = (int)((c >> 8) & 0xFF) - cg, db = (int)(c & 0xFF) - cb;
+                        var distance = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+                        if (distance >= best) continue;
+                        best = distance;
+                        index = (short)i;
+                    }
+                    lookup[key] = index;
+                }
+                indices[y * w + x] = (byte)index;
+            }
+        }
+        return indices;
     }
 
     /// <summary>Finishes the file and returns its bytes; null when it has no frames.</summary>
@@ -119,6 +237,25 @@ public static unsafe class CardImages
         // The NETSCAPE2.0 application extension: loop for ever (count 0).
         SetBytes(writer, "/appext/Application", "NETSCAPE2.0"u8);
         SetBytes(writer, "/appext/Data", [3, 1, 0, 0, 0]);
+    }
+
+    /// <summary>Where a frame sits on the canvas, and its transparent colour when it has one.</summary>
+    internal static void SetPlace(nint writer, int left, int top, int? transparentIndex)
+    {
+        SetUInt16(writer, "/imgdesc/Left", (ushort)left);
+        SetUInt16(writer, "/imgdesc/Top", (ushort)top);
+        if (transparentIndex is not { } index) return;
+        SetBool(writer, "/grctlext/TransparencyFlag", true);
+        SetUInt8(writer, "/grctlext/TransparentColorIndex", (byte)index);
+    }
+
+    private static void SetBool(nint writer, string name, bool value)
+    {
+        var variant = stackalloc byte[24];
+        new Span<byte>(variant, 24).Clear();
+        *(ushort*)variant = 11; // VT_BOOL
+        *(short*)(variant + 8) = value ? (short)-1 : (short)0;
+        Set(writer, name, variant);
     }
 
     internal static void SetFrame(nint writer, double delay)

@@ -669,10 +669,12 @@ song playing, made in a window of its own. Details, what was ported and what was
   card points (1080 on the short side). The backdrop is the album gradient, the cover blurred over it and a scrim, or the
   chosen picture/frame with two veils; the chrome is the cover tile, title, artist and the Lunalyr mark. A timed line is drawn
   by **the wallpaper's own composition layer** into the lyric stage (a scene holding only that line, no opening title,
-  credits or interlude dots), so a card looks like the wallpaper; the still (PNG, preview, lines without timing) is the Mac's
+  credits or interlude dots; its time stops just short of the line's end while the card holds), so a card looks like the
+  wallpaper; the still (PNG, preview, lines without timing) is the Mac's
   one shaped paragraph of up to three lines, each word in the album ink.
 - **Files:** PNG at twice the card's size (2160 × 2700 for 4:5) through WIC; GIF at the card's size, 0.08 s frames at most 90
-  (one line) or 120, a palette per frame, looping (WIC, with the GIF's metadata set through the query writer's vtable); MP4
+  (one line) or 120, a palette per frame (Bayer-dithered), only the changed rectangle after the first frame, looping (WIC,
+  with the GIF's metadata set through the query writer's vtable); MP4
   through Media Foundation's Sink Writer: H.264 High profile at 4 Mbit/s, BT.709, two thirds of the card (720 × 900 for 4:5),
   30 frames a second, with AAC sound (48 kHz stereo, 192 kbit/s) laid under the finished video by a passthrough copy, as the
   Mac's `mux` does. The sound is mixed in Core (`LyricCardMix`): every strand matched to −16 LUFS, its slider level as real

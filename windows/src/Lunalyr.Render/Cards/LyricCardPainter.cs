@@ -41,7 +41,7 @@ public sealed record CardLook(Palette Palette, CoverArt? Cover, LyricStyle Style
     }
 
     /// <summary>The album palette behind a scene palette (its nine cover colours), or the fallback colours.</summary>
-    internal static AlbumWallpaperPalette AlbumOf(Palette palette)
+    public static AlbumWallpaperPalette AlbumOf(Palette palette)
     {
         if (palette.ArtworkStops.Count < 9) return AlbumWallpaperPalette.Fallback;
         var grid = palette.ArtworkStops.Select(stop => AlbumColourGrid.Hsb(new Lunalyr.Core.Colour.Double3(stop.X, stop.Y, stop.Z))).ToList();
@@ -74,15 +74,19 @@ public sealed record CardLook(Palette Palette, CoverArt? Cover, LyricStyle Style
 /// </summary>
 public sealed class CardPageScene
 {
-    private CardPageScene(SceneSnapshot scene, string compositionId)
+    private CardPageScene(SceneSnapshot scene, string compositionId, double latestTime)
     {
         Scene = scene;
         CompositionId = compositionId;
+        LatestTime = latestTime;
     }
 
     public SceneSnapshot Scene { get; }
 
     public string CompositionId { get; }
+
+    /// <summary>The latest song time drawn: just before the line's end, every word sung and the line not leaving.</summary>
+    public double LatestTime { get; }
 
     /// <summary>
     /// The scene for <paramref name="animation"/> on a card of <paramref name="content"/>'s shape with
@@ -100,9 +104,11 @@ public sealed class CardPageScene
         var size = animation.Rolls
             ? Math.Min(Math.Max(290, animation.CardTypeSize * 1.62), stage.Height / LyricCardLayout.RollingHeightInTypeSizes)
             : animation.CardTypeSize;
-        // The card's only line never hands over to another: it is held open, so the layer keeps it on the stage while
-        // the card holds its last moment (the Mac's LyricPhraseTiming with no next line), instead of letting it leave.
-        var line = animation.Line with { End = Math.Max(animation.Line.End, animation.End) + 600, EndFromNextLine = null };
+        // The card's only line never hands over to another, so it must stay on the stage while the card holds its last
+        // moment (the Mac's LyricPhraseTiming with no next line), not leave or be set aside as a held line: the time drawn
+        // stops just short of the line's end (its last word's, if later), where every word is sung and the line still on.
+        var line = animation.Line;
+        var latest = animation.End - 0.02;
         var scene = new SceneSnapshot
         {
             Title = content.Title,
@@ -115,7 +121,7 @@ public sealed class CardPageScene
             ReduceMotion = content.ReduceMotion,
             TrackKey = "card",
         };
-        return new CardPageScene(scene, Lunalyr.Core.Compositions.CompositionTraits.Id(animation.Composition));
+        return new CardPageScene(scene, Lunalyr.Core.Compositions.CompositionTraits.Id(animation.Composition), latest);
     }
 }
 
@@ -727,7 +733,7 @@ public sealed class LyricCardPainter : IDisposable
         var frame = new FrameContext
         {
             Dc = dc, DWrite = _surface.DWrite, D2DFactory = _surface.Factory, Size = size, Scale = (float)Scale,
-            WallSeconds = 6 + timed.CardTime, SongSeconds = timed.SongTime, IsPlaying = true, Scene = timed.Scene.Scene,
+            WallSeconds = 6 + timed.CardTime, SongSeconds = Math.Min(timed.SongTime, timed.Scene.LatestTime), IsPlaying = true, Scene = timed.Scene.Scene,
             DeltaSeconds = Math.Clamp(timed.Delta, 0, 0.25),
         };
         made.Layer.Render(frame);

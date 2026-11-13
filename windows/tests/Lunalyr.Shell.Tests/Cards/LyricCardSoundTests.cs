@@ -308,9 +308,17 @@ public class LyricCardSoundTests
     /// <summary>A song position that moves on in real time while "playing".</summary>
     private sealed class FakeSongClock(double start)
     {
-        private readonly System.Diagnostics.Stopwatch _watch = System.Diagnostics.Stopwatch.StartNew();
+        // Starts on the first read, so a busy test run can't carry the song past the lines before the recorder looks.
+        private readonly System.Diagnostics.Stopwatch _watch = new();
 
-        public (double Seconds, bool Playing) Read() => (start + _watch.Elapsed.TotalSeconds, true);
+        public (double Seconds, bool Playing) Read()
+        {
+            lock (_watch)
+            {
+                if (!_watch.IsRunning) _watch.Start();
+                return (start + _watch.Elapsed.TotalSeconds, true);
+            }
+        }
     }
 
     /// <summary>A capture of a tone that follows the clock: what loopback would hear, made up in memory.</summary>

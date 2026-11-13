@@ -126,6 +126,19 @@ try
         Say($"Length whole song, Max 60 s: {LyricCardTiming.Plan(all.Content).Duration:0.0} s → {capped.Duration:0.0} s; \"{capped.Summary}\"");
     }
 
+    // ---- Line-timed lyrics (LRC: the line's start and end, words spread by estimate, not word-timed) ----
+    {
+        string[] texts = ["Every", "little", "window", "on", "the", "boulevard"];
+        var words = texts.Select((w, i) => new LyricWord(w, 20 + i * 0.4, 20 + i * 0.4 + 0.38)).ToList();
+        var line = new LyricLine { Start = 20, End = 22.6, Text = string.Join(' ', texts), Words = words, WordTimed = false };
+        var scene = english with { Lyrics = new LyricResult.Synced([line], new LyricProvenance("Line-by-line", "LRCLIB")), WordReadings = new Dictionary<int, IReadOnlyList<LyricWord>>(), Readings = new Dictionary<int, string>() };
+        foreach (var id in new[] { "editorial", "spoken", "scattered" })
+        {
+            var job = LyricCardBuilder.Build(scene, [0], id, CardAspect.Square, style, false);
+            Strip($"line-timed-{id}.png", job, 0.25, LyricCardTiming.Plan(job.Content), 6);
+        }
+    }
+
     // ---- A GIF (at the preview's scale, to keep the repository small) ----
     {
         var job = LyricCardBuilder.Build(english, englishRows.Take(1).ToList(), "cutout", CardAspect.Square, style, false);
@@ -133,6 +146,26 @@ try
         File.WriteAllBytes(Path.Combine(output, "card-cutout.gif"), bytes);
         var info = CardImages.ReadGif(Path.Combine(output, "card-cutout.gif"))!;
         Say($"GIF: {info.Frames.Count} frames of {info.Frames[0].Width}×{info.Frames[0].Height}, delays {info.Frames.Min(f => f.Delay):0.00}–{info.Frames.Max(f => f.Delay):0.00} s, loop {info.LoopCount}");
+    }
+
+    // ---- One export of every format, the window's own path (ExportAsync), with a sound file under the MP4 ----
+    {
+        var job = LyricCardBuilder.Build(english, englishRows, "editorial", CardAspect.Portrait, style, false);
+        var tone2 = Path.Combine(work, "export-tone.wav");
+        WavFile.Write(tone2, Sine(440, 0.3, 2, 44_100), 1, 44_100);
+        job = job with { Content = job.Content with { ExtraSounds = [new CardSoundTrack(tone2)] } };
+        var phases = new List<string>();
+        var notes = new List<string>();
+        var files = await exporter.ExportAsync(job, new HashSet<CardFormat>(CardFormats.All), Path.Combine(work, "export"), notes.Add, p => phases.Add(p.Title));
+        Say($"Export: {string.Join(", ", files.Select(f => $"{Path.GetFileName(f.Path)} {new FileInfo(f.Path).Length / 1024} KB"))}; phases {string.Join(" → ", phases)}"
+            + (notes.Count > 0 ? $"; notes: {string.Join(" / ", notes)}" : ""));
+        var mp4 = files.First(f => f.Format == CardFormat.Mp4).Path;
+        Check("Exported MP4", mp4, []);
+        var gifInfo = CardImages.ReadGif(files.First(f => f.Format == CardFormat.Gif).Path)!;
+        Say($"Exported GIF: {gifInfo.Frames.Count} frames of {gifInfo.Frames[0].Width}×{gifInfo.Frames[0].Height}, loop {gifInfo.LoopCount}");
+        var png = await CardBackgroundSource.LoadAsync(files.First(f => f.Format == CardFormat.Png).Path);
+        Say($"Exported PNG: {png?.First.Width}×{png?.First.Height}");
+        png?.Dispose();
     }
 
     // ---- MP4s with sound (synthetic tones), decoded back and measured ----
