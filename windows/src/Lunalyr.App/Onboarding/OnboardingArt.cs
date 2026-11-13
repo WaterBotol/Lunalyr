@@ -1,8 +1,9 @@
 // The welcome's pictures, drawn with XAML brushes and text, so they need no wallpaper running yet. They are pictures of
 // a desktop, so they look the same in light and dark, and Narrator skips them: the step's words say what they show.
-// Written for Windows from what the Mac's OnboardingIllustrations.swift shows (a night desktop in an album's warm
-// colours, two lines of a sample song lit word by word, the corner of the menu bar), not translated from it; the
-// Windows picture is the taskbar's corner, with the overflow ^, Lunalyr's icon and the tray lyric strip.
+// The sample wallpaper and the sample lyric are a faithful port of the Mac's OnboardingIllustrations.swift
+// (SampleWallpaper's colours, glow centres and radii; SampleLyric's lines, held word, beat, plays and cycle), whose lines
+// are Lunalyr's own apart from two SwiftUI reduce-motion declarations (a99fd65, not translated). The taskbar picture is
+// new for Windows (the Mac's is the menu bar): the overflow ^, Lunalyr's icon, the clock and the tray lyric strip.
 
 using Microsoft.UI;
 using Microsoft.UI.Text;

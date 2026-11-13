@@ -151,5 +151,5 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Item | Status | Evidence |
 | --- | --- | --- |
 | Onboarding: flow, endings (first run vs again), copy, first-run gate, `onboardingDone`, `--onboarding-capture` parsing | unit (7 Mac tests ported, 11 of Windows' own; 28 cases) | `tests/Lunalyr.Shell.Tests/Onboarding/WelcomeTests.cs` |
-| Onboarding window: six steps in light and dark, App theme opposite to Windows, never foreground under `--quiet-windows` | PC (`--onboarding-capture` with `--demo`; log says foreground: False) | `docs/previews/onboarding/` |
+| Onboarding window: six steps in light and dark, App theme opposite to Windows, never foreground under `--quiet-windows` | PC (`--onboarding-capture` with `--demo`; log says foreground: False) | `docs/previews/onboarding/` (`…-apptheme-light-on-dark-windows.png`: the App theme setting light while Windows is dark, no `--theme`) |
 | Onboarding shown by itself on a real first run (empty data folder, no flags), Show Welcome… from Settings, Enter/Esc/Alt+Left, Narrator, real high contrast | needs the owner (a first run without `--demo` would draw a wallpaper over the desktop; keys and Narrator need the keyboard and sound) | APP-SHELL.md "Onboarding" |

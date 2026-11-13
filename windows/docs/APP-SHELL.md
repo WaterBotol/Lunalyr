@@ -661,8 +661,10 @@ theme setting and `--theme` apply as in Settings.
   itself (a focused button presses itself); Alt+Left is Back; Esc closes it early. On each step the primary button
   gets the keyboard focus, but only while the window is active, so a quiet window never takes it.
 - **Narrator:** each step's title is a level-1 heading; a new step is announced ("Step 2 of 6, Your music") with a UI
-  Automation notification, as VoiceOver moves to the Mac's new title; the dots read "Step 2 of 6" with the step's name
-  as help text; every control is named after its row, with its caption as help text; the pictures are skipped.
+  Automation notification, as VoiceOver moves to the Mac's new title, and the title's help text is its position; the
+  dots' panel is named "Step 2 of 6" with the step's name as help text (whether a panel surfaces that to Narrator was
+  not checked); every control is named after its row, with its caption as help text; the pictures are skipped.
+  A held Enter doesn't repeat through the steps: only a fresh press moves on.
 - **Animation effects:** steps slide in from the side they came from (an entrance transition) and the welcome's
   sample lyric lights word by word twice, only while Windows' Animation effects are on (read each time, never changed);
   otherwise a step just appears and the lyric holds mid-line, as it does in a quiet window and in captures.

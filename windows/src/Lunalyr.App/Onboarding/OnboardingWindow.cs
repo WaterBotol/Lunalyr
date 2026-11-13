@@ -188,6 +188,8 @@ internal sealed partial class OnboardingWindow : Window
         if (e.Handled) return;
         if (e.Key == VirtualKey.Enter)
         {
+            // A held Enter repeats: only a fresh press moves on, so holding it can't run through every step.
+            if (e.KeyStatus.WasKeyDown) return;
             // Not taken by the focused control (a button presses itself): the primary button's.
             e.Handled = true;
             _flow.Press(_flow.DefaultButton);
