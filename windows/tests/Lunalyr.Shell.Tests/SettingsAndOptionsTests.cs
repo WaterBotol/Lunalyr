@@ -76,6 +76,8 @@ public sealed class AppSettingsTests
             "discordLyricLead", "trayLyric", "trayLyricLength",
             "lyricCardComposition", "lyricCardLinesBefore", "lyricCardLinesAfter", "lyricCardAspect", "lyricCardFormats",
             "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
+            // Updates (milestone 8)
+            "automaticUpdateChecks",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());

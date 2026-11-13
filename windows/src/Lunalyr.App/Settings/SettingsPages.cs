@@ -11,9 +11,13 @@ namespace Lunalyr.App.Settings;
 internal static class GeneralPage
 {
     public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
-                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null)
+                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null,
+                                   Lunalyr.App.Hosting.PackagingHooks? packaging = null)
     {
         var page = Page();
+        if (packaging?.SettingsProblem is { } problem)
+            page.Children.Add(new InfoBar { Severity = InfoBarSeverity.Warning, IsClosable = true, IsOpen = true,
+                Title = "Your settings file couldn’t be read", Message = problem });
         Section(page, "Appearance");
         var theme = Card("App theme", "How Lunalyr’s own windows look. It doesn’t change your wallpaper or Windows’ own setting.", "",
             Combo(ctx, SettingsCopy.AppThemes, s => s.AppTheme, (s, v) => s with { AppTheme = v }, width: 200));
@@ -25,12 +29,10 @@ internal static class GeneralPage
         page.Children.Add(theme);
 
         Section(page, "Startup");
-        page.Children.Add(Card("Launch at login", "Start Lunalyr in the tray when you sign in to Windows.", "", FixedToggle(false),
-            notYet: SettingsCopy.Milestone8));
+        PackagingRows.AddStartup(page, ctx, packaging);
 
         Section(page, "Updates");
-        page.Children.Add(Card($"Lunalyr {version.Split('+')[0]}", "Lunalyr checks for new versions and installs them when you agree.", "",
-            Button("Check for Updates…", () => { }), notYet: SettingsCopy.Milestone8));
+        PackagingRows.AddUpdates(page, ctx, version, packaging);
 
         Section(page, "Welcome");
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",

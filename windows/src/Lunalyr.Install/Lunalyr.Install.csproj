@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Installing, updating and removing Lunalyr for one Windows user, with no admin rights: the installer's payload
+       format, the install folder, the registry entries it owns (the lunalyr:// link, the Apps entry, launch at login),
+       the Start menu shortcut and closing a running copy. Used by Lunalyr.Setup (the installer), the app (launch at
+       login, applying updates) and tools/InstallerBuilder. BCL only, so the installer stays small. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Lunalyr.Install</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lunalyr.Install.Tests" />
+  </ItemGroup>
+</Project>

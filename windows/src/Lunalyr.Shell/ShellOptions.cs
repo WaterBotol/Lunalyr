@@ -106,6 +106,15 @@ public sealed record ShellOptions
     /// <c>lunalyr://…</c> arguments, and every argument after <c>--link</c>: links to act on, each checked before
     /// anything is done (<c>Lunalyr.Shell.Extras.LunalyrLink</c>).
     /// </summary>
+    /// <summary>
+    /// <c>--login</c>: Windows started Lunalyr at sign-in (the Run value launch at login writes). It starts quietly in the
+    /// tray: no settings window and no welcome, and a second launch with it opens nothing either.
+    /// </summary>
+    public bool Login { get; init; }
+
+    /// <summary><c>--updated &lt;version&gt;</c>: the installer started this copy after updating it; says so once.</summary>
+    public string? UpdatedTo { get; init; }
+
     public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>Arguments that couldn't be understood, as messages for the log.</summary>
@@ -150,6 +159,12 @@ public sealed record ShellOptions
                     break;
                 case "--settings":
                     options = options with { OpenSettings = true };
+                    break;
+                case "--login":
+                    options = options with { Login = true };
+                    break;
+                case "--updated":
+                    if (Value() is { } updated) options = options with { UpdatedTo = updated };
                     break;
                 case "--quiet-windows":
                     options = options with { QuietWindows = true };

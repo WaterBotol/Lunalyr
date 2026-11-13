@@ -114,6 +114,7 @@ The tray flyout and the desktop player would face the same choice.
 
 ### Packaging (criterion 5)
 
+Decided in milestone 8: an unpackaged per-user installer of Lunalyr's own (see [Packaging](#packaging-milestone-8)).
 Not built in this spike; assessed from the toolchains:
 - **C#:** MSIX via the Windows App SDK tooling (`StartupTask` for launch at login, App Installer or Store for
   updates), or an unpackaged self-contained build with **Velopack** (installer + delta auto-update, `HKCU\…\Run`
@@ -209,7 +210,38 @@ Risks and how they're handled:
   spike's `--fps` does) with a Performance setting to follow the display; measure at 280 Hz in Extend mode.
 - **Hybrid GPUs:** create the D3D device on **the adapter that owns each monitor's output** (`IDXGIOutput` →
   adapter), never the default or the "power-saving" one.
-- **Windows App SDK terms** (see Licence): prefer the framework-dependent MSIX deployment.
+- **Windows App SDK terms** (see Licence): the spike preferred the framework-dependent MSIX deployment. With the port
+  closed source the self-contained deployment's terms are just as simple, and milestone 8 kept it (see Packaging).
+
+## Packaging (milestone 8)
+
+**Decision: an unpackaged, per-user installer of our own (`Lunalyr Setup.exe`), not MSIX.** The app stays as it has
+been since milestone 5: unpackaged (`WindowsPackageType=None`), self-contained .NET and Windows App SDK
+(`WindowsAppSDKSelfContained`), Native AOT. How it works: [PACKAGING.md](PACKAGING.md).
+
+Why:
+1. **The owner can't install an unsigned MSIX.** Windows installs an MSIX only when it is signed by a certificate the
+   PC trusts. Until the owner's certificate arrives, trying Test Build 8 as MSIX would mean trusting a self-signed
+   certificate on this PC (a change to its certificate store, which the rules rule out). The installer runs unsigned,
+   with SmartScreen's warning, and the same file is signed later with no other change.
+2. **The app is already built unpackaged.** It is a plain Win32 tray process that starts WinUI only when a window opens,
+   with its data in `%LOCALAPPDATA%\Lunalyr`. MSIX would change its identity, redirect that data folder per package,
+   move launch at login to a `StartupTask` and the `lunalyr://` scheme into the manifest: rework of tested code at the
+   end of the port, for no gain the owner asked for.
+3. **No new tools or packages.** Velopack (MIT) would add its own `Update.exe` and the `vpk` tool; Inno Setup and WiX
+   aren't on this PC and would be downloads. Lunalyr's installer is BCL and Win32 only: the setup program is 2.9 MB
+   Native AOT with Windows' own task dialogs (themed, Narrator-ready), and the installer is about 42 MB for an 89 MB app.
+4. **Testable.** The payload format, unpacking, the folder swap, the registry entries (through an in-memory registry
+   that refuses anything but Lunalyr's own keys), uninstall and update verification are unit-tested with fakes; live
+   checks install into a temp folder with the registry under `HKCU\Software\Lunalyr\SetupCheck`.
+5. **Per user, no administrator prompt**, as Discord, Spotify and VS Code's user installer do: `%LOCALAPPDATA%\Programs\Lunalyr`.
+
+Measured here (silent, sandboxed, 42.5 MB installer of the 89 MB app): install 0.6 s, update over it 0.7 s,
+uninstall 0.2 s plus its Temp copy's exit.
+
+Trade-offs: every update downloads the whole installer (no deltas); no Microsoft Store (that would be an MSIX built
+separately later; the app code wouldn't change); Lunalyr's own code does what an installer framework would, so it has
+its own tests.
 
 ## Open checks (need the user)
 

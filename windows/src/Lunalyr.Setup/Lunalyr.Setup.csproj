@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- "Lunalyr Setup.exe": installs Lunalyr for the current user, applies updates and uninstalls (Settings › Apps).
+       Native AOT and BCL only, with Windows' own task dialogs for its few questions, so it stays a few MB before the
+       app's zip is appended (tools/InstallerBuilder). The logic is in Lunalyr.Install. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Lunalyr.Setup</RootNamespace>
+    <AssemblyName>Lunalyr Setup</AssemblyName>
+    <Version>0.8.0</Version>
+    <Copyright>© Lunalyr. All rights reserved.</Copyright>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Lunalyr.App\Assets\Lunalyr.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lunalyr.Install\Lunalyr.Install.csproj" />
+  </ItemGroup>
+</Project>

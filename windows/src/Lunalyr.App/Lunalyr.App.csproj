@@ -9,7 +9,7 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>Lunalyr.App</RootNamespace>
     <AssemblyName>Lunalyr</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.8.0</Version>
     <!-- The shared props still carry the old "Derived from Verso" line; the app's version resource must not. -->
     <Copyright>© Lunalyr. All rights reserved.</Copyright>
     <Platforms>x64</Platforms>
@@ -22,6 +22,8 @@
     <SelfContained>true</SelfContained>
     <PublishAot>true</PublishAot>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Lunalyr's mark (the Mac's app icon PNGs as one .ico): Explorer, the Start menu, Settings › Apps. -->
+    <ApplicationIcon>Assets\Lunalyr.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Our own Main: the tray loop runs before (and often without) XAML. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
@@ -30,6 +32,14 @@
     <TieredPGO>true</TieredPGO>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
+  <!-- Updates (docs/PACKAGING.md): the signed feed's address and public key, built in. Empty means no update service,
+       which the General page says. Pass -p:LunalyrUpdateFeed=https://… -p:LunalyrUpdateKey=<Base64 P-256 key>, and
+       -p:LunalyrRequireSignature=true once Lunalyr is code-signed. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="LunalyrUpdateFeed" Value="$(LunalyrUpdateFeed)" />
+    <AssemblyMetadata Include="LunalyrUpdateKey" Value="$(LunalyrUpdateKey)" />
+    <AssemblyMetadata Include="LunalyrRequireSignature" Value="$(LunalyrRequireSignature)" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />

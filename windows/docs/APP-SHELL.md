@@ -37,6 +37,8 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--discord-pipe <prefix>` | Discord status dials `\\.\pipe\<prefix>0…9` instead of Discord's own pipes, and runs even under `--demo` and `--no-network`: for checks against a pipe of one's own. A prefix starting with "discord" is refused. Not forwarded to a running instance. |
 | `lunalyr://…` | A link to act on (see "Shortcuts, links and the action HUD"). A second launch forwards it to the running instance; a first launch runs it once start-up has finished. Every link is checked first and anything that isn't exactly one of Lunalyr's is logged and ignored. |
 | `--link <link>…` | Every argument after it is a link, never a flag (what the installer registers: `Lunalyr.exe --link "%1"`, so a link with quotes in it can't add `--data` or `--stats`). |
+| `--login` | Windows started Lunalyr at sign-in (launch at login's Run value: `"…\Lunalyr.exe" --login`). Starts quietly in the tray: no settings window, no welcome. A second launch with it opens nothing. |
+| `--updated <version>` | The installer started this copy after an update: the action HUD says "Updated to Lunalyr <version>" once. |
 | `--hud-capture <file>` | Each action HUD note's bitmap is also written as a PNG (`file`, then `file-2`, `file-3`…), with the window's styles, display affinity and whether it is the foreground window in the log. For checks: the window itself is left out of screen captures. |
 
 ## Demo mode (`--demo`)
@@ -453,6 +455,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `lyricCardTextScale` | `0.85` | 0.5–1.1, the card's text size | `custom.lyricCardTextScale` |
 | `lyricStyleDesktop`, `lyricStyleFloating` | absent | the other surface's lyric style while one is in use: the style keys below, as stored (written once the surface has been switched) | `custom.lyricStyle.desktop`, `custom.lyricStyle.floating` |
 | `lyricsHidden` | `false` | Hide lyrics: the wallpapers' lyrics and backing fade out and the floating window hides (General, a shortcut or `lunalyr://toggle`) | `custom.lyricsHidden` |
+| `automaticUpdateChecks` | `true` | "Check for updates automatically": once a day, a newer version downloads and is verified in the background; it installs only on Restart and Update (milestone 8; builds without an update service never check) | Sparkle's automatic checks |
 | `globalShortcuts` | `false` | "Keyboard shortcuts": nothing is registered with Windows until this is on | `custom.globalShortcuts` |
 | `globalShortcutModifiers` | `"controlOptionCommand"` | `controlOptionCommand` (Win+Ctrl+Alt) or `controlShiftCommand` (Win+Ctrl+Shift), the Mac's raw values by key position | `custom.globalShortcutModifiers` |
 | `globalShortcutsOff`, `globalShortcutsOn` | `[]` | shortcuts on by default that were switched off, and newer ones (off by default) that were switched on, by name (`toggleLyrics`, `syncEarlier`, `syncLater`, `cycleLayout`, `copyCard`, `pauseWallpaper`, `tapSyncLyrics`, `toggleMusicVideo`, `nextVisualizer`); unknown names are dropped | `custom.globalShortcutsOff`, `custom.globalShortcutsOn` |
@@ -587,14 +590,13 @@ theme. The window opens at Lyric style (or `--settings-page`).
 - **Live.** The wallpaper follows every change at once through the store (`AppController.ApplySettings`): layers,
   style, frame rate, pauses, readings, and a new lookup when the sources change. The window logs which keys it changed
   ("Settings changed in the window: echoStrength."), one line per run of a dragged slider.
-- **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with a short note: "Arrives in
-  milestone 6" (visualisers, music video), "…milestone 7" (lyric cards; floating lyrics, shortcuts, the tray lyric
-  and Discord status are live since milestone 7, see "Floating lyrics", "Shortcuts, links and the action HUD" and
-  "Tray lyric and Discord status"), "…milestone 8" (launch at login, updates), "Arrives in a
-
-  milestone 6" (visualisers, music video), "…milestone 7" (tray lyric, shortcuts, Discord; floating lyrics and
-  lyric cards are live since milestone 7, see "Floating lyrics" and "Lyric cards"), "…milestone 8" (launch at login, updates), "Arrives in a
-  later build" for the rest. Launch at login writes nothing anywhere.
+- **Disabled rows.** What the Mac has and Windows can't do yet is shown disabled with "Arrives in a later build".
+  The milestone notes are gone: visualisers and music video arrived in milestone 6; floating lyrics, lyric cards,
+  shortcuts, the tray lyric and Discord status in milestone 7 (see their sections); launch at login and updates in
+  milestone 8 (see "Startup, updates and packaging").
+- **Settings that couldn't be read.** When `settings.json` is damaged and the backup (or the defaults) is used, the
+  action HUD says "Lunalyr couldn’t read its settings" once at start-up and General shows a warning bar with the
+  store's message, naming the kept `settings.json.corrupt-…` file (milestone 8; before, only the log said so).
 - **Music players › Spotify** and **Performance › Show player on hover** (live, `showControlsOnHover`, with the Mac's
   two captions): see "Spotify search and queue". The Mac's settings have no choice for the seek bar's time label
   (`desktopPlayerTimeMode` is set by clicking the time on the card), so neither does Windows.
@@ -727,10 +729,10 @@ actions and notes of `LunalyrExtras.swift`. Logic in `src/Lunalyr.Shell/Extras/`
   waits until start-up has finished, and links run in the order they came. Each runs as its shortcut does, its note in
   the HUD.
 - **Registration (milestone 8's installer; the app never writes it):** per user, under `HKCU\Software\Classes\lunalyr`:
-  `(Default)` = `URL:Lunalyr`, `URL Protocol` = `""` (empty), `DefaultIcon\(Default)` = `"<install>\Lunalyr.exe",0`,
-  `shell\open\command\(Default)` = `"<install>\Lunalyr.exe" --link "%1"`. `--link` keeps a link with quotes in it
-  from adding flags (`--data`, `--stats`…). Links go to the instance using the default data folder. Uninstalling
-  removes the key. A packaged (MSIX) build would declare a `windows.protocol` extension instead.
+  `(Default)` = `URL:Lunalyr link`, `URL Protocol` = `""` (empty), `DefaultIcon\(Default)` = `"<install>pp\Lunalyr.exe",0`,
+  `shell\open\command\(Default)` = `"<install>pp\Lunalyr.exe" --link "%1"` (`Lunalyr.Install.InstallRegistry`).
+  `--link` keeps a link with quotes in it from adding flags (`--data`, `--stats`…). Links go to the instance using the
+  default data folder. Uninstalling removes the key while it still opens that install. See [PACKAGING.md](PACKAGING.md).
 
 ### The action HUD
 
@@ -1258,3 +1260,25 @@ undarkened.
 
 Live checks so far saw no media session (nothing was playing), so the GSMTC session path has run only in the unit
 tests and the read-only `NowPlayingProbe`, not yet in the AOT app.
+
+## Startup, updates and packaging (milestone 8)
+
+The installer, updates, launch at login, `lunalyr://` registration and signing are in [PACKAGING.md](PACKAGING.md).
+In the app:
+
+- **Settings › General › Startup › Launch at login** (`PackagingRows`, `Lunalyr.Shell.Startup.LaunchAtLoginSwitch`):
+  writes or removes the `Lunalyr` value in `HKCU\…\CurrentVersion\Run` and reads it back on every refresh. Task
+  Manager's Startup apps switch shows as a warning with **Open Startup apps**; another copy's entry is named; a failed
+  write says why. Disabled in `--demo` and `--data` runs. Narrator hears "Lunalyr will start when you sign in." (or
+  why it didn't change).
+- **Settings › General › Updates** (`Lunalyr.Shell.Updates.UpdateService`): the version, the update status and one
+  button: Check for Updates, Download and Install, Restart and Update. A progress bar shows while checking and
+  downloading. "Check for updates automatically" is `automaticUpdateChecks`. Without a built-in feed and key the row
+  says "An update service hasn’t been set up for this build yet." (the Mac's words) and the button explains.
+- **Tray menu:** a downloaded, verified update adds **Restart to update to Lunalyr <version>**.
+- **Action HUD:** "Lunalyr <version> is ready to install" once a run, "Updated to Lunalyr <version>" after an update,
+  "Lunalyr couldn’t read its settings" when the settings were restored.
+- **Log** (`app`): at start-up, launch at login's state, where Lunalyr runs from (installed or not) and whether it has an
+  update service; each check, download and refusal.
+- The app's version is 0.8.0 (Test Build 8) and `Lunalyr.exe` carries Lunalyr's icon (`Assets/Lunalyr.ico`, the Mac's
+  app icon PNGs).
