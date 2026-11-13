@@ -12,6 +12,22 @@ public sealed partial record AppSettings
     /// </summary>
     public bool LowPowerVisuals { get; init; }
 
+    /// <summary>
+    /// "On battery": what the wallpaper eases off to while this PC runs on battery: <c>full</c>, <c>lightEffects</c> (the
+    /// default, as on the Mac), <c>patterns</c> or <c>colourOnly</c> (Mac <c>custom.onBattery</c>; the values are the Mac's,
+    /// the wording Windows' own because the Mac's titles are Verso lines). Unknown values read as the default.
+    /// </summary>
+    public string OnBattery { get; init; } = "lightEffects";
+
+    /// <summary>The renderer's fallback for an <see cref="OnBattery"/> value.</summary>
+    public static PowerFallback OnBatteryFallback(string? value) => value switch
+    {
+        "full" => PowerFallback.Full,
+        "patterns" => PowerFallback.Patterns,
+        "colourOnly" => PowerFallback.ColourOnly,
+        _ => PowerFallback.LightEffects,
+    };
+
     /// <summary>The renderer's frame rate, pause and power rules for these settings.</summary>
     public PerformanceOptions Performance() => PerformanceOptions.Default with
     {
@@ -26,5 +42,6 @@ public sealed partial record AppSettings
         FollowEnergySaver = PauseOnBatterySaver,
         PauseWallpaper = WallpaperPaused,
         LowPowerVisuals = LowPowerVisuals,
+        OnBattery = OnBatteryFallback(OnBattery),
     };
 }
