@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import XCTest
 @testable import VersoCustom
 
@@ -322,6 +323,81 @@ final class WelcomeTests: XCTestCase {
         flow.advance()
         flow.back()
         XCTAssertEqual(flow.lookPart, .lyrics, "Back returns to the half that was showing")
+    }
+
+    // MARK: Recordings and the opening
+
+    /// Every recording and its poster is in the app, with no audio track at
+    /// all, and onboarding's media together stay small.
+    func testTheRecordingsAreBundledSilentAndSmall() async throws {
+        var bytes = 0
+        for clip in OnboardingClip.allCases {
+            let video = try XCTUnwrap(clip.videoURL, "\(clip.rawValue).mp4 is bundled")
+            let poster = try XCTUnwrap(clip.posterURL, "\(clip.rawValue).jpg is bundled")
+            let asset = AVURLAsset(url: video)
+            let audio = try await asset.loadTracks(withMediaType: .audio)
+            XCTAssertTrue(audio.isEmpty, "\(clip.rawValue) has no audio track")
+            let picture = try await asset.loadTracks(withMediaType: .video)
+            XCTAssertEqual(picture.count, 1, clip.rawValue)
+            let duration = try await asset.load(.duration)
+            XCTAssertLessThanOrEqual(duration.seconds, 8.05, "\(clip.rawValue): 8 s at most")
+            let size = try await picture[0].load(.naturalSize)
+            XCTAssertLessThanOrEqual(size.width, 960, clip.rawValue)
+            XCTAssertEqual(size.width / size.height, OnboardingClip.aspect, accuracy: 0.01, clip.rawValue)
+            for url in [video, poster] {
+                bytes += try XCTUnwrap(url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+            }
+        }
+        let gif = try XCTUnwrap(Bundle.main.url(forResource: DiscordStatusRecording.resource, withExtension: "gif"))
+        bytes += try XCTUnwrap(gif.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+        XCTAssertLessThanOrEqual(bytes, 6_000_000, "onboarding's media: \(bytes) bytes")
+        let glass = try XCTUnwrap(WelcomeGlass.url)
+        let glassAudio = try await AVURLAsset(url: glass).loadTracks(withMediaType: .audio)
+        XCTAssertTrue(glassAudio.isEmpty, "the opening has no audio track either")
+    }
+
+    /// Recordings play only live, with motion allowed, in an active window
+    /// and never in the test host; each fills its box around its focus.
+    @MainActor
+    func testRecordingsPlayOnlyWhenAllowedAndFillTheirBox() {
+        XCTAssertTrue(OnboardingClip.plays(live: true, reduceMotion: false, windowActive: true, isUnitTesting: false))
+        XCTAssertFalse(OnboardingClip.plays(live: true, reduceMotion: true, windowActive: true, isUnitTesting: false))
+        XCTAssertFalse(OnboardingClip.plays(live: false, reduceMotion: false, windowActive: true, isUnitTesting: false))
+        XCTAssertFalse(OnboardingClip.plays(live: true, reduceMotion: false, windowActive: false, isUnitTesting: false))
+        XCTAssertFalse(OnboardingClip.plays(live: true, reduceMotion: false, windowActive: true))
+        for clip in OnboardingClip.allCases {
+            XCTAssertNotNil(clip.poster, clip.rawValue)
+            for box in [CGSize(width: 392, height: 253), CGSize(width: 196, height: 64), CGSize(width: 176, height: 104)] {
+                let frame = clip.frame(in: box)
+                XCTAssertLessThanOrEqual(frame.minX, 0.001, "\(clip) \(box)")
+                XCTAssertLessThanOrEqual(frame.minY, 0.001, "\(clip) \(box)")
+                XCTAssertGreaterThanOrEqual(frame.maxX, box.width - 0.001, "\(clip) \(box)")
+                XCTAssertGreaterThanOrEqual(frame.maxY, box.height - 0.001, "\(clip) \(box)")
+                XCTAssertEqual(frame.width / frame.height, OnboardingClip.aspect, accuracy: 0.001)
+            }
+        }
+    }
+
+    /// The opening: only on the welcome step, once per launch, never under
+    /// Reduce Motion or in tests; the logo's tile about half the window high.
+    @MainActor
+    func testTheOpeningPlaysOnceOnTheWelcomeAndFillsHalfTheWindow() {
+        XCTAssertTrue(WelcomeGlass.opensOnIntro(step: .welcome, reduceMotion: false, alreadyPlayed: false,
+                                                isUnitTesting: false, hasVideo: true))
+        XCTAssertFalse(WelcomeGlass.opensOnIntro(step: .music, reduceMotion: false, alreadyPlayed: false,
+                                                 isUnitTesting: false, hasVideo: true))
+        XCTAssertFalse(WelcomeGlass.opensOnIntro(step: .welcome, reduceMotion: true, alreadyPlayed: false,
+                                                 isUnitTesting: false, hasVideo: true))
+        XCTAssertFalse(WelcomeGlass.opensOnIntro(step: .welcome, reduceMotion: false, alreadyPlayed: true,
+                                                 isUnitTesting: false, hasVideo: true))
+        XCTAssertFalse(WelcomeGlass.opensOnIntro(step: .welcome, reduceMotion: false, alreadyPlayed: false,
+                                                 isUnitTesting: false, hasVideo: false))
+        XCTAssertFalse(WelcomeGlass.opensOnIntro(step: .welcome, reduceMotion: false, alreadyPlayed: false),
+                       "never in the test host")
+        let window = LunalyrDesign.Layout.onboarding
+        let side = WelcomeGlass.videoSide(in: window)
+        XCTAssertLessThanOrEqual(side, window.height)
+        XCTAssertEqual(side * WelcomeGlass.tileShare / window.height, 0.5, accuracy: 0.01)
     }
 
 }

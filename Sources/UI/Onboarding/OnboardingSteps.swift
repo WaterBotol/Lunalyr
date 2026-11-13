@@ -225,26 +225,31 @@ struct LyricsStep: View {
                                      text: OnboardingCopy.timing(earlier: hotkeys.label(for: .syncEarlier) ?? "⌃⌥⌘[",
                                                                  later: hotkeys.label(for: .syncLater) ?? "⌃⌥⌘]"))
                 Divider()
-                OnboardingFeatureRow(title: "Readings for Japanese, Korean and Chinese", text: OnboardingCopy.readings) {
-                    Grid(alignment: .leading, horizontalSpacing: LunalyrDesign.Spacing.small,
-                         verticalSpacing: LunalyrDesign.Spacing.small) {
-                        GridRow {
-                            Text("Display").gridColumnAlignment(.trailing).accessibilityHidden(true)
-                            Picker("Display", selection: $readings.display) {
-                                ForEach(RomanizationOptions.Display.allCases) { Text($0.title).tag($0) }
+                HStack(alignment: .top, spacing: LunalyrDesign.Spacing.large) {
+                    OnboardingFeatureRow(title: "Readings for Japanese, Korean and Chinese", text: OnboardingCopy.readings) {
+                        Grid(alignment: .leading, horizontalSpacing: LunalyrDesign.Spacing.small,
+                             verticalSpacing: LunalyrDesign.Spacing.small) {
+                            GridRow {
+                                Text("Display").fixedSize().gridColumnAlignment(.trailing).accessibilityHidden(true)
+                                Picker("Display", selection: $readings.display) {
+                                    ForEach(RomanizationOptions.Display.allCases) { Text($0.title).tag($0) }
+                                }
+                                .labelsHidden()
+                                .fixedSize()
                             }
-                            .labelsHidden()
-                            .fixedSize()
-                        }
-                        GridRow {
-                            Text("Language").accessibilityHidden(true)
-                            Picker("Language", selection: $readings.language) {
-                                ForEach(RomanizationOptions.Language.allCases) { Text($0.title).tag($0) }
+                            GridRow {
+                                Text("Language").fixedSize().accessibilityHidden(true)
+                                Picker("Language", selection: $readings.language) {
+                                    ForEach(RomanizationOptions.Language.allCases) { Text($0.title).tag($0) }
+                                }
+                                .labelsHidden()
+                                .fixedSize()
                             }
-                            .labelsHidden()
-                            .fixedSize()
                         }
                     }
+                    OnboardingClipView(clip: .readings, cornerRadius: LunalyrDesign.Radius.control)
+                        .frame(width: LunalyrDesign.Onboarding.readingsClip.width,
+                               height: LunalyrDesign.Onboarding.readingsClip.height)
                 }
                 Divider()
                 OnboardingSwitchRow(title: "Show translations under lyrics", caption: OnboardingCopy.translations,
@@ -268,7 +273,7 @@ struct ExtrasStep: View {
                     Toggle("Show player on hover", isOn: $desktop.showsControlsOnHover)
                 }
                 Divider()
-                row(picture: MiniFloatingLyrics(), title: OnboardingCopy.floatingTitle, text: OnboardingCopy.floating) {
+                row(picture: OnboardingClipView(clip: .floating, cornerRadius: LunalyrDesign.Radius.control), title: OnboardingCopy.floatingTitle, text: OnboardingCopy.floating) {
                     EmptyView()
                 }
                 Divider()

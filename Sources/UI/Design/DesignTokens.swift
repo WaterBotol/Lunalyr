@@ -112,8 +112,10 @@ enum LunalyrDesign {
         static let layoutStage = CGSize(width: 360, height: 210)
         /// The music-video step's two framing pictures.
         static let framingThumb = CGSize(width: 112, height: 76)
+        /// The readings recording, beside its row.
+        static let readingsClip = CGSize(width: 144, height: 93)
         /// The extras' pictures, beside their rows.
-        static let extraPicture = CGSize(width: 196, height: 52)
+        static let extraPicture = CGSize(width: 196, height: 64)
         /// The Discord status recording: 254 x 44 pixels, shown at 1.5 times
         /// its 2x point size so its 11-point name and line read as 16.
         static let discordStatus = CGSize(width: 190.5, height: 33)

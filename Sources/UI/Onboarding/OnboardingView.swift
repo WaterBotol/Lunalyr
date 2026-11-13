@@ -17,6 +17,8 @@ struct OnboardingView: View {
     /// outgoing step knows which way to leave.
     @State private var shown: OnboardingFlow.Step
     @State private var forward = true
+    /// The glass logo opening is over the window (`WelcomeGlassOpening`).
+    @State private var intro = false
     @AccessibilityFocusState private var focusedTitle: OnboardingFlow.Step?
 
     init(flow: OnboardingFlow, previewDisplay: SettingsPreviewDisplay) {
@@ -29,24 +31,28 @@ struct OnboardingView: View {
         // Fills the window below its see-through title bar: the window is
         // 640 x 540 in all (`LunalyrDesign.Layout.onboarding`) and decides the
         // size, so the steps get what the title bar leaves on any macOS.
-        VStack(spacing: 0) {
-            ZStack {
-                step(shown)
-                    .id(shown)
-                    .transition(LunalyrDesign.Motion.transition(forward ? .trailing : .leading, reduceMotion: reduceMotion))
+        ZStack {
+            VStack(spacing: 0) {
+                ZStack {
+                    step(shown)
+                        .id(shown)
+                        .transition(LunalyrDesign.Motion.transition(forward ? .trailing : .leading, reduceMotion: reduceMotion))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                Divider()
+                OnboardingFooter(flow: flow, enabled: !intro)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            Divider()
-            OnboardingFooter(flow: flow)
+            .accessibilityHidden(intro)
+            if intro, let url = WelcomeGlass.url {
+                WelcomeGlassOpening(url: url, onFinish: finishIntro, skip: { endIntro(after: 0) })
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
         .lunalyrTint()
-        .onAppear {
-            // VoiceOver starts on the first step's title, as on every later one.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focusedTitle = shown }
-        }
+        .onAppear(perform: appear)
         .onChange(of: flow.step) { old, new in
             // First the step on screen learns which way it will leave, then
             // it leaves: a transition is read from the view as last drawn.
@@ -59,6 +65,35 @@ struct OnboardingView: View {
                 } completion: {
                     focusedTitle = shown
                 }
+            }
+        }
+    }
+
+    /// Opens on the glass logo the first time in a launch; otherwise
+    /// VoiceOver starts on the first step's title, as on every later one.
+    private func appear() {
+        if WelcomeGlass.opensOnIntro(step: flow.step, reduceMotion: reduceMotion, alreadyPlayed: WelcomeGlass.played) {
+            WelcomeGlass.played = true
+            intro = true
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focusedTitle = shown }
+        }
+    }
+
+    /// The video ended: its last frame (the plain logo) holds a moment.
+    private func finishIntro() {
+        endIntro(after: WelcomeGlass.hold)
+    }
+
+    /// Cross-fades from the opening into the welcome, then VoiceOver lands
+    /// on its title.
+    private func endIntro(after delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard intro else { return }
+            withAnimation(.easeInOut(duration: WelcomeGlass.fade), completionCriteria: .logicallyComplete) {
+                intro = false
+            } completion: {
+                focusedTitle = shown
             }
         }
     }
@@ -81,6 +116,8 @@ struct OnboardingView: View {
 /// The step dots, Back and Continue (Open Settings and Done at the end).
 private struct OnboardingFooter: View {
     @ObservedObject var flow: OnboardingFlow
+    /// Off under the opening: hidden, and its shortcuts don't fire.
+    var enabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -116,6 +153,8 @@ private struct OnboardingFooter: View {
             }
         }
         .controlSize(.large)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0)
         .padding(.horizontal, LunalyrDesign.Spacing.xLarge)
         .padding(.vertical, LunalyrDesign.Spacing.medium + 2)
         // Back, Done and Open Settings fade in and out with the step.
