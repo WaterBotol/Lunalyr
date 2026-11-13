@@ -30,7 +30,7 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--theme <light\|dark\|system>` | How Lunalyr's own windows look for this run only (for screenshots). Nothing is saved and Windows' setting is never touched; a second launch can change it in the running instance. |
 | `--quiet-windows` | For checks while someone works at the PC: the settings window opens without being activated and at the bottom of the z-order, so it never takes the foreground or the keyboard. Capture it with `tools/capture-window.ps1` (PrintWindow). Not forwarded to a running instance. |
 | `--stats <file>` | On quitting, write the renderer's frame statistics (since 3 s after start-up) as JSON, in the engine harness's shape; `tools/measure.ps1` passes it. |
-| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). |
+| `--player-debug <list>` | Checks of the desktop player without moving the pointer or changing Windows' settings, comma-separated: `show` (up on the main display, whatever the pointer does), `top` (over every window instead of just above the desktop, to see it on screen), `light`, `dark`, `reduce-motion`, `opaque`, `contrast` (force that look), `scrub=0.6` (a drag held at that share of the seek bar: the wallpaper follows it; nothing is sent to a player). Search and the queue (only while playback commands are off, as under `--demo`): `fake-search` (an invented Spotify that answers from made-up songs with covers painted in code and refuses every play through the guard), `search=setup`, `search=signin`, `search=none` (force what the pane says), `pane=search`, `pane=queue` (open a pane when the card comes up), `query=evening` (type that), and `fake-spotify` (a Spotify account for the settings section whose HTTP client refuses every request and whose browser opens nothing). `align`: the music video's align mode drawn as it looks mid-song (film button lit, the video's bar, Reset/Cancel/Done), for captures; nothing is changed. |
 | `lunalyr://…` | Forwarded to the running instance and logged; links aren't acted on yet. |
 
 ## Demo mode (`--demo`)
@@ -124,7 +124,8 @@ Top to bottom (the Mac's order and wording):
 | Lyric line | The line being sung (two rows at most) with the next one under it, "♪" between lines, or "Looking for lyrics…", "No synced lyrics for this song.", "Lyrics appear here while a song plays."; the source and precision at its foot ("Apple Music · Word-by-word"), or the controller's status line when it says more ("Offline — …", "Lyric lookups are off for this run"). One height whatever it shows. On the wallpaper's own clock (both offsets), with readings shown in place of the lines when they replace them. |
 | Lyric timing | Earlier / Later (a tenth of a second for this song, saved per recording and lyric source in `songOffsets`, the Mac's keys), the offset ("+0.20 s"), and reset. "Tap to sync…" (the flyout steps aside and the Tap to sync panel takes the keyboard; "Stop tap to sync" while it listens) and, while the last tap sync's offset is in force for the song playing, "Undo tap sync". Off with nothing playing. See "Lyric tools". |
 | Search YouTube | Opens a YouTube search for "artist title" in the default browser, only from that click (`YouTubeSearch` through an `IUrlLauncher`; the app's is the shell's https handler). Off, with a note, while playback is off for the run, so `--no-playback` and `--demo` never open it. |
-| Wallpaper | "Options…" opens settings. Every wallpaper type as a tile, the Mac's menu-bar grid: Match, Visualiser, Effects, Patterns, Colour, then Your wallpaper, Image or video and Music video (off in this build); Image or video with nothing imported opens Settings › Wallpaper instead. Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
+| Wallpaper | "Options…" opens settings. Every wallpaper type as a tile, the Mac's menu-bar grid: Match, Visualiser, Effects, Patterns, Colour, then Your wallpaper, Image or video and Music video; Image or video with nothing imported opens Settings › Wallpaper instead. Layout: "Match the music" and every composition (`lyricComposition`). Quick toggles: Pause / Resume (`wallpaperPaused`; "Paused: your desktop is frozen until you resume it."), Readings (`romanizationDisplay` below ↔ off; "replace" counts as on and stays until switched off), Credits (`creditsLayer`). |
+| Music video | While Music video is the type and a song plays (`TrayFlyout.MusicVideo.cs`, the Mac's `MenuBarWallpaperControls` rows): Open video on YouTube (a YouTube video only; the browser, only from that click, never under `--no-playback`), Search YouTube… (opens Settings › Wallpaper, where the picker is), Tap to sync, Align…, Earlier / Later (the video a quarter second sooner or later, kept for that video), "Video timing: +x s" and the tap's note. Align… opens the video's bar right here (the Mac sends it to the desktop player's card): drag it, ← → (Shift: a second) once it has the focus, Enter keeps, Esc cancels, Reset / Cancel / Done. See "Music video". |
 | Footer | Settings… (Ctrl+,) and Quit Lunalyr (Ctrl+Q). |
 
 ## Controller
@@ -341,7 +342,7 @@ Narrator's speech (it makes sound); all three are the stock EDIT's.
 
 ### Left for the next rounds
 
-- **The music video row** (`VideoAlignRow`): milestone 6.
+- The music video's film button and align mode: see "Music video" (milestone 6).
 - Double-clicking the cover brings an `.exe` player's window forward (`PlayerWindows`). Packaged players (Apple Music,
   Media Player) and browsers aren't found that way yet.
 
@@ -387,6 +388,10 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `audioSensitivity` | `1` | 0.3–3, Music response › Sensitivity | `custom.audioSensitivity` |
 | `visualizerPunch` | `1` | 0–2, Visualiser › Beat punch (off while Animation effects are off) | `custom.visualizerPunch` |
 | `starTrailsColours` | `"album"` | `album` or `original`, Visualiser › Colours (Star Trails) | `custom.starTrailsColours` |
+| `musicVideoFallback` | `"auto"` | "Without a video": any type but `musicVideo` (anything else reads as `auto`); choosing Music video stores the type it replaced here | `custom.musicVideoFallback` |
+| `musicVideoOnline` | `false` | "Search YouTube for videos" (sends the title and artist to the YouTube Data API, with the owner's key) | `custom.musicVideoOnline` |
+| `musicVideoDim` | `0.35` | 0–0.85, "Video dimming" | `custom.musicVideoDim` |
+| `musicVideoBlur` | `0` | 0–24 points, "Video blur" | `custom.musicVideoBlur` |
 | `wallpaperPaused` | `false` | paused from the tray | `custom.wallpaperPaused` |
 | `animationRate` | `60` | `15`, `30`, `60`, `0` = follow the display | `custom.animationRate` (Mac default 30) |
 | `pauseWhenCovered` | `true` | | `custom.pauseWhenCovered` |
@@ -580,7 +585,7 @@ setting and the plumbing: the `m6/wallpaper-types` branch. What each type draws:
 | `colourOnly` | Colour only | `colour` (Album gradient on) or `gradient` (off) |
 | `desktop` | Your wallpaper | `desktop`: only the text backing, the rest see-through |
 | `custom` | Imported image or video | `custom` (the imported file); `gradient` while there is none |
-| `musicVideo` | Music video | not in this build (the type is disabled); read as Match the music |
+| `musicVideo` | Music video | `musicVideo` (the song's video file, or the album colours while its video is looked for, up to 3 s) or `musicVideo.youtube` (see-through over YouTube's player); without a video, what `musicVideoFallback` draws (see "Music video") |
 
 A layer id the renderer hasn't registered falls back to `gradient` (`EngineWallpaperRenderer.SetLayers`, logged), so
 `auto`, `shader`, `pattern` and `visualizer` draw the album colours until their layers land. Windows' earlier value
@@ -601,6 +606,7 @@ implementation, so the effects/patterns agent and the visualiser agent each own 
 | Page | `AddEffectOptions(StackPanel, SettingsContext)`, `AddPatternOptions(…)` (`App/Settings/WallpaperPage.cs`) | `WallpaperPage.Effects.cs`, `WallpaperPage.Patterns.cs` | Optional rows of your own under the "GPU effect" / "Pattern" menus (which the page owns). Called once for the Match the music section and once for your type's, so make fresh controls each call. |
 | Page | `AddVisualiserSections(StackPanel, SettingsContext, ref bool added)` (`WallpaperPage.cs`) | `WallpaperPage.Visualiser.cs` | The whole "Visualiser" section (its scene menu and options) and any after it ("Music response"), built with `SettingsKit`; set `added = true`. The panel shows only while Visualisers is the type; until then it holds a placeholder ("Arrives in a later build of milestone 6."). |
 | Settings | `NormalizeEffects(ref AppSettings)`, `NormalizeVisualiser(ref AppSettings)` (`Shell/Settings/AppSettings.Wallpaper.cs`) | `AppSettings.Effects.cs`, `AppSettings.Visualiser.cs` | Your own keys go in your own `partial record AppSettings` file (camelCase JSON, the Mac's key without `custom.`); put them in range here. Called at the end of `Normalized()`. |
+| Page, layers, settings | `AddMusicVideoSections` (`WallpaperPage.cs`), `AddMusicVideoLayers` (`WallpaperLayers.cs`), `NormalizeMusicVideo` (`AppSettings.Wallpaper.cs`) | `WallpaperPage.MusicVideo.cs`, `WallpaperLayers.MusicVideo.cs`, `AppSettings.MusicVideo.cs` | Music video's section, its two layers and its four keys. Its controller hooks (`MusicVideoTrackChanging`, `MusicVideoSongKnown`, `MusicVideoNotASong`, `MusicVideoSettingsChanged`, `MusicVideoBackground`) are partial methods declared and implemented in `AppController.MusicVideo.cs`, called from `AppController.cs` and `AppController.Wallpaper.cs`. |
 
 **What a background layer receives.**
 - `BackgroundOptions` (factory argument) holds what is fixed for the run: power saving's pixel budget (`Economical`,
@@ -631,8 +637,8 @@ per track for the session. See [compositions/matching.md](compositions/matching.
 `SettingsCopy` (tested). Previews: `docs/previews/wallpaper/`.
 
 - **Wallpaper:** every type as a tile, five small ones for what Lunalyr draws (Match, Visualiser, Effects, Patterns,
-  Colour) and three wide ones for what starts from something of yours (Your wallpaper, Image or video, Music video,
-  off in this build). The chosen tile is lit; its summary shows under the grid. Image or video with nothing imported
+  Colour) and three wide ones for what starts from something of yours (Your wallpaper, Image or video, Music video).
+  The chosen tile is lit; its summary shows under the grid. Image or video with nothing imported
   asks for a file first. Narrator reads each tile's full name and summary.
 - **The type's own section:** Match the music (the "GPU effect" and "Pattern" menus, "Match the music picks one of
   each per song; choose one to pin it."), GPU effects, Line patterns (their menu; disabled with the reason until the
@@ -667,6 +673,80 @@ nothing is drawn. Lunalyr never reads or changes the wallpaper; the automatic ba
   sits (`PictureLegibility.StageLuminance`, the Mac's `stageLuminance`); a video takes a dark-middling 0.2.
 - **Video:** muted always (no audio stream is ever read), looping, decoded on the GPU, frozen while the wallpaper is
   paused, covered or hidden, and still on its first frame when Windows' Animation effects are off.
+
+### Music video
+
+The playing song's music video behind the lyrics, muted, filled to the screen and kept on the song's own clock: the
+Mac's Music video type (`Sources/MusicVideo/`, `MusicVideoSettings.swift`, `VideoAlignRow.swift`; Lunalyr's own code,
+ported with its tests). Its automatic sync was removed on the Mac and isn't ported: the timing is the length estimate
+plus the user's Tap to sync, Align and nudges. Code: `Core/MusicVideo/` (the rules), `Shell/AppController.MusicVideo.cs`
+and `Shell/MusicVideo/` (following the song, the layers' feed), `Render/Backgrounds/MusicVideoLayer.cs` (the layers),
+`Platform/MusicVideo/` (playability, HTTP, the API key), `App/MusicVideo/` (YouTube's player), `App/Settings/
+WallpaperPage.MusicVideo.cs`, `App/Player/*Align*.cs`, `App/Tray/TrayFlyout.MusicVideo.cs`. Previews:
+`docs/previews/music-video/`.
+
+**Where a song's video comes from**, in the Mac's order (`MusicVideoResolver`):
+1. **A video file** chosen for the song (Settings › Music video › Video file, per recording: the Mac's Music library,
+   which Apple Music for Windows doesn't expose). Played when Media Foundation decodes its video track; a file that can't
+   be shown says so and falls back.
+2. **A YouTube link** pasted for the song, or picked in Search YouTube…; played even with search off.
+3. **With "Search YouTube for videos" on** (off by default): the cached answer (found videos for 60 days, "nothing
+   official" for a week, 500 songs at most), else one **YouTube Data API v3** search, "artist title official music
+   video" (`search.list`, embeddable videos only, 12 results, then `videos.list` for lengths and views), ranked as the
+   Mac ranks: this song by exact title (`MusicVideoTitleMatch`), from the artist's own or VEVO channel, never "- Topic",
+   live, fan, lyric, audio or other excluded uploads; "official music video" first, and an official video as long as
+   the song ahead of the rest. Rate limited (2 s apart, 8 a minute; 429 backs off as asked, a used-up daily quota until
+   midnight Pacific), and a lookup skipped past sends nothing. A refused video makes way for the song's next official
+   one (three at most), then "can't be embedded" is remembered.
+4. Otherwise the type chosen as **"Without a video"** (`musicVideoFallback`, the type Music video replaced), with a
+   note in Settings only. A song change shows the album colours (the `musicVideo` layer with no file) while its video is
+   looked for, for up to 3 s.
+
+**What isn't ported, because the Mac's means aren't official:** reading youtube.com's results page (`ytInitialData`)
+with a browser's User-Agent; the "verified artist" badge (only that page shows it, so a label's channel never counts on
+Windows); the still-image check (it reads YouTube's undocumented numbered stills, `1.jpg`–`3.jpg`), so a found video is
+used without it and a pasted still isn't flagged; the player's undocumented caption calls (`unloadModule`, `setOption`);
+building thumbnail addresses by hand (only stills the API returned are shown).
+
+**The YouTube Data API key** is the owner's own: Google Cloud Console › a project › enable "YouTube Data API v3" ›
+Credentials › API key (restricted to that API). Pasted in Settings › Wallpaper › Music video › YouTube Data API key; kept
+in `{data}\MusicVideo\youtube-key.bin`, encrypted with DPAPI for the Windows user (never in `settings.json`, never
+logged), and sent only in the `X-Goog-Api-Key` header to `www.googleapis.com`. Each automatic search costs about 101 of
+the default 10,000 daily quota units (to confirm for the owner's project). Without a key, Search YouTube says so; a
+refused key says so and isn't retried until it changes.
+
+**Playing it, silently:**
+- **A file:** the `musicVideo` layer decodes it on a worker thread (video stream only, on the surface's GPU when it can)
+  and shows the frame the song's own clock asks for (the player's position, never the lyrics' clock or the scrub
+  preview, plus the video offset): it seeks for a jump, decodes forward otherwise, and holds before the video's start
+  and past its end. So there is no drift to correct (the Mac's AVPlayer rate nudging is ported, with its tests, for
+  fidelity only). Paused, covered or hidden wallpapers hold it; under Reduce Motion it holds its first frame. Every
+  display decodes its own copy.
+- **YouTube (not verified live):** a WebView2 in a disabled `WS_CHILD` window under `Progman`, the size of the main
+  display's wallpaper surface and just beneath it; that surface draws `musicVideo.youtube`, see-through while the
+  player plays (dimming, scrim and backing over it), the album colours or the frozen last frame while it is hidden
+  (YouTube draws its controls over a paused player). The browser runs with `--mute-audio`, the WebView2 is muted
+  (`CoreWebView2.IsMuted`) before it loads anything, and the page mutes the player before every play, seek and sample.
+  InPrivate profile under `{data}\MusicVideo\WebView2`, the page served from a virtual https host, no other
+  navigation, no new windows, every permission denied. Steered by the ported sync loop (led seeks with hysteresis,
+  `MusicVideoCorrector`), embed session (ready timeout, error codes, crash reloads, a stuck player falls back) and
+  frozen frame (`CapturePreviewAsync`; the player closes after ten minutes not playing). Other displays show the album
+  colours. Never built under `--demo`, `--no-network` or `--no-playback`.
+- **The settings preview** draws the file, or for YouTube the album colours (it never starts a second player).
+
+**Timing** (`MusicVideoOffsets`, per recording and per video, in `{data}\music-video.json`): the user's offset wins
+(nudges, Tap to sync, Align), else a video 2–40 s longer than the song is taken to have that much intro ("Estimated"),
+else none. **Tap to sync**: armed from Settings or the flyout, a plain key (or the button) marks the singing starting in
+the video; the offset is the video's time at the tap less 0.2 s, minus the line's time in the song; taps are averaged.
+**Align video**: the desktop player's film button (beside search) or the flyout's Align… turn the seek row into the
+video's own bar; drag (fine below the bar or with Alt), ← → 0.1 s (Shift 1 s), Enter keeps, Esc cancels, Reset goes back
+to the estimate. Align mode keeps the card up.
+
+**Settings › Wallpaper › Music video:** the status note, Open video on YouTube, Search YouTube for videos and its
+privacy caption, the API key, Without a video, this song's Video file / YouTube link / Search YouTube… (results with the
+API's stills, length, channel, views and age; a click uses one; Back to automatic), Video timing (−5, −0.5, +0.5, +5,
+Reset, Tap to sync), Video dimming, Video blur. The Mac's "Show the video on" isn't offered: the renderer draws one
+background on every display.
 
 ### Covers
 

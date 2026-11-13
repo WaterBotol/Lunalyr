@@ -67,6 +67,7 @@ public sealed class AppSettingsTests
             "effectSpeed", "vividness", "scrimStrength", "patternOpacity", "motionBlur", "textBackingAutomatic", "textBacking",
             "useMotionArtwork", "motionPlacement", "motionExclusions",
             "visualizerStyle", "audioReactiveEnabled", "audioSensitivity", "visualizerPunch", "starTrailsColours",
+            "musicVideoFallback", "musicVideoOnline", "musicVideoDim", "musicVideoBlur",
         ];
         Assert.Equal(keys.Order(), json.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
