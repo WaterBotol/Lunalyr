@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Lunalyr.Core\Lunalyr.Core.csproj" />
+    <ProjectReference Include="..\Lunalyr.Install\Lunalyr.Install.csproj" />
     <ProjectReference Include="..\Lunalyr.Platform.Windows\Lunalyr.Platform.Windows.csproj" />
     <ProjectReference Include="..\Lunalyr.Render\Lunalyr.Render.csproj" />
   </ItemGroup>
