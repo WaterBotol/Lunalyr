@@ -41,6 +41,9 @@ public sealed record ExtrasNow
 
     public bool WallpaperPaused { get; init; }
 
+    /// <summary>Hide lyrics is on: neither the tray lyric nor Discord shows the line (the Mac's <c>lyricsVisible</c>).</summary>
+    public bool LyricsHidden { get; init; }
+
     public bool HasTrack => !string.IsNullOrWhiteSpace(Title);
 }
 
@@ -53,16 +56,18 @@ public sealed partial class AppController
         Core.Lyrics.LyricResult? lyrics;
         IReadOnlyDictionary<int, string>? readings;
         IReadOnlyDictionary<int, IReadOnlyList<LyricWord>>? words;
+        bool hidden;
         lock (_gate)
         {
             status = _status;
+            hidden = _settings.LyricsHidden;
             lyrics = _scene.Lyrics;
             var replace = _settings.Readings().Display == RomanizationDisplay.Replace;
             readings = replace ? _scene.Readings : null;
             words = replace ? _scene.WordReadings : null;
         }
 
-        if (string.IsNullOrWhiteSpace(status.Title)) return ExtrasNow.Nothing with { WallpaperPaused = status.WallpaperPaused };
+        if (string.IsNullOrWhiteSpace(status.Title)) return ExtrasNow.Nothing with { WallpaperPaused = status.WallpaperPaused, LyricsHidden = hidden };
         var (position, _) = ReadSongPosition();
         var (lyricTime, _) = ReadClock();
         return new ExtrasNow
@@ -79,6 +84,7 @@ public sealed partial class AppController
             ReplacementWords = words is { Count: > 0 } ? words : null,
             LyricsLoading = status.Status == StatusText.LookingUp,
             WallpaperPaused = status.WallpaperPaused,
+            LyricsHidden = hidden,
         };
     }
 }

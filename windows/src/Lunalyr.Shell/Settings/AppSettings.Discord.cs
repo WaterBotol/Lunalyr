@@ -69,7 +69,7 @@ public sealed partial record AppSettings
     /// <summary>The longest line, in characters, 16–64 (Mac <c>custom.menuBarLyricLength</c>).</summary>
     public double TrayLyricLength { get; init; } = TrayLyricTicker.DefaultLength;
 
-    private AppSettings NormalizedExtras()
+    private AppSettings NormalizedDiscord()
     {
         var lead = DiscordLyricLead;
         var length = TrayLyricLength;

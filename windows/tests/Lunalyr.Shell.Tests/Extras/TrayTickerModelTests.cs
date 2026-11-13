@@ -85,6 +85,15 @@ public class TrayTickerModelTests
     }
 
     [Fact]
+    public void HiddenLyricsSayGoAndStopTheWakes()
+    {
+        var model = new TrayTickerModel(TenPoints);
+        var step = model.Refresh(Song(11) with { LyricsHidden = true }, 36, false, 0);
+        Assert.Equal(new TickerShown(TrayLyricTicker.HiddenText, false, false), step.Shown);
+        Assert.Null(step.Wait);
+    }
+
+    [Fact]
     public void ReadingsShownInPlaceOfTheLyricsAreShownHereToo()
     {
         var model = new TrayTickerModel(TenPoints);

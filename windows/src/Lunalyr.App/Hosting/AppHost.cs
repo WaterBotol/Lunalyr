@@ -149,6 +149,7 @@ internal sealed partial class AppHost
         _tray.SettingChanged = () => _motion?.Refresh();
         _tray.OnError = ex => ReportCrash(ex, "window procedure", fatal: false);
         _tray.Create();
+        StartExtras();
         _tray.SetTooltip("Lunalyr — starting…");
         _tray.AddIcon();
         StartPlayer();
@@ -278,9 +279,10 @@ internal sealed partial class AppHost
             StartVisualisers(controller);
             StartMusicVideo(controller);
             StartMotionCovers(controller);
-            StartExtras(controller);
+            StartDiscordAndTicker(controller);
             _controller = controller;
             QueueStatusUpdate();
+            ExtrasReady();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
                 + $"Readings: {WindowsReadingServices.Describe(readings)}.");
             if (_options.StatsPath is not null)
@@ -293,6 +295,7 @@ internal sealed partial class AppHost
         {
             _log.Error("Couldn't start following now playing.", ex);
             _tray.Post(() => _tray.SetTooltip("Lunalyr — couldn't connect to now playing (see the log)"));
+            ExtrasReady();
         }
     }
 
@@ -418,6 +421,14 @@ internal sealed partial class AppHost
 
     internal void TogglePause()
     {
+        // From the tray: a pause says so in the action HUD (a paused desktop draws nothing new), as on the Mac.
+        if (_extras is { } extras)
+        {
+            extras.Performing(Lunalyr.Shell.Extras.NoteOrigin.Window, extras.ToggleWallpaperPause);
+            if (_controller is null) _log.Info(_settings.Current.WallpaperPaused ? "Wallpaper paused." : "Wallpaper resumed.");
+            return;
+        }
+
         // The controller hears about it through the settings store, which also remembers it for next time.
         if (!_settings.Update(s => s with { WallpaperPaused = !s.WallpaperPaused })) return;
         // A change to "Animation effects" while paused is taken up as the wallpaper resumes, whatever told us of it.
@@ -447,7 +458,7 @@ internal sealed partial class AppHost
             UpdateStatus();
         }
 
-        foreach (var link in forwarded.Links) _log.Info($"Received a link: {link} (links aren't handled yet).");
+        OpenLinks(forwarded.Links);
         if (forwarded.Theme is { } theme)
         {
             ThemeOverride = theme;
@@ -495,6 +506,7 @@ internal sealed partial class AppHost
         _quitting = true;
         _quitTimer?.Dispose();
         StopPlayer();
+        StopExtras();
         _tray.Dispose();
         var clean = Task.Run(async () =>
         {
@@ -512,7 +524,7 @@ internal sealed partial class AppHost
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             if (_options.FloatingCapturePath is { } capturePath) WriteFloatingCapture(capturePath);
-            await StopExtrasAsync().ConfigureAwait(false);
+            await StopDiscordAndTickerAsync().ConfigureAwait(false);
             StopVisualisers();
             StopMusicVideo();
             if (_controller is { } controller) await controller.DisposeAsync().ConfigureAwait(false);

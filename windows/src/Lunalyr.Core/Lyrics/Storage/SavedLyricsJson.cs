@@ -96,6 +96,10 @@ internal sealed class ArtistAliasEntryDto
     [JsonPropertyName("names")]
     public List<string> Names { get; set; } = [];
 
+    /// <summary>MusicBrainz's country for the artist, "" when it names none; absent (null) in entries stored before countries were kept.</summary>
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
+
     [JsonPropertyName("storedAt")]
     public DateTimeOffset StoredAt { get; set; }
 }

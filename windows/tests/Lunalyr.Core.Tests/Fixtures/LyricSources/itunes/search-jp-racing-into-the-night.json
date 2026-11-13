@@ -1,0 +1,155 @@
+{
+    "resultCount":  15,
+    "results":  [
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1765444812,
+                        "artistName":  "INKYMAP",
+                        "collectionName":  "RACING INTO THE NIGHT - Single",
+                        "trackName":  "Racing Into The Night",
+                        "trackTimeMillis":  206830,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1571239689,
+                        "artistName":  "YOASOBI",
+                        "collectionName":  "Into The Night (English Version) - Single",
+                        "trackName":  "Into The Night (English Version)",
+                        "trackTimeMillis":  262154,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1490256995,
+                        "artistName":  "YOASOBI",
+                        "collectionName":  "夜に駆ける - Single",
+                        "trackName":  "夜に駆ける",
+                        "trackTimeMillis":  261013,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1715478858,
+                        "artistName":  "Kickcheeze",
+                        "collectionName":  "Racing Into the Night (Yoru ni Kakeru 夜に駆ける) - Hardstyle - Single",
+                        "trackName":  "Racing Into the Night (Yoru ni Kakeru 夜に駆ける) - Hardstyle",
+                        "trackTimeMillis":  198750,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1707010191,
+                        "artistName":  "YOASOBI",
+                        "collectionName":  "夜に駆ける - From THE FIRST TAKE - Single",
+                        "trackName":  "夜に駆ける - From THE FIRST TAKE",
+                        "trackTimeMillis":  248523,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1677088034,
+                        "artistName":  "Skinny Hamster",
+                        "collectionName":  "Racing Into the Night - Single",
+                        "trackName":  "Racing Into the Night",
+                        "trackTimeMillis":  261616,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1604818959,
+                        "artistName":  "α波オルゴール",
+                        "collectionName":  "夜に駆ける～YOASOBIコレクション - EP",
+                        "trackName":  "夜に駆ける(オルゴール・バージョン)",
+                        "trackTimeMillis":  310293,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1549367829,
+                        "artistName":  "Relax Lab",
+                        "collectionName":  "あっ、聴いたことある! 今流行りの令和のヒットソング。 おしゃれカフェで勉強やリラックスして睡眠 集中力アップするインストカバー集 ピアノ de J-POP",
+                        "trackName":  "夜に駆ける (Piano Cover)",
+                        "trackTimeMillis":  281750,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1613096247,
+                        "artistName":  "α波オルゴール",
+                        "collectionName":  "いつも君がいるから",
+                        "trackName":  "夜に駆ける",
+                        "trackTimeMillis":  309773,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1526315265,
+                        "artistName":  "Shayne Orok",
+                        "collectionName":  "夜に駆ける - Single",
+                        "trackName":  "夜に駆ける",
+                        "trackTimeMillis":  258237,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1567002377,
+                        "artistName":  "キズナ",
+                        "collectionName":  "ポップスピアノコレクション (ランダムバージョン1)",
+                        "trackName":  "夜に駆ける (ピアノカバーバージョン)",
+                        "trackTimeMillis":  260297,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1866519118,
+                        "artistName":  "INKYMAP",
+                        "collectionName":  "IN BLACK",
+                        "trackName":  "Racing Into The Night",
+                        "trackTimeMillis":  208070,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1590852964,
+                        "artistName":  "YOASOBI",
+                        "collectionName":  "E-SIDE",
+                        "trackName":  "Into The Night (English Version)",
+                        "trackTimeMillis":  259661,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  6826993851,
+                        "artistName":  "YOASOBI",
+                        "collectionName":  "YOASOBI 5th ANNIVERSARY DOME LIVE 2024 “超現実” at TOKYO DOME",
+                        "trackName":  "夜に駆ける (YOASOBI 5th ANNIVERSARY DOME LIVE 2024 “超現実”)",
+                        "trackTimeMillis":  293100,
+                        "country":  "JPN"
+                    },
+                    {
+                        "wrapperType":  "track",
+                        "kind":  "song",
+                        "trackId":  1707023214,
+                        "artistName":  "Ayase",
+                        "collectionName":  "MIKUNOYOASOBI",
+                        "trackName":  "夜に駆ける (初音ミク Ver.)",
+                        "trackTimeMillis":  259568,
+                        "country":  "JPN"
+                    }
+                ]
+}

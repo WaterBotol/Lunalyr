@@ -205,4 +205,14 @@ public class DiscordPresenceServiceTests
         await Task.Delay(200, TestContext.Current.CancellationToken);
         Assert.Equal(0, f.Searches);
     }
+
+    [Fact]
+    public async Task HiddenLyricsShowTheArtistInsteadOfTheLine()
+    {
+        await using var f = new Fixture();
+        f.Now = Playing() with { LyricsHidden = true };
+        f.Discord.Up = true;
+        f.Service.Start();
+        Assert.Equal("Lunar Tides", Text(await f.NextActivityAsync(), "state"));
+    }
 }

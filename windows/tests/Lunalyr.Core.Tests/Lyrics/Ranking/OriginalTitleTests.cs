@@ -73,8 +73,10 @@ public sealed class OriginalTitleTests : IDisposable
         var other = new LyricQuery("Racing into the Night", "YOASOBI", null, 300);
         _catalogue.Set("itunes.apple.com/lookup", Reply.Fixture("itunes/mac-original.json"));
         Assert.Null(await titles.OriginalAsync(other, Ct));
-        // Searched, but no entry of that length.
-        Assert.Equal(3, _catalogue.Requests.Count);
+        // Searched, but no entry of that length; since the Mac's 1cdde21 Japan's storefront is then searched by title
+        // too (the same invented reply here, with no native-script entry), so four requests where the Mac test had three.
+        Assert.Equal(4, _catalogue.Requests.Count);
+        Assert.Equal(("jp", "Racing into the Night"), (_catalogue.Query(3, "country"), _catalogue.Query(3, "term")));
     }
 
     // Ported from LanguageVersionTests.swift: testFallbackSearchesUnderTheJapaneseTitle
@@ -198,9 +200,181 @@ public sealed class OriginalTitleTests : IDisposable
         Assert.Null(await titles.OriginalAsync(Query("Racing into the Night"), Ct));
         Assert.Null(await titles.OriginalAsync(Query("Racing into the Night"), Ct));
         Assert.Equal(2, _catalogue.Requests.Count);
-        // Japan's own storefront already lists the original title: nothing to ask.
+        // Japan's own storefront goes straight to its title search (the Mac's 1cdde21; until then nothing was asked),
+        // which fails here too and is asked again.
         Assert.Null(await Titles("JP").OriginalAsync(Query("Racing into the Night"), Ct));
+        Assert.Equal(3, _catalogue.Requests.Count);
+        Assert.Equal(("jp", "Racing into the Night"), (_catalogue.Query(2, "country"), _catalogue.Query(2, "term")));
+    }
+
+    // ---- The Mac's next/integration 1cdde21, from the Mac session's description (its tests aren't in the checkout) ----
+
+    /// <summary>
+    /// Recorded 13 Nov 2026 (iTunes Search API, the generic agent): Australia's storefront has no "Racing into the
+    /// Night" by YOASOBI and no native-script YOASOBI entry of its length, so Japan's storefront is searched by the title
+    /// alone, where YOASOBI's first native-script entry of the playing length is 夜に駆ける (261.013 s). Shayne Orok's
+    /// 夜に駆ける (258.2 s) is another artist's. Nothing is looked up by id.
+    /// </summary>
+    [Fact]
+    public async Task RecordedRacingIntoTheNightIsFoundInJapansStorefront()
+    {
+        UseRecordedRacingIntoTheNight();
+        var playing = new LyricQuery("Racing into the Night", "YOASOBI", null, 261.013);
+        var found = await Titles("au").OriginalAsync(playing, Ct);
+        Assert.Equal(new OriginalTitle("夜に駆ける", "夜に駆ける - Single"), found);
+        Assert.Equal(["itunes.apple.com/search", "itunes.apple.com/search"], _catalogue.Addresses);
+        Assert.Equal(("au", "YOASOBI Racing into the Night"), (_catalogue.Query(0, "country"), _catalogue.Query(0, "term")));
+        Assert.Equal(("jp", "Racing into the Night"), (_catalogue.Query(1, "country"), _catalogue.Query(1, "term")));
+        // Australia's reply (romanised and translated names) has no native-script YOASOBI entry of that length, and
+        // neither has Japan's reply to the artist + title search (also recorded): only the title alone finds the single.
+        Assert.Null(OriginalTitles.NativeEntry(ItunesCatalogue.Parse(Fixtures.Bytes("itunes/search-au-yoasobi-racing-into-the-night.json"))!, playing));
+        Assert.Null(OriginalTitles.NativeEntry(ItunesCatalogue.Parse(Fixtures.Bytes("itunes/search-jp-yoasobi-racing-into-the-night.json"))!, playing));
+    }
+
+    private void UseRecordedRacingIntoTheNight() =>
+        _catalogue.Responder = request => request.RequestUri!.AbsolutePath == "/search"
+            ? Reply.Fixture(FixtureHandler.QueryOf(request.RequestUri, "country") == "jp"
+                ? "itunes/search-jp-racing-into-the-night.json"
+                : "itunes/search-au-yoasobi-racing-into-the-night.json")
+            : null;
+
+    /// <summary>
+    /// Step (b): when this storefront has no entry with the listed title, the artist's first native-script entry of
+    /// the playing length in the same reply is the original title, with no further request. Another version, another
+    /// artist, a length outside max(3 s, 2%) or no length at all don't count.
+    /// </summary>
+    [Fact]
+    public void TheArtistsNativeEntryOfThePlayingLengthIsTheOriginalTitle()
+    {
+        var playing = new LyricQuery("Racing into the Night", "YOASOBI", null, 261);
+        CatalogueSong Song(string name, string artist, long? millis) => new(1, name, artist, name + " - Single", millis);
+        Assert.Equal(new OriginalTitle("夜に駆ける", "夜に駆ける - Single"), OriginalTitles.NativeEntry(
+        [
+            Song("夜に駆ける (Live)", "YOASOBI", 261_000), Song("夜に駆ける", "Someone Else", 261_000), Song("ハルカ", "YOASOBI", 243_613),
+            Song("夜に駆ける", "YOASOBI", null), Song("Into The Night", "YOASOBI", 261_000), Song("夜に駆ける", "YOASOBI", 266_100),
+            Song("あの夢をなぞって", "YOASOBI", 256_000),
+        ], playing));
+        // 2% of 261 s is 5.22 s; 266.3 s is past it.
+        Assert.Null(OriginalTitles.NativeEntry([Song("夜に駆ける", "YOASOBI", 266_300)], playing));
+        // Within 3 s for a short song.
+        Assert.NotNull(OriginalTitles.NativeEntry([Song("夜", "YOASOBI", 62_900)], new LyricQuery("Night", "YOASOBI", null, 60)));
+    }
+
+    [Fact]
+    public async Task ThisStorefrontsNativeEntryNeedsNoJapaneseSearch()
+    {
+        _catalogue.Responder = request => Reply.Text(200, """
+            {"resultCount":1,"results":[{"wrapperType":"track","kind":"song","trackId":7,"artistName":"YOASOBI","collectionName":"夜に駆ける - Single","trackName":"夜に駆ける","trackTimeMillis":261013}]}
+            """);
+        Assert.Equal("夜に駆ける", (await Titles("us").OriginalAsync(new LyricQuery("Racing into the Night", "YOASOBI", null, 261.013), Ct))?.Title);
+        Assert.Single(_catalogue.Requests);
+    }
+
+    /// <summary>A "none" stored by the earlier rule (no "rule" field) is asked again; a title it found still stands.</summary>
+    [Fact]
+    public async Task ANoneFromTheEarlierRuleIsAskedAgain()
+    {
+        UseRecordedRacingIntoTheNight();
+        var playing = new LyricQuery("Racing into the Night", "YOASOBI", null, 261.013);
+        var idol = new LyricQuery("Idol", "YOASOBI", null, 213.234);
+        var stored = DateTimeOffset.UtcNow.AddDays(-1).ToString("O");
+        File.WriteAllText(Path.Combine(_folder.Path, "OriginalTitles.json"), $$$"""
+            {"{{{OriginalTitles.Key(playing)}}}":{"storedAt":"{{{stored}}}"},
+             "{{{OriginalTitles.Key(idol)}}}":{"found":{"title":"アイドル","album":"アイドル - Single"},"storedAt":"{{{stored}}}"}}
+            """);
+        var titles = Titles("au");
+        Assert.Equal("アイドル", (await titles.OriginalAsync(idol, Ct))?.Title);
+        Assert.Empty(_catalogue.Requests);
+        Assert.Equal("夜に駆ける", (await titles.OriginalAsync(playing, Ct))?.Title);
         Assert.Equal(2, _catalogue.Requests.Count);
+        // Stored under the current rule: not asked again, also after a restart.
+        Assert.Equal("夜に駆ける", (await Titles("au").OriginalAsync(playing, Ct))?.Title);
+        Assert.Equal(2, _catalogue.Requests.Count);
+        Assert.Contains("\"rule\":2", File.ReadAllText(Path.Combine(_folder.Path, "OriginalTitles.json")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The original title is also looked for when the listed title found only Latin-script lyrics and the artist is
+    /// East Asian: an East Asian genre, an artist or album in native script, or a MusicBrainz country of JP, KR, CN,
+    /// TW, HK or MO. Here no genre is given; MusicBrainz (YOASOBI, recorded 13 Nov 2026) says JP.
+    /// </summary>
+    [Fact]
+    public async Task LatinLyricsOfAnEastAsianArtistAreSearchedAgain()
+    {
+        var japanese = Candidate(Lrclib, LanguageVersionTests.Japanese, "夜に駆ける", words: true);
+        var english = Candidate(Lrclib, LanguageVersionTests.English, "Racing into the Night", words: true);
+        var search = new CountingAliasSearch("musicbrainz/artist-yoasobi.json");
+        var aliases = new ArtistAliases(_folder.Path, search);
+        // The artist's country isn't waited for (that held every new artist's lyrics back): learned in the background,
+        // it counts from the next lookup on.
+        await aliases.CountryAsync("YOASOBI", Ct);
+        var found = await OriginalTitles.WithOriginalTitleAsync(Lrclib, Query("Racing into the Night"), Titles(), enabled: true,
+            (q, _) => Answer(q.Title == "夜に駆ける" ? japanese : english), Ct, aliases);
+        Assert.True(found?.ViaOriginalTitle);
+        Assert.Equal(1, search.Count);
+
+        // Without the country, and with no genre, English lyrics stand and nothing is looked up.
+        var none = await OriginalTitles.WithOriginalTitleAsync(Lrclib, Query("Racing into the Night"), Titles(), enabled: true,
+            (q, _) => Answer(q.Title == "夜に駆ける" ? japanese : english), Ct);
+        Assert.False(none?.ViaOriginalTitle);
+        Assert.Equal(2, _catalogue.Requests.Count); // the first lookup's search and lookup only
+    }
+
+    [Fact]
+    public async Task WhoCountsAsAnEastAsianArtist()
+    {
+        var yoasobi = new CountingAliasSearch("musicbrainz/artist-yoasobi.json");
+        var aliases = new ArtistAliases(_folder.Path, yoasobi);
+        Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "Someone", null, 200) { Genre = "J-Pop" }, null, Ct));
+        Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "米津玄師", null, 200), null, Ct));
+        Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "Someone", "夜に駆ける - Single", 200), null, Ct));
+        Assert.Equal(0, yoasobi.Count); // genre and script are read first
+        // An artist not asked about yet isn't waited for: no for now, and its country is learned in the background.
+        Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "YOASOBI", null, 200), aliases, Ct));
+        await aliases.CountryAsync("YOASOBI", Ct); // joins the background request already in flight
+        Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Song", "YOASOBI", null, 200), aliases, Ct));
+        Assert.True(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Other", "yoasobi", null, 200), aliases, Ct));
+        Assert.Equal(1, yoasobi.Count); // kept with the artist's other names
+        Assert.Contains("\"country\":\"JP\"", File.ReadAllText(Path.Combine(_folder.Path, "ArtistAliases.json")), StringComparison.Ordinal);
+
+        var american = new CountingAliasSearch(null, """{"artists":[{"name":"Wallows","score":100,"country":"US","aliases":[]}]}""");
+        var wallows = new ArtistAliases(_folder.Path, american);
+        await wallows.CountryAsync("Wallows", Ct);
+        Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Pleaser", "Wallows", null, 188), wallows, Ct));
+        Assert.False(await OriginalTitles.IsEastAsianAsync(new LyricQuery("Pleaser", "Wallows", null, 188), null, Ct));
+    }
+
+    /// <summary>An alias entry stored before countries were kept still gives names, and is asked again for the country.</summary>
+    [Fact]
+    public async Task AnAliasEntryWithoutACountryIsAskedAgainForIt()
+    {
+        File.WriteAllText(Path.Combine(_folder.Path, "ArtistAliases.json"),
+            $$$"""{"yoasobi":{"names":[],"storedAt":"{{{DateTimeOffset.UtcNow.AddDays(-1):O}}}"}}""");
+        var search = new CountingAliasSearch("musicbrainz/artist-yoasobi.json");
+        var aliases = new ArtistAliases(_folder.Path, search);
+        Assert.Empty(await aliases.NamesAsync("YOASOBI", Ct));
+        Assert.Equal(0, search.Count);
+        Assert.Equal("JP", await aliases.CountryAsync("YOASOBI", Ct));
+        Assert.Equal(1, search.Count);
+        // MusicBrainz naming no country is remembered as none.
+        var nowhere = new CountingAliasSearch(null, """{"artists":[{"name":"Nobody","score":100,"aliases":[]}]}""");
+        var other = new ArtistAliases(_folder.Path, nowhere);
+        Assert.Null(await other.CountryAsync("Nobody", Ct));
+        Assert.Null(await other.CountryAsync("Nobody", Ct));
+        Assert.Equal(1, nowhere.Count);
+    }
+
+    private sealed class CountingAliasSearch(string? fixture, string? json = null) : IArtistAliasSearch
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public Task<ArtistAliasReply?> SearchAsync(string artist, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _count);
+            return Task.FromResult(ArtistAliasReply.Parse(fixture is null ? System.Text.Encoding.UTF8.GetBytes(json!) : Fixtures.Bytes(fixture)));
+        }
     }
 
     /// <summary>The first name of a credit is searched for, and artists match by whole names.</summary>

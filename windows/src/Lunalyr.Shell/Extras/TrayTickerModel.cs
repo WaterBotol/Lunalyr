@@ -41,7 +41,7 @@ public sealed class TrayTickerModel(Func<string, double> measure)
     {
         ArgumentNullException.ThrowIfNull(now);
         if (force) _layout = null;
-        var display = TrayLyricTicker.DisplayFor(now.WallpaperPaused, now.HasTrack, lyricsVisible: true);
+        var display = TrayLyricTicker.DisplayFor(now.WallpaperPaused, now.HasTrack, lyricsVisible: !now.LyricsHidden);
         var maxWidth = TrayLyricTicker.MaxWidth((int)length, measure);
         TickerShown next;
         double width;
@@ -86,7 +86,7 @@ public sealed class TrayTickerModel(Func<string, double> measure)
 
         _hideAt = null;
         var interval = TrayLyricTicker.TickInterval(now.HasTrack, now.Playing, hasTimedLines: now.Lines is { Count: > 0 },
-            lyricsVisible: true, paused: now.WallpaperPaused, screensAsleep: screensAsleep);
+            lyricsVisible: !now.LyricsHidden, paused: now.WallpaperPaused, screensAsleep: screensAsleep);
         double? wait = interval is { } ceiling ? (now.Playing ? TrayLyricTicker.Wait(eventIn, ceiling) : ceiling) : null;
         return Commit(next, width, force, wait);
     }

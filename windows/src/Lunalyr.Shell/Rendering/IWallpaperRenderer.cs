@@ -50,6 +50,13 @@ public interface IWallpaperRenderer : IDisposable
     /// window ignore it.
     /// </summary>
     void SetFloating(FloatingLyricsOptions options) { }
+
+    /// <summary>
+    /// Hide lyrics (milestone 7): the wallpapers' lyrics and their text backing fade out (0.45 s) or back in (0.6 s), from
+    /// wherever they are; <paramref name="animate"/> false puts them there at once (start-up). Renderers without lyrics
+    /// ignore it.
+    /// </summary>
+    void SetLyricsShown(bool shown, bool animate = true) { }
 }
 
 /// <summary>

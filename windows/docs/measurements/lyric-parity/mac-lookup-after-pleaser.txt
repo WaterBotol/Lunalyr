@@ -1,0 +1,43 @@
+Query: "Pleaser" by "Wallows" (3:08, 187.896 s), genre "Alternative", automatic lookup
+Storefront for original titles: au; cache policy v19
+Sources:
+  Apple Music            unavailable: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   available
+  Lyrics+ (KPoe)         available
+  AMLL TTML DB           available
+  NetEase Cloud Music    available
+  LRCLIB                 available
+  QQ Music               available
+  Kugou Music            available
+  Kuwo Music             available
+  lyrics.ovh             available
+  1.50s    Apple Music: Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  1.50s    Lyrimuse local files: Choose the Lyrimuse lyrics folder
+  1.50s    Lyrics+ (KPoe): Match found · Apple Music’s lyrics
+  1.50s    AMLL TTML DB: Searching…
+  1.50s    NetEase Cloud Music: Searching…
+  1.50s    LRCLIB: Searching…
+  1.50s    QQ Music: Searching…
+  1.50s    Kugou Music: Searching…
+  1.50s    Kuwo Music: Searching…
+  1.50s    lyrics.ovh: Searching…
+  1.55s  done
+
+Source states:
+  Apple Music            Apple Music for Windows doesn't keep its lyrics anywhere Lunalyr can read, so its own lyrics can't be used here.
+  Lyrimuse local files   Choose the Lyrimuse lyrics folder
+  Lyrics+ (KPoe)         Match found · Apple Music’s lyrics · 1 other source agrees
+  AMLL TTML DB           Not needed: it couldn’t beat the match showing
+  NetEase Cloud Music    Not needed: it couldn’t beat the match showing
+  LRCLIB                 Match found · 1 other source agrees · showing
+  QQ Music               Not needed: it couldn’t beat the match showing
+  Kugou Music            Not needed: it couldn’t beat the match showing
+  Kuwo Music             Not needed: it couldn’t beat the match showing
+  lyrics.ovh             Not needed: it couldn’t beat the match showing
+
+Ranking:
+  1. Mixed timing · LRCLIB                         "Pleaser" / "Wallows" 3:08, 47 lines, score 104.8, tier 2
+  2. Line-synced · Apple via Lyrics+               "Pleaser" / "Wallows" ?:??, 50 lines, score 83.0, tier 1
+
+Chosen: Mixed timing · LRCLIB
+  (lyric lines left out)

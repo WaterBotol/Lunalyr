@@ -11,7 +11,7 @@ using static Lunalyr.App.Settings.SettingsKit;
 namespace Lunalyr.App.Settings;
 
 /// <summary>What the Discord rows need from the app: the connection, when it changes, and why it is off this run.</summary>
-internal sealed record ExtrasHooks(Func<DiscordConnectionStatus> DiscordStatus, Action<Action> SubscribeDiscord, Action<Action> UnsubscribeDiscord,
+internal sealed record DiscordHooks(Func<DiscordConnectionStatus> DiscordStatus, Action<Action> SubscribeDiscord, Action<Action> UnsubscribeDiscord,
     Func<string?> DiscordOffReason);
 
 internal static class ExtrasSections
@@ -28,7 +28,7 @@ internal static class ExtrasSections
     }
 
     /// <summary>Discord status: the switch, then (while it is on) the connection and what is shared.</summary>
-    public static void AddDiscord(StackPanel page, SettingsContext ctx, ExtrasHooks? hooks)
+    public static void AddDiscord(StackPanel page, SettingsContext ctx, DiscordHooks? hooks)
     {
         var offReason = hooks?.DiscordOffReason();
         var toggle = Toggle(ctx, s => s.DiscordPresence, (s, v) => s with { DiscordPresence = v });

@@ -49,13 +49,24 @@ public class LyricsPlusSourceTests
         Assert.Equal(Fixtures.Text("lyricsplus/shape-of-you.json"), found?.Payload);
     }
 
+    /// <summary>
+    /// A "type":"Line" reply (recorded for Wallows' "Pleaser" from lyricsplus.binimum.org, 13 Nov 2026, lyric text
+    /// invented) has no syllables. Until the Mac's 1cdde21 it counted as "not found"; now it is the node's answer.
+    /// </summary>
     [Fact]
-    public async Task LinesWithoutSyllablesAreNotFound()
+    public async Task ALineReplyIsAnAnswer()
     {
-        const string lineOnly = """{"type":"Line","metadata":{"source":"Musixmatch"},"lyrics":[{"time":1000,"duration":2000,"text":"Sing along","syllabus":[]}]}""";
-        var handler = new FixtureHandler { Fallback = Reply.Text(200, lineOnly) };
-        Assert.Null(await Source(handler).FetchAsync(ShapeOfYou, Ct));
-        Assert.Equal(2, handler.Requests.Count); // one second opinion
+        var handler = new FixtureHandler()
+            .Set("a.lyricsplus.test/v2/lyrics/get", Reply.Fixture("lyricsplus/pleaser-line.json"));
+        var found = await Source(handler).FetchAsync(new LyricQuery("Pleaser", "Wallows", null, 187.896), Ct);
+        Assert.NotNull(found);
+        Assert.Equal("Apple", found.Extras![RawLyricsExtras.Upstream]);
+        Assert.Single(handler.Requests);
+        // Lines with no text at all are still nothing.
+        const string empty = """{"type":"Line","metadata":{"source":"Musixmatch"},"lyrics":[{"time":1000,"duration":2000,"text":"  ","syllabus":[]}]}""";
+        var none = new FixtureHandler { Fallback = Reply.Text(200, empty) };
+        Assert.Null(await Source(none).FetchAsync(ShapeOfYou, Ct));
+        Assert.Equal(2, none.Requests.Count); // one second opinion
     }
 
     [Fact]

@@ -72,7 +72,7 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         .Set("search.kuwo.cn/r.s", Reply.Text(200, ServiceReplies.KuwoNoSongs));
 
     private LyricService Service(FixtureHandler handler, ILyricSource? apple = null, bool online = true, IArtistAliasSearch? aliases = null,
-        string? cacheFolder = null, LyricLookupTiming? timing = null) =>
+        string? cacheFolder = null, LyricLookupTiming? timing = null, string storefront = "us") =>
         LyricService.CreateDefault(cacheFolder ?? _cache.Path, new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan }, new LyricServiceOptions
         {
             PlatformSources = [apple ?? new AppleMusic(null)],
@@ -80,7 +80,7 @@ public sealed class LyricServiceEndToEndTests : IDisposable
             Timing = timing ?? Quick,
             ArtistSearch = aliases ?? new NoAliases(),
             // Not this PC's region, so the tests ask the same whatever Windows is set to.
-            Storefront = "us",
+            Storefront = storefront,
         });
 
     private sealed class NoAliases : IArtistAliasSearch
@@ -572,5 +572,88 @@ public sealed class LyricServiceEndToEndTests : IDisposable
         // Asked once between all the sources.
         Assert.Equal(1, handler.Addresses.Count(a => a == "itunes.apple.com/search"));
         Assert.Equal(1, handler.Addresses.Count(a => a == "itunes.apple.com/lookup"));
+    }
+
+    /// <summary>
+    /// The Mac's next/integration 1cdde21 (from the Mac session's description): "Racing into the Night" — YOASOBI in
+    /// Australia's storefront, with no genre. LRCLIB and NetEase find English lyrics under the listed title. YOASOBI's
+    /// MusicBrainz country (JP, recorded) makes that Latin script worth a second look, and Japan's storefront, searched by
+    /// title (recorded replies), names 夜に駆ける. Under it, LRCLIB and Lyrics+ (Apple's word timing) find Japanese
+    /// lyrics, so the song ends on Japanese word timing and NetEase's English ranks as another language.
+    /// </summary>
+    [Fact]
+    public async Task RacingIntoTheNightEndsOnJapaneseWordTimingInAustralia()
+    {
+        SungLine[] english = [.. Ranking.LanguageVersionTests.English.Select((text, i) => new SungLine(text, 11 + (i * 4), 14 + (i * 4)))];
+        // Invented, spaced so each word is timed (as Lyrics+ sends Japanese syllables).
+        string[] japaneseText = ["夜 の 街 を 歩く", "空 に 星 が 光る", "君 の 声 が 聞こえる", "明日 も ここ で 待つ", "風 が 窓 を 叩く", "静か な 部屋 の 中"];
+        SungLine[] japanese = [.. japaneseText.Select((text, i) => new SungLine(text, 11 + (i * 4), 14 + (i * 4)))];
+        var handler = Quiet()
+            .Set("music.163.com/api/search/get", Reply.Text(200, ServiceReplies.NetEaseSearch((1, "Racing into the Night", "YOASOBI", 261.0))))
+            .Set("music.163.com/api/song/lyric", Reply.Text(200, ServiceReplies.NetEaseLyric(ServiceReplies.Lrc(english))));
+        handler.Responder = request =>
+        {
+            var uri = request.RequestUri!;
+            if (uri.Host == "itunes.apple.com" && uri.AbsolutePath == "/search")
+            {
+                return Reply.Fixture(FixtureHandler.QueryOf(uri, "country") == "jp"
+                    ? "itunes/search-jp-racing-into-the-night.json"
+                    : "itunes/search-au-yoasobi-racing-into-the-night.json");
+            }
+            if (uri.Host.StartsWith("lyricsplus.", StringComparison.Ordinal))
+            {
+                return FixtureHandler.QueryOf(uri, "title") == "夜に駆ける"
+                    ? Reply.Text(200, ServiceReplies.LyricsPlus("夜に駆ける", "YOASOBI", japanese))
+                    : Reply.Text(404, ServiceReplies.LyricsPlusNotFound);
+            }
+            if (uri.AbsolutePath == "/api/get")
+            {
+                return FixtureHandler.QueryOf(uri, "track_name") == "夜に駆ける"
+                    ? Reply.Text(200, ServiceReplies.LrclibRow(2, "夜に駆ける", "YOASOBI", "夜に駆ける - Single", 261, japanese, wordTimed: false))
+                    : Reply.Text(200, ServiceReplies.LrclibRow(1, "Racing Into The Night", "YOASOBI", "", 260, english, wordTimed: true));
+            }
+            return null;
+        };
+        var aliases = new YoasobiAliases();
+        var playing = new LyricQuery("Racing into the Night", "YOASOBI", null, 261.013);
+
+        // A search (every source answers), so the ranking of all three can be read.
+        var report = await Service(handler, aliases: aliases, storefront: "au").LookupAsync(playing, Everything, force: true, cancellationToken: Ct);
+        Assert.Equal(new LyricProvenance("Word-by-word", "Apple via Lyrics+"), report.Result!.Provenance);
+        Assert.Equal(japaneseText, Synced(report.Result).Lines.Select(l => l.Text));
+        var relay = report.Candidates.Single(c => c.Source == LyricsPlus);
+        Assert.True(relay.ViaOriginalTitle);
+        Assert.Equal("Racing into the Night", relay.Title);
+        Assert.True(report.Candidates.Single(c => c.Source == Lrclib).ViaOriginalTitle);
+        Assert.True(report.Candidates.Single(c => c.Source == NetEase).LanguageMismatch);
+        // Apple's catalogue was asked once between the sources: Australia's search, then Japan's by title; MusicBrainz once.
+        Assert.Equal(2, handler.Addresses.Count(a => a == "itunes.apple.com/search"));
+        Assert.Equal(0, handler.Addresses.Count(a => a == "itunes.apple.com/lookup"));
+        Assert.Equal(["YOASOBI"], aliases.Asked);
+    }
+
+    private sealed class YoasobiAliases : IArtistAliasSearch
+    {
+        private readonly List<string> _asked = [];
+
+        public IReadOnlyList<string> Asked
+        {
+            get
+            {
+                lock (_asked)
+                {
+                    return [.. _asked];
+                }
+            }
+        }
+
+        public Task<ArtistAliasReply?> SearchAsync(string artist, CancellationToken cancellationToken)
+        {
+            lock (_asked)
+            {
+                _asked.Add(artist);
+            }
+            return Task.FromResult(ArtistAliasReply.Parse(Fixtures.Bytes("musicbrainz/artist-yoasobi.json")));
+        }
     }
 }

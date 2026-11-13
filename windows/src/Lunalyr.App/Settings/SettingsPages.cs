@@ -10,7 +10,8 @@ namespace Lunalyr.App.Settings;
 /// <summary>General: how Lunalyr's windows look, starting at login, updates, the welcome, the tray's shortcuts and sharing.</summary>
 internal static class GeneralPage
 {
-    public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride, ExtrasHooks? extras = null)
+    public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
+                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null)
     {
         var page = Page();
         Section(page, "Appearance");
@@ -37,11 +38,10 @@ internal static class GeneralPage
 
         Section(page, "Tray & shortcuts");
         ExtrasSections.AddTrayLyric(page, ctx);
-        page.Children.Add(Card("Keyboard shortcuts", "Hide lyrics, pause the wallpaper or copy a lyric card from anywhere.", "",
-            FixedToggle(false), notYet: SettingsCopy.Milestone7));
+        ShortcutsSection.Add(page, ctx, hotkeys);
 
         Section(page, "Discord & lyric card");
-        ExtrasSections.AddDiscord(page, ctx, extras);
+        ExtrasSections.AddDiscord(page, ctx, discord);
         page.Children.Add(Card("Lyric cards", "Save or copy a lyric as a picture, GIF or video.", "",
             Button("Make a Lyric Card…", () => { }), notYet: SettingsCopy.Milestone7));
         return page;

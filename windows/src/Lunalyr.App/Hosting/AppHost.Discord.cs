@@ -32,13 +32,13 @@ internal sealed partial class AppHost
         : null;
 
     /// <summary>What Settings › General's Discord rows need.</summary>
-    internal ExtrasHooks ExtrasHooks => new(
+    internal DiscordHooks DiscordHooks => new(
         () => _discord?.Status ?? new DiscordConnectionStatus.Off(),
         changed => DiscordStatusChanged += changed,
         changed => DiscordStatusChanged -= changed,
         () => DiscordOffReason);
 
-    private void StartExtras(AppController controller)
+    private void StartDiscordAndTicker(AppController controller)
     {
         controller.StatusChanged += (_, _) =>
         {
@@ -133,7 +133,7 @@ internal sealed partial class AppHost
     }
 
     /// <summary>On quitting: the Discord activity cleared (bounded), the strip closed, and <c>--ticker-capture</c> written.</summary>
-    private async Task StopExtrasAsync()
+    private async Task StopDiscordAndTickerAsync()
     {
         DiscordPresenceService? discord;
         TrayTickerWindow? ticker;

@@ -131,6 +131,14 @@ internal sealed class FakeRenderer : IWallpaperRenderer
 
     public void ReplaceLayer(IRenderLayerFactory factory) => Replaced.Add(factory);
 
+    /// <summary>Hide lyrics as handed over: (shown, animated), oldest first.</summary>
+    public List<(bool Shown, bool Animate)> LyricsShown { get; } = [];
+
+    public void SetLyricsShown(bool shown, bool animate = true)
+    {
+        lock (_gate) LyricsShown.Add((shown, animate));
+    }
+
     public void Dispose() => Stop();
 }
 

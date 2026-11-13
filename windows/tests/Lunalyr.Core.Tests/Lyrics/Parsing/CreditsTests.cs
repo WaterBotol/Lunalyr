@@ -61,8 +61,81 @@ public class CreditsTests
         Assert.Equal([true, true, false], heading.Select(line => line.Credit == true));
         var chorus = LyricCredits.Flagging([Line("Hello", 0), Line("Human Nature", 5), Line("Hello again", 9)], "Human Nature", "Yot Club");
         Assert.All(chorus, line => Assert.NotEqual(true, line.Credit));
+        // The Mac's 1cdde21 changed this case: a first line that is only the title, never sung again, is the file's
+        // header, credits or not. A title the song sings again stays a lyric.
         var bare = LyricCredits.Flagging([Line("Human Nature", 0), Line("Hello", 5)], "Human Nature", "Yot Club");
-        Assert.All(bare, line => Assert.NotEqual(true, line.Credit));
+        Assert.Equal([true, false], bare.Select(line => line.Credit == true));
+        var sung = LyricCredits.Flagging([Line("Human Nature", 0), Line("Hello", 5), Line("Human nature, oh", 9)], "Human Nature", "Yot Club");
+        Assert.All(sung, line => Assert.NotEqual(true, line.Credit));
+    }
+
+    // ---- The Mac's next/integration 1cdde21, from the Mac session's description (its tests aren't in the checkout) ----
+
+    [Fact]
+    public void AFirstLineOfOnlyTheArtistIsAHeader()
+    {
+        var shown = LyricCredits.Flagging([Line("Yot Club", 0), Line("Always felt like you", 5), Line("Yot Club", 9)], "Human Nature", "Yot Club");
+        Assert.Equal([true, false, false], shown.Select(line => line.Credit == true));
+        // Only the first line: later, the artist's name is sung.
+        var later = LyricCredits.Flagging([Line("Always felt like you", 0), Line("Yot Club", 5)], "Human Nature", "Yot Club");
+        Assert.All(later, line => Assert.NotEqual(true, line.Credit));
+        // Plain text drops it the same way.
+        Assert.Equal(["Always felt"], LyricCredits.DroppingLeadingCredits(["Yot Club", "Always felt"], "Human Nature", "Yot Club"));
+        Assert.Equal(["Always felt", "Human Nature"],
+            LyricCredits.DroppingLeadingCredits(["Always felt", "Human Nature"], "Human Nature", "Yot Club"));
+    }
+
+    [Fact]
+    public void RoleLinesCountInClosingCreditBlocks()
+    {
+        var lines = new[]
+        {
+            Line("故事的小黄花", 0), Line("从出生那年就飘着", 5), Line("吉他：蔡科俊Again", 200), Line("贝斯：韦伟", 202), Line("鼓：Gary Novak", 204),
+        };
+        var shown = LyricCredits.Flagging(lines, "晴天", "周杰倫");
+        Assert.Equal([false, false, true, true, true], shown.Select(line => line.Credit == true));
+        // The same labels mid-song, with lyrics after them, are sung.
+        var middle = LyricCredits.Flagging([Line("故事的小黄花", 0), Line("吉他：蔡科俊Again", 5), Line("从出生那年就飘着", 9)], "晴天", "周杰倫");
+        Assert.All(middle, line => Assert.NotEqual(true, line.Credit));
+        // Sung words after an everyday label are no names, at the end too.
+        var drums = LyricCredits.Flagging([Line("Hold on", 0), Line("Let go", 4), Line("鼓：咚咚", 8), Line("Music: it's all I need", 12)]);
+        Assert.All(drums, line => Assert.NotEqual(true, line.Credit));
+    }
+
+    [Fact]
+    public void NamesMayMixChineseAndLatinScript()
+    {
+        Assert.True(LyricCredits.IsCredit("吉他：蔡科俊Again", inCredits: true));
+        Assert.True(LyricCredits.IsCredit("和声：Jay周杰伦 / 林迈可", inCredits: true));
+        Assert.False(LyricCredits.IsCredit("吉他：我们一起again", inCredits: true));
+    }
+
+    [Fact]
+    public void JapaneseAndKoreanRolesAreCredits()
+    {
+        foreach (var text in new[] { "作詞：田中太郎", "ギター：田中太郎", "ボーカル：Ado", "작사: 김이나", "편곡 : Someone Else", "기타：이상순" })
+        {
+            Assert.True(LyricCredits.IsCredit(text, inCredits: true), text);
+        }
+        // An everyday label in the middle of a song is sung.
+        Assert.False(LyricCredits.IsCredit("ギター：田中太郎", inCredits: false));
+        var shown = LyricCredits.Flagging([Line("ギター：田中太郎", 0), Line("夜の街を歩く", 5), Line("ベース：山田花子", 200)], "夜", "誰か");
+        Assert.Equal([true, false, true], shown.Select(line => line.Credit == true));
+    }
+
+    [Fact]
+    public void TraditionalAndSimplifiedArtistNamesAreTheSameHeader()
+    {
+        var shown = LyricCredits.Flagging([Line("周杰伦", 0), Line("故事的小黄花", 5)], "晴天", "周杰倫");
+        Assert.Equal([true, false], shown.Select(line => line.Credit == true));
+    }
+
+    /// <summary>Agreement compares sung lines only: plain text's credits and header don't count for or against it.</summary>
+    [Fact]
+    public void PlainTextsCreditsAndHeaderAreNotSung()
+    {
+        Assert.Equal(["Always felt", "Like you were"],
+            LyricCredits.SungLines(["Yot Club", "Lyrics by: Ryan Kaiser", "Always felt", "Like you were", "吉他：蔡科俊Again"], "Human Nature", "Yot Club"));
     }
 
     // Ported from CreditsLayerTests.swift: testAnySourcesCreditsAreFlaggedWhenShown (the flagging and plain-text parts;

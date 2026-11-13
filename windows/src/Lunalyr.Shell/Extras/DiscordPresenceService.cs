@@ -192,7 +192,7 @@ public sealed class DiscordPresenceService : IAsyncDisposable
         if (_anchor is { } anchor && anchor.TrackKey == key && Math.Abs(anchor.Start - start) <= 3) start = anchor.Start;
         _anchor = (start, key);
         long? end = now.Duration is > 0 and var duration ? start + (long)duration : null;
-        var line = now.Playing && !now.WallpaperPaused
+        var line = now.Playing && !now.WallpaperPaused && !now.LyricsHidden
             ? DiscordPresence.Line(now.Lines, now.LyricTime + options.LyricLead, now.Replacements)
             : null;
         // Windows' media sessions carry no Spotify track ID: the link always comes from Apple's catalogue.
