@@ -208,6 +208,8 @@ public sealed class MusicVideoLayer : PlacedLayer
     private double _duration = double.NaN;
     private volatile string? _error;
     private bool _failed;
+    /// <summary>Under Reduce Motion: the video time held (the still's), from its first frame shown until Reduce Motion is off.</summary>
+    private double? _stillAt;
     private double _lastReport = double.NegativeInfinity;
 
     internal MusicVideoLayer(IMusicVideoFeed feed, BackgroundOptions options, Logger log)
@@ -254,8 +256,11 @@ public sealed class MusicVideoLayer : PlacedLayer
     {
         double? duration = double.IsFinite(_duration) ? _duration : null;
         var target = MusicVideoTiming.VideoTime(inputs.SongTime, inputs.Offset, duration);
-        // Reduce Motion: a still of the video, the first frame shown, held.
-        if (frame.Scene.ReduceMotion && _shownTime is not null) target = null;
+        // Reduce Motion: a still of the video, held at the video time its first frame was shown for. The time is held, not
+        // the frame then on screen: a slow reader can hand over a frame decoded on its way there first (after a seek, the
+        // one just before it), and the still then settles on the time's own frame.
+        if (!frame.Scene.ReduceMotion) _stillAt = null;
+        else if (_stillAt is { } still) target = still;
         double? first;
         double? decodedTo;
         double? seeking;
@@ -284,12 +289,13 @@ public sealed class MusicVideoLayer : PlacedLayer
                 {
                     using (due) Show(dc, due);
                 }
+                if (frame.Scene.ReduceMotion && _shownTime is not null) _stillAt ??= goal;
                 break;
         }
         if (_shownTime is { } shown && frame.WallSeconds - _lastReport >= ReportEvery)
         {
             _lastReport = frame.WallSeconds;
-            _feed.Report(_path!, duration, shown, inputs.Playing && target is not null);
+            _feed.Report(_path!, duration, shown, inputs.Playing && target is not null && _stillAt is null);
         }
     }
 
@@ -355,6 +361,7 @@ public sealed class MusicVideoLayer : PlacedLayer
         _failed = false;
         _error = null;
         _shownTime = null;
+        _stillAt = null;
         _duration = double.NaN;
         if (path is null)
         {
@@ -505,6 +512,7 @@ public sealed class MusicVideoLayer : PlacedLayer
     {
         StopWorker();
         _shownTime = null;
+        _stillAt = null;
         _picture.Release();
         _standIn.Release();
         _bitmap?.Dispose();
