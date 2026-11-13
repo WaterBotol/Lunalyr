@@ -4,7 +4,7 @@ namespace Lunalyr.Core.Tests.MusicVideo;
 
 // Ported from MusicVideoMatchTests.swift: the YouTube pick must be the song itself, from the artist, and never a live or
 // fan upload. The library-pick tests aren't ported (Windows has no Apple Music library to match against: the user chooses
-// the file), nor the caption-hiding one (undocumented player calls; see the M6 notes).
+// the file). The caption-hiding test is ported too (CaptionsAreForcedOff, since 14 Nov).
 public sealed class MusicVideoMatchTests
 {
     private static string? Pick(IReadOnlyList<YouTubeVideoResult> results, string title, string artist) =>
@@ -158,14 +158,17 @@ public sealed class MusicVideoMatchTests
         Assert.DoesNotContain("alert", YouTubeEmbed.Html("4NRXx6U8ABQ", 0, language: "x'); alert(1"));
     }
 
-    // Windows' own, in place of testCaptionsAreForcedOff (not ported: unloadModule and setOption('captions') aren't part of
-    // the documented IFrame Player API): only documented calls are made, and the player's language follows Windows'.
+    // Ported from MusicVideoMatchTests.swift: testCaptionsAreForcedOff (the Mac's calls, at the Mac's moments; the page
+    // attaches to its own privacy-enhanced iframe instead of the Mac's `host` option).
     [Fact]
-    public void OnlyDocumentedPlayerCallsAreMade()
-    {
+    public void CaptionsAreForcedOff()
+{
         var html = YouTubeEmbed.Html("4NRXx6U8ABQ", 0);
-        Assert.DoesNotContain("unloadModule", html);
-        Assert.DoesNotContain("setOption", html);
+        foreach (var needle in new[] { "player.unloadModule('captions')", "player.unloadModule('cc')", "player.setOption('captions', 'track', {})" })
+            Assert.Contains(needle, html);
+        Assert.Contains("onReady: function (event) { ready = true; event.target.mute(); hideCaptions();", html);
+        Assert.Contains("if (state === -1 || state === 1 || state === 5) { hideCaptions(); }", html);
+        Assert.Contains("onApiChange: function () { hideCaptions(); }", html);
         Assert.DoesNotContain("host:", html);
         Assert.Contains("new YT.Player('player'", html);
         Assert.Equal("fr", YouTubeEmbed.PlayerLanguage(new System.Globalization.CultureInfo("fr-FR")));

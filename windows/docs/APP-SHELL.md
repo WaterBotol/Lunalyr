@@ -1148,10 +1148,14 @@ WallpaperPage.MusicVideo.cs`, `App/Player/*Align*.cs`, `App/Tray/TrayFlyout.Musi
 User-Agent and failure rules, the verified-artist badge, and the result rows' thumbnails built by hand
 (`https://i.ytimg.com/vi/<id>/mqdefault.jpg`, as the Mac's picker builds them).
 
+**Captions are forced off** (14 Nov, after the owner saw them on the wallpaper), as on the Mac: besides
+`cc_load_policy=0`, the page unloads the player's captions module and clears its track when the player is ready, when its
+API changes and on each load or play (`YouTubeEmbed`, test `CaptionsAreForcedOff`, ported from the Mac's
+`testCaptionsAreForcedOff`).
+
 **What isn't ported, because the Mac's means aren't official:** the still-image check (it reads YouTube's undocumented
 numbered stills, `1.jpg`–`3.jpg`, for up to three candidates of each automatic lookup), so a found video is used
-without it, and the Mac's note for a pasted still-image upload is dropped; the player's undocumented caption calls
-(`unloadModule`, `setOption`); the Mac's `YouTubeThumbnail` (the large still for the settings preview and Reduce Motion,
+without it, and the Mac's note for a pasted still-image upload is dropped; the Mac's `YouTubeThumbnail` (the large still for the settings preview and Reduce Motion,
 which isn't part of search).
 
 **Not kept for YouTube, because YouTube's API policies don't allow obscuring, cropping or covering the embedded player's

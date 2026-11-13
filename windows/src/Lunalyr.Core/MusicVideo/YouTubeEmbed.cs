@@ -3,8 +3,11 @@
 // - The page creates the privacy-enhanced embed itself (an <iframe> of youtube-nocookie.com/embed with enablejsapi=1 and
 //   the documented player parameters) and YT.Player attaches to it, as the API's documentation describes. The Mac passes
 //   an undocumented `host` option instead.
-// - The Mac forces captions off with undocumented calls (unloadModule, setOption); those are left out. cc_load_policy=0
-//   is passed and YouTube's own default applies.
+// - Captions are forced off as on the Mac (the owner saw them on the wallpaper, 14 Nov): cc_load_policy=0 alone leaves
+//   YouTube's default, which shows them for some videos and accounts, so the page also unloads the captions module and
+//   clears the track (unloadModule, setOption: the player's own calls, not in the documented reference) when the player
+//   is ready, when its API changes (the captions module loading) and on each load or play. Only the display is switched
+//   off, as the player's own CC button does; no caption track is read.
 // - Messages go through WebView2's window.chrome.webview.postMessage; the page is served from a virtual https host so
 //   the embed gets a real origin and referrer (the Mac's baseURL).
 // - The Mac draws the player at 1.25x and clips it, hides it whenever it is not playing, and lays a frozen frame over a
@@ -92,14 +95,22 @@ public static class YouTubeEmbed
             function post(type, value) {
               try { window.chrome.webview.postMessage({type: type, value: value, video: '{{videoId}}', page: {{pageText}}}); } catch (e) {}
             }
+            function hideCaptions() {
+              if (!player) return;
+              try { player.unloadModule('captions'); } catch (e) {}
+              try { player.unloadModule('cc'); } catch (e) {}
+              try { player.setOption('captions', 'track', {}); } catch (e) {}
+            }
             function onYouTubeIframeAPIReady() {
               player = new YT.Player('player', {
                 events: {
-                  onReady: function (event) { ready = true; event.target.mute(); post('ready', 0); },
+                  onReady: function (event) { ready = true; event.target.mute(); hideCaptions(); post('ready', 0); },
                   onError: function (event) { post('error', event.data); },
+                  onApiChange: function () { hideCaptions(); },
                   onStateChange: function (event) {
                     var state = event.data;
                     if (state === 1 || state === 3) { player.mute(); }
+                    if (state === -1 || state === 1 || state === 5) { hideCaptions(); }
                     post('state', state);
                   }
                 }
