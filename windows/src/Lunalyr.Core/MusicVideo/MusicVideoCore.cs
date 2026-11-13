@@ -5,6 +5,7 @@
 
 using System.Globalization;
 using Lunalyr.Core.Lyrics;
+using Lunalyr.Core.NowPlaying;
 
 namespace Lunalyr.Core.MusicVideo;
 
@@ -36,7 +37,23 @@ public sealed record MusicVideoSong(string Title, string Artist, string? Album, 
 public sealed record MusicVideoTrack(string Title, string Artist, double Duration, string? Album = null, bool IsStream = false,
     bool IsAdvert = false)
 {
-    public MusicVideoSong Song => new(Title, Artist, Album, Duration);
+    /// <summary>
+    /// The song looked up. Windows' own: an artist that still holds Apple Music for Windows' "Artist — Album"
+    /// (<see cref="AppleMusicWindowsMetadata"/>) is split here too, whichever app reported it, when the album is missing or
+    /// is the part after the dash. The joined text can never match a video (the artist's own "Tame Impala - " segment
+    /// isn't taken off a title, and the channel isn't the artist's), so the search, its cache key, the picker and the
+    /// pasted link all use the artist alone.
+    /// </summary>
+    public MusicVideoSong Song => JoinedArtist() is { } joined
+        ? new(Title, joined.Artist, joined.Album, Duration)
+        : new(Title, Artist, Album, Duration);
+
+    private (string Artist, string Album)? JoinedArtist()
+    {
+        if (AppleMusicWindowsMetadata.Split(Artist) is not { } joined) return null;
+        return string.IsNullOrWhiteSpace(Album) || string.Equals(Album.Trim(), joined.Album, StringComparison.OrdinalIgnoreCase)
+            ? joined : null;
+    }
 }
 
 // ---- YouTube IDs ----

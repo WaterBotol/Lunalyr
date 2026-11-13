@@ -48,6 +48,97 @@ public sealed class MusicVideoPageTests
         Assert.Equal("ZRtdQ81jPUQ", Official("results-yoasobi-idol.html", "アイドル", "YOASOBI", 213));
     }
 
+    // ---- The owner's listening, 13 Nov 2026 (Apple Music for Windows) ----
+
+    private const string LostInYesterday = "results-tame-impala-lost-in-yesterday-official-music-video.html";
+    private const string LostInYesterdayJoined = "results-tame-impala-the-slow-rush-lost-in-yesterday-official-music-video.html";
+
+    [Fact]
+    public void TheOwnersRecordedPagesAreReadInPageOrder()
+    {
+        var lost = YouTubeSearchPage.Results(PageFixtures.RecordedText(LostInYesterday));
+        Assert.Equal(19, lost.Count);
+        Assert.Equal(new YouTubeVideoResult("utCjuKDXQsE", "Tame Impala - Lost in Yesterday (Official Video)", "Tame Impala", true, 260, "33M", "6y ago"),
+            lost[0]);
+        // The joined query's page: the same video first; its "Mix" and album playlists (lockupViewModel) aren't videos.
+        var joined = YouTubeSearchPage.Results(PageFixtures.RecordedText(LostInYesterdayJoined));
+        Assert.Equal(13, joined.Count);
+        Assert.Equal("utCjuKDXQsE", joined[0].VideoId);
+        Assert.Equal(18, YouTubeSearchPage.Results(PageFixtures.RecordedText("results-dayglow-hot-rod-official-music-video.html")).Count);
+        Assert.Equal(18, YouTubeSearchPage.Results(PageFixtures.RecordedText("results-wallows-pleaser-official-music-video.html")).Count);
+        Assert.Equal(18, YouTubeSearchPage.Results(PageFixtures.RecordedText("results-hers-what-once-was-official-music-video.html")).Count);
+    }
+
+    /// <summary>
+    /// Songs that fell back to the visualiser. With the artist alone, Tame Impala's and Dayglow's official videos are found.
+    /// Wallows' "Pleaser" has only a lyric video and a live take on the band's channel, and Her's' "What Once Was" only an
+    /// official audio upload and other channels' sessions: nothing official, by the Mac's rules too.
+    /// </summary>
+    [Theory]
+    [InlineData(LostInYesterday, "Lost in Yesterday", "Tame Impala", 249, "utCjuKDXQsE")]
+    [InlineData(LostInYesterdayJoined, "Lost in Yesterday", "Tame Impala", 249, "utCjuKDXQsE")]
+    [InlineData("results-dayglow-hot-rod-official-music-video.html", "Hot Rod", "Dayglow", 205, "tsJXoqvmgzM")]
+    [InlineData("results-dayglow-hot-rod-official-music-video.html", "Can I Call You Tonight?", "Dayglow", 300, "hh1WeQxfCX0")]
+    [InlineData("results-wallows-pleaser-official-music-video.html", "Pleaser", "Wallows", 190, null)]
+    [InlineData("results-hers-what-once-was-official-music-video.html", "What Once Was", "Her's", 256, null)]
+    public void TheOwnersSongsFindTheirOfficialVideosOnRecordedPages(string fixture, string title, string artist, double duration,
+        string? expected)
+    {
+        var results = YouTubeSearchPage.Results(PageFixtures.RecordedText(fixture));
+        Assert.Equal(expected, YouTubeSearch.OfficialVideo(results, title, artist, duration)?.VideoId);
+    }
+
+    /// <summary>
+    /// The bug: until Test Build 6.1 the lookup ran on "Tame Impala — The Slow Rush". No title on the page reads as the song
+    /// once that text is taken off ("Tame Impala - Lost in Yesterday" keeps its "Tame Impala"), so the song missed with its
+    /// official video first on the page.
+    /// </summary>
+    [Theory]
+    [InlineData(LostInYesterdayJoined, "Lost in Yesterday", "Tame Impala — The Slow Rush", 249)]
+    [InlineData(LostInYesterday, "Lost in Yesterday", "Tame Impala — The Slow Rush", 249)]
+    [InlineData("results-dayglow-hot-rod-official-music-video.html", "Hot Rod", "Dayglow — Fuzzybrain", 205)]
+    [InlineData("results-dayglow-hot-rod-official-music-video.html", "Can I Call You Tonight?", "Dayglow — Fuzzybrain", 300)]
+    public void TheJoinedArtistAndAlbumMatchNoVideo(string fixture, string title, string joined, double duration)
+    {
+        var results = YouTubeSearchPage.Results(PageFixtures.RecordedText(fixture));
+        Assert.Empty(YouTubeSearch.OfficialVideos(results, title, joined, duration));
+    }
+
+    [Theory]
+    [InlineData("Tame Impala — The Slow Rush", null, "Tame Impala", "The Slow Rush")]
+    [InlineData("Wallows — Pleaser - Single", "", "Wallows", "Pleaser - Single")]
+    [InlineData("Tame Impala — The Slow Rush", "The Slow Rush", "Tame Impala", "The Slow Rush")]
+    [InlineData("Tame Impala", "The Slow Rush", "Tame Impala", "The Slow Rush")]
+    [InlineData("Her's", null, "Her's", null)]
+    // An artist with a dash of its own, beside a different album, is left as it is.
+    [InlineData("Artist — Name", "Another Album", "Artist — Name", "Another Album")]
+    public void AJoinedArtistIsSplitBeforeTheSongIsLookedUp(string artist, string? album, string expectedArtist, string? expectedAlbum)
+    {
+        var song = new MusicVideoTrack("Lost in Yesterday", artist, 249, album).Song;
+        Assert.Equal((expectedArtist, expectedAlbum), (song.Artist, string.IsNullOrEmpty(song.Album) ? null : song.Album));
+    }
+
+    [Fact]
+    public async Task AJoinedArtistIsLookedUpAsTheArtistAlone()
+    {
+        var http = new FakeHttp();
+        Serve(http, LostInYesterday);
+        var controller = _world.Controller(_world.Resolver(http: http));
+        // As Apple Music for Windows reports it, should the player's own split ever be missed.
+        controller.Update(new MusicVideoTrack("Lost in Yesterday", "Tame Impala — The Slow Rush", 249), enabled: true, online: true);
+        await controller.SettleAsync();
+        Assert.Equal(new MusicVideoStatus.Showing(YouTube("utCjuKDXQsE"), "Lost in Yesterday"), controller.Status);
+        var url = Assert.Single(http.Urls);
+        Assert.Equal("https://www.youtube.com/results?search_query=Tame%20Impala%20Lost%20in%20Yesterday%20official%20music%20video",
+            url.AbsoluteUri);
+        Assert.Equal(new MusicVideoSong("Lost in Yesterday", "Tame Impala", "The Slow Rush", 249), controller.SearchSong);
+        // Cached under the split song: the same song reported already split isn't looked up again.
+        controller.Update(new MusicVideoTrack("Lost in Yesterday", "Tame Impala", 249, "The Slow Rush"), enabled: true, online: true);
+        await controller.SettleAsync();
+        Assert.Equal(new MusicVideoStatus.Showing(YouTube("utCjuKDXQsE"), "Lost in Yesterday"), controller.Status);
+        Assert.Single(http.Urls);
+    }
+
     [Fact]
     public async Task TheAutomaticLookupReadsARecordedPageWithOneRequestAndNoKey()
     {
