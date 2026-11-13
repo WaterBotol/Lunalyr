@@ -216,8 +216,64 @@ public sealed partial class AppController
         return Choose(result, LyricToolsText.Imported, $"Using imported lyrics for this song ({parsed.Count} lines).");
     }
 
+    /// <summary>
+    /// Reads a reading LRC of up to 1 MB and adds its readings to the lyrics showing, as <see cref="ImportReadings"/> does
+    /// (Settings › Readings › Import reading LRC). A file that can't be read says why, as a failure.
+    /// </summary>
+    public ReadingImport ImportReadingsFile(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        LyricDecodeResult decoded;
+        try
+        {
+            var info = new FileInfo(path);
+            decoded = info.Exists && info.Length > LyricToolsText.ImportLimit
+                ? new LyricDecodeResult(null, LyricDecodeFailure.TooLarge)
+                : LyricTextDecoder.Lyrics(File.ReadAllBytes(path), LyricToolsText.ImportLimit);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            decoded = new LyricDecodeResult(null, LyricDecodeFailure.Unopenable);
+        }
+
+        if (decoded.Text is { } text) return ImportReadings(text);
+        var warning = LyricDecodeResult.Message(decoded.Failure ?? LyricDecodeFailure.NoTimestamps);
+        _lyricLog.Info($"A reading file couldn't be imported: {warning}");
+        return new ReadingImport(warning, Failed: true);
+    }
+
+    /// <summary>
+    /// Adds the readings of a reading LRC (a timestamp and a reading per line) to the lyrics showing, matched to their
+    /// lines by time, then shows them and saves the result as this recording's lyrics (a pin), so the readings come
+    /// back with them. The lyric source stays the same (its per-source offset with it). Re-implemented from the Mac's
+    /// behaviour (LyricsViewModel.importRomanization is on Verso-attributed lines): the readings attach to the lyrics as
+    /// the lookup gave them, before presentation; nothing changes when no timestamp falls on a line.
+    /// </summary>
+    public ReadingImport ImportReadings(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        LyricQuery? query;
+        LyricResult? original;
+        lock (_gate)
+        {
+            query = _query;
+            original = _original;
+        }
+
+        if (query is null || original is not LyricResult.Synced { Lines.Count: > 0 } synced) return new ReadingImport(LyricToolsText.ReadingsNeedLyrics, false);
+        var updated = LocalSidecars.AttachingReadings(text, synced.Lines, query.Duration);
+        var count = updated.Count(line => line.Romanization is not null);
+        if (count == 0) return new ReadingImport(LyricToolsText.NoReadingsMatched, false);
+
+        var saved = false;
+        var shown = Choose(new LyricResult.Synced(updated, synced.Provenance), note: null,
+                           $"Readings from a file added to {count} lines of this song.", pinned => saved = pinned);
+        return shown ? new ReadingImport(LyricToolsText.ReadingsAdded(count, saved), false) : new ReadingImport(LyricToolsText.ReadingsNeedLyrics, false);
+    }
+
     /// <summary>Stops the lookup, shows <paramref name="result"/> for the song playing and saves it as its lyrics.</summary>
-    private bool Choose(LyricResult result, Func<bool, string> note, string log)
+    /// <param name="note">Timing's note after the choice; null leaves Timing's note as it is (imported readings).</param>
+    private bool Choose(LyricResult result, Func<bool, string>? note, string log, Action<bool>? saved = null)
     {
         LyricQuery query;
         long generation;
@@ -232,13 +288,15 @@ public sealed partial class AppController
         }
 
         Show(generation, query, result, repair, complete: true);
-        var saved = _lyrics.Pin(query, result);
+        var pinned = _lyrics.Pin(query, result);
         lock (_gate)
         {
-            if (generation == _generation) _tools = _tools with { Pinned = saved, Note = note(saved), Warning = null };
+            if (generation == _generation)
+                _tools = note is null ? _tools with { Pinned = pinned } : _tools with { Pinned = pinned, Note = note(pinned), Warning = null };
         }
 
-        _lyricLog.Info(log + (saved ? "" : " It couldn't be saved."));
+        saved?.Invoke(pinned);
+        _lyricLog.Info(log + (pinned ? "" : " It couldn't be saved."));
         RaiseStatusChanged();
         return true;
     }

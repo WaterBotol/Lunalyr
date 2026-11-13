@@ -173,6 +173,21 @@ public static class LyricToolsText
     /// <summary>The source name imported lyrics are shown under.</summary>
     public const string ImportedSource = "Imported lyrics";
 
+    // ---- Saved readings (Settings › Readings › Import reading LRC; worded afresh: the Mac's are on Verso lines) ----
+
+    /// <summary>Nothing to attach readings to (the Mac's ReadingsPage disabled reason, a Lunalyr line).</summary>
+    public const string ReadingsNeedLyrics = "Readings can be imported once a song’s lyrics are showing.";
+
+    /// <summary>No timestamp of the file fell on a lyric line: nothing changed.</summary>
+    public const string NoReadingsMatched = "None of the file’s timestamps fall on this song’s lyric lines, so nothing changed.";
+
+    /// <summary>Readings were added to <paramref name="count"/> lines and, when <paramref name="saved"/>, kept for the recording.</summary>
+    public static string ReadingsAdded(int count, bool saved) =>
+        $"Readings added to {count} {(count == 1 ? "line" : "lines")}." + (saved ? " Saved for this recording." : " They couldn’t be saved.");
+
+    /// <summary>The reading file picker's title (the Mac's, a Lunalyr line).</summary>
+    public const string ReadingPickerTitle = "Choose a reading LRC file";
+
     /// <summary>The largest lyric file imported (the Mac's InspectorImport).</summary>
     public const int ImportLimit = 1_000_000;
 

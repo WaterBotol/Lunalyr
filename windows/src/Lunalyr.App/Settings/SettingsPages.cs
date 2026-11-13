@@ -1,4 +1,5 @@
 using Lunalyr.Shell;
+using Lunalyr.Shell.LyricTools;
 using Lunalyr.Shell.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -53,7 +54,7 @@ internal static class GeneralPage
 /// <summary>Readings (the Mac's "Romanisation"): readings under the lyrics or instead of them, the language and saved readings.</summary>
 internal static class ReadingsPage
 {
-    public static StackPanel Build(SettingsContext ctx)
+    public static StackPanel Build(SettingsContext ctx, Func<AppController?>? controller = null, Func<Task<string?>>? chooseReadingFile = null)
     {
         var page = Page();
         Section(page, "Romanisation");
@@ -72,8 +73,36 @@ internal static class ReadingsPage
             Toggle(ctx, s => s.RomanizationSaved, (s, v) => s with { RomanizationSaved = v })));
 
         Section(page, "Saved readings");
-        page.Children.Add(Card("Import reading LRC", "Use readings from an LRC file for the lyrics showing.", "",
-            Button("Import…", () => { }), notYet: SettingsCopy.LaterBuild));
+        // The Mac's Import Reading LRC…: readings matched to the lines showing by time, then saved with the recording.
+        var import = new Button { Content = "Import…" };
+        AutomationProperties.SetName(import, "Import reading LRC");
+        page.Children.Add(Card("Import reading LRC", "Use readings from an LRC file for the lyrics showing.", "", import));
+        var needsLyrics = Caption(LyricToolsText.ReadingsNeedLyrics);
+        page.Children.Add(needsLyrics);
+        var warning = new InfoBar { Severity = InfoBarSeverity.Warning, IsClosable = false, IsOpen = false };
+        var note = Caption("");
+        note.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetLiveSetting(note, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        AutomationProperties.SetLiveSetting(warning, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Assertive);
+        page.Children.Add(warning);
+        page.Children.Add(note);
+        import.Click += async (_, _) =>
+        {
+            if (chooseReadingFile is null || await chooseReadingFile() is not { Length: > 0 } path) return;
+            if (controller?.Invoke() is not { } c) return;
+            var result = c.ImportReadingsFile(path);
+            warning.Message = result.Failed ? result.Message : "";
+            warning.IsOpen = result.Failed;
+            note.Text = result.Failed ? "" : result.Message;
+            note.Visibility = result.Failed ? Visibility.Collapsed : Visibility.Visible;
+            ctx.QueueRefresh();
+        };
+        ctx.OnRefresh(_ =>
+        {
+            var showing = controller?.Invoke()?.HasSyncedLyrics == true;
+            import.IsEnabled = showing && chooseReadingFile is not null;
+            needsLyrics.Visibility = showing ? Visibility.Collapsed : Visibility.Visible;
+        });
         page.Children.Add(Caption("Saved readings are pronunciation guides. Japanese readings are matched to the lyric’s kana, however they’re spaced; a reading written for other words isn’t shown, and Lunalyr’s own reading is used for that line."));
 
         Section(page, "Translations");

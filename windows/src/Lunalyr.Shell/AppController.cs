@@ -164,6 +164,8 @@ public sealed partial class AppController : IAsyncDisposable
     private MediaTrackInfo? _lookupTrack;
     private LyricQuery? _query;
     private LyricResult? _shown;
+    // The lyrics as the lookup or a choice gave them, before LyricPresentation.Prepare: what imported readings attach to.
+    private LyricResult? _original;
     private bool _retryWhenOnline;
     // The one look again this track gets when a lookup looked offline while Windows reported a connection.
     private bool _retriedWhileOnline;
@@ -229,6 +231,12 @@ public sealed partial class AppController : IAsyncDisposable
     public AppStatus Status
     {
         get { lock (_gate) return _status; }
+    }
+
+    /// <summary>A song's timed lyrics are showing, so readings can be imported for them.</summary>
+    public bool HasSyncedLyrics
+    {
+        get { lock (_gate) return _query is not null && _original is LyricResult.Synced { Lines.Count: > 0 }; }
     }
 
     public AppSettings Settings
@@ -659,6 +667,7 @@ public sealed partial class AppController : IAsyncDisposable
         _lookupTrack = null;
         _query = null;
         _shown = null;
+        _original = null;
         _retryWhenOnline = false;
         CancelOnlineRetryLocked();
         Volatile.Write(ref _recordingKey, null);
@@ -913,6 +922,7 @@ public sealed partial class AppController : IAsyncDisposable
         {
             if (generation != _generation) return;
             _shown = presented;
+            _original = result;
             _offsets.ActiveSource = result.Provenance.Source;
             _scene = _scene with { Lyrics = presented, Readings = NoReadings, WordReadings = NoWordReadings, Status = null, NoneFound = false };
             _status = _status with { LyricSource = presented.Provenance.Label, Status = complete ? StatusText.Showing : StatusText.LookingUp };
