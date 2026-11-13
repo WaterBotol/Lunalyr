@@ -26,11 +26,14 @@ extension StageLyricView {
     // and lands, dimmed, on the other side; the new phrase is set on the
     // fresh page beneath it, and the page before is covered. One axis, one
     // move at two scales: the focal word swings open on the spine as it is
-    // sung, the page turns on it at each phrase, and the line leaves with a
-    // last turn. The focal word bursts in oversized and blurred as it swings,
-    // and settles; small content words flip open on the spine with the same
-    // spring, a quick run as one group; function words just ink. A held
-    // focal word grows a little from the spine as it is held.
+    // sung, the page turns on it at each phrase, and the line leaves by
+    // closing the book: both pages fold shut onto the spine, accelerating,
+    // and the closed book recedes in the reading direction; the next line's
+    // book arrives still moving that way. The focal word bursts in
+    // oversized and blurred as it swings, and settles; small content words
+    // flip open on the spine with the same spring, a quick run as one
+    // group; function words just ink. A held focal word grows a little from
+    // the spine as it is held.
 
     /// Which side of the spine a page sits on.
     enum HingeSide: Equatable { case left, right }
@@ -108,9 +111,9 @@ extension StageLyricView {
 
     /// How far each page has turned over, 0 (flat on its own side) to 1
     /// (flat on the other side, read). A page turns as the next page's first
-    /// word is about to be sung, the last page as the line leaves; a
-    /// line-timed spread opens from the spine at once, then turns its last
-    /// page as it leaves. Eased in and out: a page is a big, heavy thing.
+    /// word is about to be sung; a line-timed spread opens from the spine at
+    /// once. The last page never turns: the line leaves by closing the book
+    /// (`hingeExit`). Eased in and out: a page is a big, heavy thing.
     static func hingeTurns(pageStarts: [Double], lineTimed: Bool, exitStart: Double, at time: Double,
                            speed: Double) -> [Double] {
         let count = pageStarts.count
@@ -120,14 +123,13 @@ extension StageLyricView {
         func turning(from start: Double, span: Double) -> Double {
             hingeEaseInOut((time - start) / span)
         }
-        let exit = turning(from: exitStart, span: StageMotion.hingeTurn)
         if lineTimed {
             let first = pageStarts.min() ?? 0
             return (0..<count).map { k in
                 let open = hingeEaseOut((time - (first - StageMotion.lead) - StageMotion.hingeSpreadStagger * Double(k))
                                         / StageMotion.hingeSwing)
                 let onOwnSide = k == count - 1
-                if onOwnSide { return time >= exitStart ? exit : 0.5 - 0.5 * open }
+                if onOwnSide { return 0.5 - 0.5 * open }
                 return 0.5 + 0.5 * open
             }
         }
@@ -135,7 +137,7 @@ extension StageLyricView {
             if k + 1 < count {
                 return turning(from: pageStarts[k + 1] - StageMotion.lead - StageMotion.hingeTurnLead, span: span)
             }
-            return exit
+            return 0
         }
     }
 
@@ -150,24 +152,50 @@ extension StageLyricView {
         var id: Int { page * 2 + (back ? 1 : 0) }
     }
 
+    /// How the line leaves: the book closes. Both pages fold shut onto the
+    /// spine, accelerating (`fold`, 0...1 of the way shut), the read page
+    /// gone in the first moments (`readFade`); the closed book is already
+    /// moving off in the reading direction and, once shut, recedes quickly
+    /// (`travel`, 0...1 of `StageMotion.hingeExitTravel`; `opacity`).
+    static func hingeExit(exitStart: Double, at time: Double)
+        -> (fold: Double, readFade: Double, travel: Double, opacity: Double) {
+        guard time > exitStart else { return (0, 1, 0, 1) }
+        let age = time - exitStart
+        let fold = hingeEaseIn(age / StageMotion.hingeClose)
+        let travel = hingeEaseIn(age / (StageMotion.hingeClose + StageMotion.hingeRecede))
+        let opacity = 1 - Easing.smoothstep((age - StageMotion.hingeClose + 0.03) / StageMotion.hingeRecede)
+        let readFade = 1 - Easing.smoothstep(age / StageMotion.hingeReadGone)
+        return (fold, readFade, travel, opacity)
+    }
+
+    /// How far (0...1 of `StageMotion.hingeExitTravel`) a line's book is
+    /// still short of its place as it arrives: it comes in already moving
+    /// the way the last line left, and decelerates (never from rest).
+    static func hingeEntry(firstStart: Double, at time: Double) -> Double {
+        let t = min(max((time - (firstStart - StageMotion.lead)) / StageMotion.hingeArrive, 0), 1)
+        return (1 - t) * (1 - t) * (1 - t)
+    }
+
     /// The drawn copies of each page at its turn, faded edge-on so no page
     /// is seen squashed to a sliver, dimmed once read, and gone once the
-    /// next page lands on it. `exitPage` is the page turned by the line's
-    /// exit: it fades out as it lands rather than staying to be read.
+    /// next page lands on it. As the line leaves (`exit`, from `hingeExit`)
+    /// both pages fold shut onto the spine and the read page fades at once.
     /// Under Reduce Motion a turn is a cross-fade between the two sides.
     /// `begun` says which pages have their first word sung (a page not yet
     /// begun is not drawn); nil takes every page as begun.
-    static func hingeInstances(turns: [Double], begun: [Bool]? = nil, exitPage: Int?,
+    static func hingeInstances(turns: [Double], begun: [Bool]? = nil,
+                               exit: (fold: Double, readFade: Double)? = nil,
                                reduceMotion: Bool) -> [HingeInstance] {
+        let fold = reduceMotion ? 0 : exit?.fold ?? 0
+        let readFade = exit?.readFade ?? 1
         var result: [HingeInstance] = []
         for k in turns.indices {
             if let begun, begun.indices.contains(k), !begun[k] { continue }
             let turn = min(max(turns[k], 0), 1)
             let next = k + 1 < turns.count ? min(max(turns[k + 1], 0), 1) : 0
             let covered = Easing.smoothstep((next - 0.55) / 0.35)
-            let leaving = k == exitPage
             func backOpacity(_ landed: Double) -> Double {
-                leaving ? 1 - landed : 1 - (1 - StageMotion.hingeReadDim) * landed
+                (1 - (1 - StageMotion.hingeReadDim) * landed) * readFade
             }
             if reduceMotion {
                 // A step at the turn's start, cross-faded.
@@ -180,18 +208,22 @@ extension StageLyricView {
             }
             let degrees = 180 * turn
             let edgeOn = abs(cos(degrees * .pi / 180))
-            let visible = Easing.smoothstep((edgeOn - 0.1) / 0.35)
+            // Closing, a page stays seen to the end, as the book's thin spine.
+            let visible = fold > 0 ? 1 : Easing.smoothstep((edgeOn - 0.1) / 0.35)
+            let shut = StageMotion.hingeShutAngle * fold
             let moving = turn > 0 && turn < 1
             if turn < 0.5 {
                 let opacity = visible * (1 - covered)
                 if opacity > 0.001 {
-                    result.append(HingeInstance(page: k, back: false, angle: degrees, opacity: opacity, z: moving ? 2 : 1))
+                    result.append(HingeInstance(page: k, back: false, angle: min(degrees + shut, 90), opacity: opacity,
+                                                z: moving ? 2 : 1))
                 }
             } else {
                 let landed = Easing.smoothstep((turn - 0.5) / 0.5)
                 let opacity = visible * backOpacity(landed) * (1 - covered)
                 if opacity > 0.001 {
-                    result.append(HingeInstance(page: k, back: true, angle: degrees - 180, opacity: opacity, z: moving ? 2 : 0))
+                    result.append(HingeInstance(page: k, back: true, angle: max(degrees - 180 - shut, -90), opacity: opacity,
+                                                z: moving ? 2 : 0))
                 }
             }
         }
@@ -238,6 +270,12 @@ extension StageLyricView {
         vc_spring_step(age, VCSpring(omega: 3.36 / max(rise, 0.01), zeta: StageMotion.arrivalDamping))
     }
 
+    /// Ease-in (cubic): the book closing and leaving, accelerating.
+    static func hingeEaseIn(_ x: Double) -> Double {
+        let t = min(max(x, 0), 1)
+        return t * t * t
+    }
+
     /// Ease-out (exponential): arrivals.
     static func hingeEaseOut(_ x: Double) -> Double {
         let t = min(max(x, 0), 1)
@@ -264,10 +302,15 @@ extension StageLyricView {
         let starts: [Double] = pages.map { page in page.map { phrasing.phrases[$0].start }.min() ?? 0 }
         let turns = Self.hingeTurns(pageStarts: starts, lineTimed: phrasing.lineTimed, exitStart: exitStart, at: time,
                                     speed: speed)
-        let exitPage: Int? = time >= exitStart && !pages.isEmpty ? pages.count - 1 : nil
+        let exit = Self.hingeExit(exitStart: exitStart, at: time)
         let begun = starts.map { phrasing.lineTimed || time >= $0 - StageMotion.lead }
-        let instances = Self.hingeInstances(turns: turns, begun: begun, exitPage: exitPage, reduceMotion: reduceMotion)
+        let instances = Self.hingeInstances(turns: turns, begun: begun, exit: (exit.fold, exit.readFade),
+                                            reduceMotion: reduceMotion)
             .sorted { $0.z < $1.z }
+        // The book moves only in the reading direction: in, still moving,
+        // as the line arrives; off, accelerating, as it leaves.
+        let entry = Self.hingeEntry(firstStart: starts.min() ?? 0, at: time)
+        let drift = reduceMotion ? 0 : CGFloat(entry - exit.travel) * width * StageMotion.hingeExitTravel * (rtl ? -1 : 1)
         // A turn swings the page's free edge up out of the stage, over the spine.
         let sign: Double = rtl ? -1 : 1
         return ZStack(alignment: .topLeading) {
@@ -288,6 +331,9 @@ extension StageLyricView {
             }
         }
         .frame(width: width, height: height, alignment: .topLeading)
+        .offset(x: drift)
+        // Reduce Motion: no fold or travel; the line fades as every other does.
+        .opacity(reduceMotion ? 1 - leave : exit.opacity)
     }
 
     /// One page: its slabs (one phrase each) stacked, flush to the spine.
@@ -401,8 +447,19 @@ struct HingeCap: Layout {
 }
 
 extension StageMotion {
-    /// Hinge: a page turning over on the spine (also the line's exit).
+    /// Hinge: a page turning over on the spine.
     static let hingeTurn = 0.62
+    /// Hinge's exit: the pages folding shut (accelerating), how far shut
+    /// they fold (a hair short of edge-on, so the closed spine is seen), the
+    /// read page fading as the fold starts, and the closed book receding.
+    static let hingeClose = 0.4
+    static let hingeShutAngle = 86.0
+    static let hingeReadGone = 0.15
+    static let hingeRecede = 0.15
+    /// Hinge: how far (a share of the stage's width) the book travels as it
+    /// leaves, and as the next line's book arrives, decelerating.
+    static let hingeExitTravel: CGFloat = 0.12
+    static let hingeArrive = 0.45
     /// Hinge: a page starts to turn this long before the next page's first word arrives.
     static let hingeTurnLead = 0.12
     /// Hinge: the focal word's burst settling (scale and blur), and its

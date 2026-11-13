@@ -143,21 +143,40 @@ final class StageMotionTests: XCTestCase {
         XCTAssertEqual(StageMotion.leave(at: exit + 0.2, exitStart: exit), vc_settle(0.2, WallpaperMotion.lineExit), accuracy: 1e-9)
     }
 
-    /// Hinge leaves with one last page turn, inside the shared exit span:
-    /// the line is dropped 0.70 s after its exit starts, so the turning page
-    /// must be gone by then, and the page under it covered.
-    func testHingeTurnsOutWithinTheExitSpan() {
+    /// Hinge leaves by closing the book, inside the shared exit span (the
+    /// line is dropped 0.70 s after its exit starts): the pages fold shut
+    /// accelerating, the read page is gone at once, and the closed book
+    /// recedes and is gone; the next line's book arrives moving the same
+    /// way, already in motion.
+    func testHingeClosesTheBookWithinTheExitSpan() {
         let exit = 10.0
-        let starts = [1.0, 3.0, 5.0]
-        let done = StageLyricView.hingeTurns(pageStarts: starts, lineTimed: false, exitStart: exit,
-                                             at: exit + LyricPhraseTiming.exitSpan, speed: 1)
-        XCTAssertEqual(done.last ?? 0, 1, accuracy: 1e-9)
-        let drawn = StageLyricView.hingeInstances(turns: done, exitPage: 2, reduceMotion: false)
-        XCTAssertTrue(drawn.isEmpty, "Nothing of the line is left when it is dropped")
-        XCTAssertLessThanOrEqual(StageMotion.hingeTurn, LyricPhraseTiming.exitSpan)
+        let done = StageLyricView.hingeExit(exitStart: exit, at: exit + LyricPhraseTiming.exitSpan)
+        XCTAssertEqual(done.opacity, 0, accuracy: 1e-9, "Nothing of the line is left when it is dropped")
+        XCTAssertLessThanOrEqual(StageMotion.hingeClose + StageMotion.hingeRecede, LyricPhraseTiming.exitSpan)
+        // Ease-in: the fold accelerates.
+        let early = StageLyricView.hingeExit(exitStart: exit, at: exit + 0.1).fold
+        let middle = StageLyricView.hingeExit(exitStart: exit, at: exit + 0.2).fold
+        let late = StageLyricView.hingeExit(exitStart: exit, at: exit + 0.3).fold
+        XCTAssertLessThan(middle - early, late - middle)
+        XCTAssertEqual(StageLyricView.hingeExit(exitStart: exit, at: exit + StageMotion.hingeClose).fold, 1)
+        // The read page goes first; the book is still there, folding.
+        let start = StageLyricView.hingeExit(exitStart: exit, at: exit + StageMotion.hingeReadGone)
+        XCTAssertEqual(start.readFade, 0, accuracy: 1e-9)
+        XCTAssertEqual(start.opacity, 1, accuracy: 1e-9)
+        let folding = StageLyricView.hingeInstances(turns: [1, 0], exit: (0.5, 0), reduceMotion: false)
+        XCTAssertEqual(folding.map(\.page), [1], "The dimmed page does not linger as the book closes")
+        XCTAssertEqual(folding.first?.angle ?? 0, StageMotion.hingeShutAngle * 0.5, accuracy: 1e-9)
+        // Leaving moves the book on; arriving, the next book is still on its
+        // way in the same direction and moving (never from rest).
+        XCTAssertGreaterThan(StageLyricView.hingeExit(exitStart: exit, at: exit + 0.5).travel, 0.5)
+        let arriving = StageLyricView.hingeEntry(firstStart: 11, at: 11 - StageMotion.lead)
+        let next = StageLyricView.hingeEntry(firstStart: 11, at: 11 - StageMotion.lead + 1.0 / 60)
+        XCTAssertEqual(arriving, 1, accuracy: 1e-9)
+        XCTAssertGreaterThan(arriving - next, 0.05, "Already moving on its first frame")
         // Before the exit the last page lies flat, the one before it read.
-        let before = StageLyricView.hingeTurns(pageStarts: starts, lineTimed: false, exitStart: exit, at: exit - 0.1, speed: 1)
-        XCTAssertEqual(before, [1, 1, 0])
+        let starts = [1.0, 3.0, 5.0]
+        let before = StageLyricView.hingeTurns(pageStarts: starts, lineTimed: false, exitStart: exit, at: exit + 0.3, speed: 1)
+        XCTAssertEqual(before, [1, 1, 0], "The last page never turns: the book closes instead")
     }
 
     // MARK: L11: Reduce Motion

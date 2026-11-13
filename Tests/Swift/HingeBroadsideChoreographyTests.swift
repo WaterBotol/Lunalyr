@@ -98,20 +98,20 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
         // At rest, between turns: at most two pages drawn.
         for time in [2.5, 4.4, 6.9] {
             let begun = starts.map { time >= $0 - StageMotion.lead }
-            let drawn = StageLyricView.hingeInstances(turns: turns(time), begun: begun, exitPage: nil, reduceMotion: false)
+            let drawn = StageLyricView.hingeInstances(turns: turns(time), begun: begun, reduceMotion: false)
                 .filter { $0.opacity > 0.02 }
             XCTAssertLessThanOrEqual(drawn.count, 2, "Too many pages at \(time)s")
             XCTAssertLessThanOrEqual(drawn.filter { $0.opacity > StageMotion.hingeReadDim + 0.01 }.count, 1,
                                      "One page is the hero; the other is read")
         }
         // Edge-on a turning page is not drawn at all (never a squashed sliver).
-        let edgeOn = StageLyricView.hingeInstances(turns: [0.5, 0], exitPage: nil, reduceMotion: false)
+        let edgeOn = StageLyricView.hingeInstances(turns: [0.5, 0], reduceMotion: false)
         XCTAssertFalse(edgeOn.contains { $0.page == 0 })
     }
 
     /// Reduce Motion: a turn is a cross-fade, never a rotation.
     func testHingeReduceMotionCrossFades() {
-        let drawn = StageLyricView.hingeInstances(turns: [0.1, 0], exitPage: nil, reduceMotion: true)
+        let drawn = StageLyricView.hingeInstances(turns: [0.1, 0], reduceMotion: true)
         XCTAssertTrue(drawn.allSatisfy { $0.angle == 0 })
         XCTAssertTrue(drawn.contains { $0.page == 0 && !$0.back })
         XCTAssertTrue(drawn.contains { $0.page == 0 && $0.back })
@@ -269,7 +269,7 @@ final class HingeBroadsideFastLineTests: XCTestCase {
         for time in stride(from: 1.0, through: 3.2, by: 1.0 / 30) {
             let turns = StageLyricView.hingeTurns(pageStarts: starts, lineTimed: false, exitStart: 4, at: time, speed: 2.6)
             let begun = starts.map { time >= $0 - StageMotion.lead }
-            let drawn = StageLyricView.hingeInstances(turns: turns, begun: begun, exitPage: nil, reduceMotion: false)
+            let drawn = StageLyricView.hingeInstances(turns: turns, begun: begun, reduceMotion: false)
                 .filter { $0.opacity > 0.05 }
             XCTAssertLessThanOrEqual(drawn.count, 3, "Pages pile up at \(time)s")
         }
