@@ -30,6 +30,10 @@ enum OpeningTitle {
     // Type sizes, as shares of the title's own size (before a long title is
     // set smaller), so the hierarchy holds at every size.
     static let artistShare: CGFloat = 0.32
+    /// How strongly the card glows in the album's colour: fully over a dark
+    /// picture, gently when the type is dark on a light one (a glow there
+    /// would only muddy the words).
+    static func glowStrength(dark: Bool) -> Double { dark ? 0.35 : 1 }
     static let readingShare: CGFloat = 0.32
     static let albumShare: CGFloat = 0.26
 
@@ -340,7 +344,9 @@ struct OpeningTitleCard: View {
         let readingSize = nominal * OpeningTitle.readingShare
         let albumSize = nominal * OpeningTitle.albumShare
         let showsReading = reading != nil && !compact
-        let ruleHeight = max(2, unit * 0.04), ruleGap = unit * (compact ? 0.18 : 0.22)
+        // The card glows in the album's own colour: a tight halo and a wide,
+        // soft bloom, arriving with the words and leaving with them.
+        let glow = OpeningTitle.glowStrength(dark: dark)
         let readingTop = nominal * 0.1, artistTop = nominal * (compact ? 0.2 : 0.26)
         // The cover is as tall as the title block: the title, its reading
         // and the artist.
@@ -362,18 +368,12 @@ struct OpeningTitleCard: View {
                     .frame(width: side, height: side)
                     .clipShape(RoundedRectangle(cornerRadius: side * 0.07, style: .continuous))
                     .shadow(color: .black.opacity(0.45), radius: side * 0.08, y: side * 0.03)
+                    .shadow(color: accent.opacity(0.55 * glow), radius: side * 0.22)
                     .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * reveal.cover, anchor: .bottomLeading)
                     .opacity(reveal.cover)
-                    .padding(.top, ruleHeight + ruleGap)
             }
             CappedWidth(maximum: columnWidth) {
             VStack(alignment: centred ? .center : .leading, spacing: 0) {
-                Capsule()
-                    .fill(accent)
-                    .frame(width: unit * (compact ? 0.7 : 1.0), height: ruleHeight)
-                    .scaleEffect(x: reduceMotion ? 1 : reveal.rule, y: 1, anchor: centred ? .center : .leading)
-                    .opacity(reveal.rule)
-                    .padding(.bottom, ruleGap)
                 Group {
                     Text(title)
                         .font(settings.lyricFont(size: titleSize, hero: true, mood: mood))
@@ -417,8 +417,10 @@ struct OpeningTitleCard: View {
                     }
                 }
                 .compositingGroup()
-                // A soft shadow under the type, as the lyrics have.
+                // A soft shadow under the type, as the lyrics have, then the glow.
                 .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
+                .shadow(color: accent.opacity(0.7 * glow), radius: unit * 0.18)
+                .shadow(color: accent.opacity(0.45 * glow), radius: unit * 0.6)
             }
             }
         }
