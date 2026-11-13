@@ -180,6 +180,7 @@ public sealed class SpreadSetupRenderTests : IDisposable
             ahead.NewPass();
             _stage.Render(layer, scene, t, t, Scale, Background, ahead: ahead);
         }
+        _stage.Settle(layer, scene, 10.0, Scale, Background);
         Assert.False(layer.SetupPending);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var t = 10.0; t < 17.0; t += 1.0 / 60)

@@ -110,6 +110,24 @@ public sealed class Offscreen : IDisposable
         Dc.Target = null;
     }
 
+    /// <summary>
+    /// Draws <paramref name="layers"/> at <paramref name="songSeconds"/> again until every lyric layer among them has
+    /// baked what it set up ahead (line setup is spread over frames), so the frames after it only draw: what a test of
+    /// settled frames waits for.
+    /// </summary>
+    public void Settle(IReadOnlyList<IRenderLayer> layers, SceneSnapshot scene, double songSeconds, double wallSeconds, float scale)
+    {
+        for (var i = 0; i < 1000 && layers.Any(layer => layer is Lunalyr.Render.Compositions.LyricCompositionLayer { SetupPending: true }); i++)
+            Render(layers, scene, songSeconds, wallSeconds, scale);
+    }
+
+    /// <summary>As <see cref="Settle(IReadOnlyList{IRenderLayer}, SceneSnapshot, double, double, float)"/>, for one layer over a plain background.</summary>
+    public void Settle(IRenderLayer layer, SceneSnapshot scene, double songSeconds, float scale, Vector4 background)
+    {
+        for (var i = 0; i < 1000 && layer is Lunalyr.Render.Compositions.LyricCompositionLayer { SetupPending: true }; i++)
+            Render(layer, scene, songSeconds, songSeconds, scale, background);
+    }
+
     /// <summary>The last frame's pixels, BGRA, top row first, alpha opaque.</summary>
     public unsafe byte[] Pixels()
     {

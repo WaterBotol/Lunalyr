@@ -10,7 +10,8 @@
 //
 // -hashes FILE writes a SHA-256 of the frame every tenth of a second of the same play-through at 30 frames a second, to
 // compare two builds pixel for pixel (same adapter, same size). With the environment variable LUNALYR_KEEP_FRAMES=DIR it
-// also keeps one frame a second (raw BGRA); with LUNALYR_AGAINST_FRAMES=DIR it prints how far each of those is from the
+// also keeps one frame a second (raw BGRA), and every frame hashed within LUNALYR_KEEP_WINDOW=song:from-to (seconds);
+// with LUNALYR_AGAINST_FRAMES=DIR it prints how far each of those is from the
 // one kept there (how many channel values differ, by how many steps at most). Direct2D is not bit-stable from run to
 // run: two runs of one build already differ by a step in a few pixels of some frames, so compare more than one run.
 //
@@ -112,8 +113,8 @@ internal static class SetupBench
                 var pixels = stage.Pixels();
                 file.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"{factory.Id} {song} {t:0.000} {Convert.ToHexString(SHA256.HashData(pixels))}"));
-                // Frames kept (one a second) to compare two runs pixel by pixel; see the header.
-                if (frame % 30 != 0) return;
+                // Frames kept (one a second, and every one in LUNALYR_KEEP_WINDOW) to compare two runs; see the header.
+                if (frame % 30 != 0 && !InWindow(song, t)) return;
                 var name = string.Create(CultureInfo.InvariantCulture, $"{factory.Id}-{song}-{t:00.000}.bgra");
                 if (Environment.GetEnvironmentVariable("LUNALYR_KEEP_FRAMES") is { } keep) File.WriteAllBytes(Path.Combine(keep, name), pixels);
                 if (Environment.GetEnvironmentVariable("LUNALYR_AGAINST_FRAMES") is { } against && File.Exists(Path.Combine(against, name)))
@@ -132,6 +133,15 @@ internal static class SetupBench
             }, fps: 30);
             Console.WriteLine($"{factory.Id} hashed");
         }
+    }
+
+    /// <summary>Whether a frame is in LUNALYR_KEEP_WINDOW ("song:from-to", seconds), where every frame hashed is kept.</summary>
+    private static bool InWindow(int song, double t)
+    {
+        if (Environment.GetEnvironmentVariable("LUNALYR_KEEP_WINDOW") is not { } window) return false;
+        var parts = window.Split(':', '-');
+        return parts.Length == 3 && song == int.Parse(parts[0], CultureInfo.InvariantCulture)
+            && t >= double.Parse(parts[1], CultureInfo.InvariantCulture) && t <= double.Parse(parts[2], CultureInfo.InvariantCulture);
     }
 
     private static RunStats Play(Offscreen stage, IRenderLayerFactory factory, List<Song> playlist, float scale, int surfaces,

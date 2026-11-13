@@ -256,6 +256,8 @@ public sealed class StageRenderTests : IDisposable
         var scene = Fixtures.English();
         // Onsets, a hand-over to the next line, backing vocals and that line's exit.
         for (var t = 10.0; t < 17.0; t += 1.0 / 30) Frame(layer, scene, t);
+        // Line setup is spread over frames: let it finish, so what follows only draws.
+        _stage.Settle(layer, scene, 10.0, Scale, Background);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var t = 10.0; t < 17.0; t += 1.0 / 60) _stage.Render(layer, scene, t, t, Scale, Background);
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
