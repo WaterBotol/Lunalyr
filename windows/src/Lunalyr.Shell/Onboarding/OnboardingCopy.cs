@@ -1,7 +1,8 @@
 // What the welcome says, kept apart from the window so tests can pin the promises in it. The Mac's OnboardingCopy
-// (OnboardingFlow.swift, Lunalyr's own lines) in Windows' terms: no permission prompt, the notification area instead of
-// the menu bar, the tray panel and Windows' shortcuts, and only what this build can do (no translations yet, no lyrics
-// from Apple Music's own app: see docs/APPLE-MUSIC-WINDOWS.md and docs/READINGS-WINDOWS.md).
+// (OnboardingFlow.swift, Lunalyr's own lines; reworded shorter for Test Build 88: one line under a title, one caption
+// under a control) in Windows' terms: no permission prompt, the notification area instead of the menu bar, the tray
+// panel and Windows' shortcuts, a video file chosen for a song instead of the Music library's videos, and no lyrics from
+// Apple Music's own app (see docs/APPLE-MUSIC-WINDOWS.md and docs/READINGS-WINDOWS.md).
 
 using Lunalyr.Core.NowPlaying;
 using Lunalyr.Shell.Flyout;
@@ -22,18 +23,25 @@ public static class OnboardingCopy
     public const string WelcomeTitle = "Welcome to Lunalyr";
 
     public const string Welcome =
-        "Your desktop becomes the lyrics of the song you’re playing, timed word by word, over a wallpaper that moves with the music.";
+        "Your desktop sings along: the lyrics of the song you’re playing, timed word by word, over a wallpaper that moves with the music.";
+
+    /// <summary>The glass logo opening, to Narrator: the whole window is one button that skips it.</summary>
+    public const string SkipOpening = "Skip the opening";
 
     // ---- 2. Your music ----
 
     public const string MusicTitle = "Let Lunalyr see what’s playing";
 
     /// <summary>
-    /// Windows' counterpart of the Mac's <c>permissionNote</c>: which players Lunalyr follows, that nothing is asked of
-    /// Windows, and what Lunalyr does with what it reads.
+    /// Windows' counterpart of the Mac's <c>permissionNote</c>: which players Lunalyr follows, and that nothing is asked of
+    /// Windows.
     /// </summary>
     public const string MusicNote =
-        "Lunalyr follows any app that shares what it plays with Windows, the ones in the media controls by the volume flyout: Spotify, Apple Music, browsers playing YouTube Music or SoundCloud, and more. Windows asks you nothing and Lunalyr needs no permission. It only reads the song and its position, and controls playback only when you use its buttons.";
+        "Lunalyr follows any app that shares what it plays with Windows: Spotify, Apple Music, YouTube Music or SoundCloud in a browser, and more. Windows asks you nothing.";
+
+    /// <summary>Under the card (the Mac's <c>permissionDetail</c>): what Lunalyr does with what it reads.</summary>
+    public const string MusicDetail =
+        "It only reads the song and its position, and controls playback only when you use its buttons. Players show here once they share what they play, in the media controls by the volume flyout.";
 
     public const string PlayersHeading = "Sharing with Windows now";
 
@@ -76,10 +84,6 @@ public static class OnboardingCopy
 
     public const string LookTitle = "Pick a look";
 
-    public const string Layout = "Layout";
-
-    public const string LayoutCaption = "How the lyrics are set on the wallpaper. Match the music picks one for each song.";
-
     public const string Importing = "Importing…";
 
     public const string ImportFailed = "Couldn’t use that file";
@@ -94,7 +98,51 @@ public static class OnboardingCopy
         return type.Value == "custom" && settings.WallpaperName is { Length: > 0 } name ? $"{name}: {type.Summary}" : type.Summary;
     }
 
-    // ---- 4. Lyrics & readings ----
+    /// <summary>The layout tiles, to Narrator.</summary>
+    public const string LayoutGroup = "Lyric layout";
+
+    /// <summary>
+    /// Under the layouts: what the chosen one does (its name is on its tile), or Match the music's promise (the Mac's
+    /// <c>layoutCaption</c>; Windows calls Automatic "Match the music").
+    /// </summary>
+    public static string LayoutCaption(string? layout) =>
+        layout is null or AppSettings.AllLayoutsKey || SettingsCopy.Layouts.FirstOrDefault(l => l.Value == layout)?.Detail is not { Length: > 0 } detail
+            ? "Match the music picks a layout to suit each song."
+            : detail;
+
+    /// <summary>How many more layouts Settings has than the look step shows (the Mac's <c>moreLayouts</c>).</summary>
+    public static string MoreLayouts(int count) => $"{count} more in Settings, with Match the music.";
+
+    // ---- 4. Music videos ----
+
+    public const string VideosTitle = "Music videos";
+
+    /// <summary>The Mac's line, with Windows' video file chosen for a song in place of the Music library's videos.</summary>
+    public const string Videos =
+        "Play a song’s official video behind its lyrics, muted. A video file you choose for a song comes first and needs nothing sent.";
+
+    public const string VideoWallpaper = "Play music videos as the wallpaper";
+
+    public const string VideoWallpaperCaption = "Songs without a video show the look you picked.";
+
+    public const string SearchYouTube = "Search YouTube for videos";
+
+    /// <summary>The same facts as Settings › Wallpaper › Music video's caption under Search YouTube for videos.</summary>
+    public const string YouTubePrivacy =
+        "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube.";
+
+    /// <summary>
+    /// The settings after the step's "Play music videos as the wallpaper" switch (the Mac's <c>VideosStep.videoWallpaper</c>):
+    /// on chooses Music video, remembering the type it replaced; off returns to that type.
+    /// </summary>
+    public static AppSettings WithVideoWallpaper(AppSettings settings, bool on)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (on) return AppSettings.RememberMusicVideoFallback(settings, settings with { BackgroundMode = "musicVideo" });
+        return settings.BackgroundMode == "musicVideo" ? settings with { BackgroundMode = settings.MusicVideoFallback } : settings;
+    }
+
+    // ---- 5. Lyrics & readings ----
 
     public const string LyricsTitle = "Lyrics & readings";
 
@@ -102,33 +150,63 @@ public static class OnboardingCopy
 
     /// <summary>Where lyrics come from and what the services are sent (the Mac's words; Windows has no Apple Music lyrics of its own).</summary>
     public const string Sources =
-        "Lunalyr finds synced lyrics in lyric services such as LRCLIB. The services receive only the song’s title, artist, album and length.";
+        "From lyric services such as LRCLIB, which receive only the song’s title, artist, album and length.";
 
     public const string TimingTitle = "Lyrics early or late?";
 
     /// <summary>Nudging the timing, with the keys this keyboard types for the two shortcuts.</summary>
     public static string Timing(string earlier, string later) =>
-        $"Nudge them a tenth of a second at a time from the tray panel, or press {earlier} and {later} once keyboard shortcuts are on. Lunalyr remembers the timing for each song.";
+        $"Nudge them from the tray panel, or press {earlier} and {later} once shortcuts are on. Each song keeps its timing.";
 
     public const string ReadingsTitle = "Readings for Japanese, Korean and Chinese";
 
-    public const string Readings =
-        "Romanisation shows how lyrics in other scripts sound, below them or in their place. Readings are worked out on this PC.";
+    public const string Readings = "How lyrics in other scripts sound, below them or in their place.";
 
     public const string ReadingsDisplay = "Display";
 
     public const string ReadingsLanguage = "Language";
 
-    /// <summary>Under Show translations under lyrics (the Mac's OnboardingCopy.translations, without its sentence about translating on the Mac).</summary>
+    /// <summary>Under Show translations under lyrics (the Mac's OnboardingCopy.translations).</summary>
     public const string Translations = Lunalyr.Shell.Settings.TranslationsCopy.Onboarding;
 
-    // ---- 5. The tray ----
+    // ---- 6. Extras ----
+
+    public const string ExtrasTitle = "Extras";
+
+    public const string Extras = "A player on the desktop, lyrics over your apps, and the line you’re hearing on Discord.";
+
+    public const string PlayerTitle = "Desktop player";
+
+    public const string Player = "Rest the pointer on an uncovered desktop to see what’s playing and next, and search.";
+
+    /// <summary>The desktop player's switch, to Narrator (Settings › Performance's Show player on hover).</summary>
+    public const string PlayerSwitch = "Show player on hover";
+
+    public const string FloatingTitle = "Floating lyrics";
+
+    public const string Floating = "Lyrics over your apps instead of on the desktop. Turn them on in Settings › Lyric style.";
+
+    public const string DiscordTitle = "Discord status";
+
+    public const string Discord = "Your status shows the line being sung, as it changes.";
+
+    /// <summary>The Discord switch, to Narrator.</summary>
+    public const string DiscordSwitch = "Show what I’m listening to on Discord";
+
+    /// <summary>
+    /// What the switch sends, and to whom (DiscordPresenceService: a local pipe to the Discord app; the cover from Apple's
+    /// public search; cleared when playback stops).
+    /// </summary>
+    public const string DiscordPrivacy =
+        "Off by default. Talks only to the Discord app on this PC (covers come from Apple’s search) and clears when playback stops.";
+
+    // ---- 7. The tray ----
 
     public const string TrayTitle = "Find Lunalyr in the tray";
 
     /// <summary>Where the app lives and the way back (the Mac's menu-bar note).</summary>
     public const string TrayNote =
-        "Lunalyr lives in the notification area by the clock and has no taskbar button once Settings is closed. If Windows tucks its icon under ^ (Show hidden icons), drag it onto the taskbar to keep it pinned there. Opening Lunalyr again brings back Settings.";
+        "Lunalyr lives in the notification area by the clock, with no taskbar button. If Windows tucks it under ^, drag it onto the taskbar, or open Lunalyr again to bring back Settings.";
 
     public const string TrayLineTitle = ExtrasCopy.TrayTitle;
 
@@ -138,7 +216,7 @@ public static class OnboardingCopy
 
     public const string LaunchAtLoginCaption = "Lunalyr starts quietly in the tray when you sign in to Windows.";
 
-    // ---- 6. Done ----
+    // ---- 8. Done ----
 
     public const string DoneTitle = "You’re all set";
 

@@ -22,12 +22,13 @@ public sealed class WelcomeTests
     [Fact]
     public void TheWelcomeExplainsThePromptAndTheWayBack()
     {
-        var note = OnboardingCopy.MusicNote;
+        var note = OnboardingCopy.MusicNote + OnboardingCopy.MusicDetail;
         Assert.Contains("Windows asks you nothing", note);
+        Assert.Contains("only reads the song and its position", note);
         foreach (var player in new[] { "Spotify", "Apple Music", "YouTube Music", "SoundCloud" }) Assert.Contains(player, note);
         Assert.Contains("controls playback only when you use its buttons", note);
         Assert.Contains("^", OnboardingCopy.TrayNote);
-        Assert.Contains("Opening Lunalyr again brings back Settings", OnboardingCopy.TrayNote);
+        Assert.Contains("open Lunalyr again to bring back Settings", OnboardingCopy.TrayNote);
         // What lyric services receive, as the Mac's About › Privacy says.
         Assert.Contains("title, artist, album and length", OnboardingCopy.Sources);
         Assert.Contains("Lyrics are never sent anywhere to be translated", OnboardingCopy.Translations);
@@ -52,14 +53,18 @@ public sealed class WelcomeTests
             visited.Add(flow.Step);
         }
         Assert.Equal(OnboardingSteps.All, visited);
-        Assert.Equal(6, visited.Count);
+        Assert.Equal([OnboardingStep.Welcome, OnboardingStep.Music, OnboardingStep.Look, OnboardingStep.Videos, OnboardingStep.Lyrics,
+                      OnboardingStep.Extras, OnboardingStep.Tray, OnboardingStep.Done], visited);
+        // The Mac's "The menu bar" is Windows' tray.
+        Assert.Equal(["Welcome", "Your music", "Pick a look", "Music videos", "Lyrics & readings", "Extras", "The tray", "Done"],
+                     visited.Select(s => s.Title()));
         flow.Advance();
         Assert.Equal(OnboardingStep.Done, flow.Step); // Continue stops at the end
         flow.Back();
         Assert.Equal(OnboardingStep.Tray, flow.Step);
         Assert.True(flow.CanGoBack);
-        Assert.Equal("Step 2 of 6", OnboardingStep.Music.Position());
-        Assert.Equal("Step 6 of 6", OnboardingStep.Done.Position());
+        Assert.Equal("Step 2 of 8", OnboardingStep.Music.Position());
+        Assert.Equal("Step 8 of 8", OnboardingStep.Done.Position());
     }
 
     // Ported from WelcomeTests.swift: testFinishingTheFirstRunCountsAndOnlyOpenSettingsOpensSettings
@@ -182,10 +187,9 @@ public sealed class WelcomeTests
     {
         var flow = new OnboardingFlow(firstRun: true, OnboardingStep.Look);
         Assert.Equal("Back to Your music (Alt+Left)", OnboardingCopy.Help(OnboardingButton.Back, flow));
-        Assert.Equal("On to Lyrics & readings (Enter)", OnboardingCopy.Help(OnboardingButton.Continue, flow));
+        Assert.Equal("On to Music videos (Enter)", OnboardingCopy.Help(OnboardingButton.Continue, flow));
         Assert.Equal("Close and leave Lunalyr in the tray", OnboardingCopy.Help(OnboardingButton.Done, new OnboardingFlow(true, OnboardingStep.Done)));
-        Assert.Equal("Step 3 of 6, Pick a look", OnboardingCopy.Announcement(OnboardingStep.Look));
-        Assert.Equal(["Welcome", "Your music", "Pick a look", "Lyrics & readings", "The tray", "Done"], OnboardingSteps.All.Select(s => s.Title()));
+        Assert.Equal("Step 3 of 8, Pick a look", OnboardingCopy.Announcement(OnboardingStep.Look));
     }
 
     [Theory]
@@ -194,14 +198,18 @@ public sealed class WelcomeTests
     [InlineData("Lyrics & readings", OnboardingStep.Lyrics)]
     [InlineData("tray", OnboardingStep.Tray)]
     [InlineData("menu-bar", OnboardingStep.Tray)]
-    [InlineData("6", OnboardingStep.Done)]
+    [InlineData("videos", OnboardingStep.Videos)]
+    [InlineData("Music videos", OnboardingStep.Videos)]
+    [InlineData("extras", OnboardingStep.Extras)]
+    [InlineData("6", OnboardingStep.Extras)]
+    [InlineData("8", OnboardingStep.Done)]
     [InlineData("1", OnboardingStep.Welcome)]
     public void StepsAreFoundByNameTitleOrNumber(string text, OnboardingStep step) => Assert.Equal(step, OnboardingSteps.Parse(text));
 
     [Theory]
     [InlineData("")]
     [InlineData("0")]
-    [InlineData("7")]
+    [InlineData("9")]
     [InlineData("settings")]
     [InlineData(null)]
     public void UnknownStepsAreNone(string? text) => Assert.Null(OnboardingSteps.Parse(text));
@@ -310,7 +318,7 @@ public sealed class WelcomeTests
         [
             ["--demo"], ["--settings"], ["--settings-page", "general"], ["--lyric-card"], ["--seconds", "20"], ["--stats", "s.json"],
             ["--floating-capture", "f.png"], ["--ticker-capture", "t.png"], ["--hud-capture", "h.png"],
-            ["--onboarding-capture", "o.png"], ["--login"], ["--youtube-search"],
+            ["--onboarding-capture", "o.png"], ["--login"], ["--youtube-search"], ["--settings-loader-capture", "l.png"],
         ];
         foreach (var args in never)
         {
@@ -347,5 +355,27 @@ public sealed class WelcomeTests
         Assert.Contains(ShellOptions.Parse(["--onboarding-capture"]).Problems, p => p.Contains("needs a value", StringComparison.Ordinal));
         Assert.Contains(ShellOptions.Parse(["--onboarding-step", "look"]).Problems, p => p.Contains("goes with --onboarding-capture", StringComparison.Ordinal));
         Assert.Null(ShellOptions.Parse(["--onboarding-capture", "x.png"]).OnboardingStep); // the capture starts at Welcome
+
+        // The look step's Lyrics half, and the glass logo opening.
+        var lyrics = ShellOptions.Parse(["--onboarding-capture", "x.png", "--onboarding-step", "look-lyrics"]);
+        Assert.Equal(OnboardingStep.Look, lyrics.OnboardingStep);
+        Assert.Equal(new OnboardingCapturePage(OnboardingStep.Look, OnboardingLookPart.Lyrics, Opening: false), lyrics.OnboardingPage);
+        Assert.Equal("look-lyrics", lyrics.OnboardingPage!.Name);
+        var opening = ShellOptions.Parse(["--onboarding-capture", "x.png", "--onboarding-step", "opening"]);
+        Assert.Equal(OnboardingStep.Welcome, opening.OnboardingStep);
+        Assert.True(opening.OnboardingPage!.Opening);
+        Assert.Equal("opening", opening.OnboardingPage.Name);
+        Assert.Equal("extras", ShellOptions.Parse(["--onboarding-capture", "x.png", "--onboarding-step", "6"]).OnboardingPage!.Name);
+    }
+
+    [Fact]
+    public void TheLoaderCaptureOpensSettingsQuietly()
+    {
+        var options = ShellOptions.Parse(["--settings-loader-capture", "C:\\temp\\loader.png"]);
+        Assert.Equal(Path.GetFullPath("C:\\temp\\loader.png"), options.SettingsLoaderCapturePath);
+        Assert.True(options.OpenSettings);
+        Assert.True(options.QuietWindows);
+        Assert.Empty(options.Problems);
+        Assert.Contains(ShellOptions.Parse(["--settings-loader-capture"]).Problems, p => p.Contains("needs a value", StringComparison.Ordinal));
     }
 }

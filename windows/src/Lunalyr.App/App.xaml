@@ -131,6 +131,11 @@
                 <Setter Property="Width" Value="18" />
                 <Setter Property="Height" Value="7" />
             </Style>
+            <!-- The welcome's pictures and recordings (Onboarding\OnboardingMediaViews.cs, OnboardingArt.cs): a card's edge. -->
+            <Style x:Key="OnboardingPicture" TargetType="Border">
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

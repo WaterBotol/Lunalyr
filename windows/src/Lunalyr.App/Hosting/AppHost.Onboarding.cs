@@ -13,6 +13,9 @@ internal sealed partial class AppHost
 {
     private volatile bool _welcomeShownAsFirstRun;
 
+    /// <summary><c>--settings-loader-capture</c>: the file the Settings loader is written to (checks), or null.</summary>
+    internal string? SettingsLoaderCapturePath => _options.SettingsLoaderCapturePath;
+
     /// <summary>The players Windows' media controls know about (null until start-up has opened them), read only.</summary>
     internal IMediaSessionSource? MediaSessions => _sessions;
 
@@ -35,8 +38,9 @@ internal sealed partial class AppHost
         if (_options.OnboardingCapturePath is { } capture)
         {
             var step = _options.OnboardingStep ?? OnboardingStep.Welcome;
-            _log.Info($"Welcome: opening at {step.Title()} for --onboarding-capture.");
-            app.ShowOnboarding(firstRun: true, step, quiet: true, capturePath: capture);
+            var page = _options.OnboardingPage ?? new OnboardingCapturePage(step, OnboardingLookPart.Wallpaper, Opening: false);
+            _log.Info($"Welcome: opening at {step.Title()} ({page.Name}) for --onboarding-capture.");
+            app.ShowOnboarding(firstRun: true, step, quiet: true, capturePath: capture, page);
             return;
         }
 

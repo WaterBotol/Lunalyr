@@ -24,11 +24,16 @@ public sealed class SettingsPreviewRenderer : IDisposable
     /// <param name="height">Preview height in pixels.</param>
     /// <param name="factories">The layers it can draw (<see cref="WallpaperLayers.Factories"/>).</param>
     /// <param name="hardware">Draw on the GPU (falls back to the WARP software rasteriser when there is none).</param>
-    public SettingsPreviewRenderer(int width, int height, IEnumerable<IRenderLayerFactory> factories, bool hardware = true)
+    /// <param name="layoutHeight">
+    /// The display height the picture is laid out as (1080 lines: the wallpaper's proportions). The welcome's layout tiles
+    /// use a smaller one, so a tile's line is set larger than a desktop's would be, as the Mac's tiles are.
+    /// </param>
+    public SettingsPreviewRenderer(int width, int height, IEnumerable<IRenderLayerFactory> factories, bool hardware = true, double layoutHeight = 1080)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(width, 16);
         ArgumentOutOfRangeException.ThrowIfLessThan(height, 16);
-        var scale = (float)(height / 1080.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(layoutHeight, 16);
+        var scale = (float)(height / layoutHeight);
         try
         {
             _surface = new OffscreenSurface(width, height, scale, hardware);

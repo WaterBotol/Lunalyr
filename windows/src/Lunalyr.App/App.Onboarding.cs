@@ -25,7 +25,7 @@ public partial class App
     /// (checks while someone works at the PC). With <paramref name="capturePath"/> it is written as a PNG once it has
     /// settled, and Lunalyr quits.
     /// </summary>
-    internal void ShowOnboarding(bool firstRun, OnboardingStep step, bool quiet, string? capturePath)
+    internal void ShowOnboarding(bool firstRun, OnboardingStep step, bool quiet, string? capturePath, OnboardingCapturePage? page = null)
     {
         try
         {
@@ -34,7 +34,8 @@ public partial class App
                 open.BringForward(quiet);
                 return;
             }
-            var window = new OnboardingWindow(_host, firstRun, step, capturePath is not null, _host.IsLaunchAtLoginOn, _host.SetLaunchAtLogin);
+            var window = new OnboardingWindow(_host, firstRun, step, capturePath is not null, _host.IsLaunchAtLoginOn, _host.SetLaunchAtLogin,
+                page?.LookPart ?? OnboardingLookPart.Wallpaper, page?.Opening ?? false);
             _onboarding = window;
             window.Ended += ending =>
             {
@@ -43,7 +44,7 @@ public partial class App
                 _host.WelcomeEnded(ending, window.FirstRun, capturePath is not null);
             };
             window.Open(quiet);
-            if (capturePath is not null) window.CaptureWhenSettled(capturePath, _host.Quit);
+            if (capturePath is not null) window.CaptureWhenSettled(capturePath, page?.Name ?? step.Name(), _host.Quit);
         }
         catch (Exception ex)
         {

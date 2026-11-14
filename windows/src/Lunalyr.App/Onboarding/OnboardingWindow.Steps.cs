@@ -1,6 +1,8 @@
-// The six steps (the Mac's OnboardingSteps.swift, Lunalyr's own lines, in Windows' controls and words). Each reads the
-// settings through its own SettingsContext, so the choices made here are the real settings and the running wallpaper
-// follows them at once. The Mac's welcome also offers its Calm/Bold settings look, which Windows doesn't have.
+// The eight steps (the Mac's OnboardingSteps.swift at Test Build 88, Lunalyr's own lines, in Windows' controls and words).
+// Each reads the settings through its own SettingsContext, so the choices made here are the real settings and the running
+// wallpaper follows them at once. A content step's title sits at the same height on every step with its line under it;
+// the welcome and the end are centred. The Mac's music-video framing menus belong to "Show the whole video", another
+// item of the port: they join the videos step once that setting is in (docs/APP-SHELL.md, "Onboarding").
 
 using Lunalyr.App.Settings;
 using Lunalyr.Core.NowPlaying;
@@ -15,65 +17,63 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Onboarding;
 
 internal sealed partial class OnboardingWindow
 {
-    /// <summary>The look step's preview and tiles: about 440 wide.</summary>
-    private const double LookColumn = 440, PreviewWidth = 320;
+    /// <summary>The look step's choices column, its live preview, and the extras' and readings' pictures (DIPs).</summary>
+    private const double LookColumn = 440, PreviewWidth = 280, ChoicesHeight = 176;
 
+    private const double ExtraPictureWidth = 196, ExtraPictureHeight = 64, ReadingsClipWidth = 144, ReadingsClipHeight = 93;
+
+    private readonly List<OnboardingClipView> _clips = [];
+    private BitmapImage? _discordRecording;
+    private LayoutThumbnails? _thumbnails;
     private IMediaSessionSource? _watchedSessions;
     private WallpaperImporter? _importer;
+
+    /// <summary>Whether a step's content starts at the shared title line (true) or is centred (the welcome and the end).</summary>
+    private static bool StartsAtTitleLine(OnboardingStep step) => step is not (OnboardingStep.Welcome or OnboardingStep.Done);
 
     private UIElement BuildStep(OnboardingStep step, SettingsContext ctx) => step switch
     {
         OnboardingStep.Welcome => WelcomeStep(),
         OnboardingStep.Music => MusicStep(ctx),
         OnboardingStep.Look => LookStep(ctx),
+        OnboardingStep.Videos => VideosStep(ctx),
         OnboardingStep.Lyrics => LyricsStep(ctx),
+        OnboardingStep.Extras => ExtrasStep(ctx),
         OnboardingStep.Tray => TrayStep(ctx),
         _ => DoneStep(ctx),
     };
 
-    // ---- 1. Welcome: what Lunalyr does, with a picture of it ----
+    /// <summary>The pictures that move stop: the step is leaving (UI thread).</summary>
+    private void ReleaseStepMedia()
+    {
+        foreach (var clip in _clips) clip.Stop();
+        _clips.Clear();
+        _discordRecording?.Stop();
+        _discordRecording = null;
+        _thumbnails?.Dispose();
+        _thumbnails = null;
+    }
+
+    // ---- 1. Welcome: the recording of the desktop it draws ----
 
     private StackPanel WelcomeStep()
     {
-        var panel = new StackPanel { Spacing = 0 };
-        var (hero, words) = OnboardingArt.Hero(392);
-        hero.Margin = new Thickness(0, 0, 0, 28);
+        var panel = new StackPanel();
+        var (hero, clip) = OnboardingArt.Hero(392);
+        hero.Margin = new Thickness(0, 0, 0, 24);
+        _clips.Add(clip);
         panel.Children.Add(hero);
-        panel.Children.Add(Header(OnboardingStep.Welcome, null, null, OnboardingCopy.WelcomeTitle, OnboardingCopy.Welcome));
-        PlayLyric(words);
+        panel.Children.Add(Header(OnboardingStep.Welcome, OnboardingCopy.WelcomeTitle, OnboardingCopy.Welcome));
         return panel;
-    }
-
-    /// <summary>
-    /// The sample lines light word by word, twice, then rest full; held mid-line with Windows' animation effects off, in
-    /// a quiet window and in captures.
-    /// </summary>
-    private void PlayLyric(List<Run> words)
-    {
-        if (_capture || _host.QuietWindows || !AnimationsEnabled())
-        {
-            OnboardingArt.Light(words, OnboardingArt.Held);
-            return;
-        }
-        var beats = 0;
-        OnboardingArt.Light(words, 0);
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = OnboardingArt.Beat;
-        timer.Tick += (_, _) =>
-        {
-            beats++;
-            OnboardingArt.Light(words, OnboardingArt.Sung(beats));
-            if (beats >= OnboardingArt.Plays * OnboardingArt.Cycle) timer.Stop();
-        };
-        timer.Start();
-        _lyricTimer = timer;
     }
 
     // ---- 2. Your music: the players Windows shares, and which one to follow ----
@@ -81,9 +81,7 @@ internal sealed partial class OnboardingWindow
     private StackPanel MusicStep(SettingsContext ctx)
     {
         var panel = new StackPanel();
-        var header = Header(OnboardingStep.Music, "", "OnboardingAccentIcon", OnboardingCopy.MusicTitle, OnboardingCopy.MusicNote);
-        header.Margin = new Thickness(0, 0, 0, 20);
-        panel.Children.Add(header);
+        panel.Children.Add(Header(OnboardingStep.Music, OnboardingCopy.MusicTitle, OnboardingCopy.MusicNote, bottom: 20));
 
         var card = CardPanel();
         card.Children.Add(PlayerList(ctx, OnboardingCopy.PlayersHeading));
@@ -105,6 +103,7 @@ internal sealed partial class OnboardingWindow
         follow.Children.Add(combo);
         card.Children.Add(follow);
         panel.Children.Add(Wrap(card));
+        panel.Children.Add(Note(OnboardingCopy.MusicDetail));
         return panel;
     }
 
@@ -173,16 +172,14 @@ internal sealed partial class OnboardingWindow
     // From any thread: the step follows on the UI thread.
     private void OnPlayersChanged(object? sender, EventArgs e) => _ctx?.QueueRefresh();
 
-    // ---- 3. Pick a look: the wallpaper type and the layout, while watching the live preview ----
+    // ---- 3. Pick a look: the wallpaper, or the lyrics' layout, while watching the live preview ----
 
     private StackPanel LookStep(SettingsContext ctx)
     {
         var panel = new StackPanel();
-        var header = Header(OnboardingStep.Look, null, null, OnboardingCopy.LookTitle, null);
-        header.Margin = new Thickness(0, 0, 0, 14);
-        panel.Children.Add(header);
+        panel.Children.Add(Header(OnboardingStep.Look, OnboardingCopy.LookTitle, null, bottom: 12));
 
-        var column = new StackPanel { Spacing = 12, Width = LookColumn, HorizontalAlignment = HorizontalAlignment.Center };
+        var column = new StackPanel { Spacing = 10, Width = LookColumn, HorizontalAlignment = HorizontalAlignment.Center };
         _preview ??= SettingsPreview.TryCreate(_host, DispatcherQueue, () => AppWindow.IsVisible, width: PreviewWidth);
         if (_preview is { View: Border view })
         {
@@ -193,47 +190,146 @@ internal sealed partial class OnboardingWindow
             _preview.UpdateVisibility();
             _preview.SetActive(true);
         }
-        _importer ??= new WallpaperImporter(_host.DataRoot, () => _host.Settings.Current, change => _ctx?.Update(change));
-        column.Children.Add(new Border { Style = Resource<Style>("Card"), Padding = new Thickness(10), Child = WallpaperPage.TypeGrid(ctx, Import) });
 
-        var layout = new Grid { ColumnSpacing = 12 };
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var label = new TextBlock { Text = OnboardingCopy.Layout, Style = Resource<Style>("SettingsTitle"), VerticalAlignment = VerticalAlignment.Center };
-        AutomationProperties.SetAccessibilityView(label, AccessibilityView.Raw);
-        layout.Children.Add(label);
-        var combo = Combo(ctx, SettingsCopy.Layouts, s => s.LyricComposition, (s, v) => s with { LyricComposition = v }, width: 220);
-        combo.HorizontalAlignment = HorizontalAlignment.Right;
-        AutomationProperties.SetName(combo, OnboardingCopy.Layout);
-        Grid.SetColumn(combo, 1);
-        layout.Children.Add(combo);
-        column.Children.Add(layout);
+        // The Mac's segmented control: Wallpaper or Lyrics, kept in the flow so Back returns to it.
+        var bar = new SelectorBar { HorizontalAlignment = HorizontalAlignment.Center };
+        AutomationProperties.SetName(bar, "Show");
+        var parts = new Dictionary<SelectorBarItem, OnboardingLookPart>();
+        foreach (var part in new[] { OnboardingLookPart.Wallpaper, OnboardingLookPart.Lyrics })
+        {
+            var item = new SelectorBarItem { Text = part.Title() };
+            parts[item] = part;
+            bar.Items.Add(item);
+            if (part == _flow.LookPart) bar.SelectedItem = item;
+        }
+        column.Children.Add(bar);
+
+        // The choices keep one height, so switching halves doesn't move the window's content.
+        var choices = new Grid { MinHeight = ChoicesHeight };
+        column.Children.Add(choices);
         panel.Children.Add(column);
 
-        // What the chosen look draws, the import going on, or why it failed.
-        var status = new StackPanel { Spacing = 4, MaxWidth = 480, MinHeight = 36, Margin = new Thickness(0, 10, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
-        var summary = new TextBlock { Style = Resource<Style>("SettingsCaption"), TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        void ShowPart()
+        {
+            choices.Children.Clear();
+            _thumbnails?.Dispose();
+            _thumbnails = null;
+            choices.Children.Add(_flow.LookPart == OnboardingLookPart.Wallpaper ? WallpaperChoices(ctx) : LayoutChoicesView(ctx));
+            ctx.Refresh();
+        }
+        bar.SelectionChanged += (_, _) =>
+        {
+            if (bar.SelectedItem is not { } item || !parts.TryGetValue(item, out var part) || part == _flow.LookPart) return;
+            _flow.LookPart = part;
+            ShowPart();
+            UpdateMotion();
+        };
+        choices.Children.Add(_flow.LookPart == OnboardingLookPart.Wallpaper ? WallpaperChoices(ctx) : LayoutChoicesView(ctx));
+        return panel;
+    }
+
+    /// <summary>The wallpaper half: every type as a tile, and what the chosen one draws (or the import's progress or failure).</summary>
+    private StackPanel WallpaperChoices(SettingsContext ctx)
+    {
+        var half = new StackPanel { Spacing = 8 };
+        _importer ??= new WallpaperImporter(_host.DataRoot, () => _host.Settings.Current, change => _ctx?.Update(change));
+        half.Children.Add(new Border { Style = Resource<Style>("Card"), Padding = new Thickness(10), Child = WallpaperPage.TypeGrid(ctx, Import) });
+
+        var status = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
+        var summary = new TextBlock { Style = Resource<Style>("SettingsCaption"), TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MaxLines = 2 };
         var another = new HyperlinkButton { Content = OnboardingCopy.ChooseAnother, HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(4, 2, 4, 2) };
         another.Click += (_, _) => Import();
         status.Children.Add(summary);
         status.Children.Add(another);
         AutomationProperties.SetLiveSetting(summary, AutomationLiveSetting.Polite);
-        void ShowStatus(Lunalyr.Shell.Settings.AppSettings s)
+        ctx.OnRefresh(s =>
         {
-            var layoutDetail = SettingsCopy.Layouts.FirstOrDefault(l => l.Value == s.LyricComposition)?.Detail;
-            AutomationProperties.SetHelpText(combo, layoutDetail ?? OnboardingCopy.LayoutCaption);
-            ToolTipService.SetToolTip(combo, layoutDetail ?? OnboardingCopy.LayoutCaption);
             if (_importer is { ShowsProgress: true }) summary.Text = OnboardingCopy.Importing;
             else if (_importer?.Message is { } message) summary.Text = $"{OnboardingCopy.ImportFailed}: {message}";
             else summary.Text = OnboardingCopy.LookSummary(s);
             another.Visibility = s.BackgroundMode == "custom" ? Visibility.Visible : Visibility.Collapsed;
-        }
-        ctx.OnRefresh(ShowStatus);
+        });
+        var importer = _importer;
         void ImportChanged() => DispatcherQueue.TryEnqueue(() => ctx.QueueRefresh());
-        _importer.Changed += ImportChanged;
-        ctx.Detached += () => _importer.Changed -= ImportChanged;
-        panel.Children.Add(status);
-        return panel;
+        importer.Changed += ImportChanged;
+        ctx.Detached += () => importer.Changed -= ImportChanged;
+        half.Children.Add(status);
+        return half;
+    }
+
+    /// <summary>
+    /// The lyrics half (the Mac's <c>LayoutChoices</c>): a few layouts drawn by the wallpaper's own layers, the one in use
+    /// always among them; choosing one sets it. Its line under them, and how many more Settings has.
+    /// </summary>
+    private StackPanel LayoutChoicesView(SettingsContext ctx)
+    {
+        var half = new StackPanel { Spacing = 8 };
+        var tiles = new Grid { ColumnSpacing = 6 };
+        AutomationProperties.SetName(tiles, OnboardingCopy.LayoutGroup);
+        var caption = new TextBlock { Style = Resource<Style>("SettingsCaption"), TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MaxLines = 2 };
+        AutomationProperties.SetLiveSetting(caption, AutomationLiveSetting.Polite);
+        var more = new TextBlock { Style = Resource<Style>("SettingsCaption"), TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        half.Children.Add(tiles);
+        half.Children.Add(caption);
+        half.Children.Add(more);
+        _thumbnails ??= new LayoutThumbnails(_host, DispatcherQueue);
+        var thumbnails = _thumbnails;
+        string? shownFor = null;
+        var buttons = new List<(ToggleButton Tile, string Layout)>();
+
+        ctx.OnRefresh(s =>
+        {
+            var current = s.LyricComposition;
+            caption.Text = OnboardingCopy.LayoutCaption(current);
+            foreach (var (tile, layout) in buttons) tile.IsChecked = layout == current;
+            if (shownFor == current && buttons.Count > 0) return;
+            shownFor = current;
+            var layouts = LayoutChoices.Shown(current);
+            more.Text = OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - layouts.Count);
+            tiles.Children.Clear();
+            tiles.ColumnDefinitions.Clear();
+            buttons.Clear();
+            for (var i = 0; i < layouts.Count; i++)
+            {
+                var layout = layouts[i];
+                var choice = SettingsCopy.Layouts.FirstOrDefault(l => l.Value == layout);
+                tiles.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                var content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
+                var picture = new Border
+                {
+                    Width = LayoutThumbnails.Width, Height = LayoutThumbnails.Height, CornerRadius = new CornerRadius(4),
+                    Child = new Image { Source = thumbnails.Bitmap(layout), Stretch = Stretch.Uniform },
+                };
+                AutomationProperties.SetAccessibilityView(picture, AccessibilityView.Raw);
+                content.Children.Add(picture);
+                content.Children.Add(new TextBlock
+                {
+                    Text = choice?.Title ?? layout, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+                var tile = new ToggleButton
+                {
+                    Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(4, 6, 4, 6), IsChecked = layout == current,
+                };
+                AutomationProperties.SetName(tile, choice?.Title ?? layout);
+                if (choice?.Detail is { } detail)
+                {
+                    AutomationProperties.SetHelpText(tile, detail);
+                    ToolTipService.SetToolTip(tile, detail);
+                }
+                tile.Click += (_, _) =>
+                {
+                    // A click never unlights the chosen tile: the layout stays until another is chosen.
+                    tile.IsChecked = ctx.Current.LyricComposition == layout;
+                    if (ctx.Current.LyricComposition != layout) ctx.Update(s2 => s2 with { LyricComposition = layout });
+                };
+                Grid.SetColumn(tile, i);
+                tiles.Children.Add(tile);
+                buttons.Add((tile, layout));
+            }
+            thumbnails.Show(layouts, layouts.Contains(current) ? current : null, animate: MotionAllowed());
+        });
+        return half;
     }
 
     /// <summary>Image or video with nothing imported yet, or Choose Another…: Windows' file picker, then the import.</summary>
@@ -258,38 +354,62 @@ internal sealed partial class OnboardingWindow
         }
     }
 
-    // ---- 4. Lyrics & readings: where lyrics come from, their timing, readings ----
+    // ---- 4. Music videos: on or off as the wallpaper, and whether YouTube may be searched ----
+
+    private StackPanel VideosStep(SettingsContext ctx)
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(Header(OnboardingStep.Videos, OnboardingCopy.VideosTitle, OnboardingCopy.Videos, bottom: 20));
+        var card = CardPanel();
+        // On: Music video. Off: back to the type it replaced (the Mac's musicVideoFallback).
+        card.Children.Add(SwitchRow(OnboardingCopy.VideoWallpaper, OnboardingCopy.VideoWallpaperCaption,
+            Toggle(ctx, s => s.BackgroundMode == "musicVideo", OnboardingCopy.WithVideoWallpaper)));
+        card.Children.Add(Divider());
+        card.Children.Add(SwitchRow(OnboardingCopy.SearchYouTube, OnboardingCopy.YouTubePrivacy,
+            Toggle(ctx, s => s.MusicVideoOnline, (s, v) => s with { MusicVideoOnline = v })));
+        panel.Children.Add(Wrap(card));
+        return panel;
+    }
+
+    // ---- 5. Lyrics & readings: where lyrics come from, their timing, readings ----
 
     private StackPanel LyricsStep(SettingsContext ctx)
     {
         var panel = new StackPanel();
-        var header = Header(OnboardingStep.Lyrics, "", "OnboardingAccentIcon", OnboardingCopy.LyricsTitle, null);
-        header.Margin = new Thickness(0, 0, 0, 20);
-        panel.Children.Add(header);
+        panel.Children.Add(Header(OnboardingStep.Lyrics, OnboardingCopy.LyricsTitle, null, bottom: 20));
 
         var card = CardPanel();
-        card.Children.Add(FeatureRow("", OnboardingCopy.SourcesTitle, OnboardingCopy.Sources));
+        card.Children.Add(FeatureRow(OnboardingCopy.SourcesTitle, OnboardingCopy.Sources));
         card.Children.Add(Divider());
         var modifiers = HotkeyModifiersInfo.Parse(ctx.Current.GlobalShortcutModifiers) ?? HotkeyModifiers.ControlOptionCommand;
         var earlier = _host.Hotkeys?.Label(HotkeyAction.SyncEarlier) ?? modifiers.Prefix() + "[";
         var later = _host.Hotkeys?.Label(HotkeyAction.SyncLater) ?? modifiers.Prefix() + "]";
-        card.Children.Add(FeatureRow("", OnboardingCopy.TimingTitle, OnboardingCopy.Timing(earlier, later)));
+        card.Children.Add(FeatureRow(OnboardingCopy.TimingTitle, OnboardingCopy.Timing(earlier, later)));
         card.Children.Add(Divider());
 
-        var readings = new Grid { ColumnSpacing = 12, RowSpacing = 8, Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        var menus = new Grid { ColumnSpacing = 8, RowSpacing = 8, Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        menus.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        menus.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        menus.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        menus.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        AddLabelled(menus, 0, OnboardingCopy.ReadingsDisplay,
+            Combo(ctx, SettingsCopy.ReadingDisplays, s => s.RomanizationDisplay, (s, v) => s with { RomanizationDisplay = v }, width: 180));
+        AddLabelled(menus, 1, OnboardingCopy.ReadingsLanguage,
+            Combo(ctx, SettingsCopy.ReadingLanguages, s => s.RomanizationLanguage, (s, v) => s with { RomanizationLanguage = v }, width: 180));
+        var readings = new Grid { ColumnSpacing = 16 };
+        readings.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         readings.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        readings.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        readings.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        readings.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        AddLabelled(readings, 0, OnboardingCopy.ReadingsDisplay,
-            Combo(ctx, SettingsCopy.ReadingDisplays, s => s.RomanizationDisplay, (s, v) => s with { RomanizationDisplay = v }, width: 220));
-        AddLabelled(readings, 1, OnboardingCopy.ReadingsLanguage,
-            Combo(ctx, SettingsCopy.ReadingLanguages, s => s.RomanizationLanguage, (s, v) => s with { RomanizationLanguage = v }, width: 220));
-        var accessory = new StackPanel { Spacing = 8 };
-        accessory.Children.Add(readings);
-        // The Mac's checkbox under the readings menus: Settings › Readings' Show translations under lyrics.
-        accessory.Children.Add(TranslationsCheckBox(ctx));
-        card.Children.Add(FeatureRow("", OnboardingCopy.ReadingsTitle, OnboardingCopy.Readings, accessory));
+        readings.Children.Add(FeatureRow(OnboardingCopy.ReadingsTitle, OnboardingCopy.Readings, menus));
+        var clip = new OnboardingClipView(OnboardingClip.Readings, ReadingsClipWidth, ReadingsClipHeight, cornerRadius: 6);
+        clip.View.VerticalAlignment = VerticalAlignment.Top;
+        _clips.Add(clip);
+        Grid.SetColumn(clip.View, 1);
+        readings.Children.Add(clip.View);
+        card.Children.Add(readings);
+        card.Children.Add(Divider());
+        // Settings › Readings' Show translations under lyrics, the same setting.
+        card.Children.Add(SwitchRow(TranslationsCopy.Title, OnboardingCopy.Translations,
+            Toggle(ctx, s => s.ShowTranslations, (s, v) => s with { ShowTranslations = v })));
         panel.Children.Add(Wrap(card));
         return panel;
     }
@@ -306,18 +426,73 @@ internal sealed partial class OnboardingWindow
         grid.Children.Add(combo);
     }
 
-    // ---- 5. The tray: where Lunalyr lives, and two switches for living there ----
+    // ---- 6. Extras: the desktop player, floating lyrics and the Discord status, each with a picture of itself ----
+
+    private StackPanel ExtrasStep(SettingsContext ctx)
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(Header(OnboardingStep.Extras, OnboardingCopy.ExtrasTitle, OnboardingCopy.Extras, bottom: 20));
+        var card = CardPanel();
+        // Settings › Performance's Show player on hover.
+        card.Children.Add(ExtraRow(OnboardingArt.MiniPlayer(ExtraPictureWidth, ExtraPictureHeight), OnboardingCopy.PlayerTitle, OnboardingCopy.Player,
+            Named(Toggle(ctx, s => s.ShowControlsOnHover, (s, v) => s with { ShowControlsOnHover = v }), OnboardingCopy.PlayerSwitch, OnboardingCopy.Player)));
+        card.Children.Add(Divider());
+        var floating = new OnboardingClipView(OnboardingClip.Floating, ExtraPictureWidth, ExtraPictureHeight, cornerRadius: 6);
+        _clips.Add(floating);
+        card.Children.Add(ExtraRow(floating.View, OnboardingCopy.FloatingTitle, OnboardingCopy.Floating, null));
+        card.Children.Add(Divider());
+        var (discord, recording) = OnboardingArt.DiscordStatus(ExtraPictureWidth, ExtraPictureHeight, animates: false);
+        _discordRecording = recording;
+        card.Children.Add(ExtraRow(discord, OnboardingCopy.DiscordTitle, OnboardingCopy.Discord,
+            Named(Toggle(ctx, s => s.DiscordPresence, (s, v) => s with { DiscordPresence = v }), OnboardingCopy.DiscordSwitch, OnboardingCopy.Discord)));
+        var privacy = Caption(OnboardingCopy.DiscordPrivacy);
+        privacy.Margin = new Thickness(ExtraPictureWidth + 16, -6, 0, 0);
+        card.Children.Add(privacy);
+        panel.Children.Add(Wrap(card));
+        return panel;
+    }
+
+    private static ToggleSwitch Named(ToggleSwitch toggle, string name, string help)
+    {
+        AutomationProperties.SetName(toggle, name);
+        AutomationProperties.SetHelpText(toggle, help);
+        return toggle;
+    }
+
+    /// <summary>A picture, the extra's name and line, and its switch at the trailing edge (the Mac's extras row).</summary>
+    private static Grid ExtraRow(FrameworkElement picture, string title, string text, ToggleSwitch? toggle)
+    {
+        var grid = new Grid { ColumnSpacing = 16 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        picture.VerticalAlignment = VerticalAlignment.Center;
+        grid.Children.Add(picture);
+        var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        texts.Children.Add(new TextBlock { Text = title, Style = Resource<Style>("BodyStrongTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
+        texts.Children.Add(Caption(text));
+        Grid.SetColumn(texts, 1);
+        grid.Children.Add(texts);
+        if (toggle is not null)
+        {
+            toggle.VerticalAlignment = VerticalAlignment.Center;
+            AutomationProperties.SetAccessibilityView(texts, AccessibilityView.Raw);
+            Grid.SetColumn(toggle, 2);
+            grid.Children.Add(toggle);
+        }
+        return grid;
+    }
+
+    // ---- 7. The tray: where Lunalyr lives, and two switches for living there ----
 
     private StackPanel TrayStep(SettingsContext ctx)
     {
         var panel = new StackPanel();
+        panel.Children.Add(Header(OnboardingStep.Tray, OnboardingCopy.TrayTitle, OnboardingCopy.TrayNote, bottom: 20));
         var (art, strip) = OnboardingArt.Taskbar(OnboardingCopy.WindowWidth - 96);
         art.Margin = new Thickness(0, 0, 0, 20);
         ctx.OnRefresh(s => strip.Visibility = s.TrayLyric ? Visibility.Visible : Visibility.Collapsed);
         panel.Children.Add(art);
-        var header = Header(OnboardingStep.Tray, null, null, OnboardingCopy.TrayTitle, OnboardingCopy.TrayNote);
-        header.Margin = new Thickness(0, 0, 0, 20);
-        panel.Children.Add(header);
 
         var card = CardPanel();
         card.Children.Add(SwitchRow(OnboardingCopy.TrayLineTitle, OnboardingCopy.TrayLineCaption,
@@ -379,13 +554,19 @@ internal sealed partial class OnboardingWindow
         }
     }
 
-    // ---- 6. Done: what is set up, then Settings ----
+    // ---- 8. Done: what is set up, then Settings ----
 
     private StackPanel DoneStep(SettingsContext ctx)
     {
         var panel = new StackPanel();
-        var header = Header(OnboardingStep.Done, "", "OnboardingSuccessIcon", OnboardingCopy.DoneTitle, "");
-        header.Margin = new Thickness(0, 0, 0, 20);
+        var check = Icon("", 34);
+        check.Style = Resource<Style>("OnboardingSuccessIcon");
+        check.Height = 40;
+        check.HorizontalAlignment = HorizontalAlignment.Center;
+        check.Margin = new Thickness(0, 0, 0, 12);
+        AutomationProperties.SetAccessibilityView(check, AccessibilityView.Raw);
+        panel.Children.Add(check);
+        var header = Header(OnboardingStep.Done, OnboardingCopy.DoneTitle, "", bottom: 20);
         var message = header.Children.OfType<TextBlock>().Last();
         ctx.OnRefresh(_ =>
         {
@@ -400,8 +581,8 @@ internal sealed partial class OnboardingWindow
         var look = new Grid { ColumnSpacing = 12 };
         look.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
         look.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var icon = Icon("", 15);
-        icon.Style = Resource<Style>("OnboardingAccentIcon");
+        var icon = Icon("", 15);
+        icon.Style = Resource<Style>("SettingsNoteIcon");
         icon.VerticalAlignment = VerticalAlignment.Top;
         icon.Margin = new Thickness(0, 3, 0, 0);
         AutomationProperties.SetAccessibilityView(icon, AccessibilityView.Raw);
@@ -432,20 +613,10 @@ internal sealed partial class OnboardingWindow
 
     // ---- Shared step pieces ----
 
-    /// <summary>A step's symbol, title and explanation, centred. The title is a heading, and Narrator hears it as the step appears.</summary>
-    private StackPanel Header(OnboardingStep step, string? glyph, string? glyphStyle, string title, string? message)
+    /// <summary>A step's title and the line under it, centred. The title is a heading, and Narrator hears it as the step appears.</summary>
+    private StackPanel Header(OnboardingStep step, string title, string? message, double bottom = 0)
     {
-        var header = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Stretch };
-        if (glyph is not null)
-        {
-            var icon = Icon(glyph, 34);
-            if (glyphStyle is not null) icon.Style = Resource<Style>(glyphStyle);
-            icon.Height = 40;
-            icon.HorizontalAlignment = HorizontalAlignment.Center;
-            icon.Margin = new Thickness(0, 0, 0, 4);
-            AutomationProperties.SetAccessibilityView(icon, AccessibilityView.Raw);
-            header.Children.Add(icon);
-        }
+        var header = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, bottom) };
         var heading = new TextBlock
         {
             Text = title, Style = Resource<Style>("TitleTextBlockStyle"), FontSize = 26, TextAlignment = TextAlignment.Center,
@@ -459,7 +630,7 @@ internal sealed partial class OnboardingWindow
         {
             header.Children.Add(new TextBlock
             {
-                Text = message, Style = Resource<Style>("OnboardingMessage"), MaxWidth = 520, HorizontalAlignment = HorizontalAlignment.Center,
+                Text = message, Style = Resource<Style>("OnboardingMessage"), MaxWidth = 500, HorizontalAlignment = HorizontalAlignment.Center,
             });
         }
         return header;
@@ -472,43 +643,22 @@ internal sealed partial class OnboardingWindow
 
     private static Border Divider() => new() { Style = Resource<Style>("OnboardingDivider") };
 
-    /// <summary>A symbol beside a short title and its explanation, with an optional control under them.</summary>
-    private static Grid FeatureRow(string glyph, string title, string text, UIElement? accessory = null)
+    /// <summary>A caption under a card, lined up with the card's rows.</summary>
+    private static TextBlock Note(string text)
     {
-        var grid = new Grid { ColumnSpacing = 14 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var icon = Icon(glyph, 16);
-        icon.Style = Resource<Style>("OnboardingAccentIcon");
-        icon.VerticalAlignment = VerticalAlignment.Top;
-        icon.Margin = new Thickness(0, 2, 0, 0);
-        AutomationProperties.SetAccessibilityView(icon, AccessibilityView.Raw);
-        grid.Children.Add(icon);
+        var note = Caption(text);
+        note.Margin = new Thickness(18, 12, 18, 0);
+        return note;
+    }
+
+    /// <summary>A short title and its explanation, with whatever the row offers beneath: a row of a card.</summary>
+    private static StackPanel FeatureRow(string title, string text, UIElement? accessory = null)
+    {
         var texts = new StackPanel { Spacing = 2 };
         texts.Children.Add(new TextBlock { Text = title, Style = Resource<Style>("BodyStrongTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
         texts.Children.Add(Caption(text));
         if (accessory is not null) texts.Children.Add(accessory);
-        Grid.SetColumn(texts, 1);
-        grid.Children.Add(texts);
-        return grid;
-    }
-
-    /// <summary>
-    /// "Show translations under lyrics" as the Mac's welcome has it: a checkbox with its caption, on the same setting as
-    /// Settings › Readings. To Narrator, the checkbox named by its title, with the caption as help text.
-    /// </summary>
-    private static CheckBox TranslationsCheckBox(SettingsContext ctx)
-    {
-        var texts = new StackPanel { Spacing = 2 };
-        texts.Children.Add(new TextBlock { Text = TranslationsCopy.Title, TextWrapping = TextWrapping.Wrap });
-        texts.Children.Add(Caption(OnboardingCopy.Translations));
-        AutomationProperties.SetAccessibilityView(texts, AccessibilityView.Raw);
-        var box = new CheckBox { Content = texts };
-        AutomationProperties.SetName(box, TranslationsCopy.Title);
-        AutomationProperties.SetHelpText(box, OnboardingCopy.Translations);
-        ctx.OnRefresh(s => box.IsChecked = s.ShowTranslations);
-        box.Click += (_, _) => ctx.Update(s => s with { ShowTranslations = box.IsChecked == true });
-        return box;
+        return texts;
     }
 
     /// <summary>A switch at the trailing edge; to Narrator, the switch named by its title, with the caption as help text.</summary>
