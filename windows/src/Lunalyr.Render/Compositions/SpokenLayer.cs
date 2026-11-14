@@ -274,7 +274,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         // The label fades as one piece (its word stays dark on a fading tile, as on the Mac), so a label that is not
         // fully there is drawn in a layer at its opacity; a cutout's label is drawn in a layer cut to its unmasked part.
         if (clip.IsSet && !(clip.Right > clip.Left)) return;
-        var layered = opacity < 0.995f || clip.IsSet;
+        // Once its label has lifted away the word is plain type, drawn at its own opacity without a layer.
+        var layered = (opacity < 0.995f && hold > 0.001) || clip.IsSet;
         if (layered)
         {
             var margin = (float)(unit.Size.Height + unit.Size.Width * 0.1);
@@ -329,12 +330,13 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         // As the label lifts away, the word on it changes back to its own colour (the Mac's tile-text switch, at 0.4).
         var on = (float)LyricHighlightTiming.TextOpacity(hold, 0.4);
         unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, offFrom, offTo, boundaries, reveal, rightToLeft);
-        if (on < 0.999f) unit.Label.DrawBetween(dc, labelWorld, scale, opacity * (1 - on), blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+        // Mid-switch the word is whole in its own colour under the tile's text colour, as the Mac draws it.
+        if (on < 0.999f) unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
         unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity * on, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
         if (reading is not null)
         {
             reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo, readingBoundaries, readingShares);
-            if (on < 0.999f) reading.DrawBetween(dc, readingWorld, scale, opacity * (1 - on), blur, onFrom, onTo, readingBoundaries, readingShares);
+            if (on < 0.999f) reading.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo, readingBoundaries, readingShares);
             unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity * on, blur, onFrom, onTo, readingBoundaries, readingShares);
         }
     }
