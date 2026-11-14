@@ -57,6 +57,10 @@ struct LyricLayer: View {
     private static let idleHoldDuration: TimeInterval = WallpaperMotion.idleNoticeHold
     static let noticeTiming = LyricStagePresence.Timing(idleHold: idleHoldDuration, noticeHold: noticeHoldDuration,
                                                         noticeFade: noticeFadeDuration)
+    /// How long after its end a word still needs every frame: the longest
+    /// fade after a word, a rolling word's (`vc_rolling_pose` releases it
+    /// from 0.45 s to 1.45 s after its end), with a frame to spare.
+    static let wordActiveTail = 1.5
 
     /// What the stage shows on this frame. Looking the lyrics up again for
     /// a song already showing "no lyrics" (a reconnect, a change of source
@@ -240,7 +244,10 @@ struct LyricLayer: View {
                 if time >= exit - 0.2, time <= exit + LyricPhraseTiming.exitSpan(for: composition(at: row)) + 0.1 {
                     return .active
                 }
-                for word in line.words where time >= word.start - lead && time <= word.end + 1.2 {
+                // A rolling word fades out until 1.45 s after its end
+                // (`vc_rolling_pose`): its last quarter second ran at 12 or
+                // 24 fps when nothing else on the stage needed frames.
+                for word in line.words where time >= word.start - lead && time <= word.end + Self.wordActiveTail {
                     return .active
                 }
             }
@@ -990,7 +997,7 @@ struct LyricLayer: View {
     /// joins or leaves the window, not every frame.
     private func rollingWords(around index: Int, scene: SceneLines, time: Double,
                               live: Bool) -> LyricLayerCache.RollingWindow {
-        let lead = live ? max(1.2, settings.nextWordPreviewLead) : 0
+        let lead = live ? max(SpokenTypographyView.windowLead, settings.nextWordPreviewLead) : 0
         let display = readingOptions.display
         let offsets = cache.wordOffsets(fingerprint: scene.fingerprint, lines: scene.lines, romanized: scene.romanized,
                                         display: display)

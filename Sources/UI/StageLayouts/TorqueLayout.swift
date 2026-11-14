@@ -229,7 +229,7 @@ extension StageLyricView {
         for face in plan.faces.dropFirst() {
             let p = (time - face.turnStart) / (3 * StageMotion.torqueUnit)
             if p <= 0 { break }
-            rho += StageMotion.torqueOut(p)
+            rho += StageMotion.torqueTurn(p)
         }
         return rho
     }
@@ -420,6 +420,23 @@ extension StageMotion {
         let u = t - 1
         return 1 + c3 * u * u * u + c1 * u * u
     }
+
+    /// The column's turn, `x` (0...1 of three units) since it started: the
+    /// out-ease, its overshoot and its landing as before, but run up to
+    /// speed over the first `torqueLaunch` of the turn instead of starting
+    /// at full speed. The out-ease alone set off at about 15 degrees in the
+    /// first frame from a standstill, so the face being sung snapped away
+    /// as the next phrase began. The run-up adds half of it to the turn
+    /// (about 0.03 s).
+    static func torqueTurn(_ x: Double) -> Double {
+        let ramp = torqueLaunch
+        guard x > 0 else { return 0 }
+        let eased = x < ramp ? x * x / (2 * ramp) : x - ramp / 2
+        return torqueOut(eased)
+    }
+
+    /// The share of the turn's out-ease over which it runs up to speed.
+    static let torqueLaunch = 0.15
 
     /// Torque's one in-ease: easeInCubic, for the line leaving.
     static func torqueIn(_ x: Double) -> Double {

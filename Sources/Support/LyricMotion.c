@@ -259,11 +259,15 @@ VCWordPose vc_rolling_pose(int style, double rank, double age, double duration,
     double separation = .66*rank+(style == 2 ? .86 : .70)*tanh(rank*1.2);
     VCWordPose p = {0, 0, 1, 0, fade, 0};
     if (style == 0) {
-        /* Hero word, then a loose fan of receding fragments. */
-        p.x = sin(h*.92+phase*.22) * fmin(h, 1) * .70;
+        /* Hero word, then a loose fan of receding fragments. The fan opens
+           over the first rank on an ease (it was fmin(h, 1), whose corner at
+           rank 0 set a word moving sideways at full speed as it stepped back
+           in a fast line, where the rank is still moving there). */
+        double fan = smooth(h);
+        p.x = sin(h*.92+phase*.22) * fan * .70;
         p.y = -separation;
         p.scale = .70+.34*focus;
-        p.angle = sin(phase+h*.6)*fmin(h, 1)*2.4;
+        p.angle = sin(phase+h*.6)*fan*2.4;
     } else if (style == 1) {
         /* A flush column (the stage sets each word's indent): differences
            in type do the emphasis, and the word being sung steps forward

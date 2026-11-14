@@ -57,6 +57,10 @@ struct SpokenTypographyView: View {
 
     private var nextIndex: Int? { words.firstIndex { $0.start > time } }
 
+    /// The least time before its onset a word joins the rolling window
+    /// (`LyricLayer.rollingWords`): the intensity looks no further ahead.
+    static let windowLead = 1.2
+
     /// How far the stage has rolled: one step per onset. Each step is a
     /// seeded spring paced by the gap to the next word, so quick passages
     /// move briskly, slow ones glide, and overlapping steps add their
@@ -114,7 +118,7 @@ struct SpokenTypographyView: View {
             following: following, ordinals: ordinals, parts: parts)
         let prepared = typography.value(for: key) { SpokenTypography.prepare(key, settings: settings) }
         let defaultEnd = LyricHighlightTiming.lineEnd(lineEnd, words: words)
-        let intensity = max(energy, OrganicMotion.vocalIntensity(words, at: time))
+        let intensity = max(energy, OrganicMotion.vocalIntensity(words, at: time, horizon: Self.windowLead))
         let style: Int32 = composition == .spoken ? 0 : composition == .cascade ? 1 : 2
         GeometryReader { geometry in
             let cursor = Self.cursor(prepared, time: time, intensity: intensity, reduceMotion: reduceMotion,
@@ -345,8 +349,13 @@ extension RollingTokenState {
     /// the one before at a little over half. Cascade and Cutout, whose
     /// units are taller, retire them sooner too, before they reach the top
     /// of the stage. A held highlight is not dimmed (see `make`).
+    ///
+    /// Each tier is eased (smoothstep over its rank), not a straight ramp
+    /// between hard corners: in a fast line the rank is still moving as a
+    /// word passes 0, 1 or 2, and a corner there started or stopped its fade
+    /// at full speed. The tiers' values at whole ranks are unchanged.
     static func recede(_ rank: Double, composition: LyricComposition) -> Double {
-        let back = min(max(rank, 0), 1) * 0.26 + min(max(rank - 1, 0), 1) * 0.16
+        let back = Easing.smoothstep(rank) * 0.26 + Easing.smoothstep(rank - 1) * 0.16
         guard composition != .spoken else { return 1 - back }
         let retire = composition == .cutout ? Easing.smoothstep((rank - 1.4) / 1.0)
             : Easing.smoothstep((rank - 1.7) / 1.2)

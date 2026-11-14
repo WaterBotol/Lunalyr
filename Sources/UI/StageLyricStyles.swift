@@ -162,6 +162,20 @@ enum StageMotion {
         1 - Easing.smoothstep((rank - 0.15) / 0.7)
     }
 
+    /// `x` held to 0...1 with its two corners rounded over `corner` either
+    /// side (quadratic, so its slope never steps): a value driven by a rank
+    /// that crosses a hard corner starts or stops at full speed. Within
+    /// `corner / 4` of the plain clamp everywhere, and equal to it away
+    /// from the corners.
+    static func softUnit(_ x: Double, corner: Double = 0.12) -> Double {
+        let c = max(1e-6, corner)
+        if x <= -c { return 0 }
+        if x < c { return (x + c) * (x + c) / (4 * c) }
+        if x <= 1 - c { return x }
+        if x < 1 + c { return 1 - (1 + c - x) * (1 + c - x) / (4 * c) }
+        return 1
+    }
+
     /// How much room a word takes in a stack: none until it starts to arrive,
     /// all of it once it has (the overshoot is not added).
     static func weight(_ arrival: Double) -> Double { min(1, max(0, arrival)) }
