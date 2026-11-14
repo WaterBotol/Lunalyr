@@ -64,7 +64,12 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
                 }
                 checkedOnce = true;
             }
-            var attempt = await AttemptAsync(host, query, ct).ConfigureAwait(false);
+            var attempt = await AttemptAsync(host, query, withAlbum: true, ct).ConfigureAwait(false);
+            // An album the service files the song under differently (a single, a soundtrack) makes it answer "not found"
+            // although it has the song: Heathens by twenty one pilots, 14 Nov 2026. On Windows this is the only way to
+            // Apple Music's lyrics, so the same node is asked once more without the album.
+            if (attempt.Kind == AttemptKind.NotFound && !string.IsNullOrEmpty(query.Album))
+                attempt = await AttemptAsync(host, query, withAlbum: false, ct).ConfigureAwait(false);
             switch (attempt.Kind)
             {
                 case AttemptKind.Lyrics:
@@ -96,14 +101,14 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
 
     private sealed record Attempt(AttemptKind Kind, RawLyrics? Lyrics = null, string? Reason = null, TimeSpan Rest = default);
 
-    private async Task<Attempt> AttemptAsync(string host, LyricQuery query, CancellationToken ct)
+    private async Task<Attempt> AttemptAsync(string host, LyricQuery query, bool withAlbum, CancellationToken ct)
     {
         var parameters = new List<KeyValuePair<string, string>> { new("title", query.Title), new("artist", query.Artist) };
         if (query.Duration > 0)
         {
             parameters.Add(new("duration", ((long)query.Duration).ToString(CultureInfo.InvariantCulture)));
         }
-        if (!string.IsNullOrEmpty(query.Album))
+        if (withAlbum && !string.IsNullOrEmpty(query.Album))
         {
             parameters.Add(new("album", query.Album));
         }

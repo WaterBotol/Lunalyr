@@ -66,7 +66,27 @@ public class LyricsPlusSourceTests
         const string empty = """{"type":"Line","metadata":{"source":"Musixmatch"},"lyrics":[{"time":1000,"duration":2000,"text":"  ","syllabus":[]}]}""";
         var none = new FixtureHandler { Fallback = Reply.Text(200, empty) };
         Assert.Null(await Source(none).FetchAsync(ShapeOfYou, Ct));
-        Assert.Equal(2, none.Requests.Count); // one second opinion
+        Assert.Equal(4, none.Requests.Count); // one second opinion, each node asked with the album and then without
+    }
+
+    /// <summary>
+    /// A node that has the song answers "not found" when the album is one it files the song under differently (Heathens by
+    /// twenty one pilots with album "Heathens", lyricsplus.binimum.org, 14 Nov 2026): it is asked again without the album.
+    /// </summary>
+    [Fact]
+    public async Task AnAlbumTheNodeDoesNotKnowIsDroppedForASecondAsk()
+    {
+        var handler = new FixtureHandler
+        {
+            Responder = request => request.RequestUri!.Query.Contains("album=", StringComparison.Ordinal)
+                ? Reply.Text(404, """{"error":"not found"}""")
+                : Reply.Fixture("lyricsplus/shape-of-you.json"),
+        };
+        var found = await Source(handler).FetchAsync(ShapeOfYou, Ct);
+        Assert.NotNull(found);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("album=", handler.Requests[0].RequestUri!.Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("album=", handler.Requests[1].RequestUri!.Query, StringComparison.Ordinal);
     }
 
     [Fact]

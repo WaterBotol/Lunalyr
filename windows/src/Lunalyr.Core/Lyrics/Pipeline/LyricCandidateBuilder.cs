@@ -22,7 +22,8 @@ public static class LyricCandidateBuilder
         switch (parsed)
         {
             case LyricResult.Synced synced:
-                var lines = LyricCredits.Flagging(synced.Lines, query.Title, query.Artist);
+                // "纯音乐，请欣赏" and its variants are filler, not lyrics: dropped; only filler is no lyrics.
+                var lines = LyricCredits.Flagging(LyricFiller.Without(synced.Lines), query.Title, query.Artist);
                 // As on the Mac (§4.5, §5.1), synced lyrics that are only instrumental breaks or credits are kept: they
                 // rank with untimed text (timing tier 0), below any timed match. Only no lines at all is nothing.
                 if (lines.Count == 0)
@@ -31,8 +32,11 @@ public static class LyricCandidateBuilder
                 }
                 parsed = synced with { Lines = lines };
                 break;
-            case LyricResult.Plain plain when plain.Lines.All(string.IsNullOrWhiteSpace):
-                return null;
+            case LyricResult.Plain plain:
+                var text = LyricFiller.Without(plain.Lines);
+                if (text.All(string.IsNullOrWhiteSpace)) return null;
+                if (!ReferenceEquals(text, plain.Lines)) parsed = plain with { Lines = text };
+                break;
             case null:
                 return null;
         }

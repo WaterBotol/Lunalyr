@@ -81,9 +81,11 @@ public sealed record LyricSourceSnapshot(
     /// Apple's line-timed lyrics relayed by Lyrics+ were never found), searches an East Asian artist's song under its
     /// original title when the listed one found only Latin-script lyrics (genre, native-script artist or album, or
     /// MusicBrainz country) and looks that title up in more places, treats closing "role：names" lines and a lone
-    /// artist or title header as credits, and leaves credits and headers out of agreement.
+    /// artist or title header as credits, and leaves credits and headers out of agreement. v20 (tester feedback on 0.9.0,
+    /// 14 Nov 2026) drops "纯音乐，请欣赏"-style filler lines, and asks Lyrics+ again without the album when the album made
+    /// it answer "not found" (Heathens found NetEase's timing instead of Apple's).
     /// </summary>
-    public const string CachePolicy = "v19";
+    public const string CachePolicy = "v20";
 
     /// <summary>The order a fresh install uses.</summary>
     public static IReadOnlyList<LyricSourceId> RecommendedOrder { get; } =
