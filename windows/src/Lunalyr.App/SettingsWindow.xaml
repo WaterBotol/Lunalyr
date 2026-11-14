@@ -37,7 +37,7 @@
                 <NavigationViewItem x:Name="AboutItem" Content="About" Tag="About" AutomationProperties.AutomationId="About"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.FooterMenuItems>
             <ScrollViewer x:Name="Scroller" Padding="36,8,36,36">
-                <StackPanel Spacing="4" MaxWidth="1000" HorizontalAlignment="Stretch">
+                <StackPanel x:Name="PageStack" Spacing="4" MaxWidth="1000" HorizontalAlignment="Stretch">
                     <TextBlock x:Name="PageTitle" Text="About" Style="{StaticResource TitleTextBlockStyle}" Margin="0,4,0,20"
                                AutomationProperties.HeadingLevel="Level1" />
 

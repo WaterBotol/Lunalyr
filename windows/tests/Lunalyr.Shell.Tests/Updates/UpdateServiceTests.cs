@@ -101,7 +101,7 @@ public sealed class UpdateServiceTests : IDisposable
         Assert.Equal("0.9.0", state.NewVersion);
         Assert.Equal(bytes, File.ReadAllBytes(state.InstallerPath!));
         Assert.EndsWith("Lunalyr Setup 0.9.0.exe", state.InstallerPath);
-        Assert.Equal("Restart and Update", UpdateCopy.Button(state));
+        Assert.Equal("Restart and update", UpdateCopy.Button(state));
         Assert.Equal([UpdatePhase.Checking, UpdatePhase.Available, UpdatePhase.Downloading], phases.Distinct().Take(3));
         Assert.Empty(Directory.GetFiles(Path.Combine(_folder, "Updates"), "*.partial"));
     }
@@ -113,7 +113,7 @@ public sealed class UpdateServiceTests : IDisposable
         using var service = Service();
         await service.CheckAsync(download: false, TestContext.Current.CancellationToken);
         Assert.Equal(UpdatePhase.Available, service.State.Phase);
-        Assert.Equal("Download and Install", UpdateCopy.Button(service.State));
+        Assert.Equal("Download and install", UpdateCopy.Button(service.State));
         Assert.DoesNotContain(InstallerUrl, _server.Requests);
 
         await service.DownloadAsync(TestContext.Current.CancellationToken);

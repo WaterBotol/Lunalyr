@@ -26,7 +26,7 @@ public sealed partial class SettingsWindow : Window
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1400, 1040));
+        SizeWindow();
 
         _ctx = new SettingsContext(host.Settings, DispatcherQueue, message => host.Log.App.Info(message));
         _ctx.OnRefresh(_ => ApplyTheme());
@@ -49,6 +49,7 @@ public sealed partial class SettingsWindow : Window
             ShowPage(page ?? "Lyric style");
             RefreshStatus();
         }
+        if (_host.SettingsCapturePath is { } capture) CaptureSettings(capture);
     }
 
     /// <summary>Shows a page by its title or a short name ("lyric-style", "players"…).</summary>
@@ -107,7 +108,7 @@ public sealed partial class SettingsWindow : Window
         else
         {
             NowPlayingText.Text = status.Title is { } title
-                ? $"{title}{(status.Artist is { Length: > 0 } artist ? " — " + artist : "")}{(status.Duration is { } d ? $"  ({TimeSpan.FromSeconds(d):m\\:ss})" : "")}"
+                ? $"{title}{(status.Artist is { Length: > 0 } artist ? " — " + artist : "")}{(status.Duration is { } d ? $" ({TimeSpan.FromSeconds(d):m\\:ss})" : "")}"
                 : "Nothing";
             PlayerText.Text = status.Player is { } player ? $"{player} · {Describe(status.Playback)}" : "No player is sharing what it plays";
             SourceText.Text = status.LyricSource ?? "—";

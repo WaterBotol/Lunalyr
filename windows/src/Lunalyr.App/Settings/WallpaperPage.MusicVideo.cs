@@ -308,7 +308,7 @@ internal static partial class WallpaperPage
             if (anchor.XamlRoot?.ContentIslandEnvironment?.AppWindowId is not { } window) return;
             var picker = new Microsoft.Windows.Storage.Pickers.FileOpenPicker(window)
             {
-                CommitButtonText = "Use for This Song",
+                CommitButtonText = "Use for this song",
                 SuggestedStartLocation = Microsoft.Windows.Storage.Pickers.PickerLocationId.VideosLibrary,
             };
             foreach (var type in WallpaperPicture.VideoExtensions) picker.FileTypeFilter.Add(type);

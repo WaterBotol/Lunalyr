@@ -140,13 +140,24 @@ internal static class SettingsKit
         return heading;
     }
 
-    /// <summary>A caption under a section or row, in the secondary text colour.</summary>
+    /// <summary>
+    /// A caption under a section or row, in the secondary text colour. On the page it sits on the headings' edge and
+    /// keeps a gap after it, so it reads with the row above rather than floating between two rows.
+    /// </summary>
     public static TextBlock Caption(string text, bool selectable = false) => new()
     {
         Text = text,
         Style = Resource<Style>("SettingsCaption"),
         IsTextSelectionEnabled = selectable,
+        Margin = new Thickness(1, 0, 0, 8),
     };
+
+    /// <summary>A row set in under the one it belongs to (shown only while that one is on, or a part of it).</summary>
+    public static T Indented<T>(T row) where T : FrameworkElement
+    {
+        row.Margin = new Thickness(36, 0, 0, 0);
+        return row;
+    }
 
     /// <summary>A Segoe Fluent Icons glyph.</summary>
     public static FontIcon Icon(string glyph, double size = 18) => new()
@@ -362,7 +373,9 @@ internal sealed partial class Card : UserControl
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var disabled = notYet is not null;
-        if (glyph is not null)
+        // An empty glyph is no icon: the row keeps the icon's column below, so its title lines up with the rows that have
+        // one (it used to take a zero-width icon and sit 20 DIPs left of them). An expander's header keeps its own inset.
+        if (glyph is not null && (glyph.Length > 0 || bare))
         {
             var icon = SettingsKit.Icon(glyph, 20);
             icon.VerticalAlignment = VerticalAlignment.Center;
@@ -386,6 +399,7 @@ internal sealed partial class Card : UserControl
         };
         texts.Children.Add(_title);
         _description = SettingsKit.Caption(description ?? "");
+        _description.Margin = new Thickness(0);
         _description.Visibility = string.IsNullOrEmpty(description) ? Visibility.Collapsed : Visibility.Visible;
         texts.Children.Add(_description);
         if (notYet is not null)
@@ -395,7 +409,9 @@ internal sealed partial class Card : UserControl
             info.Style = SettingsKit.Resource<Style>("SettingsNoteIcon");
             info.VerticalAlignment = VerticalAlignment.Center;
             note.Children.Add(info);
-            note.Children.Add(SettingsKit.Caption(notYet));
+            var noteText = SettingsKit.Caption(notYet);
+            noteText.Margin = new Thickness(0);
+            note.Children.Add(noteText);
             texts.Children.Add(note);
         }
         Grid.SetColumn(texts, 1);
@@ -415,15 +431,38 @@ internal sealed partial class Card : UserControl
             }
             else
             {
-                Grid.SetColumn(control, 2);
-                control.VerticalAlignment = VerticalAlignment.Center;
-                control.HorizontalAlignment = HorizontalAlignment.Right;
+                PlaceBeside(control, below: false);
+                // In a narrow window the control moves under the texts rather than squeezing them to a letter a line
+                // (the Windows Community Toolkit's SettingsCard wraps the same way).
+                grid.SizeChanged += (_, e) => Wrap(control, e.NewSize.Width, glyph is null && bare ? 0 : 20 + grid.ColumnSpacing);
             }
             grid.Children.Add(control);
         }
 
         border.Child = grid;
         Content = border;
+    }
+
+    /// <summary>The least room a row's title and description keep beside its control before the control moves under them.</summary>
+    public const double TextsMinWidth = 200;
+
+    private bool _below;
+
+    private void Wrap(FrameworkElement control, double width, double iconSpace)
+    {
+        var below = width - iconSpace - 2 * 16 - 12 - control.DesiredSize.Width < TextsMinWidth;
+        if (below == _below) return;
+        PlaceBeside(control, below);
+    }
+
+    private void PlaceBeside(FrameworkElement control, bool below)
+    {
+        _below = below;
+        Grid.SetRow(control, below ? 1 : 0);
+        Grid.SetColumn(control, below ? 1 : 2);
+        Grid.SetColumnSpan(control, below ? 2 : 1);
+        control.VerticalAlignment = VerticalAlignment.Center;
+        control.HorizontalAlignment = below ? HorizontalAlignment.Left : HorizontalAlignment.Right;
     }
 
     /// <summary>The card's description, for rows whose caption follows the choice.</summary>

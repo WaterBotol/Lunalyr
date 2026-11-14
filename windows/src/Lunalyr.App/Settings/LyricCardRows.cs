@@ -17,7 +17,9 @@ internal static class LyricCardRows
         page.Children.Add(Card(LyricCardCopy.LayoutTitle, "The layout a card is drawn in; it can also be changed in the card window.", "\uF0E2",
             Combo(ctx, LyricCardCopy.Layouts, s => s.CardComposition ?? "", (s, v) => s with { LyricCardComposition = v }, width: 220)));
         var open = Button(LyricCardCopy.OpenTitle, () => App.CurrentHost?.OpenLyricCard());
-        var card = Card(LyricCardCopy.RowTitle, $"{LyricCardCopy.RowCaption} {LyricCardCopy.RowMore}", "\uE91B", open);
+        // One line under the title; the longer help is the row's tooltip (the caption repeated it).
+        var card = Card(LyricCardCopy.RowTitle, LyricCardCopy.RowCaption, "\uE91B", open);
+        ToolTipService.SetToolTip(card, LyricCardCopy.RowMore);
         page.Children.Add(card);
         var reason = Caption(LyricCardCopy.NeedsSong);
         page.Children.Add(reason);

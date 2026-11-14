@@ -95,7 +95,7 @@ internal static partial class WallpaperPage
         adjustments.Children.Add(Card("Pattern visibility", null, "",
             Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent, s => s.PatternOpacity, (s, v) => s with { PatternOpacity = v }))
             .ShowWhen(ctx, s => s.BackgroundMode == "pattern"));
-        var reset = Button("Reset Adjustments", () => ctx.Update(s => s.WithDefaultAdjustments()));
+        var reset = Button("Reset adjustments", () => ctx.Update(s => s.WithDefaultAdjustments()));
         ToolTipService.SetToolTip(reset, SettingsCopy.ResetAdjustmentsHelp);
         AutomationProperties.SetHelpText(reset, SettingsCopy.ResetAdjustmentsHelp);
         ctx.OnRefresh(s => reset.IsEnabled = !s.AdjustmentsAreDefault);

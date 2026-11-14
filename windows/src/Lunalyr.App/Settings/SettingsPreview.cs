@@ -42,7 +42,9 @@ internal sealed class SettingsPreview : IDisposable
         _host = host;
         _dispatcher = dispatcher;
         _windowVisible = windowVisible;
-        var image = new Image { Source = _bitmap, Stretch = Stretch.Uniform, Width = width, Height = width * PixelHeight / PixelWidth };
+        // At most `width` wide, narrower when the page is (Stretch keeps the 16:9 shape): a fixed width ran past the page's
+        // edge in a narrow window.
+        var image = new Image { Source = _bitmap, Stretch = Stretch.Uniform, MaxWidth = width, MaxHeight = width * PixelHeight / PixelWidth };
         AutomationProperties.SetName(image, "Live wallpaper preview");
         AutomationProperties.SetHelpText(image, "What the wallpaper shows now, with the settings below.");
         _note = SettingsKit.Caption("Starting…");

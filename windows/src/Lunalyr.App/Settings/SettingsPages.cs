@@ -38,7 +38,7 @@ internal static class GeneralPage
         Section(page, "Welcome");
         // The first-run welcome again (docs/APP-SHELL.md, "Onboarding"): the same steps; finishing just closes.
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",
-            Button("Show Welcome…", () => App.CurrentHost?.ShowWelcomeAgain())));
+            Button("Show welcome…", () => App.CurrentHost?.ShowWelcomeAgain())));
 
         Section(page, "Tray");
         ExtrasSections.AddTrayLyric(page, ctx);
@@ -46,7 +46,7 @@ internal static class GeneralPage
         Section(page, "Lyrics on screen");
         LyricsOnScreenSection.Add(page, ctx, mirroring);
 
-        Section(page, "Discord & lyric card");
+        Section(page, "Discord and lyric card");
         ExtrasSections.AddDiscord(page, ctx, discord);
         LyricCardRows.Add(page, ctx);
         return page;

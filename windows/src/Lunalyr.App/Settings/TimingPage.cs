@@ -89,7 +89,7 @@ internal static class TimingPage
         ctx.OnRefresh(s => mode.Description = SettingsCopy.MatchModes.FirstOrDefault(c => c.Value == s.LyricMatchMode)?.Detail ?? "");
         page.Children.Add(mode);
         page.Children.Add(Card("Ranking", LyricSourceSnapshot.RankingText, "",
-            Button("Restore Recommended Order", () => ctx.Update(SettingsCopy.RestoreRecommendedOrder), "Restore recommended source order")));
+            Button("Restore recommended order", () => ctx.Update(SettingsCopy.RestoreRecommendedOrder), "Restore recommended source order")));
 
         // ---- Sources ----
         Section(page, "Sources · priority order");

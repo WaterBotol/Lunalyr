@@ -11,5 +11,5 @@ public static class LyricsOnScreenCopy
     public const string HideWhileMirroring = "Hide lyrics while a display is mirrored";
 
     public const string HideLyricsDescription =
-        "The wallpaper and the floating lyrics show none until you switch this off. A lunalyr://toggle link does the same.";
+        "The wallpaper and the floating lyrics show none until you switch this off.";
 }

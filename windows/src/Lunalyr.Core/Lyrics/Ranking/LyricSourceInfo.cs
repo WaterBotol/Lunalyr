@@ -66,8 +66,8 @@ public static class LyricSourceInfo
         LyricSourceId.Kugou => "Word or line timing",
         LyricSourceId.Lrclib => "Word or line timing",
         LyricSourceId.LyricsOvh => "Plain text fallback",
-        LyricSourceId.Amll => "Word / syllable timing",
-        LyricSourceId.Lyrimuse => "LRC / TTML / YRC + readings, translations",
+        LyricSourceId.Amll => "Word and syllable timing",
+        LyricSourceId.Lyrimuse => "LRC, TTML or YRC files, with readings and translations",
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 

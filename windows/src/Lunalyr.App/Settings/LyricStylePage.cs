@@ -54,8 +54,7 @@ internal static class LyricStylePage
             "", Toggle(ctx, s => s.OpeningTitle, (s, v) => s with { OpeningTitle = v })));
         var cover = Card("Show the album cover", "The cover beside the song’s title.", null,
             Toggle(ctx, s => s.OpeningTitleCover, (s, v) => s with { OpeningTitleCover = v }).EnableWhen(ctx, s => s.OpeningTitle));
-        cover.Margin = new Thickness(36, 0, 0, 0);
-        page.Children.Add(cover);
+        page.Children.Add(Indented(cover));
         page.Children.Add(Card("Show credits in the background",
             "Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.",
             "", Toggle(ctx, s => s.CreditsLayer, (s, v) => s with { CreditsLayer = v })));
@@ -206,13 +205,6 @@ internal static class LyricStylePage
 
     /// <summary>The song playing: its query once its length is known (what a style is remembered for), and its artist.</summary>
     private readonly record struct PlayingSong(Core.Lyrics.LyricQuery? Song, string? Artist);
-
-    /// <summary>A row set in under the one it belongs to.</summary>
-    private static Card Indented(Card card)
-    {
-        card.Margin = new Thickness(36, 0, 0, 0);
-        return card;
-    }
 
     /// <summary>
     /// Under the Layout or Colour picker while a style remembered for the music playing overrides it: what it uses, with

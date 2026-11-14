@@ -6,7 +6,7 @@ public sealed partial record AppSettings
 {
     /// <summary>
     /// "Check for updates automatically": once a day, a newer version is downloaded and checked in the background, and
-    /// installs only when you choose Restart and Update. On by default. Builds without an update service never check.
+    /// installs only when you choose Restart and update. On by default. Builds without an update service never check.
     /// </summary>
     public bool AutomaticUpdateChecks { get; init; } = true;
 }
