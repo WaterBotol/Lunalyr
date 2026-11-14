@@ -303,6 +303,45 @@ public sealed class AppControllerArtworkTests : IAsyncDisposable
         Assert.Equal(2, palettes.Count);
     }
 
+    /// <summary>
+    /// Tester feedback on 0.9.0: the previous album's cover showed, and stayed, when the player kept sending it for a song
+    /// from another album. The colours carry on, but the picture isn't shown for the new song or kept for it.
+    /// </summary>
+    [Fact]
+    public async Task AnotherAlbumsCoverKeptByThePlayerIsNeitherShownNorKept()
+    {
+        var palettes = new HeldPalettes();
+        var session = Playing("Song A", RedCover);
+        _source.Add(session);
+        var controller = Controller(palettes.Read);
+        controller.Start();
+        await WaitUntil(() => palettes.Count == 1);
+        var red = Named(0.8f);
+        palettes[0].Answer.SetResult(red);
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, red));
+        await WaitUntil(() => controller.Scene.Cover is not null);
+
+        _time.AdvanceSeconds(1);
+        session.SetTrack("Song B", album: "Another album");
+        session.SetTimeline(1, 180);
+        await WaitUntil(() => palettes.Count == 2);
+        palettes[1].Answer.SetResult(Named(0.81f));
+        for (var i = 0; i < 20; i++) // the further looks find the same cover again
+        {
+            _time.AdvanceMilliseconds(250);
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+        await controller.WhenIdleAsync();
+        Assert.Null(controller.Scene.Cover);
+        // Nothing was kept for Song B: coming back to it reads its cover again.
+        NextTrack(session, "Song A");
+        await WaitUntil(() => ReferenceEquals(controller.Scene.Palette, red));
+        _time.AdvanceSeconds(1);
+        session.SetTrack("Song B", album: "Another album");
+        session.SetTimeline(1, 180);
+        await WaitUntil(() => palettes.Count == 3);
+    }
+
     /// <summary>A blue cover (BMP bytes).</summary>
     private static readonly byte[] BlueCover = DemoCover.Paint(new(30, 40, 210), new(20, 50, 190), new(40, 30, 220), new(30, 60, 200), new(50, 50, 230), 64);
 

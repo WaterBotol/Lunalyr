@@ -24,6 +24,8 @@ public sealed partial class AppController
     private byte[]? _shownCover;
     // The cover the opening title draws: the playing track's own, or none. Never carried over to the next track.
     private CoverArt? _cover;
+    // The album the cover showing belongs to: a new track sent the same cover is only believed for the same album.
+    private string? _shownCoverAlbum;
     private string? _artworkKey;
     private CancellationTokenSource? _artworkCts;
 
@@ -57,6 +59,7 @@ public sealed partial class AppController
             if (_palettes.TryGetValue(key, out var known))
             {
                 SetPaletteLocked(known.Palette, known.Cover, known.Art);
+                _shownCoverAlbum = AlbumOf(track);
                 publish = true;
                 // Its colours are known but its cover was let go: read it again for the opening title.
                 if (known.Art is null && session is not null)
@@ -86,7 +89,7 @@ public sealed partial class AppController
         }
 
         if (publish) PublishScene();
-        if (cts is not null) Track(LoadArtworkAsync(key, session!, cts));
+        if (cts is not null) Track(LoadArtworkAsync(key, session!, cts, AlbumOf(track)));
     }
 
     // Must hold _gate. The cancellation itself runs on the thread pool: cancelling inline would run the old load's
@@ -141,7 +144,16 @@ public sealed partial class AppController
         lock (_gate) return _shownCover is { } shown && shown.AsSpan().SequenceEqual(hash);
     }
 
-    private async Task LoadArtworkAsync(string key, IMediaSession session, CancellationTokenSource cts)
+    private bool IsShownAlbum(string album)
+    {
+        lock (_gate) return _shownCoverAlbum is { Length: > 0 } shown && shown == album;
+    }
+
+    /// <summary>The album as a comparable name (empty when the player shares none).</summary>
+    private static string AlbumOf(MediaTrackInfo track) =>
+        Lunalyr.Core.Lyrics.LyricQuery.Normalize(string.IsNullOrWhiteSpace(track.AlbumTitle) ? "" : track.AlbumTitle);
+
+    private async Task LoadArtworkAsync(string key, IMediaSession session, CancellationTokenSource cts, string album)
     {
         var ct = cts.Token;
         try
@@ -176,7 +188,12 @@ public sealed partial class AppController
             // colours stay, uncached, and the cover is read again in a moment; a different one replaces them.
             if (palette is not null && cover is { } same && IsShownCover(same.Hash))
             {
-                ApplyPalette(key, palette, same.Hash, art, cache: false);
+                // Only the same album may share a cover (tester feedback on 0.9.0: the previous album's cover showed, and
+                // stayed, when the player was late with the new one). Otherwise the colours carry on but the picture is
+                // not shown, and nothing is cached, until the track's own cover comes.
+                var sameAlbum = album.Length > 0 && IsShownAlbum(album);
+                ApplyPalette(key, palette, same.Hash, sameAlbum ? art : null, cache: false, album: sameAlbum ? album : null);
+                var replaced = false;
                 foreach (var wait in _options.ArtworkRechecks)
                 {
                     await Task.Delay(wait, _options.TimeProvider, ct).ConfigureAwait(false);
@@ -186,11 +203,17 @@ public sealed partial class AppController
                     _player.Debug("The player sent this track's own cover a moment late.");
                     (palette, cover) = (changed, again);
                     art = await CoverArtAsync(again.Bytes, ct).ConfigureAwait(false);
+                    replaced = true;
                     break;
+                }
+                if (!replaced && !sameAlbum)
+                {
+                    _player.Debug("The player kept the previous track's cover; it isn't shown or kept for this one.");
+                    return; // the colours already showing stay; no picture, nothing cached
                 }
             }
 
-            ApplyPalette(key, palette, palette is null ? null : cover?.Hash, palette is null ? null : art);
+            ApplyPalette(key, palette, palette is null ? null : cover?.Hash, palette is null ? null : art, album: album);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -229,11 +252,12 @@ public sealed partial class AppController
     }
 
     /// <summary>Shows a cover's colours and cover (or the default ones) if the track is still the one playing; caches real ones.</summary>
-    private void ApplyPalette(string key, Palette? palette, byte[]? cover, CoverArt? art, bool cache = true)
+    private void ApplyPalette(string key, Palette? palette, byte[]? cover, CoverArt? art, bool cache = true, string? album = null)
     {
         lock (_gate)
         {
             if (_disposed || key != _artworkKey) return;
+            if (album is not null) _shownCoverAlbum = album;
             if (cache && palette is not null && cover is not null)
             {
                 if (_palettes.TryGetValue(key, out var known))
