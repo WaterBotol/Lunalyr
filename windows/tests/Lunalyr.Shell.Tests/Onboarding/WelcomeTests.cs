@@ -32,7 +32,13 @@ public sealed class WelcomeTests
         // What lyric services receive, as the Mac's About › Privacy says.
         Assert.Contains("title, artist, album and length", OnboardingCopy.Sources);
         Assert.Contains("Lyrics are never sent anywhere to be translated", OnboardingCopy.Translations);
-        Assert.Contains("Win+Ctrl+Alt+[ and Win+Ctrl+Alt+]", OnboardingCopy.Timing("Win+Ctrl+Alt+[", "Win+Ctrl+Alt+]"));
+        // The owner removed global shortcuts and the desktop player's search (14 Nov 2026): the welcome offers neither.
+        Assert.Equal("Nudge them from the tray panel. Each song keeps its timing.", OnboardingCopy.Timing);
+        foreach (var text in new[] { OnboardingCopy.Timing, OnboardingCopy.Player, OnboardingCopy.DoneFirstRun, OnboardingCopy.Extras })
+        {
+            Assert.DoesNotContain("shortcut", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("search", text, StringComparison.OrdinalIgnoreCase);
+        }
         Assert.Equal("Play a song in Music and its lyrics appear on your desktop.",
             OnboardingCopy.Done(null, idlePrompt: "Play a song in Music"));
     }

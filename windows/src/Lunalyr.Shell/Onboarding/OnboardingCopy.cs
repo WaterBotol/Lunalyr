@@ -1,7 +1,7 @@
 // What the welcome says, kept apart from the window so tests can pin the promises in it. The Mac's OnboardingCopy
 // (OnboardingFlow.swift, Lunalyr's own lines; reworded shorter for Test Build 88: one line under a title, one caption
 // under a control) in Windows' terms: no permission prompt, the notification area instead of the menu bar, the tray
-// panel and Windows' shortcuts, a video file chosen for a song instead of the Music library's videos, and no lyrics from
+// panel (no global shortcuts and no search in the desktop player: the owner removed both, 14 Nov 2026), a video file chosen for a song instead of the Music library's videos, and no lyrics from
 // Apple Music's own app (see docs/APPLE-MUSIC-WINDOWS.md and docs/READINGS-WINDOWS.md).
 
 using Lunalyr.Core.NowPlaying;
@@ -154,9 +154,8 @@ public static class OnboardingCopy
 
     public const string TimingTitle = "Lyrics early or late?";
 
-    /// <summary>Nudging the timing, with the keys this keyboard types for the two shortcuts.</summary>
-    public static string Timing(string earlier, string later) =>
-        $"Nudge them from the tray panel, or press {earlier} and {later} once shortcuts are on. Each song keeps its timing.";
+    /// <summary>Nudging the timing: from the tray panel only (Windows has no global shortcuts).</summary>
+    public const string Timing = "Nudge them from the tray panel. Each song keeps its timing.";
 
     public const string ReadingsTitle = "Readings for Japanese, Korean and Chinese";
 
@@ -177,7 +176,8 @@ public static class OnboardingCopy
 
     public const string PlayerTitle = "Desktop player";
 
-    public const string Player = "Rest the pointer on an uncovered desktop to see what’s playing and next, and search.";
+    /// <summary>The desktop player's card (the Mac's line without its search: Windows' player has none).</summary>
+    public const string Player = "Rest the pointer on an uncovered desktop to see what’s playing and next.";
 
     /// <summary>The desktop player's switch, to Narrator (Settings › Performance's Show player on hover).</summary>
     public const string PlayerSwitch = "Show player on hover";
@@ -226,7 +226,7 @@ public static class OnboardingCopy
             ? $"“{title}” is playing, so its lyrics are on your desktop now."
             : $"{idlePrompt} and its lyrics appear on your desktop.";
 
-    public const string DoneFirstRun = "Settings has the rest: lyric style, timing, shortcuts and more.";
+    public const string DoneFirstRun = "Settings has the rest: lyric style, timing, readings and more.";
 
     public const string DoneAgain = "You can change all of this in Settings.";
 

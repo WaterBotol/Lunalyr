@@ -381,10 +381,7 @@ internal sealed partial class OnboardingWindow
         var card = CardPanel();
         card.Children.Add(FeatureRow(OnboardingCopy.SourcesTitle, OnboardingCopy.Sources));
         card.Children.Add(Divider());
-        var modifiers = HotkeyModifiersInfo.Parse(ctx.Current.GlobalShortcutModifiers) ?? HotkeyModifiers.ControlOptionCommand;
-        var earlier = _host.Hotkeys?.Label(HotkeyAction.SyncEarlier) ?? modifiers.Prefix() + "[";
-        var later = _host.Hotkeys?.Label(HotkeyAction.SyncLater) ?? modifiers.Prefix() + "]";
-        card.Children.Add(FeatureRow(OnboardingCopy.TimingTitle, OnboardingCopy.Timing(earlier, later)));
+        card.Children.Add(FeatureRow(OnboardingCopy.TimingTitle, OnboardingCopy.Timing));
         card.Children.Add(Divider());
 
         var menus = new Grid { ColumnSpacing = 8, RowSpacing = 8, Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
@@ -441,8 +438,10 @@ internal sealed partial class OnboardingWindow
         _clips.Add(floating);
         card.Children.Add(ExtraRow(floating.View, OnboardingCopy.FloatingTitle, OnboardingCopy.Floating, null));
         card.Children.Add(Divider());
-        var (discord, recording) = OnboardingArt.DiscordStatus(ExtraPictureWidth, ExtraPictureHeight, animates: false);
+        var (discord, recording) = OnboardingArt.DiscordStatus(ExtraPictureWidth, ExtraPictureHeight, animates: MotionAllowed());
         _discordRecording = recording;
+        // Play and Stop only take once the GIF has been decoded.
+        if (recording is not null) recording.ImageOpened += (_, _) => UpdateMotion();
         card.Children.Add(ExtraRow(discord, OnboardingCopy.DiscordTitle, OnboardingCopy.Discord,
             Named(Toggle(ctx, s => s.DiscordPresence, (s, v) => s with { DiscordPresence = v }), OnboardingCopy.DiscordSwitch, OnboardingCopy.Discord)));
         var privacy = Caption(OnboardingCopy.DiscordPrivacy);

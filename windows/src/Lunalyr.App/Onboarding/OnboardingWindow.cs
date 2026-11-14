@@ -109,6 +109,8 @@ internal sealed partial class OnboardingWindow : Window
         Activated += (_, e) =>
         {
             _active = e.WindowActivationState != WindowActivationState.Deactivated;
+            // Under the opening, the keyboard goes to it (Enter or Space skip it) once the window is active.
+            if (_active && _introOverlay is { } intro) intro.Focus(FocusState.Programmatic);
             // The recordings play only in the active window (the Mac's controlActiveState).
             UpdateMotion();
         };

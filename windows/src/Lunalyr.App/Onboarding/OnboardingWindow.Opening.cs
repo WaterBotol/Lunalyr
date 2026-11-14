@@ -18,7 +18,7 @@ internal sealed partial class OnboardingWindow
     /// <summary>Set once the opening has played in this launch: Back to the welcome, or the welcome shown again, goes straight to the step.</summary>
     private static bool s_glassPlayed;
 
-    private Grid? _introOverlay;
+    private ContentControl? _introOverlay;
     private MutedVideo? _introVideo;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _introTimer;
     private bool _introEnding;
@@ -26,7 +26,14 @@ internal sealed partial class OnboardingWindow
     private void StartIntro()
     {
         s_glassPlayed = true;
-        var overlay = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Black), RequestedTheme = ElementTheme.Dark };
+        var black = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Black), RequestedTheme = ElementTheme.Dark };
+        // A focusable host, so Enter and Space reach the window's keys while the footer's buttons are off.
+        var overlay = new ContentControl
+        {
+            // A quiet window (checks, captures) takes no keyboard at all, so it has no tab stop either.
+            Content = black, IsTabStop = !_capture && !_host.QuietWindows, UseSystemFocusVisuals = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch,
+        };
         Grid.SetRowSpan(overlay, 3);
         AutomationProperties.SetName(overlay, OnboardingCopy.SkipOpening);
         MutedVideo video;
@@ -45,7 +52,7 @@ internal sealed partial class OnboardingWindow
         video.Element.Stretch = Stretch.Uniform;
         video.Element.HorizontalAlignment = HorizontalAlignment.Center;
         video.Element.VerticalAlignment = VerticalAlignment.Center;
-        overlay.Children.Add(video.Element);
+        black.Children.Add(video.Element);
         overlay.Tapped += (_, _) => EndIntro(TimeSpan.Zero);
         // Both arrive off the UI thread.
         video.Ended += () => DispatcherQueue.TryEnqueue(() => EndIntro(WelcomeGlass.Hold));
@@ -54,6 +61,8 @@ internal sealed partial class OnboardingWindow
         _introOverlay = overlay;
         _introVideo = video;
         SetUnderIntro(true);
+        // Only an active window's opening takes the keyboard: a quiet one never does.
+        if (_active) overlay.Focus(FocusState.Programmatic);
         video.Play();
         _host.Log.App.Info("Welcome: the glass logo opening plays (muted).");
         // Never stuck on black, whatever the player says (or doesn't).
