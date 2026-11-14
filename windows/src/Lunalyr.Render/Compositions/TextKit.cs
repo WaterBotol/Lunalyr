@@ -104,6 +104,64 @@ internal sealed class TextKit : IDisposable
         return !string.IsNullOrWhiteSpace(family) && _fonts.FindFamilyName(family, out _);
     }
 
+    /// <summary>Families that set every Latin letter pinyin and Vietnamese use, in order of preference.</summary>
+    private static readonly string[] LatinFallbacks = ["Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", "Arial"];
+
+    private readonly Dictionary<(string Family, int Code), bool> _covers = [];
+
+    /// <summary>Whether <paramref name="family"/>'s regular face has a glyph for <paramref name="code"/> (cached).</summary>
+    private bool Covers(string family, int code)
+    {
+        if (_covers.TryGetValue((family, code), out var known)) return known;
+        var covers = false;
+        try
+        {
+            if (_fonts.FindFamilyName(family, out var index))
+            {
+                using var fontFamily = _fonts.GetFontFamily(index);
+                using var font = fontFamily.GetFirstMatchingFont(FontWeight.Normal, FontStretch.Normal, Vortice.DirectWrite.FontStyle.Normal);
+                covers = font.HasCharacter((uint)code);
+            }
+        }
+        catch (SharpGen.Runtime.SharpGenException)
+        {
+            covers = true; // can't tell: leave it to DirectWrite
+        }
+        if (_covers.Count > 4096) _covers.Clear();
+        _covers[(family, code)] = covers;
+        return covers;
+    }
+
+    /// <summary>
+    /// The family to set <paramref name="text"/> in whole when it is Latin only, has letters beyond Latin-1 (tone marks)
+    /// and <paramref name="family"/> lacks one of them; null when the family sets it all, or the text is in another script.
+    /// </summary>
+    private string? WholeWordFallback(string text, string family)
+    {
+        var extended = false;
+        foreach (var c in text)
+        {
+            if (c < 0x100) continue;
+            // Latin Extended-A/B, combining marks, Latin Extended Additional: pinyin, Vietnamese.
+            if (c is (>= 'Ā' and <= 'ɏ') or (>= '̀' and <= 'ͯ') or (>= 'Ḁ' and <= 'ỿ')) { extended = true; continue; }
+            if (char.IsLetter(c)) return null; // another script: DirectWrite's own fallback is right for it
+        }
+        if (!extended) return null;
+        var missing = false;
+        foreach (var c in text)
+            if (c >= 0x100 && !Covers(family, c)) { missing = true; break; }
+        if (!missing) return null;
+        foreach (var candidate in LatinFallbacks)
+        {
+            if (candidate == family || !Installed(candidate)) continue;
+            var all = true;
+            foreach (var c in text)
+                if (c >= 0x80 && !Covers(candidate, c)) { all = false; break; }
+            if (all) return candidate;
+        }
+        return null;
+    }
+
     /// <summary>The family "Randomise lyric fonts" face <paramref name="mix"/> resolves to on this PC.</summary>
     public string MixFamily(int mix) => _mixFamilies[(mix % MixFaces + MixFaces) % MixFaces] ?? _resolvedFamily;
 
@@ -142,6 +200,11 @@ internal sealed class TextKit : IDisposable
         var format = Format(face, size, locale, mix);
         var layout = _dwrite.CreateTextLayout(text, format, 100_000, 100_000);
         layout.ReadingDirection = rightToLeft ? ReadingDirection.RightToLeft : ReadingDirection.LeftToRight;
+        // Pinyin's tone marks (ǎ ǐ ǒ ǔ ǖ ī ē…) are missing from many lyric typefaces, and DirectWrite then takes only
+        // those letters from another font, mid-word (tester feedback on 0.9.0). A Latin word the family can't set whole is
+        // set whole in one that can.
+        if (WholeWordFallback(text, format.FontFamilyName) is { } whole)
+            layout.SetFontFamilyName(whole, new TextRange(0, (uint)text.Length));
         if (wrapWidth > 0)
         {
             layout.WordWrapping = WordWrapping.Wrap;
