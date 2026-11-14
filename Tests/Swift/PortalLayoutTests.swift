@@ -1,0 +1,320 @@
+import AppKit
+import SwiftUI
+import XCTest
+@testable import VersoCustom
+
+/// Portal: its pill and burst, no static ornaments, and fast songs.
+///
+/// `testWritePortalFastVideoFrames` writes review frames of two fast lines
+/// only when LUNALYR_PORTAL_FAST_DIR is set (pass it as
+/// TEST_RUNNER_LUNALYR_PORTAL_FAST_DIR), into
+/// `<dir>/<size>/portal/<line>/frames/NNNN.png`, reusing
+/// `StageLayoutVideoTests`' drawing; encode them with ffmpeg afterwards.
+@MainActor
+final class PortalLayoutTests: XCTestCase {
+    typealias Word = LyricsFetcher.Word
+
+    // MARK: Fast lines
+
+    /// Twelve words in 2.16 s (one every 0.18 s).
+    static var fastWords: [Word] {
+        let texts = "we run it back and turn it up til the lights go".split(separator: " ").map(String.init)
+        return texts.enumerated().map { i, text in
+            Word(text: text, start: 1 + Double(i) * 0.18, end: 1 + Double(i) * 0.18 + 0.16)
+        }
+    }
+
+    /// A steadier line with three words arriving within 0.15 s ("we go now").
+    static var tripleWords: [Word] {
+        let timing: [(String, Double, Double)] = [
+            ("hold", 1.00, 1.40), ("on", 1.45, 1.90), ("we", 2.00, 2.06), ("go", 2.07, 2.13), ("now", 2.14, 2.60),
+            ("into", 2.70, 3.00), ("the", 3.05, 3.20), ("night", 3.25, 4.00),
+        ]
+        return timing.map { Word(text: $0.0, start: $0.1, end: $0.2) }
+    }
+
+    /// Syllable-timed words, glued: beau·ti·ful, run·ning, un·for·get·ta·ble.
+    static var syllableWords: (words: [Word], glue: [Bool]) {
+        let timing: [(String, Double, Bool)] = [
+            ("so", 0.80, false), ("beau", 1.00, false), ("ti", 1.20, true), ("ful", 1.40, true), ("run", 1.90, false),
+            ("ning", 2.10, true), ("un", 2.60, false), ("for", 2.75, true), ("get", 2.90, true), ("ta", 3.05, true),
+            ("ble", 3.20, true), ("night", 3.60, false),
+        ]
+        let words = timing.map { Word(text: $0.0, start: $0.1, end: $0.1 + 0.14) }
+        return (words, timing.map(\.2))
+    }
+
+    /// A line with words that have a picture: call, home, love, city, lights.
+    static var iconWords: [Word] {
+        StagePhrasesTests.even("call me home my love the city lights are burning bright", step: 0.45)
+    }
+
+    /// Japanese glued as the app glues an unspaced line: one run of tokens.
+    static var japaneseAppGlue: [Bool] {
+        StageReadingTests.japanese.words.indices.map { $0 > 0 }
+    }
+
+    static var fastClips: [StageLayoutVideoTests.Clip] {
+        typealias V = StageLayoutVideoTests
+        let fast = V.line(fastWords)
+        let fastNext = V.line(V.follower(["down", "we", "go", "again", "and", "again"], after: fast, step: 0.18))
+        let triple = V.line(tripleWords)
+        let tripleNext = V.line(V.follower(["hold", "me", "close", "tonight"], after: triple, step: 0.3))
+        let syllables = V.line(syllableWords.words)
+        let syllablesNext = V.line(V.follower(["hold", "me", "close", "tonight"], after: syllables, step: 0.3))
+        let icons = V.line(iconWords)
+        let iconsNext = V.line(V.follower(["ring", "the", "phone", "tonight"], after: icons, step: 0.4))
+        let japanese = StageReadingTests.japanese
+        let jp = V.line(japanese.words)
+        let jpNext = V.line(V.follower(["\u{661F}", "\u{304C}", "\u{5149}", "\u{308B}"], after: jp, step: 0.3))
+        func flat(_ line: LyricsFetcher.Line) -> [Bool] { [Bool](repeating: false, count: line.words.count) }
+        return [
+            V.Clip(name: "syllables", line: syllables, glue: syllableWords.glue, readings: [:], next: syllablesNext,
+                   nextGlue: flat(syllablesNext), nextReadings: [:], hue: 0.12),
+            V.Clip(name: "icons", line: icons, glue: flat(icons), readings: [:], next: iconsNext, nextGlue: flat(iconsNext),
+                   nextReadings: [:], hue: 0.66),
+            V.Clip(name: "japanese-glued", line: jp, glue: japaneseAppGlue, readings: japanese.readings, next: jpNext,
+                   nextGlue: [false, true, true, true], nextReadings: [:], hue: 0.03),
+            V.Clip(name: "fast", line: fast, glue: flat(fast), readings: [:], next: fastNext, nextGlue: flat(fastNext),
+                   nextReadings: [:], hue: 0.9),
+            V.Clip(name: "triple", line: triple, glue: flat(triple), readings: [:], next: tripleNext,
+                   nextGlue: flat(tripleNext), nextReadings: [:], hue: 0.45),
+        ]
+    }
+
+    func testWritePortalFastVideoFrames() throws {
+        typealias V = StageLayoutVideoTests
+        guard let dir = ProcessInfo.processInfo.environment["LUNALYR_PORTAL_FAST_DIR"], !dir.isEmpty else {
+            throw XCTSkip("Set TEST_RUNNER_LUNALYR_PORTAL_FAST_DIR to write Portal's fast-line frames")
+        }
+        let fileManager = FileManager.default
+        for size in V.sizes {
+            let shrink = min(1, 460 / size.stage.width)
+            let cell = CGSize(width: (size.stage.width * shrink).rounded(), height: (size.stage.height * shrink).rounded())
+            for clip in Self.fastClips {
+                let folder = "\(dir)/\(size.name)/portal/\(clip.name)"
+                let frames = folder + "/frames"
+                try? fileManager.removeItem(atPath: frames)
+                try fileManager.createDirectory(atPath: frames, withIntermediateDirectories: true)
+                let painter = V.Painter(size: size.stage, renderer: .window)
+                defer { painter.close() }
+                let span = V.span(of: clip)
+                let count = Int(((span.upperBound - span.lowerBound) * V.fps).rounded(.up))
+                let momentFrames = V.moments(of: clip).map { Int((($0 - span.lowerBound) * V.fps).rounded()) }
+                var picked: [Int: NSBitmapImageRep] = [:]
+                for index in 0...count {
+                    try autoreleasepool {
+                        let time = span.lowerBound + Double(index) / V.fps
+                        let rep = try painter.draw(V.frame(clip, composition: .portal, size: size, time: time))
+                        try V.writePNG(rep, to: frames + String(format: "/%04d.png", index))
+                        if momentFrames.contains(index) { picked[index] = rep }
+                    }
+                }
+                let row = momentFrames.compactMap { picked[$0] }
+                try V.writePNG(try V.sheet([row], cell: cell), to: "\(dir)/\(size.name)/portal/\(clip.name)-sheet.png")
+            }
+        }
+    }
+
+    // MARK: Words and syllables
+
+    func testGluedSyllablesAreOnePill() {
+        let line = Self.syllableWords
+        let runs = StageLyricView.portalRuns(line.words, glue: line.glue)
+        XCTAssertEqual(runs.map(\.text), ["so", "beautiful", "running", "unforgettable", "night"])
+        XCTAssertEqual(runs.map(\.id), Array(0..<5))
+        XCTAssertEqual(runs[1].parts.count, 3, "Each syllable is revealed in the pill on its own time")
+        XCTAssertEqual(runs[3].start, 2.60, accuracy: 0.0001)
+        // The shared runs cut a long glued word in two; Portal does not.
+        XCTAssertGreaterThan(StageRun.make(line.words, glue: line.glue).count, runs.count)
+    }
+
+    func testKoreanGluedWordIsOnePill() {
+        let words = ["\u{AE30}", "\u{C5B5}", "\u{D560}", "\u{AC8C}", "\u{B108}"].enumerated().map { i, text in
+            Word(text: text, start: 1 + Double(i) * 0.2, end: 1.15 + Double(i) * 0.2)
+        }
+        let runs = StageLyricView.portalRuns(words, glue: [false, true, true, true, false])
+        XCTAssertEqual(runs.map(\.text), ["\u{AE30}\u{C5B5}\u{D560}\u{AC8C}", "\u{B108}"])
+    }
+
+    /// An unspaced Japanese line, glued as the app glues it, is parted into
+    /// its words: one pill per word, never one pill per three characters.
+    func testJapaneseGluedLineIsPartedIntoWords() {
+        let japanese = StageReadingTests.japanese
+        let runs = StageLyricView.portalRuns(japanese.words, glue: Self.japaneseAppGlue)
+        XCTAssertGreaterThan(runs.count, 2)
+        XCTAssertLessThan(runs.count, japanese.words.count)
+        XCTAssertEqual(runs.map(\.text).joined(), japanese.words.map(\.text).joined())
+        XCTAssertTrue(runs.contains { $0.text.contains("\u{540D}\u{524D}") }, "\(runs.map(\.text)): 名前 is one word")
+        // The test line's own glue (already parted) is kept as it is.
+        let given = StageLyricView.portalRuns(japanese.words, glue: japanese.glue)
+        XCTAssertEqual(given.map(\.text), StageRun.make(japanese.words, glue: japanese.glue).map(\.text))
+    }
+
+    // MARK: Icons, ornaments, shapes
+
+    static let plainLine = "drifting slowly across empty fields beneath gentle grey willows whispering softly together"
+        .split(separator: " ").map(String.init)
+
+    func testOrnamentsVaryAndRest() {
+        XCTAssertEqual(Self.plainLine.count, 12)
+        for seed in 0..<40 {
+            let icons = StageLyricView.portalIcons(Self.plainLine) { index in Self.steady(seed, index) }
+            XCTAssertTrue(Self.plainLine.allSatisfy { LyricWordIcons.symbol(for: $0) == nil })
+            for index in icons.indices {
+                guard let icon = icons[index] else { continue }
+                XCTAssertTrue(StageLyricView.portalOrnaments.contains(icon))
+                for back in 1...3 where index - back >= 0 {
+                    XCTAssertNotEqual(icons[index - back], icon, "seed \(seed): \(icon) repeats within three pills")
+                }
+            }
+            XCTAssertGreaterThanOrEqual(icons.filter { $0 == nil }.count * 3, icons.count, "seed \(seed): at least a third bare")
+            XCTAssertGreaterThan(icons.compactMap { $0 }.count, 0)
+        }
+    }
+
+    func testMeaningfulWordsAlwaysShowTheirSymbolAndFunctionWordsNone() {
+        let texts = "call me home my love the city lights are burning bright".split(separator: " ").map(String.init)
+        for seed in 0..<20 {
+            let icons = StageLyricView.portalIcons(texts) { Self.steady(seed, $0) }
+            XCTAssertEqual(icons[0], "phone.fill")
+            XCTAssertNil(icons[1])
+            XCTAssertEqual(icons[2], "house.fill")
+            XCTAssertNil(icons[3])
+            XCTAssertEqual(icons[4], "heart.fill")
+            XCTAssertNil(icons[5])
+            XCTAssertEqual(icons[6], "building.2.fill")
+            XCTAssertEqual(icons[9], "flame.fill")
+        }
+        // Deterministic: the same line and seed, the same symbols.
+        XCTAssertEqual(StageLyricView.portalIcons(texts) { Self.steady(3, $0) }, StageLyricView.portalIcons(texts) { Self.steady(3, $0) })
+    }
+
+    func testShapesNeverRepeatOnConsecutivePills() {
+        for seed in 0..<40 {
+            let shapes = StageLyricView.portalShapes(count: 12) { Self.steady(seed, $0) }
+            XCTAssertEqual(shapes.count, 12)
+            for index in shapes.indices.dropFirst() {
+                XCTAssertNotEqual(shapes[index], shapes[index - 1], "seed \(seed) at \(index)")
+            }
+        }
+        // Every shape draws, inset or not.
+        for kind in StageLyricView.PortalShape.allCases {
+            for flip in [false, true] {
+                let shape = PortalPillShape(kind: kind, size: 40, flip: flip)
+                let rect = CGRect(x: 0, y: 0, width: 200, height: 70)
+                XCTAssertFalse(shape.path(in: rect).isEmpty)
+                XCTAssertFalse(shape.inset(by: 3).path(in: rect).isEmpty)
+            }
+        }
+    }
+
+    static func steady(_ seed: Int, _ index: Int) -> Double {
+        var value = UInt64(truncatingIfNeeded: (seed &* 7919) &+ (index &+ 2) &* 104_729)
+        value ^= value >> 13; value = value &* 0x2545F4914F6CDD1D; value ^= value >> 29
+        return Double(value % 10_000) / 10_000
+    }
+
+    // MARK: Fast songs
+
+    /// Each run's pill height and place above the live pill's, as
+    /// `portal` lays them out, at one moment.
+    static func poses(_ runs: [StageRun], at time: Double) -> [(y: CGFloat, height: CGFloat, opacity: Double, live: Double)] {
+        let shown = runs.filter { time >= $0.start - StageMotion.lead }
+        let motion = StageLyricView.portalMotion(runs, at: time, reduceMotion: false)
+        var ranks = [Double](repeating: 0, count: shown.count)
+        var after = 0.0
+        for index in shown.indices.reversed() { ranks[index] = after; after += motion.handover[index] }
+        let lives = ranks.map { StageMotion.liveness(rank: $0) }
+        let heights = shown.indices.map { i in 100 * StageLyricView.portalScale(rank: ranks[i]) * (1.04 + 0.1 * CGFloat(lives[i])) }
+        let climb = StageLyricView.portalClimb(heights: heights, lifts: Array(motion.lift.prefix(shown.count)), gap: 64 * 0.16)
+        return shown.indices.map { i in
+            let visible = 1 - Easing.smoothstep((ranks[i] - 1.0) / 0.9)
+            return (-climb[i], heights[i], motion.appear[i] * visible, lives[i])
+        }
+    }
+
+    static var fastRuns: [[StageRun]] {
+        [fastWords, tripleWords, StagePhrasesTests.mixed, StagePhrasesTests.even("we keep dreaming under neon rain")].map {
+            StageLyricView.portalRuns($0, glue: [Bool](repeating: false, count: $0.count))
+        }
+    }
+
+    /// Two pills (live words) never sit over each other, and the pale words
+    /// before them never pile up, frame by frame through fast lines.
+    func testFastLinesNeverStackPills() {
+        for runs in Self.fastRuns {
+            let first = runs.first?.start ?? 0, last = runs.last?.start ?? 0
+            var time = first - 0.2
+            while time < last + 0.8 {
+                let poses = Self.poses(runs, at: time)
+                var overlappingPills = 0
+                for i in poses.indices {
+                    for j in poses.indices where j > i {
+                        let a = poses[i], b = poses[j]
+                        guard a.opacity > 0.3, b.opacity > 0.3 else { continue }
+                        let overlap = (a.height + b.height) / 2 - abs(a.y - b.y)
+                        let smaller = min(a.height, b.height)
+                        if a.live > 0.3, b.live > 0.3, overlap > 0.2 * smaller { overlappingPills += 1 }
+                        XCTAssertLessThan(overlap, 0.35 * smaller,
+                                          String(format: "%@ and %@ pile up at %.2f s", runs[i].text, runs[j].text, time))
+                    }
+                }
+                XCTAssertEqual(overlappingPills, 0, String(format: "pills overlap at %.2f s", time))
+                time += 1.0 / 60
+            }
+        }
+    }
+
+    /// Every word is there by its sung time, and none before it starts.
+    func testEveryWordAppearsByItsSungTime() {
+        for runs in Self.fastRuns {
+            for run in runs {
+                let at = StageLyricView.portalMotion(runs, at: run.start, reduceMotion: false)
+                XCTAssertGreaterThanOrEqual(at.appear[run.id], 0.8, "\(run.text) at \(run.start)")
+                let before = StageLyricView.portalMotion(runs, at: run.start - 0.08, reduceMotion: false)
+                XCTAssertEqual(before.appear[run.id], 0, accuracy: 0.0001)
+            }
+        }
+    }
+
+    /// The three words sung within 0.15 s share one burst: it runs on,
+    /// never restarting, from the first word's onset.
+    func testQuickRunSharesOneBurst() {
+        let runs = Self.fastRuns[1]
+        var previous = -1.0
+        var time = 1.95
+        while time < 2.5 {
+            let burst = StageLyricView.portalMotion(runs, at: time, reduceMotion: false).burst
+            XCTAssertEqual(burst[2], burst[3], accuracy: 0.0001)
+            XCTAssertEqual(burst[3], burst[4], accuracy: 0.0001)
+            XCTAssertGreaterThanOrEqual(burst[4], previous)
+            previous = burst[4]
+            time += 1.0 / 60
+        }
+    }
+
+    // MARK: Drawing
+
+    /// Portal draws every kind of line without trouble, its icons included.
+    func testPortalDrawsIconsShapesAndGluedWords() throws {
+        let settings = Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("LunalyrTests.Portal"), notifications: NotificationCenter())
+        let lines: [([Word], [Bool])] = [
+            (Self.iconWords, [Bool](repeating: false, count: Self.iconWords.count)),
+            (Self.syllableWords.words, Self.syllableWords.glue),
+            (Self.fastWords, [Bool](repeating: false, count: Self.fastWords.count)),
+            (StageReadingTests.japanese.words, Self.japaneseAppGlue),
+        ]
+        for (words, glue) in lines {
+            for time in stride(from: 0.9, through: 4.5, by: 0.37) {
+                let view = StageLyricView(words: words, glue: glue, time: time, stageSize: CGSize(width: 900, height: 400), baseSize: 50,
+                                          mood: .neutral, composition: .portal, seed: 3, settings: settings)
+                    .environment(\.lyricInk, LyricInk())
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 1
+                XCTAssertNotNil(renderer.nsImage)
+            }
+        }
+    }
+}
+
