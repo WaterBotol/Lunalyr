@@ -142,7 +142,8 @@ enum LyricComposition: String, CaseIterable, Identifiable {
     /// rotation's pick; the memory itself is kept.
     @MainActor
     static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int,
-                         track: String? = nil, rotation: LyricLayoutRotation = .shared) -> Self {
+                         track: String? = nil, rotation: LyricLayoutRotation? = nil) -> Self {
+        let rotation = rotation ?? .shared
         if let remembered {
             guard let layout = saved(remembered) else { return matching(mood, seed: seed) }
             if settings.lyricComposition == nil, rotation.isEnabled, rotation.count(for: layout) == 0 {
