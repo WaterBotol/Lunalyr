@@ -80,6 +80,15 @@ public static class StyleMemory
         map is not null && map.TryGetValue(key, out var stored) ? RememberedStyle.FromStored(stored) : null;
 
     /// <summary>
+    /// A layout taken out of Custom Mix (its count set to 0 with the rotation on) is not brought back by a remembered
+    /// style: the rotation picks instead, and the rest of the style still applies. The memory itself is kept. The Mac's
+    /// rule (LyricComposition.selected, next/tester-fixes, 14 Nov 2026; tester feedback on 0.9.0).
+    /// </summary>
+    public static bool LeftOutOfMix(AppSettings settings, string layout) =>
+        settings.LyricComposition == AppSettings.AllLayoutsKey && settings.RotateLayouts
+        && settings.RotateLayoutCounts is { } counts && counts.TryGetValue(layout, out var count) && count == 0;
+
+    /// <summary>
     /// The settings as the music playing sees them: the layout and colour remembered for it in place of the ones chosen
     /// (a remembered "automatic" means Match the music even where a layout is chosen), the rest as chosen.
     /// </summary>
@@ -87,7 +96,8 @@ public static class StyleMemory
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (style is null) return settings;
-        var composition = style.Composition is { } id && AppSettings.Compositions.Contains(id) ? id : settings.LyricComposition;
+        var composition = style.Composition is { } id && AppSettings.Compositions.Contains(id) && !LeftOutOfMix(settings, id)
+            ? id : settings.LyricComposition;
         var colour = style.ColourMode is { } mode ? mode.RawValue() : settings.LyricColourMode;
         return composition == settings.LyricComposition && colour == settings.LyricColourMode
             ? settings

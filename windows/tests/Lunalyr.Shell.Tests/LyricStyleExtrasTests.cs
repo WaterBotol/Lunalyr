@@ -325,4 +325,25 @@ public class LyricStyleExtrasTests
         Assert.Equal(("spoken", LyricColourMode.SungSweep), (unknown.LyricComposition, unknown.ColourMode));
         Assert.Equal(LyricColourMode.CustomGradient, both.Style().ColourMode);
     }
+
+    /// <summary>
+    /// A layout taken out of Custom Mix stays out even for music it was remembered for; the colour still applies (the
+    /// Mac's rule, next/tester-fixes, 14 Nov 2026).
+    /// </summary>
+    [Fact]
+    public void ALayoutTakenOutOfCustomMixIsNotBroughtBackByMemory()
+    {
+        var mix = new AppSettings
+        {
+            LyricComposition = "automatic", RotateLayouts = true,
+            RotateLayoutCounts = new Dictionary<string, int> { ["echo"] = 0, ["cascade"] = 2 },
+        };
+        var applied = StyleMemory.Applied(mix, new RememberedStyle("echo", "customGradient"));
+        Assert.Equal("automatic", applied.LyricComposition);
+        Assert.Equal("customGradient", applied.LyricColourMode);
+        Assert.Equal("cascade", StyleMemory.Applied(mix, new RememberedStyle("cascade", null)).LyricComposition);
+        // With the rotation off, or a layout chosen, the memory wins as before.
+        Assert.Equal("echo", StyleMemory.Applied(mix with { RotateLayouts = false }, new RememberedStyle("echo", null)).LyricComposition);
+        Assert.Equal("echo", StyleMemory.Applied(mix with { LyricComposition = "spoken" }, new RememberedStyle("echo", null)).LyricComposition);
+    }
 }
