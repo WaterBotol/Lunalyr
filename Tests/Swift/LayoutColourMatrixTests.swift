@@ -81,17 +81,38 @@ final class LayoutColourMatrixTests: XCTestCase {
         print("LAYOUT-COLOUR-MATRIX\n" + table)
     }
 
-    /// Not a rule, a measurement: how much colour the custom gradient keeps
-    /// as the wallpaper behind the lyrics gets lighter (the 3:1 lift).
-    func testCustomGradientChromaAgainstLighterBackdrops() {
+    /// How much colour the custom gradient's words keep as the wallpaper
+    /// behind them gets lighter. Before: the plain 3:1 lift (no tint kept).
+    /// Now: the same lift keeping a tint (up to chroma 0.05, at 2.5:1)
+    /// where one exists, as the line's base colour and Sung sweep already
+    /// did. Measured: 0.05 0.166 -> 0.166, 0.20 0.079 -> 0.079,
+    /// 0.35 0.000 -> 0.007, 0.50 and 0.70 0.000 -> 0.000.
+    func testCustomGradientKeepsColourOnLighterWallpapers() {
+        func chroma(_ colour: Color) -> Double {
+            let c = NSColor(colour).usingColorSpace(.sRGB)!
+            return Perceptual.oklab(sRGB: SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent))).chroma
+        }
         var line = "CUSTOM-GRADIENT-LIFT"
         for backdrop in [0.05, 0.2, 0.35, 0.5, 0.7] {
             let ink = Self.ink(.customGradient, backdrop: backdrop)
-            let chroma = (0...10).map { slot -> Double in
-                let c = NSColor(ink.sample(slot: Double(slot) / 10).rest).usingColorSpace(.sRGB)!
-                return Perceptual.oklab(sRGB: SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent))).chroma
-            }.reduce(0, +) / 11
-            line += String(format: " backdrop %.2f: chroma %.3f;", backdrop, chroma)
+            let slots = (0...10).map { Double($0) / 10 }
+            let before = slots.map { slot in
+                chroma(Perceptual.color(Perceptual.readable(ink.gradient(slot: slot), background: ink.backdrop,
+                                                            ratio: ink.contrast)))
+            }.reduce(0, +) / Double(slots.count)
+            let after = slots.map { chroma(ink.sample(slot: $0).rest) }.reduce(0, +) / Double(slots.count)
+            line += String(format: " backdrop %.2f: chroma %.3f -> %.3f;", backdrop, before, after)
+            XCTAssertGreaterThanOrEqual(after, before - 0.002, "\(backdrop)")
+            // Where 2.5:1 can be reached at all (2.5 * (backdrop + 0.05) - 0.05
+            // < 1), every word does, keeping what tint the sRGB gamut allows
+            // that close to white.
+            if Perceptual.tintedContrast * (ink.backdrop + 0.05) - 0.05 < 1 {
+                for slot in slots {
+                    let c = NSColor(ink.sample(slot: slot).rest).usingColorSpace(.sRGB)!
+                    let lum = Perceptual.luminance(sRGB: SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent)))
+                    XCTAssertGreaterThanOrEqual(Perceptual.contrast(lum, ink.backdrop), Perceptual.tintedContrast - 0.05)
+                }
+            }
         }
         print(line)
     }

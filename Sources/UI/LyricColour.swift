@@ -299,7 +299,10 @@ struct LyricInk {
             sample.dim = dim
             return sample
         case .albumDrift, .customGradient, .musicReactive:
-            let colour = Perceptual.readable(gradient(slot: slot, seed: seed), background: backdrop, ratio: contrast)
+            // Lifted like the line's base colour and Sung sweep: 3:1, or
+            // where that would wash the colour out, a tint kept at 2.5:1.
+            let colour = Perceptual.readable(gradient(slot: slot, seed: seed), background: backdrop, ratio: contrast,
+                                             keepingColour: true)
             var sample = Self.sample(colour)
             sample.dim = dim
             return sample
