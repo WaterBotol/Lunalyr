@@ -256,8 +256,8 @@ public sealed class SettingsCopyTests
     [Fact]
     public void ThePauseCaptionSaysWhenTheDotsAreOff()
     {
-        Assert.DoesNotContain("The three dots are off", SettingsCopy.PauseCaption(showInterludes: true));
-        Assert.Contains("The three dots are off", SettingsCopy.PauseCaption(showInterludes: false));
+        Assert.DoesNotContain("The orb is off", SettingsCopy.PauseCaption(showInterludes: true));
+        Assert.Contains("The orb is off", SettingsCopy.PauseCaption(showInterludes: false));
     }
 
     [Fact]

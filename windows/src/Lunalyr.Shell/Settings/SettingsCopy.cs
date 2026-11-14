@@ -121,10 +121,10 @@ public static class SettingsCopy
     /// <summary>What "Treat long pauses as instrumental" changes (the Mac's <c>TimingPage.pauseCaption</c>).</summary>
     public static string PauseCaption(bool showInterludes)
     {
-        const string caption = "Lyrics timed only by line don’t say when singing stops. With Show three dots during instrumental breaks on (Lyric style), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes.";
+        const string caption = "Lyrics timed only by line don’t say when singing stops. With Show a glowing orb during instrumental breaks on (Lyric style), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes.";
         return showInterludes
             ? caption
-            : caption + " The three dots are off, so this changes only QQ Music’s lyrics, whose held lines end early, and how long the words of a line before a long gap take to light up.";
+            : caption + " The orb is off, so this changes only QQ Music’s lyrics, whose held lines end early, and how long the words of a line before a long gap take to light up.";
     }
 
     public static IReadOnlyList<SettingsChoice> MatchModes { get; } =

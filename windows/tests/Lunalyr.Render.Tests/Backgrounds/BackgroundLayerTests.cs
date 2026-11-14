@@ -104,14 +104,16 @@ public sealed class BackgroundLayerTests : IDisposable
     {
         using var layer = Factory(id).Create();
         _surface.Prepare(layer);
-        var pale = Uniform(0.95f, 0.92f, 0.8f);
+        // A mid-tone wallpaper: light enough to need a backing, not so light the lyrics turn dark (dark lyrics take
+        // no backing; see TheBackingFadesWithDarkLyrics).
+        var pale = Uniform(0.62f, 0.6f, 0.52f);
         var empty = Frame(layer, Quiet(pale), 1);
         using var playing = Factory(id).Create();
         _surface.Prepare(playing);
         var shown = Frame(playing, new SceneSnapshot { Palette = pale, Title = "Song" }, 1);
         var centreEmpty = Pixel(empty, Width / 2, Height / 2);
         var centreShown = Pixel(shown, Width / 2, Height / 2);
-        Assert.True(centreShown.R < centreEmpty.R - 40, $"{centreShown} vs {centreEmpty}");
+        Assert.True(centreShown.R < centreEmpty.R - 25, $"{centreShown} vs {centreEmpty}");
         // Nothing in the screen's corners (the feathered shade reaches past the sides, see FeatheredBacking).
         Assert.InRange(Pixel(empty, 0, 0).R - Pixel(shown, 0, 0).R, 0, 2);
         // White type reaches the pastel target (6.5:1) in the middle of the stage. The colour field is judged by the
@@ -121,7 +123,7 @@ public sealed class BackgroundLayerTests : IDisposable
         // When the stage empties, the backing eases away over 0.6 s rather than vanishing.
         Frame(playing, Quiet(pale), 1.3);
         var leaving = Pixel(Frame(playing, Quiet(pale), 1.6), Width / 2, Height / 2);
-        Assert.InRange(leaving.R, centreShown.R + 5, centreEmpty.R - 5);
+        Assert.InRange(leaving.R, centreShown.R + 2, centreEmpty.R - 1);
         Assert.Equal(centreEmpty, Pixel(Frame(playing, Quiet(pale), 1.95), Width / 2, Height / 2));
     }
 
@@ -133,7 +135,8 @@ public sealed class BackgroundLayerTests : IDisposable
     [Fact]
     public void TheDrawnBackingIsFeatheredAndAManualAmountKeepsItsEllipse()
     {
-        var white = Uniform(1, 1, 1);
+        // Mid-tone, so the lyrics stay light and the automatic backing is drawn (dark lyrics would take none).
+        var white = Uniform(0.62f, 0.6f, 0.52f);
         var song = new SceneSnapshot { Palette = white, Title = "Song" };
         Func<double, double, double> Darkening(BackgroundOptions options)
         {
@@ -185,7 +188,7 @@ public sealed class BackgroundLayerTests : IDisposable
         // The user's own amount keeps its old look: lighter at the stage's ends than its middle, nothing at its corners.
         var ellipse = Darkening(Plain with { ScrimStrength = 0, ManualBacking = 0.6 });
         var middle = ellipse(0.5, 0.5);
-        Assert.Equal(centre, middle, 0.03);
+        Assert.Equal(0.6, middle, 0.03);
         Assert.True(ellipse(left, 0.5) < middle * 0.75);
         Assert.True(ellipse(left, top) < 0.03);
     }

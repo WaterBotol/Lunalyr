@@ -72,25 +72,28 @@ public sealed class NoneFoundRenderTests : IDisposable
     }
 
     [Fact]
-    public void TheTitleAndArtistStayWithoutAnOpeningTitle()
+    public void WithTheSongIntroOnTheCardStandsInForTheTitleAndArtist()
     {
+        // The Mac's rule (dc87707 here): a song without lyrics keeps its intro card, low on the left, and the centred
+        // title and artist are not drawn over it.
         using var layer = Layer();
         var scene = Missing(NoLyricsDisplay.TrackName, opening: true);
         Lit(layer, scene, 100);
-        var shown = Lit(layer, scene, 101);
-        Assert.True(shown > 200, $"the title and artist show ({shown} pixels)");
-        Assert.Equal(shown, Lit(layer, scene, 160));
-        Assert.False(layer.IsAnimating);
-
-        // Only the stage's centre is used: the opening title (low on the left) stays away.
-        _stage.Render(layer, scene, 2, 161, 1, Background);
+        _stage.Render(layer, scene, 2, 101, 1, Background);
         var pixels = _stage.Pixels();
-        for (var y = Height * 3 / 4; y < Height; y++)
-        for (var x = 0; x < Width / 3; x++)
+        int Count(int x0, int x1, int y0, int y1)
         {
-            var i = (y * Width + x) * 4;
-            Assert.True(pixels[i] + pixels[i + 1] + pixels[i + 2] <= 3 * 90, $"lit at {x},{y}");
+            var count = 0;
+            for (var y = y0; y < y1; y++)
+            for (var x = x0; x < x1; x++)
+            {
+                var i = (y * Width + x) * 4;
+                if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 3 * 90) count++;
+            }
+            return count;
         }
+        Assert.True(Count(0, Width / 2, Height / 2, Height) > 50, "the intro card shows, low on the left");
+        Assert.Equal(0, Count(Width / 3, Width * 2 / 3, Height / 3, Height / 2));
     }
 
     [Fact]

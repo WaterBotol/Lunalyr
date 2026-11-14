@@ -151,7 +151,6 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     private Ink? _status;
     private string? _statusText;
     private double _statusSince = double.NaN;
-    private ID2D1SolidColorBrush? _dotBrush;
     private string[]? _readingParts;
     // Entrance extras: the swipe's colours and ribbon, highlight tiles, constellation links.
     private ID2D1SolidColorBrush? _paint;
@@ -201,7 +200,6 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         ReleaseResources();
         Kit = new TextKit(dc, dwrite) { Defers = _spreads, Meter = Meter };
-        _dotBrush = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
         _paint = dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
         using (var factory = dc.Factory)
         {
@@ -225,8 +223,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         Invalidate();
         ReleaseOpening();
-        _dotBrush?.Dispose();
-        _dotBrush = null;
+        ReleaseOrb();
         _paint?.Dispose();
         _paint = null;
         _roundCaps?.Dispose();
@@ -589,7 +586,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         ? new LineFit(Stage, 1, 1)
         : new LineFit(Kind.HasConnections() ? ConstellationLayout.FitArea(Stage) : Stage, Metrics.UserScale, 0.75);
 
-    /// <summary>The composition a backing group animates in: the lead's when it sets words loose or links them, else Editorial.</summary>
+    /// <summary>The composition a backing group animates in: the lead's when it sets words loose or links them, else Scattered.</summary>
     internal static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
         or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Scattered;
 
@@ -1443,36 +1440,6 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     // ---- Instrumental breaks, plain lyrics, status -----------------------------------------------------------------
 
     /// <summary>The three interlude dots of an instrumental break, in the album's accent.</summary>
-    private void DrawCue(ID2D1DeviceContext dc, InstrumentalCue cue, double yield = 1)
-    {
-        // Dots not there yet draw nothing (and need no ink: a song's opening frames do not wait for it).
-        if (_dotBrush is null || SceneShown is null || yield <= 0.002 || !(cue.Opacity > 0)) return;
-        // The ink's dot colour (made readable against the backdrop), as the Mac colours its interlude dots.
-        var accent = SettledInk.Dot is { } dot ? LyricInks.Vector(dot) : TextColour;
-        var diameter = (float)(Math.Min(40, Math.Max(15, BaseSize / Scale * 0.3)) * Scale);
-        var spacing = diameter * 0.65f;
-        var width = diameter * 3 + spacing * 2;
-        // The wander grows in with the cue, so the dots arrive still; under Reduce Motion they never wander.
-        var wander = ReduceMotion ? 0 : cue.Opacity;
-        dc.Transform = Matrix3x2.Identity;
-        for (var i = 0; i < 3; i++)
-        {
-            var highlight = cue.Highlight(i);
-            var radius = diameter / 2 * (float)(1 + wander * cue.Breath(i) * 0.09);
-            var x = StageCentre.X - width / 2 + diameter / 2 + i * (diameter + spacing);
-            var y = StageCentre.Y + (float)(wander * cue.Bob(i)) * diameter * 0.42f;
-            _dotBrush.Color = new Color4(accent.X, accent.Y, accent.Z, (float)(yield * cue.Opacity * (0.32 + highlight * 0.62)));
-            dc.FillEllipse(new Ellipse(new Vector2(x, y), radius, radius), _dotBrush);
-            // A lit dot carries a faint white ring (the Mac's strokeBorder, 1 point inside the edge).
-            if (highlight > 0.01)
-            {
-                var stroke = Points(1);
-                _dotBrush.Color = new Color4(1, 1, 1, (float)(yield * cue.Opacity * highlight * 0.22));
-                dc.DrawEllipse(new Ellipse(new Vector2(x, y), radius - stroke / 2, radius - stroke / 2), _dotBrush, stroke);
-            }
-        }
-    }
-
     /// <summary>Unsynced lyrics: the whole block, fitted to the stage and still.</summary>
     private void DrawPlain(ID2D1DeviceContext dc, IReadOnlyList<string> lines)
     {

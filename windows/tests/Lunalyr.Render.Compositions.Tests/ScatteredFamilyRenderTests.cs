@@ -550,12 +550,11 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
     [Fact]
     public void BackingWordsNeverAnimateInTheRollingLayouts()
     {
-        Assert.Equal(CompositionKind.Editorial, LyricCompositionLayer.BackingKind(CompositionKind.Spoken));
-        CompositionKind[] choices = [CompositionKind.Scattered, CompositionKind.Constellation, CompositionKind.ConstellationEditorial,
-                                     CompositionKind.Echo, CompositionKind.Editorial];
+        Assert.Equal(CompositionKind.Scattered, LyricCompositionLayer.BackingKind(CompositionKind.Spoken)); // Editorial is cut
+        CompositionKind[] choices = [CompositionKind.Scattered, CompositionKind.Constellation, CompositionKind.Echo];
         foreach (var lead in choices) Assert.Equal(lead, LyricCompositionLayer.BackingKind(lead));
         foreach (var lead in new[] { CompositionKind.Spoken, CompositionKind.Cascade, CompositionKind.Cutout })
-            Assert.Equal(CompositionKind.Editorial, LyricCompositionLayer.BackingKind(lead, null));
+            Assert.Equal(CompositionKind.Scattered, LyricCompositionLayer.BackingKind(lead, null));
         Assert.Equal(CompositionKind.Echo, LyricCompositionLayer.BackingKind(CompositionKind.Cutout, "echo"));
         Assert.DoesNotContain(choices, kind => kind.ArrivalOnly());
     }

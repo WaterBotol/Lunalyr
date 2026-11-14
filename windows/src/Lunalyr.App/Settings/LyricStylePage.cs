@@ -195,7 +195,7 @@ internal static class LyricStylePage
 
         // ---- Instrumental breaks ----
         Section(page, "Instrumental breaks");
-        page.Children.Add(Card("Show three dots during instrumental breaks", null, "",
+        page.Children.Add(Card("Show a glowing orb during instrumental breaks", null, "",
             Toggle(ctx, s => s.ShowInterludes, (s, v) => s with { ShowInterludes = v })));
 
         // ---- Remember a style ----
