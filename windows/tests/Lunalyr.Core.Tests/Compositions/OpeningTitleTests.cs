@@ -250,4 +250,29 @@ public class OpeningTitleTests
         Assert.Equal(0.7, T.LengthScale("Everything You Said Before the Summer Ended (Midnight Version)"));
         Assert.Equal(1, T.LengthScale("夜に駆ける"));
     }
+
+    // ---- A song without lyrics keeps its card (the owner, 15 Nov 2026) ----
+
+    [Fact]
+    public void ACardForASongWithoutLyricsStaysThenRests()
+    {
+        var card = OpeningTitle.Schedule(OpeningWords.Absent)!.Value;
+        Assert.True(OpeningTitle.Stays(card));
+        Assert.Equal(OpeningSize.Full, card.Size);
+        Assert.NotNull(OpeningTitle.Phase(card, 600)); // still up ten minutes in
+        Assert.Equal(1, OpeningTitle.Resting(card, card.Settled + 5));
+        Assert.Equal(OpeningTitle.RestOpacity, OpeningTitle.Resting(card, card.Settled + OpeningTitle.RestAfter + OpeningTitle.RestFade + 1), 6);
+        Assert.Equal(OpeningSize.Compact, OpeningTitle.Schedule(OpeningWords.Absent, joined: 90)!.Value.Size);
+    }
+
+    [Fact]
+    public void LyricsArrivingLateTakeOverWithTheUsualExit()
+    {
+        var card = OpeningTitle.Schedule(OpeningWords.Absent)!.Value;
+        var yielding = OpeningTitle.Yielding(card, 40);
+        Assert.False(OpeningTitle.Stays(yielding));
+        Assert.Equal(40, yielding.Leave);
+        Assert.Equal(40 + OpeningTitle.FullExit, yielding.End, 6);
+        Assert.Equal(1, OpeningTitle.Resting(yielding, 39));
+    }
 }

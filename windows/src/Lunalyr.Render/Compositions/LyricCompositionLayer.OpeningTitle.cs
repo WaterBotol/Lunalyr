@@ -39,7 +39,7 @@ internal abstract partial class LyricCompositionLayer
     /// </summary>
     private OpeningSchedule? PrepareOpening(in FrameContext frame)
     {
-        var schedule = OpeningScheduleFor(frame.Scene, frame.SongJoined);
+        var schedule = Staying(OpeningScheduleFor(frame.Scene, frame.SongJoined), frame.Scene.Title, frame.SongSeconds);
         // Credits wait for the opening title of synced lyrics to leave (the Mac's notBefore).
         CreditsNotBefore(Sheet is { Count: > 0 } && schedule is { } s ? s.End : 0);
         _openingSchedule = schedule;
@@ -61,6 +61,36 @@ internal abstract partial class LyricCompositionLayer
     /// </summary>
     private double InterludeYield(double time) => FloatingStage ? OpeningTitle.Yields(_openingSchedule, time) : 1;
 
+    private (OpeningSchedule Schedule, string? Title)? _staying;
+    private OpeningSchedule? _yielding;
+
+    /// <summary>
+    /// A card staying for a song without lyrics gives way when lyrics arrive after all: it leaves from that moment with its
+    /// usual exit, instead of vanishing because the new schedule's time has passed. A new song starts afresh.
+    /// </summary>
+    private OpeningSchedule? Staying(OpeningSchedule? schedule, string? title, double time)
+    {
+        if (_staying is { } held && held.Title != title)
+        {
+            _staying = null;
+            _yielding = null;
+        }
+        if (OpeningTitle.Stays(schedule))
+        {
+            _staying = (schedule!.Value, title);
+            _yielding = null;
+            return schedule;
+        }
+        if (_staying is { } was && double.IsFinite(time))
+        {
+            _yielding ??= OpeningTitle.Yielding(was.Schedule, time);
+            if (time < _yielding.Value.End) return _yielding;
+            _staying = null;
+            _yielding = null;
+        }
+        return schedule;
+    }
+
     private OpeningSchedule? OpeningScheduleFor(SceneSnapshot scene, double joined)
     {
         if (!scene.Style.OpeningTitle || string.IsNullOrWhiteSpace(scene.Title)) return null;
@@ -78,13 +108,14 @@ internal abstract partial class LyricCompositionLayer
         {
             words = OpeningWords.Showing;
         }
+        else if (scene.NoneFound)
+        {
+            // No lyrics for this song: the card stays (the owner, 15 Nov 2026), in place of the centred title and artist.
+            words = OpeningWords.Absent;
+        }
         else
         {
-            // The stage already shows the song's name in place of lyrics ("Show title and artist"): no opening title
-            // (the Mac's openingSchedule for a song without lyrics).
-            if (scene.NoneFound && !string.IsNullOrWhiteSpace(scene.Status) && scene.Style.NoLyrics == NoLyricsDisplay.TrackName)
-                return null;
-            // Looking lyrics up, none found, offline: nothing to sing along to (yet).
+            // Looking lyrics up, offline: nothing to sing along to (yet).
             words = OpeningWords.None;
         }
         return OpeningTitle.Schedule(words, double.IsFinite(joined) ? joined : 0, Options.PreviewLead);
@@ -108,7 +139,10 @@ internal abstract partial class LyricCompositionLayer
         var reveal = OpeningReveal.At(phase.Age, compact ? OpeningSize.Compact : phase.Size, reduce);
         var leaving = Easing.Smoothstep(phase.Exit);
         var unit = card.Unit;
-        var opacity = 1 - leaving;
+        // A card staying through a song without lyrics settles to a quieter rest after a while.
+        var opacity = (1 - leaving) * OpeningTitle.Resting(schedule, time);
+        if (OpeningTitle.Stays(schedule) && frame.IsPlaying && Math.Abs(time - schedule.Value.Settled - OpeningTitle.RestAfter - 1) < 1.1)
+            IsAnimating = true;
         var blur = reduce ? 0f : (float)(leaving * unit * 0.06);
         var lift = reduce ? 0f : (float)(-leaving * unit * 0.14);
         var rise = reduce ? 0 : unit * 0.32;

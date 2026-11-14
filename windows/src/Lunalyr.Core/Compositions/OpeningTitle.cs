@@ -79,6 +79,10 @@ public static class OpeningTitle
         {
             case OpeningWordsKind.Showing:
                 return brief;
+            case OpeningWordsKind.Absent:
+                // No lyrics for this song: the card stays for the rest of it (the owner, 15 Nov 2026), compact when joined
+                // part-way. It still gives way if lyrics arrive late (Yielding).
+                return Card(partWay ? OpeningSize.Compact : OpeningSize.Full, double.PositiveInfinity);
             case OpeningWordsKind.None:
             case OpeningWordsKind.Timed when words.FirstLine is null:
                 return partWay ? brief : Card(OpeningSize.Full, start + FullEntrance + WordlessHold);
@@ -93,6 +97,37 @@ public static class OpeningTitle
                 // The words are already under way: joined part-way, a moment's reminder; at the very start, nothing.
                 return partWay && first < start ? brief : null;
         }
+    }
+
+    /// <summary>A card that stays held this long (seconds after it settled) eases to its resting state.</summary>
+    public const double RestAfter = 30;
+
+    /// <summary>How long the ease to the resting state takes.</summary>
+    public const double RestFade = 2;
+
+    /// <summary>The resting state's opacity: still there, quieter.</summary>
+    public const double RestOpacity = 0.55;
+
+    /// <summary>Whether <paramref name="schedule"/> stays for the rest of the song (no lyrics).</summary>
+    public static bool Stays(OpeningSchedule? schedule) => schedule is { } s && double.IsPositiveInfinity(s.Leave);
+
+    /// <summary>
+    /// A card that was staying (<paramref name="staying"/>), now that lyrics arrived at <paramref name="at"/>: it leaves
+    /// from then, with its usual exit, rather than vanishing.
+    /// </summary>
+    public static OpeningSchedule Yielding(OpeningSchedule staying, double at)
+    {
+        var leave = Math.Max(at, staying.Settled);
+        var exit = staying.Size == OpeningSize.Full ? FullExit : CompactExit;
+        return staying with { Leave = leave, End = leave + exit };
+    }
+
+    /// <summary>The opacity a staying card is drawn at: 1, then easing to <see cref="RestOpacity"/> once held a while.</summary>
+    public static double Resting(OpeningSchedule? schedule, double time)
+    {
+        if (!Stays(schedule) || !double.IsFinite(time)) return 1;
+        var t = (time - schedule!.Value.Settled - RestAfter) / RestFade;
+        return 1 - (1 - RestOpacity) * Easing.Smoothstep(Math.Clamp(t, 0, 1));
     }
 
     /// <summary>The start of the first line that is sung (credits and breaks are not).</summary>
@@ -159,7 +194,7 @@ public enum OpeningSize
     Compact,
 }
 
-public enum OpeningWordsKind { Timed, None, Showing }
+public enum OpeningWordsKind { Timed, None, Showing, Absent }
 
 /// <summary>What the stage knows about the song's words.</summary>
 public readonly record struct OpeningWords(OpeningWordsKind Kind, double? FirstLine = null)
@@ -172,6 +207,9 @@ public readonly record struct OpeningWords(OpeningWordsKind Kind, double? FirstL
 
     /// <summary>Words already on screen from the start (unsynced lyrics): only a brief, compact card.</summary>
     public static OpeningWords Showing => new(OpeningWordsKind.Showing);
+
+    /// <summary>The lookup ended with no lyrics: the card stays for the rest of the song.</summary>
+    public static OpeningWords Absent => new(OpeningWordsKind.Absent);
 }
 
 /// <summary>When the card enters, settles, starts leaving and is gone, in song time.</summary>

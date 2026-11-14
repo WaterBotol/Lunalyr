@@ -31,7 +31,8 @@ internal abstract partial class LyricCompositionLayer
                 break;
             case NoLyricsDisplay.TrackName when !string.IsNullOrWhiteSpace(scene.Title):
                 _statusText = null;
-                DrawTrackName(dc, scene.Title!, scene.Artist ?? "");
+                // The opening title staying for the song says it already (the owner, 15 Nov 2026).
+                if (!Lunalyr.Core.Compositions.OpeningTitle.Stays(_openingSchedule)) DrawTrackName(dc, scene.Title!, scene.Artist ?? "");
                 break;
             default:
                 DrawStatus(dc, scene.Status!, wall, brief: true);
