@@ -357,67 +357,82 @@ struct ShareInspector: View {
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        ThemedForm {
+        ThemedForm(title: SettingsPage.share.title) {
             ThemedSection("Discord") {
-            Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
-            InspectorCaption("Needs the Discord desktop app. Shows the line being sung.",
-                             more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with Play this song and Get Lunalyr buttons for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
-            if extras.showsDiscordPresence {
-                Group {
-                    DiscordConnectionStatus(status: extras.discordStatus)
-                    ChoiceSegments("Status shows", selection: $extras.discordStatusText,
-                                   cases: DiscordStatusText.allCases, label: \.title)
-                    Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
-                    Toggle("Show the album cover", isOn: $extras.discordShowsCover)
-                    InspectorCaption("Looks the cover up by song and artist.",
-                                     more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown. The Play this song button uses the same search for Apple Music songs; with both off, nothing is sent to Apple.")
-                    Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
-                    Toggle("Show a Play this song button", isOn: $extras.discordShowsSongButton)
-                    InspectorCaption("Opens the song on Spotify, Apple Music, YouTube Music and more.",
-                                     more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or, for Apple Music, from the same Apple search as the cover (sent only the song title and artist), and only when the result is exactly that song. Until you change it, this follows Show the album cover. Others see it; Discord never shows you your own buttons.")
-                    Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
-                    Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
-                    ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,
-                                minimumLabel: "With the music", maximumLabel: "Earlier",
-                                format: { String(format: "%.1f s earlier", $0) })
-                    InspectorCaption("How far ahead of the music Discord shows the line.")
-                }
-                .revealRow()
-            }
-            if extras.listenAlongAvailable {
-                Group {
-                    Toggle("Let friends listen along", isOn: $extras.listenSharing)
-                    InspectorCaption("Friends with Lunalyr play what you play, in time, on their own Music or Spotify.",
-                                     more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify ID, play and pause, the position, your Discord display name (while Discord is on) and, with Share lyrics with listeners, the lyric lines with their timing. Apple\u{2019}s ID is included only when the Discord cover or song button already looked the song up; sharing never sends titles to Apple. The relay keeps only the latest state, and anyone with the link or code can read it. Off when you turn this off or quit.")
-                    if extras.listenSharing {
-                        Group {
-                            ListenSharingStatus(listen: .shared)
-                            Toggle("Share lyrics with listeners", isOn: $extras.listenSharesLyrics)
-                            InspectorCaption("Sends the lyric text with its timing, so friends and the web page can show it.",
-                                             more: "The lines you see, with their timing, go to your relay once per song. Anyone with the link or code can read them. Turn this off to share only the song.")
-                            if extras.showsDiscordPresence {
-                                Toggle("Show a Join button on Discord", isOn: $extras.discordOffersJoin)
-                                InspectorCaption("Replaces your Discord buttons while you share.",
-                                                 more: "Discord can\u{2019}t show a Join button and link buttons on the same profile. With this on, friends get Join (it opens their Lunalyr), but not Play this song or Get Lunalyr. With it off, they get Listen along (the web page) and Get Lunalyr; friends with Lunalyr can paste the link into its menu.")
+                Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
+                InspectorCaption("Needs the Discord desktop app. Shows the line being sung.",
+                                 more: "Needs the Discord desktop app. Your status shows what you choose below; your profile adds the song, artist, album, cover and progress, with Play this song and Get Lunalyr buttons for others (Discord never shows you your own). Nothing is shared while this is off, and it clears when you pause.")
+                if extras.showsDiscordPresence {
+                    Group {
+                        DiscordConnectionStatus(status: extras.discordStatus)
+                        ChoiceSegments("Status shows", selection: $extras.discordStatusText,
+                                       cases: DiscordStatusText.allCases, label: \.title)
+                        CheckboxList {
+                            Toggle("Show the current lyric", isOn: $extras.discordShowsLyric)
+                            Toggle(isOn: $extras.discordShowsCover) {
+                                CheckboxLabel("Show the album cover", caption: "Looks the cover up by song and artist.",
+                                              more: "The cover comes from Apple’s public search, which is sent only the song title and artist. Without a match, the Lunalyr icon is shown. The Play this song button uses the same search for Apple Music songs; with both off, nothing is sent to Apple.")
                             }
+                            .accessibilityLabel("Show the album cover")
+                            Toggle("Show the progress bar", isOn: $extras.discordShowsProgress)
+                            Toggle(isOn: $extras.discordShowsSongButton) {
+                                CheckboxLabel("Show a Play this song button", caption: "Opens the song on Spotify, Apple Music, YouTube Music and more.",
+                                              more: "Links to the song’s song.link page, which lists it on every service. Found from Spotify’s own link, or, for Apple Music, from the same Apple search as the cover (sent only the song title and artist), and only when the result is exactly that song. Until you change it, this follows Show the album cover. Others see it; Discord never shows you your own buttons.")
+                            }
+                            .accessibilityLabel("Show a Play this song button")
+                            Toggle("Show a Get Lunalyr button", isOn: $extras.discordShowsButton)
+                            Toggle("Keep showing while paused", isOn: $extras.discordShowsWhenPaused)
                         }
-                        .revealRow()
+                        ValueSlider("Lyric lead", value: $extras.discordLyricLead, in: LunalyrExtras.discordLeadRange, step: 0.5,
+                                    minimumLabel: "With the music", maximumLabel: "Earlier",
+                                    format: { String(format: "%.1f s earlier", $0) })
+                        InspectorCaption("How far ahead of the music Discord shows the line.")
                     }
+                    .revealRow()
                 }
-                .revealRow()
+                if extras.listenAlongAvailable {
+                    Group {
+                        Toggle("Let friends listen along", isOn: $extras.listenSharing)
+                        InspectorCaption("Friends with Lunalyr play what you play, in time, on their own Music or Spotify.",
+                                         more: "Friends with Lunalyr play what you play, in time, on their own Music or Spotify (Music friends: songs in their library). While this is on, your relay is sent the song, artist, album, its Spotify ID, play and pause, the position, your Discord display name (while Discord is on) and, with Share lyrics with listeners, the lyric lines with their timing. Apple\u{2019}s ID is included only when the Discord cover or song button already looked the song up; sharing never sends titles to Apple. The relay keeps only the latest state, and anyone with the link or code can read it. Off when you turn this off or quit.")
+                        if extras.listenSharing {
+                            Group {
+                                ListenSharingStatus(listen: .shared)
+                                Toggle("Share lyrics with listeners", isOn: $extras.listenSharesLyrics)
+                                InspectorCaption("Sends the lyric text with its timing, so friends and the web page can show it.",
+                                                 more: "The lines you see, with their timing, go to your relay once per song. Anyone with the link or code can read them. Turn this off to share only the song.")
+                                if extras.showsDiscordPresence {
+                                    Toggle("Show a Join button on Discord", isOn: $extras.discordOffersJoin)
+                                    InspectorCaption("Replaces your Discord buttons while you share.",
+                                                     more: "Discord can\u{2019}t show a Join button and link buttons on the same profile. With this on, friends get Join (it opens their Lunalyr), but not Play this song or Get Lunalyr. With it off, they get Listen along (the web page) and Get Lunalyr; friends with Lunalyr can paste the link into its menu.")
+                                }
+                            }
+                            .revealRow()
+                        }
+                    }
+                    .revealRow()
+                }
             }
-            ListenRelayField(relay: $extras.listenRelayURL)
-            InspectorCaption("Listen along needs a relay you run. Leave it empty to turn listen-along off.",
-                             more: "The address of your Lunalyr listen-along relay (a small Cloudflare Worker). With none, listen-along is hidden and nothing connects.")
-        }
-        ThemedSection("Share") {
+            ThemedSection("Listen along") {
+                HStack(spacing: 10) {
+                    Text(Self.relayLabel)
+                        .frame(width: 52, alignment: .leading)
+                        .accessibilityHidden(true)
+                    ListenRelayField(relay: $extras.listenRelayURL)
+                        .accessibilityLabel(Self.relayLabel)
+                }
+                InspectorCaption("Listen along needs a relay you run. Leave it empty to turn listen-along off.",
+                                 more: "The address of your Lunalyr listen-along relay (a small Cloudflare Worker). With none, listen-along is hidden and nothing connects.")
+            }
+            ThemedSection(Self.cardSection) {
                 ChoiceMenu("Card layout", selection: $extras.lyricCardComposition,
                            selectedTitle: { $0?.title ?? "Follow wallpaper" }) {
                     Text("Follow wallpaper").tag(Optional<LyricComposition>.none)
                     LyricCompositionOptions()
                 }
                 LabeledContent {
-                    Button("Open Lyric Card…") { extras.copyLyricCard() }
+                    Button(Self.openCardTitle) { extras.copyLyricCard() }
+                        .controlSize(.small)
                         .disabled(playing.current == nil)
                 } label: {
                     Text("Lyric card")
@@ -435,9 +450,14 @@ struct ShareInspector: View {
         .lunalyrReveal(extras.listenSharing)
         .lunalyrReveal(extras.listenAlongAvailable)
         .lunalyrReveal(playing.current == nil)
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
+
+    /// The relay field's label (it had none before).
+    static let relayLabel = "Relay"
+    /// The section for the lyric card (was "Share").
+    static let cardSection = "Lyric card"
+    /// The one name for the action, here, in the menu-bar panel and on the shortcut.
+    static let openCardTitle = "Open Lyric Card\u{2026}"
 }
 
 /// Menu bar & shortcuts: hiding and pausing, the menu-bar line and global
@@ -449,7 +469,7 @@ struct ExtrasInspector: View {
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        ThemedForm {
+        ThemedForm(title: SettingsPage.extras.title) {
             ThemedSection("Lyrics on screen") {
                 Toggle("Hide lyrics", isOn: $extras.lyricsHidden)
                 Toggle("Hide lyrics while a display is mirrored", isOn: $extras.hidesWhileMirroring)
@@ -457,6 +477,7 @@ struct ExtrasInspector: View {
                                                     showsAnyway: extras.showsWhileMirrored))
                 if extras.hiddenByMirroring {
                     Button(LunalyrExtras.Titles.showLyricsAnyway) { extras.showLyrics() }
+                        .controlSize(.small)
                         .help("Shows the lyrics on every display until mirroring ends")
                         .revealRow()
                 }
@@ -464,6 +485,8 @@ struct ExtrasInspector: View {
                 InspectorCaption("Freezes every wallpaper until you resume.", more: "Freezes every desktop wallpaper, lyrics included, until you resume it or Lunalyr next starts. The preview here keeps moving, so changes can still be judged.")
             }
             ThemedSection("Menu bar") {
+                MenuBarLinePicture(shows: extras.showsMenuBarLine && !extras.lyricsHidden,
+                                   length: Int(extras.menuBarLength.rounded()))
                 Toggle("Show the current line in the menu bar", isOn: $extras.showsMenuBarLine)
                 if extras.showsMenuBarLine {
                     Group {
@@ -480,12 +503,16 @@ struct ExtrasInspector: View {
                 ChoiceMenu("Keys", selection: $hotkeys.modifiers, selectedTitle: \.title) {
                     ForEach(GlobalHotkeys.Modifiers.allCases) { Text($0.title).tag($0) }
                 }
-                ForEach(GlobalHotkeys.shortcuts, id: \.action) { shortcut in
-                    shortcutRow(shortcut.action)
+                CheckboxList {
+                    ForEach(GlobalHotkeys.shortcuts, id: \.action) { shortcut in
+                        shortcutRow(shortcut.action)
+                    }
                 }
-                InspectorCaption("Work from any app; switch off any you need elsewhere.", more: Self.shortcutsCaption)
+                InspectorCaption("They work from any app; switch off any you need elsewhere.", more: Self.shortcutsCaption)
+                    .environment(\.captionFollowsControl, false)
                 if !hotkeys.unavailable.isEmpty && extras.shortcutsEnabled {
                     InspectorCaption("A shortcut another app uses is left to that app.", more: "A shortcut another app already uses is left to that app. Switch it off there, or choose other keys above.")
+                        .environment(\.captionFollowsControl, false)
                 }
                 if NSWorkspace.shared.isVoiceOverEnabled && hotkeys.modifiers == .controlOptionCommand {
                     StatusBanner(.warning, title: "VoiceOver uses these keys",
@@ -495,35 +522,29 @@ struct ExtrasInspector: View {
         }
         .lunalyrReveal(extras.showsMenuBarLine)
         .lunalyrReveal(extras.hiddenByMirroring)
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 
-    /// One shortcut: what it does, its keys, whether another app holds them,
-    /// and a switch of its own.
+    /// One shortcut: a checkbox with what it does, its keys right-aligned
+    /// (ink while it works, ink2 while it doesn't), and a warning line
+    /// under it while another app holds the keys.
     private func shortcutRow(_ action: GlobalHotkeys.Action) -> some View {
         let on = hotkeys.isSwitchedOn(action)
         let taken = extras.shortcutsEnabled && hotkeys.unavailable.contains(action)
-        return LabeledContent {
-            HStack(spacing: LunalyrDesign.Spacing.small) {
-                Text(hotkeys.label(for: action) ?? "")
-                    .monospaced()
-                    .foregroundStyle(extras.shortcutsEnabled && on && !taken ? .primary : .secondary)
-                // Its own label for VoiceOver, which reaches it on its own.
+        let live = extras.shortcutsEnabled && on && !taken
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Toggle(action.title, isOn: Binding(get: { hotkeys.isSwitchedOn(action) },
                                                    set: { hotkeys.setSwitchedOn($0, for: action) }))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    .accessibilityValue(on ? "On, \(hotkeys.label(for: action) ?? "")" : "Off")
+                Text(hotkeys.label(for: action) ?? "")
+                    .font(LunalyrDesign.Studio.TypeScale.row)
+                    .foregroundStyle(live ? Color.studio(.ink) : Color.studio(.ink2))
+                    .fixedSize()
+                    .accessibilityHidden(true)
             }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(action.title)
-                if taken {
-                    Label("In use by another app", systemImage: "exclamationmark.triangle.fill")
-                        .labelStyle(CaptionLabelStyle())
-                        .foregroundStyle(LunalyrStatus.warning.text)
-                }
+            if taken {
+                WarningCaption("In use by another app")
+                    .padding(.leading, ThemedCheckboxBox.size + 8)
             }
         }
     }
@@ -532,7 +553,7 @@ struct ExtrasInspector: View {
     /// keyboard in use types it (⌃⌥⌘Ü for ⌃⌥⌘[ on a German one), so this
     /// names no key of Lunalyr's: only the arrows it leaves alone. The card
     /// shortcut is named as its row names it (`GlobalHotkeys`), and does what
-    /// the Share page's button does.
+    /// the Lyric card section's button does.
     static let shortcutsCaption = "They work from any app; switch off any you need for something else. \(GlobalHotkeys.Action.copyCard.title) opens the lyric card window for the line playing, like Open Lyric Card\u{2026} in \(SettingsPage.share.title). Sync changes are saved for this song’s lyric source, like the song offset in \(SettingsPage.lyrics.title). None of them use the arrow keys, which window managers such as Rectangle use with ⌃⌥⌘ to move windows between displays."
 
     /// The caption under "Hide lyrics while a display is mirrored".
@@ -542,6 +563,49 @@ struct ExtrasInspector: View {
         return showsAnyway
             ? "A display is mirrored now, and the lyrics are shown anyway until mirroring ends."
             : "A display is mirrored now, so the lyrics are hidden on every display until mirroring ends."
+    }
+}
+
+/// The menu bar as it will look: the sample line beside the clock, cut to
+/// Longest line, or nothing while the line is off. A static drawing.
+private struct MenuBarLinePicture: View {
+    let shows: Bool
+    let length: Int
+
+    static let sample = SampleLyric.lines.map { $0.joined(separator: " ") }.joined(separator: " ")
+
+    /// The sample cut to `length` characters, with an ellipsis when cut.
+    static func line(length: Int) -> String {
+        let text = sample
+        guard text.count > length, length > 1 else { return text }
+        return String(text.prefix(length - 1)).trimmingCharacters(in: .whitespaces) + "\u{2026}"
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            SampleWallpaper()
+            HStack(spacing: 10) {
+                Image(systemName: "apple.logo").font(.system(size: 12))
+                Text("Finder").font(.system(size: 12, weight: .bold))
+                Spacer(minLength: 8)
+                if shows {
+                    Text(Self.line(length: length))
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                }
+                Image(systemName: "wifi").font(.system(size: 11))
+                Text("Fri 21:40").font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 26)
+            .background(Color.black.opacity(0.28))
+        }
+        .frame(maxWidth: ThemedPageMetrics.column)
+        .frame(height: 62)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(shows ? "The menu bar with the current line" : "The menu bar without the line")
     }
 }
 

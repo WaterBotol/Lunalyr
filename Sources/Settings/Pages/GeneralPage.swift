@@ -1,9 +1,8 @@
 import ServiceManagement
 import SwiftUI
 
-/// General: how Lunalyr's own windows look, starting at login, updates, and
-/// the welcome again. The first page drawn with the Calm and Bold components
-/// (design/spec.md); long explanations sit behind the ⓘ buttons.
+/// General: starting at login, updates, the welcome again, and the window
+/// style of Lunalyr's own windows (Standard or Bold).
 @MainActor
 struct GeneralPage: View {
     @Environment(\.lunalyrModels) private var models
@@ -11,65 +10,61 @@ struct GeneralPage: View {
     @Model(\.updates) private var updates
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ThemedCard("Look", info: "How Lunalyr’s own windows look: Settings, the menu-bar panel and the welcome. It doesn’t change your wallpaper.") {
-                    SettingsStylePicker()
-                }
-                ThemedCard("Startup") {
-                    Toggle("Launch at login", isOn: $s.launchAtLogin)
-                        .toggleStyle(ThemedToggleStyle())
-                    if let error = s.launchAtLoginError {
-                        if s.launchAtLoginNeedsApproval {
-                            StatusBanner(.warning, title: "Waiting for your approval", message: error) {
-                                Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }
-                                    .help("Opens System Settings › General › Login Items")
-                            }
-                        } else {
-                            StatusBanner(.warning, title: "Launch at login didn’t change", message: error)
+        ThemedForm(title: SettingsPage.general.title) {
+            ThemedSection("Startup") {
+                Toggle("Launch at login", isOn: $s.launchAtLogin)
+                if let error = s.launchAtLoginError {
+                    if s.launchAtLoginNeedsApproval {
+                        StatusBanner(.warning, title: "Waiting for your approval", message: error) {
+                            Button("Open Login Items…") { SMAppService.openSystemSettingsLoginItems() }
+                                .help("Opens System Settings › General › Login Items")
                         }
-                    }
-                }
-                ThemedCard("Updates") {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Lunalyr \(Self.version)")
-                            Text(updates.status).lunalyrText(.caption)
-                        }
-                        Spacer()
-                        if updates.badge.pendingVersion != nil {
-                            // The update the daily check found, waiting.
-                            Button("Update…") { updates.check() }
-                                .buttonStyle(ThemedButtonStyle())
-                                .help("See what’s new and install the update")
-                        } else {
-                            Button("Check for Updates…") { updates.check() }
-                                .buttonStyle(ThemedButtonStyle())
-                                .disabled(updates.buttonDisabled)
-                                .help(updates.buttonDisabled ? "Available once the update service is ready, or when its current check finishes." : "")
-                        }
-                    }
-                    Toggle("Check for updates automatically", isOn: Binding(
-                        get: { updates.automaticallyChecks },
-                        set: { updates.setAutomaticallyChecks($0) }))
-                        .toggleStyle(ThemedToggleStyle())
-                        .disabled(!updates.configured)
-                        .help("Once a day, Lunalyr asks GitHub whether a newer version is out. It never installs one without asking.")
-                }
-                ThemedCard("Welcome") {
-                    HStack {
-                        Text("Music access, a look and the menu bar.")
-                        Spacer()
-                        Button("Show Welcome Again…") { models.resolved.navigation.openOnboarding() }
-                            .buttonStyle(ThemedButtonStyle())
-                            .help("Go through Lunalyr’s welcome again")
+                    } else {
+                        StatusBanner(.warning, title: "Launch at login didn’t change", message: error)
                     }
                 }
             }
-            .padding(20)
-            .frame(maxWidth: .infinity)
+            ThemedSection("Updates") {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Lunalyr \(Self.version)")
+                            .foregroundStyle(Color.studio(.ink))
+                        Text(updates.status)
+                            .font(LunalyrDesign.Studio.TypeScale.caption)
+                            .foregroundStyle(Color.studio(.ink2))
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 8)
+                    if updates.badge.pendingVersion != nil {
+                        // The update the daily check found, waiting.
+                        Button("Update…") { updates.check() }
+                            .controlSize(.small)
+                            .help("See what’s new and install the update")
+                    } else {
+                        Button("Check for Updates…") { updates.check() }
+                            .controlSize(.small)
+                            .disabled(updates.buttonDisabled)
+                            .help(updates.buttonDisabled ? "Available once the update service is ready, or when its current check finishes." : "")
+                    }
+                }
+                Toggle("Check for updates automatically", isOn: Binding(
+                    get: { updates.automaticallyChecks },
+                    set: { updates.setAutomaticallyChecks($0) }))
+                    .disabled(!updates.configured)
+                InspectorCaption("Once a day. It never installs one without asking.",
+                                 more: "Once a day, Lunalyr asks GitHub whether a newer version is out. It never installs one without asking.")
+            }
+            ThemedSection("Windows") {
+                SettingsStylePicker()
+            }
+            ThemedSection("Welcome") {
+                LabeledContent("Music access, a look and the menu bar") {
+                    Button("Show Welcome Again…") { models.resolved.navigation.openOnboarding() }
+                        .controlSize(.small)
+                        .help("Go through Lunalyr’s welcome again")
+                }
+            }
         }
-        .scrollContentBackground(.hidden)
     }
 
     static var version: String {

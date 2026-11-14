@@ -9,17 +9,17 @@ final class SettingsPolishTests: XCTestCase {
     // MARK: S9 slider
 
     /// Grabbing the thumb off-centre keeps that grip: the thumb no longer
-    /// jumps up to 11 points to put its centre under the pointer.
+    /// jumps up to half its width (7.5 points for the 15-point knob) to put its centre under the pointer.
     func testGrabbingTheThumbOffCentreDoesNotJump() {
         let thumb = ThemedSliderTrack.thumb, travel: CGFloat = 300
         let centre = thumb / 2 + travel * 0.5
-        let offset = ThemedSliderMath.grabOffset(start: centre + 9, fraction: 0.5, travel: travel, thumb: thumb)
-        XCTAssertEqual(offset, 9)
+        let offset = ThemedSliderMath.grabOffset(start: centre + 5, fraction: 0.5, travel: travel, thumb: thumb)
+        XCTAssertEqual(offset, 5)
         // The pointer hasn't moved: the value stays where it was.
-        XCTAssertEqual(ThemedSliderMath.fraction(pointer: centre + 9, grabOffset: offset, travel: travel, thumb: thumb),
+        XCTAssertEqual(ThemedSliderMath.fraction(pointer: centre + 5, grabOffset: offset, travel: travel, thumb: thumb),
                        0.5, accuracy: 1e-9)
         // Moving 30 points moves the thumb 30 points.
-        XCTAssertEqual(ThemedSliderMath.fraction(pointer: centre + 39, grabOffset: offset, travel: travel, thumb: thumb),
+        XCTAssertEqual(ThemedSliderMath.fraction(pointer: centre + 35, grabOffset: offset, travel: travel, thumb: thumb),
                        0.6, accuracy: 1e-9)
     }
 

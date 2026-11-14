@@ -1,14 +1,14 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Two looks for Lunalyr's own windows: Calm and Bold
+// MARK: - Window style: Standard and Bold
 //
-// Calm is flat and opaque: quiet surfaces, hairline edges, no shadows.
-// Bold is a toned-down neubrutalism: flat fills, a 1.5pt ink outline on
-// everything and a hard offset shadow with no blur. Both are static and
-// opaque, so Reduce Transparency has nothing to take away, and selected
-// controls are always the violet accent. The values are specified, with
-// their contrast ratios, in design/spec.md.
+// Standard (stored as "calm", the value earlier versions wrote) is the
+// redesign itself: `LunalyrDesign.Studio`'s fills, no edges and no shadows,
+// edges only under Increase Contrast. Bold keeps its toned-down
+// neubrutalism over the same structure: a 1.5pt ink outline on every
+// control and a hard offset shadow with no blur. Both are static and
+// opaque, so Reduce Transparency has nothing to take away.
 //
 //     SettingsStyleStore.shared.style = .bold
 //     Button("Hi") { }.styledSurface(radius: 14, selected: false)
@@ -20,15 +20,15 @@ enum SettingsVisualStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .calm: return "Calm"
+        case .calm: return "Standard"
         case .bold: return "Bold"
         }
     }
 
     var summary: String {
         switch self {
-        case .calm: return "Flat and quiet, with thin edges."
-        case .bold: return "Thick outlines and hard shadows."
+        case .calm: return "Flat fills that follow the system appearance."
+        case .bold: return "Thick outlines and hard shadows on every control."
         }
     }
 
@@ -69,14 +69,16 @@ enum SettingsVisualStyle: String, CaseIterable, Identifiable {
             LunalyrPalette.rgb(Int((hex >> 16) & 0xFF), Int((hex >> 8) & 0xFF), Int(hex & 0xFF))
         }
         switch (self, dark) {
-        case (.calm, false):
-            return Tokens(canvas: c(0xF2F2F4), face: c(0xFFFFFF), ink: c(0x1C1C1E), secondary: c(0x5A5A60),
-                          controlEdge: c(0x8A8A92), cardEdge: increaseContrast ? c(0x8A8A92) : c(0xD6D6DB),
-                          shadow: nil, outline: 1, shadowOffset: 0, cardRadius: 12, controlRadius: 8)
-        case (.calm, true):
-            return Tokens(canvas: c(0x18181B), face: c(0x242428), ink: c(0xF2F2F5), secondary: c(0xA6A6AE),
-                          controlEdge: c(0x8E8E96), cardEdge: increaseContrast ? c(0x8E8E96) : c(0x34343A),
-                          shadow: nil, outline: 1, shadowOffset: 0, cardRadius: 12, controlRadius: 8)
+        case (.calm, _):
+            // Standard is the Studio tokens (SPEC.md §2): the window fill,
+            // the control fill, ink and ink2; edges only under Increase Contrast.
+            func studio(_ role: LunalyrDesign.Studio.Role) -> NSColor {
+                LunalyrDesign.Studio.color(role, dark: dark, increaseContrast: increaseContrast)
+            }
+            let edge = studio(.ink).withAlphaComponent(0.25)
+            return Tokens(canvas: studio(.window), face: studio(.control), ink: studio(.ink), secondary: studio(.ink2),
+                          controlEdge: edge, cardEdge: increaseContrast ? edge : .clear,
+                          shadow: nil, outline: 1, shadowOffset: 0, cardRadius: 8, controlRadius: 6)
         case (.bold, false):
             return Tokens(canvas: c(0xF5EFE0), face: c(0xFFFFFF), ink: c(0x111111), secondary: c(0x4A4A4F),
                           controlEdge: c(0x111111), cardEdge: c(0x111111),
@@ -162,43 +164,18 @@ private struct StyledCanvas: ViewModifier {
     }
 }
 
-/// Calm and Bold side by side, each a live miniature of itself, to choose
-/// from in the welcome and in Settings › General.
+/// The Window style row on General: Standard | Bold, and what Bold does.
+/// (Earlier builds showed both as miniatures; the setting is unchanged.)
 struct SettingsStylePicker: View {
     @ObservedObject private var store = SettingsStyleStore.shared
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: LunalyrDesign.Spacing.large) {
-            ForEach(SettingsVisualStyle.allCases) { option in
-                let selected = store.hasChosen && store.style == option
-                Button {
-                    store.choose(option)
-                } label: {
-                    VStack(spacing: LunalyrDesign.Spacing.small) {
-                        ThemeMiniPreview(style: option)
-                        Text(option.title).font(.body.weight(.semibold))
-                        Text(option.summary)
-                            .lunalyrText(.caption)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(LunalyrDesign.Spacing.medium)
-                    .frame(maxWidth: .infinity)
-                    // A fill, not a border, holds each option; the accent ring marks the chosen one.
-                    .background(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous).fill(.quinary))
-                    .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                        .strokeBorder(selected ? Color.lunalyrAccentText : Color.lunalyrContrastBorder, lineWidth: 2))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(option.title) look")
-                .accessibilityHint(option.summary)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
+        VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.captionGap) {
+            ChoiceSegments("Window style", selection: Binding(get: { store.style }, set: { store.choose($0) }),
+                           cases: SettingsVisualStyle.allCases, label: \.title)
+            InspectorCaption(Self.caption)
         }
-        // The ring moves to the new look with the click. Only the picker's
-        // own drawing: the rest of the window switches look as before.
-        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
-                   value: store.hasChosen ? store.style : nil)
     }
+
+    static let caption = "Bold adds thick outlines and hard shadows to Lunalyr\u{2019}s own windows. It doesn\u{2019}t change your wallpaper."
 }

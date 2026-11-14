@@ -6,7 +6,7 @@ struct PerformancePage: View {
     @Model(\.settings) private var s
 
     var body: some View {
-        ThemedForm {
+        ThemedForm(title: SettingsPage.performance.title) {
             ThemedSection("Rendering and power") {
                 ChoiceSegments("Frame rate", selection: $s.animationRate,
                                cases: Array(Settings.AnimationRate.allCases), label: \.title)
@@ -32,14 +32,13 @@ struct PerformancePage: View {
             DesktopInteractionSection()
         }
         .lunalyrReveal(s.pauseWhenCovered)
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 }
 
-/// A caption about power saving, with its leaf.
+/// A caption about power saving, with its leaf in the success colour.
 private struct PowerCaption: View {
     let text: String
+    @Environment(\.formDensity) private var density
 
     init(_ text: String) { self.text = text }
 
@@ -47,9 +46,10 @@ private struct PowerCaption: View {
         Label {
             Text(text)
         } icon: {
-            Image(systemName: "leaf.fill").foregroundStyle(LunalyrStatus.success.text)
+            Image(systemName: "leaf.fill").foregroundStyle(Color.studio(.success))
         }
         .labelStyle(CaptionLabelStyle())
+        .padding(.top, LunalyrDesign.Studio.Layout.captionGap - density.rowSpacing)
         .accessibilityElement(children: .combine)
     }
 }
