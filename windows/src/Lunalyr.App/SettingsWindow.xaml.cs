@@ -108,7 +108,7 @@ public sealed partial class SettingsWindow : Window
         else
         {
             NowPlayingText.Text = status.Title is { } title
-                ? $"{title}{(status.Artist is { Length: > 0 } artist ? " — " + artist : "")}{(status.Duration is { } d ? $"  ({TimeSpan.FromSeconds(d):m\\:ss})" : "")}"
+                ? $"{title}{(status.Artist is { Length: > 0 } artist ? " — " + artist : "")}{(status.Duration is { } d ? $" ({TimeSpan.FromSeconds(d):m\\:ss})" : "")}"
                 : "Nothing";
             PlayerText.Text = status.Player is { } player ? $"{player} · {Describe(status.Playback)}" : "No player is sharing what it plays";
             SourceText.Text = status.LyricSource ?? "—";

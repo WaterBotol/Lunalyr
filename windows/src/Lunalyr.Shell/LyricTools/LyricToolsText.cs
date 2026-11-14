@@ -35,7 +35,7 @@ public static class LyricToolsText
 
     public const string UsingSavedChoice = "Using your saved choice";
 
-    public const string ReturnToAutomatic = "Return to Automatic";
+    public const string ReturnToAutomatic = "Return to automatic";
 
     public const string ReturnToAutomaticName = "Return to automatic selection";
 
@@ -45,7 +45,7 @@ public static class LyricToolsText
 
     public const string TapToSyncHelp = "Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps";
 
-    public const string UndoTapToSync = "Undo Tap to Sync";
+    public const string UndoTapToSync = "Undo tap to sync";
 
     public const string UndoTapToSyncHelp = "Back to the timing from before the last tap to sync";
 
@@ -100,7 +100,7 @@ public static class LyricToolsText
 
     public const string SearchHelp = "Ask every enabled source for these words";
 
-    public const string UsePlayingSong = "Use Playing Song";
+    public const string UsePlayingSong = "Use playing song";
 
     public const string UsePlayingSongHelp = "Put the playing song’s title and artist back";
 
@@ -114,7 +114,7 @@ public static class LyricToolsText
 
     public const string ImportPickerTitle = "Import lyrics for the playing song";
 
-    public const string UseForThisSong = "Use for This Song";
+    public const string UseForThisSong = "Use for this song";
 
     public static string UseForThisSongName(LyricCandidate candidate)
     {

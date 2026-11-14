@@ -409,7 +409,7 @@ public static class UpdateCopy
         $"Downloading Lunalyr {version}… {Math.Clamp(fraction, 0, 1):P0}";
 
     public static string Ready(string version) =>
-        $"Lunalyr {version} is downloaded and checked. Restart and Update installs it; your settings stay.";
+        $"Lunalyr {version} is downloaded and checked. Restart and update installs it; your settings stay.";
 
     public static string Failed(string reason) => $"Couldn’t update: {reason}";
 
@@ -425,9 +425,9 @@ public static class UpdateCopy
     /// <summary>The button beside the status.</summary>
     public static string Button(UpdateState state) => state.Phase switch
     {
-        UpdatePhase.Available => "Download and Install",
-        UpdatePhase.Ready => "Restart and Update",
-        _ => "Check for Updates",
+        UpdatePhase.Available => "Download and install",
+        UpdatePhase.Ready => "Restart and update",
+        _ => "Check for updates",
     };
 
     public static bool ButtonEnabled(UpdateState state) =>

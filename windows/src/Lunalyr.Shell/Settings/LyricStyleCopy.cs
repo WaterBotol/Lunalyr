@@ -78,7 +78,7 @@ public static class LyricStyleCopy
     };
 
     public const string ColourBacking =
-        "Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still with Reduce Motion on.";
+        "Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still while Windows’ animation effects are off.";
 
     // ---- Remembered styles ----
 

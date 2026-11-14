@@ -772,7 +772,7 @@ open a URL (a `.url` file, a Stream Deck, AutoHotkey, the Run box) runs the same
 
 ## Tray lyric and Discord status (milestone 7)
 
-Settings › General's "Tray" and "Discord & lyric card" rows for these two are live. Both are **off by
+Settings › General's "Tray" and "Discord and lyric card" rows for these two are live. Both are **off by
 default**. Checks and ported tests: [milestones/M7.md](milestones/M7.md), "Discord and tray lyric".
 
 ### Tray lyric (the Mac's menu-bar line)

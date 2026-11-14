@@ -101,7 +101,7 @@ internal static partial class WallpaperPage
         row.Children.Add(highs.Panel);
         meters.Children.Add(row);
         meters.Children.Add(packets);
-        var copy = Button("Copy Audio Diagnostics", () =>
+        var copy = Button("Copy audio diagnostics", () =>
         {
             if (VisualiserServices.Audio is not { } audio) return;
             var data = new Windows.ApplicationModel.DataTransfer.DataPackage();
@@ -110,7 +110,7 @@ internal static partial class WallpaperPage
         }, "Copy a report of how audio capture is set up");
         ToolTipService.SetToolTip(copy, "Copies a report of how audio capture is set up, to paste into a bug report");
         meters.Children.Add(copy);
-        var diagnostics = Expander("Audio setup & diagnostics", "Live levels from the analysis; nothing is recorded.", "", meters);
+        var diagnostics = Expander("Audio setup and diagnostics", "Live levels from the analysis; nothing is recorded.", "", meters);
         page.Children.Add(diagnostics);
 
         void Follow(object? sender, EventArgs e) => ctx.QueueRefresh();

@@ -11,7 +11,7 @@ public static class LyricCardCopy
     public const string WindowTitle = "Lyric Card";
 
     /// <summary>The action, wherever it is offered (the Mac's <c>LunalyrExtras.Titles.copyCard</c>).</summary>
-    public const string OpenTitle = "Open Lyric Card…";
+    public const string OpenTitle = "Open lyric card…";
 
     public const string TileTitle = "Lyric card";
     public const string TileHelpPlaying = "Opens the lyric card window: pick lines, a shape and a format to share.";

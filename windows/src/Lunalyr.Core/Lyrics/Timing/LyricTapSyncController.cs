@@ -21,8 +21,8 @@ public sealed record LyricTapContext(
 /// </summary>
 public sealed class LyricTapSyncController
 {
-    public const string MenuTitle = "Tap to Sync Lyrics…";
-    public const string StopTitle = "Stop Tap to Sync";
+    public const string MenuTitle = "Tap to sync lyrics…";
+    public const string StopTitle = "Stop tap to sync";
     public const string UndoTitle = "Undo Lyric Tap Sync";
 
     private readonly SongOffsets _offsets;

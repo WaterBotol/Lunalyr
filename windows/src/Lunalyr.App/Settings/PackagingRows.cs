@@ -61,11 +61,11 @@ internal static class PackagingRows
         var shortVersion = version.Split('+')[0];
         if (hooks is null)
         {
-            page.Children.Add(Card($"Lunalyr {shortVersion}", UpdateCopy.Unconfigured, "", Button("Check for Updates", () => { }, name: "Check for Updates")));
+            page.Children.Add(Card($"Lunalyr {shortVersion}", UpdateCopy.Unconfigured, "", Button("Check for updates", () => { }, name: "Check for updates")));
             return;
         }
         // Named for what it does (the card would otherwise name it "Lunalyr 0.8.0"); the status is its help text.
-        var button = Button("Check for Updates", hooks.UpdateAction, name: "Check for Updates");
+        var button = Button("Check for updates", hooks.UpdateAction, name: "Check for updates");
         var card = Card($"Lunalyr {shortVersion}", "", "", button);
         var progress = new ProgressBar { Minimum = 0, Maximum = 1, IsIndeterminate = false, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 4) };
         AutomationProperties.SetName(progress, "Update download");
@@ -96,7 +96,7 @@ internal static class PackagingRows
         page.Children.Add(card);
         page.Children.Add(progress);
         page.Children.Add(Card("Check for updates automatically",
-            "Once a day. A new version downloads in the background and installs only when you choose Restart and Update.", "",
+            "Once a day. A new version downloads in the background and installs only when you choose Restart and update.", "",
             Toggle(ctx, s => s.AutomaticUpdateChecks, (s, v) => s with { AutomaticUpdateChecks = v })));
     }
 
