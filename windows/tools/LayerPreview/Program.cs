@@ -195,12 +195,13 @@ internal sealed record Arguments(string Covers, string Out, string Layer, double
                     var pair = Next().Split(',');
                     fade = (pair[0], pair[1]);
                     break;
-                case "-wallpaper": wallpaper = Next(); break;
+                // Full paths: Windows' picture decoder (a WinRT file stream) can't open a relative one.
+                case "-wallpaper": wallpaper = Path.GetFullPath(Next()); break;
                 case "-placements": placements = Next().Split(','); break;
                 case "-bench": bench = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "-motion": motion = true; break;
                 case "-reduce-motion": reduceMotion = true; break;
-                case "-cover": cover = Next(); break;
+                case "-cover": cover = Path.GetFullPath(Next()); break;
                 case "-adjust":
                     foreach (var pair2 in Next().Split(','))
                     {
