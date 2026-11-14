@@ -11,8 +11,8 @@ namespace Lunalyr.Core.Tests.Player;
 public sealed class PlayerKeyMapTests
 {
     private static PlayerKeyAction? Action(ushort code, string chars = "", bool ctrl = false, bool alt = false,
-        bool system = false, bool editing = false, bool results = false) =>
-        PlayerKeyMap.Action(code, chars, ctrl, alt, system, editing, results);
+        bool system = false) =>
+        PlayerKeyMap.Action(code, chars, ctrl, alt, system);
 
     // Ported from DesktopScrubberTests.swift: testTransportAndSeekKeys
     [Fact]
@@ -28,25 +28,10 @@ public sealed class PlayerKeyMapTests
         Assert.Equal(PlayerKeyAction.Jump(0), Action(0x30, "0"));
         Assert.Equal(PlayerKeyAction.Jump(9), Action(0x39, "9"));
         Assert.Equal(PlayerKeyAction.Jump(9), Action(0x69, "9")); // the numeric keypad's 9
-        Assert.Equal(PlayerKeyAction.FocusSearch, Action(0x46, "f", ctrl: true));
-        Assert.Equal(PlayerKeyAction.FocusSearch, Action(0xBF, "/"));
         Assert.Equal(PlayerKeyAction.Escape, Action(K.Escape));
-    }
-
-    // Ported from DesktopScrubberTests.swift: testTypingBelongsToTheSearchField
-    [Fact]
-    public void TypingBelongsToTheSearchField()
-    {
-        Assert.Null(Action(K.Space, " ", editing: true)); // Space types a space
-        Assert.Null(Action(K.Left, editing: true)); // arrows move the caret
-        Assert.Null(Action(0x30, "0", editing: true));
-        Assert.Null(Action(0xBF, "/", editing: true));
-        Assert.Equal(PlayerKeyAction.Escape, Action(K.Escape, editing: true));
-        Assert.Equal(PlayerKeyAction.MoveSelection(1), Action(K.Down, editing: true, results: true));
-        Assert.Equal(PlayerKeyAction.MoveSelection(-1), Action(K.Up, editing: true, results: true));
-        Assert.Equal(PlayerKeyAction.PlaySelection, Action(K.Return, editing: true, results: true));
-        Assert.Null(Action(K.Return, editing: true, results: false));
-        Assert.Null(Action(K.Left, ctrl: true, editing: true)); // Ctrl+← moves by a word in text
+        // Windows has no player search: the Mac's ⌘F and / do nothing here.
+        Assert.Null(Action(0x46, "f", ctrl: true));
+        Assert.Null(Action(0xBF, "/"));
     }
 
     // Ported from DesktopScrubberTests.swift: testSystemShortcutsAreLeftAlone

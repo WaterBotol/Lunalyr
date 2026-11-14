@@ -1,6 +1,7 @@
 // Ported from the Mac's Sources/Player/PlayerKeyMap.swift (Lunalyr's own code, no Verso lines), in Windows terms: the
 // Mac's ⌘ is Ctrl, its ⌥ is Alt, its Control (left to the system) is the Windows key, and the key codes are Windows
-// virtual-key codes instead of Carbon's.
+// virtual-key codes instead of Carbon's. The Mac's search keys (⌘F, /, ↑ ↓ Return in the results) are left out: Windows
+// has no player search (the owner removed it, 14 Nov 2026).
 
 namespace Lunalyr.Core.Player;
 
@@ -11,18 +12,15 @@ public enum PlayerKeyKind
     Line,
     Track,
     Jump,
-    FocusSearch,
-    MoveSelection,
-    PlaySelection,
 
-    /// <summary>Esc: cancel a drag, else clear the search, else give the keyboard back.</summary>
+    /// <summary>Esc: cancel a drag, else give the keyboard back.</summary>
     Escape,
 }
 
 /// <summary>What a key press on the player does.</summary>
 /// <param name="Seconds">For <see cref="PlayerKeyKind.SeekBy"/>.</param>
 /// <param name="Forward">For <see cref="PlayerKeyKind.Line"/> and <see cref="PlayerKeyKind.Track"/>.</param>
-/// <param name="Value">The digit for <see cref="PlayerKeyKind.Jump"/>, the step for <see cref="PlayerKeyKind.MoveSelection"/>.</param>
+/// <param name="Value">The digit for <see cref="PlayerKeyKind.Jump"/>.</param>
 public readonly record struct PlayerKeyAction(PlayerKeyKind Kind, double Seconds = 0, bool Forward = false, int Value = 0)
 {
     public static PlayerKeyAction PlayPause => new(PlayerKeyKind.PlayPause);
@@ -35,17 +33,11 @@ public readonly record struct PlayerKeyAction(PlayerKeyKind Kind, double Seconds
 
     public static PlayerKeyAction Jump(int digit) => new(PlayerKeyKind.Jump, Value: digit);
 
-    public static PlayerKeyAction FocusSearch => new(PlayerKeyKind.FocusSearch);
-
-    public static PlayerKeyAction MoveSelection(int step) => new(PlayerKeyKind.MoveSelection, Value: step);
-
-    public static PlayerKeyAction PlaySelection => new(PlayerKeyKind.PlaySelection);
-
     public static PlayerKeyAction Escape => new(PlayerKeyKind.Escape);
 }
 
 /// <summary>
-/// The desktop player's keys, while its card has the keyboard (after a click on it, or in the search field). Media
+/// The desktop player's keys, while its card has the keyboard (after a click on it). Media
 /// keys stay the system's, and nothing here shadows a system shortcut.
 /// </summary>
 /// <remarks>
@@ -55,9 +47,7 @@ public readonly record struct PlayerKeyAction(PlayerKeyKind Kind, double Seconds
 /// <item><term>Alt+← / Alt+→</term><description>previous or next lyric line, 10 s without synced lyrics (Mac: ⌥← / ⌥→)</description></item>
 /// <item><term>Ctrl+← / Ctrl+→</term><description>previous or next song (Mac: ⌘← / ⌘→)</description></item>
 /// <item><term>0–9</term><description>jump to 0 %–90 % of the song</description></item>
-/// <item><term>Ctrl+F or /</term><description>search (Mac: ⌘F or /; search is a later round)</description></item>
-/// <item><term>↑ / ↓, Enter</term><description>pick a search result</description></item>
-/// <item><term>Esc</term><description>cancel a drag, else close the search, else give the keyboard back</description></item>
+/// <item><term>Esc</term><description>cancel a drag, else give the keyboard back</description></item>
 /// </list>
 /// While dragging the seek bar: Ctrl turns snapping off (Mac: ⌘) and Alt scrubs finely (Mac: ⌥).
 /// </remarks>
@@ -68,36 +58,23 @@ public static class PlayerKeyMap
 
     /// <summary>
     /// What a key press does. <paramref name="characters"/> is the key's character ignoring modifiers (the keyboard
-    /// layout's unshifted character); <paramref name="editingText"/> is true while the search field has the keyboard,
-    /// where letters, digits, Space and the arrows are its own; <paramref name="hasResults"/> is true while search
-    /// results are listed. <paramref name="system"/> is the Windows key (the Mac's Control): those are the system's.
+    /// layout's unshifted character). <paramref name="system"/> is the Windows key (the Mac's Control): those are the
+    /// system's.
     /// </summary>
-    public static PlayerKeyAction? Action(ushort keyCode, string characters, bool ctrl, bool alt, bool system,
-        bool editingText, bool hasResults)
+    public static PlayerKeyAction? Action(ushort keyCode, string characters, bool ctrl, bool alt, bool system)
     {
-        switch (keyCode)
-        {
-            case KeyCode.Escape: return PlayerKeyAction.Escape;
-            case KeyCode.Return:
-                return hasResults && !ctrl && !alt && !system ? PlayerKeyAction.PlaySelection : null;
-            case KeyCode.Up when hasResults && !ctrl && !alt: return PlayerKeyAction.MoveSelection(-1);
-            case KeyCode.Down when hasResults && !ctrl && !alt: return PlayerKeyAction.MoveSelection(1);
-        }
-
+        if (keyCode == KeyCode.Escape) return PlayerKeyAction.Escape;
         if (system) return null;
         if (ctrl)
         {
-            switch (keyCode)
+            return keyCode switch
             {
-                case KeyCode.Left when !editingText && !alt: return PlayerKeyAction.Track(false);
-                case KeyCode.Right when !editingText && !alt: return PlayerKeyAction.Track(true);
-            }
-
-            return string.Equals(characters, "f", StringComparison.OrdinalIgnoreCase) && !alt ? PlayerKeyAction.FocusSearch : null;
+                KeyCode.Left when !alt => PlayerKeyAction.Track(false),
+                KeyCode.Right when !alt => PlayerKeyAction.Track(true),
+                _ => null,
+            };
         }
 
-        // Everything else belongs to the text while it is being edited.
-        if (editingText) return null;
         switch (keyCode)
         {
             case KeyCode.Space: return alt ? null : PlayerKeyAction.PlayPause;
@@ -106,7 +83,6 @@ public static class PlayerKeyMap
         }
 
         if (alt) return null;
-        if (characters == "/") return PlayerKeyAction.FocusSearch;
         if (characters.Length == 1 && characters[0] is >= '0' and <= '9') return PlayerKeyAction.Jump(characters[0] - '0');
         return null;
     }

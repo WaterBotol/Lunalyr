@@ -53,7 +53,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private readonly bool _debugShow;
     private readonly bool _debugTop;
     private PlayerAutomation? _automation;
-    private SearchField? _field;
+    private readonly float _cardHeightDip = CardPainter.Height;
 
     // Hover poll.
     private uint _pollMs;
@@ -129,7 +129,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         s_instance = this;
         _surface.CreateWindow(&WndProc);
         _automation = new PlayerAutomation(this, _surface.Hwnd);
-        StartSearch();
         _model.ShowsRemaining = _settings().DesktopPlayerTimeMode != "total";
         RefreshLook();
         SchedulePoll(_debugShow ? 100 : (uint)(HoverPolicy.Interval * 1000));
@@ -162,7 +161,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         }
 
         _controller()?.ClearScrubPreview();
-        StopSearch();
         _automation?.Dispose();
         _painter.Dispose();
         _surface.Dispose();
@@ -219,7 +217,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         {
             _hover.Reset();
             _intent.Reset();
-            Apply(Pinned(null), now);
+            Apply(null, now);
             return;
         }
 
@@ -236,7 +234,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         if (intentReady && previous is null && BusyFullScreen()) intentReady = false;
         var dragging = _interaction.Dragging && held;
         // Align mode keeps the card up too (the Mac's pinnedOpen while aligning).
-        var holds = previous is not null && (PlayerDismissGuard.Holds(dragging, _interaction.SearchFocused, _interaction.LastClick, now, blocked) || Aligning);
+        var holds = previous is not null && (PlayerDismissGuard.Holds(dragging, _interaction.LastClick, now, blocked) || Aligning);
         var active = HoverPolicy.Decide(stepped, previous, intentReady, holds);
         if (active is { } a)
         {
@@ -248,8 +246,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             _hover.Reset();
         }
 
-        // A typed search keeps the card on the display it was typed on.
-        Apply(Pinned(active), now);
+        Apply(active, now);
     }
 
     /// <summary>Whether the desktop (or Lunalyr's own card) is under the pointer, not an app's window.</summary>
@@ -261,7 +258,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         if (root != 0 && root == _lastHit.Root && now - _lastHit.At < 2) return _lastHit.Exposed;
         bool exposed;
         if (root == 0) exposed = false;
-        else if (root == _surface.Hwnd || (_field is not null && root == _field.Hwnd)) exposed = true;
+        else if (root == _surface.Hwnd) exposed = true;
         // The desktop: the wallpaper and its icons (Lunalyr's own wallpaper is a child of Progman). Hovering an icon
         // counts as the desktop, as on the Mac.
         else exposed = PlayerNative.ClassIs(root, "Progman") || PlayerNative.ClassIs(root, "WorkerW");
@@ -330,8 +327,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _work = work;
         RefreshLook();
         ReadSong(now, force: true);
-        SearchShown(now);
-        UpdateSearch(now);
         var reduce = _model.Look.ReduceMotion;
         if (!_visible || moving)
         {
@@ -370,7 +365,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         ApplyLyricFocus();
         _automation?.Shown(false);
         ReleaseKeyboard();
-        SearchHidden();
         StartFrames(16);
     }
 
@@ -440,7 +434,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         ReadSong(now, force: false);
         ApplyLyricFocus();
         if (!double.IsNaN(_debugScrub) && _shownOn is not null && !_scrub.IsDragging && _scrub.Current.CanSeek) StartDebugScrub();
-        UpdateSearch(now);
         UpdateModel(now);
         if (_rise.Moving(now) || _rise.Value(now) != 0) Place(now);
         var animating = _reveal.Moving(now) || _rise.Moving(now) || _record.Moving(now) || _thickness.Moving(now) || _active.Moving(now)
@@ -518,7 +511,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
 
         UpdatePalette(song);
         UpdateContext(song);
-        SearchTrackChanged(song, now);
     }
 
     private void UpdatePalette(PlayerNow song)

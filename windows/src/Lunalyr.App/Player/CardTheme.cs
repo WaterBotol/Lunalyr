@@ -33,9 +33,6 @@ internal sealed record CardTheme
     /// <summary>The capsules' backing (time and lyric over the bar, notes), alpha included.</summary>
     public Color4 Capsule { get; init; }
 
-    /// <summary>A recessed well (the search field, the player switch's track), alpha included.</summary>
-    public Color4 Well { get; init; }
-
     /// <summary>Edges: only in a contrast theme (transparent otherwise).</summary>
     public Color4 Hairline { get; init; }
 
@@ -52,16 +49,6 @@ internal sealed record CardTheme
 
     /// <summary><c>DWMWA_COLOR_DEFAULT</c>: the border every Windows 11 window has, in the system's colour.</summary>
     public const uint SystemBorder = 0xFFFFFFFF;
-
-    /// <summary>The card's ground as one opaque colour (the veil and the tint over black or white), for the search box's EDIT.</summary>
-    public Color4 Ground
-    {
-        get
-        {
-            var under = Ink.R > 0.5f ? new Color4(0, 0, 0, 1) : new Color4(1, 1, 1, 1);
-            return Over(Tint, Over(Veil, under));
-        }
-    }
 
     public static CardTheme For(ArtworkPalette palette, PlayerLook look)
     {
@@ -85,8 +72,6 @@ internal sealed record CardTheme
                 Accent = Colour(ArtworkPalette.Guarded(palette.Accent, ArtworkPalette.AccentContrast)),
                 Deep = deep,
                 Capsule = WithAlpha(light, look.ReduceTransparency ? 1 : capsule),
-                // Black at 24 % would grey the light card's field; the ink at the hover fill is its well.
-                Well = WithAlpha(ink, (float)PlayerTokens.Fill.Hover),
                 Hairline = clear,
                 Border = SystemBorder,
             };
@@ -105,7 +90,6 @@ internal sealed record CardTheme
                 Accent = accent,
                 Deep = deep,
                 Capsule = new Color4(0.08f, 0.08f, 0.08f, 1),
-                Well = new Color4(0, 0, 0, (float)PlayerTokens.Fill.Well),
                 Hairline = clear,
                 Border = SystemBorder,
             };
@@ -121,7 +105,6 @@ internal sealed record CardTheme
             Accent = accent,
             Deep = deep,
             Capsule = WithAlpha(deep, capsule),
-            Well = new Color4(0, 0, 0, (float)PlayerTokens.Fill.Well),
             Hairline = clear,
             Border = SystemBorder,
         };
@@ -141,7 +124,6 @@ internal sealed record CardTheme
             Accent = Sys(13),
             Deep = window,
             Capsule = window,
-            Well = window,
             Hairline = text,
             Border = PlayerNative.GetSysColor(8),
             HighContrast = true,
@@ -155,10 +137,6 @@ internal sealed record CardTheme
         new((float)Math.Clamp(c.Red, 0, 1), (float)Math.Clamp(c.Green, 0, 1), (float)Math.Clamp(c.Blue, 0, 1), 1);
 
     public static Color4 WithAlpha(Color4 c, float alpha) => new(c.R, c.G, c.B, alpha);
-
-    /// <summary><paramref name="top"/> (alpha included) over an opaque <paramref name="under"/>.</summary>
-    private static Color4 Over(Color4 top, Color4 under) =>
-        new(under.R + (top.R - under.R) * top.A, under.G + (top.G - under.G) * top.A, under.B + (top.B - under.B) * top.A, 1);
 
     private static Color4 Sys(int index)
     {

@@ -44,7 +44,6 @@ typography:
   player-time: { size: 11, weight: 400, numbers: tabular }
   player-time-strong: { size: 11, weight: 600, numbers: tabular }
   player-capsule-lyric: { size: 15, weight: 600 }
-  player-field: { size: 15, weight: 400 }
   player-note: { size: 12, weight: 500 }
 
 rounded:
@@ -145,8 +144,8 @@ The ink is white on the dark card. In Windows' light app mode (Windows only: the
 near-black on a light tint of the album's hue, lightened until near-black reaches 12:1, so every level above
 quaternary still reads 4.5:1 with a black wallpaper behind (`PlayerTokensTests.SmallTypeReadsOnTheLightCard`).
 
-Fills on the card: hover 8 %, selected or pressed 16 % ink; wells 24 % black (ink 8 % on the light card); placeholders
-10 % ink. No edges; the focus ring is 70 % ink at 1.5.
+Fills on the card: hover 8 %, selected or pressed 16 % ink; placeholders 10 % ink. (The Mac's 24 % black well is
+for its search field, which Windows hasn't.) No edges; keyboard focus is Windows' two-stroke focus visual.
 
 ### Contrast themes (the Mac's Increase Contrast)
 A Windows contrast theme is stronger than Increase Contrast: the card draws in the theme's own colours only
@@ -179,7 +178,7 @@ Principles:
 - **Concentric corners**: an inner shape's radius plus its inset equals the outer radius (the Mac's player card 28 =
   cover 8 + padding 20).
 - **Desktop player geometry** (as the Mac's): card 640 wide, cover 176, right column 364, centred in its display's work
-  area at every height.
+  area. (The Mac's card also opens search and the queue; Windows has no player search.)
 - **Window silhouettes** (winui-design's app-shape anchors): Settings is a settings tool (`NavigationView` left with
   settings cards); onboarding, lyric cards and the music-video search are single-purpose utilities sized to their
   content.

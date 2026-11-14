@@ -21,7 +21,6 @@ internal sealed partial class AppHost
                 change => _settings.Update(change), _tray.Post, _options.PlayerDebug, Log)
             {
                 OnError = ex => ReportCrash(ex, "desktop player window procedure", fatal: false),
-                Search = CreatePlayerSearchSource(),
             };
             player.Start();
             _player = player;

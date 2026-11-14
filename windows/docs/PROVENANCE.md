@@ -269,3 +269,6 @@ translated.
 | `Sources/Player/DesktopPlayerView.swift`, `DesktopScrubber.swift`, `PlayerControls.swift`, `SleeveParts.swift`, `VideoAlignRow.swift` | 1 (`DesktopPlayerView`'s observed `HoverState`, no counterpart) | `App/Player/CardPainter*.cs`, `CardTheme.cs`, `CardModel.cs` | The look re-drawn in Direct2D from the Mac's values |
 | `Sources/Support/DesktopInteraction.c` (`vc_hover_set_card`, `card_zone`, the card branches of the hot and keep zones), `Tests/desktop_test.c` (the card-zone block) | 42 in the file, none in these lines (`d5f73c92`; one closing brace in the test block) | `Core/Player/HoverZones.cs`, `HoverIntentTests.TheZonesHugTheCard` | Faithful port of the Lunalyr lines; the hover step around them stays re-implemented (`DesktopHoverSession`) |
 | `Sources/Desktop/HoverState.swift` (`vc_hover_set_card` per poll) | 45 in the file, none in these lines (`d5f73c92`) | `DesktopPlayer.ReadDisplays` (zones from the card's current height; a height change re-reads them) | Behaviour ported |
+
+The player's search and queue (milestone 5's port of `DesktopPlayerModel`, `SleeveParts`' search and queue columns and
+the Spotify service) were removed on 14 Nov 2026 at the owner's request; nothing of them is left to account for.

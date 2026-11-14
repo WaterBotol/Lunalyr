@@ -41,8 +41,7 @@ internal sealed partial class CardPainter : IDisposable
     private enum TextStyle
     {
         Label, Title, TitleSmall, Artist, Album, Time, CapsuleLyric, CapsuleReading, CapsuleTime, Rate, Note, Live,
-        CompactTitle, CompactArtist, Picker, Field, RowTitle, RowDetail, RowTag, Count, Status, Section, Glyph, Button,
-        ButtonMedium, AlignTitle,
+        RowDetail, RowTag, Glyph, Button, ButtonMedium, AlignTitle,
     }
 
     /// <summary>Lets go of everything made on the old device (after a device loss or a new card surface).</summary>
@@ -55,7 +54,6 @@ internal sealed partial class CardPainter : IDisposable
         _coverClip?.Dispose(); _coverClip = null;
         _playGlyph?.Dispose(); _playGlyph = null;
         _skipGlyph?.Dispose(); _skipGlyph = null;
-        ReleaseRowCovers();
         _wedge?.Dispose(); _wedge = null;
         _dc = null;
     }
@@ -72,10 +70,7 @@ internal sealed partial class CardPainter : IDisposable
     }
 
     /// <summary>The card's height in DIPs at rest (the Song pane).</summary>
-    public static float Height => (float)PlayerCard.CardHeight(PlayerPane.Song);
-
-    /// <summary>The card's height in DIPs for a pane (search and the queue make it taller, centred as before).</summary>
-    public static float HeightFor(PlayerPane pane, int queueRows) => (float)PlayerCard.CardHeight(pane, queueRows);
+    public static float Height => (float)PlayerCard.RestHeight;
 
     // ---- Frame ----
 
@@ -100,10 +95,7 @@ internal sealed partial class CardPainter : IDisposable
         Hits.Clear();
         DrawBackground(dc, m, width, height);
         DrawArt(dc, m);
-        if (m.Pane == PlayerPane.Song) DrawColumn(dc, m);
-        else DrawCompact(dc, m);
-        if (m.Pane == PlayerPane.Search) DrawSearch(dc, m);
-        else if (m.Pane == PlayerPane.Queue) DrawQueue(dc, m);
+        DrawColumn(dc, m);
         if (m.FocusVisible) DrawFocus(dc, m);
         // A contrast theme's firm edge, inside DWM's 8 px corners (no edge in any other look).
         if (t.HighContrast) Stroke(dc, new RawRectF(1, 1, width - 1, height - 1), 6, t.Hairline, 2);
@@ -269,20 +261,15 @@ internal sealed partial class CardPainter : IDisposable
         var width = CardLayout.ColumnWidth;
 
         // The player, small, over the song (or the note about a command, while it shows): a dot in the album's
-        // colour, the name in secondary ink, a chevron in tertiary; primary under the pointer.
+        // colour and the name in secondary ink. Plain text: the Mac's chevron opens its search, which Windows hasn't.
         if (m.PlayerName.Length > 0 && m.NoteAlpha < 0.999f)
         {
             // As the player names itself, not tracked capitals (the design pass's "no ALL CAPS subtitles").
             var label = Layout(m.PlayerName, TextStyle.Label, (int)width - 34);
             var alpha = 1 - m.NoteAlpha;
-            var hovered = m.HoverPart == CardPart.PlayerLabel;
             var centreY = CardLayout.ColumnTop + label.Metrics.Height / 2;
             Fill(dc, new Ellipse(new Vector2(left + 3, centreY), 3, 3), WithAlpha(t.HighContrast ? t.Ink : t.Accent, alpha));
-            DrawText(dc, label, left + 12, CardLayout.ColumnTop, Ink(m, hovered ? PlayerInk.Primary : PlayerInk.Secondary, alpha));
-            // A click opens the search, where the picker is (the Mac's chevron).
-            var chevronX = left + 12 + label.Metrics.Width + 6 + 4;
-            Chevron(dc, new Vector2(chevronX, centreY), Ink(m, hovered ? PlayerInk.Primary : PlayerInk.Tertiary, alpha));
-            Hits.Add((CardPart.PlayerLabel, new RectF(left - 2, CardLayout.ColumnTop - 2, chevronX + 10 - left, 20)));
+            DrawText(dc, label, left + 12, CardLayout.ColumnTop, Ink(m, PlayerInk.Secondary, alpha));
         }
 
         if (m.Note is { } note && m.NoteAlpha > 0.001f)
@@ -556,7 +543,7 @@ internal sealed partial class CardPainter : IDisposable
     /// <summary>The keyboard's focus, ringed after Tab (Windows' focus visual: two strokes, so it shows on any colour).</summary>
     private void DrawFocus(ID2D1DeviceContext dc, CardModel m)
     {
-        var r = PartRect(m.Pane, m.FocusPart);
+        var r = PartRect(m.FocusPart);
         if (r.Width <= 0) return;
         var round = CardParts.IsRound(m.FocusPart) ? r.Width / 2 + 4 : 10;
         var outer = m.Theme.HighContrast ? m.Theme.Highlight : m.Theme.Ink;
@@ -573,18 +560,12 @@ internal sealed partial class CardPainter : IDisposable
         // the tertiary level. Without a song, the skips are disabled (quaternary).
         var enabled = m.CommandsOff && !m.Theme.HighContrast ? Level(PlayerInk.Tertiary) : 1f;
         var skipAlpha = (m.HasSong ? 1f : Level(PlayerInk.Quaternary)) * enabled;
-        var small = m.Pane != PlayerPane.Song;
-        DrawSkip(dc, m, CardLayout.PreviousFor(m.Pane), forward: false, skipAlpha, CardPart.Previous, small);
-        DrawSkip(dc, m, CardLayout.NextFor(m.Pane), forward: true, skipAlpha, CardPart.Next, small);
-        if (!small)
-        {
-            // Search and the queue, at the row's right-hand end, lit while open.
-            IconButton(dc, m, CardLayout.SearchButtonRect, CardPart.SearchButton, on: false);
-            IconButton(dc, m, CardLayout.QueueButtonRect, CardPart.QueueButton, on: false);
-            if (m.MusicVideoOffered) DrawAlignButton(dc, m);
-        }
+        DrawSkip(dc, m, CardLayout.PreviousRect, forward: false, skipAlpha, CardPart.Previous);
+        DrawSkip(dc, m, CardLayout.NextRect, forward: true, skipAlpha, CardPart.Next);
+        // The film button, at the row's right-hand end, while Music video is the wallpaper.
+        if (m.MusicVideoOffered) DrawAlignButton(dc, m);
 
-        var disc = CardLayout.PlayFor(m.Pane);
+        var disc = CardLayout.PlayRect;
         // The play disc: the ink as a flat disc (no shadow), its glyph in the colour behind the ink.
         var pressed = m.PressedPart == CardPart.PlayPause && !m.Look.ReduceMotion ? PressScale : 1f;
         var radius = disc.Width / 2 * pressed;
@@ -607,14 +588,14 @@ internal sealed partial class CardPainter : IDisposable
         }
     }
 
-    private void DrawSkip(ID2D1DeviceContext dc, CardModel m, RectF cell, bool forward, float alpha, CardPart part, bool small = false)
+    private void DrawSkip(ID2D1DeviceContext dc, CardModel m, RectF cell, bool forward, float alpha, CardPart part)
     {
         var t = m.Theme;
         var centre = new Vector2(cell.CentreX, cell.CentreY);
         var halo = m.PressedPart == part ? F(PlayerTokens.Fill.Selected) : m.HoverPart == part ? F(PlayerTokens.Fill.Hover) : 0;
         if (halo > 0 && m.HasSong) Fill(dc, new Ellipse(centre, ButtonSize / 2, ButtonSize / 2), WithAlpha(t.Ink, halo));
         var scale = m.PressedPart == part && !m.Look.ReduceMotion ? PressScale : 1f;
-        DrawGlyph(dc, _skipGlyph!, centre, (small ? 13 : 17) * scale, WithAlpha(t.Ink, alpha), mirror: !forward);
+        DrawGlyph(dc, _skipGlyph!, centre, 17 * scale, WithAlpha(t.Ink, alpha), mirror: !forward);
     }
 
     private void DrawGlyph(ID2D1DeviceContext dc, ID2D1PathGeometry glyph, Vector2 centre, float size, Color4 colour, bool mirror)
@@ -702,7 +683,7 @@ internal sealed partial class CardPainter : IDisposable
         }
 
         var layout = _dwrite.CreateTextLayout(text, Format(style), maxWidth, 200);
-        if (style is TextStyle.Note or TextStyle.Status)
+        if (style is TextStyle.Note)
         {
             // A note wraps (two lines at most for the card's own sentences), so it is read whole.
             layout.WordWrapping = WordWrapping.Wrap;
@@ -750,18 +731,17 @@ internal sealed partial class CardPainter : IDisposable
         {
             TextStyle.Title => (Display, scale),
             TextStyle.TitleSmall => (Display, scale with { Size = scale.Size * PlayerTokens.TypeScale.TitleMinimumScale }),
-            TextStyle.Label or TextStyle.Picker => (Text, PlayerTokens.TypeScale.Label),
+            TextStyle.Label => (Text, PlayerTokens.TypeScale.Label),
             TextStyle.Artist => (Text, PlayerTokens.TypeScale.Artist),
-            TextStyle.Album or TextStyle.Status or TextStyle.CompactArtist => (Text, PlayerTokens.TypeScale.Meta),
-            TextStyle.Time or TextStyle.Count => (Text, PlayerTokens.TypeScale.Time),
+            TextStyle.Album => (Text, PlayerTokens.TypeScale.Meta),
+            TextStyle.Time => (Text, PlayerTokens.TypeScale.Time),
             TextStyle.CapsuleTime => (Text, PlayerTokens.TypeScale.TimeStrong),
             TextStyle.CapsuleLyric => (Text, PlayerTokens.TypeScale.CapsuleLyric),
             TextStyle.AlignTitle => (Text, PlayerTokens.TypeScale.CapsuleLyric with { TabularDigits = true }),
             TextStyle.CapsuleReading or TextStyle.RowDetail => (Text, PlayerTokens.TypeScale.RowSubtitle),
-            TextStyle.Rate or TextStyle.Live or TextStyle.RowTag or TextStyle.Section => (Text, PlayerTokens.TypeScale.Tag),
+            TextStyle.Rate or TextStyle.Live or TextStyle.RowTag => (Text, PlayerTokens.TypeScale.Tag),
             TextStyle.Note => (Text, PlayerTokens.TypeScale.Note),
-            TextStyle.Field => (Text, PlayerTokens.TypeScale.Field),
-            TextStyle.CompactTitle or TextStyle.RowTitle or TextStyle.Button => (Text, PlayerTokens.TypeScale.RowTitle),
+            TextStyle.Button => (Text, PlayerTokens.TypeScale.RowTitle),
             TextStyle.ButtonMedium => (Text, PlayerTokens.TypeScale.RowTitle with { Weight = 500 }),
             TextStyle.Glyph => ("Segoe Fluent Icons", new PlayerType(PlayerTokens.Glyph.Icon, 400)),
             _ => (Text, PlayerTokens.TypeScale.Meta),
@@ -778,7 +758,7 @@ internal sealed partial class CardPainter : IDisposable
     // ---- Tokens ----
 
     private static readonly float CoverRadius = F(PlayerTokens.Radius.Cover), ControlRadius = F(PlayerTokens.Radius.Control),
-        RowRadius = F(PlayerTokens.Radius.Row), ThumbRadius = F(PlayerTokens.Radius.Thumb), ButtonSize = F(PlayerTokens.Glyph.Button),
+        ButtonSize = F(PlayerTokens.Glyph.Button),
         PressScale = F(PlayerTokens.Motion.PressScale), CapsuleShadowOpacity = F(PlayerTokens.Shadow.CapsuleOpacity),
         CapsuleShadowBlur = F(PlayerTokens.Shadow.CapsuleBlur), CapsuleShadowY = F(PlayerTokens.Shadow.CapsuleY);
 

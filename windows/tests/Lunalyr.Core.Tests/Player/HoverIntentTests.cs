@@ -77,16 +77,16 @@ public sealed class HoverIntentTests
         Assert.Null(HoverPolicy.Decide(proposed: 2, previous: 1, intentReady: false, holds: false));
     }
 
-    // Ported from DesktopScrubberTests.swift: testDismissGuards
+    // Ported from DesktopScrubberTests.swift: testDismissGuards (its search-field case left out: Windows has no player
+    // search)
     [Fact]
     public void DismissGuards()
     {
-        Assert.True(PlayerDismissGuard.Holds(dragging: true, searchFocused: false, lastClick: null, now: 5, overWindow: true));
-        Assert.False(PlayerDismissGuard.Holds(dragging: false, searchFocused: true, lastClick: 4.5, now: 5, overWindow: true)); // a window always wins outside a drag
-        Assert.True(PlayerDismissGuard.Holds(dragging: false, searchFocused: true, lastClick: null, now: 5, overWindow: false));
-        Assert.True(PlayerDismissGuard.Holds(dragging: false, searchFocused: false, lastClick: 4, now: 5, overWindow: false));
-        Assert.False(PlayerDismissGuard.Holds(dragging: false, searchFocused: false, lastClick: 3.7, now: 5, overWindow: false));
-        Assert.False(PlayerDismissGuard.Holds(dragging: false, searchFocused: false, lastClick: null, now: 5, overWindow: false));
+        Assert.True(PlayerDismissGuard.Holds(dragging: true, lastClick: null, now: 5, overWindow: true));
+        Assert.False(PlayerDismissGuard.Holds(dragging: false, lastClick: 4.5, now: 5, overWindow: true)); // a window always wins outside a drag
+        Assert.True(PlayerDismissGuard.Holds(dragging: false, lastClick: 4, now: 5, overWindow: false));
+        Assert.False(PlayerDismissGuard.Holds(dragging: false, lastClick: 3.7, now: 5, overWindow: false));
+        Assert.False(PlayerDismissGuard.Holds(dragging: false, lastClick: null, now: 5, overWindow: false));
     }
 
     // Ported from DesktopScrubberTests.swift: testPollIsQuickWhileShownOrPending
@@ -108,15 +108,6 @@ public sealed class HoverIntentTests
         Assert.False(HoverPolicy.ShouldPoll(enabled: false, systemHidden: false, hidden: new HashSet<long>(), displays));
         Assert.False(HoverPolicy.ShouldPoll(enabled: true, systemHidden: true, hidden: new HashSet<long>(), displays));
         Assert.True(HoverPolicy.ShouldPoll(enabled: true, systemHidden: false, hidden: new HashSet<long>(), new HashSet<long>()));
-    }
-
-    [Fact]
-    public void ATypedSearchKeepsThePlayerOnItsOneDisplay()
-    {
-        Assert.True(HoverPolicy.ShowsPlayer(1, active: 1, pinned: null, searching: false));
-        Assert.False(HoverPolicy.ShowsPlayer(2, active: 1, pinned: 1, searching: true));
-        Assert.True(HoverPolicy.ShowsPlayer(1, active: null, pinned: 1, searching: true));
-        Assert.False(HoverPolicy.ShowsPlayer(1, active: null, pinned: 1, searching: false));
     }
 
     // Ported from desktop_test.c (Test Build 88): "With the card's size set, the zones hug the card." The Mac's

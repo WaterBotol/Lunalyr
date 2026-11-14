@@ -5,7 +5,7 @@ using Lunalyr.Core.Player;
 namespace Lunalyr.App.Player;
 
 // Align video on the card (the Mac's VideoAlignRow.swift: LiveAlignButton, VideoAlignEvents, and PlayerKeyboard's align
-// keys; Lunalyr's own code). While the wallpaper is a music video, the film button beside search turns the seek row into
+// keys; Lunalyr's own code). While the wallpaper is a music video, the film button at the transport row's end turns the seek row into
 // the video's own bar: dragging it moves only the video (the song plays on) until the picture matches the music, and the
 // release keeps that offset for the video. ← → move it a tenth (Shift: a second), Enter keeps it, Esc cancels. The rules
 // are the controller's (MusicVideoController's align members, ported with their tests); this only draws and forwards.
@@ -32,7 +32,7 @@ internal sealed unsafe partial class DesktopPlayer
         }
         var video = Video;
         var aligning = video?.IsAligning ?? false;
-        var offered = video is not null && m.Pane == PlayerPane.Song && _settings().BackgroundMode == "musicVideo"
+        var offered = video is not null && _settings().BackgroundMode == "musicVideo"
             && video.Status is not MusicVideoStatus.Off
             && (aligning || m.RowKind is ScrubRowKind.Seekable or ScrubRowKind.ReadOnly or ScrubRowKind.ElapsedOnly);
         var reason = offered && !aligning ? video!.AlignAvailability.Reason : null;
@@ -52,7 +52,6 @@ internal sealed unsafe partial class DesktopPlayer
     private CardPart? AlignPartAt(float x, float y)
     {
         var m = _model;
-        if (m.Pane != PlayerPane.Song) return null;
         // While aligning, Done ends it (the film button would sit on Cancel).
         if (m.MusicVideoOffered && m.Align is null && CardLayout.AlignButtonRect.Contains(x, y)) return CardPart.AlignButton;
         if (m.Align is not { } display) return null;
@@ -155,7 +154,6 @@ internal sealed unsafe partial class DesktopPlayer
     private void AddAlignFocus(List<CardPart> order)
     {
         var m = _model;
-        if (m.Pane != PlayerPane.Song) return;
         if (m.Align is { } display)
         {
             order.Remove(CardPart.Previous);

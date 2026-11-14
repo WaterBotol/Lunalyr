@@ -72,7 +72,7 @@ internal sealed unsafe partial class DesktopPlayer
                 if (_previousForeground == 0)
                 {
                     var foreground = PlayerNative.GetForegroundWindow();
-                    if (foreground != hwnd && !IsSearchField(foreground)) _previousForeground = foreground;
+                    if (foreground != hwnd) _previousForeground = foreground;
                 }
 
                 return (nint)PlayerNative.MA_ACTIVATE;
@@ -81,14 +81,9 @@ internal sealed unsafe partial class DesktopPlayer
                 PlayerNative.SetCursor(PlayerNative.LoadCursor(0, (nint)(_model.HoverPart switch
                 {
                     CardPart.None => PlayerNative.IDC_ARROW,
-                    CardPart.SearchField => 32513, // IDC_IBEAM
                     _ => PlayerNative.IDC_HAND,
                 })));
                 return 1;
-
-            case PlayerNative.WM_MOUSEWHEEL:
-                Scroll((short)(((long)wParam >> 16) & 0xFFFF));
-                return 0;
 
             case PlayerNative.WM_MOUSEMOVE:
                 MouseMove(lParam, wParam);
@@ -144,8 +139,8 @@ internal sealed unsafe partial class DesktopPlayer
                 break;
 
             case PlayerNative.WM_KILLFOCUS:
-                // The keyboard moving into the search box stays "on the card"; anywhere else, it has left.
-                if (!IsSearchField((nint)wParam)) _previousForeground = 0;
+                // The keyboard has left the card.
+                _previousForeground = 0;
                 break;
 
             case PlayerNative.WM_SETTINGCHANGE:
@@ -160,15 +155,6 @@ internal sealed unsafe partial class DesktopPlayer
             case PlayerNative.WM_DPICHANGED:
                 _displaysRead = double.NegativeInfinity;
                 if (msg == PlayerNative.WM_DPICHANGED) return 0; // the card sizes itself for its display
-                break;
-
-            case PlayerNative.WM_CTLCOLOREDIT:
-            case PlayerNative.WM_CTLCOLORSTATIC:
-                if (_field is not null && lParam == _field.Hwnd) return _field.CtlColor((nint)wParam);
-                break;
-
-            case PlayerNative.WM_COMMAND:
-                if (_field?.Command(wParam, lParam) == true) return 0;
                 break;
 
             case PlayerNative.WM_GETOBJECT:
@@ -192,37 +178,17 @@ internal sealed unsafe partial class DesktopPlayer
     private CardPart PartAt(float x, float y)
     {
         var m = _model;
-        var pane = m.Pane;
         if (AlignPartAt(x, y) is { } aligned) return aligned;
         if (CardLayout.CoverRect.Contains(x, y)) return m.HasSong ? CardPart.Cover : CardPart.None;
-        if (CardLayout.PlayFor(pane).Inflate(2).Contains(x, y)) return CardPart.PlayPause;
-        if (CardLayout.PreviousFor(pane).Contains(x, y)) return m.HasSong ? CardPart.Previous : CardPart.None;
-        if (CardLayout.NextFor(pane).Contains(x, y)) return m.HasSong ? CardPart.Next : CardPart.None;
-        if (pane == PlayerPane.Song)
-        {
-            if (m.RowKind == ScrubRowKind.Seekable && CardLayout.BarHitRect.Contains(x, y)) return CardPart.SeekBar;
-            var times = CardLayout.TimesRect;
-            if (m.RowKind is ScrubRowKind.Seekable or ScrubRowKind.ReadOnly
-                && new RectF(times.Right - 64, times.Y, 64, times.Height).Inflate(2).Contains(x, y)) return CardPart.TimeLabel;
-            if (_search is not null && CardLayout.SearchButtonRect.Contains(x, y)) return CardPart.SearchButton;
-            if (_search is not null && CardLayout.QueueButtonRect.Contains(x, y)) return CardPart.QueueButton;
-        }
-
-        // Rows, the picker and the pane's buttons, where they were last drawn (a row scrolled out of its list is gone).
-        foreach (var (part, rect) in _painter.Hits)
-        {
-            if (!rect.Contains(x, y)) continue;
-            if (CardParts.IsResult(part, out _) && (y < CardLayout.ResultsTop || y > CardLayout.ColumnBottom(PlayerPane.Search, 0))) continue;
-            if (CardParts.IsQueueRow(part, out var row)
-                && (y < CardLayout.QueueTop || y > CardLayout.ColumnBottom(PlayerPane.Queue, m.QueueRows) || row >= m.Queue.Count || !m.Queue[row].IsPlayable)) continue;
-            return part;
-        }
-
-        if (pane == PlayerPane.Search && m.Prompt is null && CardLayout.FieldRect.Contains(x, y)) return CardPart.SearchField;
+        if (CardLayout.PlayRect.Inflate(2).Contains(x, y)) return CardPart.PlayPause;
+        if (CardLayout.PreviousRect.Contains(x, y)) return m.HasSong ? CardPart.Previous : CardPart.None;
+        if (CardLayout.NextRect.Contains(x, y)) return m.HasSong ? CardPart.Next : CardPart.None;
+        if (m.RowKind == ScrubRowKind.Seekable && CardLayout.BarHitRect.Contains(x, y)) return CardPart.SeekBar;
+        var times = CardLayout.TimesRect;
+        if (m.RowKind is ScrubRowKind.Seekable or ScrubRowKind.ReadOnly
+            && new RectF(times.Right - 64, times.Y, 64, times.Height).Inflate(2).Contains(x, y)) return CardPart.TimeLabel;
         return CardPart.None;
     }
-
-    private bool IsSearchField(nint hwnd) => hwnd != 0 && _field is not null && hwnd == _field.Hwnd;
 
     private static bool Ctrl => PlayerNative.KeyDown(PlayerNative.VK_CONTROL);
 
@@ -354,11 +320,6 @@ internal sealed unsafe partial class DesktopPlayer
                 _updateSettings(s => s with { DesktopPlayerTimeMode = remaining ? "remaining" : "total" });
                 Invalidate();
                 break;
-            default:
-                ClickSearchPart(part);
-                Invalidate();
-                StartFrames(16);
-                break;
         }
     }
 
@@ -367,7 +328,7 @@ internal sealed unsafe partial class DesktopPlayer
     private void TakeKeyboard()
     {
         var foreground = PlayerNative.GetForegroundWindow();
-        if (foreground == _surface.Hwnd || IsSearchField(foreground)) return;
+        if (foreground == _surface.Hwnd) return;
         if (_previousForeground == 0) _previousForeground = foreground;
         PlayerNative.SetForegroundWindow(_surface.Hwnd);
     }
@@ -376,7 +337,7 @@ internal sealed unsafe partial class DesktopPlayer
     private void ReleaseKeyboard()
     {
         var foreground = PlayerNative.GetForegroundWindow();
-        if (foreground != _surface.Hwnd && !IsSearchField(foreground)) return;
+        if (foreground != _surface.Hwnd) return;
         var previous = _previousForeground;
         _previousForeground = 0;
         if (previous != 0 && PlayerNative.IsWindowVisible(previous)) PlayerNative.SetForegroundWindow(previous);
@@ -416,7 +377,7 @@ internal sealed unsafe partial class DesktopPlayer
         if (vk is >= 0x60 and <= 0x69) character = (char)('0' + vk - 0x60);
         if (vk == 0x6F) character = '/';
         var characters = character == '\0' ? "" : char.ToLowerInvariant(character).ToString();
-        if (PlayerKeyMap.Action(vk, characters, ctrl, alt, system, editingText: false, hasResults: _search?.HasResults ?? false) is not { } action)
+        if (PlayerKeyMap.Action(vk, characters, ctrl, alt, system) is not { } action)
             return false;
         Perform(action);
         return true;
@@ -431,20 +392,10 @@ internal sealed unsafe partial class DesktopPlayer
             case PlayerKeyKind.Line: _scrub.SeekLine(action.Forward); break;
             case PlayerKeyKind.Track: Skip(action.Forward); break;
             case PlayerKeyKind.Jump: _scrub.Jump(action.Value); break;
-            case PlayerKeyKind.FocusSearch:
-                OpenSearch(toggle: false, focus: true);
-                break;
-            case PlayerKeyKind.MoveSelection:
-                _search?.MoveSelection(action.Value);
-                break;
-            case PlayerKeyKind.PlaySelection:
-                _search?.PlaySelection();
-                ReturnFocusToCard();
-                break;
             case PlayerKeyKind.Escape:
-                // A drag first, then the search (cleared and closed) or the queue, then the keyboard goes back.
+                // A drag first, then the keyboard goes back.
                 if (_scrub.IsDragging) _scrub.Cancel();
-                else if (!ClosePaneFromKey()) ReleaseKeyboard();
+                else ReleaseKeyboard();
                 break;
         }
 
@@ -472,8 +423,6 @@ internal sealed unsafe partial class DesktopPlayer
     internal void Skip(bool forward)
     {
         if (_now is not { HasSong: true }) return;
-        // The strip's row moves at once only where what comes next is known (never a guess; see OptimisticNext).
-        if (forward) _search?.NoteNext(_controller()?.Monitor.Session?.SourceApp.Kind);
         Run(_commands.SkipAsync(forward), result => ShowNote(result.Note!));
     }
 
@@ -524,7 +473,7 @@ internal sealed unsafe partial class DesktopPlayer
 
     internal double Scale => _scale;
 
-    internal bool HasKeyboard => PlayerNative.GetForegroundWindow() is var f && (f == _surface.Hwnd || IsSearchField(f));
+    internal bool HasKeyboard => PlayerNative.GetForegroundWindow() == _surface.Hwnd;
 
     /// <summary>The card's place on screen, in pixels.</summary>
     internal PlayerNative.RECT ScreenRect() => new() { Left = _cardX, Top = _cardY, Right = _cardX + _cardW, Bottom = _cardY + _cardH };
@@ -534,67 +483,31 @@ internal sealed unsafe partial class DesktopPlayer
 
     /// <summary>
     /// What Tab and Shift+Tab walk, in order (Windows' own convention; the Mac has no Tab here), and what Narrator lists:
-    /// the cover and the transport, then the song's row or the pane's own parts.
+    /// the cover and the transport, then the song's row and the film button.
     /// </summary>
     internal List<CardPart> FocusOrder()
     {
         var m = _model;
         var order = new List<CardPart>();
         if (m.HasSong) order.Add(CardPart.Cover);
-        if (m.Pane == PlayerPane.Song && m.PlayerName.Length > 0 && _search is not null) order.Add(CardPart.PlayerLabel);
         if (m.HasSong) order.Add(CardPart.Previous);
         order.Add(CardPart.PlayPause);
         if (m.HasSong) order.Add(CardPart.Next);
-        switch (m.Pane)
-        {
-            case PlayerPane.Song:
-                if (m.RowKind == ScrubRowKind.Seekable) order.Add(CardPart.SeekBar);
-                if (m.RowKind is ScrubRowKind.Seekable or ScrubRowKind.ReadOnly) order.Add(CardPart.TimeLabel);
-                if (_search is not null)
-                {
-                    order.Add(CardPart.SearchButton);
-                    order.Add(CardPart.QueueButton);
-                }
-
-                AddAlignFocus(order);
-                break;
-            case PlayerPane.Search:
-                for (var i = 0; i < m.Pickers.Count; i++) order.Add(CardParts.Picker(i));
-                order.Add(CardPart.PaneClose);
-                if (m.Prompt is { ActionLabel: not null }) order.Add(CardPart.PromptAction);
-                if (m.Prompt is null)
-                {
-                    order.Add(CardPart.SearchField);
-                    if (m.Query.Length > 0) order.Add(CardPart.ClearSearch);
-                    for (var i = 0; i < m.Results.Count; i++) order.Add(CardParts.Result(i));
-                }
-
-                break;
-            case PlayerPane.Queue:
-                order.Add(CardPart.PaneClose);
-                for (var i = 0; i < m.Queue.Count; i++)
-                    if (m.Queue[i].IsPlayable) order.Add(CardParts.QueueRow(i));
-                break;
-        }
-
+        if (m.RowKind == ScrubRowKind.Seekable) order.Add(CardPart.SeekBar);
+        if (m.RowKind is ScrubRowKind.Seekable or ScrubRowKind.ReadOnly) order.Add(CardPart.TimeLabel);
+        AddAlignFocus(order);
         return order;
     }
+
+    /// <summary>Where a part is on the card, in DIPs (UI Automation's bounding rectangles).</summary>
+    internal RectF PartRectDip(CardPart part) => _painter.PartRect(part);
 
     internal void FocusPart(CardPart part)
     {
         if (part == CardPart.None) return;
-        if (part == CardPart.SearchField)
-        {
-            _model.FocusPart = part;
-            FocusField();
-            return;
-        }
-
         TakeKeyboard();
-        if (IsSearchField(PlayerNative.GetForegroundWindow()) || _field?.HasFocus == true) ReturnFocusToCard();
         _model.FocusPart = part;
         _automation?.Focus(part);
-        RevealFocused(part);
         Invalidate();
         StartFrames(16);
     }
@@ -607,25 +520,6 @@ internal sealed unsafe partial class DesktopPlayer
         var next = order[((index < 0 ? (back ? 0 : -1) : index) + (back ? -1 : 1) + order.Count * 2) % order.Count];
         _model.FocusVisible = true;
         FocusPart(next);
-    }
-
-    /// <summary>A row reached with Tab scrolls into view.</summary>
-    private void RevealFocused(CardPart part)
-    {
-        var rect = _painter.PartRect(_model.Pane, part);
-        if (rect.Height <= 0) return;
-        if (CardParts.IsResult(part, out _))
-        {
-            var bottom = CardLayout.ColumnBottom(PlayerPane.Search, 0);
-            if (rect.Y < CardLayout.ResultsTop) _model.ResultsScroll = Math.Max(0, _model.ResultsScroll - (CardLayout.ResultsTop - rect.Y));
-            else if (rect.Bottom > bottom) _model.ResultsScroll += rect.Bottom - bottom;
-        }
-        else if (CardParts.IsQueueRow(part, out _))
-        {
-            var bottom = CardLayout.ColumnBottom(PlayerPane.Queue, _model.QueueRows);
-            if (rect.Y < CardLayout.QueueTop) _model.QueueScroll = Math.Max(0, _model.QueueScroll - (CardLayout.QueueTop - rect.Y));
-            else if (rect.Bottom > bottom) _model.QueueScroll += rect.Bottom - bottom;
-        }
     }
 
     /// <summary>Narrator set the seek bar's value: a seek there, as a key would make.</summary>

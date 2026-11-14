@@ -164,8 +164,7 @@ public sealed partial class SettingsWindow : Window
             "Timing" => TimingPage.Build(_ctx, () => _host.Controller, ChooseFolderAsync, new TimingTools(_host.ToggleTapSync, ChooseLyricsFileAsync)),
             "Wallpaper" => WallpaperPage.Build(_ctx, Importer(), ChooseWallpaperFileAsync, () => _host.ReduceMotion),
             "Covers" => CoversPage.Build(_ctx, () => _host.Controller, () => _host.ReduceMotion),
-            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.Spotify, () => _host.SpotifyOffReason,
-                () => _host.SharingPlayers()),
+            "Music players" => PlayersPage.Build(_ctx, () => _host.Controller, () => _host.SharingPlayers()),
             "Performance" => PerformancePage.Build(_ctx, () => _host.Controller),
             _ => new TextBlock { Text = page },
         };

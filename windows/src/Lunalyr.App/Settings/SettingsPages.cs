@@ -118,7 +118,6 @@ internal static class ReadingsPage
 internal static class PlayersPage
 {
     public static StackPanel Build(SettingsContext ctx, Func<AppController?> controller,
-        Func<Lunalyr.Core.Player.Spotify.SpotifyAccount?>? spotify = null, Func<string?>? spotifyOff = null,
         Func<IReadOnlyList<Lunalyr.Core.NowPlaying.MediaSourceApp>>? sharing = null)
     {
         var page = Page();
@@ -138,7 +137,6 @@ internal static class PlayersPage
             "Lunalyr follows any app that shares what it plays with Windows (the media controls by the volume flyout): Spotify, Apple Music, browsers playing YouTube Music or SoundCloud, and more.",
             ""));
         page.Children.Add(Caption("Lunalyr only reads the song and its position. It controls playback only when you use its own buttons."));
-        if (spotify is not null) SpotifySection.Add(page, ctx, spotify, spotifyOff ?? (() => null));
         return page;
     }
 }
@@ -190,7 +188,7 @@ internal static class PerformancePage
         // The Mac's Performance › Desktop switch (custom.showControlsOnHover), live: the card follows at once.
         var hover = Card("Show player on hover", null, "",
             Toggle(ctx, s => s.ShowControlsOnHover, (s, v) => s with { ShowControlsOnHover = v }));
-        ctx.OnRefresh(s => hover.Description = SpotifyCopy.HoverCaption(s.ShowControlsOnHover));
+        ctx.OnRefresh(s => hover.Description = DesktopPlayerCopy.HoverCaption(s.ShowControlsOnHover));
         page.Children.Add(hover);
         return page;
     }

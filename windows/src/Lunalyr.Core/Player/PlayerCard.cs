@@ -5,12 +5,10 @@
 
 namespace Lunalyr.Core.Player;
 
-/// <summary>What the card's right-hand column shows: the song, the search, or the queue (search and queue are a later round).</summary>
-public enum PlayerPane { Song, Search, Queue }
-
 /// <summary>
 /// The "Sleeve" card's geometry in DIPs: the cover on the left with its record peeking out, the song's column on the
-/// right. The card is centred on its display at every size, so a taller pane grows it up and down alike.
+/// right, centred on its display. (The Mac's card also opens search and the queue in its right-hand column; Windows has
+/// no player search: the owner removed it, 14 Nov 2026.)
 /// </summary>
 public static class PlayerCard
 {
@@ -26,35 +24,11 @@ public static class PlayerCard
     /// <summary>The card at rest.</summary>
     public const double RestHeight = Cover + 2 * Padding;
 
-    /// <summary>The cover with the song's title and the small transport under it (search or queue open).</summary>
-    public const double CompactArtHeight = Cover + 96;
-
-    /// <summary>The card at its tallest (the queue open).</summary>
-    public static double TallestHeight => ColumnHeight(PlayerPane.Queue) + 2 * Padding;
-
     /// <summary>
     /// Where the card's top sits in a panel <paramref name="panelHeight"/> tall (centred on the screen): the card is
     /// centred at every size.
     /// </summary>
     public static double CardTop(double panelHeight, double cardHeight = RestHeight) => Math.Max(0, (panelHeight - cardHeight) / 2);
-
-    /// <summary>
-    /// The card's height for each pane: the taller of the cover column (the cover alone, or with the song and transport
-    /// under it while search or the queue is open) and the right-hand column, with the padding.
-    /// </summary>
-    public static double CardHeight(PlayerPane pane, int queueRows = int.MaxValue) =>
-        Math.Max(pane == PlayerPane.Song ? Cover : CompactArtHeight, ColumnHeight(pane, queueRows)) + 2 * Padding;
-
-    /// <summary>
-    /// The right-hand column's height for each pane. A queue of a song or two keeps to the height of the cover with the
-    /// song and transport under it.
-    /// </summary>
-    public static double ColumnHeight(PlayerPane pane, int queueRows = int.MaxValue) => pane switch
-    {
-        PlayerPane.Song => Cover,
-        PlayerPane.Search => 300,
-        _ => queueRows <= 2 ? CompactArtHeight : 334,
-    };
 
     /// <summary>The song's titles while the seek bar's capsules are up over them: all but gone, so the capsules read.</summary>
     public static double TitleOpacity(bool dimmed) => dimmed ? 0.08 : 1;

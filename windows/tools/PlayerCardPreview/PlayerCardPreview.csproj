@@ -18,7 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.cs" Link="App\CardPainter.cs" />
-    <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.Panes.cs" Link="App\CardPainter.Panes.cs" />
+    <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.Parts.cs" Link="App\CardPainter.Parts.cs" />
     <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.Align.cs" Link="App\CardPainter.Align.cs" />
     <Compile Include="..\..\src\Lunalyr.App\Player\CardModel.cs" Link="App\CardModel.cs" />
     <Compile Include="..\..\src\Lunalyr.App\Player\CardTheme.cs" Link="App\CardTheme.cs" />

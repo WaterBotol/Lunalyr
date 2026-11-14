@@ -1,6 +1,7 @@
 // Ported from the Mac's Sources/UI/Design/PlayerTokens.swift and the player's durations in MotionTokens.swift and
 // DesignTokens.swift (Lunalyr's own code, no Verso lines; the four smoothstep lines MotionTokens.swift shares with the
-// Verso import have no counterpart here). docs/DESIGN.md ("Desktop player") is the spec.
+// Verso import have no counterpart here). docs/DESIGN.md ("Desktop player") is the spec. The Mac's field token (its
+// search box) is left out: Windows has no player search.
 
 using Lunalyr.Core.Colour;
 
@@ -121,8 +122,6 @@ public static class PlayerTokens
 
         /// <summary>The lyric shown over the bar while scrubbing.</summary>
         public static readonly PlayerType CapsuleLyric = new(15, 600);
-
-        public static readonly PlayerType Field = new(15, 400);
 
         /// <summary>A note over the card ("Controls are off for this run").</summary>
         public static readonly PlayerType Note = new(12, 500);
