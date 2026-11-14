@@ -89,7 +89,10 @@ public record struct LyricInkSample(SrgbColour Rest, SrgbColour Sung, SrgbColour
     /// <summary>Opacity of words not yet sung, in karaoke layouts. Higher with Increase Contrast.</summary>
     public double Dim { get; set; } = LyricInk.UnsungDim;
 
-    /// <summary>Visible progress when the readable fill approaches white.</summary>
+    /// <summary>
+    /// Never set: there is no underline under sung words (the owner, 14 Nov 2026), and no layer draws one.
+    /// Kept so the sample matches the Mac's `LyricInk`.
+    /// </summary>
     public SrgbColour? SweepUnderline { get; set; }
 
     public static LyricInkSample White { get; } =
