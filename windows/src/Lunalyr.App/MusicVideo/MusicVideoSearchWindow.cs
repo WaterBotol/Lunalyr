@@ -338,7 +338,8 @@ internal sealed class MusicVideoSearchWindow : Window
 
     private void ShowSearching()
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 40, 0, 0) };
+        // At the top, where the messages that follow it sit (a horizontal panel would otherwise centre it in the window).
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 40, 0, 0) };
         panel.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
         panel.Children.Add(new TextBlock { Text = "Searching YouTube…", Style = Resource<Style>("SettingsCaption"), VerticalAlignment = VerticalAlignment.Center });
         AutomationProperties.SetName(panel, "Searching YouTube");
