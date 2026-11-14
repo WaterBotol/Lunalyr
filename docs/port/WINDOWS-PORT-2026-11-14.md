@@ -46,12 +46,10 @@ Spoken, Cascade and Cutout (`SpokenTypographyView.swift`, `LyricMotion.c`):
   - Timing comes from each word's neighbours: on time at onset, quick runs share one burst, no pile-ups, a pill fades
     at the top rather than being clamped.
   - One pill per word: glued syllables are never split; unspaced CJK is split into real words.
-- **Mosaic** (original decluttered):
-  - No stars or panel; the bar is the background of its word (never shows alone).
-  - Letters keep one size.
-  - Quick runs share one setting.
-  - Words leave before the next lands.
-  - Treatments vary on long lines.
+- **Mosaic**: the ORIGINAL, unchanged (user, 14 Nov: "old mosaic was better"). Port it exactly as the
+  Windows app had it before any rework: huge word with its star, white on a colour bar across a pale panel, or
+  letter by letter on jumping baselines, then shrinking into the small stack. Do not port the decluttered version
+  (Mac commits 69ee523/a93bd11 are superseded by 691883e). `MosaicLayoutTests` is gone.
 - **Hinge** (new design): an open book on a spine.
   - Each phrase is a page of heavy caps: the focal word huge, bursting in and swinging open; small words along the page.
   - Pages turn at phrases; at most two pages show.
@@ -67,7 +65,7 @@ Spoken, Cascade and Cutout (`SpokenTypographyView.swift`, `LyricMotion.c`):
   - Small and held words are pen-written.
   - Pages turn by phrase.
   - No static stars, brackets or underlines.
-- Tests: `PortalLayoutTests`, `LyricWordIconsTests`, `MosaicLayoutTests`, `TorqueLayoutTests`, `FableLayoutTests`,
+- Tests: `PortalLayoutTests`, `LyricWordIconsTests`, `TorqueLayoutTests`, `FableLayoutTests`,
   `HingeBroadsideChoreographyTests` (Hinge only), `StagePhrasesTests`, `StageMotionTests`, `StageReadingTests`.
 - Review videos: `Scripts/render-stage-videos.sh`.
 
