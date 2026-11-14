@@ -71,6 +71,8 @@ struct LookInspectorForm<Content: View>: View {
             }
             .padding(.bottom, 12)
         }
+        // The inspector's tighter sections and 20 / 16 padding (SPEC §2, §4).
+        .environment(\.formDensity, .inspector)
         .overlay(alignment: .bottom) {
             LinearGradient(colors: [Color.studio(.window).opacity(0), Color.studio(.window)],
                            startPoint: .top, endPoint: .bottom)
