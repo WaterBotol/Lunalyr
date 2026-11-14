@@ -6,19 +6,26 @@ namespace Lunalyr.Core.Tests.Lyrics.Parsing;
 /// <summary>"纯音乐，请欣赏" and its variants (tester feedback on 0.9.0; the Mac session's working set, 14 Nov 2026).</summary>
 public class LyricFillerTests
 {
+    // The Mac's matches and non-matches (next/tester-fixes, 14 Nov 2026), plus half-width punctuation and spaces.
     [Theory]
     [InlineData("纯音乐，请欣赏")]
     [InlineData("纯音乐,请欣赏")]
     [InlineData("纯音乐 请欣赏")]
     [InlineData("纯音乐，请您欣赏")]
     [InlineData("此歌曲为没有填词的纯音乐，请您欣赏")]
-    [InlineData("此歌曲为没有填词的纯音乐")]
     [InlineData("純音樂，請欣賞")]
+    [InlineData("【纯音乐，请欣赏】")]
+    [InlineData("纯音乐，请欣赏！")]
     [InlineData("  纯音乐，请欣赏！ ")]
     public void FillerLinesAreKnown(string line) => Assert.True(LyricFiller.IsFiller(line));
 
     [Theory]
     [InlineData("纯音乐")]
+    [InlineData("请欣赏")]
+    [InlineData("我爱纯音乐，请欣赏")]
+    [InlineData("纯音乐，请欣赏这首歌")]
+    [InlineData("这是纯音乐")]
+    [InlineData("此歌曲为没有填词的纯音乐")]
     [InlineData("我爱纯音乐，请欣赏这首歌")]
     [InlineData("All my friends are heathens")]
     [InlineData("")]
