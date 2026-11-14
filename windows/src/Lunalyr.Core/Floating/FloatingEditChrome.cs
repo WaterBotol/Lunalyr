@@ -40,7 +40,8 @@ public static class FloatingEditChrome
     /// <summary>How close to an edge (points) a press resizes from that edge rather than moving the window.</summary>
     public const double EdgeReach = 8;
     public const double DoneWidth = 64, DoneHeight = 26;
-    public const double HintHeight = 24, HintTextSize = 12, PlaceholderTextSize = 22;
+    /// <summary>The hint's capsule is as tall as Done beside it, so the two sit on one line.</summary>
+    public const double HintHeight = DoneHeight, HintTextSize = 12, PlaceholderTextSize = 22;
 
     public const string Hint = "Drag to move, edges or corner to resize";
     public const string Placeholder = "Lyrics appear here";
