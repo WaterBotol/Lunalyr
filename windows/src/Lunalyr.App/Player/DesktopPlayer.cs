@@ -491,8 +491,9 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _nowReadAt = now;
         var m = _model;
         m.HasSong = song.HasSong;
-        m.Title = song.Title is { Length: > 0 } title ? title : "Nothing playing";
-        m.Artist = song.HasSong ? song.Artist : "Play something in a music app";
+        m.Title = song.Title is { Length: > 0 } title ? title : Lunalyr.Shell.Flyout.FlyoutText.NothingPlaying;
+        // The prompt the tray flyout and the welcome use too.
+        m.Artist = song.HasSong ? song.Artist : Lunalyr.Shell.Flyout.FlyoutText.IdlePrompt;
         m.Album = song.Album is { Length: > 0 } album && album != song.Title ? album : null;
         m.PlayerName = song.Player ?? "";
         m.CommandsOff = _commands.AreOff;
