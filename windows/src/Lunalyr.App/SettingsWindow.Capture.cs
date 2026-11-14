@@ -72,10 +72,35 @@ public sealed partial class SettingsWindow
     /// <summary>Draws the page from its title to its last row (off the screen too) over the window's base colour.</summary>
     private async Task RenderPage(string path)
     {
-        var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync(PageStack);
-        var pixels = (await bitmap.GetPixelsAsync()).ToArray();
-        int width = bitmap.PixelWidth, height = bitmap.PixelHeight;
+        // RenderTargetBitmap draws at most 4096 pixels a side (it shrinks anything bigger), so a long page is drawn in
+        // blocks no taller than that, each put back where it sits on the page.
+        var scale = PageStack.XamlRoot.RasterizationScale;
+        int width = (int)Math.Ceiling(PageStack.ActualWidth * scale), height = (int)Math.Ceiling(PageStack.ActualHeight * scale);
+        var pixels = new byte[width * height * 4];
+        foreach (var block in Blocks(PageStack, 4000 / scale))
+        {
+            var bitmap = new RenderTargetBitmap();
+            await bitmap.RenderAsync(block);
+            if (bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0) continue;
+            var drawn = (await bitmap.GetPixelsAsync()).ToArray();
+            var at = block.TransformToVisual(PageStack).TransformPoint(new Windows.Foundation.Point(0, 0));
+            int left = (int)Math.Round(at.X * scale), top = (int)Math.Round(at.Y * scale);
+            for (var y = 0; y < bitmap.PixelHeight; y++)
+            {
+                var row = top + y;
+                if (row < 0 || row >= height) continue;
+                var from = Math.Max(0, -left);
+                var count = Math.Min(bitmap.PixelWidth, width - left) - from;
+                if (count <= 0) continue;
+                for (var x = from; x < from + count; x++)
+                {
+                    // Over what is already there (a block's own background is drawn with it).
+                    int s = (y * bitmap.PixelWidth + x) * 4, d = (row * width + left + x) * 4;
+                    var under = 255 - drawn[s + 3];
+                    for (var c = 0; c < 4; c++) pixels[d + c] = (byte)(drawn[s + c] + pixels[d + c] * under / 255);
+                }
+            }
+        }
         // Mica isn't drawn off the screen: the page goes over the theme's solid base colour (Fluent's
         // SolidBackgroundFillColorBase), as Mica looks with transparency effects off.
         var (r, g, b) = Root.ActualTheme == ElementTheme.Dark ? (0x20, 0x20, 0x20) : (0xF3, 0xF3, 0xF3);
@@ -139,6 +164,26 @@ public sealed partial class SettingsWindow
             TextBlock t => $"\"{t.Text}\"",
             _ => AutomationProperties.GetName(e) is { Length: > 0 } name ? $"\"{name}\"" : e.Name,
         };
+    }
+
+    /// <summary>
+    /// The page in pieces no taller than <paramref name="tallest"/> DIPs: an element that fits as itself, else each of its
+    /// children (a transparent panel loses nothing by being drawn child by child).
+    /// </summary>
+    private static IEnumerable<UIElement> Blocks(UIElement element, double tallest)
+    {
+        if (element.Visibility == Visibility.Collapsed || element.ActualSize.Y <= 0) yield break;
+        var children = element is Panel or ContentControl or ContentPresenter or Border ? VisualTreeHelper.GetChildrenCount(element) : 0;
+        if (element.ActualSize.Y <= tallest || children == 0)
+        {
+            yield return element;
+            yield break;
+        }
+        for (var i = 0; i < children; i++)
+        {
+            if (VisualTreeHelper.GetChild(element, i) is UIElement child)
+                foreach (var block in Blocks(child, tallest)) yield return block;
+        }
     }
 
     /// <summary>Whether <paramref name="element"/> and everything above it inside the page is visible.</summary>
