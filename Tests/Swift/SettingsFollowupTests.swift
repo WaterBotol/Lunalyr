@@ -81,7 +81,7 @@ final class SettingsFollowupTests: XCTestCase {
     func testTheMenuMarksAndExplainsALeftOutEntrance() {
         XCTAssertEqual(EntranceSupport.menuTitle(.satinRibbon, in: .hinge), "Satin Ribbon (whole lines only)")
         XCTAssertEqual(EntranceSupport.menuTitle(.cutoutHighlight, in: .hinge), "Cutout · Highlight")
-        // Match the music marks nothing.
+        // Custom Mix marks nothing.
         XCTAssertEqual(EntranceSupport.menuTitle(.satinRibbon, in: nil), "Satin Ribbon")
         XCTAssertNil(EntranceSupport.note(selected: .satinRibbon, layout: nil, mix: []))
 
@@ -121,7 +121,7 @@ final class SettingsFollowupTests: XCTestCase {
         settings.wordArrivalByStyle[LyricComposition.scattered.rawValue] = WordArrival.satinRibbon.rawValue
         XCTAssertEqual(settings.wordRevealLock(in: .scattered), .entrance(.satinRibbon))
 
-        // Match the music's entrance is for every layout it picks: it locks
+        // Custom Mix's entrance is for every layout it picks: it locks
         // in a stage layout too, as before.
         settings.lyricComposition = nil
         settings.wordArrivalByStyle[settings.wordControlsKey] = WordArrival.satinRibbon.rawValue

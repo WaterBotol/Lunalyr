@@ -12,6 +12,9 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+### Changed
+- **Match the music is now called Custom Mix** everywhere it appears: the wallpaper type, the layout, the GPU effect and pattern choices, Looks and remembered styles. Your settings are kept.
+
 ## [2.1.0] - 2026-11-14
 
 ### Added

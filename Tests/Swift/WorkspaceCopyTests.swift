@@ -31,7 +31,7 @@ final class WorkspaceCopyTests: XCTestCase {
         XCTAssertFalse(picked.isEmpty)
         for composition in picked {
             XCTAssertTrue(WorkspaceCopy.automaticLayoutDetail.contains(composition.title),
-                          "Match the music can pick \(composition.title) but does not say so")
+                          "Custom Mix can pick \(composition.title) but does not say so")
         }
     }
 
@@ -41,7 +41,7 @@ final class WorkspaceCopyTests: XCTestCase {
         for layout in LyricComposition.allCases {
             XCTAssertEqual(WorkspaceCopy.editorialNote(layout: layout) != nil, layout.hasEditorialTypography, layout.title)
         }
-        XCTAssertNotNil(WorkspaceCopy.editorialNote(layout: nil), "Match the music can pick Editorial")
+        XCTAssertNotNil(WorkspaceCopy.editorialNote(layout: nil), "Custom Mix can pick Editorial")
     }
 
     /// Animated covers are looked up only for songs playing in Music and

@@ -498,7 +498,7 @@ struct EchoBackdrop: View {
 
 // MARK: - A new layout for every song
 
-/// With the layout on Match the music, each new song takes the next layout in
+/// With the layout on Custom Mix, each new song takes the next layout in
 /// a rotation you set up: which layouts take part, and how many songs in a
 /// row each one gets (0 leaves it out). Layouts that don't suit a song's
 /// energy are skipped for that song. A song keeps its layout for as long as

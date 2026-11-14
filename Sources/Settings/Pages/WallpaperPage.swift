@@ -70,10 +70,10 @@ struct WallpaperPage: View {
     @ViewBuilder private var typeSection: some View {
         switch s.backgroundMode {
         case .auto:
-            InspectorSection("Match the music") {
+            InspectorSection("Custom Mix") {
                 shaderPicker
                 patternPicker
-                InspectorCaption("Match the music picks one of each per song; choose one to pin it.")
+                InspectorCaption("Custom Mix picks one of each per song; choose one to pin it.")
             }
         case .shader:
             InspectorSection("GPU effects") { shaderPicker }
@@ -100,15 +100,15 @@ struct WallpaperPage: View {
     }
 
     private var shaderPicker: some View {
-        ChoiceMenu("GPU effect", selection: $s.shaderStyle, selectedTitle: { $0?.title ?? "Match the music" }) {
-            Text("Match the music").tag(Optional<ShaderStyle>.none)
+        ChoiceMenu("GPU effect", selection: $s.shaderStyle, selectedTitle: { $0?.title ?? "Custom Mix" }) {
+            Text("Custom Mix").tag(Optional<ShaderStyle>.none)
             ForEach(ShaderStyle.allCases) { Text($0.title).tag(Optional($0)) }
         }
     }
 
     private var patternPicker: some View {
-        ChoiceMenu("Pattern", selection: $s.patternStyle, selectedTitle: { $0?.title ?? "Match the music" }) {
-            Text("Match the music").tag(Optional<BackgroundStyle>.none)
+        ChoiceMenu("Pattern", selection: $s.patternStyle, selectedTitle: { $0?.title ?? "Custom Mix" }) {
+            Text("Custom Mix").tag(Optional<BackgroundStyle>.none)
             ForEach(BackgroundStyle.allCases) { Text($0.title).tag(Optional($0)) }
         }
     }

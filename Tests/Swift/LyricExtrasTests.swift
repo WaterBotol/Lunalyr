@@ -60,7 +60,7 @@ final class LyricExtrasTests: XCTestCase {
         memory.forgetAll()
         XCTAssertNil(StyleMemory(defaults: defaults).remembered(for: other))
         XCTAssertEqual(LyricStyleMemorySection.describe(.init(composition: "automatic", colour: "albumDrift")),
-                       "Match the music · Album drift")
+                       "Custom Mix · Album drift")
     }
 
     @MainActor
@@ -69,7 +69,7 @@ final class LyricExtrasTests: XCTestCase {
         XCTAssertEqual(RememberedStyleNote.rememberedName(.layout, in: both), "Echo")
         XCTAssertEqual(RememberedStyleNote.rememberedName(.colour, in: both), "Album drift")
         let layoutOnly = StyleMemory.Style(composition: "automatic", colour: nil)
-        XCTAssertEqual(RememberedStyleNote.rememberedName(.layout, in: layoutOnly), "Match the music")
+        XCTAssertEqual(RememberedStyleNote.rememberedName(.layout, in: layoutOnly), "Custom Mix")
         XCTAssertNil(RememberedStyleNote.rememberedName(.colour, in: layoutOnly), "the colour picker is not overridden")
     }
 

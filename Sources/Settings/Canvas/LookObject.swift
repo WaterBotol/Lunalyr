@@ -174,7 +174,7 @@ enum LookChoices {
         Settings.BackgroundMode.generated + Settings.BackgroundMode.own
     }
 
-    /// Match the music (nil), then every layout, in the Layout menu's order
+    /// Custom Mix (nil), then every layout, in the Layout menu's order
     /// (Calm, Bold, Playful).
     static var layouts: [LyricComposition?] {
         let grouped = LyricCompositionGroup.allCases.flatMap(\.layouts)
@@ -182,7 +182,7 @@ enum LookChoices {
     }
 
     static func layoutTitle(_ layout: LyricComposition?) -> String {
-        layout?.title ?? "Match the music"
+        layout?.title ?? "Custom Mix"
     }
 
     /// The typefaces, in the order the tiles show them.

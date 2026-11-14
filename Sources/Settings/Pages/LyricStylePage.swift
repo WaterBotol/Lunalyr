@@ -16,7 +16,7 @@ struct LyricStylePage: View {
         self.floating = floating ?? .shared
     }
 
-    /// The layout the word controls read from. Match the music saves them
+    /// The layout the word controls read from. Custom Mix saves them
     /// for every layout it picks; Scattered, its general-purpose pick, stands
     /// in when reading them back.
     private var style: LyricComposition { s.lyricComposition ?? .scattered }
@@ -48,7 +48,7 @@ struct LyricStylePage: View {
                 Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
                     .toggleStyle(StudioCheckboxStyle())
             }
-            // Match the music can pick either, so both stay reachable there.
+            // Custom Mix can pick either, so both stay reachable there.
             if style.hasConnections || automatic {
                 constellation
             }
@@ -78,7 +78,7 @@ struct LyricStylePage: View {
             ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
                         format: SettingsFormat.percent)
             if automatic {
-                InspectorCaption("Used when Match the music picks Constellation.")
+                InspectorCaption("Used when Custom Mix picks Constellation.")
                     .revealRow()
             }
         }
@@ -90,7 +90,7 @@ struct LyricStylePage: View {
             ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
                         format: SettingsFormat.percent)
             if automatic {
-                InspectorCaption("Used when Match the music picks Echo.")
+                InspectorCaption("Used when Custom Mix picks Echo.")
                     .revealRow()
             }
         }
@@ -272,7 +272,7 @@ struct LyricStylePage: View {
                             spoken: { SettingsFormat.spokenSeconds($0) + " before the next word" })
                     .help("How long before each word its faint preview appears")
             }
-            InspectorCaption(automatic ? "These controls apply to layouts picked by Match the music."
+            InspectorCaption(automatic ? "These controls apply to layouts picked by Custom Mix."
                                        : "These controls apply to the selected layout.")
         }
     }

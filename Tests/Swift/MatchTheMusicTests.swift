@@ -47,7 +47,7 @@ final class MatchTheMusicTests: XCTestCase {
         }
     }
 
-    /// Every "Match the music" choice should actually vary across songs.
+    /// Every "Custom Mix" choice should actually vary across songs.
     func testMatchedChoicesVaryAcrossSongs() {
         var shaders = Set<ShaderStyle>(), patterns = Set<BackgroundStyle>(), faces = Set<String>()
         let settings = Settings.shared

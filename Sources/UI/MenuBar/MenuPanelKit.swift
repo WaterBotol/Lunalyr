@@ -8,7 +8,7 @@ import SwiftUI
 // separators 14 in, 5 above and below. No cards, no icons per row.
 //
 //     MenuPanelRow("Tap to sync…") { tapSync.toggle() }
-//     MenuPanelSubmenuRow("Wallpaper", value: "Match the music", items: items)
+//     MenuPanelSubmenuRow("Wallpaper", value: "Custom Mix", items: items)
 //     QuickToggle("Pause", isOn: paused, …) { extras.toggleWallpaperPause() }
 //     MenuPanelSeparator()
 
@@ -318,7 +318,7 @@ struct MenuPanelMenuItem: Identifiable {
 }
 
 /// A row that opens a real menu beside it, like a menu's submenu:
-/// "Wallpaper   Match the music ›". The menu lists `items`, the chosen one
+/// "Wallpaper   Custom Mix ›". The menu lists `items`, the chosen one
 /// checked. Reachable with the keyboard (Space or Return opens it).
 struct MenuPanelSubmenuRow: View {
     let title: String

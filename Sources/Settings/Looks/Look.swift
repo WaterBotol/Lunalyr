@@ -8,10 +8,10 @@ import Foundation
 /// | Field | Store | UserDefaults key |
 /// |---|---|---|
 /// | `wallpaper` | `Settings.backgroundMode` | `backgroundMode` |
-/// | `layout` | `Settings.lyricComposition` (nil = Match the music) | `lyricComposition` |
+/// | `layout` | `Settings.lyricComposition` (nil = Custom Mix) | `lyricComposition` |
 /// | `typeface` | `Settings.fontChoice`, via `selectFontChoice(_:)` / `applyGoogleFont(family:)` | `fontChoice` |
 /// | `fontFamily` | `Settings.googleFontFamily`, only when `typeface == .google` | `googleFontFamily` |
-/// | `entrance` | `Settings.wordArrivalByStyle[layout key]` -- the entry `arrival(in:)` reads for the Look's layout (`"automatic"` for Match the music) | `custom.wordArrivalByStyle` |
+/// | `entrance` | `Settings.wordArrivalByStyle[layout key]` -- the entry `arrival(in:)` reads for the Look's layout (`"automatic"` for Custom Mix) | `custom.wordArrivalByStyle` |
 /// | `entranceMix` | `Settings.wordEntranceMix`, only when `entrance == .mix` | `custom.wordEntranceMix` |
 /// | `highlight` | `LyricHighlightOptions.mode` (the colour treatment) | `custom.lyricHighlightMode` |
 /// | `highlightCustomHex` | `LyricHighlightOptions.customHex`, only when `highlight == .custom` | `custom.lyricHighlightCustom` |
@@ -34,13 +34,13 @@ import Foundation
 /// use), and the wallpaper type applies to the desktop as always.
 struct LookValues: Equatable, Hashable {
     var wallpaper: Settings.BackgroundMode
-    /// nil is Match the music.
+    /// nil is Custom Mix.
     var layout: LyricComposition?
     var typeface: Settings.FontChoice
     /// The Google or installed family, when `typeface` is `.google`.
     var fontFamily: String?
     /// The entrance for the Look's layout. nil only in a user Look saved
-    /// while Match the music had no entrance of its own (each layout used
+    /// while Custom Mix had no entrance of its own (each layout used
     /// its own pick); applying it clears that entry again.
     var entrance: WordArrival?
     /// The custom mix's entrances (raw values), when `entrance` is `.mix`.
@@ -73,7 +73,7 @@ struct LookValues: Equatable, Hashable {
         switch choice {
         case .manrope: return "Manrope"
         case .appleMusic: return "SF Pro Display"
-        case .auto: return "Match the music"
+        case .auto: return "Custom Mix"
         case .sans: return "Avenir Next"
         case .serif: return "Charter"
         case .slab: return "Rockwell"
@@ -84,11 +84,11 @@ struct LookValues: Equatable, Hashable {
         }
     }
 
-    var layoutTitle: String { layout?.title ?? "Match the music" }
+    var layoutTitle: String { layout?.title ?? "Custom Mix" }
     var entranceTitle: String { entrance?.title ?? "Each layout’s own" }
 
     /// "Visualisers · Cascade · Avenir Next". Repeats collapse, so
-    /// Match the music for both wallpaper and layout reads once.
+    /// Custom Mix for both wallpaper and layout reads once.
     var summary: String {
         var parts: [String] = []
         for part in [wallpaper.title, layoutTitle, typefaceName] where parts.last != part {

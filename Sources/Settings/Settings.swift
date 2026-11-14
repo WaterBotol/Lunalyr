@@ -25,7 +25,7 @@ final class Settings: ObservableObject {
             switch self {
             case .manrope: return "Manrope"
             case .appleMusic: return "Apple Music — SF Pro"
-            case .auto: return "Match the music"
+            case .auto: return "Custom Mix"
             case .sans: return "Sans — Avenir Next"
             case .serif: return "Serif — Charter"
             case .slab: return "Slab — Rockwell"
@@ -102,7 +102,7 @@ final class Settings: ObservableObject {
 
         var title: String {
             switch self {
-            case .auto: return "Match the music"
+            case .auto: return "Custom Mix"
             case .pattern: return "Line patterns"
             case .shader: return "GPU effects"
             case .visualizer: return "Visualisers"
@@ -203,7 +203,7 @@ final class Settings: ObservableObject {
 
     /// With a layout chosen, only an entrance it shows on sung words locks
     /// it: Hinge with Satin Ribbon moves its words its own way, so nothing
-    /// needs unveiling. Match the music's choice is one for every layout it
+    /// needs unveiling. Custom Mix's choice is one for every layout it
     /// picks, so it locks as before.
     func wordRevealLock(in style: LyricComposition) -> WordRevealLock? {
         if style.arrivalOnly { return .layout(style) }
@@ -739,14 +739,14 @@ final class Settings: ObservableObject {
                 "\(constraint.reason), so Lunalyr is showing \(effective.title) instead of “\(chosen.title)”.",
                 frameRateNote: rateNote)
         }
-        // GPU effects and Match the music keep running, but `resolvedShader`
+        // GPU effects and Custom Mix keep running, but `resolvedShader`
         // swaps a pinned heavy effect for a cheap one -- only a swap power
-        // saving causes is reported, and Match the music draws an effect
+        // saving causes is reported, and Custom Mix draws an effect
         // only for some tracks.
         if chosen == .shader || chosen == .auto, let pinnedShader, pinnedShader.cost == .heavy {
             return PowerSavingNotice(constraint: constraint, message: chosen == .shader
                 ? "\(constraint.reason), so \(pinnedShader.title) is swapped for a lighter GPU effect."
-                : "\(constraint.reason), so when Match the music shows a GPU effect, \(pinnedShader.title) is swapped for a lighter one.",
+                : "\(constraint.reason), so when Custom Mix shows a GPU effect, \(pinnedShader.title) is swapped for a lighter one.",
                 frameRateNote: rateNote)
         }
         if held != rate {

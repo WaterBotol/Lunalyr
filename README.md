@@ -61,7 +61,7 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 
 [![A tour of twelve of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.webp)](docs/media/layouts-tour.mp4)
 
-Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Match the music** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
+Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Custom Mix** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
 
 <details>
 <summary><b>See all 14 layouts</b></summary>
@@ -138,7 +138,7 @@ As a song starts, its title, artist and album appear low on the left beside the 
 
 Choose what the lyrics sit on in **Settings › Wallpaper**:
 
-- **Match the music** picks a look to suit each song's energy and feel.
+- **Custom Mix** picks a look to suit each song's energy and feel.
 - **Animated effects** (called GPU effects in Settings): 27 moving scenes, from plasma and aurora to nebulae, in the album's colours.
 - **Line patterns** in the album's colours, gentle on power.
 - **Colour only**: a moving gradient of the album's colours.

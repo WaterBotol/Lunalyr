@@ -13,7 +13,7 @@ struct CoversPage: View {
     /// What covers are doing for the playing song, or why they aren't.
     private var coverStatus: String {
         guard s.useMotionArtwork else { return "Animated covers are off." }
-        guard s.backgroundMode == .auto else { return "Animated covers play in Match the music wallpaper mode." }
+        guard s.backgroundMode == .auto else { return "Animated covers play in Custom Mix wallpaper mode." }
         guard s.effectiveBackgroundMode == .auto else {
             return "\(s.powerConstraint?.reason ?? "Power saving is on"), so animated covers are paused."
         }
@@ -52,12 +52,12 @@ struct CoversPage: View {
             VStack(alignment: .leading, spacing: 10) {
                 InspectorTitle(title: "Animated covers")
                 if s.useMotionArtwork && s.backgroundMode != .auto {
-                    StatusBanner(.info, title: "Covers play with Match the music",
+                    StatusBanner(.info, title: "Covers play with Custom Mix",
                                  message: "The wallpaper is \(s.backgroundMode.title) now, so animated covers don’t show.",
                                  symbol: "play.rectangle.fill") {
-                        Button("Use Match the music") { s.backgroundMode = .auto }
-                            .accessibilityLabel("Use Match the music wallpaper")
-                            .help("Switch the wallpaper to Match the music, where animated covers play")
+                        Button("Use Custom Mix") { s.backgroundMode = .auto }
+                            .accessibilityLabel("Use Custom Mix wallpaper")
+                            .help("Switch the wallpaper to Custom Mix, where animated covers play")
                     }
                 } else {
                     Label(coverStatus, systemImage: "play.rectangle")
@@ -67,7 +67,7 @@ struct CoversPage: View {
             }
             VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.captionGap) {
                 Toggle("Use animated covers", isOn: $s.useMotionArtwork)
-                InspectorCaption("Apple Music’s motion artwork, behind Match the music.")
+                InspectorCaption("Apple Music’s motion artwork, behind Custom Mix.")
                 if reduceMotion && s.useMotionArtwork {
                     InspectorCaption(WorkspaceCopy.reduceMotionCovers)
                 }
@@ -108,7 +108,7 @@ struct CoversPage: View {
                 .revealRow()
             }
         }
-        // The note about Match the music and the excluded albums come and go smoothly.
+        // The note about Custom Mix and the excluded albums come and go smoothly.
         .lunalyrReveal(s.backgroundMode)
         .lunalyrReveal(s.useMotionArtwork)
         .lunalyrReveal(s.motionExclusions.isEmpty)

@@ -180,7 +180,7 @@ struct LyricStyleMemorySection: View {
     }
 
     static func describe(_ style: StyleMemory.Style) -> String {
-        let layout = style.composition == "automatic" ? "Match the music" : style.layout?.title ?? "Match the music"
+        let layout = style.composition == "automatic" ? "Custom Mix" : style.layout?.title ?? "Custom Mix"
         return [layout, style.colourMode?.title].compactMap { $0 }.joined(separator: " · ")
     }
 }
@@ -225,7 +225,7 @@ struct RememberedStyleNote: View {
         switch aspect {
         case .layout:
             guard let raw = style.composition else { return nil }
-            return raw == "automatic" ? "Match the music" : style.layout?.title ?? "Match the music"
+            return raw == "automatic" ? "Custom Mix" : style.layout?.title ?? "Custom Mix"
         case .colour:
             return style.colourMode?.title
         }

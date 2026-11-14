@@ -103,7 +103,7 @@ final class StyleMemory: ObservableObject {
     static let shared = StyleMemory()
 
     struct Style: Equatable {
-        /// A `LyricComposition` raw value, or "automatic" for Match the music.
+        /// A `LyricComposition` raw value, or "automatic" for Custom Mix.
         var composition: String?
         var colour: String?
 
@@ -235,8 +235,8 @@ final class StyleMemory: ObservableObject {
 }
 
 extension LyricComposition {
-    /// The next layout for the cycle shortcut: Match the music, then each
-    /// layout in turn, then back to Match the music.
+    /// The next layout for the cycle shortcut: Custom Mix, then each
+    /// layout in turn, then back to Custom Mix.
     static func cycled(after current: LyricComposition?) -> LyricComposition? {
         guard let current else { return allCases.first }
         guard let index = allCases.firstIndex(of: current), index + 1 < allCases.count else { return nil }

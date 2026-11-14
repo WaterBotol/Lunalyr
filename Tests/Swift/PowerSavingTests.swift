@@ -125,11 +125,11 @@ final class PowerSavingTests: XCTestCase {
         XCTAssertFalse(rate.message.contains(ShaderStyle.plasma.title))
         XCTAssertTrue(rate.message.contains("30 fps"))
 
-        // Match the music draws a GPU effect only for some tracks, so the
+        // Custom Mix draws a GPU effect only for some tracks, so the
         // notice says when the swap applies rather than that it is happening.
         let matched = try XCTUnwrap(Settings.powerSavingNotice(chosen: .auto, pinnedShader: .nebula, rate: .balanced,
                                                                constraint: .battery(.lightEffects)))
-        XCTAssertTrue(matched.message.contains("when Match the music shows a GPU effect"))
+        XCTAssertTrue(matched.message.contains("when Custom Mix shows a GPU effect"))
         XCTAssertTrue(matched.message.contains(ShaderStyle.nebula.title))
         let pinned = try XCTUnwrap(Settings.powerSavingNotice(chosen: .shader, pinnedShader: .nebula, rate: .balanced,
                                                               constraint: .battery(.lightEffects)))

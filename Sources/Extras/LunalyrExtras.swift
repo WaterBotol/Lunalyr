@@ -458,11 +458,11 @@ final class LunalyrExtras: ObservableObject {
             let next = LyricComposition.cycled(after: style.layout)
             style.composition = next?.rawValue ?? "automatic"
             memory.remember(style, for: track, scope: remembered.scope)
-            post("Layout for this \(remembered.scope == .song ? "song" : "artist"): \(next?.title ?? "Match the music")",
+            post("Layout for this \(remembered.scope == .song ? "song" : "artist"): \(next?.title ?? "Custom Mix")",
                  symbol: "square.grid.3x3")
         } else {
             settings.lyricComposition = LyricComposition.cycled(after: settings.lyricComposition)
-            post("Layout: \(settings.lyricComposition?.title ?? "Match the music")", symbol: "square.grid.3x3")
+            post("Layout: \(settings.lyricComposition?.title ?? "Custom Mix")", symbol: "square.grid.3x3")
         }
     }
 

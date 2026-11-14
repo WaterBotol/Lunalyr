@@ -679,7 +679,7 @@ struct LyricLayer: View {
     }
 
     /// A layout remembered for this song or artist wins; "automatic" there
-    /// means Match the music even if a fixed layout is set globally.
+    /// means Custom Mix even if a fixed layout is set globally.
     private func composition(at index: Int) -> LyricComposition {
         LyricComposition.selected(settings: settings,
             remembered: memory.remembered(for: nowPlaying.current)?.style.composition, mood: mood, seed: index,

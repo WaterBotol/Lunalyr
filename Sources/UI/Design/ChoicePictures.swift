@@ -94,7 +94,7 @@ struct WallpaperTypePicture: View {
     private static let bars: [CGFloat] = [0.3, 0.55, 0.8, 0.45, 0.65, 0.9, 0.5, 0.35, 0.6]
 }
 
-/// Match the music's picture: the song's colours as a soft glow.
+/// Custom Mix's picture: the song's colours as a soft glow.
 struct ChoicePictureGlow: View {
     var palette: ArtworkPalette
 
@@ -110,7 +110,7 @@ struct ChoicePictureGlow: View {
 }
 
 /// One lyric layout's picture: the app's own thumbnail scaled to fill, or,
-/// for Match the music (nil), the song's colours with its symbol.
+/// for Custom Mix (nil), the song's colours with its symbol.
 struct LayoutPicture: View {
     let composition: LyricComposition?
     var palette: ArtworkPalette = .neutral

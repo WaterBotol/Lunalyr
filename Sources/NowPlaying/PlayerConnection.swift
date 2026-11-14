@@ -607,7 +607,7 @@ struct NowPlayingServices {
                 await MotionArtworkProvider.shared.motion(album: track.album, artist: track.artist, title: track.title)
             },
             allowsMotionLookup: { track in
-                // Animated covers only ever play in Match the music.
+                // Animated covers only ever play in Custom Mix.
                 let settings = Settings.shared
                 return settings.motionArtworkEnabled && settings.backgroundMode == .auto
                     && !settings.excludesMotion(artist: track.artist, album: track.album)

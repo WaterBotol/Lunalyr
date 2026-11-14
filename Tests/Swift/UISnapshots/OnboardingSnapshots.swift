@@ -16,7 +16,7 @@ extension UISnapshotCatalogue {
             step("onboarding/2-music-denied", "Your music: Music refused in Automation, with its fix", .music,
                  looks: every, player: .denied),
             step("onboarding/2-music-not-running", "Your music: no player open", .music, player: .notRunning),
-            step("onboarding/3-look", "Pick a look: Match the music over the live preview", .look, player: .playing),
+            step("onboarding/3-look", "Pick a look: Custom Mix over the live preview", .look, player: .playing),
             step("onboarding/3-look-your-wallpaper", "Pick a look: Your wallpaper (lyrics only)", .look,
                  prepare: { $0.settings.backgroundMode = .desktop }),
             step("onboarding/3-look-power-saving", "Pick a look: Visualisers, held back by Low power visuals", .look,

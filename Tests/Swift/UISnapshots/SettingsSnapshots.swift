@@ -199,7 +199,7 @@ extension UISnapshotCatalogue {
             UISnapshotCase("settings/covers-playing", note: "Animated covers with a song playing",
                            chrome: .settingsWindow, size: .settingsWindow, player: .playing,
                            prepare: { $0.showSettingsPage("covers") }, view: settingsWindow),
-            UISnapshotCase("settings/covers-needs-match", note: "covers on, wallpaper not Match the music; two excluded albums",
+            UISnapshotCase("settings/covers-needs-match", note: "covers on, wallpaper not Custom Mix; two excluded albums",
                            chrome: .settingsWindow, size: .settingsWindow, player: .playing,
                            prepare: { scene in
                                scene.showSettingsPage("covers")

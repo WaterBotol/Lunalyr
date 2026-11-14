@@ -70,7 +70,7 @@ struct WallpaperTypeChoices: View {
     }
 }
 
-/// Layout: Match the music and every layout as the app's own thumbnails, six
+/// Layout: Custom Mix and every layout as the app's own thumbnails, six
 /// to a row; the names are VoiceOver labels and help tags, the header names
 /// the chosen one.
 @MainActor
@@ -93,7 +93,7 @@ struct LayoutTileChoices: View {
                     .disabled(settings.lyricComposition != nil)
                     .help(settings.lyricComposition == nil
                           ? "Each new song takes the next layout"
-                          : "Applies while the layout is Match the music")
+                          : "Applies while the layout is Custom Mix")
                     .fixedSize()
             }
             VStack(alignment: .leading, spacing: ChoiceGridMetrics.gap) {

@@ -164,7 +164,7 @@ Each desktop window hosts `NowPlayingView`. A single `TimelineView(.animation)` 
 
 Inside it, `WallpaperViewport` stacks two layers:
 
-- **Background**: nothing (Your wallpaper), an animated album cover, an imported image or video, a GPU effect, a visualiser, or an album-colour gradient on its own (Colour only) or with a line pattern. Changes cross-fade, except when switching to or from Your wallpaper. In **Match the music** mode, an animated cover wins if there is one, then a GPU effect for high-energy tracks, then a pattern.
+- **Background**: nothing (Your wallpaper), an animated album cover, an imported image or video, a GPU effect, a visualiser, or an album-colour gradient on its own (Colour only) or with a line pattern. Changes cross-fade, except when switching to or from Your wallpaper. In **Custom Mix** mode, an animated cover wins if there is one, then a GPU effect for high-energy tracks, then a pattern.
 - **Lyrics**: `LyricLineView` sends Spoken, Cascade and Cutout to `SpokenTypographyView` and the other compositions to `ScatteredLyricText`.
 
 The workspace preview (`SettingsLivePreview`) renders the same `NowPlayingView`, so what you see in settings is what the desktop draws.

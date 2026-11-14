@@ -123,7 +123,7 @@ struct ChoiceTilePressStyle: ButtonStyle {
     }
 }
 
-/// "Wallpaper type  Match the music": a choice grid's name and its value.
+/// "Wallpaper type  Custom Mix": a choice grid's name and its value.
 struct ChoiceHeader: View {
     let title: String
     let value: String

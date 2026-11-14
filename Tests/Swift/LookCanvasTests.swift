@@ -95,7 +95,7 @@ final class LookCanvasTests: XCTestCase {
         XCTAssertEqual(Set(LookChoices.wallpaperTypes), Set(Settings.BackgroundMode.allCases))
         XCTAssertEqual(LookChoices.wallpaperTypes.count, 8)
         XCTAssertEqual(LookChoices.layouts.count, LyricComposition.allCases.count + 1)
-        XCTAssertNil(LookChoices.layouts.first ?? .scattered, "Match the music first")
+        XCTAssertNil(LookChoices.layouts.first ?? .scattered, "Custom Mix first")
         XCTAssertEqual(Set(LookChoices.layouts.compactMap { $0 }), Set(LyricComposition.allCases))
         XCTAssertEqual(Set(LookChoices.typefaces), Set(Settings.FontChoice.allCases))
         XCTAssertEqual(LookChoices.typefaces.map(LookChoices.shortName),

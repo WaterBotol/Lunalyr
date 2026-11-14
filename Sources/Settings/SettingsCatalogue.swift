@@ -68,7 +68,7 @@ struct SettingsCatalogueEntry: Hashable, Identifiable {
 /// Deliberately left out:
 /// - Status banners' one-off fixes that only appear while something is
 ///   wrong (power saving's override and "Performance Settings…", "Open Login
-///   Items…" while launch at login waits, "Use Match the music" on Animated
+///   Items…" while launch at login waits, "Use Custom Mix" on Animated
 ///   covers): each repeats a setting that is catalogued.
 /// - Read-only rows (Lyrics from, Timing, Connection, Sharing status, the
 ///   audio meters, version text) and captions.
@@ -162,12 +162,12 @@ enum SettingsCatalogue {
 
     private static let wallpaper: [SettingsCatalogueEntry] = [
         .init(.wallpaper, "Picture", "Wallpaper type", .choice, keys: ["backgroundMode"],
-              keywords: ["background", "mode", "match the music", "gpu effects", "line patterns", "visualiser",
+              keywords: ["background", "mode", "custom mix", "match the music", "gpu effects", "line patterns", "visualiser",
                          "visualizer", "colour only", "your wallpaper", "image or video", "music video"],
               menuBar: true),
-        .init(.wallpaper, "Match the music", "GPU effect", .choice, keys: ["shaderStyle"],
+        .init(.wallpaper, "Custom Mix", "GPU effect", .choice, keys: ["shaderStyle"],
               keywords: ["shader", "gpu effects", "plasma", "aurora", "nebula"]),
-        .init(.wallpaper, "Match the music", "Pattern", .choice, keys: ["patternStyle"],
+        .init(.wallpaper, "Custom Mix", "Pattern", .choice, keys: ["patternStyle"],
               keywords: ["line patterns", "lines"]),
         .init(.wallpaper, "Colour only", "Album gradient", .toggle, keys: ["custom.albumGradientWallpaper"],
               keywords: ["colour only", "color", "cover colours"]),
@@ -275,7 +275,7 @@ enum SettingsCatalogue {
             .init(.typography, "Place", "Reset size", .action,
                   keys: ["custom.floating.frames", "custom.floating.sizes"], keywords: ["floating", "forget size"]),
             .init(.typography, "Picture", "Layout", .choice, keys: ["lyricComposition"],
-                  keywords: ["composition", "match the music", "scattered", "echo", "cascade", "editorial",
+                  keywords: ["composition", "custom mix", "match the music", "scattered", "echo", "cascade", "editorial",
                              "constellation", "spoken", "cutout"]),
             .init(.typography, "Picture", "Change layout every song", .toggle, keys: ["custom.rotateLayouts"],
                   keywords: ["rotate", "rotation", "next layout"]),

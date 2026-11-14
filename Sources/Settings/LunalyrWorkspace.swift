@@ -207,7 +207,7 @@ private struct SettingsStatusHeader: View {
 /// tests can hold it to what the renderer actually does.
 @MainActor
 enum WorkspaceCopy {
-    /// What Match the music does with the layout.
+    /// What Custom Mix does with the layout.
     static let automaticLayoutDetail =
         "Picks Constellation, Echo, Editorial or Scattered to suit each track’s energy and feel."
 
@@ -224,7 +224,7 @@ enum WorkspaceCopy {
     /// How "Add Editorial typography" relates to the chosen layout.
     static func editorialNote(layout: LyricComposition?) -> String? {
         guard let layout else {
-            return "Editorial picks already mix two typefaces; this adds the mix to the other layouts Match the music chooses."
+            return "Editorial picks already mix two typefaces; this adds the mix to the other layouts Custom Mix chooses."
         }
         return layout.hasEditorialTypography
             ? "\(layout.title) already mixes two typefaces. Switch this on to set how many words take the second one."
