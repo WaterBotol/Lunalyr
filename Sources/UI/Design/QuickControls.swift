@@ -269,8 +269,8 @@ struct ToggleTile: View {
 
 // MARK: Timing
 
-/// Lyrics earlier or later, a tenth of a second a click, with the offset
-/// between: the song offset Timing & sources and the shortcuts change too.
+/// Lyrics earlier or later, five hundredths of a second a click, with the
+/// offset between, which can be typed: the song offset Timing & sources and the shortcuts change too.
 /// Positive brings the lyrics in earlier.
 struct TimingNudge: View {
     /// Seconds; positive is earlier.
@@ -279,26 +279,35 @@ struct TimingNudge: View {
     let earlier: () -> Void
     let later: () -> Void
     let reset: () -> Void
+    /// Sets a typed offset; nil shows the offset as plain text.
+    var set: ((Double) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 6) {
             Button("Earlier", action: earlier)
-                .help("Show lyrics a tenth of a second earlier for this song")
+                .help("Show lyrics five hundredths of a second earlier for this song")
                 .accessibilityLabel("Lyrics earlier")
-                .accessibilityHint("Shows lyrics a tenth of a second earlier for this song")
-            Text(Self.format(offset))
-                .lunalyrText(.value)
-                .foregroundStyle(offset == 0 ? .secondary : .primary)
-                .contentTransition(reduceMotion ? .opacity : .numericText(value: offset))
-                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
-                           value: offset)
-                .frame(minWidth: 56)
-                .accessibilityHidden(true)
+                .accessibilityHint("Shows lyrics five hundredths of a second earlier for this song")
+            if let set {
+                SongOffsetField(offset: offset, commit: set)
+                    .lunalyrText(.value)
+                    .foregroundStyle(offset == 0 ? .secondary : .primary)
+                    .frame(width: 64)
+            } else {
+                Text(Self.format(offset))
+                    .lunalyrText(.value)
+                    .foregroundStyle(offset == 0 ? .secondary : .primary)
+                    .contentTransition(reduceMotion ? .opacity : .numericText(value: offset))
+                    .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                               value: offset)
+                    .frame(minWidth: 56)
+                    .accessibilityHidden(true)
+            }
             Button("Later", action: later)
-                .help("Show lyrics a tenth of a second later for this song")
+                .help("Show lyrics five hundredths of a second later for this song")
                 .accessibilityLabel("Lyrics later")
-                .accessibilityHint("Shows lyrics a tenth of a second later for this song")
+                .accessibilityHint("Shows lyrics five hundredths of a second later for this song")
             Button(action: reset) {
                 Image(systemName: "arrow.counterclockwise")
             }
@@ -338,9 +347,48 @@ struct SongTimingNudge: View {
     var body: some View {
         let models = models.resolved
         TimingNudge(offset: models.songOffset, enabled: playing.current != nil,
-                    earlier: { models.nudgeSongOffset(by: 0.1) },
-                    later: { models.nudgeSongOffset(by: -0.1) },
-                    reset: { models.resetSongOffset() })
+                    earlier: { models.nudgeSongOffset(by: SongOffsets.step) },
+                    later: { models.nudgeSongOffset(by: -SongOffsets.step) },
+                    reset: { models.resetSongOffset() },
+                    set: { models.setSongOffset($0) })
+    }
+}
+
+/// The song offset as an editable field: Return, or leaving the field,
+/// sets the typed value (`SongOffsets.parse`); Esc puts the current one
+/// back, as does anything that is not an offset.
+struct SongOffsetField: View {
+    /// Seconds; positive is earlier.
+    let offset: Double
+    let commit: (Double) -> Void
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("Offset", text: $text)
+            .textFieldStyle(.plain)
+            .multilineTextAlignment(.center)
+            .focused($focused)
+            .onSubmit(apply)
+            .onExitCommand {
+                text = TimingNudge.format(offset)
+                focused = false
+            }
+            .onChange(of: focused) { _, now in if !now { apply() } }
+            .onChange(of: offset) { _, value in if !focused { text = TimingNudge.format(value) } }
+            .onAppear { text = TimingNudge.format(offset) }
+            .help("Type this song’s offset, such as +0.35 or −350 ms; positive brings the lyrics in earlier")
+            .accessibilityLabel("Song offset")
+            .accessibilityValue(TimingNudge.spoken(offset))
+    }
+
+    private func apply() {
+        if let value = SongOffsets.parse(text) {
+            if value != offset { commit(value) }
+            text = TimingNudge.format(value)
+        } else {
+            text = TimingNudge.format(offset)
+        }
     }
 }
 

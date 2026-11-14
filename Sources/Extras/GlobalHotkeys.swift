@@ -24,8 +24,8 @@ final class GlobalHotkeys: ObservableObject {
         var title: String {
             switch self {
             case .toggleLyrics: return "Show or hide lyrics"
-            case .syncEarlier: return "Lyrics 0.1 s earlier for this song"
-            case .syncLater: return "Lyrics 0.1 s later for this song"
+            case .syncEarlier: return "Lyrics 0.05 s earlier for this song"
+            case .syncLater: return "Lyrics 0.05 s later for this song"
             case .cycleLayout: return "Next layout"
             case .copyCard: return "Open lyric card"
             case .pauseWallpaper: return "Pause or resume the wallpaper"
@@ -283,8 +283,8 @@ final class GlobalHotkeys: ObservableObject {
         extras.performing(from: .elsewhere) {
             switch action {
             case .toggleLyrics: extras.toggleLyrics()
-            case .syncEarlier: extras.nudgeSync(by: 0.1)
-            case .syncLater: extras.nudgeSync(by: -0.1)
+            case .syncEarlier: extras.nudgeSync(by: SongOffsets.step)
+            case .syncLater: extras.nudgeSync(by: -SongOffsets.step)
             case .cycleLayout: extras.cycleLayout()
             case .copyCard: extras.copyLyricCard()
             case .pauseWallpaper: extras.toggleWallpaperPause()

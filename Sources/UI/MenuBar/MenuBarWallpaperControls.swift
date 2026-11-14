@@ -6,7 +6,7 @@ import SwiftUI
 // switches, the Discord status switch, and Open Lyric Card…. The wallpaper
 // type and the visualiser's scene are chosen in Settings › Wallpaper.
 
-/// "Lyric timing   Earlier · 0.00 s · Later": this song's lyrics a tenth
+/// "Lyric timing   Earlier · 0.00 s · Later": this song’s lyrics five hundredths
 /// of a second earlier or later, the per-song, per-source offset the
 /// shortcuts and Timing & sources change too; then Tap to sync…. Both
 /// belong to a song: shown, but disabled, with nothing playing.
@@ -38,24 +38,20 @@ struct MenuBarLyricTiming: View {
                     .help("Back to the lyrics’ own timing")
                     .accessibilityLabel("Reset song offset")
                 }
-                Button("Earlier") { models.nudgeSongOffset(by: 0.1) }
+                Button("Earlier") { models.nudgeSongOffset(by: SongOffsets.step) }
                     .buttonStyle(.menuPanelMini)
-                    .help("Show lyrics a tenth of a second earlier for this song")
+                    .help("Show lyrics five hundredths of a second earlier for this song")
                     .accessibilityLabel("Lyrics earlier")
-                    .accessibilityHint("Shows lyrics a tenth of a second earlier for this song")
-                Text(TimingNudge.format(offset))
+                    .accessibilityHint("Shows lyrics five hundredths of a second earlier for this song")
+                SongOffsetField(offset: offset) { models.setSongOffset($0) }
                     .font(.system(size: 13).monospacedDigit())
                     .foregroundStyle(Color.studio(.ink).opacity(hasSong ? 1 : 0.4))
-                    .contentTransition(reduceMotion ? .opacity : .numericText(value: offset))
-                    .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
-                               value: offset)
-                    .frame(minWidth: 50)
-                    .accessibilityHidden(true)
-                Button("Later") { models.nudgeSongOffset(by: -0.1) }
+                    .frame(width: 58)
+                Button("Later") { models.nudgeSongOffset(by: -SongOffsets.step) }
                     .buttonStyle(.menuPanelMini)
-                    .help("Show lyrics a tenth of a second later for this song")
+                    .help("Show lyrics five hundredths of a second later for this song")
                     .accessibilityLabel("Lyrics later")
-                    .accessibilityHint("Shows lyrics a tenth of a second later for this song")
+                    .accessibilityHint("Shows lyrics five hundredths of a second later for this song")
             }
             .padding(.horizontal, MenuPanel.inset)
             .frame(height: 28)

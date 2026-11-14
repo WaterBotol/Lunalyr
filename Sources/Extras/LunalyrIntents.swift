@@ -13,13 +13,13 @@ struct ToggleLyricsIntent: AppIntent {
 
 struct LyricsEarlierIntent: AppIntent {
     static let title: LocalizedStringResource = "Lyrics Earlier"
-    static let description = IntentDescription("Moves the lyrics 0.1 s earlier for the song playing, saved with that song.")
+    static let description = IntentDescription("Moves the lyrics 0.05 s earlier for the song playing, saved with that song.")
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { LunalyrCommand.dialogResult(.syncEarlier) }
 }
 
 struct LyricsLaterIntent: AppIntent {
     static let title: LocalizedStringResource = "Lyrics Later"
-    static let description = IntentDescription("Moves the lyrics 0.1 s later for the song playing, saved with that song.")
+    static let description = IntentDescription("Moves the lyrics 0.05 s later for the song playing, saved with that song.")
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog { LunalyrCommand.dialogResult(.syncLater) }
 }
 

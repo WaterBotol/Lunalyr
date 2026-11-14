@@ -9,6 +9,35 @@ import Foundation
 @MainActor
 final class SongOffsets: ObservableObject {
     static let shared = SongOffsets()
+    /// One Earlier or Later step, in seconds.
+    static let step = 0.05
+    /// The furthest an offset goes either way, in seconds.
+    static let limit = 30.0
+
+    /// A typed offset in seconds (positive: lyrics earlier), or nil when the
+    /// text is not one. Takes an optional sign (+ - − –), a decimal point or
+    /// comma and an optional unit, s, sec or ms ("350ms" is 0.35); spaces
+    /// are ignored. Rounded to hundredths; beyond ±30 s is rejected.
+    static func parse(_ text: String) -> Double? {
+        var body = String(text.filter { !$0.isWhitespace }.lowercased())
+        var scale = 1.0
+        if body.hasSuffix("ms") { body.removeLast(2); scale = 0.001 }
+        else if body.hasSuffix("sec") { body.removeLast(3) }
+        else if body.hasSuffix("s") { body.removeLast() }
+        var sign = 1.0
+        if let first = body.first, "+-−–".contains(first) {
+            if first != "+" { sign = -1 }
+            body.removeFirst()
+        }
+        body = body.replacingOccurrences(of: ",", with: ".")
+        guard body.contains(where: { $0.isASCII && $0.isNumber }),
+              body.allSatisfy({ ($0.isASCII && $0.isNumber) || $0 == "." }),
+              body.filter({ $0 == "." }).count <= 1,
+              let number = Double(body) else { return nil }
+        let value = (sign * number * scale * 100).rounded() / 100
+        guard value.isFinite, abs(value) <= limit else { return nil }
+        return value == 0 ? 0 : value
+    }
     @Published private(set) var values: [String: Double] {
         didSet { resolved = nil }
     }

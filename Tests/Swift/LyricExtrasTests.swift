@@ -74,6 +74,54 @@ final class LyricExtrasTests: XCTestCase {
     }
 
     @MainActor
+    func testATypedSongOffsetIsParsedLikeTheWindowsField() {
+        let parse = SongOffsets.parse
+        XCTAssertEqual(parse("0.35"), 0.35)
+        XCTAssertEqual(parse("+0.35"), 0.35)
+        XCTAssertEqual(parse("-0.35"), -0.35)
+        XCTAssertEqual(parse("−0.35"), -0.35, "a minus sign")
+        XCTAssertEqual(parse("–0.35"), -0.35, "an en dash")
+        XCTAssertEqual(parse("0,35"), 0.35, "a decimal comma")
+        XCTAssertEqual(parse(".5"), 0.5)
+        XCTAssertEqual(parse("2"), 2)
+        XCTAssertEqual(parse("350ms"), 0.35)
+        XCTAssertEqual(parse("- 350 ms"), -0.35, "spaces are ignored")
+        XCTAssertEqual(parse("1.5 s"), 1.5)
+        XCTAssertEqual(parse("1.5sec"), 1.5)
+        XCTAssertEqual(parse("1.5 SEC"), 1.5)
+        XCTAssertEqual(parse("0.123"), 0.12, "rounded to hundredths")
+        XCTAssertEqual(parse("0.125") ?? 0, 0.13, accuracy: 1e-9)
+        XCTAssertEqual(parse("-0.001"), 0)
+        XCTAssertEqual(parse("30"), 30)
+        XCTAssertEqual(parse("-30 s"), -30)
+        XCTAssertEqual(parse("30000ms"), 30)
+        // What the field shows parses back to itself.
+        for value in [0, 0.25, -0.3, 12.05] {
+            XCTAssertEqual(parse(TimingNudge.format(value)), value, "\(value)")
+        }
+        for bad in ["", " ", "abc", "1.2.3", "1,2.3", "+-1", "--1", "30.01", "-31", "1e3", "0x10", "1 m", "ms", "s", ".",
+                    "+", "1 2 3 4 5 6 7 8 9 0 ms extra", "nan", "inf"] {
+            XCTAssertNil(parse(bad), bad)
+        }
+        XCTAssertEqual(SongOffsets.step, 0.05)
+    }
+
+    @MainActor
+    func testATypedOffsetSetsTheSongOffsetOutright() {
+        let (defaults, cleanUp) = isolated()
+        defer { cleanUp() }
+        let offsets = SongOffsets(defaults: defaults)
+        let extras = LunalyrExtras(defaults: defaults)
+        let query = LyricQuery(title: "Midnight Rain", artist: "Taylor Swift", album: "Midnights", duration: 174)
+        extras.nudgeSync(by: SongOffsets.step, offsets: offsets, query: query)
+        XCTAssertEqual(offsets.offset(for: query), 0.05, accuracy: 1e-9)
+        XCTAssertEqual(extras.note?.text, "Lyrics 0.05 s earlier · +0.05 s for this song’s lyric source")
+        XCTAssertEqual(extras.setSync(to: -1.25, offsets: offsets, query: query) ?? 0, -1.25, accuracy: 1e-9)
+        XCTAssertEqual(SongOffsets(defaults: defaults).offset(for: query), -1.25, accuracy: 1e-9)
+        XCTAssertNil(extras.setSync(to: 1, offsets: offsets, query: nil))
+    }
+
+    @MainActor
     func testSyncNudgeIsSavedForThePlayingRecordingInTenthSteps() {
         let (defaults, cleanUp) = isolated()
         defer { cleanUp() }

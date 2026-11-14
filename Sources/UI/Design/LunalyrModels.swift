@@ -116,6 +116,13 @@ final class LunalyrModels {
         extras.nudgeSync(by: delta, offsets: offsets, query: currentQuery)
     }
 
+    /// Sets the playing song's offset to a typed `value` (positive: earlier).
+    @discardableResult
+    func setSongOffset(_ value: Double) -> Double? {
+        guard value != songOffset else { return songOffset }
+        return extras.setSync(to: value, offsets: offsets, query: currentQuery)
+    }
+
     /// Back to the lyrics' own timing for the playing song.
     func resetSongOffset() {
         guard let query = currentQuery else { return }

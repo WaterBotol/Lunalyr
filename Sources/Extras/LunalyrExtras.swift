@@ -441,8 +441,19 @@ final class LunalyrExtras: ObservableObject {
         offsets.set(value, for: query)
         let saved = offsets.offset(for: query)
         let direction = delta > 0 ? "earlier" : "later"
-        post(String(format: "Lyrics %.1f s %@ · %+.2f s for this song’s lyric source", abs(delta), direction, saved),
+        post(String(format: "Lyrics %g s %@ · %+.2f s for this song’s lyric source", abs(delta), direction, saved),
              symbol: "clock.arrow.circlepath")
+        return saved
+    }
+
+    /// Sets the playing recording's offset to `value` seconds (positive:
+    /// earlier), as typed into the timing field, saved like a nudge.
+    @discardableResult
+    func setSync(to value: Double, offsets: SongOffsets, query: LyricQuery?) -> Double? {
+        guard let query else { return nil }
+        offsets.set((value * 100).rounded() / 100, for: query)
+        let saved = offsets.offset(for: query)
+        post(String(format: "Lyrics %+.2f s for this song’s lyric source", saved), symbol: "clock.arrow.circlepath")
         return saved
     }
 

@@ -13,8 +13,8 @@ enum LunalyrCommand: String, CaseIterable, Sendable {
         extras.performing(from: .elsewhere) {
             switch self {
             case .toggleLyrics: extras.toggleLyrics()
-            case .syncEarlier: extras.nudgeSync(by: 0.1)
-            case .syncLater: extras.nudgeSync(by: -0.1)
+            case .syncEarlier: extras.nudgeSync(by: SongOffsets.step)
+            case .syncLater: extras.nudgeSync(by: -SongOffsets.step)
             case .cycleLayout: extras.cycleLayout()
             case .lyricCard: extras.copyLyricCard()
             case .pauseWallpaper: extras.toggleWallpaperPause()
