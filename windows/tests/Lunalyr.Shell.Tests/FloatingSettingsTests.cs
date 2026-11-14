@@ -253,4 +253,41 @@ public class FloatingSettingsTests
         Assert.Equal("Custom", FloatingCopy.SizeName(50));
         Assert.Equal("44 pt", FloatingCopy.Points(44.2));
     }
+
+    // ---- Each layout's own floating size (Windows' own, tester feedback on 0.9.0) ----
+
+    [Fact]
+    public void AResizedLayoutKeepsItsOwnSizeAndScaledText()
+    {
+        var s = new AppSettings().WithLyricsSurface(LyricsSurface.Floating);
+        Assert.Equal(s.FloatingTextSize, s.FloatingTextSizeFor("cascade"));
+        var resized = s.WithLayoutResized("cascade", new Core.Compositions.SizeD(900, 300), 1.5);
+        Assert.Equal(66, resized.FloatingTextSizeFor("cascade"));
+        Assert.Equal(new Core.Compositions.SizeD(900, 300), resized.LayoutSize("cascade")!.Value.Size);
+        // Another layout keeps the shared size and the Text size setting.
+        Assert.Null(resized.LayoutSize("echo"));
+        Assert.Equal(44, resized.FloatingTextSizeFor("echo"));
+        // Kept across a relaunch.
+        Assert.Equal(66, Relaunched(resized).FloatingTextSizeFor("cascade"));
+    }
+
+    [Fact]
+    public void SettingTheTextSizeByHandForgetsTheLayoutsOwnSizes()
+    {
+        var resized = new AppSettings().WithLayoutResized("cascade", new Core.Compositions.SizeD(900, 300), 2);
+        Assert.Same(resized, resized.WithFloatingTextSize(resized.FloatingTextSize));
+        var set = resized.WithFloatingTextSize(30);
+        Assert.Equal(30, set.FloatingTextSizeFor("cascade"));
+        Assert.Empty(set.FloatingLayoutSizes);
+    }
+
+    [Fact]
+    public void ALayoutsOwnSizeIsCentredOnTheSharedPlace()
+    {
+        var own = new FloatingLayoutSize(new Core.Compositions.SizeD(200, 100), 44);
+        Assert.Equal(new FloatingRect(150, 50, 200, 100), own.Centred(new FloatingRect(100, 0, 300, 200)));
+        Assert.Equal(110, FloatingLayoutSize.ScaledText(44, 100, 400));
+        Assert.Equal(22, FloatingLayoutSize.ScaledText(44, 400, 100));
+        Assert.Null(FloatingLayoutSize.Decode([1, 2]));
+    }
 }

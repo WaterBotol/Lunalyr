@@ -30,7 +30,19 @@ internal sealed partial class AppHost
     {
         var engine = wallpaper.Engine;
         // A drag ended: the frame is kept for that display and the place becomes Custom (the Mac's storeCustomFrame).
-        engine.FloatingPlaced += (_, e) => _settings.Update(s => s.WithCustomFrame(e.Relative, e.DisplayKey));
+        // A resize belongs to the layout showing (tester feedback on 0.9.0): it keeps that size, its text scaled with the
+        // height, while the place every layout shares moves to the window's new centre at its own size.
+        engine.FloatingPlaced += (_, e) => _settings.Update(s =>
+        {
+            if (e.HeightRatio is not { } ratio || controller.ShownComposition is not { Length: > 0 } layout)
+                return s.WithCustomFrame(e.Relative, e.DisplayKey);
+            var shared = s.CustomFrame(e.DisplayKey) is { } frame
+                ? new Lunalyr.Core.Floating.FloatingLayoutSize(new Lunalyr.Core.Compositions.SizeD(frame.Width, frame.Height), 0).Centred(e.Relative)
+                : e.Relative;
+            _log.Info($"Floating lyrics: {layout} keeps {e.Relative.Width:0}x{e.Relative.Height:0} pt, text ×{ratio:0.00}.");
+            return s.WithCustomFrame(shared, e.DisplayKey)
+                .WithLayoutResized(layout, new Lunalyr.Core.Compositions.SizeD(e.Relative.Width, e.Relative.Height), ratio);
+        });
         engine.FloatingEditDone += (_, _) => controller.SetFloatingEditing(false);
     }
 

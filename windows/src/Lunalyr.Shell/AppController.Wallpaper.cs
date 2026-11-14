@@ -57,6 +57,8 @@ public sealed partial class AppController
             var settings = Settings;
             _renderer.SetLayers(BackgroundLayerFor(settings), CompositionFor(settings));
         }
+        // A new layout may bring its own floating size.
+        if (Settings.IsFloating) UpdateFloating();
     }
 
     /// <summary>The background layer id <paramref name="settings"/> draw for the song on screen.</summary>

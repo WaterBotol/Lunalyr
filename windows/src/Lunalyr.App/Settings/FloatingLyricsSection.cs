@@ -60,13 +60,13 @@ internal static class FloatingLyricsSection
         });
         sizes.SelectionChanged += (_, _) =>
         {
-            if (sizes.SelectedItem is RadioButton { Tag: double points }) ctx.Update(s => s with { FloatingTextSize = points });
+            if (sizes.SelectedItem is RadioButton { Tag: double points }) ctx.Update(s => s.WithFloatingTextSize(points));
         };
         var sizeCard = Card("Size", null, "", sizes);
         ctx.OnRefresh(s => sizeCard.Description = FloatingCopy.SizeName(s.FloatingTextSize));
         section.Children.Add(sizeCard);
         section.Children.Add(Card("Text size", null, "", Slider(ctx, AppSettings.FloatingTextSizeMin, AppSettings.FloatingTextSizeMax, 1,
-            FloatingCopy.Points, s => s.FloatingTextSize, (s, v) => s with { FloatingTextSize = Math.Round(v) })));
+            FloatingCopy.Points, s => s.FloatingTextSize, (s, v) => s.WithFloatingTextSize(Math.Round(v)))));
         section.Children.Add(Card("Shade behind lyrics", FloatingCopy.ShadeCaption, "", Slider(ctx, 0, 1, 0.01, SettingsCopy.Percent,
             s => s.FloatingBackdrop, (s, v) => s with { FloatingBackdrop = Math.Round(v, 2) })));
         section.Children.Add(Card("Fade when the pointer is over them", null, "",

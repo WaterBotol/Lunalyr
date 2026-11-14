@@ -44,6 +44,42 @@ public sealed partial record AppSettings
     /// <summary>Window sizes per display key, used by the presets (Mac <c>custom.floating.sizes</c>).</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<double>> FloatingSizes { get; init; } = new Dictionary<string, IReadOnlyList<double>>();
 
+    /// <summary>
+    /// Each layout's own floating window size and text size, [width, height, text size] in points, by layout id (Windows'
+    /// own; <see cref="FloatingLayoutSize"/>). The window's place stays shared by every layout.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<double>> FloatingLayoutSizes { get; init; } = new Dictionary<string, IReadOnlyList<double>>();
+
+    /// <summary>The size <paramref name="layout"/> was last resized to, or null.</summary>
+    public FloatingLayoutSize? LayoutSize(string? layout) =>
+        layout is not null && (FloatingLayoutSizes ?? new Dictionary<string, IReadOnlyList<double>>()).TryGetValue(layout, out var values)
+            ? FloatingLayoutSize.Decode(values) : null;
+
+    /// <summary>
+    /// The Text size (or a size preset) set by hand: every layout takes it again, their own sizes forgotten. The same size
+    /// changes nothing.
+    /// </summary>
+    public AppSettings WithFloatingTextSize(double points) =>
+        Math.Abs(points - FloatingTextSize) < 0.01 ? this
+            : this with { FloatingTextSize = ClampedFloatingTextSize(points), FloatingLayoutSizes = new Dictionary<string, IReadOnlyList<double>>() };
+
+    /// <summary>The floating text size for <paramref name="layout"/>: its own once resized, else the Text size setting.</summary>
+    public double FloatingTextSizeFor(string? layout) => LayoutSize(layout)?.TextSize ?? FloatingTextSize;
+
+    /// <summary>
+    /// The window was resized in Edit position while <paramref name="layout"/> showed: that layout keeps the new size, its
+    /// text scaled by the height's change (<paramref name="heightRatio"/>).
+    /// </summary>
+    public AppSettings WithLayoutResized(string layout, Core.Compositions.SizeD size, double heightRatio)
+    {
+        var text = FloatingLayoutSize.ScaledText(FloatingTextSizeFor(layout), 1, heightRatio);
+        var sizes = new Dictionary<string, IReadOnlyList<double>>(FloatingLayoutSizes ?? new Dictionary<string, IReadOnlyList<double>>())
+        {
+            [layout] = new FloatingLayoutSize(size, text).Encode(),
+        };
+        return this with { FloatingLayoutSizes = sizes };
+    }
+
     /// <summary>The desktop's lyric style, kept while the floating lyrics are in use (Mac <c>custom.lyricStyle.desktop</c>).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyDictionary<string, JsonElement>? LyricStyleDesktop { get; init; }
@@ -101,6 +137,7 @@ public sealed partial record AppSettings
     {
         FloatingFrames = new Dictionary<string, IReadOnlyList<double>>(),
         FloatingSizes = new Dictionary<string, IReadOnlyList<double>>(),
+        FloatingLayoutSizes = new Dictionary<string, IReadOnlyList<double>>(),
         FloatingPlacement = Placement == Core.Floating.FloatingPlacement.Custom ? Core.Floating.FloatingPlacement.Bottom.Raw() : FloatingPlacement,
     };
 
@@ -117,7 +154,16 @@ public sealed partial record AppSettings
             FloatingDisplay = FloatingDisplay ?? "",
             FloatingFrames = ValidFrames(FloatingFrames),
             FloatingSizes = ValidFrames(FloatingSizes),
+            FloatingLayoutSizes = ValidLayoutSizes(FloatingLayoutSizes),
         };
+
+        static IReadOnlyDictionary<string, IReadOnlyList<double>> ValidLayoutSizes(IReadOnlyDictionary<string, IReadOnlyList<double>>? sizes)
+        {
+            var valid = new Dictionary<string, IReadOnlyList<double>>(StringComparer.Ordinal);
+            foreach (var (key, values) in sizes ?? new Dictionary<string, IReadOnlyList<double>>())
+                if (!string.IsNullOrEmpty(key) && FloatingLayoutSize.Decode(values) is { } size) valid[key] = size.Encode();
+            return valid;
+        }
 
         static IReadOnlyDictionary<string, IReadOnlyList<double>> ValidFrames(IReadOnlyDictionary<string, IReadOnlyList<double>>? frames)
         {

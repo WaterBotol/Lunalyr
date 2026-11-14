@@ -71,7 +71,7 @@ public sealed class AppSettingsTests
             "musicVideoFallback", "musicVideoOnline", "musicVideoSearch", "musicVideoDim", "musicVideoBlur",
             "musicVideoFraming", "libraryVideoFraming",
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
-            "floatingFrames", "floatingSizes",
+            "floatingFrames", "floatingSizes", "floatingLayoutSizes",
             // (hideLyricsWhileMirroring is written only once chosen; MirroringTests checks it)
             "lyricsHidden",
             // Discord status and the tray lyric (discordSongButton is written only once it is set)

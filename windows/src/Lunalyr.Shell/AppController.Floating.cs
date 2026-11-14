@@ -60,13 +60,18 @@ public sealed partial class AppController
                 var input = VisibilityInput(settings, _scene);
                 hidesAfter = FloatingVisibility.HidesAfter(input);
                 bool hasWords = input.HasTrack && ((input.HasTimedLines && !input.AllInstrumental) || input.HasPlainLines);
+                // Each layout keeps its own floating size and text size once resized (Lock is re-entrant: CompositionFor
+                // takes _gate again).
+                var layout = settings.IsFloating ? CompositionFor(settings) : "";
                 options = new FloatingLyricsOptions
                 {
                     Enabled = settings.IsFloating,
                     Shown = FloatingVisibility.Shows(input),
                     Editing = _floatEditing,
                     Placeholder = _floatEditing && !hasWords,
-                    TextSize = settings.FloatingTextSize,
+                    TextSize = settings.FloatingTextSizeFor(layout),
+                    Layout = layout,
+                    LayoutSize = settings.LayoutSize(layout),
                     Backdrop = settings.FloatingBackdrop,
                     FadesUnderPointer = settings.FloatingFadeUnderPointer,
                     Placement = settings.Placement,

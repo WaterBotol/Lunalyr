@@ -19,13 +19,16 @@ using D2DPixelFormat = Vortice.DCommon.PixelFormat;
 namespace Lunalyr.Render;
 
 /// <summary>A drag in edit mode placed the floating lyrics on a display.</summary>
-public sealed class FloatingPlacedEventArgs(string displayKey, FloatingRect relative) : EventArgs
+public sealed class FloatingPlacedEventArgs(string displayKey, FloatingRect relative, double? heightRatio = null) : EventArgs
 {
     /// <summary>The display's lasting key.</summary>
     public string DisplayKey { get; } = displayKey;
 
     /// <summary>The frame relative to the display, in points, y up (the Mac's convention, as settings keep it).</summary>
     public FloatingRect Relative { get; } = relative;
+
+    /// <summary>After a resize, the new height over the old (the text scales with it); null after a move.</summary>
+    public double? HeightRatio { get; } = heightRatio;
 }
 
 public sealed partial class RenderEngine
@@ -340,8 +343,8 @@ public sealed partial class RenderEngine
             engine.InputChanged();
         }
 
-        public void Placed(string displayKey, FloatingRect relative) => Raise(() =>
-            engine.FloatingPlaced?.Invoke(engine, new FloatingPlacedEventArgs(displayKey, relative)));
+        public void Placed(string displayKey, FloatingRect relative, double? heightRatio) => Raise(() =>
+            engine.FloatingPlaced?.Invoke(engine, new FloatingPlacedEventArgs(displayKey, relative, heightRatio)));
 
         public void EditDone() => Raise(() => engine.FloatingEditDone?.Invoke(engine, EventArgs.Empty));
 

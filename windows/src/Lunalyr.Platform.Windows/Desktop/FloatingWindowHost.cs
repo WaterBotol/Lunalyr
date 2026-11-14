@@ -40,6 +40,12 @@ public sealed record FloatingLyricsOptions
 
     public IReadOnlyDictionary<string, IReadOnlyList<double>> Frames { get; init; } = new Dictionary<string, IReadOnlyList<double>>();
     public IReadOnlyDictionary<string, IReadOnlyList<double>> Sizes { get; init; } = new Dictionary<string, IReadOnlyList<double>>();
+
+    /// <summary>The layout the lyrics show in now, its own window size kept apart from the others'.</summary>
+    public string Layout { get; init; } = "";
+
+    /// <summary>The size <see cref="Layout"/> was last resized to, or null for the shared one.</summary>
+    public FloatingLayoutSize? LayoutSize { get; init; }
 }
 
 /// <summary>The renderer's side of the floating window. Every call comes from the window's own thread.</summary>
@@ -60,8 +66,11 @@ public interface IFloatingWindowSink
     /// <summary>Windows' transparency effects and accent colour (sRGB, 0–1), read at start and on every setting change.</summary>
     void Look(bool reduceTransparency, Vector4 accent);
 
-    /// <summary>A drag in edit mode ended: the frame, relative to the display, in points, y up.</summary>
-    void Placed(string displayKey, FloatingRect relative);
+    /// <summary>
+    /// A drag in edit mode ended: the frame, relative to the display, in points, y up. <paramref name="heightRatio"/> is the
+    /// new height over the old after a resize, null after a move.
+    /// </summary>
+    void Placed(string displayKey, FloatingRect relative, double? heightRatio);
 
     /// <summary>Done was pressed in the window.</summary>
     void EditDone();
@@ -94,7 +103,8 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     private const uint WM_APP = 0x8000;
     private const uint MsgUpdate = WM_APP + 1, MsgFadedOut = WM_APP + 2, MsgStop = WM_APP + 3;
     private const nuint TimerPointer = 1, TimerTopmost = 2, TimerReplace = 3;
-    private const uint PointerPollMs = 250, TopmostMs = 2000, ReplaceDelayMs = 300;
+    // The pointer is looked for every 40 ms (it was 250 ms, which testers saw as the fade lagging behind the pointer).
+    private const uint PointerPollMs = 40, TopmostMs = 2000, ReplaceDelayMs = 300;
 
     [ThreadStatic] private static FloatingWindowHost? t_host;
 
@@ -254,7 +264,15 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         options.Sizes.TryGetValue(display.Key, out var size);
         _display = display;
         _geometry = geometry;
-        return geometry.Place(options.Placement, FloatingFrame.Decode(frame), FloatingFrame.Decode(size)?.Size, options.TextSize);
+        var custom = FloatingFrame.Decode(frame);
+        var saved = FloatingFrame.Decode(size)?.Size;
+        if (options.LayoutSize is { } own)
+        {
+            // This layout's own size, at the place every layout shares.
+            saved = own.Size;
+            if (custom is { } shared) custom = own.Centred(shared);
+        }
+        return geometry.Place(options.Placement, custom, saved, options.TextSize);
     }
 
     private void Apply(FloatingLyricsOptions options)
@@ -422,14 +440,15 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     private void EndDrag(bool store)
     {
         _donePressed = false;
-        if (_drag is null) return;
+        if (_drag is not { } drag) return;
         _drag = null;
         if (GetCapture() == _hwnd) ReleaseCapture();
         if (!store || _display is null) return;
         _log.Info($"Floating lyrics: placed at {_rect.X},{_rect.Y}, {_rect.Width}x{_rect.Height}");
         // The display's frame is at the origin in points, so the window's frame is already relative to it.
         var relative = FloatingFrame.Relative(_geometry.ToPoints(_rect), _geometry.ScreenFrame);
-        _sink.Placed(_display.Key, relative);
+        double? ratio = drag.Edges != FloatingEdges.None && drag.Start.Height > 0 ? _rect.Height / drag.Start.Height : null;
+        _sink.Placed(_display.Key, relative, ratio);
     }
 
     private void SetCursorFor(int x, int y)
