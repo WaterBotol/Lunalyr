@@ -15,6 +15,20 @@ public static class SettingsWindowSize
     public const double Margin = 24;
 
     /// <summary>
+    /// How small and how large it can be dragged, in DIPs (tester feedback on 0.9.0): narrower than this the cards
+    /// crowd; wider, the rows stretch past reading width.
+    /// </summary>
+    public const double MinWidth = 720, MinHeight = 520, MaxWidth = 1440, MaxHeight = 1200;
+
+    /// <summary>The drag limits in physical pixels at <paramref name="scale"/>.</summary>
+    public static (int MinWidth, int MinHeight, int MaxWidth, int MaxHeight) Limits(double scale)
+    {
+        if (!(scale > 0) || !double.IsFinite(scale)) scale = 1;
+        return ((int)Math.Round(MinWidth * scale), (int)Math.Round(MinHeight * scale),
+                (int)Math.Round(MaxWidth * scale), (int)Math.Round(MaxHeight * scale));
+    }
+
+    /// <summary>
     /// The opening size in physical pixels at <paramref name="scale"/> (1.25 for 125 %) on a display whose work area is
     /// <paramref name="workWidth"/> × <paramref name="workHeight"/> physical pixels.
     /// </summary>

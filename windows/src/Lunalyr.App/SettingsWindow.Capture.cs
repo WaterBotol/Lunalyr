@@ -36,6 +36,16 @@ public sealed partial class SettingsWindow
         }
         AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(
             work.X + Math.Max(0, (work.Width - width) / 2), work.Y + Math.Max(0, (work.Height - height) / 2), width, height));
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter && _host.SettingsCaptureScale is null)
+        {
+            // Drag limits (tester feedback on 0.9.0), never past the work area; maximising would only break the maximum.
+            var limits = SettingsWindowSize.Limits(native);
+            presenter.PreferredMinimumWidth = Math.Min(limits.MinWidth, work.Width);
+            presenter.PreferredMinimumHeight = Math.Min(limits.MinHeight, work.Height);
+            presenter.PreferredMaximumWidth = Math.Max(Math.Min(limits.MaxWidth, work.Width), width);
+            presenter.PreferredMaximumHeight = Math.Max(Math.Min(limits.MaxHeight, work.Height), height);
+            presenter.IsMaximizable = false;
+        }
     }
 
     /// <summary><c>--settings-capture</c>: once the page has settled, writes it (and the window), logs what doesn't fit, quits.</summary>
