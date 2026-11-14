@@ -55,16 +55,20 @@ internal sealed partial class CardPainter
         return default;
     }
 
-    /// <summary>The field's flat colour, behind the search box's text (the EDIT window over it paints the same colour).</summary>
+    /// <summary>
+    /// The field's flat colour, behind the search box's text: the well over the card's ground, opaque (the EDIT window
+    /// over it paints the same colour).
+    /// </summary>
     public static Color4 FieldColour(CardModel m)
     {
         var t = m.Theme;
-        if (t.HighContrast) return new Color4(t.Base.R, t.Base.G, t.Base.B, 1);
-        var toward = m.Look.Light ? new Color4(1, 1, 1, 1) : new Color4(0, 0, 0, 1);
-        var amount = m.Look.Light ? 0.55f : 0.32f;
-        return new Color4(t.Base.R + (toward.R - t.Base.R) * amount, t.Base.G + (toward.G - t.Base.G) * amount,
-            t.Base.B + (toward.B - t.Base.B) * amount, 1);
+        if (t.HighContrast) return new Color4(t.Veil.R, t.Veil.G, t.Veil.B, 1);
+        return Mix(t.Well, t.Ground, t.Well.A);
     }
+
+    /// <summary>The field's placeholder colour on <see cref="FieldColour"/>: the ink at the tertiary level, opaque.</summary>
+    public static Color4 PlaceholderColour(CardModel m) =>
+        m.Theme.HighContrast ? m.Theme.Disabled : Mix(m.Theme.Ink, FieldColour(m), Level(PlayerInk.Tertiary));
 
     /// <summary>A colour as a GDI COLORREF (0x00BBGGRR), for the search box's EDIT window.</summary>
     public static uint ColorRef(Color4 c) =>
@@ -89,12 +93,12 @@ internal sealed partial class CardPainter
         var t = m.Theme;
         var cover = CardLayout.CoverRect;
         var title = Layout(m.Title, TextStyle.CompactTitle, (int)cover.Width);
-        DrawText(dc, title, cover.CentreX - title.Metrics.Width / 2, CardLayout.CompactTitleTop, t.Ink);
+        DrawText(dc, title, cover.CentreX - title.Metrics.Width / 2, CardLayout.CompactTitleTop, Ink(m, PlayerInk.Primary));
         if (m.Artist is { Length: > 0 } artist)
         {
             var a = Layout(artist, TextStyle.CompactArtist, (int)cover.Width);
             DrawText(dc, a, cover.CentreX - a.Metrics.Width / 2, CardLayout.CompactTitleTop + title.Metrics.Height + 2,
-                WithAlpha(t.Ink, t.HighContrast ? 1 : 0.7f));
+                Ink(m, PlayerInk.Secondary));
         }
 
         DrawTransport(dc, m);
@@ -104,14 +108,12 @@ internal sealed partial class CardPainter
     private void DrawPaneNote(ID2D1DeviceContext dc, CardModel m)
     {
         if (m.Note is not { } note || m.NoteAlpha <= 0.001f) return;
-        var t = m.Theme;
-        var layout = Layout(note, TextStyle.Note, (int)CardLayout.ColumnWidth - 20);
+        var layout = Layout(note, TextStyle.Note, (int)CardLayout.ColumnWidth - 24);
         var metrics = layout.Metrics;
-        var box = new RectF(CardLayout.ColumnLeft, CardLayout.ColumnTop - 3, Math.Min(CardLayout.ColumnWidth, metrics.Width + 20), metrics.Height + 8);
-        // Over the picker or the queue's header: solid enough to read.
-        FillRounded(dc, box, 12, WithAlpha(FieldColour(m), m.NoteAlpha));
-        Stroke(dc, Rect(box), 12, WithAlpha(t.CapsuleRim, t.CapsuleRim.A * m.NoteAlpha), 1);
-        DrawText(dc, layout, box.X + 10, box.Y + 4, WithAlpha(t.Ink, m.NoteAlpha));
+        var box = new RectF(CardLayout.ColumnLeft, CardLayout.ColumnTop - 4, Math.Min(CardLayout.ColumnWidth, metrics.Width + 24), metrics.Height + 12);
+        // Over the picker or the queue's header, in a capsule like the note over the song.
+        Capsule(dc, m, box, m.NoteAlpha);
+        DrawText(dc, layout, box.X + 12, box.Y + 6, Ink(m, PlayerInk.Primary, m.NoteAlpha));
     }
 
     // ---- Search ----
@@ -122,22 +124,24 @@ internal sealed partial class CardPainter
         var left = CardLayout.ColumnLeft;
         var width = CardLayout.ColumnWidth;
         DrawPicker(dc, m);
-        IconButton(dc, m, CardLayout.PaneCloseRect, CardPart.PaneClose, on: false, glyph: GlyphClose, glyphSize: 10);
+        IconButton(dc, m, CardLayout.PaneCloseRect, CardPart.PaneClose, on: false, glyph: GlyphClose);
 
         if (m.Prompt is { } prompt)
         {
             var text = Layout(prompt.Text, TextStyle.Status, (int)width - 8);
             var y = CardLayout.FieldRect.Y + 4;
-            DrawText(dc, text, left + 2, y, WithAlpha(t.Ink, t.HighContrast ? 1 : 0.85f));
-            y += text.Metrics.Height + 14;
+            DrawText(dc, text, left + 2, y, Ink(m, PlayerInk.Secondary));
+            y += text.Metrics.Height + 16;
             if (prompt.ActionLabel is { } label)
             {
+                // The default action: the ink as a pill (Done's look), darker under the pointer.
                 var words = Layout(label, TextStyle.Button, (int)width);
                 var box = new RectF(left, y, words.Metrics.Width + 32, 32);
                 var hover = m.HoverPart == CardPart.PromptAction;
-                var fill = t.HighContrast ? t.Highlight : m.Look.Light ? t.Ink : new Color4(1, 1, 1, 1);
-                FillRounded(dc, box, 16, WithAlpha(fill, hover ? 0.88f : 1f));
-                var ink = t.HighContrast ? t.HighlightText : m.Look.Light ? new Color4(1, 1, 1, 1) : new Color4(0, 0, 0, 1);
+                var fill = t.HighContrast ? t.Highlight : t.Ink;
+                if (hover && !t.HighContrast) fill = Darken(fill, m.Look.Light ? -0.12f : 0.06f);
+                FillRounded(dc, box, 16, fill);
+                var ink = t.HighContrast ? t.HighlightText : t.InkInverse;
                 DrawText(dc, words, box.X + 16, box.Y + (32 - words.Metrics.Height) / 2, ink);
                 Hits.Add((CardPart.PromptAction, box));
             }
@@ -146,24 +150,26 @@ internal sealed partial class CardPainter
             return;
         }
 
-        // The box: a flat well with a rim (white while it has the keyboard), the magnifier, and a clear button once
-        // something is typed. The text itself is the EDIT window over it; the same text is drawn here underneath, so
-        // the card reads right while the window comes and goes with the fade.
+        // The box: a flat well with no edge at rest and a focus ring while it has the keyboard, the magnifier, and a
+        // clear button once something is typed. The text itself is the EDIT window over it; the same text is drawn
+        // here underneath, so the card reads right while the window comes and goes with the fade.
         var field = CardLayout.FieldRect;
         var well = FieldColour(m);
-        FillRounded(dc, field, 10, well);
-        var rim = m.FieldFocused ? (t.HighContrast ? t.Highlight : WithAlpha(t.Ink, 0.85f)) : WithAlpha(t.Ink, t.HighContrast ? 1 : 0.25f);
-        Stroke(dc, Rect(field), 10, rim, m.FieldFocused ? 2 : 1);
-        DrawGlyph(dc, GlyphSearch, new RectF(field.X + 8, field.Y, 22, field.Height), WithAlpha(t.Ink, 0.7f));
+        FillRounded(dc, field, ControlRadius, well);
+        if (m.FieldFocused)
+            Stroke(dc, Rect(field), ControlRadius, t.HighContrast ? t.Highlight : WithAlpha(t.Ink, F(PlayerTokens.Line.Focus)), F(PlayerTokens.Line.FocusWidth));
+        else
+            Stroke(dc, Rect(field), ControlRadius, t.Hairline, F(PlayerTokens.Line.Width));
+        DrawGlyph(dc, GlyphSearch, new RectF(field.X + 8, field.Y, 22, field.Height), Ink(m, PlayerInk.Tertiary));
         var textRect = CardLayout.FieldTextRect;
         var shown = m.Query.Length > 0 ? m.Query : m.SearchPlaceholder;
         var typed = Layout(shown, TextStyle.Field, (int)textRect.Width);
         DrawText(dc, typed, textRect.X, textRect.Y + (textRect.Height - typed.Metrics.Height) / 2,
-            m.Query.Length > 0 ? t.Ink : Mix(t.Ink, well, 0.5f));
+            m.Query.Length > 0 ? Ink(m, PlayerInk.Primary) : PlaceholderColour(m));
         if (m.Query.Length > 0)
         {
             var clear = CardLayout.ClearRect;
-            DrawGlyph(dc, GlyphClear, clear, WithAlpha(t.Ink, m.HoverPart == CardPart.ClearSearch ? 0.85f : 0.5f));
+            DrawGlyph(dc, GlyphClear, clear, Ink(m, m.HoverPart == CardPart.ClearSearch ? PlayerInk.Secondary : PlayerInk.Tertiary));
             Hits.Add((CardPart.ClearSearch, clear));
         }
 
@@ -185,19 +191,19 @@ internal sealed partial class CardPainter
             items[i] = (text, text.Metrics.Width + 20 + 11);
         }
 
+        // The player switch: a pill in a well, the chosen player in the ink with the colour behind the ink on it.
         var total = items.Sum(i => i.Width) + 2 * (items.Length - 1) + 6;
         var capsule = new RectF(start, y - 3, total, 24 + 6);
-        FillRounded(dc, capsule, 15, t.HighContrast ? t.Base : new Color4(0, 0, 0, m.Look.Light ? 0.08f : 0.25f));
-        if (t.HighContrast) Stroke(dc, Rect(capsule), 15, t.Ink, 1);
+        FillRounded(dc, capsule, 15, t.Well);
+        Stroke(dc, Rect(capsule), 15, t.Hairline, F(PlayerTokens.Line.Width));
         for (var i = 0; i < items.Length; i++)
         {
             var on = i == m.PickerSelected;
             var box = new RectF(x, y, items[i].Width, 24);
             var part = CardParts.Picker(i);
-            if (on) FillRounded(dc, box, 12, t.HighContrast ? t.Highlight : m.Look.Light ? t.Ink : new Color4(1, 1, 1, 1));
-            else if (m.HoverPart == part) FillRounded(dc, box, 12, WithAlpha(t.Ink, 0.1f));
-            var ink = on ? (t.HighContrast ? t.HighlightText : m.Look.Light ? new Color4(1, 1, 1, 1) : new Color4(0, 0, 0, 1))
-                : WithAlpha(t.Ink, t.HighContrast ? 1 : 0.72f);
+            if (on) FillRounded(dc, box, 12, t.HighContrast ? t.Highlight : t.Ink);
+            else if (m.HoverPart == part) FillRounded(dc, box, 12, WithAlpha(t.Ink, F(PlayerTokens.Fill.Hover)));
+            var ink = on ? (t.HighContrast ? t.HighlightText : t.InkInverse) : Ink(m, PlayerInk.Secondary);
             Fill(dc, new Ellipse(new Vector2(box.X + 13, box.CentreY), 3, 3), on || t.HighContrast ? ink : t.Accent);
             DrawText(dc, items[i].Text, box.X + 21, box.Y + (24 - items[i].Text.Metrics.Height) / 2, ink);
             Hits.Add((part, box));
@@ -217,7 +223,7 @@ internal sealed partial class CardPainter
         if (m.Status.Kind != PlayerSearchStatusKind.Idle)
         {
             var status = Layout(m.Status.Text, TextStyle.Status, (int)width - 16);
-            DrawText(dc, status, left + 8, y + 8, WithAlpha(t.Ink, t.HighContrast ? 1 : m.Status.Kind == PlayerSearchStatusKind.Searching ? 0.65f : 0.78f));
+            DrawText(dc, status, left + 8, y + 8, Ink(m, m.Status.Kind == PlayerSearchStatusKind.Searching ? PlayerInk.Tertiary : PlayerInk.Secondary));
             y += status.Metrics.Height + 16;
         }
 
@@ -229,32 +235,35 @@ internal sealed partial class CardPainter
             var result = m.Results[i];
             var part = CardParts.Result(i);
             var selected = i == m.Selection;
-            if (selected) FillRounded(dc, row, 10, t.HighContrast ? t.Highlight : WithAlpha(t.Ink, 0.16f));
-            else if (m.HoverPart == part || m.PressedPart == part) FillRounded(dc, row, 10, WithAlpha(t.Ink, m.PressedPart == part ? 0.14f : 0.08f));
-            var ink = selected && t.HighContrast ? t.HighlightText : t.Ink;
-            RowCover(dc, m, m.RowCover(result.ArtworkUri), new RectF(row.X + 6, row.Y + 6, 36, 36), 5,
+            if (selected) FillRounded(dc, row, RowRadius, t.HighContrast ? t.Highlight : WithAlpha(t.Ink, F(PlayerTokens.Fill.Selected)));
+            else if (m.HoverPart == part || m.PressedPart == part)
+                FillRounded(dc, row, RowRadius, WithAlpha(t.Ink, F(m.PressedPart == part ? PlayerTokens.Fill.Selected : PlayerTokens.Fill.Hover)));
+            // On a contrast theme's selection, everything in the row is the selection's text colour.
+            var lit = selected && t.HighContrast;
+            RowCover(dc, m, m.RowCover(result.ArtworkUri), new RectF(row.X + 6, row.Y + 6, 36, 36), ThumbRadius,
                 result.Kind == PlayerSearchResultKind.Album ? GlyphAlbum : GlyphNote);
             var right = row.Right - 8;
             if (selected)
             {
+                // Return plays it: the bare glyph, no key cap.
                 var key = new RectF(right - 22, row.CentreY - 9, 22, 18);
-                Stroke(dc, Rect(key), 4, WithAlpha(ink, 0.45f), 1);
-                DrawGlyph(dc, GlyphReturn, key, WithAlpha(ink, 0.8f), size: 10);
+                DrawGlyph(dc, GlyphReturn, key, RowInk(m, lit, PlayerInk.Secondary), size: F(PlayerTokens.TypeScale.Tag.Size));
                 right = key.X - 8;
             }
 
             if (result.Kind == PlayerSearchResultKind.Album || result.InLibrary)
             {
-                var tag = Layout(result.InLibrary ? "LIBRARY" : "ALBUM", TextStyle.RowTag, 80);
-                DrawText(dc, tag, right - tag.Metrics.Width, row.CentreY - tag.Metrics.Height / 2, WithAlpha(ink, t.HighContrast ? 1 : 0.5f));
+                // A plain-text label in tag type, never a pill.
+                var tag = Layout(result.InLibrary ? "Library" : "Album", TextStyle.RowTag, 80);
+                DrawText(dc, tag, right - tag.Metrics.Width, row.CentreY - tag.Metrics.Height / 2, RowInk(m, lit, PlayerInk.Tertiary));
                 right -= tag.Metrics.Width + 8;
             }
 
             var textLeft = row.X + 52;
             var title = Layout(result.Title, TextStyle.RowTitle, (int)(right - textLeft));
-            DrawText(dc, title, textLeft, row.Y + 7, ink);
+            DrawText(dc, title, textLeft, row.Y + 7, RowInk(m, lit, PlayerInk.Primary));
             var detail = Layout(Subtitle(result), TextStyle.RowDetail, (int)(right - textLeft));
-            DrawText(dc, detail, textLeft, row.Y + 7 + title.Metrics.Height + 1, WithAlpha(ink, t.HighContrast ? 1 : 0.65f));
+            DrawText(dc, detail, textLeft, row.Y + 7 + title.Metrics.Height + 1, RowInk(m, lit, PlayerInk.Secondary));
             Hits.Add((part, row));
         }
 
@@ -274,15 +283,19 @@ internal sealed partial class CardPainter
         var t = m.Theme;
         var left = CardLayout.ColumnLeft;
         var width = CardLayout.ColumnWidth;
-        var header = WithAlpha(t.Ink, t.HighContrast ? 1 : m.Look.Light ? 0.75f : 0.65f);
-        DrawText(dc, Layout("QUEUE", TextStyle.Label, 100), left + 2, CardLayout.ColumnTop + 6, header);
-        IconButton(dc, m, CardLayout.PaneCloseRect, CardPart.PaneClose, on: false, glyph: GlyphClose, glyphSize: 10);
+        // "Queue" in row-title type on the rows' edge (they have 6 DIPs inside them), the × at the right.
+        var heading = Layout("Queue", TextStyle.RowTitle, 100);
+        var headY = CardLayout.ColumnTop + (CardLayout.QueueHeader - heading.Metrics.Height) / 2;
+        DrawText(dc, heading, left + 6, headY, Ink(m, PlayerInk.Primary));
+        IconButton(dc, m, CardLayout.PaneCloseRect, CardPart.PaneClose, on: false, glyph: GlyphClose);
         if (m.ShuffleOn && m.Queue.Count > 1)
         {
-            var words = Layout("Playlist order, shuffle is on", TextStyle.RowDetail, 240);
-            var x = CardLayout.PaneCloseRect.X - 6 - words.Metrics.Width;
-            DrawText(dc, words, x, CardLayout.ColumnTop + 5, header);
-            DrawGlyph(dc, GlyphShuffle, new RectF(x - 20, CardLayout.ColumnTop, 16, 24), header, size: 11);
+            // The shuffle note in tertiary tag type.
+            var note = Ink(m, PlayerInk.Tertiary);
+            var words = Layout("Playlist order, shuffle is on", TextStyle.RowTag, 240);
+            var x = CardLayout.PaneCloseRect.X - 8 - words.Metrics.Width;
+            DrawText(dc, words, x, CardLayout.ColumnTop + (CardLayout.QueueHeader - words.Metrics.Height) / 2, note);
+            DrawGlyph(dc, GlyphShuffle, new RectF(x - 18, CardLayout.ColumnTop, 14, CardLayout.QueueHeader), note, size: F(PlayerTokens.TypeScale.Tag.Size));
         }
 
         var top = CardLayout.QueueTop;
@@ -310,32 +323,37 @@ internal sealed partial class CardPainter
             var part = CardParts.QueueRow(i);
             var now = i == current;
             var earlier = current >= 0 && i < current;
-            var alpha = earlier ? (t.HighContrast ? 0.7f : 0.5f) : item.IsPlayable ? 1f : 0.6f;
-            if (now) FillRounded(dc, row, 8, t.HighContrast ? t.Highlight : WithAlpha(t.Ink, 0.16f));
-            else if (item.IsPlayable && (m.HoverPart == part || m.PressedPart == part)) FillRounded(dc, row, 8, WithAlpha(t.Ink, m.PressedPart == part ? 0.14f : 0.08f));
-            var ink = now && t.HighContrast ? t.HighlightText : t.Ink;
+            // Earlier rows step back (a contrast theme never fades its colours: the "Earlier" heading says it); a song
+            // that can't be found again is quieter.
+            var alpha = earlier ? (t.HighContrast ? 1f : F(EarlierOpacity)) : item.IsPlayable ? 1f : F(UnplayableOpacity);
+            if (now) FillRounded(dc, row, RowRadius, t.HighContrast ? t.Highlight : WithAlpha(t.Ink, F(PlayerTokens.Fill.Selected)));
+            else if (item.IsPlayable && (m.HoverPart == part || m.PressedPart == part))
+                FillRounded(dc, row, RowRadius, WithAlpha(t.Ink, F(m.PressedPart == part ? PlayerTokens.Fill.Selected : PlayerTokens.Fill.Hover)));
+            var lit = now && t.HighContrast;
             var art = m.RowCover(item.ArtworkUri) ?? (now ? m.Cover : null);
-            RowCover(dc, m, art, new RectF(row.X + 6, row.Y + 4, 30, 30), 4, GlyphNote, alpha);
+            RowCover(dc, m, art, new RectF(row.X + 6, row.Y + 4, 30, 30), ThumbRadius, GlyphNote, alpha);
             var right = row.Right - 10;
             if (now)
             {
-                DrawGlyph(dc, m.DisplayedPlaying ? GlyphPlaying : GlyphPaused, new RectF(right - 16, row.Y, 16, row.Height), ink, size: 11);
+                DrawGlyph(dc, m.DisplayedPlaying ? GlyphPlaying : GlyphPaused, new RectF(right - 16, row.Y, 16, row.Height),
+                    RowInk(m, lit, PlayerInk.Primary), size: F(PlayerTokens.TypeScale.Tag.Size));
                 right -= 24;
             }
             else if (item.Index > 0)
             {
-                var number = Layout(item.Index.ToString(System.Globalization.CultureInfo.InvariantCulture), TextStyle.RowDetail, 40);
-                DrawText(dc, number, right - number.Metrics.Width, row.CentreY - number.Metrics.Height / 2, WithAlpha(ink, 0.42f * alpha));
+                // Counts in tertiary monospaced digits.
+                var number = Layout(item.Index.ToString(System.Globalization.CultureInfo.InvariantCulture), TextStyle.Count, 40);
+                DrawText(dc, number, right - number.Metrics.Width, row.CentreY - number.Metrics.Height / 2, RowInk(m, lit, PlayerInk.Tertiary, alpha));
                 right -= number.Metrics.Width + 10;
             }
 
             var textLeft = row.X + 46;
-            var title = Layout(item.Title, now ? TextStyle.RowTitleBold : TextStyle.RowTitle, (int)(right - textLeft));
-            DrawText(dc, title, textLeft, row.Y + 4, WithAlpha(ink, alpha));
+            var title = Layout(item.Title, TextStyle.RowTitle, (int)(right - textLeft));
+            DrawText(dc, title, textLeft, row.Y + 3, RowInk(m, lit, PlayerInk.Primary, alpha));
             if (item.Artist.Length > 0)
             {
                 var artist = Layout(item.Artist, TextStyle.RowDetail, (int)(right - textLeft));
-                DrawText(dc, artist, textLeft, row.Y + 4 + title.Metrics.Height, WithAlpha(ink, alpha * (t.HighContrast ? 1 : 0.62f)));
+                DrawText(dc, artist, textLeft, row.Y + 3 + title.Metrics.Height, RowInk(m, lit, PlayerInk.Secondary, alpha));
             }
 
             Hits.Add((part, row));
@@ -343,8 +361,9 @@ internal sealed partial class CardPainter
 
         if (m.QueueMessage is { } message)
         {
+            // The footnote under the rows, in tertiary.
             var note = Layout(message, TextStyle.Status, (int)width - 12);
-            DrawText(dc, note, left + 6, y + 6, WithAlpha(t.Ink, t.HighContrast ? 1 : 0.6f));
+            DrawText(dc, note, left + 6, y + 6, Ink(m, PlayerInk.Tertiary));
             y += note.Metrics.Height + 12;
         }
 
@@ -355,25 +374,37 @@ internal sealed partial class CardPainter
 
     private float Section(ID2D1DeviceContext dc, CardModel m, string title, float y)
     {
+        // "Earlier" and "Up next" in tertiary tag type, on the rows' edge.
         var words = Layout(title, TextStyle.Section, 200);
-        DrawText(dc, words, CardLayout.ColumnLeft + 2, y + 5, WithAlpha(m.Theme.Ink, m.Theme.HighContrast ? 0.8f : 0.5f));
+        DrawText(dc, words, CardLayout.ColumnLeft + 6, y + 4, Ink(m, PlayerInk.Tertiary));
         return y + CardLayout.QueueSection;
     }
 
     // ---- Pieces ----
 
-    /// <summary>A round icon button (search, queue, close): a faint circle on hover, lit while what it opens is open.</summary>
-    private void IconButton(ID2D1DeviceContext dc, CardModel m, RectF rect, CardPart part, bool on, string? glyph = null, float glyphSize = 13)
+    /// <summary>
+    /// A round icon button (search, queue, close): the glyph in secondary ink, a halo at the hover fill under the
+    /// pointer and at the selected fill while pressed or while what it opens is open; it sinks a little when pressed.
+    /// </summary>
+    private void IconButton(ID2D1DeviceContext dc, CardModel m, RectF rect, CardPart part, bool on, string? glyph = null)
     {
         var t = m.Theme;
         var centre = new Vector2(rect.CentreX, rect.CentreY);
-        var halo = on ? 0.2f : m.PressedPart == part ? 0.14f : m.HoverPart == part ? 0.1f : 0;
-        if (halo > 0) Fill(dc, new Ellipse(centre, rect.Width / 2, rect.Width / 2), WithAlpha(t.Ink, halo));
-        var size = m.PressedPart == part && !m.Look.ReduceMotion ? glyphSize * 0.88f : glyphSize;
+        var halo = on || m.PressedPart == part ? F(PlayerTokens.Fill.Selected) : m.HoverPart == part ? F(PlayerTokens.Fill.Hover) : 0;
+        if (halo > 0) Fill(dc, new Ellipse(centre, ButtonSize / 2, ButtonSize / 2), WithAlpha(t.Ink, halo));
+        var glyphSize = F(PlayerTokens.Glyph.Icon);
+        var size = m.PressedPart == part && !m.Look.ReduceMotion ? glyphSize * PressScale : glyphSize;
         glyph ??= part == CardPart.SearchButton ? GlyphSearch : GlyphQueue;
-        DrawGlyph(dc, glyph, rect, WithAlpha(t.Ink, on || t.HighContrast ? 1 : 0.75f), size);
+        DrawGlyph(dc, glyph, rect, Ink(m, on || m.HoverPart == part ? PlayerInk.Primary : PlayerInk.Secondary), size);
         if (part is CardPart.SearchButton or CardPart.QueueButton or CardPart.PaneClose) Hits.Add((part, rect));
     }
+
+    /// <summary>A row's ink: the level's, or a contrast theme's selection text on a lit row.</summary>
+    private static Color4 RowInk(CardModel m, bool lit, PlayerInk level, float alpha = 1) =>
+        lit ? WithAlpha(m.Theme.HighlightText, alpha) : Ink(m, level, alpha);
+
+    /// <summary>Earlier rows in the queue (the Mac's 55 %), and a song that can't be found again.</summary>
+    private const double EarlierOpacity = 0.55, UnplayableOpacity = 0.6;
 
     private void Chevron(ID2D1DeviceContext dc, Vector2 centre, Color4 colour) =>
         DrawGlyph(dc, GlyphChevron, new RectF(centre.X - 6, centre.Y - 8, 12, 16), colour, size: 8);
@@ -405,13 +436,13 @@ internal sealed partial class CardPainter
         var bitmap = art is null ? null : RowBitmap(dc, art);
         if (bitmap is null)
         {
-            FillRounded(dc, box, radius, WithAlpha(t.Ink, 0.1f * alpha));
-            DrawGlyph(dc, glyph, box, WithAlpha(t.Ink, 0.4f * alpha), size: box.Width * 0.36f);
+            FillRounded(dc, box, radius, t.HighContrast ? t.Veil : WithAlpha(t.Ink, F(PlayerTokens.Fill.Placeholder) * alpha));
+            DrawGlyph(dc, glyph, box, Ink(m, PlayerInk.Quaternary, alpha), size: box.Width * 0.36f);
             return;
         }
 
-        var clip = box.Width > 32 ? (_rowClip36 ??= _factory!.CreateRoundedRectangleGeometry(new RoundedRectangle(new RawRectF(0, 0, 36, 36), 5, 5)))
-            : (_rowClip30 ??= _factory!.CreateRoundedRectangleGeometry(new RoundedRectangle(new RawRectF(0, 0, 30, 30), 4, 4)));
+        var clip = box.Width > 32 ? (_rowClip36 ??= _factory!.CreateRoundedRectangleGeometry(new RoundedRectangle(new RawRectF(0, 0, 36, 36), ThumbRadius, ThumbRadius)))
+            : (_rowClip30 ??= _factory!.CreateRoundedRectangleGeometry(new RoundedRectangle(new RawRectF(0, 0, 30, 30), ThumbRadius, ThumbRadius)));
         var previous = dc.Transform;
         dc.Transform = Matrix3x2.CreateTranslation(box.X, box.Y) * previous;
         dc.PushLayer(new LayerParameters1

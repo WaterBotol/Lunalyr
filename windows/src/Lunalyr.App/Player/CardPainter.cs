@@ -12,9 +12,11 @@ using D2DPixelFormat = Vortice.DCommon.PixelFormat;
 namespace Lunalyr.App.Player;
 
 /// <summary>
-/// Draws the "Sleeve" card from a <see cref="CardModel"/> with Direct2D and DirectWrite, in DIPs. Device resources
-/// (brushes, the cover bitmap, gradients) are made once and kept until the device or the theme changes; text layouts
-/// are kept per string. A frame allocates only when a string it shows changes (the times, once a second).
+/// Draws the "Sleeve" card from a <see cref="CardModel"/> with Direct2D and DirectWrite, in DIPs, from the player's
+/// tokens (<see cref="PlayerTokens"/>, docs/DESIGN.md): a flat album tint, four ink levels, three type weights, edges
+/// only in a contrast theme. Device resources (brushes, the cover bitmap) are made once and kept until the device
+/// changes; text layouts are kept per string. A frame allocates only when a string it shows changes (the times, once a
+/// second).
 /// </summary>
 internal sealed partial class CardPainter : IDisposable
 {
@@ -29,26 +31,23 @@ internal sealed partial class CardPainter : IDisposable
     private ID2D1DeviceContext? _dc;
     private ID2D1Factory1? _factory;
     private ID2D1SolidColorBrush? _brush;
-    private ID2D1LinearGradientBrush? _wash, _sheen, _label;
-    private ID2D1GradientStopCollection? _washStops, _sheenStops, _labelStops;
     private ID2D1RadialGradientBrush? _vinyl, _soft;
     private ID2D1GradientStopCollection? _vinylStops, _softStops;
     private ID2D1Bitmap1? _cover;
     private CoverArt? _coverSource;
     private ID2D1RoundedRectangleGeometry? _coverClip;
     private ID2D1PathGeometry? _playGlyph, _skipGlyph;
-    private CardTheme? _themeMade;
 
     private enum TextStyle
     {
         Label, Title, TitleSmall, Artist, Album, Time, CapsuleLyric, CapsuleReading, CapsuleTime, Rate, Note, Live,
-        CompactTitle, CompactArtist, Picker, Field, RowTitle, RowTitleBold, RowDetail, RowTag, Status, Section, Glyph, Button,
+        CompactTitle, CompactArtist, Picker, Field, RowTitle, RowDetail, RowTag, Count, Status, Section, Glyph, Button,
+        ButtonMedium, AlignTitle,
     }
 
     /// <summary>Lets go of everything made on the old device (after a device loss or a new card surface).</summary>
     public void ReleaseDevice()
     {
-        DisposeThemed();
         _brush?.Dispose(); _brush = null;
         _vinyl?.Dispose(); _vinyl = null; _vinylStops?.Dispose(); _vinylStops = null;
         _soft?.Dispose(); _soft = null; _softStops?.Dispose(); _softStops = null;
@@ -57,15 +56,8 @@ internal sealed partial class CardPainter : IDisposable
         _playGlyph?.Dispose(); _playGlyph = null;
         _skipGlyph?.Dispose(); _skipGlyph = null;
         ReleaseRowCovers();
+        _wedge?.Dispose(); _wedge = null;
         _dc = null;
-    }
-
-    private void DisposeThemed()
-    {
-        _wash?.Dispose(); _wash = null; _washStops?.Dispose(); _washStops = null;
-        _sheen?.Dispose(); _sheen = null; _sheenStops?.Dispose(); _sheenStops = null;
-        _label?.Dispose(); _label = null; _labelStops?.Dispose(); _labelStops = null;
-        _themeMade = null;
     }
 
     public void Dispose()
@@ -113,7 +105,8 @@ internal sealed partial class CardPainter : IDisposable
         if (m.Pane == PlayerPane.Search) DrawSearch(dc, m);
         else if (m.Pane == PlayerPane.Queue) DrawQueue(dc, m);
         if (m.FocusVisible) DrawFocus(dc, m);
-        if (t.HighContrast) Stroke(dc, new RawRectF(1, 1, width - 1, height - 1), 6, t.Ink, 2);
+        // A contrast theme's firm edge, inside DWM's 8 px corners (no edge in any other look).
+        if (t.HighContrast) Stroke(dc, new RawRectF(1, 1, width - 1, height - 1), 6, t.Hairline, 2);
 
         if (layered) dc.PopLayer();
     }
@@ -121,19 +114,6 @@ internal sealed partial class CardPainter : IDisposable
     private void Prepare(ID2D1DeviceContext dc, CardModel m)
     {
         _brush ??= dc.CreateSolidColorBrush(new Color4(1, 1, 1, 1));
-        if (!ReferenceEquals(_themeMade, m.Theme))
-        {
-            DisposeThemed();
-            var t = m.Theme;
-            _washStops = dc.CreateGradientStopCollection([new GradientStop(0, t.WashTop), new GradientStop(1, t.WashBottom)]);
-            _wash = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(Vector2.Zero, Vector2.One), _washStops);
-            _sheenStops = dc.CreateGradientStopCollection([new GradientStop(0, new Color4(1, 1, 1, t.Sheen)), new GradientStop(1, new Color4(1, 1, 1, 0))]);
-            _sheen = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(Vector2.Zero, Vector2.UnitY), _sheenStops);
-            _labelStops = dc.CreateGradientStopCollection([new GradientStop(0, t.Accent), new GradientStop(1, t.Deep)]);
-            _label = dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(Vector2.Zero, Vector2.UnitY), _labelStops);
-            _themeMade = t;
-        }
-
         if (_vinyl is null)
         {
             _vinylStops = dc.CreateGradientStopCollection([new GradientStop(0, Grey(0.17f)), new GradientStop(1, Grey(0.03f))]);
@@ -158,7 +138,7 @@ internal sealed partial class CardPainter : IDisposable
             }
         }
 
-        _coverClip ??= _factory!.CreateRoundedRectangleGeometry(new RoundedRectangle(Rect(CardLayout.CoverRect), 8, 8));
+        _coverClip ??= _factory!.CreateRoundedRectangleGeometry(new RoundedRectangle(Rect(CardLayout.CoverRect), CoverRadius, CoverRadius));
         _playGlyph ??= Triangle(_factory!);
         _skipGlyph ??= DoubleTriangle(_factory!);
     }
@@ -167,19 +147,10 @@ internal sealed partial class CardPainter : IDisposable
 
     private void DrawBackground(ID2D1DeviceContext dc, CardModel m, float width, float height)
     {
-        var t = m.Theme;
+        // The veil, so the ink always reads, then the album's colour as one flat tint: no gradient in chrome.
         var whole = new RawRectF(0, 0, width, height);
-        Fill(dc, whole, t.Base);
-        if (t.HighContrast) return;
-        _wash!.StartPoint = Vector2.Zero;
-        _wash.EndPoint = new Vector2(width, height);
-        dc.FillRectangle(whole, _wash);
-        if (t.Sheen > 0)
-        {
-            _sheen!.StartPoint = Vector2.Zero;
-            _sheen.EndPoint = new Vector2(0, height / 2);
-            dc.FillRectangle(new RawRectF(0, 0, width, height / 2), _sheen);
-        }
+        Fill(dc, whole, m.Theme.Veil);
+        Fill(dc, whole, m.Theme.Tint);
     }
 
     // ---- Art column ----
@@ -197,8 +168,10 @@ internal sealed partial class CardPainter : IDisposable
             DrawRecord(dc, m, centre, size / 2);
         }
 
-        // A soft shadow under the cover, then the cover in its rounded corners.
-        if (!t.HighContrast) SoftShadow(dc, new RectF(cover.X + 4, cover.Y + 6, cover.Width, cover.Height), 10, 0.45f);
+        // The cover's one soft shadow, then the cover in its rounded corners.
+        if (!t.HighContrast)
+            SoftShadow(dc, new RectF(cover.X, cover.Y + F(PlayerTokens.Shadow.CoverY), cover.Width, cover.Height),
+                F(PlayerTokens.Shadow.CoverBlur), F(PlayerTokens.Shadow.CoverOpacity));
         if (_cover is not null && m.HasSong)
         {
             dc.PushLayer(new LayerParameters1
@@ -212,11 +185,12 @@ internal sealed partial class CardPainter : IDisposable
         }
         else
         {
-            FillRounded(dc, cover, 8, t.HighContrast ? t.Base : WithAlpha(t.Ink, 0.1f));
-            DrawNote(dc, new Vector2(cover.CentreX, cover.CentreY), 20, WithAlpha(t.Ink, t.HighContrast ? 1 : 0.4f));
+            FillRounded(dc, cover, CoverRadius, t.HighContrast ? t.Veil : WithAlpha(t.Ink, F(PlayerTokens.Fill.Placeholder)));
+            DrawNote(dc, new Vector2(cover.CentreX, cover.CentreY), 20, Ink(m, PlayerInk.Quaternary));
         }
 
-        Stroke(dc, Rect(cover), 8, WithAlpha(t.Ink, t.HighContrast ? 1 : m.Look.Light ? 0.18f : 0.12f), t.HighContrast ? 1 : 0.5f);
+        // An edge only in a contrast theme.
+        Stroke(dc, Rect(cover), CoverRadius, t.Hairline, 1);
     }
 
     private static RawRectF CoverSource(ID2D1Bitmap1 bitmap)
@@ -233,14 +207,14 @@ internal sealed partial class CardPainter : IDisposable
         var t = m.Theme;
         if (t.HighContrast)
         {
-            Fill(dc, new Ellipse(centre, radius, radius), t.Base);
+            Fill(dc, new Ellipse(centre, radius, radius), t.Veil);
             StrokeEllipse(dc, new Ellipse(centre, radius, radius), t.Ink, 1.5f);
             StrokeEllipse(dc, new Ellipse(centre, radius * 0.33f, radius * 0.33f), t.Ink, 1.5f);
             return;
         }
 
-        // Its shadow, offset to the right.
-        SoftShadow(dc, new Ellipse(new Vector2(centre.X + 3, centre.Y), radius + 6, radius + 6), 0.4f);
+        // Its shadow, offset to the right, as dark as the cover's.
+        SoftShadow(dc, new Ellipse(new Vector2(centre.X + 3, centre.Y), radius + 6, radius + 6), F(PlayerTokens.Shadow.CoverOpacity));
         _vinyl!.Center = centre;
         _vinyl.RadiusX = radius;
         _vinyl.RadiusY = radius;
@@ -251,11 +225,9 @@ internal sealed partial class CardPainter : IDisposable
         // A sheen across it, as light catches the vinyl.
         _brush!.Color = new Color4(1, 1, 1, 0.07f);
         dc.FillGeometry(SheenWedge(centre, radius), _brush);
-        // The label in the album's colours, and the hole.
+        // The label in the album's accent, flat, and the hole.
         var label = radius * 0.33f;
-        _label!.StartPoint = new Vector2(centre.X, centre.Y - label);
-        _label.EndPoint = new Vector2(centre.X, centre.Y + label);
-        dc.FillEllipse(new Ellipse(centre, label, label), _label);
+        Fill(dc, new Ellipse(centre, label, label), t.Accent);
         Fill(dc, new Ellipse(centre, 3, 3), Grey(0.05f));
     }
 
@@ -295,30 +267,31 @@ internal sealed partial class CardPainter : IDisposable
         var t = m.Theme;
         var left = CardLayout.ColumnLeft;
         var width = CardLayout.ColumnWidth;
-        var secondary = t.HighContrast ? 1f : m.Look.Light ? 0.75f : 0.7f;
 
-        // The player, small, over the song (or the note about a command, while it shows).
+        // The player, small, over the song (or the note about a command, while it shows): a dot in the album's
+        // colour, the name in secondary ink, a chevron in tertiary; primary under the pointer.
         if (m.PlayerName.Length > 0 && m.NoteAlpha < 0.999f)
         {
             // As the player names itself, not tracked capitals (the design pass's "no ALL CAPS subtitles").
             var label = Layout(m.PlayerName, TextStyle.Label, (int)width - 34);
-            var alpha = secondary * (1 - m.NoteAlpha);
-            if (m.HoverPart == CardPart.PlayerLabel) alpha = Math.Min(1, alpha + 0.25f);
-            Fill(dc, new Ellipse(new Vector2(left + 3, CardLayout.ColumnTop + 8), 3, 3), WithAlpha(t.HighContrast ? t.Ink : t.Accent, alpha));
-            DrawText(dc, label, left + 11, CardLayout.ColumnTop + 1, WithAlpha(t.Ink, alpha));
+            var alpha = 1 - m.NoteAlpha;
+            var hovered = m.HoverPart == CardPart.PlayerLabel;
+            var centreY = CardLayout.ColumnTop + label.Metrics.Height / 2;
+            Fill(dc, new Ellipse(new Vector2(left + 3, centreY), 3, 3), WithAlpha(t.HighContrast ? t.Ink : t.Accent, alpha));
+            DrawText(dc, label, left + 12, CardLayout.ColumnTop, Ink(m, hovered ? PlayerInk.Primary : PlayerInk.Secondary, alpha));
             // A click opens the search, where the picker is (the Mac's chevron).
-            var chevronX = left + 11 + label.Metrics.Width + 6;
-            Chevron(dc, new Vector2(chevronX, CardLayout.ColumnTop + 8), WithAlpha(t.Ink, alpha));
+            var chevronX = left + 12 + label.Metrics.Width + 6 + 4;
+            Chevron(dc, new Vector2(chevronX, centreY), Ink(m, hovered ? PlayerInk.Primary : PlayerInk.Tertiary, alpha));
             Hits.Add((CardPart.PlayerLabel, new RectF(left - 2, CardLayout.ColumnTop - 2, chevronX + 10 - left, 20)));
         }
 
         if (m.Note is { } note && m.NoteAlpha > 0.001f)
         {
-            var layout = Layout(note, TextStyle.Note, (int)width - 20);
+            var layout = Layout(note, TextStyle.Note, (int)width - 24);
             var metrics = layout.Metrics;
-            var box = new RectF(left - 2, CardLayout.ColumnTop - 3, Math.Min(width, metrics.Width + 20), metrics.Height + 8);
+            var box = new RectF(left - 2, CardLayout.ColumnTop - 4, Math.Min(width, metrics.Width + 24), metrics.Height + 12);
             Capsule(dc, m, box, m.NoteAlpha);
-            DrawText(dc, layout, box.X + 10, box.Y + 4, WithAlpha(t.Ink, m.NoteAlpha * (t.HighContrast ? 1 : 0.92f)));
+            DrawText(dc, layout, box.X + 12, box.Y + 6, Ink(m, PlayerInk.Primary, m.NoteAlpha));
         }
 
         // The song, stepping aside while the seek bar's capsules are up over it.
@@ -328,20 +301,19 @@ internal sealed partial class CardPainter : IDisposable
         {
             var y = CardLayout.TitleTop;
             var title = TitleLayout(m.Title, (int)width);
-            DrawText(dc, title, left, y, WithAlpha(t.Ink, titleAlpha));
-            y += title.Metrics.Height + 1;
+            DrawText(dc, title, left, y, Ink(m, PlayerInk.Primary, titleAlpha));
+            y += title.Metrics.Height + CardLayout.TitleGap;
             if (m.Artist is { Length: > 0 } artist)
             {
                 var a = Layout(artist, TextStyle.Artist, (int)width);
-                DrawText(dc, a, left, y, WithAlpha(t.Ink, titleAlpha * (t.HighContrast ? 1 : m.Look.Light ? 0.82f : 0.8f)));
-                y += a.Metrics.Height + 1;
+                DrawText(dc, a, left, y, Ink(m, PlayerInk.Secondary, titleAlpha));
+                y += a.Metrics.Height + CardLayout.TitleGap;
             }
 
-            if (m.Album is { Length: > 0 } album && y < CardLayout.SeekRowTop - 14)
-            {
-                var b = Layout(album, TextStyle.Album, (int)width);
-                DrawText(dc, b, left, y, WithAlpha(t.Ink, titleAlpha * (t.HighContrast ? 1 : m.Look.Light ? 0.62f : 0.55f)));
-            }
+            // The album, when it fits above the seek row (the bar's band is empty above the hairline).
+            var b = m.Album is { Length: > 0 } album ? Layout(album, TextStyle.Album, (int)width) : null;
+            if (b is not null && y + b.Metrics.Height <= CardLayout.SeekRowTop + 2)
+                DrawText(dc, b, left, y, Ink(m, PlayerInk.Tertiary, titleAlpha));
         }
 
         // Align mode (the music video): the video's bar and its row take the seek row's and the transport's place.
@@ -357,7 +329,7 @@ internal sealed partial class CardPainter : IDisposable
 
     private IDWriteTextLayout TitleLayout(string title, int width)
     {
-        // One line at 25, set smaller down to three quarters before it is cut short.
+        // One line at the title's size, set smaller down to its minimum scale before it is cut short.
         var full = Layout(title, TextStyle.Title, width);
         if (full.Metrics.WidthIncludingTrailingWhitespace <= width + 0.5f) return full;
         return Layout(title, TextStyle.TitleSmall, width);
@@ -370,26 +342,29 @@ internal sealed partial class CardPainter : IDisposable
         var t = m.Theme;
         var left = CardLayout.ColumnLeft;
         var width = CardLayout.ColumnWidth;
-        var timeAlpha = t.HighContrast ? 1f : 0.55f + 0.30f * m.Active;
+        // The times: tertiary at rest, secondary while the bar is active.
+        var tertiary = Level(PlayerInk.Tertiary);
+        var timeAlpha = t.HighContrast ? 1f : tertiary + (Level(PlayerInk.Secondary) - tertiary) * m.Active;
         switch (m.RowKind)
         {
             case ScrubRowKind.Hidden:
                 return;
             case ScrubRowKind.Live:
             {
-                var live = Layout("LIVE", TextStyle.Live, 80);
-                var box = new RectF(left, CardLayout.SeekRowTop + 6, live.Metrics.Width + 32, 22);
+                // "Live" in sentence case beside a red dot, in a capsule.
+                var live = Layout("Live", TextStyle.Live, 80);
+                var box = new RectF(left, CardLayout.SeekRowTop + 6, 8 + 6 + 6 + live.Metrics.Width + 8, live.Metrics.Height + 8);
                 Capsule(dc, m, box, 1);
-                Fill(dc, new Ellipse(new Vector2(box.X + 12, box.CentreY), 3, 3), t.HighContrast ? t.Ink : new Color4(1, 0.23f, 0.19f, 1));
-                DrawText(dc, live, box.X + 20, box.Y + 3, t.Ink);
+                Fill(dc, new Ellipse(new Vector2(box.X + 11, box.CentreY), 3, 3), t.HighContrast ? t.Ink : new Color4(1, 0.23f, 0.19f, 1));
+                DrawText(dc, live, box.X + 20, box.Y + 4, Ink(m, PlayerInk.Primary));
                 return;
             }
             case ScrubRowKind.ElapsedOnly:
             {
                 var elapsed = Layout(Elapsed(m.Elapsed), TextStyle.Time, 80);
-                DrawText(dc, elapsed, left, CardLayout.SeekRowTop + CardLayout.BarBand, WithAlpha(t.Ink, timeAlpha));
-                var unknown = Layout("Length unknown", TextStyle.Time, 200);
-                DrawText(dc, unknown, left + elapsed.Metrics.Width + 8, CardLayout.SeekRowTop + CardLayout.BarBand, WithAlpha(t.Ink, timeAlpha * 0.6f));
+                DrawText(dc, elapsed, left, CardLayout.SeekRowTop + CardLayout.BarBand, Ink(m, PlayerInk.Tertiary));
+                var unknown = Layout("Length unknown", TextStyle.RowDetail, 200);
+                DrawText(dc, unknown, left + elapsed.Metrics.Width + 8, CardLayout.SeekRowTop + CardLayout.BarBand, Ink(m, PlayerInk.Tertiary));
                 return;
             }
         }
@@ -461,13 +436,13 @@ internal sealed partial class CardPainter : IDisposable
         var timeColour = WithAlpha(t.Ink, timeAlpha);
         if (m.RowKind == ScrubRowKind.Advert)
         {
-            DrawText(dc, Layout("Advertisement", TextStyle.Time, 200), times.X, times.Y, timeColour);
+            DrawText(dc, Layout("Advertisement", TextStyle.RowTag, 200), times.X, times.Y, timeColour);
         }
         else
         {
             DrawText(dc, Layout(Elapsed(m.Elapsed), TextStyle.Time, 100), times.X, times.Y, timeColour);
             var trailing = Layout(Trailing(m.Elapsed, duration, m.ShowsRemaining), TextStyle.Time, 100);
-            DrawText(dc, trailing, times.Right - trailing.Metrics.Width, times.Y, m.HoverPart == CardPart.TimeLabel ? WithAlpha(t.Ink, 1) : timeColour);
+            DrawText(dc, trailing, times.Right - trailing.Metrics.Width, times.Y, m.HoverPart == CardPart.TimeLabel ? Ink(m, PlayerInk.Primary) : timeColour);
         }
 
         if (m.RowKind == ScrubRowKind.Seekable && m.Capsules > 0.001f) DrawCapsules(dc, m);
@@ -508,11 +483,12 @@ internal sealed partial class CardPainter : IDisposable
         var width = CardLayout.ColumnWidth;
         var time = m.CapsuleTime;
 
-        // The time, with the rate under a slow hand.
+        // The time, with the rate under a slow hand (8 by 4 inside its capsule).
         var timeLayout = Layout(CapsuleTime(time), TextStyle.CapsuleTime, 100);
         var rate = m.Session?.RateLabel is { } r ? Layout(r, TextStyle.Rate, 120) : null;
-        var timeWidth = timeLayout.Metrics.Width + (rate is null ? 0 : rate.Metrics.Width + 6) + 18;
-        var timeBox = Clamp(new RectF(left + (float)m.CapsuleX - timeWidth / 2, bottom - 22, timeWidth, 22), left, width);
+        var timeWidth = timeLayout.Metrics.Width + (rate is null ? 0 : rate.Metrics.Width + 6) + 16;
+        var timeHeight = timeLayout.Metrics.Height + 8;
+        var timeBox = Clamp(new RectF(left + (float)m.CapsuleX - timeWidth / 2, bottom - timeHeight, timeWidth, timeHeight), left, width);
 
         // The lyric at that moment, above it.
         RectF? lyricBox = null;
@@ -531,14 +507,14 @@ internal sealed partial class CardPainter : IDisposable
             }
             else if (at.Kind == ScrubLyricKind.Instrumental)
             {
-                lyric = Layout("♪ instrumental", TextStyle.CapsuleReading, 330);
+                lyric = Layout("♪ Instrumental", TextStyle.CapsuleLyric, 330);
                 instrumental = true;
             }
 
             if (lyric is not null)
             {
-                var w = Math.Max(lyric.Metrics.Width, reading?.Metrics.Width ?? 0) + 28;
-                var h = lyric.Metrics.Height + (reading is null ? 0 : reading.Metrics.Height + 1) + 14;
+                var w = Math.Max(lyric.Metrics.Width, reading?.Metrics.Width ?? 0) + 24;
+                var h = lyric.Metrics.Height + (reading is null ? 0 : reading.Metrics.Height + 1) + 16;
                 lyricBox = Clamp(new RectF(left + (float)m.CapsuleX - w / 2, timeBox.Y - 4 - h, w, h), left, width);
             }
         }
@@ -547,15 +523,15 @@ internal sealed partial class CardPainter : IDisposable
         {
             Capsule(dc, m, box, alpha);
             var x = box.CentreX - lyric.Metrics.Width / 2;
-            DrawText(dc, lyric, x, box.Y + 7, WithAlpha(t.Ink, alpha * (instrumental && !t.HighContrast ? 0.7f : 1)));
+            DrawText(dc, lyric, x, box.Y + 8, Ink(m, instrumental ? PlayerInk.Secondary : PlayerInk.Primary, alpha));
             if (reading is not null)
-                DrawText(dc, reading, box.CentreX - reading.Metrics.Width / 2, box.Y + 7 + lyric.Metrics.Height + 1, WithAlpha(t.Ink, alpha * (t.HighContrast ? 1 : 0.6f)));
+                DrawText(dc, reading, box.CentreX - reading.Metrics.Width / 2, box.Y + 8 + lyric.Metrics.Height + 1, Ink(m, PlayerInk.Secondary, alpha));
         }
 
         Capsule(dc, m, timeBox, alpha);
-        DrawText(dc, timeLayout, timeBox.X + 9, timeBox.Y + 3, WithAlpha(t.Ink, alpha));
+        DrawText(dc, timeLayout, timeBox.X + 8, timeBox.Y + 4, Ink(m, PlayerInk.Primary, alpha));
         if (rate is not null)
-            DrawText(dc, rate, timeBox.X + 9 + timeLayout.Metrics.Width + 6, timeBox.Y + 4, WithAlpha(t.Ink, alpha * (t.HighContrast ? 1 : 0.75f)));
+            DrawText(dc, rate, timeBox.X + 8 + timeLayout.Metrics.Width + 6, timeBox.Y + 4, Ink(m, PlayerInk.Secondary, alpha));
     }
 
     private static RectF Clamp(RectF box, float left, float width)
@@ -564,13 +540,17 @@ internal sealed partial class CardPainter : IDisposable
         return box with { X = x };
     }
 
+    /// <summary>
+    /// A capsule over the card (the time and lyric over the bar, a note): the card's own deep shade lifted on a soft
+    /// shadow, not a second accent; an edge only in a contrast theme.
+    /// </summary>
     private void Capsule(ID2D1DeviceContext dc, CardModel m, RectF box, float alpha)
     {
         var t = m.Theme;
         if (!t.HighContrast && !m.Look.ReduceTransparency)
-            SoftShadow(dc, new RectF(box.X, box.Y + 2, box.Width, box.Height), 6, 0.25f * alpha);
-        FillRounded(dc, box, 12, WithAlpha(t.Capsule, t.Capsule.A * alpha));
-        Stroke(dc, Rect(box), 12, WithAlpha(t.CapsuleRim, t.CapsuleRim.A * alpha), 1);
+            SoftShadow(dc, new RectF(box.X, box.Y + CapsuleShadowY, box.Width, box.Height), CapsuleShadowBlur, CapsuleShadowOpacity * alpha);
+        FillRounded(dc, box, ControlRadius, WithAlpha(t.Capsule, t.Capsule.A * alpha));
+        Stroke(dc, Rect(box), ControlRadius, WithAlpha(t.Hairline, t.Hairline.A * alpha), F(PlayerTokens.Line.Width));
     }
 
     /// <summary>The keyboard's focus, ringed after Tab (Windows' focus visual: two strokes, so it shows on any colour).</summary>
@@ -589,9 +569,10 @@ internal sealed partial class CardPainter : IDisposable
     private void DrawTransport(ID2D1DeviceContext dc, CardModel m)
     {
         var t = m.Theme;
-        // Commands off for this run (--no-playback, --demo): still there to press (the card says why), but quieter.
-        var enabled = m.CommandsOff ? 0.6f : 1f;
-        var skipAlpha = (m.HasSong ? 1f : 0.35f) * enabled;
+        // Commands off for this run (--no-playback, --demo): still there to press (the card says why), but quieter, at
+        // the tertiary level. Without a song, the skips are disabled (quaternary).
+        var enabled = m.CommandsOff && !m.Theme.HighContrast ? Level(PlayerInk.Tertiary) : 1f;
+        var skipAlpha = (m.HasSong ? 1f : Level(PlayerInk.Quaternary)) * enabled;
         var small = m.Pane != PlayerPane.Song;
         DrawSkip(dc, m, CardLayout.PreviousFor(m.Pane), forward: false, skipAlpha, CardPart.Previous, small);
         DrawSkip(dc, m, CardLayout.NextFor(m.Pane), forward: true, skipAlpha, CardPart.Next, small);
@@ -604,15 +585,15 @@ internal sealed partial class CardPainter : IDisposable
         }
 
         var disc = CardLayout.PlayFor(m.Pane);
-        var pressed = m.PressedPart == CardPart.PlayPause && !m.Look.ReduceMotion ? 0.88f : 1f;
+        // The play disc: the ink as a flat disc (no shadow), its glyph in the colour behind the ink.
+        var pressed = m.PressedPart == CardPart.PlayPause && !m.Look.ReduceMotion ? PressScale : 1f;
         var radius = disc.Width / 2 * pressed;
         var centre = new Vector2(disc.CentreX, disc.CentreY);
-        var discColour = t.HighContrast ? t.Ink : m.Look.Light ? t.Ink : new Color4(1, 1, 1, 1);
-        var glyphColour = t.HighContrast ? t.Base : m.Look.Light ? new Color4(1, 1, 1, 1) : new Color4(0, 0, 0, 1);
+        var discColour = t.Ink;
+        var glyphColour = t.InkInverse;
         if (m.HoverPart == CardPart.PlayPause && !t.HighContrast) discColour = Darken(discColour, m.Look.Light ? -0.12f : 0.06f);
-        if (!t.HighContrast) SoftShadow(dc, new Ellipse(new Vector2(centre.X, centre.Y + 2), radius + 4, radius + 4), 0.3f * enabled);
         Fill(dc, new Ellipse(centre, radius, radius), WithAlpha(discColour, enabled));
-        var glyph = radius * 0.8f;
+        var glyph = radius * 0.76f;
         if (m.DisplayedPlaying)
         {
             var bar = glyph * 0.26f;
@@ -630,9 +611,9 @@ internal sealed partial class CardPainter : IDisposable
     {
         var t = m.Theme;
         var centre = new Vector2(cell.CentreX, cell.CentreY);
-        var halo = m.PressedPart == part ? 0.14f : m.HoverPart == part ? 0.1f : 0;
-        if (halo > 0 && m.HasSong) Fill(dc, new Ellipse(centre, small ? 14 : 16, small ? 14 : 16), WithAlpha(t.Ink, halo));
-        var scale = m.PressedPart == part && !m.Look.ReduceMotion ? 0.88f : 1f;
+        var halo = m.PressedPart == part ? F(PlayerTokens.Fill.Selected) : m.HoverPart == part ? F(PlayerTokens.Fill.Hover) : 0;
+        if (halo > 0 && m.HasSong) Fill(dc, new Ellipse(centre, ButtonSize / 2, ButtonSize / 2), WithAlpha(t.Ink, halo));
+        var scale = m.PressedPart == part && !m.Look.ReduceMotion ? PressScale : 1f;
         DrawGlyph(dc, _skipGlyph!, centre, (small ? 13 : 17) * scale, WithAlpha(t.Ink, alpha), mirror: !forward);
     }
 
@@ -734,7 +715,7 @@ internal sealed partial class CardPainter : IDisposable
             using var sign = _dwrite.CreateEllipsisTrimmingSign(layout);
             layout.SetTrimming(new Trimming { Granularity = TrimmingGranularity.Character }, sign);
         }
-        if (style is TextStyle.Time or TextStyle.CapsuleTime)
+        if (TypeOf(style).Type.TabularDigits)
         {
             _tabular ??= MakeTabular();
             layout.SetTypography(_tabular, new TextRange(0, (uint)text.Length));
@@ -754,36 +735,37 @@ internal sealed partial class CardPainter : IDisposable
     private IDWriteTextFormat Format(TextStyle style)
     {
         if (_formats.TryGetValue(style, out var format)) return format;
-        var (family, weight, size) = style switch
-        {
-            TextStyle.Label => (Text, FontWeight.SemiBold, 12f),
-            TextStyle.Title => (Display, FontWeight.Bold, 25f),
-            TextStyle.TitleSmall => (Display, FontWeight.Bold, 25f * 0.75f),
-            TextStyle.Artist => (Text, FontWeight.Medium, 15f),
-            TextStyle.Album => (Text, FontWeight.Normal, 12f),
-            TextStyle.Time => (Text, FontWeight.Normal, 11f),
-            TextStyle.CapsuleLyric => (Display, FontWeight.Bold, 15f),
-            TextStyle.CapsuleReading => (Text, FontWeight.SemiBold, 12f),
-            TextStyle.CapsuleTime => (Text, FontWeight.Bold, 11f),
-            TextStyle.Rate => (Text, FontWeight.Medium, 10f),
-            TextStyle.Note => (Text, FontWeight.Medium, 11f),
-            TextStyle.CompactTitle => (Text, FontWeight.Bold, 13f),
-            TextStyle.CompactArtist => (Text, FontWeight.Normal, 11f),
-            TextStyle.Picker => (Text, FontWeight.SemiBold, 11f),
-            TextStyle.Field => (Text, FontWeight.Medium, 15f),
-            TextStyle.RowTitle => (Text, FontWeight.SemiBold, 13f),
-            TextStyle.RowTitleBold => (Text, FontWeight.Bold, 12f),
-            TextStyle.RowDetail => (Text, FontWeight.Normal, 11f),
-            TextStyle.RowTag => (Text, FontWeight.Bold, 9f),
-            TextStyle.Status => (Text, FontWeight.Normal, 12f),
-            TextStyle.Section => (Text, FontWeight.SemiBold, 10f),
-            TextStyle.Glyph => ("Segoe Fluent Icons", FontWeight.Normal, 13f),
-            TextStyle.Button => (Text, FontWeight.SemiBold, 12f),
-            _ => (Text, FontWeight.Bold, 11f),
-        };
-        format = _dwrite.CreateTextFormat(family, null, weight, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, size, "");
+        var (family, type) = TypeOf(style);
+        var weight = type.Weight switch { >= 600 => FontWeight.SemiBold, >= 500 => FontWeight.Medium, _ => FontWeight.Normal };
+        format = _dwrite.CreateTextFormat(family, null, weight, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, (float)type.Size, "");
         _formats[style] = format;
         return format;
+    }
+
+    /// <summary>Each text style's token (<see cref="PlayerTokens.TypeScale"/>): Segoe UI Variable for SF Pro, Display for the title.</summary>
+    private static (string Family, PlayerType Type) TypeOf(TextStyle style)
+    {
+        var scale = PlayerTokens.TypeScale.Title;
+        return style switch
+        {
+            TextStyle.Title => (Display, scale),
+            TextStyle.TitleSmall => (Display, scale with { Size = scale.Size * PlayerTokens.TypeScale.TitleMinimumScale }),
+            TextStyle.Label or TextStyle.Picker => (Text, PlayerTokens.TypeScale.Label),
+            TextStyle.Artist => (Text, PlayerTokens.TypeScale.Artist),
+            TextStyle.Album or TextStyle.Status or TextStyle.CompactArtist => (Text, PlayerTokens.TypeScale.Meta),
+            TextStyle.Time or TextStyle.Count => (Text, PlayerTokens.TypeScale.Time),
+            TextStyle.CapsuleTime => (Text, PlayerTokens.TypeScale.TimeStrong),
+            TextStyle.CapsuleLyric => (Text, PlayerTokens.TypeScale.CapsuleLyric),
+            TextStyle.AlignTitle => (Text, PlayerTokens.TypeScale.CapsuleLyric with { TabularDigits = true }),
+            TextStyle.CapsuleReading or TextStyle.RowDetail => (Text, PlayerTokens.TypeScale.RowSubtitle),
+            TextStyle.Rate or TextStyle.Live or TextStyle.RowTag or TextStyle.Section => (Text, PlayerTokens.TypeScale.Tag),
+            TextStyle.Note => (Text, PlayerTokens.TypeScale.Note),
+            TextStyle.Field => (Text, PlayerTokens.TypeScale.Field),
+            TextStyle.CompactTitle or TextStyle.RowTitle or TextStyle.Button => (Text, PlayerTokens.TypeScale.RowTitle),
+            TextStyle.ButtonMedium => (Text, PlayerTokens.TypeScale.RowTitle with { Weight = 500 }),
+            TextStyle.Glyph => ("Segoe Fluent Icons", new PlayerType(PlayerTokens.Glyph.Icon, 400)),
+            _ => (Text, PlayerTokens.TypeScale.Meta),
+        };
     }
 
     private void DrawText(ID2D1DeviceContext dc, IDWriteTextLayout layout, float x, float y, Color4 colour)
@@ -791,6 +773,29 @@ internal sealed partial class CardPainter : IDisposable
         if (colour.A <= 0.001f) return;
         _brush!.Color = colour;
         dc.DrawTextLayout(new Vector2(x, y), layout, _brush, DrawTextOptions.EnableColorFont | DrawTextOptions.Clip);
+    }
+
+    // ---- Tokens ----
+
+    private static readonly float CoverRadius = F(PlayerTokens.Radius.Cover), ControlRadius = F(PlayerTokens.Radius.Control),
+        RowRadius = F(PlayerTokens.Radius.Row), ThumbRadius = F(PlayerTokens.Radius.Thumb), ButtonSize = F(PlayerTokens.Glyph.Button),
+        PressScale = F(PlayerTokens.Motion.PressScale), CapsuleShadowOpacity = F(PlayerTokens.Shadow.CapsuleOpacity),
+        CapsuleShadowBlur = F(PlayerTokens.Shadow.CapsuleBlur), CapsuleShadowY = F(PlayerTokens.Shadow.CapsuleY);
+
+    private static float F(double value) => (float)value;
+
+    /// <summary>An ink level's opacity (the Mac's normal levels; a contrast theme never fades its colours).</summary>
+    private static float Level(PlayerInk level) => F(PlayerTokens.Ink.Opacity(level));
+
+    /// <summary>
+    /// The ink at <paramref name="level"/>, faded by <paramref name="alpha"/> (a fade in or out). In a contrast theme,
+    /// the theme's text colour as it is, and its grey text for the quaternary level (disabled and decoration).
+    /// </summary>
+    private static Color4 Ink(CardModel m, PlayerInk level, float alpha = 1)
+    {
+        var t = m.Theme;
+        if (t.HighContrast) return WithAlpha(level == PlayerInk.Quaternary ? t.Disabled : t.Ink, alpha);
+        return WithAlpha(t.Ink, Level(level) * alpha);
     }
 
     // ---- Shapes ----

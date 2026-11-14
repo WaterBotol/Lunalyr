@@ -82,10 +82,13 @@ internal static class CardLayout
     public const float LabelHeight = 16;
     public const float TitleTop = ColumnTop + LabelHeight + 8;
 
+    /// <summary>Between the title, the artist and the album.</summary>
+    public const float TitleGap = 2;
+
     public const float ControlsHeight = 44;
     public const float ControlsTop = ColumnTop + CoverSize - ControlsHeight;
     public const float SeekRowHeight = 34, BarBand = 20, TimesHeight = 14;
-    public const float SeekRowTop = ControlsTop - 8 - SeekRowHeight;
+    public const float SeekRowTop = ControlsTop - 4 - SeekRowHeight;
     public const float BarCentre = SeekRowTop + BarBand / 2;
 
     /// <summary>The seek bar takes presses this far beyond its band, so a click between a hairline's pixels never misses.</summary>
@@ -139,22 +142,28 @@ internal static class CardLayout
     // ---- The search column ----
 
     public const float PickerHeight = 30;
-    public static readonly RectF PaneCloseRect = new(ColumnLeft + ColumnWidth - 26, ColumnTop + 3, 24, 24);
-    public static readonly RectF FieldRect = new(ColumnLeft, ColumnTop + PickerHeight + 10, ColumnWidth, 36);
+
+    /// <summary>The column's rows in search: 12 apart.</summary>
+    public const float PaneGap = 12;
+
+    /// <summary>The × that closes search or the queue: an icon button like the others.</summary>
+    public static readonly RectF PaneCloseRect = new(ColumnLeft + ColumnWidth - IconButton, ColumnTop, IconButton, IconButton);
+    public static readonly RectF FieldRect = new(ColumnLeft, ColumnTop + PickerHeight + PaneGap, ColumnWidth, 36);
     public static readonly RectF ClearRect = new(FieldRect.Right - 32, FieldRect.Y + 6, 24, 24);
 
     /// <summary>The text inside the field: after the magnifier, before the clear button; one line of 15 DIP type.</summary>
     public const float FieldTextHeight = 21;
     public static readonly RectF FieldTextRect = new(FieldRect.X + 34, FieldRect.Y + (36 - FieldTextHeight) / 2, FieldRect.Width - 34 - 38, FieldTextHeight);
 
-    public const float ResultsTop = ColumnTop + PickerHeight + 10 + 36 + 10;
+    public const float ResultsTop = ColumnTop + PickerHeight + PaneGap + 36 + PaneGap;
     public const float ResultRow = 48, RowGap = 2;
 
     public static float ColumnBottom(PlayerPane pane, int queueRows) => ColumnTop + (float)PlayerCard.ColumnHeight(pane, queueRows);
 
     // ---- The queue column ----
 
-    public const float QueueHeader = 24;
+    /// <summary>The queue's heading row: as tall as the × beside it.</summary>
+    public const float QueueHeader = IconButton;
     public const float QueueTop = ColumnTop + QueueHeader + 6;
     public const float QueueRow = 38, QueueSection = 20;
 }

@@ -577,7 +577,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         var song = _now;
         var reduce = m.Look.ReduceMotion;
         m.DisplayedPlaying = _toggle.Displayed(song?.IsPlaying ?? false, now);
-        _record.To(m.DisplayedPlaying || reduce ? 1 : 0, now, reduce ? 0 : 0.55);
+        _record.To(m.DisplayedPlaying || reduce ? 1 : 0, now, reduce ? 0 : PlayerTokens.Motion.Record);
         m.RowKind = ScrubRowKinds.Of(song?.HasSong ?? false, isAdvert: false, isStream: m.IsStream, song?.Duration ?? 0,
             _scrub.Current.CanSeek);
         if (song is { HasSong: true, HasTimeline: false }) m.RowKind = ScrubRowKind.Hidden;
@@ -596,13 +596,14 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _thickness.To(!seekable ? 4 : dragging ? 9 : active ? 7 : 4, now, reduce ? 0 : 0.18);
         _active.To(active ? 1 : 0, now, reduce ? 0.1 : 0.18);
         var capsulesUp = seekable && _scrub.CapsulesUp;
-        _capsules.To(capsulesUp ? 1 : 0, now, capsulesUp ? 0.12 : 0.10);
-        _titles.To((float)PlayerCard.TitleOpacity(capsulesUp), now, capsulesUp ? 0.10 : 0.14);
+        // The capsules rise (quick) while the titles dim (quick exit), and back.
+        _capsules.To(capsulesUp ? 1 : 0, now, capsulesUp ? PlayerTokens.Motion.Feedback : PlayerTokens.Motion.FeedbackOut);
+        _titles.To((float)PlayerCard.TitleOpacity(capsulesUp), now, capsulesUp ? PlayerTokens.Motion.FeedbackOut : PlayerTokens.Motion.Feedback);
         if (_scrub.Session is { } session) (m.CapsuleX, m.CapsuleTime) = (session.DisplayX, session.TargetTime);
         else if (_scrub.HoverState is { } hover) (m.CapsuleX, m.CapsuleTime) = (hover.X, hover.Time);
         else if (_scrub.Flash is { } flash) (m.CapsuleX, m.CapsuleTime) = (ScrubMath.X(flash, m.Duration), flash);
 
-        _note.To(now < _noteUntil ? 1 : 0, now, 0.3);
+        _note.To(now < _noteUntil ? 1 : 0, now, now < _noteUntil ? PlayerTokens.Motion.Feedback : PlayerTokens.Motion.FeedbackOut);
         m.Reveal = _reveal.Value(now);
         m.RecordOut = _record.Value(now);
         m.Thickness = _thickness.Value(now);

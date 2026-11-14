@@ -120,12 +120,12 @@ internal sealed unsafe class SearchField : IDisposable
         }
     }
 
-    /// <summary>The text's size in pixels (15 DIPs at the card's scale), and the face the card uses.</summary>
+    /// <summary>The text's size in pixels (15 DIPs at the card's scale), and the face and weight the card uses (the field token: regular).</summary>
     public void SetFont(int pixels)
     {
         if (pixels == _fontPixels) return;
         _fontPixels = pixels;
-        var font = PlayerNative.CreateFont(-pixels, 0, 0, 0, 500, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI Variable Text");
+        var font = PlayerNative.CreateFont(-pixels, 0, 0, 0, PlayerTokens.TypeScale.Field.Weight, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI Variable Text");
         PlayerNative.SendMessage(Hwnd, PlayerNative.WM_SETFONT, (nuint)font, 1);
         if (_font != 0) PlayerNative.DeleteObject(_font);
         _font = font;

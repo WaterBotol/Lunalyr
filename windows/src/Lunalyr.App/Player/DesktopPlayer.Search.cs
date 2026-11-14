@@ -296,8 +296,8 @@ internal sealed unsafe partial class DesktopPlayer
         var s = _scale;
         var look = _model;
         var well = CardPainter.FieldColour(look);
-        field.SetColours(CardPainter.ColorRef(well), CardPainter.ColorRef(look.Theme.Ink), CardPainter.ColorRef(CardPainter.Mix(look.Theme.Ink, well, 0.5f)));
-        field.SetFont((int)Math.Round(15 * s));
+        field.SetColours(CardPainter.ColorRef(well), CardPainter.ColorRef(look.Theme.Ink), CardPainter.ColorRef(CardPainter.PlaceholderColour(look)));
+        field.SetFont((int)Math.Round(PlayerTokens.TypeScale.Field.Size * s));
         field.Place(_cardX + (int)Math.Round(r.X * s), _cardY + (int)Math.Round(r.Y * s), (int)Math.Round(r.Width * s), (int)Math.Round(r.Height * s));
         field.SetAlpha(reveal);
         field.Show(true);

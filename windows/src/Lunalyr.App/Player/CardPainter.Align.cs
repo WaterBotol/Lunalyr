@@ -49,42 +49,43 @@ internal sealed partial class CardPainter
 
         // Under the bar: where the video is, the keys, its length.
         var times = CardLayout.TimesRect;
-        var timeColour = WithAlpha(t.Ink, t.HighContrast ? 1 : 0.8f);
+        var timeColour = Ink(m, PlayerInk.Secondary);
         DrawText(dc, Layout(ScrubMath.Timestamp(display.VideoTime), TextStyle.Time, 100), times.X, times.Y, timeColour);
         var length = Layout(ScrubMath.Timestamp(display.VideoLength), TextStyle.Time, 100);
         DrawText(dc, length, times.Right - length.Metrics.Width, times.Y, timeColour);
-        var hint = Layout(MusicVideoAlignDisplay.Hint, TextStyle.Rate, (int)width - 90);
-        DrawText(dc, hint, times.CentreX - hint.Metrics.Width / 2, times.Y + 1, WithAlpha(t.Ink, t.HighContrast ? 1 : 0.6f));
+        var hint = Layout(MusicVideoAlignDisplay.Hint, TextStyle.RowDetail, (int)width - 90);
+        DrawText(dc, hint, times.CentreX - hint.Metrics.Width / 2, times.Y, Ink(m, PlayerInk.Tertiary));
 
-        // Over the knob: the offset the release keeps, and what it means.
-        var title = Layout(display.Title, TextStyle.CapsuleTime, 200);
+        // Over the knob: the offset the release keeps, and what it means (12 by 8 inside its capsule).
+        var title = Layout(display.Title, TextStyle.AlignTitle, 200);
         var detail = Layout(display.Detail, TextStyle.Rate, 300);
-        var boxWidth = Math.Max(title.Metrics.Width, detail.Metrics.Width) + 28;
-        var boxHeight = title.Metrics.Height + detail.Metrics.Height + 12;
+        var boxWidth = Math.Max(title.Metrics.Width, detail.Metrics.Width) + 24;
+        var boxHeight = title.Metrics.Height + 1 + detail.Metrics.Height + 16;
         var box = Clamp(new RectF(knob - boxWidth / 2, CardLayout.SeekRowTop - 4 - boxHeight, boxWidth, boxHeight), left, width);
         Capsule(dc, m, box, 1);
-        DrawText(dc, title, box.CentreX - title.Metrics.Width / 2, box.Y + 5, t.Ink);
-        DrawText(dc, detail, box.CentreX - detail.Metrics.Width / 2, box.Y + 6 + title.Metrics.Height, WithAlpha(t.Ink, t.HighContrast ? 1 : 0.75f));
+        DrawText(dc, title, box.CentreX - title.Metrics.Width / 2, box.Y + 8, Ink(m, PlayerInk.Primary));
+        DrawText(dc, detail, box.CentreX - detail.Metrics.Width / 2, box.Y + 8 + title.Metrics.Height + 1, Ink(m, PlayerInk.Secondary));
 
-        // The row under it: Reset, Cancel, Done.
+        // The row under it: Reset (label type; quaternary while there is nothing to reset), Cancel, Done.
         var canReset = display.Origin == MusicVideoOffsetOrigin.Manual;
         var reset = CardLayout.AlignResetRect;
-        var resetAlpha = canReset ? (m.HoverPart == CardPart.AlignReset ? 1f : 0.85f) : 0.4f;
-        DrawGlyph(dc, GlyphReset, new RectF(reset.X, reset.Y, 18, reset.Height), WithAlpha(t.Ink, resetAlpha), 12);
-        DrawText(dc, Layout("Reset", TextStyle.Button, 80), reset.X + 22, reset.Y + 6, WithAlpha(t.Ink, resetAlpha));
+        var resetInk = Ink(m, !canReset ? PlayerInk.Quaternary : m.HoverPart == CardPart.AlignReset ? PlayerInk.Primary : PlayerInk.Secondary);
+        var resetText = Layout("Reset", TextStyle.Label, 80);
+        DrawGlyph(dc, GlyphReset, new RectF(reset.X, reset.Y, 18, reset.Height), resetInk, 12);
+        DrawText(dc, resetText, reset.X + 22, reset.CentreY - resetText.Metrics.Height / 2, resetInk);
         if (canReset) Hits.Add((CardPart.AlignReset, reset));
         var cancel = CardLayout.AlignCancelRect;
-        var cancelText = Layout("Cancel", TextStyle.Button, 80);
-        if (m.HoverPart == CardPart.AlignCancel && !t.HighContrast) FillRounded(dc, cancel, 16, WithAlpha(t.Ink, 0.1f));
-        DrawText(dc, cancelText, cancel.CentreX - cancelText.Metrics.Width / 2, cancel.CentreY - cancelText.Metrics.Height / 2, t.Ink);
+        var cancelText = Layout("Cancel", TextStyle.ButtonMedium, 80);
+        if (m.HoverPart == CardPart.AlignCancel && !t.HighContrast) FillRounded(dc, cancel, 16, WithAlpha(t.Ink, F(PlayerTokens.Fill.Hover)));
+        DrawText(dc, cancelText, cancel.CentreX - cancelText.Metrics.Width / 2, cancel.CentreY - cancelText.Metrics.Height / 2,
+            Ink(m, m.HoverPart == CardPart.AlignCancel ? PlayerInk.Primary : PlayerInk.Secondary));
         Hits.Add((CardPart.AlignCancel, cancel));
         var done = CardLayout.AlignDoneRect;
-        var doneFill = t.HighContrast ? t.Ink : m.Look.Light ? t.Ink : new Color4(1, 1, 1, 1);
+        var doneFill = t.Ink;
         if (m.HoverPart == CardPart.AlignDone && !t.HighContrast) doneFill = Darken(doneFill, m.Look.Light ? -0.12f : 0.06f);
         FillRounded(dc, done, 16, doneFill);
         var doneText = Layout("Done", TextStyle.Button, 80);
-        var doneInk = t.HighContrast ? t.Base : m.Look.Light ? new Color4(1, 1, 1, 1) : new Color4(0, 0, 0, 1);
-        DrawText(dc, doneText, done.CentreX - doneText.Metrics.Width / 2, done.CentreY - doneText.Metrics.Height / 2, doneInk);
+        DrawText(dc, doneText, done.CentreX - doneText.Metrics.Width / 2, done.CentreY - doneText.Metrics.Height / 2, t.InkInverse);
         Hits.Add((CardPart.AlignDone, done));
     }
 
@@ -94,10 +95,12 @@ internal sealed partial class CardPainter
         var rect = CardLayout.AlignButtonRect;
         var t = m.Theme;
         var on = m.Align is not null;
-        var halo = on ? 0.2f : m.PressedPart == CardPart.AlignButton ? 0.14f : m.HoverPart == CardPart.AlignButton ? 0.1f : 0;
-        if (halo > 0) Fill(dc, new Ellipse(new Vector2(rect.CentreX, rect.CentreY), rect.Width / 2, rect.Width / 2), WithAlpha(t.Ink, halo));
-        var alpha = on || t.HighContrast ? 1f : m.AlignReason is null ? 0.75f : 0.3f;
-        DrawGlyph(dc, GlyphFilm, rect, on ? (t.HighContrast ? t.Highlight : t.Accent) : WithAlpha(t.Ink, alpha), 13);
+        var hovered = m.HoverPart == CardPart.AlignButton;
+        var halo = on || m.PressedPart == CardPart.AlignButton ? F(PlayerTokens.Fill.Selected) : hovered ? F(PlayerTokens.Fill.Hover) : 0;
+        if (halo > 0) Fill(dc, new Ellipse(new Vector2(rect.CentreX, rect.CentreY), ButtonSize / 2, ButtonSize / 2), WithAlpha(t.Ink, halo));
+        // Lit in the album's accent (a state); dimmed to quaternary while the video can't be lined up.
+        var ink = Ink(m, m.AlignReason is not null ? PlayerInk.Quaternary : hovered ? PlayerInk.Primary : PlayerInk.Secondary);
+        DrawGlyph(dc, GlyphFilm, rect, on ? (t.HighContrast ? t.Highlight : t.Accent) : ink, F(PlayerTokens.Glyph.Icon));
         Hits.Add((CardPart.AlignButton, rect));
     }
 }

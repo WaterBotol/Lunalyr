@@ -27,7 +27,7 @@ internal sealed unsafe partial class DesktopPlayer
             m.MusicVideoOffered = true;
             m.AlignReason = null;
             m.Align = new MusicVideoAlignDisplay(215, 200, 3.4, Math.Max(0, Elapsed(now)), MusicVideoOffsetOrigin.Manual);
-            m.TitleAlpha = Math.Min(m.TitleAlpha, 0.15f);
+            m.TitleAlpha = Math.Min(m.TitleAlpha, (float)PlayerCard.TitleOpacity(true));
             return;
         }
         var video = Video;
@@ -42,7 +42,7 @@ internal sealed unsafe partial class DesktopPlayer
         m.AlignReason = reason;
         m.Align = display;
         // The offset's capsule sits over the song: it steps aside, as for the seek bar's capsules.
-        if (display is not null) m.TitleAlpha = Math.Min(m.TitleAlpha, 0.15f);
+        if (display is not null) m.TitleAlpha = Math.Min(m.TitleAlpha, (float)PlayerCard.TitleOpacity(true));
     }
 
     /// <summary>Align mode keeps the card drawing (the knob moves with the song) and the card up.</summary>
