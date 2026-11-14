@@ -140,13 +140,13 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="TimingHeader" Style="{StaticResource SectionHeader}" Text="Lyric timing"
+                            <TextBlock x:Name="TimingHeader" Style="{StaticResource SectionHeader}" Text="Lyric timing" TextWrapping="NoWrap"
                                        AutomationProperties.AccessibilityView="Raw" />
                             <Button x:Name="EarlierButton" Grid.Column="1" Content="Earlier" Padding="10,4,10,5"
                                     Click="EarlierButton_Click" />
                             <!-- This song's offset; type +0.35, −1.2 or 350ms and press Enter to set it (the owner, 15 Nov 2026). -->
-                            <TextBox x:Name="OffsetText" Grid.Column="2" MinWidth="72" MaxWidth="96" TextAlignment="Center"
-                                     VerticalAlignment="Center" FontFamily="Segoe UI Variable Text" Padding="6,4,6,4"
+                            <TextBox x:Name="OffsetText" Grid.Column="2" MinWidth="60" MaxWidth="76" TextAlignment="Center"
+                                     VerticalAlignment="Center" FontFamily="Segoe UI Variable Text" Padding="4,4,4,4"
                                      AutomationProperties.LiveSetting="Polite" KeyDown="OffsetText_KeyDown" LostFocus="OffsetText_LostFocus"
                                      ToolTipService.ToolTip="Type an offset such as +0.35 or −1.2 and press Enter" />
                             <Button x:Name="LaterButton" Grid.Column="3" Content="Later" Padding="10,4,10,5"

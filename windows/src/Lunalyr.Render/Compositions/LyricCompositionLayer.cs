@@ -591,7 +591,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
 
     /// <summary>The composition a backing group animates in: the lead's when it sets words loose or links them, else Editorial.</summary>
     internal static CompositionKind BackingKind(CompositionKind lead) => lead is CompositionKind.Scattered or CompositionKind.Constellation
-        or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Editorial;
+        or CompositionKind.ConstellationEditorial or CompositionKind.Echo or CompositionKind.Editorial ? lead : CompositionKind.Scattered;
 
     /// <summary>
     /// The composition a backing group (or a credit) animates in: the one chosen under "Backing vocals animate like", else

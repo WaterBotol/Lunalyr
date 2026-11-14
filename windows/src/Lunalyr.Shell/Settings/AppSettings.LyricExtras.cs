@@ -25,7 +25,7 @@ public sealed partial record AppSettings
 
     /// <summary>
     /// "Backing vocals animate like" (Mac <c>custom.backingVocalStyle</c>): a layout of <see cref="BackingVocalChoices"/>,
-    /// or "" for the lead's own layout (the rolling three then take Editorial).
+    /// or "" for the lead's own layout (layouts that can't carry backing words set them as Scattered).
     /// </summary>
     public string BackingVocalStyle { get; init; } = "";
 

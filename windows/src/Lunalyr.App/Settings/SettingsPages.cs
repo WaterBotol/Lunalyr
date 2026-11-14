@@ -42,19 +42,22 @@ internal static class GeneralPage
 
         // Tester feedback on 0.9.0: a log can be weeks away, a paste isn't.
         Section(page, "Troubleshooting");
-        var copied = Caption("");
-        page.Children.Add(Card("Copy diagnostics",
-            "Your graphics card, displays, HDR and refresh rate, what each display's wallpaper is doing and the last problems, ready to paste into a message. Nothing is sent anywhere.",
-            "", Button("Copy diagnostics", async () =>
-            {
-                if (App.CurrentHost is not { } host) return;
-                copied.Text = "Collecting…";
-                copied.Text = await host.CopyDiagnosticsAsync() ? "Copied. Paste it into your message." : "Couldn't copy to the clipboard.";
-            })));
-        page.Children.Add(copied);
+        const string diagnosticsText =
+            "Your graphics card, displays, HDR and refresh rate, what each display's wallpaper is doing and the last problems, ready to paste into a message. Nothing is sent anywhere.";
+        Card? diagnostics = null;
+        diagnostics = Card("Copy diagnostics", diagnosticsText, "", Button("Copy diagnostics", async () =>
+        {
+            if (App.CurrentHost is not { } host) return;
+            // The result shows in the row itself (a caption under it left a gap while it was empty).
+            diagnostics!.Description = "Collecting…";
+            diagnostics.Description = await host.CopyDiagnosticsAsync()
+                ? "Copied. Paste it into your message."
+                : "Couldn't copy to the clipboard. " + diagnosticsText;
+        }));
+        page.Children.Add(diagnostics);
         page.Children.Add(Card("Reduce flicker (compatibility)",
             "If the wallpaper or music video flickers, this draws the wallpaper a simpler way. Takes effect when Lunalyr next starts. “Your wallpaper” and YouTube music videos need it off and show the album colours instead.",
-            "", Toggle(ctx, s => s.ReduceFlicker, (s, v) => s with { ReduceFlicker = v })));
+            "", Toggle(ctx, s => s.ReduceFlicker, (s, v) => s with { ReduceFlicker = v })));
 
         Section(page, "Tray");
         ExtrasSections.AddTrayLyric(page, ctx);

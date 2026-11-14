@@ -17,8 +17,22 @@ internal static class SettingsGroups
     public static UIElement Fold(UIElement built)
     {
         if (built is not StackPanel page || !Equals(page.Tag, SettingsKit.PageRoot)) return built;
-        var children = page.Children.ToList();
-        if (!children.Any(IsHeading)) return built;
+        FoldPanel(page, depth: 0);
+        return built;
+    }
+
+    /// <summary>
+    /// Folds <paramref name="panel"/>'s sections, and those of the panels inside it that are shown for one choice (the
+    /// Wallpaper page's per-type sections), a couple of levels down.
+    /// </summary>
+    private static void FoldPanel(StackPanel panel, int depth)
+    {
+        if (depth < 3)
+            foreach (var nested in panel.Children.OfType<StackPanel>().ToList())
+                if (!ReferenceEquals(nested.Tag, SettingsKit.PageRoot)) FoldPanel(nested, depth + 1);
+        var children = panel.Children.ToList();
+        if (!children.Any(IsHeading)) return;
+        var page = panel;
         page.Children.Clear();
         var groups = new List<(TextBlock Heading, StackPanel Rows)>();
         var order = new List<object>(); // a loose element, or a group's index
@@ -35,7 +49,6 @@ internal static class SettingsGroups
         }
         foreach (var item in order)
             page.Children.Add(item is int index ? Group(groups[index].Heading, groups[index].Rows, first: page.Children.Count == 0) : (UIElement)item);
-        return built;
     }
 
     private static bool IsHeading(UIElement element) =>

@@ -136,6 +136,26 @@ public sealed partial class TrayFlyout : Window
     /// <c>--flyout-capture</c> (checks): the flyout as it opens, but off screen, not topmost and never activated (no
     /// focus goes in); after <paramref name="after"/> it is written as a PNG with PrintWindow, then <paramref name="then"/>.
     /// </summary>
+    /// <summary>The panel's content, drawn by XAML (RenderTargetBitmap), over the theme's base colour, as a PNG.</summary>
+    private async Task WriteContentPng(string path)
+    {
+        var bitmap = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+        await bitmap.RenderAsync(Panel);
+        if (bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0) return;
+        var pixels = (await bitmap.GetPixelsAsync()).ToArray();
+        var (r, g, b) = Root.ActualTheme == ElementTheme.Dark ? (0x20, 0x20, 0x20) : (0xF3, 0xF3, 0xF3);
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            var keep = 255 - pixels[i + 3];
+            pixels[i] = (byte)(pixels[i] + b * keep / 255);
+            pixels[i + 1] = (byte)(pixels[i + 1] + g * keep / 255);
+            pixels[i + 2] = (byte)(pixels[i + 2] + r * keep / 255);
+            pixels[i + 3] = 255;
+        }
+        await System.IO.File.WriteAllBytesAsync(path, Ticker.TickerPng.FromBgra(pixels, bitmap.PixelWidth, bitmap.PixelHeight));
+        _host.Log.App.Info($"Tray panel content written to {path} ({bitmap.PixelWidth}×{bitmap.PixelHeight}).");
+    }
+
     internal void CaptureQuietly(PixelRect anchor, string path, TimeSpan after, Action then)
     {
         _capturing = true;
@@ -156,8 +176,18 @@ public sealed partial class TrayFlyout : Window
             Refresh();
             Place();
             // One more layout pass for what the refresh changed, then the picture.
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
             {
+                try
+                {
+                    // The panel's content drawn by XAML itself as well: the window's pixels are blank while the
+                    // displays are off (an overnight check), the content is not.
+                    await WriteContentPng(System.IO.Path.ChangeExtension(path, null) + "-content.png");
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    _host.Log.App.Warn("Couldn't draw the tray panel's content for the capture.", ex);
+                }
                 try
                 {
                     var size = Onboarding.WindowCapture.WritePng(_hwnd, path);

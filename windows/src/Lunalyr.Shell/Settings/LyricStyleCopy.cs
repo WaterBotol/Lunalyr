@@ -40,7 +40,7 @@ public static class LyricStyleCopy
         "While Randomise is on, synced lyrics use the mix; this typeface still sets titles, unsynced lyrics and Echo’s repeats.";
 
     public const string BackingVocals =
-        "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.";
+        "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Layouts that can’t carry them (Spoken, Cascade, Cutout and the stage layouts) set them as Scattered.";
 
     public const string BackingLeadsLayout = "The lead’s layout";
 
@@ -84,7 +84,7 @@ public static class LyricStyleCopy
 
     public const string MemoryNothingPlaying = "Play a song to remember a layout and colour for it or its artist.";
 
-    public const string MemorySaves = "Saves the layout and text colour chosen above. A song’s own style wins over its artist’s.";
+    public const string MemorySaves = "Saves the layout, text colour and typeface chosen above. A song’s own style wins over its artist’s.";
 
     public const string MemoryNoArtist = "This song names no artist, so its style can only be remembered for the song.";
 
