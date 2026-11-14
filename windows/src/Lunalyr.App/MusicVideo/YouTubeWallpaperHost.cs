@@ -5,11 +5,16 @@
 //
 // - Where: a disabled WS_CHILD window under Progman, the size of the main display's wallpaper surface and just beneath it
 //   in z-order (above Windows' own wallpaper). The surface draws the "musicVideo.youtube" layer, which is see-through
-//   while the player is on screen, so the video shows through it under the lyrics. Disabled: it takes no clicks or keys.
-// - As YouTube draws it: the player fills the window, fitted without cropping, and is on screen in every state once it is
-//   ready (paused included, with YouTube's own interface). Nothing is laid over it to hide that interface: YouTube's API
-//   policies don't allow obscuring, cropping or covering the embedded player's interface (the Mac's overscan and frozen
-//   frame are not kept for YouTube). After ten minutes not playing, the player is closed and the album colours show.
+//   while the player is uncovered, so the video shows through it under the lyrics. Disabled: it takes no clicks or keys.
+// - Framing and hiding, the Mac's (the owner's decision, 14 Nov 2026, replacing milestone 6's player "as YouTube draws
+//   it"): filled, the page draws the player 1.25x larger, so YouTube's title bar and logo fall off-screen; shown whole
+//   (musicVideoFraming "whole"), the WebView2 is only the visible picture's size, centred (never larger than the screen,
+//   MusicVideoFramings.VisiblePixels), and the page sizes the player inside it (YouTubeEmbed.Box) from the video's own
+//   shape (oEmbed, AppController.MusicVideoAspect). The player is uncovered only while it plays (YouTubePlayerReveal):
+//   paused, buffering or ended, the wallpaper's layer covers it with the video's still; shown whole, each start, resume
+//   and seek stays covered for 5 s while YouTube's title overlay fades. Covering is done by the wallpaper's layer, not by
+//   hiding the WebView2, so the page keeps playing and rendering behind it. After ten minutes not playing, the player is
+//   closed and the still shows.
 // - Silence does not rest on YouTube: the browser runs with Chromium's --mute-audio, the WebView2 is muted
 //   (CoreWebView2.IsMuted) before anything is loaded, and the page mutes the player again before every play, seek and
 //   sample. The profile is InPrivate (no cookies kept), the page is served from a virtual https host, it may not navigate
@@ -61,6 +66,9 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private MusicVideoHold _hold = MusicVideoHold.Other;
     private DispatcherQueueTimer? _placement;
     private bool _disposed;
+    private readonly YouTubePlayerReveal _reveal;
+    /// <summary>What the page and the WebView2 were last given: framing, box, blur, bounds (null: nothing yet).</summary>
+    private (MusicVideoFraming Framing, YouTubeEmbed.Box? Box, double Blur, Windows.Foundation.Rect Bounds)? _look;
 
     public YouTubeWallpaperHost(DispatcherQueue ui, AppController app, MusicVideoController video, MusicVideoFeed feed, RenderEngine engine,
         string userDataFolder, Func<AppSettings> settings, Logger log)
@@ -88,10 +96,27 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
             Surface = this,
             AlignDragging = () => _video.IsAlignDragging,
         };
+        _reveal = new YouTubePlayerReveal((delay, work) =>
+        {
+            var timer = ui.CreateTimer();
+            timer.Interval = TimeSpan.FromSeconds(delay);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                work();
+            };
+            timer.Start();
+            return timer.Stop;
+        }) { OnShow = Uncover };
         _session.OnEffect = effect => _ui.TryEnqueue(() => Perform(effect));
         video.Changed += () => _ui.TryEnqueue(Follow);
-        // Reduce Motion (Animation effects) turning on or off.
-        app.StatusChanged += (_, _) => _ui.TryEnqueue(Follow);
+        // Reduce Motion (Animation effects) turning on or off; the video's shape arriving (oEmbed).
+        app.StatusChanged += (_, _) => _ui.TryEnqueue(() =>
+        {
+            Follow();
+            ApplyLook();
+        });
         // The loop rests once a paused, covered or hidden wallpaper has paused the video; these wake it again. Power
         // saving arrives the same way, and may draw another type instead of the video.
         engine.StatusChanged += (_, _) => _ui.TryEnqueue(() =>
@@ -227,7 +252,8 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         var uri = Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var parsed) ? parsed : null;
         if (uri?.AbsolutePath == "/player.html" && _pageVideo is { } video && YouTubeVideoId.IsValid(video))
         {
-            var html = Encoding.UTF8.GetBytes(YouTubeEmbed.Html(video, _pageStart, _pageNumber));
+            var (framing, box, _) = Look();
+            var html = Encoding.UTF8.GetBytes(YouTubeEmbed.Html(video, _pageStart, _pageNumber, overscan: framing.YouTubeOverscan(), box: box));
             e.Response = _environment.CreateWebResourceResponse(Stream(html), 200, "OK",
                 "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: strict-origin-when-cross-origin");
             return;
@@ -253,30 +279,40 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         if (YouTubeEmbedSession.Message.Parse(e.WebMessageAsJson) is not { } message) return;
         var source = Uri.TryCreate(e.Source, UriKind.Absolute, out var uri) ? uri : null;
         var trusted = source is not null && YouTubeEmbed.Trusts(true, source.Scheme, source.Host);
-        Perform(_session.Receive(message, trusted));
+        var buffering = message is { Kind: YouTubeEmbedSession.MessageKind.State, Value: 3 };
+        Perform(_session.Receive(message, trusted), buffering);
     }
 
-    private void Perform(YouTubeEmbedSession.Effect effect)
+    /// <param name="buffering">The effect answers a buffering state (3) message.</param>
+    private void Perform(YouTubeEmbedSession.Effect effect, bool buffering = false)
     {
         if (_disposed) return;
         switch (effect.Kind)
         {
             case YouTubeEmbedSession.EffectKind.Ready:
-                ApplyBlur();
-                Show(_session.ShowsPlayer);
+                // The page's window shows beneath the wallpaper from now on; the wallpaper uncovers it once it plays.
+                _look = null;
+                ApplyLook();
+                if (_controller is not null) _controller.IsVisible = _session.HasPlayer;
                 _loop.Tick();
                 break;
             case YouTubeEmbedSession.EffectKind.Load when _controller is not null:
+                _reveal.Reset();
+                Uncover(false);
+                _controller.IsVisible = false;
                 _pageVideo = effect.VideoId;
                 _pageNumber = effect.Page;
                 _pageStart = MusicVideoTiming.VideoTime(_app.ReadSongPosition().Time, _video.CurrentOffset, null) ?? 0;
+                _look = null;
+                ApplyLook();
                 _controller.CoreWebView2.Navigate(YouTubeEmbed.PageUrl(effect.Page).AbsoluteUri);
                 break;
             case YouTubeEmbedSession.EffectKind.Visible:
-                Show(effect.Visible);
+                _reveal.Set(effect.Visible, buffering);
                 break;
             case YouTubeEmbedSession.EffectKind.Fail when effect.VideoId is { } id:
-                Show(false);
+                _reveal.Set(false);
+                if (_controller is not null) _controller.IsVisible = false;
                 _idle.Reset();
                 Run("window.lunalyrPause && window.lunalyrPause()");
                 _log.Info($"Music video: YouTube's player couldn't show the video ({effect.Failure}).");
@@ -286,18 +322,53 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     }
 
     /// <summary>
-    /// The player is on screen from ready until it fails or closes, in every state, as YouTube draws it
-    /// (<see cref="YouTubeEmbed.ShowsPlayer"/>); the wallpaper's layer is see-through over it exactly then.
+    /// Uncovers the player (the wallpaper's layer turns see-through over it) or covers it again with the video's still
+    /// (<see cref="YouTubePlayerReveal"/> decides when). The WebView2 itself stays shown from ready, so it keeps playing.
     /// </summary>
-    private void Show(bool visible)
+    private void Uncover(bool visible)
     {
         // A sample answered after the player closed must not leave the wallpaper see-through over nothing.
-        visible &= _controller is not null;
+        visible &= _controller is not null && _session.HasPlayer;
         _feed.PlayerVisible = visible;
-        if (_controller is not null) _controller.IsVisible = visible;
     }
 
-    private void ApplyBlur() => Run($"window.lunalyrBlur && window.lunalyrBlur({Math.Max(0, _settings().MusicVideoBlur).ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+    /// <summary>The framing chosen, the player's box in the page (whole only) and the WebView2's bounds in the host window.</summary>
+    private (MusicVideoFraming Framing, YouTubeEmbed.Box? Box, Windows.Foundation.Rect Bounds) Look()
+    {
+        var framing = _settings().YouTubeFraming;
+        var width = 0;
+        var height = 0;
+        if (_hwnd != 0 && GetClientRect(_hwnd, out var client))
+        {
+            width = client.Right - client.Left;
+            height = client.Bottom - client.Top;
+        }
+        if (framing != MusicVideoFraming.Whole || width <= 0 || height <= 0)
+            return (framing, null, new Windows.Foundation.Rect(0, 0, Math.Max(0, width), Math.Max(0, height)));
+        // Shown whole: never larger than the screen; the page draws the 16:9 player at the box inside it, so YouTube's own
+        // bars for a video of another shape fall outside.
+        var aspect = _app.MusicVideoAspect ?? MusicVideoFramings.YouTubeAspect;
+        var (x, y, w, h) = MusicVideoFramings.VisiblePixels(aspect, width, height);
+        var layout = MusicVideoFramings.WholeLayoutFor(aspect, new VideoSize(width, height));
+        return (framing, layout.Box, new Windows.Foundation.Rect(x, y, w, h));
+    }
+
+    /// <summary>Gives the page and the WebView2 the framing, box, blur and bounds wanted now, when they changed.</summary>
+    private void ApplyLook()
+    {
+        if (_disposed || _controller is null) return;
+        var (framing, box, bounds) = Look();
+        var blur = Math.Max(0, _settings().MusicVideoBlur);
+        _reveal.Framing = framing;
+        var last = _look;
+        if (last is { } was && was.Framing == framing && Equals(was.Box, box) && was.Blur == blur && was.Bounds == bounds) return;
+        _look = (framing, box, blur, bounds);
+        _controller.Bounds = bounds;
+        if (!_session.Ready) return; // a loading page gets its framing and box in its HTML; the blur once it is ready
+        Run(YouTubeEmbed.OverscanScript(framing.YouTubeOverscan()));
+        Run(YouTubeEmbed.BoxScript(box));
+        Run($"window.lunalyrBlur && window.lunalyrBlur({blur.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+    }
 
     private void Run(string script)
     {
@@ -319,9 +390,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     public void NoteHold(MusicVideoHold hold)
     {
-        // The wallpaper paused, covered or hidden pauses the video too (shown paused, as YouTube draws it).
+        // The wallpaper paused, covered or hidden pauses the video too (covered by its still once it stops playing).
         _loop.SetSurfacePaused(SurfacePaused());
         _hold = hold;
+        _reveal.Hold = hold;
         _idle.NoteHold(hold);
     }
 
@@ -361,9 +433,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
             done(null, null);
             return;
         }
-        // Also from each sample, in case a message was missed.
-        Show(_session.ShowsPlayer);
-        var stuck = _session.NotePlayback(_hold == MusicVideoHold.Live, YouTubeEmbed.IsPlaying(read.Sample), Environment.TickCount64 / 1000.0);
+        // Also from each sample, in case a state message was missed (through the reveal's hold, like the messages).
+        var showing = YouTubeEmbed.ShowsVideo(read.Sample);
+        _reveal.Set(_session.Ready && showing, read.Sample.Buffering);
+        var stuck = _session.NotePlayback(_hold == MusicVideoHold.Live, showing, Environment.TickCount64 / 1000.0);
         if (stuck.Kind != YouTubeEmbedSession.EffectKind.None)
         {
             Perform(stuck);
@@ -375,7 +448,7 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     public void PlayVideo() => Run("window.lunalyrPlay()");
 
-    /// <summary>Just pauses: the paused player stays on screen as YouTube draws it.</summary>
+    /// <summary>Just pauses: the paused player is covered by its still (there is no frozen frame on Windows).</summary>
     public void PauseVideo() => _idle.Pause();
 
     public void SeekVideo(double seconds)
@@ -432,14 +505,11 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         var origin = new Point { X = rect.Left, Y = rect.Top };
         ScreenToClient(progman, ref origin);
         SetWindowPos(_hwnd, _surface, origin.X, origin.Y, rect.Right - rect.Left, rect.Bottom - rect.Top, 0x0010 | 0x0040 /* NOACTIVATE | SHOWWINDOW */);
-        if (_controller is not null) Resize(_controller);
+        // Also every two seconds: a framing, blur or display size changed in the meantime.
+        ApplyLook();
     }
 
-    private void Resize(CoreWebView2Controller controller)
-    {
-        if (_hwnd != 0 && GetClientRect(_hwnd, out var client))
-            controller.Bounds = new Windows.Foundation.Rect(0, 0, client.Right - client.Left, client.Bottom - client.Top);
-    }
+    private void Resize(CoreWebView2Controller controller) => controller.Bounds = Look().Bounds;
 
     /// <summary>This process's wallpaper surface on the main display (the one at the desktop's origin), under Progman.</summary>
     private static unsafe nint MainSurface(nint progman)
@@ -489,7 +559,9 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
 
     private void CloseWebView()
     {
-        Show(false);
+        _reveal.Reset();
+        _feed.PlayerVisible = false;
+        _look = null;
         _controller?.Close();
         _controller = null;
         _core = null; // only once the controller is closed: no more events can come
