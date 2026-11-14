@@ -255,3 +255,22 @@ Blame (`-w -M -C`) run on each Mac range read; nothing from an `a99fd65` line wa
 | `LyricLayerView.swift` 125–150, 672–682 (remembered colour and composition) | 0 | `AppController.StyleMemory.cs`, `StyleMemory.Applied` | Behaviour ported into the controller |
 | `LunalyrExtras.swift` 445–470 (`cycleLayout`) | 0 | `LunalyrExtras.CycleLayout`, `StyleMemory.CycledRemembered` | Faithful port |
 | `LyricExtrasInspector.swift` 1–260, `LyricStylePage.swift` 1–300 | 0, 1 (a SwiftUI environment line) | `LyricStylePage.cs`, `LyricStyleCopy.cs` | Rows rebuilt with `SettingsKit`, copy ported |
+
+### Mac Test Build 88: the eight original layouts and the title card (`mac88/original-layouts`)
+
+Blame (`-w -M -C`, `transfer/windows-port-14nov`) intersected with the lines the diff from `next/integration` adds: none
+of the added lines in `SpokenTypographyView.swift`, `LyricMotion.c` or `OpeningTitle.swift` is from `a99fd65`; in
+`LyricTypography.swift` (264–265, 302–303), `ScatteredLyricText.swift` (262–265) and `LyricComposition.swift` (278–296)
+a few lines are attributed to it because `-C` matches lines moved from older code (lower-casing and trimming a word, the
+row-wrap loop's tail, Echo's phrase text). Those were not translated: Windows already had them in its own form
+(`EditorialSetting.TrimPunctuationAndSpaces`, `EditorialFlow.RowEnd`, `LyricRuns.Text`).
+
+| Mac file | Windows | How |
+|---|---|---|
+| `LyricColour.swift` (`sweepUnderline` never set) | `LyricInkDirector` | Faithful port |
+| `LyricTypography.swift` (`focalRun`, `starHeights`, tiers, per-layout metrics; `SpokenTypography` sizes) | `EditorialSetting.FocalRun`, `Tiers`, `StarHeights`, `Metrics`; `RollingWords.Prepare` | Faithful port of the Lunalyr lines |
+| `ScatteredLyricText.swift` (`FlowPlan`, `FlowLayout` breaks, balance, shifts, field; still words; `settles`; entrance direction) | `FlowPlan`, `EditorialFlow.Place`, `LinePlans.Build`, `LyricCompositionLayer.DrawWordTimed` | Faithful port |
+| `LyricComposition.swift` (`EchoBackdrop` table, side, edge, fit) | `EchoBackdrop` | Faithful port |
+| `SpokenTypographyView.swift` (`handoff`, `gap`, focus height, `calmLabel`, `labelHold`, `tilePadding`, `recede`, column shift, indent, `align`, title-safe margins) | `RollingWords.Handoff`, `RollingStack.Gap/FocusHeight/Margins`, `RollingLabel.Calm/Hold/TilePadding`, `RollingTokenState.Recede`, `RollingStack.Slot.Align`, `SpokenLayer` | Faithful port |
+| `LyricMotion.c` (`vc_rolling_pose` styles 1 and 2) | `RollingMotion.Pose` | Faithful port of the new Lunalyr lines into the re-implemented curve |
+| `OpeningTitle.swift` (`glowStrength`, no rule, artist's own case, glows) | `OpeningTitle.GlowStrength`, `LyricCompositionLayer.OpeningTitle.cs` | Faithful port |

@@ -24,3 +24,10 @@ the fit — is Lunalyr's own and is ported as it is (`Lunalyr.Core.Compositions.
 - Each word (with its reading) carries a soft black shadow, 25% opacity, radius 7 points, 2 points down.
 - A word is set on one line at its own width, with 2 points of padding at each side (11 by 3 for a Cutout label).
 - The stage is at least 7.2 type sizes tall.
+
+## Mac Test Build 88 (Lunalyr's own lines, ported)
+
+- The roll is calm: each onset's step is a critically damped glide (`LyricMotion.Settle`) over 0.9 of its cadence,
+  held to 0.35–0.6 s, with no overshoot.
+- Sung words step back in two tiers (74%, then 58%) and settled words hold still; one spacing unit (8/46 em) between
+  words; a title-safe margin of 5% of the stage. See [cascade-cutout.md](cascade-cutout.md).

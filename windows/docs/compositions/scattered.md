@@ -90,7 +90,22 @@ editorial.md), with these differences:
     degrees; and it is shrunk (never grown) to keep within two thirds of the stage around its resting centre
     (`WordStageFit`, scale 1.04, margin 4). Reduce Motion stops the wander.
 
-The idle float is 1.0 for the constellations, 0.8 for Echo and 0.6 otherwise (Lunalyr's `idleAmplitude`).
+Since Mac Test Build 88 settled words no longer float (the idle float is gone), and the word metrics, heights, rows and
+Echo's repeats below the table are superseded as described in [editorial.md](editorial.md) and here:
+
+- **Echo (Test Build 88, Lunalyr's own, ported)**: five repeats step away from the live line, measured from its
+  nearer edge (`Down`, base sizes; negative above) and to the side (`Across`, base sizes, mirrored on odd lines):
+
+  | Size share | Across | Down | Strength | Mirrored |
+  |---|---|---|---|---|
+  | 0.62 | 0.30 | −0.48 | 0.18 | no |
+  | 0.42 | 0.62 | −1.16 | 0.08 | no |
+  | 0.28 | 0.90 | −1.66 | 0.08 | no |
+  | 0.78 | 0 | 0.58 | 0.18 | yes |
+  | 0.52 | −0.30 | 1.44 | 0.08 | yes |
+
+  None is tilted; the wander is `0.08 × base` across, `0.03 × base` down and 0.4° of turn; each is shrunk to the
+  title-safe stage (90%) at scale 1.02. The table above is the earlier one, kept for the record.
 
 ## Word entrances (`WordArrival`)
 

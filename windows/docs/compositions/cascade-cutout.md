@@ -80,3 +80,21 @@ time, against 0.07–0.14 ms for Spoken; a label not fully shown is drawn in a D
 line costs a little more than in Spoken (up to about 11 ms on a cold first pass for a line of labels: each label bakes
 its tile and its word a second time in the colour set on it). Allocation is
 exactly Spoken's: nothing while the rolling window holds, and only on the frames where a word joins or leaves it.
+
+## Mac Test Build 88 (Lunalyr's own lines, ported)
+
+- **Sizes**: heroes 0.96, fillers 0.56, other words 0.70 of the base size (three clear steps).
+- **Sung words step back** (`RollingTokenState.Recede`): the last word to 74%, the one before to 58% (Spoken too);
+  Cascade retires them from rank 1.7 over 1.2, Cutout from rank 1.4 over 1.0. A held highlight is not dimmed. Settled
+  words hold still (no idle float).
+- **Cascade** is a steady flush column (the column curve's x is 0 and its scale 0.80 → 1.10): its edge is 19% of the
+  stage left of centre (right for a right-to-left word), heroes on the axis and other words tucked in 0.34 of a type
+  size. The roll keeps the seeded spring.
+- **Cutout** sits off the top edge: its focus at 59% of the stage's height, two spacing units between units, the
+  collage 16% left of centre with its own offsets (`sin(1.3 phase) × 0.42 + sin(0.72 rank) × 0.12`) and the sung label
+  a size up (0.80 → 1.06). Only the word in focus wears its label (`RollingLabel.Hold`: gone by rank 1, its word back
+  to its own colour); labels are the highlight's tile with chroma × 0.78 (`RollingLabel.Calm`); padding
+  `max(11 pt, 0.26 em)` by `max(3 pt, 0.08 em)`. The roll is a livelier spring that runs about 12% past (rise
+  `clamp(cadence / 2, 0.15, 0.30)`, ζ 0.55).
+- Every rolling layout keeps a title-safe margin of 5% of the stage (at least 0.22 of the type size) at the sides and
+  above and below.

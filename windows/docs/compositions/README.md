@@ -107,8 +107,11 @@ written from them in its own structure; no Verso line was translated.
 - **Opening title** (`LyricStyle.OpeningTitle` and `OpeningTitleCover`; off and on in the contract's defaults, both on
   in the app's settings as on the Mac). Every layer draws the song's title card as it starts, over whatever else is
   on the stage (`LyricCompositionLayer.OpeningTitle.cs`, ported from `OpeningTitle.swift`): the title in the lyric
-  family, a rule in the accent, the title's reading (`SceneSnapshot.TitleReading`), the artist in tracked capitals, the
-  album and the cover (`SceneSnapshot.Cover`), low on the left with a soft corner shade. Its timing is
+  family, the title's reading (`SceneSnapshot.TitleReading`), the artist in its own case, the album and the cover
+  (`SceneSnapshot.Cover`), low on the left with a soft corner shade. Since Mac Test Build 88 there is no bar above the
+  title, and the type and the cover glow in the album's colour: a tight halo (radius 0.18 of the card's unit, 0.7) and a
+  wide bloom (0.6, 0.45) on the type, one round the cover (0.22 of its side, 0.55), each times
+  `OpeningTitle.GlowStrength` (1 over a dark picture, 0.35 under dark type), baked once with the card. Its timing is
   `Core.Compositions.OpeningTitle`'s: gone a second before the first line can show, compact or none when singing
   starts soon, brief for a song joined part-way (`FrameContext.SongJoined`, kept by the engine), longer with no
   lyrics. Under Reduce Motion it only fades. Previews: `CompositionPreview -opening` (`docs/previews/opening/`).

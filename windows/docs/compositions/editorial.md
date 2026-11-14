@@ -83,3 +83,35 @@ so a line always sets the same way:
   the full 5% upwards and by 5% over the glyph count across, anchored at its foot (7% both ways for joined scripts).
   It used to scale the whole word by 5% about its centre, on top of the capped swell, which closed the gap before a
   held, emphasised word ("neonRAIN" in the milestone 3 capture).
+
+## Mac Test Build 88: one focal word, size tiers and composition (Lunalyr's own, ported)
+
+These lines are Lunalyr's (blame: not `a99fd65`, apart from a few moved lines that lower-case and trim a word or wrap
+rows, which Windows already had in its own form), so they are ported as they are. They replace the size, editorial
+range, turn and connection rules above for word-timed lines; the hash, "drag", hero and jitter stay as described.
+
+- **Focal word** (`EditorialSetting.FocalRun`): the run scoring highest on `drag × 6 + min(characters, 10)`, less 20
+  for a function word; ties go to the later run. It is set in the heavy cut.
+- **Tiers** (ems of the base size; focal, ordinary, function word): Editorial 1.08 / 0.74 / 0.60, Constellation
+  1.04 / 0.70 / 0.60, Constellation + Editorial 1.06 / 0.70 / 0.60, Echo 0.98 / 0.80 / 0.66, Scattered 1.04 / 0.72 /
+  0.60. An ordinary word adds `0.03 × jitter + 0.14 × contrast × drag`; nothing passes the focal tier.
+- **Editorial**: the words before the focal one are its kicker, at the small tier; the focal word starts a row of its
+  own and the next word starts the row after it. Level and upright. The second face goes to the focal word and to
+  roughly every third word after it (hash), by the editorial amount.
+- **Scattered**: words other than the focal one tilt by `((hash / 1000) mod 9 − 4) × 0.7 × max(0.6, spread) × mood`
+  degrees and lift by `(((hash / 13) mod 100) / 100 − 0.5) × 0.52 × base × (0.5 + 0.5 × mood) + sin(0.85 i) × wave ×
+  base`; the focal word and heroes take capitals where the setting asks.
+- **Constellation**: stars at deliberate heights, `[−0.55, 0.40, −0.20, 0.62, −0.42, 0.18, 0.52, −0.30]` em by index,
+  plus `0.18 × wobble` (hash / 7), times `(0.45 + 0.55 × fullness) × Spread`; the focal word holds its row's line.
+  **Constellation + Editorial**: the heights shifted by three, × 0.45 × Spread; the focal word on a row of its own;
+  the second face on the focal word and every even run.
+- **Echo**: one calm level line.
+- **Rows** (`FlowPlan`, ems of the line's base size): Editorial a flush-left column, measure 10, no line gap, field 10
+  (every line hangs from the same left edge); Constellation spacing 4 units, rows 2 units apart (1 on lines past 60%
+  fullness), measure 12, rows stepped ∓6 units; Constellation + Editorial spacing 5 units, rows 1 unit, measure 13;
+  Echo measure 13; Scattered measure 9 with rows stepped by three amounts that follow the setting's alignment. One
+  unit is 8/46 em. Rows are balanced (the narrowest measure that still takes no more rows), centred except
+  Editorial's. A line-timed line stays one level sentence (gaps 0.02, or 0.06 for the constellations; rows 0.30).
+- **Stillness**: settled words no longer float; and every flow layout but Echo lands its words without overshoot.
+  Words enter along the reading direction (from the right, from the left in a right-to-left line).
+- Backing vocals and credits under the rolling and stage layouts are set as Editorial (the Mac's `BackingVocals.style`).
