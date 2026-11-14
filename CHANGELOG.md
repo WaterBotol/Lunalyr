@@ -18,6 +18,7 @@ When merging, keep every entry and combine duplicate headings.
 - **Sung sweep gives each word its own colour.** As words are sung they fill with colours stepping smoothly through the cover's colours (or your custom colours, when set) along the line, moving on slowly from line to line, instead of one colour for every word. Unsung words stay white, and the readability rules are unchanged.
 - **The menu-bar panel no longer has Wallpaper › or Scene ›.** Choose the wallpaper type and the visualiser scene in Settings › Wallpaper (Looks in the panel still change the wallpaper with the rest of a look). The panel gains a **Discord status** switch; everything else in it is as before.
 - **Match the music is now called Custom Mix** everywhere it appears: the wallpaper type, the layout, the GPU effect and pattern choices, Looks and remembered styles. Your settings are kept.
+- **The word-entrance option Custom mix is now called Mixed entrances**, so it no longer shares a name with the Custom Mix layout. Your choice is kept, and searching "custom mix" still finds it.
 
 ### Removed
 - **The Editorial and Constellation + Editorial layouts.** Wherever either was chosen (the layout, a style remembered for a song or artist, a saved Look, the backing-vocal layout or a lyric card), Constellation + Editorial becomes Constellation and Editorial becomes Scattered. **Add Editorial typography** (Lyric style › Shown with the lyrics) still mixes in the second typeface on any layout. New installs start on Constellation.

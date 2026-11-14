@@ -30,7 +30,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
         case .cutoutHighlight: return "Cutout · Highlight"
         case .satinRibbon: return "Satin Ribbon"
         case .splitInk: return "Split Ink"
-        case .mix: return "Custom mix"
+        case .mix: return "Mixed entrances"
         }
     }
     var isCutout: Bool { self == .cutoutFold || self == .cutoutSlide }
