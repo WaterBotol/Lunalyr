@@ -96,7 +96,7 @@ public sealed class TrayFlyoutTests
     public void TestThePanelNamesItsActionsForWhatTheyActOn()
     {
         var state = TrayFlyoutState.From(Inputs(Playing()));
-        Assert.Equal("Pause Wallpaper", state.PauseTitle);
+        Assert.Equal("Pause wallpaper", state.PauseTitle);
         Assert.NotEqual(state.PauseTitle, FlyoutText.TransportTitle(playing: true));
         Assert.Equal("Pause music", FlyoutText.TransportTitle(playing: true));
         Assert.Equal("Play a song in Music", FlyoutText.Subtitle(hasTrack: false, artist: null, isStream: false, idlePrompt: "Play a song in Music"));
@@ -234,14 +234,14 @@ public sealed class TrayFlyoutTests
         };
         var state = TrayFlyoutState.From(Inputs(Playing()) with { Settings = settings });
         Assert.True(state.WallpaperPaused);
-        Assert.Equal(("Resume", "Resume Wallpaper", "Lets the wallpaper move again"), (state.PauseLabel, state.PauseTitle, state.PauseHint));
+        Assert.Equal(("Resume", "Resume wallpaper", "Lets the wallpaper move again"), (state.PauseLabel, state.PauseTitle, state.PauseHint));
         Assert.False(state.ReadingsOn);
         Assert.False(state.CreditsOn);
         Assert.Equal("colourOnly", state.Background);
         Assert.Equal("Constellation + Editorial", TrayFlyoutState.Layouts[state.LayoutIndex].Title);
 
         var defaults = TrayFlyoutState.From(Inputs(Playing()));
-        Assert.Equal(("Pause", "Pause Wallpaper"), (defaults.PauseLabel, defaults.PauseTitle));
+        Assert.Equal(("Pause", "Pause wallpaper"), (defaults.PauseLabel, defaults.PauseTitle));
         Assert.True(defaults.ReadingsOn && defaults.CreditsOn);
         Assert.Equal("auto", defaults.Background);
         Assert.Equal("Editorial", TrayFlyoutState.Layouts[defaults.LayoutIndex].Title);

@@ -125,7 +125,7 @@ wallpaper paused, credits off, Colour chosen).
   of a deactivation is the click that caused it and doesn't reopen it).
 - **Keyboard and Narrator:** Tab goes through every enabled control in reading order; the first one has the focus when
   it opens. Ctrl+, opens settings, Ctrl+Q quits. Every control has a Narrator name in the Mac's wording ("Pause music",
-  "Lyrics earlier", "Reset song offset", "Pause Wallpaper"…), with help text; the lyric block reads "Current lyric: …";
+  "Lyrics earlier", "Reset song offset", "Pause wallpaper"…), with help text; the lyric block reads "Current lyric: …";
   a nudge announces the Mac's note ("Lyrics 0.1 s earlier · +0.30 s for this song's lyric source").
 
 Top to bottom (the Mac's order and wording):
@@ -875,7 +875,7 @@ The Mac's lyric cards (`LyricCard*.swift`, `SongAudioRecorder.swift`): a shareab
 song playing, made in a window of its own. Details, what was ported and what was checked: [milestones/M7.md](milestones/M7.md),
 "Lyric cards". Previews: `docs/previews/lyric-cards/` (made by `tools/LyricCardPreview`, the app's own exporter).
 
-- **Where it opens:** the tray flyout's "Lyric card" tile and Settings › General › "Open Lyric Card…" (both off while nothing
+- **Where it opens:** the tray flyout's "Lyric card" tile and Settings › General › "Open lyric card…" (both off while nothing
   plays), as on the Mac (its menu-bar tile and Settings › Share). The Mac has no card button on its desktop player, so
   neither has Windows. `AppHost.OpenLyricCard()` is there for the shortcut and `lunalyr://card` (other branches), and
   `--lyric-card` opens it for checks.
