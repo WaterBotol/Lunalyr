@@ -11,9 +11,21 @@ extension StageLyricView {
     /// Motion dissolve still steps from one word to the next.
     func portalBody(runs: [StageRun], shown: [StageRun]) -> some View {
         let words = Self.portalRuns(self.words, glue: glue)
+        return portal(Self.portalArrived(words, runs: runs, shown: shown, at: time), all: words)
+    }
+
+    /// Portal's words that have arrived: each from its own onset (less the
+    /// shared lead), as every curve of its entrance starts there, so nothing
+    /// on the stage jumps when it joins. (A word cut from the middle of a
+    /// shared run, as an unspaced line's words are, arrived late, a few
+    /// frames into its entrance, when only the shared runs' arrivals
+    /// counted.) Under Reduce Motion the shared dissolve draws the step
+    /// before as well: that layer leaves out the newest shared run's words.
+    static func portalArrived(_ words: [StageRun], runs: [StageRun], shown: [StageRun], at time: Double) -> [StageRun] {
+        let byTime = Array(words.prefix { time >= $0.start - StageMotion.lead })
+        guard shown.count < shownRuns(runs, at: time).count else { return byTime }
         let cut = shown.last?.start ?? -.infinity
-        let arrived = Array(words.prefix { $0.start <= cut + 0.0001 })
-        return portal(arrived, all: words)
+        return Array(byTime.prefix { $0.start <= cut + 0.0001 })
     }
 
     /// Portal leaves Reduce Motion to the shared dissolve between steps
@@ -62,13 +74,14 @@ extension StageLyricView {
 
     // MARK: Timing
 
-    /// How each pill moves at one moment, worked out from the words' own
-    /// times, not the line's pace alone: a quick word gets a shorter
-    /// entrance, so the next never cuts it off, and a quick run (words
-    /// under `portalQuickGap` apart) shares one burst. Every word is
-    /// visible by its sung time; nothing waits behind the music.
+    /// How each pill moves at one moment. Every word moves as the original
+    /// Portal moved: the shared landing spring, a 0.6 s settle and a 0.36 s
+    /// trail lift (divided by the line's pace), all on smooth eases. Only a
+    /// word whose next word follows within `portalQuickNext` has a shorter
+    /// settle and lift, never under `portalQuickSettle` / `portalQuickLift`,
+    /// and a quick run (words under `portalQuickGap` apart) shares one burst.
     struct PortalMotion {
-        /// 0...1: the pill fading in, mostly done by the word's onset.
+        /// 0...1: the pill fading in (the settle, as in the original).
         var appear: [Double]
         /// 0...1: the entrance (travel, tilt, outline) easing to rest.
         var settle: [Double]
@@ -76,40 +89,35 @@ extension StageLyricView {
         var lift: [Double]
         /// 0...1: the burst swelling off the pill (its quick run's).
         var burst: [Double]
-        /// 0...1: the word taking the pill over from the one before it.
-        /// Quicker than its settle after a quick word, so a pill sung for
-        /// a moment never lingers beside the next.
-        var handover: [Double]
-        /// How far back each word is: the later words' hand-overs, summed.
+        /// How far back each word is: the later words' settles, summed.
         var ranks: [Double]
         /// 1 while the word is the one sung, easing to 0 as the next takes over.
         var live: [Double]
-        /// 0...1: how far a pill travels in (less for a quick word).
-        var drift: [Double]
-        /// 1...3: the pace of a word's own landing spring.
-        var pace: [Double]
     }
-
-    /// A pill starts to show this long before its word's onset.
-    static let portalAppearLead = 0.06
 
     /// Words closer together than this share one burst.
     static let portalQuickGap = 0.16
+    /// A word followed sooner than this gets a shorter entrance...
+    static let portalQuickNext = 0.35
+    /// ...but its settle never shorter than this,
+    static let portalQuickSettle = 0.28
+    /// and its trail lift never shorter than this.
+    static let portalQuickLift = 0.2
 
-    /// The longest and shortest entrance, in seconds.
-    static let portalSettleRange: ClosedRange<Double> = 0.14...0.6
-
-    /// How long `index`'s entrance takes: most of the time until the next word.
-    static func portalSettleTime(_ runs: [StageRun], _ index: Int) -> Double {
-        let next = index + 1 < runs.count ? runs[index + 1].start - runs[index].start : 0.8
-        let range = portalSettleRange
-        return min(range.upperBound, max(range.lowerBound, 0.85 * next))
+    /// The original settle and lift for a line at `speed`, shortened only
+    /// for a quick word (and then never below the floors).
+    static func portalTimes(_ runs: [StageRun], _ index: Int, speed: Double) -> (settle: Double, lift: Double) {
+        let settle = 0.6 / speed, lift = 0.36 / speed
+        guard index + 1 < runs.count else { return (settle, lift) }
+        let next = runs[index + 1].start - runs[index].start
+        guard next < portalQuickNext else { return (settle, lift) }
+        // Never longer than the original either: a line already that quick keeps its own.
+        return (min(settle, max(portalQuickSettle, 2 * next)), min(lift, max(portalQuickLift, 1.2 * next)))
     }
 
-    static func portalMotion(_ runs: [StageRun], at time: Double, reduceMotion: Bool) -> PortalMotion {
+    static func portalMotion(_ runs: [StageRun], at time: Double, speed: Double, reduceMotion: Bool) -> PortalMotion {
         let count = runs.count
-        var motion = PortalMotion(appear: [], settle: [], lift: [], burst: [], handover: [], ranks: [],
-                                  live: [], drift: [], pace: [])
+        var motion = PortalMotion(appear: [], settle: [], lift: [], burst: [], ranks: [], live: [])
         // The quick run each word belongs to: its first word's index.
         var head = [Int](repeating: 0, count: count)
         for index in runs.indices where index > 0 {
@@ -123,41 +131,56 @@ extension StageLyricView {
         }
         for index in runs.indices {
             let start = runs[index].start
-            let settleTime = portalSettleTime(runs, index)
-            let previousGap = index > 0 ? start - runs[index - 1].start : 0.6
-            let liftTime = min(0.36, max(0.08, 0.6 * min(settleTime, previousGap)))
+            let times = portalTimes(runs, index, speed: speed)
             if reduceMotion {
                 let on: Double = time >= start - StageMotion.lead ? 1 : 0
                 motion.appear.append(on); motion.settle.append(on); motion.lift.append(on); motion.burst.append(1)
-                motion.handover.append(on)
             } else {
-                // Mostly in by the onset (0.84 there), whatever the pace.
-                motion.appear.append(Easing.smoothstep((time - (start - portalAppearLead)) / 0.08))
-                motion.settle.append(glide((time - (start - 0.05)) / settleTime))
-                let handoverTime = min(settleTime, max(portalSettleRange.lowerBound, 2 * previousGap))
-                motion.handover.append(glide((time - (start - 0.05)) / handoverTime))
-                // The trail has climbed out of the way just before the new
-                // pill shows, so the pill never lands on the one before it.
-                let liftEnd = start - portalAppearLead + 0.025
-                motion.lift.append(glide((time - (liftEnd - liftTime)) / liftTime))
-                // One burst for a quick run: from its first word's onset
-                // to the end of its last word's entrance.
+                // Smootherstep starts and ends at rest, so the trail's sum of
+                // them never jolts.
+                // (From the word's arrival, `StageMotion.lead` before its
+                // onset, so a pill joins the stage at rest.)
+                let settle = glide((time - (start - StageMotion.lead)) / times.settle)
+                motion.settle.append(settle)
+                motion.appear.append(settle)
+                // The trail climbs out of the way a little quicker than the
+                // new pill settles, so the pill never lands on the one before it.
+                motion.lift.append(glide((time - (start - StageMotion.lead)) / times.lift))
+                // The burst swells with the settle; a quick run's words share
+                // one, from its first word's onset to its last word's rest.
                 let first = runs[head[index]].start
                 let last = runEnd[index]
-                let span = runs[last].start - first + portalSettleTime(runs, last)
-                motion.burst.append(min(1, max(0, (time - (first - 0.05)) / span)))
+                let span = runs[last].start - first + portalTimes(runs, last, speed: speed).settle
+                motion.burst.append(glide((time - (first - StageMotion.lead)) / span))
             }
-            motion.drift.append(min(1, settleTime / 0.5))
-            motion.pace.append(min(3, max(1, 0.6 / settleTime)))
         }
         var after = 0.0
         motion.ranks = [Double](repeating: 0, count: count)
         for index in runs.indices.reversed() {
             motion.ranks[index] = after
-            after += motion.handover[index]
+            after += motion.settle[index]
         }
         motion.live = motion.ranks.map { StageMotion.liveness(rank: $0) }
         return motion
+    }
+
+    /// Each pill's place above (negative) the live pill's resting place, on
+    /// a stage with `above` points over that place and `below` under it.
+    /// The trail is lowered, if it must be, so its top pill stays on the
+    /// stage (a fading pill counts in full until it is mostly gone, so it is
+    /// never squeezed against the top onto the one below), but never so far
+    /// that a pill leaves the foot of the stage. Every term moves with the
+    /// pills' own curves: a pill joining at rest moves nothing.
+    static func portalColumn(heights: [CGFloat], lifts: [Double], visible: [Double], appear: [Double], gap: CGFloat,
+                             above: CGFloat, below: CGFloat) -> [CGFloat] {
+        let climb = portalClimb(heights: heights, lifts: lifts, gap: gap)
+        let room = heights.indices.map { i in
+            (climb[i] + heights[i] / 2 - (above - gap)) * CGFloat(min(1, visible[i] * 3))
+        }
+        let lowest = heights.indices.map { i in heights[i] * CGFloat(min(1, appear[i] * 3)) }.max() ?? 0
+        let floor = max(0, below - lowest * 0.54)
+        let lower = min(max(0, room.max() ?? 0), floor)
+        return climb.map { lower - $0 }
     }
 
     /// How far above the live pill's place each pill has climbed: every
@@ -246,17 +269,16 @@ extension StageLyricView {
         let speed = lineSpeed
         let total = all.count
         // Worked out over the whole line, so a word's entrance knows when the next comes.
-        let whole = Self.portalMotion(all, at: time, reduceMotion: reduceMotion)
+        let whole = Self.portalMotion(all, at: time, speed: speed, reduceMotion: reduceMotion)
         let motion = PortalMotion(appear: Array(whole.appear.prefix(runs.count)), settle: Array(whole.settle.prefix(runs.count)),
                                   lift: Array(whole.lift.prefix(runs.count)), burst: Array(whole.burst.prefix(runs.count)),
-                                  handover: Array(whole.handover.prefix(runs.count)), ranks: [], live: [],
-                                  drift: whole.drift, pace: whole.pace)
+                                  ranks: [], live: [])
         // Ranks count only the words shown, so the newest is always the live one.
         var ranks = [Double](repeating: 0, count: runs.count)
         var after = 0.0
         for index in runs.indices.reversed() {
             ranks[index] = after
-            after += motion.handover[index]
+            after += motion.settle[index]
         }
         let lives = ranks.map { StageMotion.liveness(rank: $0) }
         // Each pill's tilt, in degrees: it leans in as it arrives and rocks
@@ -264,9 +286,9 @@ extension StageLyricView {
         let tilts = runs.indices.map { index -> Double in
             let tiltAmount = 4 + 10 * chance(index, 14)
             let tiltSign: Double = chance(index, 15) < 0.5 ? 1 : -1
-            let rock = sin(time * 1.1 + Double(index)) * 1.6 * lives[index] / speed
-            let entrance = (1 - motion.settle[index]) * tiltAmount * tiltSign * motion.drift[index]
-            return reduceMotion ? 0 : (entrance + rock) * (0.5 + 0.5 * lives[index])
+            let rock = sin(time * 1.1 + Double(index)) * 1.6 * lives[index]
+            let entrance = (1 - motion.settle[index]) * tiltAmount * tiltSign
+            return reduceMotion ? 0 : (entrance + rock) / speed * (0.5 + 0.5 * lives[index])
         }
         // Which way this line's trail leans, and where the pills sit. The
         // trail always climbs above the live pill, so it reads top to bottom.
@@ -297,41 +319,30 @@ extension StageLyricView {
         let estimated = runs.indices.map { i -> CGFloat in
             let size = unit * (1.2 + 0.3 * chance(i, 10))
             let reading: CGFloat = Self.reading(of: runs[i], in: readings) == nil ? 0 : Self.readingSlot(size)
-            let width = CGFloat(runs[i].text.count) * size * 0.55 + size * (icons[i] == nil ? 1 : 1.9)
-            let lean = CGFloat(abs(sin(tilts[i] * .pi / 180)))
-            return scales[i] * ((size * 1.5 + reading) * (1.04 + 0.1 * CGFloat(lives[i])) + width * lean)
+            return scales[i] * (size * 1.5 + reading) * (1.04 + 0.1 * CGFloat(lives[i]))
         }
         let estimatedClimb = Self.portalClimb(heights: estimated, lifts: motion.lift, gap: gap)
         let visible = runs.indices.map { i -> Double in
             let aged = 1 - Easing.smoothstep((ranks[i] - fadeFrom) / 0.9)
             let top = estimatedClimb[i] + estimated[i] / 2
             let crowded = Easing.smoothstep(Double((top - roomAbove) / max(1, estimated[i] * 0.6)) + 1)
-            return i == runs.count - 1 ? aged : aged * (1 - crowded)
+            // The live pill never fades for room; the one it took over from
+            // starts to as it hands over (by its liveness, so nothing pops).
+            return aged * (1 - crowded * (1 - lives[i]))
         }
         let leaving = leave
         // Quick songs get less float, so the eye can follow.
         let float: CGFloat = reduceMotion ? 0 : CGFloat(1 / speed)
         return StageLayout(place: { measured, bounds in
-            // The live pill's hand-drawn outline reaches a little beyond it,
-            // and a tilted pill reaches higher and lower than a flat one.
-            let shown = measured.indices.map { i -> CGFloat in
-                let lean = abs(sin(tilts[i] * .pi / 180))
-                let upright = measured[i].height * (1.04 + 0.1 * CGFloat(lives[i]))
-                return scales[i] * (upright + measured[i].width * CGFloat(lean))
+            // The live pill's hand-drawn outline reaches a little beyond it.
+            let shown = measured.indices.map { i in
+                measured[i].height * scales[i] * (1.04 + 0.1 * CGFloat(lives[i]))
             }
-            let climb = Self.portalClimb(heights: shown, lifts: motion.lift, gap: gap)
-            // The trail is lowered, if it must be, so its top pill stays on the stage.
             let base = bounds.midY + lift
-            // (A fading pill counts in full until it is mostly gone, so it is
-            // never squeezed against the top of the stage onto the one below.)
-            let room = measured.indices.map { i in
-                (climb[i] + shown[i] / 2 - (base - bounds.minY - gap)) * CGFloat(min(1, visible[i] * 3))
-            }
-            // Never so far that the live pill leaves the foot of the stage.
-            let floor = max(0, bounds.maxY - base - (shown.last ?? 0) * 0.54)
-            let lower = min(max(0, room.max() ?? 0), floor)
+            let column = Self.portalColumn(heights: shown, lifts: motion.lift, visible: visible, appear: motion.appear, gap: gap,
+                                           above: base - bounds.minY, below: bounds.maxY - base)
             return measured.indices.map { index -> CGPoint in
-                let p = CGPoint(x: alongX(ranks[index]), y: lower - climb[index])
+                let p = CGPoint(x: alongX(ranks[index]), y: column[index])
                 let bobRate: Double = 1.2 + 0.6 * chance(index, 7)
                 let bobPhase: Double = time * bobRate + Double(index) * 1.3
                 // Only the live pill floats; the trail holds still to be read.
@@ -342,9 +353,8 @@ extension StageLyricView {
                 let sway: CGFloat = CGFloat(cos(swayPhase)) * unit * 0.05 * floating
                 // Each pill comes in from its own direction, between the right
                 // and below, as the line reads; never down through the trail.
-                // A quick word travels less: it bursts in where it lands.
                 let heading = chance(index, 9) * 0.5 * .pi
-                let travel = reduceMotion ? 0 : CGFloat(1 - motion.settle[index]) * CGFloat(motion.drift[index]) * float
+                let travel = CGFloat(1 - motion.settle[index]) * float
                 let comeX: CGFloat = travel * CGFloat(cos(heading)) * bounds.width * 0.07
                 let comeY: CGFloat = travel * CGFloat(sin(heading)) * bounds.height * 0.1
                 let x: CGFloat = bounds.midX + shiftX + p.x + sway + comeX
@@ -367,7 +377,7 @@ extension StageLyricView {
     private func portalPill(_ run: StageRun, total: Int, motion: PortalMotion, rank: Double, live: Double,
                             visible: Double, icon: String?, shape kind: PortalShape, tilt: Double) -> some View {
         let index = run.id
-        let a = StageMotion.arrival(run.start, at: time, speed: motion.pace[index], reduceMotion: reduceMotion)
+        let a = arrive(run, speed: lineSpeed)
         let eased = motion.settle[index]
         let burst = motion.burst[index]
         let sample = sample(run, of: total)

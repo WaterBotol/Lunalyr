@@ -217,20 +217,60 @@ final class PortalLayoutTests: XCTestCase {
 
     // MARK: Fast songs
 
-    /// Each run's pill height and place above the live pill's, as
-    /// `portal` lays them out, at one moment.
-    static func poses(_ runs: [StageRun], at time: Double) -> [(y: CGFloat, height: CGFloat, opacity: Double, live: Double)] {
+    /// The line's pace, as `StageLyricView.lineSpeed` works it out.
+    static func speed(_ runs: [StageRun]) -> Double {
+        let starts = runs.map(\.start).sorted()
+        let gaps = zip(starts, starts.dropFirst()).map { $1 - $0 }.filter { $0 > 0.02 }.sorted()
+        guard !gaps.isEmpty else { return 1 }
+        return min(3, max(1, 0.5 / max(gaps[gaps.count / 2], 0.1)))
+    }
+
+    struct Pose {
+        var y: CGFloat
+        var height: CGFloat
+        var scale: CGFloat
+        var opacity: Double
+        var live: Double
+    }
+
+    /// Each shown run's pill as `portal` lays it out at one moment, on a
+    /// 520-point stage with 100-point, 300-point-wide pills: its place
+    /// above the live pill's (climb, and the travel in from below), shown
+    /// scale (age and landing) and opacity. `original` is the Portal the
+    /// user liked, before this branch (`git show aa7f036:Sources/UI/StageLayouts/PortalLayout.swift`).
+    static func poses(_ runs: [StageRun], at time: Double, original: Bool = false) -> [Pose] {
         let shown = runs.filter { time >= $0.start - StageMotion.lead }
-        let motion = StageLyricView.portalMotion(runs, at: time, reduceMotion: false)
+        let speed = speed(runs)
+        var settle: [Double], lift: [Double]
+        if original {
+            // (The original's lift started 0.08 s before the onset, before
+            // the word arrived: its first frames jumped the trail.)
+            settle = shown.map { StageLyricView.glide((time - ($0.start - 0.05)) / (0.6 / speed)) }
+            lift = shown.map { StageLyricView.glide((time - ($0.start - 0.08)) / (0.36 / speed)) }
+        } else {
+            let motion = StageLyricView.portalMotion(runs, at: time, speed: speed, reduceMotion: false)
+            settle = Array(motion.settle.prefix(shown.count))
+            lift = Array(motion.lift.prefix(shown.count))
+        }
         var ranks = [Double](repeating: 0, count: shown.count)
         var after = 0.0
-        for index in shown.indices.reversed() { ranks[index] = after; after += motion.handover[index] }
+        for index in shown.indices.reversed() { ranks[index] = after; after += settle[index] }
         let lives = ranks.map { StageMotion.liveness(rank: $0) }
-        let heights = shown.indices.map { i in 100 * StageLyricView.portalScale(rank: ranks[i]) * (1.04 + 0.1 * CGFloat(lives[i])) }
-        let climb = StageLyricView.portalClimb(heights: heights, lifts: Array(motion.lift.prefix(shown.count)), gap: 64 * 0.16)
+        let heights = shown.indices.map { i -> CGFloat in
+            let upright = 100 * (1.04 + 0.1 * CGFloat(lives[i]))
+            return StageLyricView.portalScale(rank: ranks[i]) * upright
+        }
+        let fadeFrom = speed > 1.6 ? 1.0 : 1.6
+        let visible = ranks.map { 1 - Easing.smoothstep(($0 - fadeFrom) / 0.9) }
+        // The live pill rests 70 points below the middle of the stage.
+        let column = StageLyricView.portalColumn(heights: heights, lifts: lift, visible: visible, appear: settle, gap: 64 * 0.16,
+                                                 above: 330, below: original ? 10_000 : 190)
         return shown.indices.map { i in
-            let visible = 1 - Easing.smoothstep((ranks[i] - 1.0) / 0.9)
-            return (-climb[i], heights[i], motion.appear[i] * visible, lives[i])
+            let travel = CGFloat(1 - settle[i]) * 520 * 0.1 / CGFloat(speed)
+            let landing = StageMotion.arrival(shown[i].start, at: time, speed: speed)
+            let scale = StageLyricView.portalScale(rank: ranks[i]) * CGFloat(0.9 + 0.1 * min(landing, 1.05))
+            return Pose(y: travel + column[i], height: heights[i], scale: scale,
+                        opacity: settle[i] * visible[i] * (0.85 + 0.15 * lives[i]), live: lives[i])
         }
     }
 
@@ -266,14 +306,19 @@ final class PortalLayoutTests: XCTestCase {
         }
     }
 
-    /// Every word is there by its sung time, and none before it starts.
-    func testEveryWordAppearsByItsSungTime() {
+    /// Every word starts on its own sung time, never queued behind the
+    /// words before it: its entrance begins at its onset (less the shared
+    /// 0.05 s lead) and is at least half in 0.3 s later, however quick the line.
+    func testEveryWordEntersOnItsSungTime() {
         for runs in Self.fastRuns {
+            let speed = Self.speed(runs)
             for run in runs {
-                let at = StageLyricView.portalMotion(runs, at: run.start, reduceMotion: false)
-                XCTAssertGreaterThanOrEqual(at.appear[run.id], 0.8, "\(run.text) at \(run.start)")
-                let before = StageLyricView.portalMotion(runs, at: run.start - 0.08, reduceMotion: false)
-                XCTAssertEqual(before.appear[run.id], 0, accuracy: 0.0001)
+                func appear(_ time: Double) -> Double {
+                    StageLyricView.portalMotion(runs, at: time, speed: speed, reduceMotion: false).appear[run.id]
+                }
+                XCTAssertEqual(appear(run.start - 0.05), 0, accuracy: 0.0001, run.text)
+                XCTAssertGreaterThan(appear(run.start), 0, run.text)
+                XCTAssertGreaterThanOrEqual(appear(run.start + 0.3), 0.5, "\(run.text) at \(run.start)")
             }
         }
     }
@@ -285,12 +330,105 @@ final class PortalLayoutTests: XCTestCase {
         var previous = -1.0
         var time = 1.95
         while time < 2.5 {
-            let burst = StageLyricView.portalMotion(runs, at: time, reduceMotion: false).burst
+            let burst = StageLyricView.portalMotion(runs, at: time, speed: Self.speed(runs), reduceMotion: false).burst
             XCTAssertEqual(burst[2], burst[3], accuracy: 0.0001)
             XCTAssertEqual(burst[3], burst[4], accuracy: 0.0001)
             XCTAssertGreaterThanOrEqual(burst[4], previous)
             previous = burst[4]
             time += 1.0 / 60
+        }
+    }
+
+    /// Only a word followed within 0.35 s moves quicker than the original,
+    /// and never below the floors.
+    func testOnlyQuickWordsShortenAndNeverBelowTheFloors() {
+        for runs in Self.fastRuns {
+            let speed = Self.speed(runs)
+            for index in runs.indices {
+                let times = StageLyricView.portalTimes(runs, index, speed: speed)
+                let next = index + 1 < runs.count ? runs[index + 1].start - runs[index].start : 9
+                if next >= 0.35 {
+                    XCTAssertEqual(times.settle, 0.6 / speed, accuracy: 1e-9)
+                    XCTAssertEqual(times.lift, 0.36 / speed, accuracy: 1e-9)
+                } else {
+                    XCTAssertGreaterThanOrEqual(times.settle, min(0.6 / speed, 0.28) - 1e-9)
+                    XCTAssertGreaterThanOrEqual(times.lift, min(0.36 / speed, 0.2) - 1e-9)
+                    XCTAssertLessThanOrEqual(times.settle, 0.6 / speed + 1e-9)
+                }
+            }
+        }
+    }
+
+    // MARK: Smoothness
+
+    /// The largest change of any pill's place, scale or opacity over one
+    /// 60 Hz frame, sampled at 120 Hz through a line and its exit.
+    static func largestSteps(_ runs: [StageRun], original: Bool) -> (y: CGFloat, scale: CGFloat, opacity: Double) {
+        var worst: (y: CGFloat, scale: CGFloat, opacity: Double) = (0, 0, 0)
+        let first = runs.first?.start ?? 0, last = runs.last?.start ?? 0
+        var time = first - 0.2
+        while time < last + 1.0 {
+            let now = poses(runs, at: time, original: original)
+            let later = poses(runs, at: time + 1.0 / 60, original: original)
+            for i in now.indices {
+                worst.y = max(worst.y, abs(later[i].y - now[i].y))
+                worst.scale = max(worst.scale, abs(later[i].scale - now[i].scale))
+                worst.opacity = max(worst.opacity, abs(later[i].opacity - now[i].opacity))
+            }
+            time += 1.0 / 120
+        }
+        return worst
+    }
+
+    /// Portal moves as smoothly as the original: no pill's place, scale or
+    /// opacity steps further in a frame than the original's largest step,
+    /// plus 15 %. Each line is held to the original on that same line: a
+    /// line's pace sets every duration (the original divides them by it),
+    /// so the long line (pace 1.43) and the fast one (2.78) move quicker
+    /// than the short one in the original too.
+    func testMovesAsSmoothlyAsTheOriginal() {
+        let short = Self.fastRuns[3], long = Self.fastRuns[2], fast = Self.fastRuns[0], triple = Self.fastRuns[1]
+        for (name, runs) in [("short", short), ("long", long), ("fast", fast), ("triple", triple)] {
+            let limit = Self.largestSteps(runs, original: true)
+            let steps = Self.largestSteps(runs, original: false)
+            print(String(format: "PORTAL-SMOOTH %@: y %.2f/%.2f scale %.4f/%.4f opacity %.4f/%.4f", name,
+                         steps.y, limit.y, steps.scale, limit.scale, steps.opacity, limit.opacity))
+            XCTAssertLessThanOrEqual(steps.y, limit.y * 1.15, "\(name): place")
+            XCTAssertLessThanOrEqual(steps.scale, limit.scale * 1.15, "\(name): scale")
+            XCTAssertLessThanOrEqual(steps.opacity, limit.opacity * 1.15, "\(name): opacity")
+        }
+    }
+
+    /// Nothing already on the stage jumps when a word arrives: across each
+    /// arrival (and each onset), 1/120 s either side, every pill already
+    /// there before that word moves less than the per-frame limit (the
+    /// original's largest step on that line, plus 15 %).
+    func testNothingJumpsWhenAWordArrives() {
+        for (name, runs) in [("short", Self.fastRuns[3]), ("long", Self.fastRuns[2]), ("fast", Self.fastRuns[0]),
+                             ("triple", Self.fastRuns[1])] {
+            let limit = Self.largestSteps(runs, original: true)
+            for run in runs {
+                for moment in [run.start - StageMotion.lead, run.start] {
+                    let before = Self.poses(runs, at: moment - 1.0 / 120)
+                    let after = Self.poses(runs, at: moment + 1.0 / 120)
+                    for i in before.indices where i < run.id {
+                        let what = String(format: "%@ %@: pill %d at %.3f s", name, run.text, i, moment)
+                        XCTAssertLessThan(abs(after[i].y - before[i].y), limit.y * 1.15, what + " place")
+                        XCTAssertLessThan(abs(after[i].scale - before[i].scale), limit.scale * 1.15, what + " scale")
+                        XCTAssertLessThan(abs(after[i].opacity - before[i].opacity), limit.opacity * 1.15, what + " opacity")
+                    }
+                    // For the record: the original's largest jump here.
+                    let oldBefore = Self.poses(runs, at: moment - 1.0 / 120, original: true)
+                    let oldAfter = Self.poses(runs, at: moment + 1.0 / 120, original: true)
+                    let oldJump = oldBefore.indices.filter { $0 < run.id }.map { abs(oldAfter[$0].y - oldBefore[$0].y) }.max() ?? 0
+                    let newJump = before.indices.filter { $0 < run.id }.map { abs(after[$0].y - before[$0].y) }.max() ?? 0
+                    if moment < run.start {
+                        print(String(format: "PORTAL-ARRIVE %@ %@: original %.2f, now %.2f", name, run.text, oldJump, newJump))
+                    }
+                    // A pill that joins is at rest: invisible, in place.
+                    if after.count > before.count { XCTAssertLessThan(after[before.count].opacity, 0.01, name + " " + run.text) }
+                }
+            }
         }
     }
 
