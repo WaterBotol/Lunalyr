@@ -31,7 +31,7 @@ public static class OnboardingGate
         if (options.Demo) return (false, "--demo");
         if (options.OnboardingCapturePath is not null) return (false, "--onboarding-capture opens its own");
         if (options.FloatingCapturePath is not null || options.TickerCapturePath is not null || options.HudCapturePath is not null
-            || options.SettingsLoaderCapturePath is not null)
+            || options.SettingsLoaderCapturePath is not null || options.SettingsCapturePath is not null)
             return (false, "a capture flag");
         if (options.StatsPath is not null) return (false, "--stats");
         if (options.QuitAfterSeconds is not null) return (false, "--seconds (a check)");

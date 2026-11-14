@@ -132,6 +132,22 @@ public sealed record ShellOptions
     public string? SettingsLoaderCapturePath { get; init; }
 
     /// <summary>
+    /// <c>--settings-capture &lt;file&gt;</c>: open Settings quietly (at <c>--settings-page</c>), let it settle, write the
+    /// whole page from its title to its last row as a PNG (drawn off the screen, so a long page needs no scrolling), the
+    /// window as <c>…-window.png</c> (PrintWindow) and, when the page has closed expanders, <c>…-expanded.png</c> with
+    /// them open; log any text cut short; and quit. Implies <c>--settings</c> and <c>--quiet-windows</c>. For checks;
+    /// not forwarded to a running instance.
+    /// </summary>
+    public string? SettingsCapturePath { get; init; }
+
+    /// <summary>
+    /// <c>--settings-capture-scale &lt;percent&gt;</c> (dev only, with <c>--settings-capture</c>): size the window as it
+    /// would open at that display scale (100–400 %), so a capture shows the layout another scale gets. The pixels are
+    /// still drawn at the display's own scale; Windows' setting is never changed.
+    /// </summary>
+    public double? SettingsCaptureScale { get; init; }
+
+    /// <summary>
     /// <c>lunalyr://…</c> arguments, and every argument after <c>--link</c>: links to act on, each checked before
     /// anything is done (<c>Lunalyr.Shell.Extras.LunalyrLink</c>).
     /// </summary>
@@ -274,6 +290,22 @@ public sealed record ShellOptions
                         else options = options with { SettingsLoaderCapturePath = Path.GetFullPath(loader.Trim()), OpenSettings = true, QuietWindows = true };
                     }
                     break;
+                case "--settings-capture":
+                    if (Value() is { } settingsCapture)
+                    {
+                        if (settingsCapture.Trim().Length == 0) problems.Add("--settings-capture needs a file.");
+                        else options = options with { SettingsCapturePath = Path.GetFullPath(settingsCapture.Trim()), OpenSettings = true, QuietWindows = true };
+                    }
+                    break;
+                case "--settings-capture-scale":
+                    if (Value() is { } scaleText)
+                    {
+                        if (double.TryParse(scaleText.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var percent)
+                            && percent is >= 100 and <= 400)
+                            options = options with { SettingsCaptureScale = percent / 100 };
+                        else problems.Add($"--settings-capture-scale {scaleText}: expected a percentage from 100 to 400.");
+                    }
+                    break;
                 case "--stats":
                     if (Value() is { } stats)
                     {
@@ -320,6 +352,8 @@ public sealed record ShellOptions
 
         if (options.OnboardingStep is not null && options.OnboardingCapturePath is null)
             problems.Add("--onboarding-step goes with --onboarding-capture; on its own it does nothing.");
+        if (options.SettingsCaptureScale is not null && options.SettingsCapturePath is null)
+            problems.Add("--settings-capture-scale goes with --settings-capture; on its own it does nothing.");
         return options with { Links = links, Problems = problems };
     }
 

@@ -16,6 +16,12 @@ internal sealed partial class AppHost
     /// <summary><c>--settings-loader-capture</c>: the file the Settings loader is written to (checks), or null.</summary>
     internal string? SettingsLoaderCapturePath => _options.SettingsLoaderCapturePath;
 
+    /// <summary><c>--settings-capture</c>: the file the whole Settings page is written to (checks), or null.</summary>
+    internal string? SettingsCapturePath => _options.SettingsCapturePath;
+
+    /// <summary><c>--settings-capture-scale</c>: the display scale whose window size the capture shows (dev only), or null.</summary>
+    internal double? SettingsCaptureScale => _options.SettingsCaptureScale;
+
     /// <summary>The players Windows' media controls know about (null until start-up has opened them), read only.</summary>
     internal IMediaSessionSource? MediaSessions => _sessions;
 

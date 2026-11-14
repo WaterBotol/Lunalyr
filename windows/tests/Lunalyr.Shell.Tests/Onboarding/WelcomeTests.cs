@@ -325,6 +325,7 @@ public sealed class WelcomeTests
             ["--demo"], ["--settings"], ["--settings-page", "general"], ["--lyric-card"], ["--seconds", "20"], ["--stats", "s.json"],
             ["--floating-capture", "f.png"], ["--ticker-capture", "t.png"], ["--hud-capture", "h.png"],
             ["--onboarding-capture", "o.png"], ["--login"], ["--youtube-search"], ["--settings-loader-capture", "l.png"],
+            ["--settings-capture", "s.png"],
         ];
         foreach (var args in never)
         {
@@ -383,5 +384,25 @@ public sealed class WelcomeTests
         Assert.True(options.QuietWindows);
         Assert.Empty(options.Problems);
         Assert.Contains(ShellOptions.Parse(["--settings-loader-capture"]).Problems, p => p.Contains("needs a value", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheSettingsCaptureOpensSettingsQuietlyAndTakesAScale()
+    {
+        var options = ShellOptions.Parse(["--settings-capture", "C:\\temp\\general.png", "--settings-page", "general", "--settings-capture-scale", "150"]);
+        Assert.Equal(Path.GetFullPath("C:\\temp\\general.png"), options.SettingsCapturePath);
+        Assert.True(options.OpenSettings);
+        Assert.True(options.QuietWindows);
+        Assert.Equal("general", options.SettingsPage);
+        Assert.Equal(1.5, options.SettingsCaptureScale);
+        Assert.Empty(options.Problems);
+
+        Assert.Equal(2.0, ShellOptions.Parse(["--settings-capture", "x.png", "--settings-capture-scale", "200%"]).SettingsCaptureScale);
+        Assert.Null(ShellOptions.Parse(["--settings-capture", "x.png"]).SettingsCaptureScale);
+        Assert.Contains(ShellOptions.Parse(["--settings-capture"]).Problems, p => p.Contains("needs a value", StringComparison.Ordinal));
+        Assert.Contains(ShellOptions.Parse(["--settings-capture", "x.png", "--settings-capture-scale", "90"]).Problems,
+            p => p.Contains("from 100 to 400", StringComparison.Ordinal));
+        Assert.Contains(ShellOptions.Parse(["--settings-capture-scale", "125"]).Problems,
+            p => p.Contains("goes with --settings-capture", StringComparison.Ordinal));
     }
 }
