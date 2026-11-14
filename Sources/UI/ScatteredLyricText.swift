@@ -209,6 +209,13 @@ struct FlowLayout: Layout {
     /// The narrowest the block may be: rows align inside this width, so a
     /// flush-left layout keeps one left edge from line to line.
     var fieldWidth: CGFloat?
+    /// Constellation's fill (`vc_constellation_field`): each row's gaps
+    /// widen towards `justifyWidth`, by at most `maxGap` each, and the rows
+    /// part towards `fillHeight`, by at most `maxRowGap`.
+    var justifyWidth: CGFloat?
+    var maxGap: CGFloat = 0
+    var fillHeight: CGFloat?
+    var maxRowGap: CGFloat = 0
 
     struct Row {
         var items: [(index: Int, size: CGSize)] = []
@@ -281,6 +288,23 @@ struct FlowLayout: Layout {
         return result
     }
 
+    /// The gap between words in `row`, widened for the fill.
+    func gap(in row: Row) -> CGFloat {
+        guard let justifyWidth else { return spacing }
+        return CGFloat(vc_justified_gap(Double(row.width), Int32(row.items.count), Double(spacing),
+                                        Double(justifyWidth), Double(maxGap)))
+    }
+    func justifiedWidth(_ row: Row) -> CGFloat {
+        row.width + (gap(in: row) - spacing) * CGFloat(max(row.items.count - 1, 0))
+    }
+    /// The gap between rows, parted for the fill.
+    func rowGap(_ rows: [Row]) -> CGFloat {
+        guard let fillHeight else { return lineSpacing }
+        let content = rows.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(rows.count - 1, 0))
+        return CGFloat(vc_fill_row_gap(Double(content), Int32(rows.count), Double(lineSpacing),
+                                       Double(fillHeight), Double(maxRowGap)))
+    }
+
     private func shift(row: Int, of count: Int) -> CGFloat {
         guard count > 1, !rowShifts.isEmpty else { return 0 }
         let value = rowShifts[row % rowShifts.count]
@@ -291,10 +315,10 @@ struct FlowLayout: Layout {
         if cache.sizes.count != subviews.count { cache = makeCache(subviews: subviews) }
         let maxWidth = stageWidth ?? proposal.width ?? .infinity
         let laid = rows(maxWidth: maxWidth, cache: &cache)
-        let height = laid.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(laid.count - 1, 0))
+        let height = laid.reduce(0) { $0 + $1.height } + rowGap(laid) * CGFloat(max(laid.count - 1, 0))
         var width: CGFloat = 0
         for (number, row) in laid.enumerated() {
-            width = max(width, row.width + 2 * abs(shift(row: number, of: laid.count)))
+            width = max(width, justifiedWidth(row) + 2 * abs(shift(row: number, of: laid.count)))
         }
         if let fieldWidth { width = max(width, min(fieldWidth, maxWidth)) }
         // Report an oversized word honestly so the outer stage can fit it;
@@ -306,15 +330,18 @@ struct FlowLayout: Layout {
         if cache.sizes.count != subviews.count { cache = makeCache(subviews: subviews) }
         let laid = rows(maxWidth: stageWidth ?? proposal.width ?? .infinity, cache: &cache)
         var y = bounds.minY
+        let between = rowGap(laid)
         for (number, row) in laid.enumerated() {
+            let wordGap = gap(in: row)
+            let rowWidth = justifiedWidth(row)
             var x: CGFloat
             // A right-to-left line's "leading" edge is the right one.
             let alignment: RowAlignment = !rightToLeft ? rowAlignment
                 : rowAlignment == .leading ? .trailing : rowAlignment == .trailing ? .leading : .center
             switch alignment {
             case .leading: x = bounds.minX
-            case .center: x = bounds.midX - row.width / 2
-            case .trailing: x = bounds.maxX - row.width
+            case .center: x = bounds.midX - rowWidth / 2
+            case .trailing: x = bounds.maxX - rowWidth
             }
             x += shift(row: number, of: laid.count)
             let count = row.items.count
@@ -327,9 +354,9 @@ struct FlowLayout: Layout {
                     anchor: .center,
                     proposal: .unspecified
                 )
-                x += item.size.width + spacing
+                x += item.size.width + wordGap
             }
-            y += row.height + lineSpacing
+            y += row.height + between
         }
     }
 }
@@ -550,6 +577,8 @@ struct LyricLineStyle: Equatable {
 struct ScatteredLyricText: View {
     let words: [LyricsFetcher.Word]
     var stageWidth: CGFloat?
+    /// The stage's height, for Constellation's fill.
+    var stageHeight: CGFloat?
     /// Current playback position. Emphasis is interpolated from this every
     /// frame rather than toggled on an index, which is what keeps words
     /// swelling smoothly instead of snapping between states.
@@ -630,15 +659,22 @@ struct ScatteredLyricText: View {
         // wide word claim a wide margin and a narrow one almost none, so the
         // spacing visibly changed from word to word.
         let plan = FlowPlan.make(composition, style: style, wordTimed: wordTimed, fullness: fullness)
+        let fill = ConstellationFill.field(composition: composition, wordTimed: wordTimed,
+                                           stage: CGSize(width: stageWidth ?? 0, height: stageHeight ?? 0), baseSize: baseSize)
         FlowLayout(
             spacing: baseSize * plan.spacing,
             lineSpacing: baseSize * plan.lineSpacing,
             rowAlignment: plan.alignment,
-            stageWidth: plan.measure.map { min(stageWidth ?? .infinity, $0 * baseSize) } ?? stageWidth,
+            stageWidth: fill.map { CGFloat($0.measure) }
+                ?? plan.measure.map { min(stageWidth ?? .infinity, $0 * baseSize) } ?? stageWidth,
             rightToLeft: layout.rightToLeft,
             balanced: plan.balanced,
             rowShifts: plan.rowShifts.map { $0 * baseSize },
-            fieldWidth: plan.field.map { $0 * baseSize }
+            fieldWidth: plan.field.map { $0 * baseSize },
+            justifyWidth: fill.map { CGFloat($0.target_width) },
+            maxGap: fill.map { CGFloat($0.max_gap) } ?? 0,
+            fillHeight: fill.map { CGFloat($0.target_height) },
+            maxRowGap: fill.map { CGFloat($0.max_row_gap) } ?? 0
         ) {
             ForEach(layout.runs, id: \.index) { run in
                 if wordTimed {
@@ -982,5 +1018,21 @@ private struct ScatteredRunInk: View, Equatable {
             SungText(label: run.label, font: run.font, fill: frame.fill, tint: frame.tint,
                      rightToLeft: run.rightToLeft, ink: ink)
         }
+    }
+}
+
+/// Constellation spreads its stars over the stage at any aspect ratio
+/// (16:9, 21:9, a small floating window) instead of drawing one compact
+/// block: the maths is shared with Windows in `vc_constellation_field`.
+enum ConstellationFill {
+    /// For before-and-after renders in the tests only.
+    nonisolated(unsafe) static var isEnabled = true
+
+    /// Nil for other layouts, line-timed lines and an unknown stage.
+    static func field(composition: LyricComposition, wordTimed: Bool, stage: CGSize,
+                      baseSize: CGFloat) -> VCConstellationField? {
+        guard isEnabled, composition == .constellation, wordTimed, stage.width > 0, stage.height > 0 else { return nil }
+        let field = vc_constellation_field(Double(stage.width), Double(stage.height), Double(baseSize))
+        return field.measure > 0 ? field : nil
     }
 }

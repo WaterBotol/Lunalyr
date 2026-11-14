@@ -31,6 +31,20 @@ double vc_estimated_line_end(double start, double next_start, int word_count, do
    Invalid, overlapping and off-screen nodes never produce a link. */
 int vc_build_connections(const VCBox *boxes, int count, VCBox viewport,
                          double clearance, VCSegment *output, int capacity);
+/* Constellation fill: how a line's star field uses the stage at any aspect
+   ratio. `target_width`/`target_height` are the share of the stage the field
+   may cover (VC_CONSTELLATION_FILL of each side, so the stage fit never has
+   to shrink it); rows wrap at `measure`; a row's gaps may widen up to
+   `max_gap` and the rows part by up to `max_row_gap`. All in points. */
+#define VC_CONSTELLATION_FILL 0.75
+typedef struct { double target_width, target_height, measure, max_gap, max_row_gap; } VCConstellationField;
+VCConstellationField vc_constellation_field(double stage_width, double stage_height, double base_size);
+/* The gap between neighbouring words of a row `row_width` wide (natural
+   spacing included) holding `items` words, widened towards `target`. */
+double vc_justified_gap(double row_width, int items, double spacing, double target, double max_gap);
+/* The gap between rows when `rows` rows `content_height` tall (natural
+   line spacing included) are parted towards `target_height`. */
+double vc_fill_row_gap(double content_height, int rows, double line_spacing, double target_height, double max_row_gap);
 /* Deterministic metadata scorer used by the native lyrics resolver. */
 double vc_match_score(double title_match, double artist_match, double duration_delta,
                       int duration_known, int word_timed, int line_timed, int album_match);

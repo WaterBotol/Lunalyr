@@ -5,6 +5,30 @@
 static int inside(VCBox b,double x,double y) {
     return x>b.x+1e-6&&x<b.x+b.width-1e-6&&y>b.y+1e-6&&y<b.y+b.height-1e-6;
 }
+/* Wraps `n` words `word` wide at `measure`, justifies each row and parts
+   the rows; returns the field's width and height. */
+static void fill(VCConstellationField f,double base,int n,double word,double row_h,double *w,double *h,int *rows_out) {
+    double spacing=4*(8.0/46)*base,line=2*(8.0/46)*base;
+    int rows=0,in_row=0;double width=0,widest=0,widths[64];int items[64];
+    for(int i=0;i<n;i++){
+        double next=in_row?width+spacing+word:word;
+        if(in_row&&next>f.measure){widths[rows]=width;items[rows]=in_row;rows++;in_row=0;next=word;}
+        width=next;in_row++;
+    }
+    widths[rows]=width;items[rows]=in_row;rows++;
+    for(int r=0;r<rows;r++){
+        double gap=vc_justified_gap(widths[r],items[r],spacing,f.target_width,f.max_gap);
+        assert(gap>=spacing-1e-9&&gap<=fmax(spacing,f.max_gap)+1e-9);
+        double justified=widths[r]+(gap-spacing)*(items[r]-1);
+        assert(justified<=fmax(widths[r],f.target_width)+1e-6);
+        widest=fmax(widest,justified);
+    }
+    double content=rows*row_h+(rows-1)*line;
+    double gap=vc_fill_row_gap(content,rows,line,f.target_height,f.max_row_gap);
+    assert(gap>=line-1e-9&&gap<=fmax(line,f.max_row_gap)+1e-9);
+    *w=widest;*h=rows*row_h+(rows-1)*gap;*rows_out=rows;
+}
+
 int main(void) {
     /* Every rotated/growing ink corner fits the fixed graph anchor. */
     for(int angle=0;angle<=20;angle++) {
@@ -138,6 +162,39 @@ int main(void) {
     assert(vc_match_score(1,.2,0,1,1,1,1)<0);
     assert(vc_match_score(1,1,80,1,1,1,1)<0);
     assert(vc_match_score(NAN,1,0,1,1,1,1)<0);
+    /* Constellation fill at 16:9, 21:9 and a small floating window: the
+       field stays inside its share of the stage, and the wider the stage
+       the more of its width a line uses. */
+    {
+        struct {double w,h,base;} stages[3]={
+            {1920*.80,1080*.72,fmin(124,fmax(24,fmin(1920,1080*16.0/9)*.046))},
+            {3440*.80,1440*.72,fmin(124,fmax(24,fmin(3440,1440*16.0/9)*.046))},
+            {480*.94,220*.88,28}};
+        double share[3];
+        for(int k=0;k<3;k++){
+            VCConstellationField f=vc_constellation_field(stages[k].w,stages[k].h,stages[k].base);
+            assert(f.measure<=f.target_width+1e-9&&f.measure>0);
+            assert(f.target_width<=stages[k].w&&f.target_height<=stages[k].h);
+            double w,h;int rows;
+            fill(f,stages[k].base,8,2.4*stages[k].base,1.3*stages[k].base,&w,&h,&rows);
+            assert(w<=f.target_width+1e-6);
+            share[k]=w/stages[k].w;
+            /* A full line reaches most of the field. */
+            assert(share[k]>.6*VC_CONSTELLATION_FILL);
+        }
+        /* 21:9 used to be the same block as 16:9 (12 type sizes); now it
+           spreads at least as far across its wider stage. */
+        assert(share[1]>=share[0]-.05);
+        VCConstellationField wide=vc_constellation_field(stages[1].w,stages[1].h,stages[1].base);
+        assert(wide.measure>12*stages[1].base);
+        /* A two-word line never stretches past the gap cap. */
+        assert(vc_justified_gap(200,2,10,5000,60)==60);
+        assert(vc_justified_gap(200,1,10,5000,60)==10);
+        assert(vc_fill_row_gap(100,1,8,900,50)==8);
+        assert(vc_fill_row_gap(1000,3,8,900,50)==8);
+        VCConstellationField bad=vc_constellation_field(NAN,1,1);
+        assert(bad.measure==0);
+    }
     puts("Geometry and match-ranking invariants passed.");
     return 0;
 }

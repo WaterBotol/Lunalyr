@@ -265,6 +265,7 @@ struct LyricLineView: View {
               ScatteredLyricText(
                 words: words,
                 stageWidth: stageSize.width,
+                stageHeight: stageSize.height,
                 time: time,
                 baseSize: baseSize,
                 style: .forLine(seed),

@@ -168,3 +168,29 @@ double vc_match_score(double title,double artist,double delta,int known,int word
     double duration=known?fmax(-22,14-delta*2):0;
     return title*48+artist*27+duration+(words?20:lines?7:0)+(album?4:0);
 }
+
+VCConstellationField vc_constellation_field(double w,double h,double base) {
+    VCConstellationField f={0,0,0,0,0};
+    if(!isfinite(w)||!isfinite(h)||!isfinite(base)||w<=0||h<=0||base<=0)return f;
+    f.target_width=w*VC_CONSTELLATION_FILL;
+    f.target_height=h*VC_CONSTELLATION_FILL;
+    /* Rows wrap at the old 12-type-size measure or 70% of the field,
+       whichever is wider, never past the field: an ultrawide stage takes
+       fewer, longer rows instead of the same compact block. */
+    f.measure=fmin(f.target_width,fmax(12*base,.7*f.target_width));
+    f.max_gap=2.5*base;
+    f.max_row_gap=1.2*base;
+    return f;
+}
+double vc_justified_gap(double row,int items,double spacing,double target,double max_gap) {
+    if(!isfinite(spacing)||spacing<0)spacing=0;
+    if(items<2||!isfinite(row)||!isfinite(target)||!isfinite(max_gap)||target<=row)return spacing;
+    double gap=spacing+(target-row)/(items-1);
+    return fmax(spacing,fmin(gap,fmax(spacing,max_gap)));
+}
+double vc_fill_row_gap(double content,int rows,double spacing,double target,double max_gap) {
+    if(!isfinite(spacing)||spacing<0)spacing=0;
+    if(rows<2||!isfinite(content)||!isfinite(target)||!isfinite(max_gap)||target<=content)return spacing;
+    double gap=spacing+(target-content)/(rows-1);
+    return fmax(spacing,fmin(gap,fmax(spacing,max_gap)));
+}
