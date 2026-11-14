@@ -390,6 +390,14 @@ struct StageLyricView: View {
         ink.sample(slot: count > 1 ? Double(run.id) / Double(count - 1) : 0.5, seed: UInt64(abs(seed &+ run.id)))
     }
 
+    /// The colour a word settles in once it is no longer the one being
+    /// sung. Sung sweep keeps a word's fill once it has been reached, as
+    /// the flowing and rolling layouts do; before then, and in every other
+    /// mode, it is the word's resting colour.
+    func settled(_ run: StageRun, _ sample: LyricInkSample) -> Color {
+        sample.sweeps && time >= run.start - StageMotion.lead ? sample.sung : sample.rest
+    }
+
     /// "Cutout · Highlight" chosen as the entrance: each sung word sits on a tile.
     func tiled(_ run: StageRun) -> Bool {
         settings.arrival(in: composition, for: LyricsFetcher.Word(text: run.text, start: run.start, end: run.end)).highlightsSungWords

@@ -23,6 +23,7 @@ When merging, keep every entry and combine duplicate headings.
 - **The Broadside layout.** Wherever it was chosen (the layout, a remembered style, a saved Look, Custom Mix's rotation, a lyric card), it becomes Hinge, the other bold layout of big, heavy type built word by word. The built-in Poster Look now uses Hinge.
 
 ### Fixed
+- **Sung sweep in Torque, Fable and Portal** keeps a word's colour once it has been sung, as every other layout does; those three turned sung words back to white as the next word began.
 - **Constellation now uses the screen at any shape**, from 16:9 to 21:9 ultrawide and the small floating window, instead of drawing the same compact cloud everywhere. Rows wrap wider on wide screens, words in a row spread out and rows part, all inside three quarters of the lyric area, so nothing overlaps or reaches the edges.
 - **Taking a layout out of Custom Mix now takes effect for songs with a remembered style.** While the layout is Custom Mix and its rotation is on, a layout remembered for a song or artist that is no longer in the mix is passed over for the rotation's pick. The remembered colour still applies, and the memory is kept.
 

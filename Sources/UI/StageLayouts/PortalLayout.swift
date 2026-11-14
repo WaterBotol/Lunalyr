@@ -390,7 +390,7 @@ extension StageLyricView {
         let outlined = chance(index, 12) < 0.25 && !tile
         let iconSide = chance(index, 13)
         let tiltSign: Double = chance(index, 15) < 0.5 ? 1 : -1
-        let restColour = tile ? ink.tileText : sample.rest.opacity(0.85)
+        let restColour = tile ? ink.tileText : settled(run, sample).opacity(0.85)
         let liveColour = outlined ? ink.tileColour : ink.tileText
         HStack(spacing: size * 0.3) {
             if let icon, iconSide < 0.6 { portalIcon(icon, size: size, live: live, eased: eased, tiltSign: tiltSign, outlined: outlined) }

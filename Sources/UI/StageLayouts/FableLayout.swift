@@ -105,7 +105,7 @@ extension StageLyricView {
         let tight = LyricScript.keepsSyllables(run.text)
         let reading = Self.revealedReading(of: run, in: readings, at: time, colour: sample.rest.opacity(0.9))
         let face = font(size, hero: true, id: run.id)
-        let rest = tile ? ink.tileText : sample.rest.opacity(0.86)
+        let rest = tile ? ink.tileText : settled(run, sample).opacity(0.86)
         let lit = tile ? ink.tileText : sample.sung
         let word = ZStack {
             if live < 0.999 { self.word(run, rest).font(face) }

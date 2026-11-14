@@ -114,7 +114,7 @@ extension StageLyricView {
         let live = Self.torqueLive(run, runs: runs, at: time)
         let sample = sample(run, of: runs.count)
         let tile = tiled(run)
-        let restColour = tile ? ink.tileText : sample.rest.opacity(0.86)
+        let restColour = tile ? ink.tileText : settled(run, sample).opacity(0.86)
         let liveColour = tile ? ink.tileText : sample.sung
         let steps = Self.torqueSteps(role)
         let depth = size * Self.torqueDepth(role) * CGFloat(pose.depth)
