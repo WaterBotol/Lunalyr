@@ -88,7 +88,7 @@ public static class OnboardingCopy
 
     public const string ImportFailed = "Couldn’t use that file";
 
-    public const string ChooseAnother = "Choose Another Image or Video…";
+    public const string ChooseAnother = "Choose another image or video…";
 
     /// <summary>What the chosen type draws (the Mac's look-step summary): the imported file's name first, when there is one.</summary>
     public static string LookSummary(AppSettings settings)
@@ -177,7 +177,7 @@ public static class OnboardingCopy
     public const string PlayerTitle = "Desktop player";
 
     /// <summary>The desktop player's card (the Mac's line without its search: Windows' player has none).</summary>
-    public const string Player = "Rest the pointer on an uncovered desktop to see what’s playing and next.";
+    public const string Player = "Rest the pointer on an uncovered desktop to see what’s playing and control it.";
 
     /// <summary>The desktop player's switch, to Narrator (Settings › Performance's Show player on hover).</summary>
     public const string PlayerSwitch = "Show player on hover";
