@@ -1,4 +1,4 @@
-// Portal (the Mac's StageLayouts/PortalLayout.swift, Build 88: portal, portalPill, portalIcon, portalBackground,
+// Portal (the Mac's StageLayouts/PortalLayout.swift, Test Build 90: portal, portalPill, portalIcon, portalBackground,
 // PortalPillShape, SketchyOutline; Lunalyr's own code, ported as it is). The word being sung sits in a solid pill,
 // tilted as it arrives and settling flat, with a soft burst swelling off it as it lands (a quick run shares one burst).
 // The words before it climb above it as a trail of smaller, paler type, spaced by their own heights so none overlaps,
@@ -6,7 +6,9 @@
 // picture of its own ("love", "home", "call") carries its icon in the pill (a Segoe Fluent Icons glyph standing in for
 // the Mac's SF Symbol); some other words carry a small ornament, never one of the three pills before. The pills' shapes
 // rotate: capsule, rounded, tag, speech, slant, never the same twice in a row. One pill per word: glued syllables are one
-// pill, and an unspaced line is parted into its words. The choreography is PortalGeometry's.
+// pill, and an unspaced line is parted into its words. It moves on the original Portal's smooth timing (Build 90): the
+// shared landing spring, a 0.6 s settle and 0.36 s lift over the line's pace, shortened only for a word followed within
+// 0.35 s, every curve starting at the word's arrival so nothing jumps. The choreography is PortalGeometry's.
 
 using System.Numerics;
 using Lunalyr.Core.Colour;
@@ -38,6 +40,7 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         public double[] EstimatedClimb { get; } = new double[Math.Max(1, source.Runs.Count)];
         public double[] Shown { get; } = new double[Math.Max(1, source.Runs.Count)];
         public double[] Climb { get; } = new double[Math.Max(1, source.Runs.Count)];
+        public double[] Column { get; } = new double[Math.Max(1, source.Runs.Count)];
         public double[] Visible { get; } = new double[Math.Max(1, source.Runs.Count)];
         public double[] Tilts { get; } = new double[Math.Max(1, source.Runs.Count)];
         public double[] PillWidth { get; } = new double[Math.Max(1, source.Runs.Count)];
@@ -132,13 +135,13 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         var bounds = Bounds;
         // Worked out over the whole line, so a word's entrance knows when the next comes.
         var motion = line.Motion;
-        PortalGeometry.Motion(runs, time, reduce, motion);
+        PortalGeometry.Motion(runs, time, speed, reduce, motion);
         // Ranks count only the words shown, so the newest is always the live one.
         var ranks = line.A.AsSpan(0, n);
         var lives = line.B.AsSpan(0, n);
         var scales = line.C.AsSpan(0, n);
         double after = 0;
-        for (var i = n - 1; i >= 0; i--) { ranks[i] = after; after += motion.Handover[i]; }
+        for (var i = n - 1; i >= 0; i--) { ranks[i] = after; after += motion.Settle[i]; }
         for (var i = 0; i < n; i++)
         {
             lives[i] = StageMotion.Liveness(ranks[i]);
@@ -146,9 +149,9 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             // Each pill's tilt, in degrees: it leans in as it arrives and rocks a little while it is sung.
             var tiltAmount = 4 + 10 * StageShared.Chance(seed, i, 14);
             var tiltSign = StageShared.Chance(seed, i, 15) < 0.5 ? 1.0 : -1.0;
-            var rock = Math.Sin(time * 1.1 + i) * 1.6 * lives[i] / speed;
-            var entrance = (1 - motion.Settle[i]) * tiltAmount * tiltSign * motion.Drift[i];
-            line.Tilts[i] = reduce ? 0 : (entrance + rock) * (0.5 + 0.5 * lives[i]);
+            var rock = Math.Sin(time * 1.1 + i) * 1.6 * lives[i];
+            var entrance = (1 - motion.Settle[i]) * tiltAmount * tiltSign;
+            line.Tilts[i] = reduce ? 0 : (entrance + rock) / speed * (0.5 + 0.5 * lives[i]);
         }
         // Which way this line's trail leans, and where the pills sit. The trail always climbs above the live pill.
         var flipX = StageShared.Chance(seed, null, 1) < 0.5 ? 1.0 : -1.0;
@@ -165,9 +168,7 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         {
             var size = line.Size[i];
             var reading = line.Words[i].HasReading ? StageShared.ReadingSlot(size, point: Pt) : 0;
-            var width = StageShared.Count(runs[i].Text) * size * 0.55 + size * (line.HasIcon[i] ? 1.9 : 1);
-            var lean = Math.Abs(Math.Sin(line.Tilts[i] * Math.PI / 180));
-            line.Estimated[i] = scales[i] * ((size * 1.5 + reading) * (1.04 + 0.1 * lives[i]) + width * lean);
+            line.Estimated[i] = scales[i] * (size * 1.5 + reading) * (1.04 + 0.1 * lives[i]);
         }
         PortalGeometry.Climb(line.Estimated.AsSpan(0, n), motion.Lift.AsSpan(0, n), gap, line.EstimatedClimb);
         for (var i = 0; i < n; i++)
@@ -175,9 +176,11 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             var aged = 1 - Easing.Smoothstep((ranks[i] - fadeFrom) / 0.9);
             var top = line.EstimatedClimb[i] + line.Estimated[i] / 2;
             var crowded = Easing.Smoothstep((top - roomAbove) / Math.Max(1, line.Estimated[i] * 0.6) + 1);
-            line.Visible[i] = i == n - 1 ? aged : aged * (1 - crowded);
+            // The live pill never fades for room; the one it took over from starts to as it hands over.
+            line.Visible[i] = aged * (1 - crowded * (1 - lives[i]));
         }
-        // Measured: each pill's own box (its icon gives its room back as the word hands over).
+        // Measured: each pill's own box (its icon gives its room back as the word hands over); its outline reaches a
+        // little beyond it while it is live.
         for (var i = 0; i < n; i++)
         {
             var size = line.Size[i];
@@ -185,19 +188,11 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             var icon = line.Icons[i] is not null;
             line.PillWidth[i] = word.Width + (icon ? size * 0.3 + size * 0.62 * lives[i] : 0) + size;
             line.PillHeight[i] = Math.Max(word.Height, icon ? size * 0.62 : 0) + size * 0.52;
-            // A tilted pill reaches higher and lower than a flat one.
-            var lean = Math.Abs(Math.Sin(line.Tilts[i] * Math.PI / 180));
-            line.Shown[i] = scales[i] * (line.PillHeight[i] * (1.04 + 0.1 * lives[i]) + line.PillWidth[i] * lean);
+            line.Shown[i] = line.PillHeight[i] * scales[i] * (1.04 + 0.1 * lives[i]);
         }
-        PortalGeometry.Climb(line.Shown.AsSpan(0, n), motion.Lift.AsSpan(0, n), gap, line.Climb);
-        // The trail is lowered, if it must be, so its top pill stays on the stage (a fading pill counts in full until
-        // it is mostly gone), but never so far that the live pill leaves the foot of the stage.
         var baseY = bounds.MidY + lift;
-        double most = 0;
-        for (var i = 0; i < n; i++)
-            most = Math.Max(most, (line.Climb[i] + line.Shown[i] / 2 - (baseY - bounds.MinY - gap)) * Math.Min(1, line.Visible[i] * 3));
-        var floor = Math.Max(0, bounds.MaxY - baseY - line.Shown[n - 1] * 0.54);
-        var lower = Math.Min(Math.Max(0, most), floor);
+        PortalGeometry.Column(line.Shown.AsSpan(0, n), motion.Lift.AsSpan(0, n), line.Visible.AsSpan(0, n), motion.Appear.AsSpan(0, n),
+                              gap, baseY - bounds.MinY, bounds.MaxY - baseY, line.Climb, line.Column);
         // Quick songs get less float, so the eye can follow.
         var floatAmount = reduce ? 0 : 1 / speed;
         var group = Matrix3x2.CreateTranslation(0, reduce ? 0 : (float)(-Stage.Height * 0.1 * leaving)) * Homography.Flat(stage);
@@ -212,16 +207,18 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             var live = lives[id];
             // Where it sits on the trail, which zig-zags a little either side.
             var x0 = AlongX(rank, flipX, reach);
+            // Only the live pill floats; the trail holds still to be read.
             var floating = live * floatAmount;
             var bob = Math.Sin(time * (1.2 + 0.6 * StageShared.Chance(seed, id, 7)) + id * 1.3) * u * 0.07 * floating;
             var sway = Math.Cos(time * (0.9 + 0.5 * StageShared.Chance(seed, id, 8)) + id * 0.9) * u * 0.05 * floating;
-            // Each pill comes in from its own direction, between the right and below; a quick word travels less.
+            // Each pill comes in from its own direction, between the right and below, never down through the trail.
             var heading = StageShared.Chance(seed, id, 9) * 0.5 * Math.PI;
-            var travel = reduce ? 0 : (1 - motion.Settle[id]) * motion.Drift[id] * floatAmount;
+            var travel = (1 - motion.Settle[id]) * floatAmount;
             var comeX = travel * Math.Cos(heading) * bounds.Width * 0.07;
             var comeY = travel * Math.Sin(heading) * bounds.Height * 0.1;
+            // A pill with its reading is taller; none is pushed off the stage.
             var centre = PortalGeometry.KeepOnStage(
-                new PointD(bounds.MidX + shiftX + x0 + sway + comeX, bounds.MidY + lift + lower - line.Climb[id] + bob + comeY),
+                new PointD(bounds.MidX + shiftX + x0 + sway + comeX, baseY + line.Column[id] + bob + comeY),
                 new SizeD(line.PillWidth[id], line.PillHeight[id]), scales[id], bounds);
             DrawPill(dc, line, id, time, centre, scales[id], live, motion, group, tile, calm, boil, opacity, blur);
         }
@@ -249,7 +246,7 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         var size = line.Size[id];
         var eased = motion.Settle[id];
         var burst = motion.Burst[id];
-        var a = StageMotion.Arrival(run.Start, time, motion.Pace[id], reduce);
+        var a = StageMotion.Arrival(run.Start, time, line.Speed, reduce);
         var outlined = line.Outlined[id];
         var shape = line.Shapes[id];
         var flip = line.Flip[id];

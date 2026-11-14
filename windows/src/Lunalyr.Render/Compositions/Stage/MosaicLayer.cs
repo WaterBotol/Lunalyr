@@ -1,10 +1,11 @@
-// Mosaic (the Mac's StageLayouts/MosaicLayout.swift, Build 88: mosaic, mosaicBeat, mosaicSetting, mosaicLetters,
+// Mosaic (the Mac's StageLayouts/MosaicLayout.swift, Test Build 90: mosaic, mosaicBeat, mosaicSetting, mosaicLetters,
 // MosaicLetterRenderer; Lunalyr's own code, ported as it is). A collage: each beat is set a different way as it arrives
 // -- huge, near the stage's width; white on a colour bar; or letter by letter, each letter rising onto one baseline --
 // and then shrinks into a small, flush-left stack above, read top to bottom, the oldest words fading out at its top.
 // Nothing else is drawn: no stars, no panels, and the bar is only ever the background of its own word. A quick run of
 // words shares one beat (one treatment), each word appearing in its place as it is sung; a beat leaves for the stack just
-// before the next one lands. Letters keep one size. The choreography is MosaicGeometry's.
+// before the next one lands, on the original Mosaic's hand-off spring and eases, so nothing jumps as a word arrives.
+// Letters keep one size. The choreography is MosaicGeometry's.
 
 using System.Globalization;
 using System.Numerics;
@@ -100,7 +101,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                 Beat = beat, Size = new SizeD(total, height), X = xs,
                 Fit = total > width && total > 0 ? Math.Max(0.4, width / total) : 1,
                 Tilt = (StageShared.Chance(seed, first.Id, 28) - 0.5) * 5,
-                Sway = (StageShared.Chance(seed, g, 21) - 0.5) * 0.06,
+                Sway = MosaicGeometry.Sway(g),
             };
             if (beat.Kind == MosaicKind.Letters) BakeLetters(setting, line, runs, words, size, big);
             settings[g] = setting;
@@ -177,8 +178,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
         var u = Unit;
         var moves = line.A.AsSpan(0, beats.Length);
         var ranks = line.B.AsSpan(0, beats.Length);
-        MosaicGeometry.Moves(beats, runs, time, speed, exitStart, reduce, arrived, moves);
-        MosaicGeometry.Ranks(moves, ranks);
+        MosaicGeometry.Motion(beats, runs, time, speed, exitStart, line.Seed, reduce, arrived, line.C.AsSpan(0, beats.Length), moves, ranks);
         // The stack's rows make room for readings when the line has any.
         var step = MosaicGeometry.StackStep(u, line.HasReadings, Pt);
         var flat = Homography.Flat(stage);
@@ -225,7 +225,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
                         var shown1 = Math.Min(1, appear0 * 1.6) * bigOpacity;
                         var leading = (float)(rtl ? setting.Size.Width / 2 : -setting.Size.Width / 2);
                         var print = Matrix3x2.CreateRotation(Radians(setting.Tilt))
-                            * Matrix3x2.CreateScale(reduce ? 1 : (float)(0.7 + 0.3 * appear0), 1, new Vector2(leading, 0)) * beatAt;
+                            * Matrix3x2.CreateScale(reduce ? 1 : (float)(0.7 + 0.3 * MosaicGeometry.BarSpread(first, time, speed)), 1, new Vector2(leading, 0)) * beatAt;
                         // The bar is the background of the whole setting: its word, and the word's reading printed on it.
                         var word = line.Words[beat.From];
                         var barWidth = word.Size.Width + 2 * size * MosaicGeometry.BarPaddingX;

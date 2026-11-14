@@ -7,7 +7,8 @@ using static Lunalyr.Core.Tests.Compositions.StageLines;
 namespace Lunalyr.Core.Tests.Compositions;
 
 /// <summary>
-/// Portal: its pills, icons, ornaments and shapes, and fast songs (the Mac's PortalLayoutTests, same inputs and values).
+/// Portal: its pills, icons, ornaments and shapes, fast songs and smoothness (the Mac's PortalLayoutTests at Test Build 90,
+/// same inputs and values).
 /// The Japanese parting needs the system word breaker, so it is in the render tests (PortalRenderTests).
 /// </summary>
 public class PortalLayoutTests
@@ -135,21 +136,48 @@ public class PortalLayoutTests
         }
     }
 
-    /// <summary>Each run's pill height and place above the live pill's, as Portal lays them out, at one moment.</summary>
-    private static List<(double Y, double Height, double Opacity, double Live)> Poses(List<StageRun> runs, double time)
+    /// <summary>The line's pace, as the stage works it out.</summary>
+    private static double Speed(List<StageRun> runs) => StageShared.LineSpeed([.. runs.Select(run => run.Start)]);
+
+    private readonly record struct Pose(double Y, double Height, double Scale, double Opacity, double Live);
+
+    /// <summary>
+    /// Each shown run's pill as Portal lays it out at one moment, on a 520-point stage with 100-point pills: its place
+    /// above the live pill's (climb, and the travel in from below), shown scale (age and landing) and opacity.
+    /// <paramref name="original"/> is the Portal the user liked, before Build 88 (the Mac's aa7f036).
+    /// </summary>
+    private static List<Pose> Poses(List<StageRun> runs, double time, bool original = false)
     {
         var shown = runs.Where(run => time >= run.Start - StageMotion.Lead).ToList();
-        var motion = PortalGeometry.Motion(runs, time, false);
+        var speed = Speed(runs);
+        double[] settle, lift;
+        if (original)
+        {
+            // (The original's lift started 0.08 s before the onset, before the word arrived: its first frames jumped the trail.)
+            settle = [.. shown.Select(run => StageShared.Glide((time - (run.Start - 0.05)) / (0.6 / speed)))];
+            lift = [.. shown.Select(run => StageShared.Glide((time - (run.Start - 0.08)) / (0.36 / speed)))];
+        }
+        else
+        {
+            var motion = PortalGeometry.Motion(runs, time, speed, false);
+            settle = [.. motion.Settle.Take(shown.Count)];
+            lift = [.. motion.Lift.Take(shown.Count)];
+        }
         var ranks = new double[shown.Count];
         double after = 0;
-        for (var index = shown.Count - 1; index >= 0; index--) { ranks[index] = after; after += motion.Handover[index]; }
+        for (var index = shown.Count - 1; index >= 0; index--) { ranks[index] = after; after += settle[index]; }
         var lives = ranks.Select(StageMotion.Liveness).ToArray();
-        var heights = Enumerable.Range(0, shown.Count).Select(i => 100 * PortalGeometry.Scale(ranks[i]) * (1.04 + 0.1 * lives[i])).ToList();
-        var climb = PortalGeometry.Climb(heights, motion.Lift.Take(shown.Count).ToList(), 64 * 0.16);
+        var heights = Enumerable.Range(0, shown.Count).Select(i => PortalGeometry.Scale(ranks[i]) * 100 * (1.04 + 0.1 * lives[i])).ToList();
+        var fadeFrom = speed > 1.6 ? 1.0 : 1.6;
+        var visible = ranks.Select(rank => 1 - Easing.Smoothstep((rank - fadeFrom) / 0.9)).ToList();
+        // The live pill rests 70 points below the middle of the stage.
+        var column = PortalGeometry.Column(heights, lift, visible, settle, 64 * 0.16, 330, original ? 10_000 : 190);
         return [.. Enumerable.Range(0, shown.Count).Select(i =>
         {
-            var visible = 1 - Easing.Smoothstep((ranks[i] - 1.0) / 0.9);
-            return (-climb[i], heights[i], motion.Appear[i] * visible, lives[i]);
+            var travel = (1 - settle[i]) * 520 * 0.1 / speed;
+            var landing = StageMotion.Arrival(shown[i].Start, time, speed);
+            var scale = PortalGeometry.Scale(ranks[i]) * (0.9 + 0.1 * Math.Min(landing, 1.05));
+            return new Pose(travel + column[i], heights[i], scale, settle[i] * visible[i] * (0.85 + 0.15 * lives[i]), lives[i]);
         })];
     }
 
@@ -186,15 +214,20 @@ public class PortalLayoutTests
         }
     }
 
-    // Ported from PortalLayoutTests.swift: testEveryWordAppearsByItsSungTime
+    // Ported from PortalLayoutTests.swift: testEveryWordEntersOnItsSungTime
     [Fact]
-    public void EveryWordAppearsByItsSungTime()
+    public void EveryWordEntersOnItsSungTime()
     {
         foreach (var runs in FastRuns)
-        foreach (var run in runs)
         {
-            Assert.True(PortalGeometry.Motion(runs, run.Start, false).Appear[run.Id] >= 0.8, $"{run.Text} at {run.Start}");
-            Assert.Equal(0, PortalGeometry.Motion(runs, run.Start - 0.08, false).Appear[run.Id], 0.0001);
+            var speed = Speed(runs);
+            foreach (var run in runs)
+            {
+                double Appear(double time) => PortalGeometry.Motion(runs, time, speed, false).Appear[run.Id];
+                Assert.Equal(0, Appear(run.Start - 0.05), 0.0001);
+                Assert.True(Appear(run.Start) > 0, run.Text);
+                Assert.True(Appear(run.Start + 0.3) >= 0.5, $"{run.Text} at {run.Start}");
+            }
         }
     }
 
@@ -206,11 +239,96 @@ public class PortalLayoutTests
         var previous = -1.0;
         for (var time = 1.95; time < 2.5; time += 1.0 / 60)
         {
-            var burst = PortalGeometry.Motion(runs, time, false).Burst;
+            var burst = PortalGeometry.Motion(runs, time, Speed(runs), false).Burst;
             Assert.Equal(burst[2], burst[3], 0.0001);
             Assert.Equal(burst[3], burst[4], 0.0001);
             Assert.True(burst[4] >= previous);
             previous = burst[4];
+        }
+    }
+
+    // Ported from PortalLayoutTests.swift: testOnlyQuickWordsShortenAndNeverBelowTheFloors
+    [Fact]
+    public void OnlyQuickWordsShortenAndNeverBelowTheFloors()
+    {
+        foreach (var runs in FastRuns)
+        {
+            var speed = Speed(runs);
+            for (var index = 0; index < runs.Count; index++)
+            {
+                var times = PortalGeometry.Times(runs, index, speed);
+                var next = index + 1 < runs.Count ? runs[index + 1].Start - runs[index].Start : 9;
+                if (next >= 0.35)
+                {
+                    Assert.Equal(0.6 / speed, times.Settle, 1e-9);
+                    Assert.Equal(0.36 / speed, times.Lift, 1e-9);
+                }
+                else
+                {
+                    Assert.True(times.Settle >= Math.Min(0.6 / speed, 0.28) - 1e-9);
+                    Assert.True(times.Lift >= Math.Min(0.36 / speed, 0.2) - 1e-9);
+                    Assert.True(times.Settle <= 0.6 / speed + 1e-9);
+                }
+            }
+        }
+    }
+
+    /// <summary>The largest change of any pill's place, scale or opacity over one 60 Hz frame, sampled at 120 Hz through a line and its exit.</summary>
+    private static (double Y, double Scale, double Opacity) LargestSteps(List<StageRun> runs, bool original)
+    {
+        (double Y, double Scale, double Opacity) worst = (0, 0, 0);
+        for (var time = runs[0].Start - 0.2; time < runs[^1].Start + 1.0; time += 1.0 / 120)
+        {
+            var now = Poses(runs, time, original);
+            var later = Poses(runs, time + 1.0 / 60, original);
+            for (var i = 0; i < now.Count; i++)
+            {
+                worst.Y = Math.Max(worst.Y, Math.Abs(later[i].Y - now[i].Y));
+                worst.Scale = Math.Max(worst.Scale, Math.Abs(later[i].Scale - now[i].Scale));
+                worst.Opacity = Math.Max(worst.Opacity, Math.Abs(later[i].Opacity - now[i].Opacity));
+            }
+        }
+        return worst;
+    }
+
+    private static (string Name, List<StageRun> Runs)[] Named => [("short", FastRuns[3]), ("long", FastRuns[2]), ("fast", FastRuns[0]), ("triple", FastRuns[1])];
+
+    // Ported from PortalLayoutTests.swift: testMovesAsSmoothlyAsTheOriginal
+    [Fact]
+    public void MovesAsSmoothlyAsTheOriginal()
+    {
+        foreach (var (name, runs) in Named)
+        {
+            var limit = LargestSteps(runs, original: true);
+            var steps = LargestSteps(runs, original: false);
+            Assert.True(steps.Y <= limit.Y * 1.15, $"{name}: place {steps.Y:0.00} against {limit.Y:0.00}");
+            Assert.True(steps.Scale <= limit.Scale * 1.15, $"{name}: scale {steps.Scale:0.0000} against {limit.Scale:0.0000}");
+            Assert.True(steps.Opacity <= limit.Opacity * 1.15, $"{name}: opacity {steps.Opacity:0.0000} against {limit.Opacity:0.0000}");
+        }
+    }
+
+    // Ported from PortalLayoutTests.swift: testNothingJumpsWhenAWordArrives
+    [Fact]
+    public void NothingJumpsWhenAWordArrives()
+    {
+        foreach (var (name, runs) in Named)
+        {
+            var limit = LargestSteps(runs, original: true);
+            foreach (var run in runs)
+            foreach (var moment in new[] { run.Start - StageMotion.Lead, run.Start })
+            {
+                var before = Poses(runs, moment - 1.0 / 120);
+                var after = Poses(runs, moment + 1.0 / 120);
+                for (var i = 0; i < before.Count && i < run.Id; i++)
+                {
+                    var what = $"{name} {run.Text}: pill {i} at {moment:0.000} s";
+                    Assert.True(Math.Abs(after[i].Y - before[i].Y) < limit.Y * 1.15, what + " place");
+                    Assert.True(Math.Abs(after[i].Scale - before[i].Scale) < limit.Scale * 1.15, what + " scale");
+                    Assert.True(Math.Abs(after[i].Opacity - before[i].Opacity) < limit.Opacity * 1.15, what + " opacity");
+                }
+                // A pill that joins is at rest: invisible, in place.
+                if (after.Count > before.Count) Assert.True(after[before.Count].Opacity < 0.01, $"{name} {run.Text}");
+            }
         }
     }
 }

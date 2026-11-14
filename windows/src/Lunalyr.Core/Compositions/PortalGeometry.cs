@@ -1,5 +1,5 @@
-// Portal's choreography (the Mac's PortalLayout.swift, Build 88: portalRuns, PortalMotion, portalClimb, portalIcons,
-// portalShapes, portalScale, keepOnStage; Lunalyr's own code, no line from the Verso import, ported as it is). Pure
+// Portal's choreography (the Mac's PortalLayout.swift, Test Build 90: portalRuns, PortalMotion, portalTimes,
+// portalColumn, portalClimb, portalIcons, portalShapes, portalScale, keepOnStage; Lunalyr's own code, no line from the Verso import, ported as it is). Pure
 // functions of the line and the time; the drawing is PortalLayer's.
 //
 // The word being sung sits in a solid pill, tilted as it arrives and settling flat, with a soft burst swelling off it as
@@ -18,23 +18,25 @@ namespace Lunalyr.Core.Compositions;
 public enum PortalShape { Capsule, Rounded, Tag, Speech, Slant }
 
 /// <summary>
-/// How each pill moves at one moment, worked out from the words' own times, not the line's pace alone: a quick word gets
-/// a shorter entrance, so the next never cuts it off, and a quick run (words under <see cref="PortalGeometry.QuickGap"/>
-/// apart) shares one burst. Arrays of one value per run; reused frame to frame.
+/// How each pill moves at one moment. Every word moves as the original Portal moved: the shared landing spring, a 0.6 s
+/// settle and a 0.36 s trail lift (divided by the line's pace), all on smooth eases from the word's arrival. Only a word
+/// whose next word follows within <see cref="PortalGeometry.QuickNext"/> has a shorter settle and lift, never under the
+/// floors, and a quick run (words under <see cref="PortalGeometry.QuickGap"/> apart) shares one burst. Arrays of one
+/// value per run; reused frame to frame.
 /// </summary>
 public sealed class PortalMotion
 {
     public PortalMotion(int count)
     {
         var n = Math.Max(1, count);
-        Appear = new double[n]; Settle = new double[n]; Lift = new double[n]; Burst = new double[n]; Handover = new double[n];
-        Ranks = new double[n]; Live = new double[n]; Drift = new double[n]; Pace = new double[n];
+        Appear = new double[n]; Settle = new double[n]; Lift = new double[n]; Burst = new double[n];
+        Ranks = new double[n]; Live = new double[n];
         Head = new int[n]; RunEnd = new int[n];
         Count = count;
     }
 
     public int Count { get; }
-    /// <summary>0…1: the pill fading in, mostly done by the word's onset.</summary>
+    /// <summary>0…1: the pill fading in (the settle, as in the original).</summary>
     public double[] Appear { get; }
     /// <summary>0…1: the entrance (travel, tilt, outline) easing to rest.</summary>
     public double[] Settle { get; }
@@ -42,16 +44,10 @@ public sealed class PortalMotion
     public double[] Lift { get; }
     /// <summary>0…1: the burst swelling off the pill (its quick run's).</summary>
     public double[] Burst { get; }
-    /// <summary>0…1: the word taking the pill over from the one before it (quicker than its settle after a quick word).</summary>
-    public double[] Handover { get; }
-    /// <summary>How far back each word is: the later words' hand-overs, summed.</summary>
+    /// <summary>How far back each word is: the later words' settles, summed.</summary>
     public double[] Ranks { get; }
     /// <summary>1 while the word is the one sung, easing to 0 as the next takes over.</summary>
     public double[] Live { get; }
-    /// <summary>0…1: how far a pill travels in (less for a quick word).</summary>
-    public double[] Drift { get; }
-    /// <summary>1…3: the pace of a word's own landing spring.</summary>
-    public double[] Pace { get; }
     /// <summary>The quick run each word belongs to: its first word's index.</summary>
     internal int[] Head { get; }
     /// <summary>The last word of each word's quick run.</summary>
@@ -63,14 +59,12 @@ public static class PortalGeometry
     /// <summary>The ornaments a word without a picture of its own may carry (the Mac's SF Symbols; see <see cref="SegoeIcons"/>).</summary>
     public static readonly string[] Ornaments = ["arrow.up.right", "arrow.right", "sparkle", "play.fill", "plus", "bolt.fill", "star.fill"];
 
-    /// <summary>A pill starts to show this long before its word's onset.</summary>
-    public const double AppearLead = 0.06;
-
     /// <summary>Words closer together than this share one burst.</summary>
     public const double QuickGap = 0.16;
-
-    /// <summary>The shortest and longest entrance, in seconds.</summary>
-    public const double SettleMin = 0.14, SettleMax = 0.6;
+    /// <summary>A word followed sooner than this gets a shorter entrance…</summary>
+    public const double QuickNext = 0.35;
+    /// <summary>…but its settle never shorter than this, and its trail lift never shorter than this.</summary>
+    public const double QuickSettle = 0.28, QuickLift = 0.2;
 
     /// <summary>A word longer than this (in characters) is not one word: it is set as two.</summary>
     public const int LongestWord = 24;
@@ -134,23 +128,27 @@ public static class PortalGeometry
         return result;
     }
 
-    /// <summary>How long word <paramref name="index"/>'s entrance takes: most of the time until the next word.</summary>
-    public static double SettleTime(IReadOnlyList<StageRun> runs, int index)
+    /// <summary>The original settle and lift for a line at <paramref name="speed"/>, shortened only for a quick word (and then never below the floors).</summary>
+    public static (double Settle, double Lift) Times(IReadOnlyList<StageRun> runs, int index, double speed)
     {
-        var next = index + 1 < runs.Count ? runs[index + 1].Start - runs[index].Start : 0.8;
-        return Math.Min(SettleMax, Math.Max(SettleMin, 0.85 * next));
+        double settle = 0.6 / speed, lift = 0.36 / speed;
+        if (index + 1 >= runs.Count) return (settle, lift);
+        var next = runs[index + 1].Start - runs[index].Start;
+        if (!(next < QuickNext)) return (settle, lift);
+        // Never longer than the original either: a line already that quick keeps its own.
+        return (Math.Min(settle, Math.Max(QuickSettle, 2 * next)), Math.Min(lift, Math.Max(QuickLift, 1.2 * next)));
     }
 
     /// <summary>Every pill's motion at <paramref name="time"/>, worked out over the whole line.</summary>
-    public static PortalMotion Motion(IReadOnlyList<StageRun> runs, double time, bool reduceMotion)
+    public static PortalMotion Motion(IReadOnlyList<StageRun> runs, double time, double speed, bool reduceMotion)
     {
         var motion = new PortalMotion(runs.Count);
-        Motion(runs, time, reduceMotion, motion);
+        Motion(runs, time, speed, reduceMotion, motion);
         return motion;
     }
 
-    /// <summary><see cref="Motion(IReadOnlyList{StageRun}, double, bool)"/> into <paramref name="motion"/> (allocation-free).</summary>
-    public static void Motion(IReadOnlyList<StageRun> runs, double time, bool reduceMotion, PortalMotion motion)
+    /// <summary><see cref="Motion(IReadOnlyList{StageRun}, double, double, bool)"/> into <paramref name="motion"/> (allocation-free).</summary>
+    public static void Motion(IReadOnlyList<StageRun> runs, double time, double speed, bool reduceMotion, PortalMotion motion)
     {
         var count = Math.Min(runs.Count, motion.Count);
         var head = motion.Head;
@@ -165,41 +163,66 @@ public static class PortalGeometry
         for (var index = 0; index < count; index++)
         {
             var start = runs[index].Start;
-            var settleTime = SettleTime(runs, index);
-            var previousGap = index > 0 ? start - runs[index - 1].Start : 0.6;
-            var liftTime = Math.Min(0.36, Math.Max(0.08, 0.6 * Math.Min(settleTime, previousGap)));
             if (reduceMotion)
             {
                 var on = time >= start - StageMotion.Lead ? 1.0 : 0.0;
                 motion.Appear[index] = on; motion.Settle[index] = on; motion.Lift[index] = on; motion.Burst[index] = 1;
-                motion.Handover[index] = on;
+                continue;
             }
-            else
-            {
-                // Mostly in by the onset (0.84 there), whatever the pace.
-                motion.Appear[index] = Easing.Smoothstep((time - (start - AppearLead)) / 0.08);
-                motion.Settle[index] = StageShared.Glide((time - (start - 0.05)) / settleTime);
-                var handoverTime = Math.Min(settleTime, Math.Max(SettleMin, 2 * previousGap));
-                motion.Handover[index] = StageShared.Glide((time - (start - 0.05)) / handoverTime);
-                // The trail has climbed out of the way just before the new pill shows, so it never lands on the one before.
-                var liftEnd = start - AppearLead + 0.025;
-                motion.Lift[index] = StageShared.Glide((time - (liftEnd - liftTime)) / liftTime);
-                // One burst for a quick run: from its first word's onset to the end of its last word's entrance.
-                var first = runs[head[index]].Start;
-                var last = runEnd[index];
-                var span = runs[last].Start - first + SettleTime(runs, last);
-                motion.Burst[index] = Math.Min(1, Math.Max(0, (time - (first - 0.05)) / span));
-            }
-            motion.Drift[index] = Math.Min(1, settleTime / 0.5);
-            motion.Pace[index] = Math.Min(3, Math.Max(1, 0.6 / settleTime));
+            var times = Times(runs, index, speed);
+            // Smootherstep starts and ends at rest, so the trail's sum of them never jolts; from the word's arrival
+            // (StageMotion.Lead before its onset), so a pill joins the stage at rest.
+            var settle = StageShared.Glide((time - (start - StageMotion.Lead)) / times.Settle);
+            motion.Settle[index] = settle;
+            motion.Appear[index] = settle;
+            // The trail climbs out of the way a little quicker than the new pill settles, so it never lands on the one before.
+            motion.Lift[index] = StageShared.Glide((time - (start - StageMotion.Lead)) / times.Lift);
+            // The burst swells with the settle; a quick run's words share one, from its first onset to its last word's rest.
+            var first = runs[head[index]].Start;
+            var last = runEnd[index];
+            var span = runs[last].Start - first + Times(runs, last, speed).Settle;
+            motion.Burst[index] = StageShared.Glide((time - (first - StageMotion.Lead)) / span);
         }
         double after = 0;
         for (var index = count - 1; index >= 0; index--)
         {
             motion.Ranks[index] = after;
-            after += motion.Handover[index];
+            after += motion.Settle[index];
         }
         for (var index = 0; index < count; index++) motion.Live[index] = StageMotion.Liveness(motion.Ranks[index]);
+    }
+
+    /// <summary>
+    /// Each pill's place above (negative) the live pill's resting place, on a stage with <paramref name="above"/> over
+    /// that place and <paramref name="below"/> under it. The trail is lowered, if it must be, so its top pill stays on
+    /// the stage (a fading pill counts in full until it is mostly gone, so it is never squeezed against the top onto the
+    /// one below), but never so far that a pill leaves the foot of the stage. Every term moves with the pills' own
+    /// curves: a pill joining at rest moves nothing. <paramref name="climb"/> is scratch; the places go in <paramref name="column"/>.
+    /// </summary>
+    public static void Column(ReadOnlySpan<double> heights, ReadOnlySpan<double> lifts, ReadOnlySpan<double> visible,
+                              ReadOnlySpan<double> appear, double gap, double above, double below, Span<double> climb, Span<double> column)
+    {
+        var n = heights.Length;
+        Climb(heights, lifts, gap, climb);
+        double room = 0, lowest = 0;
+        for (var i = 0; i < n; i++)
+        {
+            room = Math.Max(room, (climb[i] + heights[i] / 2 - (above - gap)) * Math.Min(1, visible[i] * 3));
+            lowest = Math.Max(lowest, heights[i] * Math.Min(1, appear[i] * 3));
+        }
+        var floor = Math.Max(0, below - lowest * 0.54);
+        var lower = Math.Min(room, floor);
+        for (var i = 0; i < n; i++) column[i] = lower - climb[i];
+    }
+
+    public static double[] Column(IReadOnlyList<double> heights, IReadOnlyList<double> lifts, IReadOnlyList<double> visible,
+                                  IReadOnlyList<double> appear, double gap, double above, double below)
+    {
+        var n = heights.Count;
+        var climb = new double[n];
+        var column = new double[n];
+        Column(heights.ToArray(), lifts.Take(n).ToArray(), visible.Take(n).ToArray(), appear.Take(n).ToArray(), gap, above, below, climb, column);
+        return column;
     }
 
     /// <summary>

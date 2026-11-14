@@ -1,5 +1,5 @@
-// Mosaic's choreography (the Mac's MosaicLayout.swift, Build 88: mosaicBeats, mosaicMoves, mosaicRanks, mosaicAppear,
-// mosaicCentre, mosaicLetterReveal, mosaicHome and their constants; Lunalyr's own code, no line from the Verso import,
+// Mosaic's choreography (the Mac's MosaicLayout.swift, Test Build 90: mosaicBeats, mosaicLeaves, mosaicMotion,
+// mosaicAppear, mosaicBarSpread, mosaicCentre, mosaicLetterReveal, mosaicHeld, mosaicHome and their constants; Lunalyr's own code, no line from the Verso import,
 // ported as it is). Pure functions of the line and the time; the drawing is MosaicLayer's.
 //
 // A collage: each word is set a different way as it arrives -- huge, near the stage's width; white on a colour bar; or
@@ -8,7 +8,8 @@
 //
 // A quick run of words (each under QuickGap after the one before) is one "beat": set together in one treatment, each
 // word appearing in its place as it is sung, so a fast line never stacks big words on top of each other. A beat leaves
-// for the stack just before the next one arrives (the times are known), so the two never share the spot.
+// for the stack just before the next one arrives (the times are known), so the two never share the spot. Build 90 moves
+// it on the original Mosaic's curves (the shared hand-off spring, its eases and wipe), so nothing jumps at an arrival.
 
 using Lunalyr.Core.Lyrics.Parsing;
 using Lunalyr.Core.Lyrics.Timing;
@@ -129,65 +130,89 @@ public static class MosaicGeometry
         return beats;
     }
 
+    /// <summary>How far ahead of the next beat's arrival a beat starts to leave, at an ordinary pace.</summary>
+    public const double LeaveAhead = 0.22;
+
     /// <summary>
-    /// How far each beat has gone from where it landed into the stack, 0…1. A beat leaves just ahead of the next beat's
-    /// arrival (or of the line's exit, for the last), but not before its last word has had a moment on its own; the move
-    /// is quicker on a quick line. <paramref name="arrived"/> beats count under Reduce Motion, where the moves are steps.
+    /// When each beat starts to leave for the stack: a little ahead of the next beat's arrival (or of the line's exit,
+    /// for the last), so the two never share the spot, but only once its own last word is in. Null: it stays (the last
+    /// beat of a line that does not leave).
     /// </summary>
-    public static void Moves(IReadOnlyList<MosaicBeat> beats, IReadOnlyList<StageRun> runs, double time, double speed,
-                             double exitStart, bool reduceMotion, int arrived, Span<double> moves)
+    public static void Leaves(IReadOnlyList<MosaicBeat> beats, IReadOnlyList<StageRun> runs, double speed, double exitStart,
+                              Span<double> leaves)
     {
+        var pace = Math.Min(3, Math.Max(1, speed));
         for (var g = 0; g < beats.Count; g++)
         {
-            var followed = g + 1 < beats.Count;
-            if (reduceMotion)
-            {
-                moves[g] = followed && beats[g + 1].From < arrived ? 1 : 0;
-                continue;
-            }
             double next;
-            if (followed) next = runs[beats[g + 1].From].Start - Lead;
+            if (g + 1 < beats.Count) next = runs[beats[g + 1].From].Start - Lead;
             else if (double.IsFinite(exitStart)) next = exitStart;
-            else { moves[g] = 0; continue; }
-            var last = double.NegativeInfinity;
-            for (var id = beats[g].From; id < beats[g].To; id++) last = Math.Max(last, runs[id].Start);
-            if (double.IsNegativeInfinity(last)) last = next;
-            var gap = Math.Max(0, next - (last - Lead));
-            var duration = Math.Min(0.42 / Math.Min(3, Math.Max(1, speed)) + 0.06, Math.Max(0.14, gap * 0.9));
-            var start = Math.Max(last - Lead + Math.Min(0.18, gap * 0.5), next - duration * 0.6);
-            moves[g] = StageShared.Glide((time - start) / duration);
+            else { leaves[g] = double.NaN; continue; }
+            // Ahead by about half the hand-off, which the pace shortens as it shortens the hand-off itself; never before
+            // the last word is in.
+            leaves[g] = Math.Max(next - LeaveAhead / pace, Held(beats[g], runs, speed));
         }
     }
 
-    public static double[] Moves(IReadOnlyList<MosaicBeat> beats, IReadOnlyList<StageRun> runs, double time, double speed,
-                                 double exitStart, bool reduceMotion, int arrived)
+    /// <summary>
+    /// Each beat's journey into the stack (<paramref name="moves"/>, 0…1) and its row there (<paramref name="ranks"/>),
+    /// with the original Mosaic's curves: each leave is the shared hand-off spring (its cadence shortened only by the
+    /// line's pace), a beat's rank is the sum of its own and every later beat's hand-off, and its move is
+    /// <c>glide(min(rank, 1.2) / 1.2)</c>. Under Reduce Motion each hand-off is a step once the next beat has
+    /// <paramref name="arrived"/>. <paramref name="leaves"/> is scratch, one per beat.
+    /// </summary>
+    public static void Motion(IReadOnlyList<MosaicBeat> beats, IReadOnlyList<StageRun> runs, double time, double speed,
+                              double exitStart, long seed, bool reduceMotion, int arrived, Span<double> leaves, Span<double> moves,
+                              Span<double> ranks)
     {
-        var moves = new double[beats.Count];
-        Moves(beats, runs, time, speed, exitStart, reduceMotion, arrived, moves);
-        return moves;
-    }
-
-    /// <summary>Each beat's row in the stack: the sum of its own move and the moves of every beat after it.</summary>
-    public static void Ranks(ReadOnlySpan<double> moves, Span<double> ranks)
-    {
+        Leaves(beats, runs, speed, exitStart, leaves);
         double after = 0;
-        for (var index = moves.Length - 1; index >= 0; index--)
+        for (var g = beats.Count - 1; g >= 0; g--)
         {
-            after += moves[index];
-            ranks[index] = after;
+            var leave = leaves[g];
+            double handoff = 0;
+            if (!double.IsNaN(leave))
+            {
+                if (reduceMotion)
+                {
+                    var followed = g + 1 < beats.Count;
+                    handoff = (followed ? beats[g + 1].From < arrived : time >= leave) ? 1 : 0;
+                }
+                else
+                {
+                    var id = g + 1 < beats.Count ? beats[g + 1].From : runs.Count;
+                    handoff = StageMotion.Handoff(leave + StageMotion.Lead, time, StageMotion.RunSeed(seed, id), speed);
+                }
+            }
+            after += handoff;
+            ranks[g] = after;
         }
+        for (var g = 0; g < beats.Count; g++) moves[g] = StageShared.Glide(Math.Min(ranks[g], 1.2) / 1.2);
     }
 
-    public static double[] Ranks(IReadOnlyList<double> moves)
+    public static (double[] Moves, double[] Ranks) Motion(IReadOnlyList<MosaicBeat> beats, IReadOnlyList<StageRun> runs, double time,
+                                                         double speed, double exitStart, long seed, bool reduceMotion, int arrived)
     {
-        var ranks = new double[moves.Count];
-        Ranks(moves.ToArray(), ranks);
-        return ranks;
+        var leaves = new double[beats.Count];
+        var moves = new double[beats.Count];
+        var ranks = new double[beats.Count];
+        Motion(beats, runs, time, speed, exitStart, seed, reduceMotion, arrived, leaves, moves, ranks);
+        return (moves, ranks);
     }
 
     /// <summary>How much of a word is in, 0…1 (it may overshoot a little): fully in by its onset.</summary>
     public static double Appear(StageRun run, double time, double speed, bool reduceMotion, int arrived) =>
         reduceMotion ? (run.Id < arrived ? 1 : 0) : StageMotion.Arrival(run.Start - (Lead - StageMotion.Lead), time, speed);
+
+    /// <summary>
+    /// How far the bar (with its word) has spread to its full width: the original wipe's ease and length (0.32 s,
+    /// shortened by the line's pace, but never under 0.2 s), from the word's first appearance.
+    /// </summary>
+    public static double BarSpread(StageRun run, double time, double speed) =>
+        StageShared.Glide((time - (run.Start - Lead)) / Math.Max(0.2, 0.32 / Math.Min(3, Math.Max(1, speed))));
+
+    /// <summary>Beats land a little left and right of each other in turn, so one just leaving is never quite where the next lands.</summary>
+    public static double Sway(int beat) => beat % 2 == 0 ? -0.035 : 0.035;
 
     /// <summary>The centre of a beat measured <paramref name="size"/>: from where it lands to its row in the stack, flush to the stack's column.</summary>
     public static PointD Centre(SizeD size, double move, double rank, double sway, double step, double overhang, bool rightToLeft,
@@ -200,19 +225,55 @@ public static class MosaicGeometry
     }
 
     /// <summary>
-    /// When a letter of a word rises in: its syllable's own onset (less the lead), the letters of the syllable a little
-    /// apart, all of them in before the next syllable or word is sung. <paramref name="next"/> is the onset after the run.
+    /// When a letter of a word rises in: the original Mosaic's rise (0.25 s, letters 0.05 s apart), from its syllable's
+    /// own onset less the lead. A quick syllable (the next under 0.35 s away) rises a little quicker, never under 0.2 s;
+    /// a long word's letters follow each other closer when the next onset is near, so the word is in by then.
+    /// <paramref name="next"/> is the onset after the run.
     /// </summary>
     public static double LetterReveal(int part, int letter, StageRun run, double? next, double time)
     {
-        if (part < 0 || part >= run.Parts.Count) return 1;
+        if (LetterTiming(part, run, next) is not { } timing) return 1;
         var onset = run.Parts[part].Start;
-        var following = part + 1 < run.Parts.Count ? run.Parts[part + 1].Start : next ?? onset + 0.5;
-        var window = Math.Min(0.6, Math.Max(0.08, following - onset));
+        return StageShared.Glide((time - (onset - Lead + letter * timing.Stagger)) / timing.Rise);
+    }
+
+    /// <summary>The rise of each letter of a syllable and the delay between letters.</summary>
+    public static (double Rise, double Stagger)? LetterTiming(int part, StageRun run, double? next)
+    {
+        if (part < 0 || part >= run.Parts.Count) return null;
+        var onset = run.Parts[part].Start;
+        var following = part + 1 < run.Parts.Count ? run.Parts[part + 1].Start : next ?? onset + 1;
+        var window = Math.Max(0, following - onset);
         var count = Math.Max(1, TextElements.Count(run.Parts[part].Text));
-        var rise = Math.Min(0.2, Math.Max(0.07, window * 0.55));
-        var stagger = count > 1 ? Math.Min(0.045, window * 0.45 / (count - 1)) : 0;
-        return StageShared.Glide((time - (onset - Lead + letter * stagger)) / rise);
+        var rise = window < 0.35 ? Math.Max(0.2, Math.Min(0.25, window + 0.05)) : 0.25;
+        var stagger = count > 1 ? Math.Min(0.05, Math.Max(0.015, (window + Lead - rise) / (count - 1))) : 0;
+        return (rise, stagger);
+    }
+
+    /// <summary>
+    /// When a beat's last word is far enough in for the beat to start leaving: its arrival risen, or its letters well on
+    /// their way up (the last ones finish as the hand-off spring gathers pace).
+    /// </summary>
+    public static double Held(MosaicBeat beat, IReadOnlyList<StageRun> runs, double speed)
+    {
+        var pace = Math.Min(3, Math.Max(1, speed));
+        var held = double.NegativeInfinity;
+        for (var index = beat.From; index < beat.To; index++)
+        {
+            var run = runs[index];
+            held = Math.Max(held, run.Start - Lead + StageMotion.ArrivalRise / pace);
+            if (beat.Kind != MosaicKind.Letters) continue;
+            double? next = index + 1 < runs.Count ? runs[index + 1].Start : null;
+            for (var part = 0; part < run.Parts.Count; part++)
+            {
+                if (LetterTiming(part, run, next) is not { } timing) continue;
+                var span = timing.Rise + Math.Max(0, TextElements.Count(run.Parts[part].Text) - 1) * timing.Stagger;
+                // A quick syllable's letters finish on the way (the next word is close).
+                var share = timing.Rise < 0.25 ? 0.25 : 0.4;
+                held = Math.Max(held, run.Parts[part].Start - Lead + span * share);
+            }
+        }
+        return held;
     }
 
     /// <summary>The size the small stack sets its words at.</summary>
