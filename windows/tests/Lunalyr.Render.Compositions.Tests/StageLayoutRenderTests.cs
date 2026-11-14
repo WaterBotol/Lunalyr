@@ -12,7 +12,7 @@ namespace Lunalyr.Render.Compositions.Tests;
 
 /// <summary>
 /// The Build 88 stage layouts' parts that need the system (the word breaker, the icon font, drawing): Portal's words
-/// and icons, and Mosaic's bar (the Mac's PortalLayoutTests and MosaicLayoutTests, their drawing and Japanese parts).
+/// and icons (the Mac's PortalLayoutTests, their drawing and Japanese parts). Mosaic is the original, as shipped up to 2.0.2.
 /// </summary>
 [Collection(GpuCollection.Name)]
 public sealed class StageLayoutRenderTests : IDisposable
@@ -136,68 +136,5 @@ public sealed class StageLayoutRenderTests : IDisposable
         Assert.Empty(_sink.Entries);
     }
 
-    // Ported from MosaicLayoutTests.swift: testBarNeverShowsWithoutItsWord. Drawn: whenever any of the bar shows, its word
-    // shows on it in full proportion, through the whole entrance.
-    [Fact]
-    public void MosaicBarNeverShowsWithoutItsWord()
-    {
-        // "oh" is the longest word held, so huge; "no" takes the bar.
-        List<LyricWord> words = [new("oh", 1, 1.5), new("no", 1.6, 2.0)];
-        Assert.Equal([MosaicKind.Huge, MosaicKind.Bar], MosaicGeometry.Beats(StageRun.Make(words, [false, false])).Select(beat => beat.Kind));
-        using var layer = Layer("mosaic");
-        var scene = Scene(words, [false, false]);
-        var frames = new List<byte[]>();
-        for (var step = 0; step <= 30; step++) frames.Add(Frame(layer, scene, 1.6 - 0.2 + step / 60.0));
-        // The bar's colour: the commonest strongly coloured pixel once it is fully in.
-        var bar = Commonest(frames[^1]);
-        (int Bar, int Word) Count(byte[] pixels)
-        {
-            int w = _stage.Width, h = _stage.Height;
-            int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1, count = 0;
-            for (var y = 0; y < h; y++)
-            for (var x = 0; x < w; x++)
-            {
-                var i = (y * w + x) * 4;
-                if (!Near(pixels, i, bar, 18)) continue;
-                count++;
-                minX = Math.Min(minX, x); minY = Math.Min(minY, y); maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
-            }
-            if (count == 0) return (0, 0);
-            var word = 0;
-            for (var y = minY; y <= maxY; y++)
-            for (var x = minX; x <= maxX; x++)
-            {
-                var i = (y * w + x) * 4;
-                if (!Near(pixels, i, bar, 60) && !Near(pixels, i, Background, 30)) word++;
-            }
-            return (count, word);
-        }
-        var full = Count(frames[^1]);
-        var ratio = (double)full.Word / Math.Max(1, full.Bar);
-        Assert.True(ratio > 0.05, "the finished bar should carry its word");
-        for (var index = 0; index < frames.Count; index++)
-        {
-            var (barPixels, wordPixels) = Count(frames[index]);
-            if (barPixels > 600)
-                Assert.True((double)wordPixels / barPixels > ratio * 0.6, $"frame {index}: the bar shows with too little of its word");
-        }
-    }
 
-    private static bool Near(byte[] pixels, int i, Vector4 colour, int tolerance) =>
-        Math.Abs(pixels[i + 2] - colour.X * 255) + Math.Abs(pixels[i + 1] - colour.Y * 255) + Math.Abs(pixels[i] - colour.Z * 255) <= tolerance;
-
-    /// <summary>The commonest saturated colour in a frame (BGRA), as 0…1 RGB.</summary>
-    private static Vector4 Commonest(byte[] pixels)
-    {
-        var counts = new Dictionary<int, int>();
-        for (var i = 0; i < pixels.Length; i += 4)
-        {
-            int b = pixels[i], g = pixels[i + 1], r = pixels[i + 2];
-            if (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) < 60) continue;
-            var key = (r << 16) | (g << 8) | b;
-            counts[key] = counts.GetValueOrDefault(key) + 1;
-        }
-        var best = counts.MaxBy(pair => pair.Value).Key;
-        return new Vector4(((best >> 16) & 255) / 255f, ((best >> 8) & 255) / 255f, (best & 255) / 255f, 1);
-    }
 }

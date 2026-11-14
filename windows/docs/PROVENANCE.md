@@ -301,10 +301,10 @@ behaviour.
 | `Sources/UI/StageLayouts/HingeLayout.swift` | 0 | `HingeGeometry.cs`, `Render/Compositions/Stage/HingeLayer.cs` | Faithful port |
 | `Sources/UI/StageLayouts/BroadsideLayout.swift` | 0 | `StageGeometry.cs` (`BroadsideGeometry`), `BroadsideLayer.cs` | Faithful port |
 | `Sources/UI/StageLayouts/PortalLayout.swift` (Test Build 90) | 0 | `PortalGeometry.cs`, `PortalLayer.cs` | Faithful port |
-| `Sources/UI/StageLayouts/MosaicLayout.swift` (Test Build 90) | 0 | `MosaicGeometry.cs`, `MosaicLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/MosaicLayout.swift` | 0 | `MosaicGeometry.cs`, `MosaicLayer.cs` | Not ported: the owner kept the original Mosaic (Mac 691883e, 14 Nov 2026). Windows' Mosaic is its own from before the rework, unchanged |
 | `Sources/UI/StageLayouts/TorqueLayout.swift` | 0 | `TorqueGeometry.cs`, `TorqueLayer.cs` | Faithful port |
 | `Sources/UI/StageLayouts/FableLayout.swift` | 0 | `FableGeometry.cs`, `FableLayer.cs` | Faithful port |
-| Tests: `StagePhrasesTests`, `LyricWordIconsTests`, `PortalLayoutTests`, `MosaicLayoutTests`, `TorqueLayoutTests`, `FableLayoutTests`, `HingeBroadsideChoreographyTests`, `StageMotionTests`, `StageReadingTests` | 0 | `tests/Lunalyr.Core.Tests/Compositions/*`, `StageLayoutRenderTests.cs` | Same inputs and values |
+| Tests: `StagePhrasesTests`, `LyricWordIconsTests`, `PortalLayoutTests`, `TorqueLayoutTests`, `FableLayoutTests`, `HingeBroadsideChoreographyTests`, `StageMotionTests`, `StageReadingTests` | 0 | `tests/Lunalyr.Core.Tests/Compositions/*`, `StageLayoutRenderTests.cs` | Same inputs and values |
 
 ## Onboarding rework and the Settings loader (Mac Test Build 88, 14 Nov 2026)
 
