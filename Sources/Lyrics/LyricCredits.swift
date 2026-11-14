@@ -157,6 +157,46 @@ enum LyricCredits {
         func isEither(_ text: String) -> Bool { isHeading(text) || isLoneName(text) }
     }
 
+    /// "纯音乐，请欣赏" ("instrumental, please enjoy"): a notice Chinese
+    /// lyric services put in place of lyrics, sometimes timed over the intro
+    /// ahead of the real ones. Only a line that is the notice and nothing
+    /// else counts. The line is NFKC-normalised (full-width punctuation and
+    /// spaces become half-width), stripped of every space, punctuation mark
+    /// and symbol, has the traditional characters 純樂請賞為沒詞 mapped to
+    /// simplified, and must then be exactly
+    /// `(此歌曲为没有填词的)?纯音乐请您?欣赏`.
+    static func isInstrumentalNotice(_ text: String) -> Bool {
+        let folded = text.precomposedStringWithCompatibilityMapping
+        var kept = ""
+        for scalar in folded.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .spaceSeparator, .lineSeparator, .paragraphSeparator, .control, .format,
+                 .connectorPunctuation, .dashPunctuation, .openPunctuation, .closePunctuation,
+                 .initialPunctuation, .finalPunctuation, .otherPunctuation,
+                 .mathSymbol, .currencySymbol, .modifierSymbol, .otherSymbol:
+                continue
+            default:
+                kept.unicodeScalars.append(noticeSimplified[scalar] ?? scalar)
+            }
+        }
+        guard kept.count <= 24 else { return false }
+        return kept.range(of: "^(此歌曲为没有填词的)?纯音乐请您?欣赏$", options: .regularExpression) != nil
+    }
+
+    private static let noticeSimplified: [Unicode.Scalar: Unicode.Scalar] = [
+        "純": "纯", "樂": "乐", "請": "请", "賞": "赏", "為": "为", "沒": "没", "詞": "词",
+    ]
+
+    /// The lines without any "纯音乐，请欣赏" notice. Every line being one
+    /// leaves nothing: the song then shows as having no lyrics.
+    static func droppingInstrumentalNotices(_ lines: [LyricsFetcher.Line]) -> [LyricsFetcher.Line] {
+        lines.filter { !isInstrumentalNotice($0.text) }
+    }
+
+    static func droppingInstrumentalNotices(_ lines: [String]) -> [String] {
+        lines.filter { !isInstrumentalNotice($0) }
+    }
+
     /// Unsynced lyrics have no time to show a credit at, so the ones opening
     /// the text (and the heading above them) are dropped.
     static func droppingLeadingCredits(_ lines: [String], title: String = "", artist: String = "") -> [String] {

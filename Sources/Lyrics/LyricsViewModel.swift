@@ -361,6 +361,17 @@ final class LyricsViewModel: ObservableObject {
     static func presentation(of result: LyricsFetcher.Result?, repairingGaps repair: Bool,
                              track: (title: String, artist: String)? = nil) -> Presentation {
         let (title, artist) = track ?? ("", "")
+        // "纯音乐，请欣赏" notices are not lyrics; a file of nothing else
+        // shows as no lyrics at all.
+        var result = result
+        switch result {
+        case .synced(let value, let source): result = .synced(LyricCredits.droppingInstrumentalNotices(value), source)
+        case .plain(let value, let source):
+            let kept = LyricCredits.droppingInstrumentalNotices(value)
+            let dropped = kept.count != value.count
+            result = .plain(dropped && !kept.contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ? [] : kept, source)
+        default: break
+        }
         switch result {
         case .synced(let value, let source) where !value.isEmpty:
             let qq = source.source.lowercased().contains("qq")

@@ -82,3 +82,37 @@ final class LyricTextRulesTests: XCTestCase {
         }
     }
 }
+
+@MainActor
+final class InstrumentalNoticeTests: XCTestCase {
+    func testOnlyAWholeNoticeLineCounts() {
+        let notices = ["纯音乐，请欣赏", "纯音乐,请欣赏", "纯音乐 请欣赏", "纯音乐，请您欣赏", "此歌曲为没有填词的纯音乐，请您欣赏",
+                       "純音樂，請欣賞", "  纯音乐 ， 请欣赏 。", "纯音乐，请欣赏！", "【纯音乐，请欣赏】", "纯音乐　请欣赏",
+                       "此歌曲為沒有填詞的純音樂，請您欣賞"]
+        for text in notices { XCTAssertTrue(LyricCredits.isInstrumentalNotice(text), text) }
+        let lyrics = ["纯音乐", "请欣赏", "我爱纯音乐，请欣赏", "纯音乐，请欣赏这首歌", "这是纯音乐", "Instrumental", "", "欣赏"]
+        for text in lyrics { XCTAssertFalse(LyricCredits.isInstrumentalNotice(text), text) }
+    }
+
+    func testNoticeOverTheIntroIsDroppedAndTheLyricsKept() {
+        let lines = [LyricsFetcher.makeLine(text: "纯音乐，请欣赏", start: 0, end: 12),
+                     LyricsFetcher.makeLine(text: "天青色等烟雨", start: 14, end: 17),
+                     LyricsFetcher.makeLine(text: "而我在等你", start: 17, end: 20)]
+        let shown = LyricsViewModel.presentation(of: .synced(lines, .init(precision: "Line", source: "NetEase")), repairingGaps: false)
+        XCTAssertEqual(shown.lines.filter { !$0.isInstrumental }.map(\.text), ["天青色等烟雨", "而我在等你"])
+        XCTAssertFalse(shown.lines.contains { $0.text.contains("纯音乐") })
+        let plain = LyricsViewModel.presentation(of: .plain(["純音樂，請欣賞", "", "天青色等烟雨"], .init(precision: "Plain", source: "x")),
+                                                 repairingGaps: false)
+        XCTAssertFalse(plain.plainLines.contains { $0.contains("純音樂") })
+        XCTAssertTrue(plain.plainLines.contains("天青色等烟雨"))
+    }
+
+    func testANoticeAloneLeavesNoLyrics() {
+        let synced = LyricsViewModel.presentation(of: .synced([LyricsFetcher.makeLine(text: "纯音乐，请欣赏", start: 0, end: 5)],
+                                                              .init(precision: "Line", source: "Kugou")), repairingGaps: false)
+        XCTAssertFalse(synced.found)
+        let plain = LyricsViewModel.presentation(of: .plain(["此歌曲为没有填词的纯音乐，请您欣赏"], .init(precision: "Plain", source: "x")),
+                                                 repairingGaps: false)
+        XCTAssertFalse(plain.found)
+    }
+}
