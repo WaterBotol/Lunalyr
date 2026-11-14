@@ -178,6 +178,7 @@ public sealed partial class AppController
     {
         if (_musicVideo is null) return;
         if (old.BackgroundMode != settings.BackgroundMode || old.MusicVideoOnline != settings.MusicVideoOnline) UpdateMusicVideo();
+        if (old.MusicVideoFraming != settings.MusicVideoFraming) FollowMusicVideoShape();
     }
 
     private void UpdateMusicVideo()
@@ -202,6 +203,7 @@ public sealed partial class AppController
         lock (_gate) track = _musicVideoTrack;
         _musicVideoShowing = controller.SourceFor(track);
         FollowMusicVideoStill();
+        FollowMusicVideoShape();
         RefreshMusicVideoLayers();
         RaiseStatusChanged();
     }
@@ -270,7 +272,8 @@ public sealed partial class AppController
         var settings = _settings;
         var path = _musicVideoShowing is MusicVideoSource.Local local ? local.Path : null;
         return new MusicVideoInputs(path, time, playing, _musicVideo?.CurrentOffset ?? 0, settings.MusicVideoDim, settings.MusicVideoBlur,
-            Still: _musicVideoStill);
+            Still: _musicVideoStill, YouTubeFraming: settings.YouTubeFraming, FileFraming: settings.FileFraming,
+            YouTubeAspect: MusicVideoAspect);
     }
 
     private void ReportMusicVideo(string path, double? duration, double videoTime, bool playing)

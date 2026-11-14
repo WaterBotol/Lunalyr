@@ -70,6 +70,7 @@ public sealed class AppSettingsTests
             // Performance › Low power visuals; Visualiser › Colours for Wavefield and Fosfora Aurora
             "lowPowerVisuals", "wavefieldColours", "wavecoreColours",
             "musicVideoFallback", "musicVideoOnline", "musicVideoSearch", "musicVideoDim", "musicVideoBlur",
+            "musicVideoFraming", "libraryVideoFraming",
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
             // (hideLyricsWhileMirroring is written only once chosen; MirroringTests checks it)

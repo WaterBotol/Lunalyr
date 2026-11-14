@@ -26,6 +26,7 @@ public sealed partial class AppController
     {
         lock (_gate) _stillHttp = http;
         FollowMusicVideoStill();
+        FollowMusicVideoShape();
     }
 
     /// <summary>Starts fetching the still of the YouTube video now on screen, or lets the last one go.</summary>

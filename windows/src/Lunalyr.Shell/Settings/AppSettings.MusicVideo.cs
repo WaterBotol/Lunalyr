@@ -4,6 +4,9 @@
 // (offsets, pasted links, chosen files, the lookup cache) isn't a setting: it is in {data}\music-video.json, and the
 // YouTube Data API key in {data}\MusicVideo\youtube-key.bin (DPAPI). The Mac's "Show the video on"
 // (custom.musicVideoDisplays) isn't kept: Windows' renderer draws one background on every display (docs/milestones/M6.md).
+// musicVideoFraming and libraryVideoFraming are the Mac's Test Build 88 keys (MusicVideoFraming.swift).
+
+using Lunalyr.Core.MusicVideo;
 
 namespace Lunalyr.Shell.Settings;
 
@@ -34,6 +37,24 @@ public sealed partial record AppSettings
 
     public const double MusicVideoDimMax = 0.85, MusicVideoBlurMax = 24;
 
+    /// <summary>
+    /// How a YouTube video sits on the screen: <c>fill</c> ("Fill the screen", cropped and zoomed past YouTube's overlays) or
+    /// <c>whole</c> ("Show the whole video", its width matched over a blurred backdrop). Anything else reads as fill. Mac
+    /// <c>custom.musicVideoFraming</c> (Test Build 88).
+    /// </summary>
+    public string MusicVideoFraming { get; init; } = "fill";
+
+    /// <summary>The same choice for video files (the Mac's library videos). Mac <c>custom.libraryVideoFraming</c>.</summary>
+    public string LibraryVideoFraming { get; init; } = "fill";
+
+    /// <summary><see cref="MusicVideoFraming"/> as the framing.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Core.MusicVideo.MusicVideoFraming YouTubeFraming => MusicVideoFramings.FromStored(MusicVideoFraming);
+
+    /// <summary><see cref="LibraryVideoFraming"/> as the framing.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Core.MusicVideo.MusicVideoFraming FileFraming => MusicVideoFramings.FromStored(LibraryVideoFraming);
+
     /// <summary>The types "Without a video" offers: every one but Music video.</summary>
     public static IReadOnlyList<string> MusicVideoFallbacks { get; } = ["auto", "pattern", "shader", "colourOnly", "visualizer", "desktop", "custom"];
 
@@ -53,5 +74,7 @@ public sealed partial record AppSettings
         MusicVideoSearch = MusicVideoSearchModes.Contains(settings.MusicVideoSearch) ? settings.MusicVideoSearch : "site",
         MusicVideoDim = InRange(settings.MusicVideoDim, 0, MusicVideoDimMax, 0.35),
         MusicVideoBlur = InRange(settings.MusicVideoBlur, 0, MusicVideoBlurMax, 0),
+        MusicVideoFraming = settings.YouTubeFraming.Value(),
+        LibraryVideoFraming = settings.FileFraming.Value(),
     };
 }

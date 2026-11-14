@@ -24,7 +24,7 @@ public sealed class MediaFoundationPlayability : IMusicVideoPlayabilityCheck
 
 /// <summary>
 /// GETs for the music video, the Mac's URLSessionMusicVideoHTTP: HTTPS only, to YouTube's results page, the YouTube Data API
-/// and YouTube's image host (the results' stills); no cookies, no redirects followed, nothing cached, eight seconds at most,
+/// YouTube's image host (the results' stills) and YouTube's oEmbed address for one video's shape; no cookies, no redirects followed, nothing cached, eight seconds at most,
 /// <c>Accept-Language: en</c>. youtube.com is sent the Mac's WebKit User-Agent (its results data is served only to a
 /// browser); every other host is told it is Lunalyr. Anything else is refused before it is sent.
 /// </summary>
@@ -52,8 +52,12 @@ public sealed class MusicVideoHttpClient : IMusicVideoHttp, IDisposable
         };
     }
 
+    /// <summary>
+    /// Whether <paramref name="url"/> may be asked: the allowed hosts, YouTube's results page, or exactly the oEmbed address
+    /// of one video (its shape for "Show the whole video": only the video's ID is sent).
+    /// </summary>
     public static bool Allows(Uri url) =>
-        url.Scheme == Uri.UriSchemeHttps && (AllowedHosts.Contains(url.Host) || YouTubeSearchPage.IsResultsPage(url));
+        url.Scheme == Uri.UriSchemeHttps && (AllowedHosts.Contains(url.Host) || YouTubeSearchPage.IsResultsPage(url) || YouTubeVideoShape.IsOEmbed(url));
 
     /// <summary>The User-Agent for <paramref name="url"/>: the Mac's WebKit one for youtube.com, Lunalyr's own elsewhere.</summary>
     public static string UserAgentFor(Uri url) =>
