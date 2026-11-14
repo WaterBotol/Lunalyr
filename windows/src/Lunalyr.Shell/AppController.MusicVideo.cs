@@ -178,7 +178,12 @@ public sealed partial class AppController
     {
         if (_musicVideo is null) return;
         if (old.BackgroundMode != settings.BackgroundMode || old.MusicVideoOnline != settings.MusicVideoOnline) UpdateMusicVideo();
-        if (old.MusicVideoFraming != settings.MusicVideoFraming) FollowMusicVideoShape();
+        if (old.MusicVideoFraming != settings.MusicVideoFraming)
+        {
+            FollowMusicVideoShape();
+            // YouTube's player host listens: it sizes the WebView2 and the page's box at once rather than at its next check.
+            RaiseStatusChanged();
+        }
     }
 
     private void UpdateMusicVideo()

@@ -56,6 +56,9 @@ internal static class FramingPreview
                     var still = Still(aspect);
                     failures += YouTubeRender(output, $"youtube-{tag}-{w}x{h}-{framing.Value()}-covered", still, aspect, framing, w, h, scene, false, report);
                     failures += YouTubeRender(output, $"youtube-{tag}-{w}x{h}-{framing.Value()}-playing", still, aspect, framing, w, h, scene, true, report);
+                    // The smaller 4:3 still YouTube falls back to: cropped into the picture, never squashed.
+                    failures += YouTubeRender(output, $"youtube-hq-{tag}-{w}x{h}-{framing.Value()}-covered", Still(aspect, hq: true), aspect, framing, w, h,
+                        scene, false, report);
                 }
             }
         }
@@ -186,12 +189,14 @@ internal static class FramingPreview
     /// A still as YouTube makes one: 1280×720, the picture at <paramref name="aspect"/> inside it with black bars, painted with
     /// hue bands and a grid so a crop or a stretch shows.
     /// </summary>
-    private static CoverArt Still(double aspect)
+    private static CoverArt Still(double aspect, bool hq = false)
     {
-        const int W = 1280, H = 720;
+        // maxresdefault: 1280×720, the 16:9 player. hqdefault: 480×360, the 16:9 player letterboxed again inside 4:3.
+        int W = hq ? 480 : 1280, H = hq ? 360 : 720;
+        var playerH = hq ? 270 : H;
         var pixels = new byte[W * H * 4];
-        var pw = aspect < 16.0 / 9.0 ? (int)Math.Round(H * aspect) : W;
-        var ph = aspect < 16.0 / 9.0 ? H : (int)Math.Round(W / aspect);
+        var pw = aspect < 16.0 / 9.0 ? (int)Math.Round(playerH * aspect) : W;
+        var ph = aspect < 16.0 / 9.0 ? playerH : (int)Math.Round(W / aspect);
         var x0 = (W - pw) / 2;
         var y0 = (H - ph) / 2;
         for (var y = 0; y < H; y++)

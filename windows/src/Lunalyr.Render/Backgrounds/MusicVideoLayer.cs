@@ -635,7 +635,10 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
             else if (!uncovered)
             {
                 _standIn.Draw(dc, frame.Scene.Palette, _size);
-                DrawStill(dc, inputs, frame.WallSeconds, FilledStill(inputs.Still));
+                // Zoomed like the filled player only where a player can be uncovered over it (the main desktop surface,
+                // without Reduce Motion); elsewhere the still simply fills, as on the Mac.
+                var player = frame.AheadWork is not null && frame.IsMainDisplay && !frame.Scene.ReduceMotion;
+                DrawStill(dc, inputs, frame.WallSeconds, player ? FilledStill(inputs.Still) : null);
             }
             _standIn.Dim(dc, inputs.Dim, _size);
             _shade.Draw(frame, AssumedLuminance, scrim: true, grain: false);
@@ -689,11 +692,21 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
             _standIn.Draw(dc, frame.Scene.Palette, _size);
             dc.PopAxisAlignedClip();
         }
-        _backdrop.Draw(dc, backdrop, _size, frame.WallSeconds, cut);
+        _backdrop.Draw(dc, backdrop, _size, frame.WallSeconds, cut,
+            inputs.Still is not null ? inputs.YouTubeAspect ?? MusicVideoFramings.YouTubeAspect : null);
         if (uncovered) return;
         dc.PushAxisAlignedClip(new Vortice.RawRectF((float)visible.X, (float)visible.Y, (float)(visible.X + visible.Width),
             (float)(visible.Y + visible.Height)), AntialiasMode.Aliased);
-        DrawStill(dc, inputs, frame.WallSeconds, layout.PlayerRect(container));
+        // Aspect-filled into the 16:9 player's frame (a 4:3 hqdefault still, with its own baked-in bars, is cropped, not
+        // squashed), then clipped to the visible picture.
+        var playerRect = layout.PlayerRect(container);
+        VideoRect? stillRect = null;
+        if (inputs.Still is { } still)
+        {
+            var (x, y, w, h) = WallpaperPlacements.Frame(still.Width, still.Height, playerRect.Width, playerRect.Height, WallpaperPlacement.Fill);
+            stillRect = new VideoRect(playerRect.X + x, playerRect.Y + y, w, h);
+        }
+        DrawStill(dc, inputs, frame.WallSeconds, stillRect);
         dc.PopAxisAlignedClip();
     }
 

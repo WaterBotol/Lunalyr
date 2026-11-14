@@ -329,7 +329,10 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     {
         // A sample answered after the player closed must not leave the wallpaper see-through over nothing.
         visible &= _controller is not null && _session.HasPlayer;
+        if (_feed.PlayerVisible == visible) return;
         _feed.PlayerVisible = visible;
+        // A wallpaper frozen by "Pause wallpaper" (or resting) still redraws once, so it covers a player that stopped.
+        _engine.RequestFrame();
     }
 
     /// <summary>The framing chosen, the player's box in the page (whole only) and the WebView2's bounds in the host window.</summary>
@@ -560,7 +563,11 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
     private void CloseWebView()
     {
         _reveal.Reset();
-        _feed.PlayerVisible = false;
+        if (_feed.PlayerVisible)
+        {
+            _feed.PlayerVisible = false;
+            _engine.RequestFrame();
+        }
         _look = null;
         _controller?.Close();
         _controller = null;

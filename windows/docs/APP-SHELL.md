@@ -1182,7 +1182,7 @@ nothing is drawn. Lunalyr never reads or changes the wallpaper; the automatic ba
 
 ### Music video
 
-The playing song's music video behind the lyrics, muted, filled to the screen and kept on the song's own clock: the
+The playing song's music video behind the lyrics, muted, filled to the screen or shown whole ("Framing and hiding" below) and kept on the song's own clock: the
 Mac's Music video type (`Sources/MusicVideo/`, `MusicVideoSettings.swift`, `VideoAlignRow.swift`; Lunalyr's own code,
 ported with its tests). Its automatic sync was removed on the Mac and isn't ported: the timing is the length estimate
 plus the user's Tap to sync, Align and nudges. Code: `Core/MusicVideo/` (the rules), `Shell/AppController.MusicVideo.cs`
@@ -1248,7 +1248,8 @@ screen, `AppController.MusicVideoStill.cs` fetches its still from YouTube's imag
 Search YouTube window's rows already load from; `maxresdefault.jpg`, then `hqdefault.jpg`, the stills the Data API lists
 as a video's thumbnails), through the same client (`MusicVideoHttpClient`: no cookies, nothing cached, allowed hosts
 only), decodes it to at most 1280 px and hands it to the `musicVideo.youtube` layer through the feed. The layer draws
-it, filled and softened by Video blur, wherever the player isn't on screen: under Reduce Motion (Windows' Animation
+it, softened by Video blur (filled, or at the picture's place when shown whole), wherever the player is covered: paused,
+buffering or held, under Reduce Motion (Windows' Animation
 effects off; the player is then never opened, as on the Mac), in the settings preview, on the other displays, and
 while the player loads or after it has closed. It fades in over the album colours in 0.4 s; dimming, scrim and backing
 go over it as over the player. Nothing is fetched where no player could be shown (`--demo`, `--no-network`,
@@ -1265,6 +1266,10 @@ default) or "Show the whole video" (`Core/MusicVideo/MusicVideoFraming.cs`, `Mus
   16:10, 21:9 anywhere) leaves bands above and below; a taller one (4:3) loses a little of its top and bottom. The bands
   show the album colours under a blurred, darkened copy of the cover, or of the YouTube video's still once it has loaded
   (`MusicVideoBackdrop`: reduced to 256 px wide and blurred once off the render thread, darkened 0.45), never black.
+  Windows' own refinement: a still's backdrop blurs only the video's own picture, cut out of the bars YouTube bakes
+  into its stills (`MusicVideoBackdrop.PictureIn`), so a wide video's bands don't go near-black; the Mac blurs the whole
+  still. The still itself is aspect-filled into the 16:9 player's frame, so the 4:3 `hqdefault` fallback is cropped,
+  not squashed.
   Video files: the Mac's `videoGravity` (a fit for a wider picture, a fill for a taller one).
 - **A YouTube video shown whole:** its own shape comes from YouTube's oEmbed endpoint (`YouTubeVideoShape`: only the
   video's ID is in the address; asked only while a YouTube video is on screen and shown whole, through the stills'
@@ -1279,6 +1284,9 @@ default) or "Show the whole video" (`Core/MusicVideo/MusicVideoFraming.cs`, `Mus
   change from covered to playing (a start, a resume, a seek) stays covered for 5 s (`MusicVideoFramings.TitleOverlayHold`;
   the Mac measured YouTube's title, buttons and logo gone 4.0–4.4 s in). `YouTubePlayerReveal` holds that rule (tests with
   hand-fired timers). The covering is the wallpaper's layer, not a hidden WebView2: the page keeps playing beneath it.
+  Each cover or uncover asks every surface for one frame (`RenderEngine.RequestFrame`), so a wallpaper frozen by Pause
+  wallpaper still covers a player that stopped. Filled, the still is zoomed like the player only on the main desktop
+  surface; elsewhere (other displays, the preview, Reduce Motion) it simply fills.
 - **Not ported:** the Mac's frozen frame (a picture of the paused player's last frame laid in its place). A paused
   YouTube player shows its still instead.
 

@@ -74,7 +74,7 @@ public static class YouTubeVideoShape
         {
             reply = await http.GetAsync(url, new Dictionary<string, string>(), ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or IOException)
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or InvalidOperationException or IOException)
         {
             return null;
         }

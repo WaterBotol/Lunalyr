@@ -333,6 +333,32 @@ public sealed class MusicVideoFramingTests
         Assert.True(grey[^1] < 25);
     }
 
+    // Windows' own: a YouTube still's backdrop blurs only the video's own picture, not the bars YouTube bakes around it.
+    [Fact]
+    public void AStillsBackdropLeavesYouTubesBarsOut()
+    {
+        Assert.Equal((0, 0, 1280, 720), MusicVideoBackdrop.PictureIn(1280, 720, Hd));
+        Assert.Equal((160, 0, 960, 720), MusicVideoBackdrop.PictureIn(1280, 720, 4.0 / 3.0)); // pillarboxed
+        Assert.Equal((0, 92, 1280, 536), MusicVideoBackdrop.PictureIn(1280, 720, 2.39)); // letterboxed
+        Assert.Equal((0, 45, 480, 270), MusicVideoBackdrop.PictureIn(480, 360, Hd)); // hqdefault: 16:9 inside 4:3
+        Assert.Equal((0, 0, 0, 0), MusicVideoBackdrop.PictureIn(0, 0, Hd));
+        // Black bars around a white picture: the blurred backdrop keeps no black from them.
+        var pixels = new byte[480 * 360 * 4];
+        for (var y = 0; y < 360; y++)
+        {
+            for (var x = 0; x < 480; x++)
+            {
+                var i = (y * 480 + x) * 4;
+                var picture = y >= 79 && y < 280; // a 2.39 picture (480 × 201) in the 16:9 player in the 4:3 still
+                pixels[i] = pixels[i + 1] = pixels[i + 2] = picture ? (byte)255 : (byte)0;
+                pixels[i + 3] = 255;
+            }
+        }
+        var blurred = MusicVideoBackdrop.Blurred(new CoverArt(480, 360, pixels), 2.39);
+        Assert.NotNull(blurred);
+        Assert.True(Greys(blurred).All(g => g > 200), "only the picture is blurred");
+    }
+
     /// <summary>Timers by delay, fired by hand.</summary>
     private sealed class Timers
     {

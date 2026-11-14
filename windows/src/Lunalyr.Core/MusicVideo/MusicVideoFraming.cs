@@ -230,6 +230,47 @@ public static class MusicVideoBackdrop
     {
         ArgumentNullException.ThrowIfNull(image);
         if (image.Width <= 0 || image.Height <= 0) return null;
+        return BlurredWhole(image);
+    }
+
+    /// <summary>
+    /// Where a YouTube still's own picture lies (Windows' own): YouTube's stills are its 16:9 player (letterboxed again inside
+    /// 4:3 for the smaller one), with the video's own shape barred inside that. Integer pixels, centred.
+    /// </summary>
+    public static (int X, int Y, int Width, int Height) PictureIn(int width, int height, double contentAspect)
+    {
+        if (width <= 0 || height <= 0 || !(contentAspect > 0) || !double.IsFinite(contentAspect)) return (0, 0, Math.Max(0, width), Math.Max(0, height));
+        // The 16:9 player inside the still.
+        double pw = width, ph = height;
+        if (pw / ph > MusicVideoFramings.YouTubeAspect) pw = ph * MusicVideoFramings.YouTubeAspect;
+        else ph = pw / MusicVideoFramings.YouTubeAspect;
+        // The picture inside the player.
+        double w = pw, h = ph;
+        if (contentAspect < MusicVideoFramings.YouTubeAspect) w = ph * contentAspect;
+        else h = pw / contentAspect;
+        var iw = Math.Clamp((int)Math.Round(w), 1, width);
+        var ih = Math.Clamp((int)Math.Round(h), 1, height);
+        return ((width - iw) / 2, (height - ih) / 2, iw, ih);
+    }
+
+    /// <summary>
+    /// The backdrop of a YouTube still of a video of <paramref name="contentAspect"/>: its own picture only, cut out of
+    /// YouTube's bars before blurring, so a wide video's backdrop isn't darkened by the bars baked into its still (Windows'
+    /// own refinement; the Mac blurs the whole still).
+    /// </summary>
+    public static CoverArt? Blurred(CoverArt image, double contentAspect)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        var (x, y, w, h) = PictureIn(image.Width, image.Height, contentAspect);
+        if (w == image.Width && h == image.Height) return Blurred(image);
+        var pixels = new byte[w * h * 4];
+        for (var row = 0; row < h; row++)
+            Array.Copy(image.Pixels, ((y + row) * image.Width + x) * 4, pixels, row * w * 4, w * 4);
+        return BlurredWhole(new CoverArt(w, h, pixels));
+    }
+
+    private static CoverArt BlurredWhole(CoverArt image)
+    {
         var scale = Math.Min(1.0, (double)WorkingWidth / image.Width);
         var width = Math.Max(1, (int)Math.Round(image.Width * scale));
         var height = Math.Max(1, (int)Math.Round(image.Height * scale));

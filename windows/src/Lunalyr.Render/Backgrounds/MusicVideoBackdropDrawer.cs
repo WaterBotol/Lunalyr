@@ -18,6 +18,7 @@ namespace Lunalyr.Render.Backgrounds;
 internal sealed class MusicVideoBackdropDrawer : IDisposable
 {
     private CoverArt? _source;
+    private double? _aspect;
     private Task<CoverArt?>? _blurring;
     private CoverArt? _blurred;
     private ID2D1Bitmap1? _bitmap;
@@ -32,9 +33,10 @@ internal sealed class MusicVideoBackdropDrawer : IDisposable
     /// <paramref name="picture"/> (the bands it leaves) when given: there the surface stays as it is (see-through over
     /// YouTube's player).
     /// </summary>
-    public unsafe void Draw(ID2D1DeviceContext dc, CoverArt? source, Vector2 size, double now, VideoRect? picture = null)
+    /// <param name="stillAspect">For a YouTube still: the video's own shape, so only its picture (not YouTube's bars) is blurred.</param>
+    public unsafe void Draw(ID2D1DeviceContext dc, CoverArt? source, Vector2 size, double now, VideoRect? picture = null, double? stillAspect = null)
     {
-        Follow(source, now);
+        Follow(source, stillAspect, now);
         if (_blurred is not { } blurred) return;
         if (_bitmap is null)
         {
@@ -81,12 +83,14 @@ internal sealed class MusicVideoBackdropDrawer : IDisposable
     }
 
     /// <summary>Starts blurring a new source off the render thread; takes up the result once it is done.</summary>
-    private void Follow(CoverArt? source, double now)
+    private void Follow(CoverArt? source, double? aspect, double now)
     {
-        if (!ReferenceEquals(source, _source))
+        if (!ReferenceEquals(source, _source) || aspect != _aspect)
         {
             _source = source;
-            _blurring = source is null ? null : Task.Run(() => MusicVideoBackdrop.Blurred(source));
+            _aspect = aspect;
+            _blurring = source is null ? null
+                : Task.Run(() => aspect is { } shape ? MusicVideoBackdrop.Blurred(source, shape) : MusicVideoBackdrop.Blurred(source));
             // The old backdrop stays until the new one is ready (the Mac keeps the cover until the still is blurred).
             if (source is null) DropPicture();
         }

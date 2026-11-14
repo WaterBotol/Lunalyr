@@ -54,7 +54,7 @@ public sealed partial class AppController
         var aspect = await YouTubeVideoShape.AspectAsync(video, http, ct).ConfigureAwait(false);
         lock (_gate)
         {
-            if (ct.IsCancellationRequested || _shapeVideo != video) return;
+            if (_disposed || ct.IsCancellationRequested || _shapeVideo != video) return;
             if (aspect is { } found) Volatile.Write(ref _musicVideoAspect, found);
         }
         if (aspect is { } shape) _app.Info($"Music video: the YouTube video's shape is {shape:0.###}:1 (YouTube's oEmbed).");
