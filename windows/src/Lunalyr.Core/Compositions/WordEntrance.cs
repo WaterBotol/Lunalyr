@@ -49,7 +49,7 @@ public enum WordArrival
     SatinRibbon,
     /// <summary>"Split Ink": two bars of ink slide past each other across the word as it arrives.</summary>
     SplitInk,
-    /// <summary>"Custom mix": each word takes one of the mix's entrances.</summary>
+    /// <summary>"Mixed entrances" (once "Custom mix"): each word takes one of the mix's entrances.</summary>
     Mix,
 }
 
@@ -89,7 +89,7 @@ public static class WordArrivals
         WordArrival.CutoutHighlight => "Cutout · Highlight",
         WordArrival.SatinRibbon => "Satin Ribbon",
         WordArrival.SplitInk => "Split Ink",
-        _ => "Custom mix",
+        _ => "Mixed entrances",
     };
 
     /// <summary>

@@ -375,7 +375,13 @@ public sealed partial class TrayFlyout : Window
             ToolTipService.SetToolTip(PauseToggle, state.PauseTitle);
             ReadingsToggle.IsChecked = state.ReadingsOn;
             CreditsToggle.IsChecked = state.CreditsOn;
-            DiscordToggle.IsChecked = _host.Settings.Current.DiscordPresence;
+            var settings = _host.Settings.Current;
+            DiscordToggle.IsChecked = settings.DiscordPresence;
+            HideLyricsToggle.IsChecked = settings.LyricsHidden;
+            FloatingToggle.IsChecked = settings.IsFloating;
+            EditPositionToggle.IsChecked = settings.IsFloating && _host.FloatingEditing;
+            EditPositionToggle.IsEnabled = settings.IsFloating;
+            RefreshPlayers(settings.Player);
             PausedNote.Visibility = state.WallpaperPaused ? Visibility.Visible : Visibility.Collapsed;
             RefreshMusicVideo();
         }
@@ -625,6 +631,65 @@ public sealed partial class TrayFlyout : Window
         if (_updating) return;
         var on = ReadingsToggle.IsChecked == true;
         _host.Settings.Update(s => s with { RomanizationDisplay = TrayFlyoutState.ReadingsValue(on, s.RomanizationDisplay) });
+        Refresh();
+    }
+
+    // ---- The Mac panel's rows Windows had not (the owner, 15 Nov 2026): Player, Hide lyrics, Floating, Edit position ----
+
+    private IReadOnlyList<string> _playersShown = [];
+
+    /// <summary>The players offered (Automatic, Apple Music, Spotify, each app sharing now, the current one), as Settings › Music players.</summary>
+    private void RefreshPlayers(string? current)
+    {
+        IReadOnlyList<Lunalyr.Core.NowPlaying.MediaSourceApp> apps;
+        try
+        {
+            apps = _host.SharingPlayers();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            apps = [];
+        }
+        var offered = Lunalyr.Core.NowPlaying.PlayerChoice.Offered(apps, current);
+        if (!offered.SequenceEqual(_playersShown))
+        {
+            PlayerBox.Items.Clear();
+            foreach (var choice in offered)
+                PlayerBox.Items.Add(new ComboBoxItem { Content = Lunalyr.Core.NowPlaying.PlayerChoice.Title(choice), Tag = choice });
+            _playersShown = offered;
+        }
+        var wanted = Lunalyr.Core.NowPlaying.PlayerChoice.Normalize(current);
+        var index = -1;
+        for (var i = 0; i < _playersShown.Count; i++) if (_playersShown[i] == wanted) index = i;
+        if (PlayerBox.SelectedIndex != index) PlayerBox.SelectedIndex = index;
+    }
+
+    private void PlayerBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updating || PlayerBox.SelectedItem is not ComboBoxItem { Tag: string value }) return;
+        _host.Settings.Update(s => s with { Player = value });
+    }
+
+    private void HideLyricsToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updating) return;
+        var hide = HideLyricsToggle.IsChecked == true;
+        _host.Settings.Update(s => s with { LyricsHidden = hide });
+        Refresh();
+    }
+
+    private void FloatingToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updating) return;
+        var floating = FloatingToggle.IsChecked == true;
+        _host.Settings.Update(s => s.WithLyricsSurface(floating ? Lunalyr.Core.Floating.LyricsSurface.Floating : Lunalyr.Core.Floating.LyricsSurface.Desktop));
+        Refresh();
+    }
+
+    private void EditPositionToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updating) return;
+        _host.SetFloatingEditing(EditPositionToggle.IsChecked == true);
         Refresh();
     }
 

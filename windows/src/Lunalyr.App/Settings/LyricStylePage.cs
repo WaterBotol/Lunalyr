@@ -164,7 +164,7 @@ internal static class LyricStylePage
             if (entrance.SelectedItem is ComboBoxItem { Tag: string value }) ctx.Update(s => s.WithEntranceForControls(value));
         };
         page.Children.Add(entranceCard);
-        page.Children.Add(Expander("Custom mix", "Each word takes one of the entrances ticked here.", "", MixList(ctx), expanded: true)
+        page.Children.Add(Expander("Mixed entrances", "Each word takes one of the entrances ticked here.", "", MixList(ctx), expanded: true)
             .ShowWhen(ctx, s => s.EntranceForControls() == "mix"));
         page.Children.Add(Card("Faint next-word preview", LyricStyleCopy.NextWordPreview, "",
             Toggle(ctx, s => s.PreviewsNextWordForControls(), (s, v) => s.WithPreviewsNextWordForControls(v))));

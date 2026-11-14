@@ -218,7 +218,7 @@ public class ScatteredFamilyTests
         Assert.DoesNotContain(WordArrival.Automatic, WordArrivals.MixChoices);
         Assert.DoesNotContain(WordArrival.Mix, WordArrivals.MixChoices);
         Assert.Equal("Satin Ribbon", WordArrival.SatinRibbon.Title());
-        Assert.Equal("Custom mix", WordArrival.Mix.Title());
+        Assert.Equal("Mixed entrances", WordArrival.Mix.Title());
         Assert.True(WordArrival.SplitInk.RequiresReveal());
         Assert.True(WordArrival.CutoutSlide.RequiresReveal());
         Assert.False(WordArrival.Pop.RequiresReveal());

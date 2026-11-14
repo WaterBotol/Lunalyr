@@ -17,7 +17,7 @@ public static class LyricStyleCopy
         { Kind: WordRevealLockKind.Entrance, Entrance: { } arrival } =>
             $"{arrival.Title()} unveils each word as it’s sung, so this stays on.",
         { Kind: WordRevealLockKind.Mix } =>
-            "Your custom mix includes entrances that unveil each word as it’s sung, so this stays on.",
+            "Your mixed entrances include ones that unveil each word as it’s sung, so this stays on.",
         _ => null,
     };
 

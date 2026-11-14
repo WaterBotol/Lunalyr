@@ -181,37 +181,8 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== Lyric card and Discord ===== -->
-                <Border Style="{StaticResource FlyoutCard}">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnSpacing="4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <!-- The lyric card (milestone 7): opens the card window, as the Mac's menu-bar tile does. -->
-                            <StackPanel Spacing="4">
-                                <ToggleButton x:Name="LyricCardTile" Style="{StaticResource QuickToggle}" Click="LyricCardTile_Click"
-                                              AutomationProperties.Name="Lyric card">
-                                    <FontIcon Glyph="&#xE91B;" FontSize="16" />
-                                </ToggleButton>
-                                <TextBlock Text="Lyric card" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
-                                           AutomationProperties.AccessibilityView="Raw" />
-                            </StackPanel>
-                            <!-- Discord status on or off (discordPresence; its details are in Settings). -->
-                            <StackPanel Grid.Column="1" Spacing="4">
-                                <ToggleButton x:Name="DiscordToggle" Style="{StaticResource QuickToggle}" Click="DiscordToggle_Click"
-                                              AutomationProperties.Name="Discord status">
-                                    <FontIcon Glyph="&#xE8BD;" FontSize="16" />
-                                </ToggleButton>
-                                <TextBlock Text="Discord" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
-                                           AutomationProperties.AccessibilityView="Raw" />
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
-                <!-- ===== Wallpaper ===== -->
+                <!-- ===== Wallpaper and lyrics: the Mac panel's order (music video, Player, then Pause, Hide lyrics,
+                     Floating, Edit position) ===== -->
                 <Border x:Name="WallpaperCard" Style="{StaticResource FlyoutCard}">
                     <StackPanel Spacing="10">
                         <Grid>
@@ -227,6 +198,16 @@
                         </Grid>
                         <!-- Music video: the video's timing, Tap to sync and Align (TrayFlyout.MusicVideo.cs), while it is the type. -->
                         <StackPanel x:Name="MusicVideoPanel" Spacing="6" Visibility="Collapsed" />
+                        <!-- Player: which app Lunalyr follows (the Mac's Player ›), as Settings › Music players. -->
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Player" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+                            <ComboBox x:Name="PlayerBox" Grid.Column="1" MinWidth="190" AutomationProperties.Name="Player"
+                                      SelectionChanged="PlayerBox_SelectionChanged" />
+                        </Grid>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -250,13 +231,45 @@
                                            AutomationProperties.AccessibilityView="Raw" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Spacing="4">
+                                <ToggleButton x:Name="HideLyricsToggle" Style="{StaticResource QuickToggle}" Click="HideLyricsToggle_Click"
+                                              AutomationProperties.Name="Hide lyrics">
+                                    <FontIcon Glyph="&#xED1A;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Hide lyrics" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="4">
+                                <ToggleButton x:Name="FloatingToggle" Style="{StaticResource QuickToggle}" Click="FloatingToggle_Click"
+                                              AutomationProperties.Name="Floating lyrics">
+                                    <FontIcon Glyph="&#xE737;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Floating" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" Spacing="4">
+                                <ToggleButton x:Name="EditPositionToggle" Style="{StaticResource QuickToggle}" Click="EditPositionToggle_Click"
+                                              AutomationProperties.Name="Edit position">
+                                    <FontIcon Glyph="&#xE7C2;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Edit position" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
                                 <ToggleButton x:Name="ReadingsToggle" Style="{StaticResource QuickToggle}" Click="ReadingsToggle_Click">
                                     <FontIcon Glyph="&#xE8C1;" FontSize="16" />
                                 </ToggleButton>
                                 <TextBlock Text="Readings" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
                                            AutomationProperties.AccessibilityView="Raw" />
                             </StackPanel>
-                            <StackPanel Grid.Column="2" Spacing="4">
+                            <StackPanel Grid.Column="1" Spacing="4">
                                 <ToggleButton x:Name="CreditsToggle" Style="{StaticResource QuickToggle}" Click="CreditsToggle_Click">
                                     <FontIcon Glyph="&#xE716;" FontSize="16" />
                                 </ToggleButton>
@@ -266,6 +279,34 @@
                         </Grid>
                         <TextBlock x:Name="PausedNote" Style="{StaticResource Caption}" Visibility="Collapsed" />
                     </StackPanel>
+                </Border>
+
+                <!-- ===== Discord status, then the lyric card (the Mac panel's order) ===== -->
+                <Border Style="{StaticResource FlyoutCard}">
+                    <Grid ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Discord status on or off (discordPresence; its details are in Settings). -->
+                        <StackPanel Spacing="4">
+                            <ToggleButton x:Name="DiscordToggle" Style="{StaticResource QuickToggle}" Click="DiscordToggle_Click"
+                                          AutomationProperties.Name="Discord status">
+                                <FontIcon Glyph="&#xE8BD;" FontSize="16" />
+                            </ToggleButton>
+                            <TextBlock Text="Discord" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
+                        <!-- The lyric card (milestone 7): opens the card window, as the Mac's menu-bar tile does. -->
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <ToggleButton x:Name="LyricCardTile" Style="{StaticResource QuickToggle}" Click="LyricCardTile_Click"
+                                          AutomationProperties.Name="Lyric card">
+                                <FontIcon Glyph="&#xE91B;" FontSize="16" />
+                            </ToggleButton>
+                            <TextBlock Text="Lyric card" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- ===== Footer ===== -->
