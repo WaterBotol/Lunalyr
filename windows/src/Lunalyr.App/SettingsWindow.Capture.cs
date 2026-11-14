@@ -4,6 +4,8 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Lunalyr.App.Onboarding;
+using Lunalyr.Shell.Settings;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -14,23 +16,26 @@ namespace Lunalyr.App;
 
 public sealed partial class SettingsWindow
 {
-    /// <summary>The window's size in physical pixels when it opens.</summary>
-    private const int OpeningWidth = 1400, OpeningHeight = 1040;
-
     /// <summary>
-    /// Sizes the window as it opens. <c>--settings-capture-scale</c> (dev only) gives it the size in DIPs it would have at
-    /// that display scale, drawn at this display's own scale.
+    /// Sizes the window as it opens: <see cref="SettingsWindowSize"/> in DIPs at its display's scale, inside the work area,
+    /// centred there. <c>--settings-capture-scale</c> (dev only) gives it the size in DIPs it would have at that display
+    /// scale on this display, drawn at this display's own scale.
     /// </summary>
     private void SizeWindow()
     {
-        if (_host.SettingsCaptureScale is { } emulated)
+        var native = GetDpiForWindow(Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id)) / 96.0;
+        if (native <= 0) native = 1;
+        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var scale = _host.SettingsCaptureScale ?? native;
+        var (width, height) = SettingsWindowSize.Pixels(scale, work.Width, work.Height);
+        if (_host.SettingsCaptureScale is not null)
         {
-            var native = GetDpiForWindow(Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id)) / 96.0;
-            AppWindow.Resize(new Windows.Graphics.SizeInt32((int)Math.Round(OpeningWidth / emulated * native),
-                (int)Math.Round(OpeningHeight / emulated * native)));
-            return;
+            // The same DIPs, drawn at this display's scale.
+            width = (int)Math.Round(width / scale * native);
+            height = (int)Math.Round(height / scale * native);
         }
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(OpeningWidth, OpeningHeight));
+        AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(
+            work.X + Math.Max(0, (work.Width - width) / 2), work.Y + Math.Max(0, (work.Height - height) / 2), width, height));
     }
 
     /// <summary><c>--settings-capture</c>: once the page has settled, writes it (and the window), logs what doesn't fit, quits.</summary>
