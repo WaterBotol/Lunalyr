@@ -249,8 +249,9 @@ squircle-shaped badges or icon tiles as ornament).
   caption folds behind an ⓘ only at the end of a sentence; it is never cut off mid-sentence with
   an ellipsis. One that has no short first sentence shows whole.
 - **Choice tiles** (wallpaper types): a face a step darker than the card (5 % ink), no edge;
-  symbol over name in every tile, so no name truncates in the
-  364 pt menu-bar panel.
+  a wide tile puts its symbol beside the name where the whole name fits (`ViewThatFits`)
+  and stacks it like the small tiles where it doesn't (the 364 pt menu-bar panel): no name ever
+  truncates.
 - **Sidebar**: SF Symbols in the accent (white on the selected row), no badge behind them.
 - **The look picker** (Calm / Bold): options on a quiet fill, the chosen one with a 2 pt accent ring.
 

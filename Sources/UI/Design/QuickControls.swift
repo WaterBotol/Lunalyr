@@ -117,7 +117,7 @@ struct WallpaperModeGrid: View {
 
 private struct ModeTile: View {
     let mode: Settings.BackgroundMode
-    /// A tile in the second row: wider, drawn the same way.
+    /// A tile in the second row: symbol beside the name where it fits.
     let wide: Bool
     let selected: Bool
     /// Power saving draws this instead of the chosen type.
@@ -129,7 +129,7 @@ private struct ModeTile: View {
         Button(action: action) {
             content
                 .foregroundStyle(selected ? Color.white : Color.primary)
-                .frame(maxWidth: .infinity, minHeight: 50)
+                .frame(maxWidth: .infinity, minHeight: wide ? 34 : 50)
                 .padding(.horizontal, LunalyrDesign.Spacing.xSmall)
                 .styledSurface(radius: LunalyrDesign.Radius.card, selected: selected, recessed: true)
                 .overlay(alignment: .topTrailing) {
@@ -153,9 +153,25 @@ private struct ModeTile: View {
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
-    /// Every tile the same way, symbol over name, so a wide tile's name
-    /// never truncates in the narrow menu-bar panel ("Your wal…").
-    private var content: some View {
+    /// A wide tile lays its symbol beside the name where the whole name
+    /// fits, and stacks them like the small tiles where it doesn't (the
+    /// narrow menu-bar panel), so a name never truncates ("Your wal…").
+    @ViewBuilder private var content: some View {
+        if wide {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    Image(systemName: mode.symbol).font(.system(size: 13, weight: .medium))
+                    Text(mode.shortTitle).font(.callout).lineLimit(1).fixedSize()
+                }
+                stacked
+                    .padding(.vertical, LunalyrDesign.Spacing.small)
+            }
+        } else {
+            stacked
+        }
+    }
+
+    private var stacked: some View {
         VStack(spacing: LunalyrDesign.Spacing.xSmall) {
             Image(systemName: mode.symbol)
                 .font(.system(size: 15, weight: .medium))
