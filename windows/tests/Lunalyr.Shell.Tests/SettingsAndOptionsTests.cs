@@ -82,7 +82,7 @@ public sealed class AppSettingsTests
             // Updates and the first-run welcome (milestone 8)
             "automaticUpdateChecks", "onboardingDone", "onBattery",
             // Windows' Animation effects: followed or not, and the notice saying why nothing moves
-            "motionFollowsWindows", "motionNoticeShown",
+            "motionFollowsWindows", "motionNoticeShown", "reduceFlicker",
             // The last of the Lyric style page: backing vocals, typography, colour, word reveal and remembered styles
             "backingVocalsLayer", "backingVocalStyle", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
             "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "wordRevealByStyle",

@@ -13,6 +13,13 @@ public sealed partial record AppSettings
     /// </summary>
     public bool MotionFollowsWindows { get; init; } = true;
 
+    /// <summary>
+    /// "Reduce flicker (compatibility)", off by default (tester feedback on 0.9.0: flicker on an RTX 5070): wallpapers
+    /// present through plain window swap chains, from the next start. "Your wallpaper" and the YouTube music video need
+    /// it off. Windows' own.
+    /// </summary>
+    public bool ReduceFlicker { get; init; }
+
     /// <summary>The notice explaining why nothing moves has been seen and answered (shown once).</summary>
     public bool MotionNoticeShown { get; init; }
 

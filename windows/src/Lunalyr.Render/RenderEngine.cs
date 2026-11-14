@@ -26,6 +26,14 @@ public sealed record RenderEngineOptions
 
     /// <summary>How often a frame-rate summary is logged while drawing.</summary>
     public TimeSpan StatsLogInterval { get; init; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// "Reduce flicker (compatibility)": wallpapers present through plain window swap chains instead of DirectComposition
+    /// (tester feedback on 0.9.0, flicker on an RTX 5070; DComp surfaces and the driver's overlay planes are the usual
+    /// suspects). Opaque only, so "Your wallpaper" and the YouTube music video, which need the wallpaper see-through, show
+    /// the album colours instead. The floating lyrics always compose.
+    /// </summary>
+    public bool WindowSwapChains { get; init; }
 }
 
 /// <summary>

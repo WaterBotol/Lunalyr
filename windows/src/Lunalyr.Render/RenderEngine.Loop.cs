@@ -601,9 +601,12 @@ public sealed partial class RenderEngine
     /// <summary>
     /// Every surface presents through DirectComposition with premultiplied alpha, so a see-through background ("Your
     /// wallpaper") shows the desktop beneath: docs/ARCHITECTURE.md, "See-through wallpaper". Setting
-    /// <c>LUNALYR_HWND_SWAPCHAIN=1</c> brings back the plain window swap chain (opaque only), for comparisons.
+    /// <c>LUNALYR_HWND_SWAPCHAIN=1</c>, or "Reduce flicker (compatibility)" (<see cref="RenderEngineOptions.WindowSwapChains"/>),
+    /// brings back the plain window swap chain (opaque only).
     /// </summary>
-    private static readonly bool WindowSwapChains = Environment.GetEnvironmentVariable("LUNALYR_HWND_SWAPCHAIN") == "1";
+    private static readonly bool WindowSwapChainsByEnvironment = Environment.GetEnvironmentVariable("LUNALYR_HWND_SWAPCHAIN") == "1";
+
+    private bool WindowSwapChains => WindowSwapChainsByEnvironment || _options.WindowSwapChains;
 
     private void CreateSwapChain(RenderSurface s)
     {

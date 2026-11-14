@@ -185,7 +185,13 @@ internal sealed partial class AppHost
     /// <summary>The desktop renderer with the layers this build has. Pause and power rules follow the settings.</summary>
     private EngineWallpaperRenderer CreateWallpaper(ReadingServices readings)
     {
-        var engine = new RenderEngine(new RenderEngineOptions { Performance = PerformanceFrom(_settings.Current) }, Log);
+        // "Reduce flicker (compatibility)" is read once: it takes effect at the next start.
+        var engine = new RenderEngine(new RenderEngineOptions
+        {
+            Performance = PerformanceFrom(_settings.Current),
+            WindowSwapChains = _settings.Current.ReduceFlicker,
+        }, Log);
+        if (_settings.Current.ReduceFlicker) _log.Info("Reduce flicker (compatibility) is on: wallpapers use plain window swap chains.");
         // Every background and composition, as the settings preview has them (WallpaperLayers); the backgroundMode
         // setting and "Custom Mix" pick the background (AppController.Wallpaper.cs).
         foreach (var factory in WallpaperLayers.Factories(readings.WordBreaker, Log)) engine.RegisterLayer(factory);

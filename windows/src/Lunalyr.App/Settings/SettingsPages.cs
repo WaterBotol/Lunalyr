@@ -52,6 +52,9 @@ internal static class GeneralPage
                 copied.Text = await host.CopyDiagnosticsAsync() ? "Copied. Paste it into your message." : "Couldn't copy to the clipboard.";
             })));
         page.Children.Add(copied);
+        page.Children.Add(Card("Reduce flicker (compatibility)",
+            "If the wallpaper or music video flickers, this draws the wallpaper a simpler way. Takes effect when Lunalyr next starts. “Your wallpaper” and YouTube music videos need it off and show the album colours instead.",
+            "", Toggle(ctx, s => s.ReduceFlicker, (s, v) => s with { ReduceFlicker = v })));
 
         Section(page, "Tray");
         ExtrasSections.AddTrayLyric(page, ctx);
