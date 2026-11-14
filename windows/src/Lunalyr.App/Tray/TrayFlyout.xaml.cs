@@ -506,6 +506,33 @@ public sealed partial class TrayFlyout : Window
         Refresh();
     }
 
+    // ---- The offset typed by hand ----
+
+    private void OffsetText_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            ApplyTypedOffset();
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            Refresh(); // back to the offset as it is
+            e.Handled = true;
+        }
+    }
+
+    private void OffsetText_LostFocus(object sender, RoutedEventArgs e) => ApplyTypedOffset();
+
+    /// <summary>Sets the song's offset to what was typed; anything that isn't an offset puts the current one back.</summary>
+    private void ApplyTypedOffset()
+    {
+        if (_updating || _state is not { } state || OffsetText.Text == state.OffsetText) return;
+        if (FlyoutText.ParseOffset(OffsetText.Text) is { } seconds && _host.Controller?.SetSongOffset(seconds) == true)
+            Announce(OffsetText, FlyoutText.SpokenOffset(seconds));
+        Refresh();
+    }
+
     private void ResetButton_Click(object sender, RoutedEventArgs e)
     {
         _host.Controller?.ResetSongOffset();

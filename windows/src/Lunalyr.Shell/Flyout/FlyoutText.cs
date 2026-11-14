@@ -115,6 +115,26 @@ public static class FlyoutText
     public static string FormatOffset(double seconds) =>
         seconds == 0 ? "0.00 s" : seconds.ToString("+0.00;−0.00", CultureInfo.InvariantCulture) + " s";
 
+    /// <summary>
+    /// An offset typed by hand (the owner, 15 Nov 2026: "+X / −X"): seconds with an optional sign ("+0.35", "−1.2",
+    /// "-0.4"), a unit ("s", "sec", "ms"), a comma as the decimal point; positive is earlier, as Earlier is. Null when it
+    /// isn't one, or is past the ±30 s a song may be moved.
+    /// </summary>
+    public static double? ParseOffset(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var s = text.Trim().Replace('−', '-').Replace('–', '-').Replace(',', '.').Replace(" ", "", StringComparison.Ordinal).ToLowerInvariant();
+        var scale = 1.0;
+        if (s.EndsWith("ms", StringComparison.Ordinal)) { scale = 0.001; s = s[..^2]; }
+        else if (s.EndsWith("sec", StringComparison.Ordinal)) s = s[..^3];
+        else if (s.EndsWith('s')) s = s[..^1];
+        if (!double.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value))
+            return null;
+        value *= scale;
+        if (!double.IsFinite(value) || Math.Abs(value) > Core.Lyrics.Timing.SongOffsets.Limit) return null;
+        return Math.Round(value * 100, MidpointRounding.AwayFromZero) / 100;
+    }
+
     /// <summary>"Lyrics 0.25 seconds earlier", "No offset" (TimingNudge.spoken).</summary>
     public static string SpokenOffset(double seconds) =>
         seconds == 0

@@ -9,8 +9,8 @@ namespace Lunalyr.Shell;
 
 public sealed partial class AppController
 {
-    /// <summary>One click of the flyout's Earlier / Later: a tenth of a second.</summary>
-    public const double NudgeStep = 0.1;
+    /// <summary>One click of the flyout's Earlier / Later: a twentieth of a second (was a tenth; the owner asked for smaller steps, 15 Nov 2026).</summary>
+    public const double NudgeStep = 0.05;
 
     /// <summary>Whether the song on screen has a recording to keep an offset for (its lookup has started).</summary>
     public bool CanAdjustSongOffset => Volatile.Read(ref _recordingKey) is not null;
