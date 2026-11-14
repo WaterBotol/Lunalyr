@@ -238,8 +238,21 @@ squircle-shaped badges or icon tiles as ornament).
 ### Windows
 `ThemeComponents.swift` builds every control for Calm and Bold (`ThemedButtonStyle`,
 `ThemedToggleStyle`, `ThemedSegments`, `ThemedSlider`, `ThemedCard`, `ThemedSectionHeader`,
-`ThemedInfoButton`); states are in `design/spec.md`. Captions take one line; longer help goes
-behind an info button.
+`ThemedInfoButton`); states are in `design/spec.md`.
+
+- **Cards** (Calm): the face colour on the window's canvas, no edge (an edge only under Increase
+  Contrast). Controls keep their 1 pt edge, as macOS controls do. Bold keeps its outlines and hard
+  shadow: that look is chosen for them.
+- **Section headers**: 13 pt semibold, sentence case, in both looks (Bold in ink, Calm in
+  secondary). Never capitals or tracking.
+- **Captions** sit close under the control they explain (4 pt), not a row's gap away. A long
+  caption folds behind an ⓘ only at the end of a sentence; it is never cut off mid-sentence with
+  an ellipsis. One that has no short first sentence shows whole.
+- **Choice tiles** (wallpaper types): a face a step darker than the card (5 % ink), no edge;
+  symbol over name in every tile, so no name truncates in the
+  364 pt menu-bar panel.
+- **Sidebar**: SF Symbols in the accent (white on the selected row), no badge behind them.
+- **The look picker** (Calm / Bold): options on a quiet fill, the chosen one with a 2 pt accent ring.
 
 ## Motion
 
@@ -340,12 +353,7 @@ swaps materials for solid fills; Reduce Motion as above.
 
 ## Known gaps
 
-- Settings, the menu-bar panel, floating lyrics, the opening title and the music-video search
-  window still carry some view-local numbers, and Settings still has bordered containers and
-  two-part captions (`InspectorCaption` plus "more"); they move onto these tokens in later
-  passes. Done so far outside the player: sentence-case group headers in the Settings sidebar
-  and the menu-bar panel (the panel's were 9.5 pt capitals), and the opening title's artist in
-  its own case without the widening letter-spacing. The Bold theme's capital headers
-  (`design/spec.md`) are still to be decided with the user.
+- Windows still carry some view-local numbers in pages' own rows; new work uses the tokens. The
+  music-video search window has not had a pass yet.
 - The desktop player uses `.ultraThinMaterial`, not Liquid Glass.
 - Colour blending across the app has not been audited against OKLab yet; new blends should use it.

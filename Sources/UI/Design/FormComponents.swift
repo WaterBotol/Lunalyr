@@ -49,18 +49,25 @@ struct InspectorCaption: View {
         more = nil
     }
 
-    /// The line to show and the full text behind the ⓘ, if any.
+    /// The line to show and the full text behind the ⓘ, if any. Only ever
+    /// folds at a sentence's end: a caption is never cut off mid-sentence
+    /// ("…with animated covers where…"). A long first sentence shows whole.
     static func split(_ string: String, limit: Int = 90) -> (short: String, full: String?) {
         guard string.count > limit else { return (string, nil) }
-        if let end = string.range(of: ". "), string.distance(from: string.startIndex, to: end.lowerBound) <= limit {
-            return (String(string[..<end.lowerBound]) + ".", string)
-        }
-        let cut = string.prefix(limit - 10)
-        let trimmed = cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? String(cut)
-        return (trimmed + "…", string)
+        guard let end = string.range(of: ". ") else { return (string, nil) }
+        let first = String(string[..<end.lowerBound]) + "."
+        guard first.count <= limit + 30 else { return (string, nil) }
+        return (first, string)
     }
 
     var body: some View {
+        caption
+            // In a settings card the caption belongs to the control above it:
+            // it sits close under it rather than a whole row's gap away.
+            .padding(.top, compact ? -LunalyrDesign.Spacing.xSmall - 2 : 0)
+    }
+
+    @ViewBuilder private var caption: some View {
         if let more, let string {
             row(Text(string), full: more)
         } else if compact, let string, case let split = Self.split(string), let full = split.full {
@@ -340,8 +347,9 @@ extension PanelSectionHeader where Accessory == EmptyView {
     }
 }
 
-/// A Settings page's icon: a violet SF Symbol on a soft violet rounded square,
-/// one calm colour for every page (`tint` is kept for callers). Decorative: the row's title names it.
+/// A Settings page's icon: a violet SF Symbol, one calm colour for every page
+/// (`tint` is kept for callers). No badge behind it (docs/DESIGN.md: no squircle
+/// tiles as ornament). Decorative: the row's title names it.
 struct SettingsIcon: View {
     let symbol: String
     let tint: Color
@@ -349,19 +357,8 @@ struct SettingsIcon: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: size * 0.56, weight: .semibold))
-            .foregroundStyle(Color.lunalyrAccentText)
+            .font(.system(size: size * 0.6, weight: .medium))
             .frame(width: size, height: size)
-            .background(
-                RoundedRectangle(cornerRadius: LunalyrDesign.Radius.badge * size / LunalyrDesign.Size.sidebarIcon,
-                                 style: .continuous)
-                    .fill(Color.lunalyrAccent.opacity(0.18))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: LunalyrDesign.Radius.badge * size / LunalyrDesign.Size.sidebarIcon,
-                                 style: .continuous)
-                    .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1)
-            )
             .accessibilityHidden(true)
     }
 }

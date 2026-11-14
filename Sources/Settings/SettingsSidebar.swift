@@ -129,16 +129,9 @@ struct SettingsSidebar: View {
             focus = .list
         } label: {
             HStack(spacing: 8) {
-                if on {
-                    Image(systemName: page.symbol)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 22, height: 22)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.white.opacity(0.22)))
-                        .accessibilityHidden(true)
-                } else {
-                    SettingsIcon(symbol: page.symbol, tint: page.tint, size: 22)
-                }
+                // The symbol alone, white on the selected row (no badge behind it).
+                SettingsIcon(symbol: page.symbol, tint: page.tint, size: 22)
+                    .foregroundStyle(on ? Color.white : Color.lunalyrAccentText)
                 Text(page.title)
                     .font(.body.weight(on ? .semibold : .regular))
                     .foregroundStyle(on ? Color.white : Color(nsColor: t.ink))

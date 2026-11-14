@@ -63,6 +63,9 @@ struct ThemedSurface: ViewModifier {
     /// nil for a card, which has no states.
     let state: ThemeState?
     let isCard: Bool
+    /// A tile (Calm): the face a step darker, so it reads as a button
+    /// without a border, whether it sits on a card or on the window.
+    var recessed = false
 
     func body(content: Content) -> some View {
         ThemeReader { style, t in
@@ -72,10 +75,18 @@ struct ThemedSurface: ViewModifier {
             let pressed = current == .pressed
             let shadowed = style == .bold && !pressed && current != .disabled
             let shift: CGFloat = style == .bold && pressed ? t.shadowOffset * 0.66 : 0
-            let edge = isCard ? Color(nsColor: t.cardEdge) : Color(nsColor: t.controlEdge)
+            // docs/DESIGN.md: containers are separated by fill and space, not
+            // borders. Calm cards and tiles (and anything selected) have no edge,
+            // except under Increase Contrast; controls keep theirs. Bold keeps
+            // its outline everywhere: it is that look's character.
+            let edgeless = style == .calm && (isCard || selected)
+            let edge = edgeless ? Color.lunalyrContrastBorder
+                : selected ? Color.clear
+                : Color(nsColor: isCard ? t.cardEdge : t.controlEdge)
+            let width: CGFloat = edgeless ? 1 : t.outline
             content
                 .background(fill(style: style, t: t, state: current).clipShape(shape))
-                .overlay(shape.strokeBorder(selected ? Color.white.opacity(style == .bold ? 0 : 0.25) : edge, lineWidth: selected && style == .bold ? t.outline : (isCard && style == .calm ? 1 : t.outline)))
+                .overlay(shape.strokeBorder(edge, lineWidth: width))
                 .background(alignment: .topLeading) {
                     if shadowed, let shadow = t.shadow {
                         shape.fill(Color(nsColor: shadow)).offset(x: t.shadowOffset, y: t.shadowOffset)
@@ -101,6 +112,7 @@ struct ThemedSurface: ViewModifier {
         } else {
             ZStack {
                 Color(nsColor: state == .pressed && style == .calm ? t.canvas : t.face)
+                if recessed && style == .calm { Color.primary.opacity(0.05) }
                 if state == .hover {
                     (style == .bold ? Color.lunalyrAccent.opacity(0.12) : Color.primary.opacity(0.05))
                 }
@@ -475,9 +487,9 @@ struct ThemedSectionHeader: View {
     var body: some View {
         ThemeReader { style, t in
             HStack(spacing: 6) {
-                Text(style == .bold ? title.uppercased() : title)
-                    .font(.system(size: style == .bold ? 11 : 12, weight: style == .bold ? .bold : .semibold))
-                    .tracking(style == .bold ? 0.6 : 0)
+                // Sentence case in both looks (docs/DESIGN.md); Bold says it with ink, not capitals.
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(nsColor: style == .bold ? t.ink : t.secondary))
                     .accessibilityAddTraits(.isHeader)
                 if let info { ThemedInfoButton(text: info, label: title) }

@@ -10,7 +10,7 @@ The look of Lunalyr's Settings window, menu-bar panel and welcome. It has two th
 | Edges | none on cards (hairline); 1pt control edge | 1.5pt ink outline on everything |
 | Shadow | none | hard, offset 3pt, no blur |
 | Radius | 10 | 6 |
-| Type | regular weights, sentence-case headers | semibold, small-caps-style bold headers |
+| Type | regular weights, sentence-case headers | semibold, sentence-case headers in ink |
 
 ## Colour tokens
 
@@ -23,12 +23,12 @@ Contrast ratios computed from these hex values (WCAG relative luminance).
 | ink (text) | #1C1C1E, 15.2:1 on canvas | #F2F2F5, 15.9:1 | #111111, 16.5:1 | #F4F4F6, 17.2:1 |
 | secondary text | #5A5A60, 6.9:1 on face | #A6A6AE, 6.4:1 | #4A4A4F, 8.8:1 | #B4B4BC, 8.1:1 |
 | control edge | #8A8A92, 3.1:1 on canvas, 3.4:1 on face | #8E8E96, 5.5:1 / 4.8:1 | #111111, 16.5:1 | #EDEDF0, 16.1:1 |
-| card edge | #D6D6DB hairline (decorative) | #34343A | = control edge | = control edge |
+| card edge | none (fill only; see Increase Contrast) | none | = control edge | = control edge |
 | outline width | 1pt (controls) | 1pt | 1.5pt | 1.5pt |
 | selected fill | accent, white text | accent | accent, white text | accent |
 | hard shadow colour | none | none | #111111 | accent text violet (#A89BFF) so it shows on dark |
 
-Increase Contrast: Calm card edges switch to the control-edge colour at 1pt; Bold is unchanged (already maximal). Both drop shadows to zero offset under Increase Contrast only if the outline alone separates the shape (Bold keeps the shadow: it is a solid black bar, not a blur).
+Increase Contrast: Calm cards, tiles and selected faces gain a 1pt edge (`lunalyrContrastBorder`); Bold is unchanged (already maximal). Both drop shadows to zero offset under Increase Contrast only if the outline alone separates the shape (Bold keeps the shadow: it is a solid black bar, not a blur).
 Reduce Transparency: nothing to remove. Reduce Motion: press and state changes become instant (no easing).
 
 ## Shapes and spacing
@@ -41,7 +41,7 @@ Reduce Transparency: nothing to remove. Reduce Motion: press and state changes b
 ## Typography
 
 - Body: SF Pro 13pt, regular. Captions 11pt secondary. Titles 20pt semibold (Calm) / bold (Bold).
-- Section header: Calm 12pt semibold secondary, sentence case. Bold 11pt bold, uppercase, tracking +0.6, ink colour.
+- Section header: 13pt semibold, sentence case, no tracking; Calm in secondary, Bold in ink (docs/DESIGN.md).
 - Dynamic Type is not used on macOS; sizes are fixed but come from the existing `LunalyrTextStyle`.
 
 ## States (every interactive component)
