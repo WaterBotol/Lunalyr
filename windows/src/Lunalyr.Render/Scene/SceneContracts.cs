@@ -29,6 +29,12 @@ public sealed record Palette(Vector4 Base, IReadOnlyList<Vector4> Accents, Vecto
     /// </summary>
     public double TextBackdrop { get; init; } = 0.08;
 
+    /// <summary>
+    /// The luminance behind the lyrics before the automatic text backing, which turns the lyrics dark on a light wallpaper
+    /// (LyricInkInputs.Unbacked); null where the lyrics have a shade of their own (floating lyrics, lyric cards).
+    /// </summary>
+    public double? TextUnbacked { get; init; }
+
     public static Palette Default { get; } = new(
         new Vector4(0.106f, 0.063f, 0.208f, 1),
         [new(0.482f, 0.247f, 0.894f, 1), new(0.894f, 0.341f, 0.180f, 1), new(0.180f, 0.525f, 0.671f, 1), new(0.949f, 0.757f, 0.306f, 1)],

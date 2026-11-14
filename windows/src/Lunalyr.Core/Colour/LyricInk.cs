@@ -177,6 +177,38 @@ public record struct LyricInk
 
     private readonly OkLab Stop(int index) => Stops[index % Math.Max(1, StopCount)];
 
+    // ---- Dark lyrics (the Mac's next/tester-fixes 8a52096, 15 Nov 2026) ----
+
+    /// <summary>0 light lyrics … 1 dark lyrics: on a light wallpaper every colour turns to its deep version.</summary>
+    public double Dark { get; set; }
+
+    /// <summary>What the deep colours are measured against: the wallpaper without the automatic backing, smoothed.</summary>
+    public double DeepBackdrop { get; set; } = 0.6;
+
+    /// <summary>The neutral the unsung words of Sung sweep deepen to (a faint tint of the palette's second colour).</summary>
+    public OkLab UnsungDeep { get; set; } = OkLab.FromLch(0.32, 0, 0);
+
+    /// <summary>The neutral Static white deepens to.</summary>
+    public static OkLab WhiteDeep => OkLab.FromLch(0.32, 0, 0);
+
+    /// <summary>
+    /// <paramref name="lightRest"/> (and <paramref name="lightSung"/>) as drawn now: mixed toward the deep versions of
+    /// <paramref name="restSource"/> (and <paramref name="sungSource"/>) by <see cref="Dark"/>, the glow toward a light
+    /// halo. Unchanged while the lyrics are light.
+    /// </summary>
+    public readonly LyricInkSample Toned(OkLab lightRest, OkLab restSource, OkLab? lightSung = null, OkLab? sungSource = null)
+    {
+        if (!(Dark > 0.0005)) return SampleOf(lightRest, lightSung);
+        var dark = Math.Min(1, Dark);
+        var rest = Perceptual.Mix(lightRest, Perceptual.Deep(restSource, DeepBackdrop, Contrast), dark);
+        OkLab? sung = lightSung is { } ls ? Perceptual.Mix(ls, Perceptual.Deep(sungSource ?? ls, DeepBackdrop, Contrast), dark) : null;
+        var sample = SampleOf(rest, sung);
+        var source = lightSung ?? lightRest;
+        var lightGlow = Perceptual.Clipped(new OkLab(Math.Min(1, source.L + 0.06), source.A * 0.8, source.B * 0.8));
+        var halo = new OkLab(0.97, lightGlow.A * 0.1, lightGlow.B * 0.1);
+        return sample with { Glow = Perceptual.ToColour(Perceptual.Mix(lightGlow, halo, dark)) };
+    }
+
     /// <summary>The colours for a word at <paramref name="slot"/>, its 0...1 position along the line.</summary>
     public readonly LyricInkSample Sample(double slot, ulong seed = 0)
     {
@@ -188,8 +220,9 @@ public record struct LyricInk
             {
                 // Unsung words stay white; each word sweeps to its own colour on the drifting gradient (the Mac's
                 // next/tester-fixes, 15 Nov 2026: not one colour for every word).
-                var sung = Perceptual.Readable(Gradient(slot, seed), Backdrop, Contrast, keepingColour: true);
-                var swept = SampleOf(Perceptual.Readable(OkLab.White, Backdrop, Contrast), sung);
+                var palette = Gradient(slot, seed);
+                var sung = Perceptual.Readable(palette, Backdrop, Contrast, keepingColour: true);
+                var swept = Toned(Perceptual.Readable(OkLab.White, Backdrop, Contrast), UnsungDeep, sung, palette);
                 swept.Dim = Dim;
                 return swept;
             }
@@ -197,8 +230,9 @@ public record struct LyricInk
             {
                 // Lifted keeping its colour (chroma kept at 2.5:1 where it can be), so a custom gradient doesn't turn
                 // white on a mid or light wallpaper (the owner's approval, relayed 15 Nov 2026).
-                var colour = Perceptual.Readable(Gradient(slot, seed), Backdrop, Contrast, keepingColour: true);
-                var sample = SampleOf(colour);
+                var palette = Gradient(slot, seed);
+                var colour = Perceptual.Readable(palette, Backdrop, Contrast, keepingColour: true);
+                var sample = Toned(colour, palette);
                 sample.Dim = Dim;
                 return sample;
             }

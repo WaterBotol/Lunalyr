@@ -36,6 +36,7 @@ internal static class LyricInks
             Custom = CustomColours(style),
             Album = palette.ArtworkStops,
             Backdrop = palette.TextBackdrop,
+            Unbacked = palette.TextUnbacked,
             Vocal = double.IsFinite(vocal) ? Math.Clamp(vocal, 0, 1) : ReactiveRest,
             Highlight = mode,
             HighlightCustom = mode == LyricHighlightMode.Custom
@@ -102,7 +103,8 @@ internal static class LyricInks
     public static bool SameInk(Palette a, Palette b)
     {
         if (ReferenceEquals(a, b)) return true;
-        if (a.Text != b.Text || !a.TextBackdrop.Equals(b.TextBackdrop) || a.ArtworkStops.Count != b.ArtworkStops.Count) return false;
+        if (a.Text != b.Text || !a.TextBackdrop.Equals(b.TextBackdrop) || !Nullable.Equals(a.TextUnbacked, b.TextUnbacked)
+            || a.ArtworkStops.Count != b.ArtworkStops.Count) return false;
         for (var i = 0; i < a.ArtworkStops.Count; i++)
             if (a.ArtworkStops[i] != b.ArtworkStops[i]) return false;
         return true;

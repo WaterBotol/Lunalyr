@@ -280,6 +280,6 @@ public sealed class FloatingFrameDrawer : IDisposable
         scene with
         {
             Style = scene.Style with { FloatingTextSize = textSize },
-            Palette = scene.Palette with { TextBackdrop = FloatingBackdrop.Luminance(backdrop, reduceTransparency) },
+            Palette = scene.Palette with { TextBackdrop = FloatingBackdrop.Luminance(backdrop, reduceTransparency), TextUnbacked = null },
         };
 }

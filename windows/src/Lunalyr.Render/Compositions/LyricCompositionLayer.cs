@@ -793,6 +793,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                              string? translation)
     {
         var ink = InkAt(inkTime);
+        // Dark lyrics bake their shadows as a light halo.
+        Kit!.Dark = (float)ink.Dark;
         var planKind = kind ?? Kind;
         var editorialAmount = EditorialAmountFor(editorial);
         var spec = new PlanSpec(

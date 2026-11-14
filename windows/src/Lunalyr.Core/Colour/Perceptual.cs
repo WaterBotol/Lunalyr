@@ -184,6 +184,27 @@ public static class Perceptual
         return best;
     }
 
+    /// <summary>
+    /// A deep version of <paramref name="lab"/> for light wallpapers ("dark lyrics", the Mac's Perceptual.deep,
+    /// next/tester-fixes 8a52096): its hue and chroma at a lightness low enough to reach <paramref name="ratio"/> under
+    /// <paramref name="background"/> with a 15% margin. The lightest such colour from L ≤ 0.5 down; black where none is.
+    /// </summary>
+    public static OkLab Deep(OkLab lab, double background, double ratio = LyricInk.MinimumContrast)
+    {
+        var target = (Math.Clamp(background, 0, 1) + 0.05) / (ratio * 1.15) - 0.05;
+        if (target <= 0) return new OkLab(0, 0, 0);
+        double chroma = lab.Chroma, hue = lab.Hue;
+        var start = Clipped(OkLab.FromLch(Math.Min(lab.L, 0.5), chroma, hue));
+        if (Luminance(start) <= target) return start;
+        double low = 0, high = start.L;
+        for (var i = 0; i < 18; i++)
+        {
+            var mid = (low + high) / 2;
+            if (Luminance(Clipped(OkLab.FromLch(mid, chroma, hue))) <= target) low = mid; else high = mid;
+        }
+        return Clipped(OkLab.FromLch(low, chroma, hue));
+    }
+
     /// <summary>The colour as drawn: clipped into gamut and gamma-encoded.</summary>
     public static SrgbColour ToColour(OkLab lab, double opacity = 1)
     {

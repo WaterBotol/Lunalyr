@@ -40,6 +40,8 @@ public static class PaletteMapper
         {
             ArtworkStops = [.. cover.ArtworkStops],
             TextBackdrop = backdrop,
+            // Before the automatic backing: what decides light or dark lyrics.
+            TextUnbacked = LyricBackdrop.BeforeBacking(options.Mode, false, cover.ArtworkStops, options.ScrimStrength),
         };
     }
 

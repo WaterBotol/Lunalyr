@@ -21,6 +21,12 @@ public sealed record LyricInkInputs(LyricColourMode Mode)
 
     public double Backdrop { get; init; } = 0.08;
 
+    /// <summary>
+    /// The luminance behind the lyric stage before the automatic text backing (a backing set by hand counts), which
+    /// decides light or dark lyrics; null where the lyrics have a shade of their own (floating), so they stay light.
+    /// </summary>
+    public double? Unbacked { get; init; }
+
     /// <summary>Live audio, when a visualiser is capturing it.</summary>
     public AudioLevels? Audio { get; init; }
 
@@ -103,12 +109,18 @@ public sealed class LyricInkDirector
         if (_lastWall is { } previous && wall < previous - 1) _lastWall = null;
         var dt = _lastWall is { } lastWall ? Math.Min(0.25, Math.Max(0, wall - lastWall)) : 0;
         if (_lastWall is not null && dt == 0 && _last is { } last) return last;
+        var firstFrame = _lastWall is null && _last is null;
         _lastWall = wall;
         RefreshAlbum(inputs.Album);
         var calm = inputs.ReduceMotion;
         var ratio = inputs.IncreaseContrast ? LyricInk.IncreasedContrast : LyricInk.MinimumContrast;
         var textRatio = inputs.IncreaseContrast ? LyricHighlight.IncreasedTextContrast : LyricHighlight.TextContrast;
-        if (inputs.Mode == LyricColourMode.Standard && AtWhite)
+        var (dark, deepBackdrop, darkMoving) = DarkState(inputs, dt, firstFrame);
+        if (inputs.Mode == LyricColourMode.Standard && AtWhite && dark > 0.0005)
+        {
+            // Static white on a light wallpaper: deep grey, through the general path below.
+        }
+        else if (inputs.Mode == LyricColourMode.Standard && AtWhite)
         {
             // The type is white, but the highlights have colour: white has no hue to complement, so they take the
             // album accent, or the user's own colour.
@@ -125,7 +137,7 @@ public sealed class LyricInkDirector
                 _whiteInk = white;
             }
             var whiteInk = _whiteInk;
-            whiteInk.Settled = HighlightSettled(whiteGoal);
+            whiteInk.Settled = HighlightSettled(whiteGoal) && !darkMoving;
             _last = whiteInk;
             return whiteInk;
         }
@@ -162,34 +174,49 @@ public sealed class LyricInkDirector
             Phase = SwiftMath.Round(_phase * 720) / 720,
             Contrast = ratio,
             Dim = inputs.IncreaseContrast ? LyricInk.IncreasedUnsungDim : LyricInk.UnsungDim,
+            Dark = dark,
+            DeepBackdrop = deepBackdrop,
         };
+        if (darkMoving) ink.Settled = false;
+        if (inputs.Mode == LyricColourMode.SungSweep)
+        {
+            // Unsung words deepen to a faint tint of the palette's second colour (its first when that one is grey).
+            var tint = followed.S1.Chroma >= 0.02 ? followed.S1 : followed.S0;
+            ink.UnsungDeep = OkLab.FromLch(0.32, 0.025, tint.Hue);
+        }
         switch (inputs.Mode)
         {
             case LyricColourMode.Standard:
-                // Still easing back to white after another mode.
+                // Still easing back to white after another mode (or white on a light wallpaper, deepened to grey).
                 ink.Mode = LyricColourMode.AlbumDrift;
                 ink.StopCount = 1;
-                ink.Base = LyricInk.SampleOf(Perceptual.Readable(followed.S0, behind, ratio));
+                ink.Base = ink.Toned(Perceptual.Readable(followed.S0, behind, ratio), LyricInk.WhiteDeep);
                 break;
             case LyricColourMode.SungSweep:
             {
                 // Unsung white, sung the middle of the drifting palette; each word samples its own (LyricInk.Sample).
                 // No underline under sung words (the owner, 14 Nov 2026): SweepUnderline is never set.
-                var sung = Perceptual.Readable(ink.Gradient(0.5), behind, ratio, keepingColour: true);
-                ink.Base = LyricInk.SampleOf(Perceptual.Readable(OkLab.White, behind, ratio), sung);
+                var middle = ink.Gradient(0.5);
+                var sung = Perceptual.Readable(middle, behind, ratio, keepingColour: true);
+                ink.Base = ink.Toned(Perceptual.Readable(OkLab.White, behind, ratio), ink.UnsungDeep, sung, middle);
                 break;
             }
             default:
-                ink.Base = LyricInk.SampleOf(Perceptual.Readable(ink.Gradient(0.5), behind, ratio, keepingColour: true));
+            {
+                var middle = ink.Gradient(0.5);
+                ink.Base = ink.Toned(Perceptual.Readable(middle, behind, ratio, keepingColour: true), middle);
                 break;
+            }
         }
         var baseSample = ink.Base;
         baseSample.Dim = ink.Dim;
         ink.Base = baseSample;
         // Sung sweep's highlight, dots and links take the palette's first colour (the Mac's rule).
         var highlight = Perceptual.Readable(inputs.Mode == LyricColourMode.SungSweep ? followed.S0 : ink.Gradient(0.5), behind, ratio);
-        ink.Dot = Perceptual.ToColour(highlight);
-        ink.Link = Perceptual.ToColour(Perceptual.Mix(highlight, OkLab.White, 0.5));
+        // Dark lyrics: the dots take the toned highlight, the links mix less white into it.
+        var toned = dark > 0.0005 ? Perceptual.Mix(highlight, Perceptual.Deep(highlight, deepBackdrop, ratio), dark) : highlight;
+        ink.Dot = Perceptual.ToColour(toned);
+        ink.Link = Perceptual.ToColour(Perceptual.Mix(toned, OkLab.White, 0.5 * (1 - dark) + 0.12 * dark));
         // The highlight complements the lyric colour as it is now (easing back to Static white, the one it will
         // settle on): the sung colour for Sung sweep, the middle of the line otherwise.
         OkLab? basis = inputs.Mode switch
@@ -204,9 +231,49 @@ public sealed class LyricInkDirector
         var goal = HighlightGoal(inputs, basis, stops, behind, textRatio);
         var tile = FollowHighlight(goal, dt, calm);
         ApplyHighlight(ref ink, tile, behind, textRatio, ratio, Perceptual.Luminance(highlight));
+        // Cascade's held words: the deep tile colour on a light wallpaper (tiles themselves stay as they are).
+        if (dark > 0.0005 && ink.Highlight is { } tone && ink.Accent is { } accent)
+            ink.Accent = Perceptual.ToColour(Perceptual.Mix(Perceptual.ToOkLab(new Double3(accent.R, accent.G, accent.B)), Perceptual.Deep(tone.Tile, deepBackdrop, ratio), dark));
         ink.Settled = ink.Settled && HighlightSettled(goal);
         _last = ink;
         return ink;
+    }
+
+    // ---- Dark lyrics (the Mac's next/tester-fixes 8a52096) ----
+
+    /// <summary>Above this luminance behind the stage (before the automatic backing) the lyrics turn dark.</summary>
+    public const double DarkAbove = 0.34;
+
+    /// <summary>Below this they turn light again (hysteresis, so a wallpaper near the line doesn't flicker).</summary>
+    public const double LightBelow = 0.26;
+
+    /// <summary>How long a switch between light and dark lyrics takes, seconds.</summary>
+    public const double DarkFade = 0.6;
+
+    private double _dark, _darkTarget;
+    private Follower _deepBackdrop;
+
+    /// <summary>
+    /// Light or dark lyrics this frame, from <see cref="LyricInkInputs.Unbacked"/> (null: the floating lyrics, on their
+    /// own shade, stay light): the amount, the backdrop the deep colours are measured against, and whether it is moving.
+    /// </summary>
+    private (double Dark, double DeepBackdrop, bool Moving) DarkState(LyricInkInputs inputs, double dt, bool firstFrame)
+    {
+        if (inputs.Unbacked is not { } unbacked || !double.IsFinite(unbacked))
+        {
+            _darkTarget = 0;
+        }
+        else
+        {
+            if (unbacked > DarkAbove) _darkTarget = 1;
+            else if (unbacked < LightBelow) _darkTarget = 0;
+        }
+        var behind = Math.Clamp(inputs.Unbacked ?? 0, 0, 1);
+        var deep = Quantised(_deepBackdrop.Follow(behind, dt, 0.5, 0.6));
+        if (firstFrame) _dark = _darkTarget;
+        else if (_dark < _darkTarget) _dark = Math.Min(_darkTarget, _dark + dt / DarkFade);
+        else if (_dark > _darkTarget) _dark = Math.Max(_darkTarget, _dark - dt / DarkFade);
+        return (_dark, deep, _dark != _darkTarget || !IsSettled(_deepBackdrop, behind));
     }
 
     /// <summary>The highlight from its tile: the text on it, the held words' type, and where a fading tile's text turns back.</summary>

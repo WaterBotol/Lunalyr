@@ -36,7 +36,7 @@ public sealed record CardLook(Palette Palette, CoverArt? Cover, LyricStyle Style
         ArgumentNullException.ThrowIfNull(style);
         var album = AlbumOf(palette);
         var backdrop = Math.Max(0.06, LyricLegibility.Darkened(album.GradientLuminance(1), LyricCardLayout.LightestScrim));
-        return new CardLook(palette with { TextBackdrop = backdrop }, cover,
+        return new CardLook(palette with { TextBackdrop = backdrop, TextUnbacked = null }, cover,
             style with { OpeningTitle = false, Credits = false, Interludes = false, FloatingTextSize = null });
     }
 

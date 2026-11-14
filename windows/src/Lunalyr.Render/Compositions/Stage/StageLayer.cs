@@ -262,6 +262,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         StageLine line;
         _baking = shares;
         _bakingSeed = row;
+        // Dark lyrics bake their shadows as a light halo.
+        Kit!.Dark = (float)InkAt(source.Start).Dark;
         try
         {
             line = Build(new StageSource(row, source, runs, readings, StageShared.LineSpeed(starts), source.Start, shares));

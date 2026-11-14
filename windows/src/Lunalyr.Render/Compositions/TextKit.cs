@@ -77,6 +77,9 @@ internal sealed class TextKit : IDisposable
     /// <summary>The device context words are drawn on (the engine's): their effects are created on it.</summary>
     public ID2D1DeviceContext Draw => _draw;
 
+    /// <summary>How dark the lyrics being baked are (LyricInk.Dark), for their shadows; set with each line's ink.</summary>
+    public float Dark { get; set; }
+
     /// <summary>Bakes are queued rather than made at once (see the class summary). Off by default.</summary>
     public bool Defers { get; set; }
 
@@ -228,6 +231,8 @@ internal sealed class TextKit : IDisposable
     /// </summary>
     public Ink Bake(IDWriteTextLayout layout, Vector4 colour, float raster, ShadowSpec shadow)
     {
+        // Dark lyrics: the shadow turns into a light halo with them.
+        shadow = shadow.Darkened(Dark);
         var metrics = layout.Metrics;
         var overhang = layout.OverhangMetrics;
         var box = new Vector2(MathF.Max(1, metrics.Width), MathF.Max(1, metrics.Height));
@@ -548,4 +553,17 @@ internal sealed class TextKit : IDisposable
 internal readonly record struct ShadowSpec(float Alpha, float Sigma, float OffsetY, Vector3 Colour = default)
 {
     public static ShadowSpec None => default;
+
+    /// <summary>
+    /// The shadow under dark lyrics (the Mac's next/tester-fixes 8a52096): grey at lightness <paramref name="dark"/>, its
+    /// opacity ×(1 + 0.6·dark) and its drop ×(1 − dark), so dark words sit in a soft light halo instead of a dark shadow.
+    /// </summary>
+    public ShadowSpec Darkened(float dark)
+    {
+        if (!(dark > 0.0005f) || Alpha <= 0) return this;
+        var d = MathF.Min(1, dark);
+        var grey = Lunalyr.Core.Colour.Perceptual.ToColour(new Lunalyr.Core.Colour.OkLab(d, 0, 0));
+        var mixed = Vector3.Lerp(Colour, new Vector3((float)grey.R, (float)grey.G, (float)grey.B), d);
+        return this with { Colour = mixed, Alpha = MathF.Min(1, Alpha * (1 + 0.6f * d)), OffsetY = OffsetY * (1 - d) };
+    }
 }

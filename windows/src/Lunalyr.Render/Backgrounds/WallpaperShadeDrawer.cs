@@ -201,7 +201,27 @@ internal sealed class WallpaperShadeDrawer : IDisposable
         var baseSize = Math.Min(124, Math.Max(24, Math.Min(points.X, points.Y * 16 / 9) * 0.046));
         var target = playing ? LyricLegibility.PastelBackingTarget(_options.IncreaseContrast) : LyricLegibility.TargetContrast(baseSize);
         var scrim = stageShade ?? WallpaperShade.ScrimAtStage(darkening);
-        return LyricLegibility.StageBacking(luminance, scrim, target);
+        // Dark lyrics on a light wallpaper need no darkening behind them: the automatic backing fades with them
+        // (×(1 − dark); the Mac's next/tester-fixes 8a52096). The same switch as the ink's, from the unbacked stage.
+        var dark = DarkLyrics(LyricLegibility.Darkened(luminance, scrim), frame.WallSeconds);
+        return LyricLegibility.StageBacking(luminance, scrim, target) * (1 - dark);
+    }
+
+    private double _dark, _darkTarget, _darkAt = double.NaN;
+
+    /// <summary>Light (0) or dark (1) lyrics over <paramref name="unbacked"/>, with the ink director's hysteresis and 0.6 s fade.</summary>
+    private double DarkLyrics(double unbacked, double now)
+    {
+        if (unbacked > Core.Colour.LyricInkDirector.DarkAbove) _darkTarget = 1;
+        else if (unbacked < Core.Colour.LyricInkDirector.LightBelow) _darkTarget = 0;
+        if (double.IsNaN(_darkAt)) _dark = _darkTarget;
+        else
+        {
+            var step = Math.Clamp(now - _darkAt, 0, 0.25) / Core.Colour.LyricInkDirector.DarkFade;
+            _dark = _dark < _darkTarget ? Math.Min(_darkTarget, _dark + step) : Math.Max(_darkTarget, _dark - step);
+        }
+        _darkAt = now;
+        return _dark;
     }
 
     public void ReleaseResources()
