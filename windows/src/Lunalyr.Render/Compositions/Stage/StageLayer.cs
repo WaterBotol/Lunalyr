@@ -255,7 +255,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
             words = romanised;
             glue = new bool[romanised.Count];
         }
-        var runs = StageRun.Make(words, glue);
+        var runs = MakeRuns(words, glue);
         var (readings, lineReading, shares) = set is not null ? PairWordReadings(row, set, runs) : PairReadings(row, words, runs);
         var starts = new double[words.Count];
         for (var i = 0; i < words.Count; i++) starts[i] = words[i].Start;
@@ -363,7 +363,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         if (set.Replaced || ReadingDisplay != RomanizationDisplay.Below || WordReadingList(row) is not { } read)
             return (none, null, null);
         var line = Sheet!.Lines[row];
-        var pairs = LyricReadingPairs.Parts(read, line.Words, StageRun.Glue(line.Words, Sheet.Glue[row]));
+        var pairs = LyricReadingPairs.Parts(read, line.Words, RunGlue(line.Words, Sheet.Glue[row]));
         var readings = new string?[runs.Count];
         var shares = new ReadingShares?[runs.Count];
         for (var i = 0; i < runs.Count; i++)
@@ -387,6 +387,18 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
 
     /// <summary>Bakes a stage line's words for this layout.</summary>
     protected abstract StageLine Build(StageSource source);
+
+    /// <summary>The runs a line is set in: the shared runs (<see cref="StageRun.Make"/>), or a layout's own (Portal's whole words).</summary>
+    protected virtual List<StageRun> MakeRuns(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue) => StageRun.Make(words, glue);
+
+    /// <summary>The glue of the runs <see cref="MakeRuns"/> makes, so word-by-word readings pair with the runs drawn.</summary>
+    protected virtual IReadOnlyList<bool> RunGlue(IReadOnlyList<LyricWord> words, IReadOnlyList<bool> glue) => StageRun.Glue(words, glue);
+
+    /// <summary>
+    /// Whether the layout draws Reduce Motion itself (the Mac's <c>ownsReduceMotion</c>: Hinge cross-fades its pages and
+    /// words, Fable fades its words), rather than the shared dissolve between steps.
+    /// </summary>
+    protected virtual bool OwnsReduceMotion => false;
 
     /// <summary>
     /// Draws the line's words. <paramref name="stage"/> maps stage pixels (top-left origin, <see cref="Stage"/> in
@@ -451,8 +463,8 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         var stage = new Matrix4x4(toDevice);
         var shown = StageMotion.ShownCount(line.Runs, time);
         // Reduce Motion: every layout step is a short dissolve between where the words were and where they now are, not a
-        // journey; the curves keep the sum of the two near 1 where nothing moved. Fable never moves its words.
-        if (StageMotion.ReducedDissolve(line.Runs, shown, Kind != CompositionKind.Fable, time, reduce) is { } step)
+        // journey; the curves keep the sum of the two near 1 where nothing moved. Hinge and Fable draw it themselves.
+        if (StageMotion.ReducedDissolve(line.Runs, shown, !OwnsReduceMotion, time, reduce) is { } step)
         {
             DrawLine(dc, line, time, exitStart, stage, alpha * (1 - step * step), blur, shown - 1);
             DrawLine(dc, line, time, exitStart, stage, alpha * (1 - (1 - step) * (1 - step)), blur, shown);
@@ -599,6 +611,29 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         {
             label.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Bakes the Segoe Fluent Icons <paramref name="glyph"/> at <paramref name="size"/> in each of <paramref name="colours"/>
+    /// (the stage's word icons); null for no glyph.
+    /// </summary>
+    protected Ink[]? BakeSymbol(string? glyph, double size, params Vector4[] colours)
+    {
+        if (string.IsNullOrEmpty(glyph)) return null;
+        var kit = Kit!;
+        using var layout = kit.SymbolLayout(glyph, (float)size);
+        var inks = new Ink[colours.Length];
+        for (var i = 0; i < inks.Length; i++) inks[i] = kit.Bake(layout, colours[i], 1.2f, ShadowSpec.None);
+        return inks;
+    }
+
+    /// <summary>The heavy face's baseline as a share of a line's height (rows of words share their baselines).</summary>
+    protected double HeavyBaseline()
+    {
+        using var layout = Kit!.Layout("Ag", Face.Heavy, 100, "en-us", false);
+        var metrics = new Vortice.DirectWrite.LineMetrics[1];
+        layout.GetLineMetrics(metrics, out var count);
+        return count > 0 && layout.Metrics.Height > 0 ? metrics[0].Baseline / layout.Metrics.Height : 0.8;
     }
 
     /// <summary>The shares of <paramref name="run"/>'s reading on the line being built, if it fills in by part.</summary>

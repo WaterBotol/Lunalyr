@@ -53,7 +53,7 @@ public static class CompositionTraits
         CompositionKind.Spoken => "Each sung word takes focus; recent words settle around it.",
         CompositionKind.Cascade => "A moving column of words, arriving with the voice.",
         CompositionKind.Cutout => "Uneven type and album-colour labels, built word by word.",
-        CompositionKind.Hinge => "Heavy words swing in on a hinge and fold into a stack.",
+        CompositionKind.Hinge => "Heavy words swing open on a spine, page by page, and the book snaps shut.",
         CompositionKind.Broadside => "One strip of big type that slides along, with little words as labels.",
         CompositionKind.Portal => "The sung word in a pill; earlier words drift away as pale ones.",
         CompositionKind.Mosaic => "A collage: each word set huge, on a colour bar, or letter by letter.",

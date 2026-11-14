@@ -1,3 +1,4 @@
+using Lunalyr.Core.Compositions;
 using Lunalyr.Core.Lyrics;
 using Lunalyr.Core.Motion;
 
@@ -95,15 +96,49 @@ public class StageMotionTests
         Assert.Equal(LyricMotion.Settle(0.2, WallpaperMotion.LineExit), StageMotion.Leave(exit + 0.2, exit), 1e-9);
     }
 
-    // Ported from StageMotionTests.swift: testHingeFoldsShutWithinTheExitSpan
+    // Ported from StageMotionTests.swift: testHingeFocalWordFitsTheStage
     [Fact]
-    public void HingeFoldsShutWithinTheExitSpan()
+    public void HingeFocalWordFitsTheStage()
+    {
+        HingeSlab[] one = [new(Head: true, Foot: false, FocalReading: false, SmallReading: false)];
+        var roomy = HingeGeometry.FocalSize(one, held: true, unit: 40, stageHeight: 1000);
+        Assert.Equal(40 * 3.0, roomy, 0.001); // A held focal word at its full size
+        Assert.True(HingeGeometry.FocalSize(one, held: false, unit: 40, stageHeight: 1000) < roomy);
+        var tight = HingeGeometry.FocalSize(one, held: true, unit: 40, stageHeight: 200);
+        Assert.True(tight * 1.18 + 40 * 0.62 * 1.2 + 40 * 0.12 <= 200 * 0.88 + 0.01);
+        HingeSlab[] two = [.. one, new(Head: true, Foot: true, FocalReading: false, SmallReading: false)];
+        Assert.True(HingeGeometry.FocalSize(two, true, 40, 360) < HingeGeometry.FocalSize(one, true, 40, 360));
+    }
+
+    // Ported from StageMotionTests.swift: testHingeClosesTheBookWithinTheExitSpan
+    [Fact]
+    public void HingeClosesTheBookWithinTheExitSpan()
     {
         const double exit = 10.0;
-        foreach (var order in new[] { 0.0, 0.5, 1.0 })
-            Assert.True(StageMotion.HingeFold(order, exit + LyricPhraseTiming.ExitSpan, exit) >= 0.99);
-        Assert.True(StageMotion.HingeFold(1, exit + 0.2, exit) < StageMotion.HingeFold(0, exit + 0.2, exit)); // Oldest first
-        Assert.True(LyricMotion.Settle(LyricPhraseTiming.ExitSpan, StageMotion.HingeClose) >= 0.999);
+        var done = HingeGeometry.Exit(exit, exit + LyricPhraseTiming.ExitSpan);
+        Assert.Equal(0, done.Opacity, 1e-9); // Nothing of the line is left when it is dropped
+        Assert.True(HingeGeometry.Close + HingeGeometry.Recede <= LyricPhraseTiming.ExitSpan);
+        // Ease-in: the fold accelerates.
+        var early = HingeGeometry.Exit(exit, exit + 0.1).Fold;
+        var middle = HingeGeometry.Exit(exit, exit + 0.2).Fold;
+        var late = HingeGeometry.Exit(exit, exit + 0.3).Fold;
+        Assert.True(middle - early < late - middle);
+        Assert.Equal(1, HingeGeometry.Exit(exit, exit + HingeGeometry.Close).Fold);
+        // The read page goes first; the book is still there, folding.
+        var start = HingeGeometry.Exit(exit, exit + HingeGeometry.ReadGone);
+        Assert.Equal(0, start.ReadFade, 1e-9);
+        Assert.Equal(1, start.Opacity, 1e-9);
+        var folding = HingeGeometry.Instances([1.0, 0], exit: (0.5, 0), reduceMotion: false);
+        Assert.Equal([1], folding.Select(i => i.Page)); // The dimmed page does not linger as the book closes
+        Assert.Equal(HingeGeometry.ShutAngle * 0.5, folding[0].Angle, 1e-9);
+        // Leaving moves the book on; arriving, the next book is still on its way in the same direction and moving.
+        Assert.True(HingeGeometry.Exit(exit, exit + 0.5).Travel > 0.5);
+        var arriving = HingeGeometry.Entry(11, 11 - StageMotion.Lead);
+        var next = HingeGeometry.Entry(11, 11 - StageMotion.Lead + 1.0 / 60);
+        Assert.Equal(1, arriving, 1e-9);
+        Assert.True(arriving - next > 0.05, "Already moving on its first frame");
+        // Before the exit the last page lies flat, the one before it read.
+        Assert.Equal([1.0, 1, 0], HingeGeometry.Turns([1.0, 3.0, 5.0], lineTimed: false, exit + 0.3, speed: 1));
     }
 
     // Ported from StageMotionTests.swift: testReduceMotionDissolvesEachStepAndFableNeedsNone

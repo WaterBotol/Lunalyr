@@ -423,8 +423,52 @@ internal sealed class TextKit : IDisposable
         return hangul ? "ko-kr" : han ? "zh-cn" : "en-us";
     }
 
+    private readonly Dictionary<float, IDWriteTextFormat> _symbolFormats = [];
+    private string? _symbolFamily;
+
+    /// <summary>
+    /// A laid-out icon glyph from Segoe Fluent Icons (Segoe MDL2 Assets where it is missing): the stage layouts' word
+    /// icons (<see cref="Core.Compositions.SegoeIcons"/>). A glyph the font lacks falls back to the system's text faces.
+    /// The caller disposes it.
+    /// </summary>
+    public IDWriteTextLayout SymbolLayout(string glyph, float size)
+    {
+        _symbolFamily ??= Installed(Core.Compositions.SegoeIcons.Family) ? Core.Compositions.SegoeIcons.Family
+            : Installed(Core.Compositions.SegoeIcons.FallbackFamily) ? Core.Compositions.SegoeIcons.FallbackFamily : _resolvedFamily;
+        size = MathF.Max(1, MathF.Round(size * 4) / 4);
+        if (!_symbolFormats.TryGetValue(size, out var format))
+        {
+            if (_symbolFormats.Count > 32)
+            {
+                foreach (var old in _symbolFormats.Values) old.Dispose();
+                _symbolFormats.Clear();
+            }
+            format = _dwrite.CreateTextFormat(_symbolFamily, null, FontWeight.Normal, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, size, "en-us");
+            format.WordWrapping = WordWrapping.NoWrap;
+            _symbolFormats[size] = format;
+        }
+        var layout = _dwrite.CreateTextLayout(glyph, format, 100_000, 100_000);
+        layout.MaxWidth = MathF.Ceiling(layout.Metrics.WidthIncludingTrailingWhitespace + 1);
+        layout.MaxHeight = MathF.Ceiling(layout.Metrics.Height + 1);
+        return layout;
+    }
+
+    /// <summary>Whether the installed icon font draws <paramref name="glyph"/> itself (not by fallback).</summary>
+    public bool SymbolFontHas(string glyph)
+    {
+        var family = Installed(Core.Compositions.SegoeIcons.Family) ? Core.Compositions.SegoeIcons.Family : Core.Compositions.SegoeIcons.FallbackFamily;
+        if (!_fonts.FindFamilyName(family, out var index)) return false;
+        using var fonts = _fonts.GetFontFamily(index);
+        using var font = fonts.GetFirstMatchingFont(FontWeight.Normal, FontStretch.Normal, Vortice.DirectWrite.FontStyle.Normal);
+        foreach (var rune in glyph.EnumerateRunes())
+            if (!font.HasCharacter((uint)rune.Value)) return false;
+        return true;
+    }
+
     public void Dispose()
     {
+        foreach (var format in _symbolFormats.Values) format.Dispose();
+        _symbolFormats.Clear();
         // Bakes still waiting are let go; their inks are never drawn once the kit is gone.
         while (_pending.TryDequeue(out var ink)) Cancel(ink);
         foreach (var format in _formats.Values) format.Dispose();
