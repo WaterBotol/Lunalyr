@@ -200,4 +200,94 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertGreaterThan(T.Reveal.at(0.15, size: .full, reduceMotion: false).cover,
                              T.Reveal.at(0.15, size: .full, reduceMotion: false).wipe, "The cover leads the wipe")
     }
+
+    // MARK: No lyrics found: the card stays
+
+    func testWithNoLyricsFoundTheCardStaysForTheRestOfTheSong() throws {
+        let card = T.staying()
+        XCTAssertEqual(card.size, .full)
+        XCTAssertEqual(card.start, T.lead, accuracy: 1e-9)
+        XCTAssertEqual(card.settled, T.lead + T.fullEntrance, accuracy: 1e-9)
+        XCTAssertTrue(card.stays)
+        XCTAssertEqual(card.leave, .infinity)
+        for time in [5.0, 60, 600, 3600] {
+            let phase = try XCTUnwrap(T.phase(card, at: time), "\(time)")
+            XCTAssertEqual(phase.exit, 0)
+        }
+        // Nothing hides it: what else names the song stays away.
+        XCTAssertEqual(T.yields(to: card, at: 600), 0)
+        // Paused, the same moment draws the same frame.
+        XCTAssertEqual(T.phase(card, at: 12), T.phase(card, at: 12))
+    }
+
+    func testAStayingCardRestsAtFiftyFivePercentAfterThirtySeconds() throws {
+        let card = T.staying()
+        let rest = card.settled + T.restAfter
+        XCTAssertEqual(try XCTUnwrap(T.phase(card, at: card.settled + 1)).opacity, 1, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(T.phase(card, at: rest)).opacity, 1, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(T.phase(card, at: rest + 1)).opacity, 0.775, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(T.phase(card, at: rest + 2)).opacity, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(T.phase(card, at: rest + 500)).opacity, 0.55, accuracy: 1e-9)
+        // Its clock runs for the ease, and only looks in while it is held.
+        XCTAssertTrue(try XCTUnwrap(T.phase(card, at: rest + 1)).moving)
+        let held = try XCTUnwrap(T.phase(card, at: rest + 10))
+        XCTAssertFalse(held.moving)
+        XCTAssertEqual(T.pace(.resting, phase: held, playing: true), .waiting)
+        // Other cards never rest.
+        let intro = try XCTUnwrap(T.schedule(words: .none))
+        XCTAssertEqual(try XCTUnwrap(T.phase(intro, at: 10)).opacity, 1)
+    }
+
+    func testLateLyricsSendTheStayingCardOffWithItsOrdinaryExit() throws {
+        let full = T.staying()
+        // Arriving long after it settled: it leaves from that moment.
+        let late = T.leaving(full, at: 95)
+        XCTAssertEqual(late.leave, 95, accuracy: 1e-9)
+        XCTAssertEqual(late.end, 95 + T.fullExit, accuracy: 1e-9)
+        XCTAssertNil(T.phase(late, at: late.end))
+        // Rested, it leaves from its resting strength, without a jump.
+        let before = try XCTUnwrap(T.phase(late, at: 95))
+        let after = try XCTUnwrap(T.phase(late, at: 95.01))
+        XCTAssertEqual(before.opacity, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(after.opacity, 0.55, accuracy: 1e-9)
+        XCTAssertLessThan(after.exit, 0.05)
+        // Arriving during the entrance: it settles first.
+        let early = T.leaving(full, at: 1)
+        XCTAssertEqual(early.leave, full.settled, accuracy: 1e-9)
+        // Compact leaves with the compact exit.
+        let compact = T.leaving(T.staying(joined: 95), at: 120)
+        XCTAssertEqual(compact.end - compact.leave, T.compactExit, accuracy: 1e-9)
+        // A second arrival does not move it.
+        XCTAssertEqual(T.leaving(late, at: 200), late)
+    }
+
+    func testAStayingCardIsCompactForASongJoinedPartWay() {
+        let compact = T.staying(joined: 95, found: 96)
+        XCTAssertEqual(compact.size, .compact)
+        XCTAssertEqual(compact.start, 95.3, accuracy: 1e-9)
+        XCTAssertEqual(compact.settled, 95.3 + T.compactEntrance, accuracy: 1e-9)
+        XCTAssertEqual(T.staying(joined: 2.4).size, .full)
+        XCTAssertEqual(T.staying(joined: 2.6).size, .compact)
+        // Found while the lookup's card still held: the same card stays.
+        XCTAssertEqual(T.staying(found: 9).start, T.lead, accuracy: 1e-9)
+        // Found after that card began to leave: it enters afresh.
+        XCTAssertEqual(T.staying(found: 20).start, 20 + T.joinLead, accuracy: 1e-9)
+    }
+
+    @MainActor
+    func testWhetherTheCardStaysIsKeptPerSong() throws {
+        let memory = OpeningTitleMemory()
+        XCTAssertNil(memory.stay(track: 1, kind: .loading, notFoundAt: nil, at: 1))
+        let found = try XCTUnwrap(memory.stay(track: 1, kind: .missing, notFoundAt: Date(), at: 4))
+        XCTAssertEqual(found.found, 4)
+        XCTAssertNil(found.lyricsAt)
+        XCTAssertEqual(memory.stay(track: 1, kind: .synced, notFoundAt: nil, at: 40)?.lyricsAt, 40)
+        XCTAssertEqual(memory.stay(track: 1, kind: .synced, notFoundAt: nil, at: 41)?.lyricsAt, 40)
+        // A seek back to before the lyrics came forgets it.
+        XCTAssertNil(memory.stay(track: 1, kind: .synced, notFoundAt: nil, at: 10))
+        // A new song starts afresh; the song before's report is not its own.
+        _ = memory.stay(track: 3, kind: .missing, notFoundAt: Date(), at: 4)
+        XCTAssertNil(memory.stay(track: 2, kind: .missing, notFoundAt: Date().addingTimeInterval(-5), at: 1))
+        XCTAssertNil(memory.currentStay(track: 3))
+    }
 }

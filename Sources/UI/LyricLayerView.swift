@@ -166,6 +166,11 @@ struct LyricLayer: View {
         let wall = pace?.wall(self.wall) ?? self.wall
         let (key, loadingSince) = sceneKey(wall: wall)
         let content = sceneContent(key: key, loadingSince: loadingSince)
+        // No lyrics found: the song's opening title stays, drawn once above
+        // the scenes so their cross-fades neither double nor dim it.
+        let stay = opening.stay(track: key.track, kind: key.kind, notFoundAt: lyricsVM.notFound ? lyricsVM.notFoundAt : nil,
+                                at: time)
+        let staying = stay.flatMap { _ in openingSchedule(content, key: key) }
         let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
@@ -173,7 +178,7 @@ struct LyricLayer: View {
         let shown = animating ? extras.visibility.presence(at: wall) : (extras.lyricsVisible ? 1 : 0)
         let _ = pace?.report(OpeningTitle.pace(level(key: key, transition: transition, shown: shown,
                                    target: animating ? extras.visibility.target : shown, ink: ink, wall: wall),
-                                   phase: shown > 0.001 ? OpeningTitle.upcoming(openingSchedule(content, kind: key.kind), at: time) : nil,
+                                   phase: shown > 0.001 ? OpeningTitle.upcoming(openingSchedule(content, key: key), at: time) : nil,
                                    playing: nowPlaying.isPlaying))
         ZStack {
             if shown > 0.001 {
@@ -188,8 +193,15 @@ struct LyricLayer: View {
                                 scene(leaving.scene.content, key: leaving.scene.key,
                                       time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
                                       ink: ink)
-                                openingTitle(leaving.scene.content, kind: leaving.scene.key.kind,
-                                             time: leaving.scene.renderTime(at: wall))
+                                // The staying card is drawn once, below;
+                                // a card this scene held before it leaves
+                                // with the scene.
+                                if !Self.yieldsToStaying(leaving.scene.key, ownStart: openingSchedule(
+                                    leaving.scene.content, key: leaving.scene.key, staying: false)?.start,
+                                                         staying: staying, track: key.track) {
+                                    openingTitle(leaving.scene.content, key: leaving.scene.key,
+                                                 time: leaving.scene.renderTime(at: wall), staying: false)
+                                }
                             }
                                 .opacity(leaving.presence)
                                 .blur(radius: dissolve * 5)
@@ -198,9 +210,10 @@ struct LyricLayer: View {
                     }
                     ZStack {
                         scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
-                        openingTitle(content, kind: key.kind, time: time)
+                        if staying == nil { openingTitle(content, key: key, time: time) }
                     }
                         .opacity(transition.incomingPresence)
+                    if staying != nil { openingTitle(content, key: key, time: time) }
                 }
                 // Hiding the lyrics dissolves them softly rather than cutting.
                 .opacity(shown)
@@ -315,7 +328,7 @@ struct LyricLayer: View {
             if let since = content.loadingSince {
                 // The opening title already names the song.
                 let presence = Self.loadingPresence(age: wall - since)
-                    * OpeningTitle.yields(to: openingSchedule(content, kind: .loading), at: time)
+                    * OpeningTitle.yields(to: openingSchedule(content, key: key), at: time)
                 if presence > 0.001 {
                     placeholder([content.title, content.artist].filter { !$0.isEmpty }.joined(separator: " · "),
                                 size: baseSize * 0.34, colour: fallback.rest)
@@ -335,6 +348,9 @@ struct LyricLayer: View {
             // should not carry a permanent error notice on the wallpaper.
             switch settings.noLyrics {
             case .nothing:
+                Color.clear
+            case .trackName where openingSchedule(content, key: key) != nil:
+                // The opening title stays in its place.
                 Color.clear
             case .trackName:
                 VStack(spacing: baseSize * 0.12) {
@@ -378,7 +394,7 @@ struct LyricLayer: View {
             // wait for the opening title to leave.
             let cues = LyricCreditCues.isOn
                 ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist,
-                                       notBefore: openingSchedule(content, kind: .synced)?.end ?? 0) : []
+                                       notBefore: openingSchedule(content, key: key)?.end ?? 0) : []
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
                 .environment(\.lyricCreditBands, LyricCreditCues.bands(cues))
@@ -391,7 +407,7 @@ struct LyricLayer: View {
                         // middle, where the dots are: they wait for it.
                         InstrumentalInterludeView(cue: cue, accent: accent, baseSize: baseSize)
                             .opacity(backdropOverride == nil ? 1
-                                     : OpeningTitle.yields(to: openingSchedule(content, kind: .synced), at: time))
+                                     : OpeningTitle.yields(to: openingSchedule(content, key: key), at: time))
                     }
                 }
         }
@@ -409,26 +425,38 @@ struct LyricLayer: View {
     }
 
     /// The song's opening title for a scene, or nil when it has none: the
-    /// setting is off, nothing is playing, or the stage already shows the
-    /// song's name in its place ("Show the song's name" without lyrics).
-    private func openingSchedule(_ content: LyricSceneContent, kind: LyricSceneKey.Kind) -> OpeningTitle.Schedule? {
-        guard OpeningTitle.isOn, !content.title.isEmpty else { return nil }
+    /// setting is off or nothing is playing. For the song playing, once its
+    /// lookup has found no lyrics, the card that stays (unless `staying` is
+    /// false), leaving when lyrics arrive.
+    private func openingSchedule(_ content: LyricSceneContent, key: LyricSceneKey,
+                                 staying: Bool = true) -> OpeningTitle.Schedule? {
+        guard OpeningTitle.isOn, !content.title.isEmpty, key.kind != .idle else { return nil }
+        if staying, let stay = opening.currentStay(track: key.track) {
+            let card = OpeningTitle.staying(joined: content.joined, found: stay.found)
+            return stay.lyricsAt.map { OpeningTitle.leaving(card, at: $0) } ?? card
+        }
         let words: OpeningTitle.Words
-        switch kind {
+        switch key.kind {
         case .idle: return nil
-        case .loading: words = .none
+        case .loading, .missing: words = .none
         case .plain: words = .showing
-        case .missing:
-            guard settings.noLyrics != .trackName else { return nil }
-            words = .none
         case .synced: words = .timed(firstLine: OpeningTitle.firstSung(content.lines))
         }
         return OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead)
     }
 
+    /// Whether a leaving scene leaves its card to the staying one: the same
+    /// song's card, entered at the same moment, so it is the same card.
+    static func yieldsToStaying(_ key: LyricSceneKey, ownStart: Double?, staying: OpeningTitle.Schedule?,
+                                track: Int) -> Bool {
+        guard let staying, key.track == track else { return false }
+        return ownStart.map { abs($0 - staying.start) < 1e-6 } ?? true
+    }
+
     @ViewBuilder
-    private func openingTitle(_ content: LyricSceneContent, kind: LyricSceneKey.Kind, time: Double) -> some View {
-        if let phase = OpeningTitle.phase(openingSchedule(content, kind: kind), at: time) {
+    private func openingTitle(_ content: LyricSceneContent, key: LyricSceneKey, time: Double,
+                              staying: Bool = true) -> some View {
+        if let phase = OpeningTitle.phase(openingSchedule(content, key: key, staying: staying), at: time) {
             OpeningTitleCard(phase: phase, title: content.title, artist: content.artist,
                              album: OpeningTitle.albumLine(album: content.album, title: content.title),
                              reading: opening.reading(of: content.title, options: readingOptions.snapshot),

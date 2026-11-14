@@ -6,7 +6,9 @@ import SwiftUI
 // When a song starts, its title, artist and album are set on the wallpaper
 // like a music video's title card: low on the left, clear of the lyric, in
 // the lyric's own typeface. It arrives with the song, holds through the
-// intro and has gone a second before the first line is sung. Everything is
+// intro and has gone a second before the first line is sung. When the
+// lookup finds no lyrics at all, it stays for the rest of the song, resting
+// at a lower strength after half a minute (`staying`). Everything is
 // a pure function of the song's time, so a seek or a pause shows the same
 // frame for the same moment.
 
@@ -65,6 +67,9 @@ enum OpeningTitle {
         var leave: Double
         var end: Double
         var size: Size
+        /// No lyrics were found: the card stays, resting after `restAfter`.
+        /// Its leave and end are infinite until lyrics arrive (`leaving`).
+        var stays = false
     }
 
     // Timing (seconds of song time).
@@ -91,6 +96,11 @@ enum OpeningTitle {
     static let briefHold = 2.6
     /// Gone at least this long before the first line starts to appear.
     static let clearance = 1.0
+    /// A card that stays (no lyrics found) rests: held this long past
+    /// settling, it eases over `restEase` to `restOpacity` and stays there.
+    static let restAfter = 30.0
+    static let restEase = 2.0
+    static let restOpacity = 0.55
 
     /// When the first line may first be drawn: its own start, less the
     /// next-word preview lead and the line's attack.
@@ -129,6 +139,35 @@ enum OpeningTitle {
         }
     }
 
+    /// The card for a song whose lookup found no lyrics, seen at song time
+    /// `found`: it enters as usual (full, or compact for a song joined
+    /// part-way) and stays for the rest of the song. When the lookup ran on
+    /// after the card it held had begun to leave, it enters afresh.
+    static func staying(joined: Double = 0, found: Double = 0) -> Schedule {
+        let partWay = joined > midSong
+        var start = partWay ? joined + joinLead : lead
+        if let held = schedule(words: .none, joined: joined), found > held.leave { start = found + joinLead }
+        let size: Size = partWay ? .compact : .full
+        let entrance = size == .full ? fullEntrance : compactEntrance
+        return Schedule(start: start, settled: start + entrance, leave: .infinity, end: .infinity, size: size, stays: true)
+    }
+
+    /// A staying card once lyrics arrive at song time `arrival`: it leaves
+    /// from then, or once it has settled, with its ordinary exit.
+    static func leaving(_ schedule: Schedule, at arrival: Double) -> Schedule {
+        guard schedule.leave == .infinity else { return schedule }
+        var card = schedule
+        card.leave = max(arrival, schedule.settled)
+        card.end = card.leave + (schedule.size == .full ? fullExit : compactExit)
+        return card
+    }
+
+    /// How far a staying card has eased to rest at `time`, 0...1.
+    static func rest(_ schedule: Schedule, at time: Double) -> Double {
+        guard schedule.stays else { return 0 }
+        return Easing.smoothstep((time - schedule.settled - restAfter) / restEase)
+    }
+
     /// The start of the first line that is sung (credits and breaks are not).
     static func firstSung(_ lines: [LyricsFetcher.Line]) -> Double? {
         lines.first { !$0.isInstrumental && $0.credit != true }?.start
@@ -142,15 +181,25 @@ enum OpeningTitle {
         var exit: Double
         var size: Size
 
-        /// Moving: entering or leaving. Held, nothing on it changes.
+        /// Moving: entering, easing to rest or leaving. Held, nothing on it changes.
         var moving: Bool
+        /// 0 at full strength, 1 rested at `restOpacity` (a staying card).
+        var rest: Double = 0
+        /// Staying with no leave due: only an input (lyrics arriving) ends it.
+        var stays = false
+
+        /// The card's strength before its exit.
+        var opacity: Double { 1 - (1 - OpeningTitle.restOpacity) * rest }
     }
 
     static func phase(_ schedule: Schedule?, at time: Double) -> Phase? {
         guard let schedule, time >= schedule.start, time < schedule.end else { return nil }
         let exit = time <= schedule.leave ? 0 : (time - schedule.leave) / (schedule.end - schedule.leave)
+        let restStart = schedule.settled + restAfter
+        let resting = schedule.stays && time >= restStart && time <= restStart + restEase
         return Phase(age: time - schedule.start, exit: min(1, max(0, exit)), size: schedule.size,
-                     moving: time < schedule.settled || time > schedule.leave)
+                     moving: time < schedule.settled || time > schedule.leave || resting,
+                     rest: rest(schedule, at: time), stays: schedule.leave == .infinity)
     }
 
     /// 0...1: how much of something else naming the song (the loading
@@ -169,11 +218,12 @@ enum OpeningTitle {
     }
 
     /// The stage's clock while the card is up: every frame while it moves,
-    /// and never stopped while it is held, so its exit is drawn.
+    /// and never stopped while it is held, so its exit is drawn. A card that
+    /// stays with no exit due is only looked at, for its ease to rest.
     static func pace(_ level: LyricPace.Level, phase: Phase?, playing: Bool) -> LyricPace.Level {
         guard let phase else { return level }
         if phase.moving { return playing ? .active : (level == .resting ? .waiting : level) }
-        return level == .resting ? (playing ? .still : .waiting) : level
+        return level == .resting ? (playing && !phase.stays ? .still : .waiting) : level
     }
 
     // MARK: Motion
@@ -234,6 +284,47 @@ final class OpeningTitleMemory: ObservableObject {
     private var joinedAt = 0.0
     private var readingKey: String?
     private var reading: String?
+    private var stayTrack: Int?
+    private var stayTrackSeen = Date.distantPast
+    private var foundNone: Double?
+    private var lyricsAt: Double?
+
+    /// Whether `track`'s card stays because its lookup found no lyrics, and
+    /// the song time lyrics arrived after that, if they did. `kind` is what
+    /// the stage shows at song time `time`; `notFoundAt` is when the lookup
+    /// reported nothing (one from the song before is ignored). A new song
+    /// starts afresh; a seek back to before the lyrics arrived forgets them
+    /// with the rest, so the card does not return over the lyrics.
+    func stay(track: Int, kind: LyricSceneKey.Kind, notFoundAt: Date?, at time: Double)
+        -> (found: Double, lyricsAt: Double?)? {
+        if track != stayTrack {
+            stayTrack = track
+            stayTrackSeen = Date()
+            foundNone = nil
+            lyricsAt = nil
+        }
+        switch kind {
+        case .missing:
+            if foundNone == nil, let notFoundAt, notFoundAt > stayTrackSeen.addingTimeInterval(-0.25) { foundNone = time }
+        case .synced, .plain:
+            guard foundNone != nil else { break }
+            if let arrived = lyricsAt, time < arrived - 1 {
+                foundNone = nil
+                lyricsAt = nil
+            } else if lyricsAt == nil {
+                lyricsAt = time
+            }
+        case .idle, .loading:
+            break
+        }
+        return currentStay(track: track)
+    }
+
+    /// What `stay` last worked out for `track`, without updating it.
+    func currentStay(track: Int) -> (found: Double, lyricsAt: Double?)? {
+        guard track == stayTrack else { return nil }
+        return foundNone.map { ($0, lyricsAt) }
+    }
 
     /// The song time at which `track` was first seen: 0 for a song seen from
     /// its start, or once playback is back at its start.
@@ -298,7 +389,7 @@ struct OpeningTitleCard: View {
             let dark = Self.isDark(ink.base.rest)
             let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
                              width: floating ? size.width * 0.9 : size.width * 0.46)
-                .opacity(1 - leaving)
+                .opacity((1 - leaving) * phase.opacity)
                 .blur(radius: reduceMotion ? 0 : leaving * unit * 0.06)
                 .offset(y: reduceMotion ? 0 : -leaving * unit * 0.14)
             if floating {
@@ -314,7 +405,7 @@ struct OpeningTitleCard: View {
                                                .init(color: shade.opacity(0.1), location: 0.65),
                                                .init(color: shade.opacity(0), location: 1)],
                                        center: UnitPoint(x: 0.2, y: 0.8), startRadiusFraction: 0, endRadiusFraction: 0.5)
-                        .opacity(max(reveal.title, reveal.rule) * (1 - leaving))
+                        .opacity(max(reveal.title, reveal.rule) * (1 - leaving) * phase.opacity)
                     block
                         .padding(.leading, max(40, size.width * 0.058))
                         .padding(.bottom, max(96, size.height * 0.13))
