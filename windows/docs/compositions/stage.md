@@ -23,7 +23,7 @@ used here were blamed line by line (`git blame -w -M -C -L`):
 ## Where the code is
 
 - `src/Lunalyr.Core/Motion/StageMotion.cs` (already ported): `StageRun` (glued runs, syllable fade-in, readings by
-  run) and `StageMotion` (arrival spring, hand-off ranks, liveness, exits, Hinge's fold, Mosaic's morph).
+  run) and `StageMotion` (arrival spring, hand-off ranks, liveness, exits, Mosaic's morph).
 - `src/Lunalyr.Core/Compositions/StageGeometry.cs`: `StageShared` (the Mac's `chance`, `lineSpeed`, `glide`, reading
   sizes, `chosenEntrance`), `BroadsideGeometry` and `StageShapes` (`Star4` and `SketchyOutline`).
 - `src/Lunalyr.Core/Compositions/StagePhrases.cs` and `LyricWordIcons.cs` (with `SegoeIcons`), shared by the layouts.

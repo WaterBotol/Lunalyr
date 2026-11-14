@@ -621,7 +621,9 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     {
         if (string.IsNullOrEmpty(glyph)) return null;
         var kit = Kit!;
-        using var layout = kit.SymbolLayout(glyph, (float)size);
+        // A glyph the icon font lacks (the dollar sign) is set from the lyric face, not drawn as the font's empty box.
+        using var layout = kit.SymbolFontHas(glyph) ? kit.SymbolLayout(glyph, (float)size)
+            : kit.Layout(glyph, Face.Heavy, (float)(size * 0.8), "en-us", false);
         var inks = new Ink[colours.Length];
         for (var i = 0; i < inks.Length; i++) inks[i] = kit.Bake(layout, colours[i], 1.2f, ShadowSpec.None);
         return inks;

@@ -16,7 +16,8 @@ public readonly record struct LyricPhraseTiming
     /// <summary>From <see cref="ExitStart"/> until the last, most staggered word has gone.</summary>
     public const double ExitSpan = 0.70;
 
-    /// <summary>Hinge folds its words shut one after another over most of a second, longer than the other exits.</summary>
+    /// <summary>A longer exit span (most of a second) for a layout that needs it. Hinge used it to fold its words shut one
+    /// after another; since the Mac's Build 88 its book closes within <see cref="ExitSpan"/>, so no layout uses it now.</summary>
     public const double HingeExitSpan = 1.0;
 
     /// <summary>The longest a line still being sung keeps the stage once the next line has started.</summary>

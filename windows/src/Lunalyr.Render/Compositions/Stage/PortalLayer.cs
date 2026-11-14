@@ -322,12 +322,26 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
     private void FillPill(ID2D1DeviceContext dc, in Matrix3x2 body, double w, double h, double radius, PortalShape shape, bool flip,
                           double size, Vector4 colour, double opacity)
     {
-        FillRounded(dc, body, w, h, radius, colour, opacity);
-        if (shape != PortalShape.Speech || !(radius > 0)) return;
-        // The sharp corner: the bottom leading one (trailing when flipped), nearly square.
+        if (shape != PortalShape.Speech || !(radius > 0))
+        {
+            FillRounded(dc, body, w, h, radius, colour, opacity);
+            return;
+        }
+        if (!(opacity > 0.002)) return;
+        // The sharp corner: the bottom leading one (trailing when flipped), nearly square. The two fills overlap, so they
+        // are drawn opaque in a layer that takes the pill's opacity.
+        dc.Transform = body;
+        dc.PushLayer(new LayerParameters1
+        {
+            ContentBounds = new Vortice.RawRectF(-(float)w, -(float)h, (float)w, (float)h), MaskTransform = Matrix3x2.Identity,
+            MaskAntialiasMode = AntialiasMode.PerPrimitive, Opacity = (float)Math.Clamp(opacity, 0, 1), LayerOptions = LayerOptions1.None,
+        }, null!);
+        FillRounded(dc, body, w, h, radius, colour, 1);
         var sharp = Math.Min(radius, size * 0.05);
         var cx = flip ? w / 2 - radius / 2 : -w / 2 + radius / 2;
-        FillRounded(dc, Matrix3x2.CreateTranslation((float)cx, (float)(h / 2 - radius / 2)) * body, radius, radius, sharp, colour, opacity);
+        FillRounded(dc, Matrix3x2.CreateTranslation((float)cx, (float)(h / 2 - radius / 2)) * body, radius, radius, sharp, colour, 1);
+        dc.Transform = body;
+        dc.PopLayer();
     }
 
     /// <summary>A pill's outline, inside its edge: the speech shape's rounded corners as arcs and its sharp corner square.</summary>

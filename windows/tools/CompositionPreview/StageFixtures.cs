@@ -1,4 +1,4 @@
-// Lines for checking the six stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable): the Mac's review lines
+﻿// Lines for checking the six stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable): the Mac's review lines
 // from its Build 88 stage tests (fast word runs, a quick three-word burst, glued syllables, the long phrased line, words
 // with pictures), built through the real TTML parser as the app gets them.
 
@@ -48,7 +48,7 @@ public static class StageFixtures
 
     /// <summary>
     /// Long lines: the review videos' line (a quick run, a held word, a pause) from 10 s; a 23-word line a word every
-    /// 0.3 s from 18 s; and a line of words with pictures from 26 s.
+    /// 0.3 s from 18 s; a line of words with pictures from 26 s; and one of stand-in pictures from 31.2 s.
     /// </summary>
     public static SceneSnapshot Long(LyricStyle? style = null)
     {
@@ -61,6 +61,8 @@ public static class StageFixtures
         Sung[] longest = Even(18.0, 0.3, 0.27,
             "And if the night keeps calling out my name I will follow every echo down the empty streets until the morning finds us".Split(' '));
         Sung[] icons = Even(26.0, 0.45, 0.4, "call me home my love the city lights are burning bright".Split(' '));
-        return Scene("Morning Comes", Ttml("en", mixed, longest, icons), 40, style);
+        // Words whose pictures Windows draws with a stand-in (cloud with drops, "$", the road sign, a crescent).
+        Sung[] standIns = Even(31.2, 0.45, 0.4, "rain and money on the highway tonight".Split(' '));
+        return Scene("Morning Comes", Ttml("en", mixed, longest, icons, standIns), 40, style);
     }
 }

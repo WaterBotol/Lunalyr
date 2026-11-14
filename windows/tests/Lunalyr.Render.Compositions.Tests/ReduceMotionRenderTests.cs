@@ -123,8 +123,8 @@ public sealed class ReduceMotionRenderTests : IDisposable
             using var played = Layer(id);
             for (var t = time - 0.5; t < time; t += 1.0 / 30) Frame(played, scene, t);
             var afterPlaying = Frame(played, scene, time);
-            // Drawn at all (Hinge's Reduce Motion page turn is a cross-fade, both pages dimmed part way through it).
-            Assert.True(Drawn(afterPlaying) > 100, $"{id} drew nothing at {time}");
+            // Hinge's Reduce Motion page turn is a cross-fade, both pages dimmed part way through it: drawn at all.
+            Assert.True((id == "hinge" ? Drawn(afterPlaying) : Lit(afterPlaying)) > 100, $"{id} drew nothing at {time}");
             using var fresh = Layer(id);
             Assert.Equal(afterPlaying, Frame(fresh, scene, time));
         }
