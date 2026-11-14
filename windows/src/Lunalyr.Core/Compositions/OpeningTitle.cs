@@ -122,6 +122,13 @@ public static class OpeningTitle
         return staying with { Leave = leave, End = leave + exit };
     }
 
+    /// <summary>A staying card entering again from <paramref name="at"/>: the holding card had already left when the lookup ended.</summary>
+    public static OpeningSchedule Reentering(OpeningSchedule staying, double at)
+    {
+        var entrance = staying.Size == OpeningSize.Full ? FullEntrance : CompactEntrance;
+        return staying with { Start = at, Settled = at + entrance };
+    }
+
     /// <summary>The opacity a staying card is drawn at: 1, then easing to <see cref="RestOpacity"/> once held a while.</summary>
     public static double Resting(OpeningSchedule? schedule, double time)
     {

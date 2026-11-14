@@ -75,21 +75,40 @@ internal abstract partial class LyricCompositionLayer
             _staying = null;
             _yielding = null;
         }
+        if (_before is { } b && b.Title != title) _before = null;
         if (OpeningTitle.Stays(schedule))
         {
-            _staying = (schedule!.Value, title);
+            // Already staying: the same card, as it entered.
+            if (_staying is { } kept && _yielding is null) return kept.Schedule;
+            var staying = schedule!.Value;
+            // The lookup ended after the holding card had started leaving (or gone): it comes back in from now rather
+            // than popping back at full strength (the Mac's dd3854e).
+            if (_before is { } shown && double.IsFinite(time) && time >= shown.Schedule.Leave)
+                staying = OpeningTitle.Reentering(staying, time);
+            _staying = (staying, title);
             _yielding = null;
-            return schedule;
+            return staying;
         }
         if (_staying is { } was && double.IsFinite(time))
         {
             _yielding ??= OpeningTitle.Yielding(was.Schedule, time);
+            // Sought back to before the lyrics arrived: the lyrics are there, so the card doesn't come back over them.
+            if (time < _yielding.Value.Leave - 0.05)
+            {
+                _staying = null;
+                _yielding = null;
+                return schedule;
+            }
             if (time < _yielding.Value.End) return _yielding;
             _staying = null;
             _yielding = null;
         }
+        if (schedule is { } s) _before = (s, title);
         return schedule;
     }
+
+    /// <summary>The last schedule shown while not staying, for the card coming back in when a lookup ends late.</summary>
+    private (OpeningSchedule Schedule, string? Title)? _before;
 
     private OpeningSchedule? OpeningScheduleFor(SceneSnapshot scene, double joined)
     {

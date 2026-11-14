@@ -131,8 +131,10 @@ public static class FlyoutText
         if (!double.TryParse(s, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value))
             return null;
         value *= scale;
-        if (!double.IsFinite(value) || Math.Abs(value) > Core.Lyrics.Timing.SongOffsets.Limit) return null;
-        return Math.Round(value * 100, MidpointRounding.AwayFromZero) / 100;
+        if (!double.IsFinite(value)) return null;
+        // Rounded first, then held to ±30 s: past it is refused, never clamped (as the Mac's a9657d0).
+        value = Math.Round(value * 100, MidpointRounding.AwayFromZero) / 100;
+        return Math.Abs(value) > Core.Lyrics.Timing.SongOffsets.Limit ? null : value;
     }
 
     /// <summary>"Lyrics 0.25 seconds earlier", "No offset" (TimingNudge.spoken).</summary>
@@ -144,7 +146,7 @@ public static class FlyoutText
     /// <summary>The note a nudge leaves (LunalyrExtras.nudgeSync): "Lyrics 0.1 s earlier · +0.30 s for this song’s lyric source".</summary>
     public static string NudgeNote(double delta, double saved) =>
         string.Create(CultureInfo.InvariantCulture,
-            $"Lyrics {Math.Abs(delta):0.0} s {(delta > 0 ? "earlier" : "later")} · {saved.ToString("+0.00;-0.00;+0.00", CultureInfo.InvariantCulture)} s for this song’s lyric source");
+            $"Lyrics {Math.Abs(delta):0.0#} s {(delta > 0 ? "earlier" : "later")} · {saved.ToString("+0.00;-0.00;+0.00", CultureInfo.InvariantCulture)} s for this song’s lyric source");
 
     /// <summary>The note a reset leaves (LunalyrModels.resetSongOffset).</summary>
     public const string ResetNote = "Lyrics back to their own timing for this song";

@@ -190,10 +190,10 @@ public sealed class LunalyrExtrasTests
         var offset = 0.2;
         var extras = Extras(new ExtrasHooks { NudgeSync = delta => offset = Math.Round((offset + delta) * 100) / 100 });
         extras.Perform(HotkeyAction.SyncEarlier);
-        Assert.Equal(0.3, offset, 9);
-        Assert.Equal("Lyrics 0.1 s earlier · +0.30 s for this song’s lyric source", _shown[^1]);
+        Assert.Equal(0.25, offset, 9);
+        Assert.Equal("Lyrics 0.05 s earlier · +0.25 s for this song’s lyric source", _shown[^1]);
         extras.Perform(HotkeyAction.SyncLater);
-        Assert.Equal("Lyrics 0.1 s later · +0.20 s for this song’s lyric source", _shown[^1]);
+        Assert.Equal("Lyrics 0.05 s later · +0.20 s for this song’s lyric source", _shown[^1]);
 
         var none = Extras(new ExtrasHooks { NudgeSync = _ => null });
         Assert.Null(none.NudgeSync(0.1));

@@ -275,4 +275,15 @@ public class OpeningTitleTests
         Assert.Equal(40 + OpeningTitle.FullExit, yielding.End, 6);
         Assert.Equal(1, OpeningTitle.Resting(yielding, 39));
     }
+
+    [Fact]
+    public void ACardComingBackAfterTheHoldingOneLeftEntersFromThen()
+    {
+        var staying = OpeningTitle.Schedule(OpeningWords.Absent)!.Value;
+        var again = OpeningTitle.Reentering(staying, 20);
+        Assert.Equal(20, again.Start);
+        Assert.Equal(20 + OpeningTitle.FullEntrance, again.Settled);
+        Assert.True(OpeningTitle.Stays(again));
+        Assert.Equal(0, OpeningTitle.Phase(again, 20)!.Value.Age);
+    }
 }

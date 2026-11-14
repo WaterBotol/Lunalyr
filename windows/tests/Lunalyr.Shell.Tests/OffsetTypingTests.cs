@@ -14,12 +14,14 @@ public class OffsetTypingTests
     [InlineData("-0,25", -0.25)]
     [InlineData("+2sec", 2)]
     [InlineData("0.123", 0.12)]
+    [InlineData("30.004", 30)]
     public void TypedOffsetsAreRead(string typed, double seconds) => Assert.Equal(seconds, FlyoutText.ParseOffset(typed));
 
     [Theory]
     [InlineData("")]
     [InlineData("soon")]
     [InlineData("+45")]
+    [InlineData("30.006")]
     [InlineData("1.2.3")]
     public void AnythingElseIsNot(string typed) => Assert.Null(FlyoutText.ParseOffset(typed));
 
