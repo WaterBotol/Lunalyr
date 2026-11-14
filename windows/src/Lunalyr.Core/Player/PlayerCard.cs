@@ -21,7 +21,7 @@ public static class PlayerCard
     public const double Padding = 20;
 
     /// <summary>The Mac's corner radius. Windows draws the card in a window DWM rounds at its own 8 px (see APP-SHELL.md).</summary>
-    public const double MacRadius = 28;
+    public const double MacRadius = PlayerTokens.Radius.Card;
 
     /// <summary>The card at rest.</summary>
     public const double RestHeight = Cover + 2 * Padding;
@@ -59,12 +59,11 @@ public static class PlayerCard
     /// <summary>The song's titles while the seek bar's capsules are up over them: all but gone, so the capsules read.</summary>
     public static double TitleOpacity(bool dimmed) => dimmed ? 0.08 : 1;
 
-    /// <summary>Reveal and dismiss in seconds: in on a soft spring, out quicker as a fade; under Reduce Motion, short fades.</summary>
-    public static double RevealSeconds(bool shown, bool reduceMotion) =>
-        reduceMotion ? (shown ? 0.15 : 0.12) : (shown ? 0.32 : 0.20);
+    /// <summary>Reveal and dismiss in seconds: in with the standard settle, out quicker as a fade; under Reduce Motion, short fades.</summary>
+    public static double RevealSeconds(bool shown, bool reduceMotion) => PlayerTokens.Motion.Reveal(shown, reduceMotion);
 
     /// <summary>The rise the card makes as it appears (none under Reduce Motion), in DIPs.</summary>
-    public static double RevealRise(bool reduceMotion) => reduceMotion ? 0 : 8;
+    public static double RevealRise(bool reduceMotion) => reduceMotion ? 0 : PlayerTokens.Motion.Rise;
 
     /// <summary>Long enough to read a note over the card: 2.5 s for a short one, up to 7 s.</summary>
     public static double NoteSeconds(string? note) => Math.Min(7, Math.Max(2.5, (note?.Length ?? 0) / 14.0));

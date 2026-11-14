@@ -58,8 +58,14 @@ public readonly record struct ArtworkPalette(ArtworkPalette.Rgb Accent, ArtworkP
 
     public static ArtworkPalette Neutral { get; } = new(new Rgb(0.50, 0.52, 0.62), new Rgb(0.13, 0.13, 0.17), false);
 
-    /// <summary>White type on <see cref="Deep"/> reaches at least this (WCAG AA for body text).</summary>
-    public const double DeepContrast = 7.0;
+    /// <summary>The desktop player card's flat tint: the deep shade with a little of the accent.</summary>
+    public Rgb CardTint => Deep.Mixed(Accent, FromArtwork ? 0.08 : 0.04);
+
+    /// <summary>
+    /// White type on <see cref="Deep"/> reaches at least this, so the card's quieter ink levels (docs/DESIGN.md) still
+    /// read 4.5:1 over a bright wallpaper.
+    /// </summary>
+    public const double DeepContrast = 9.0;
 
     /// <summary>The accent carries the big title at the wash's top: AA for large type.</summary>
     public const double AccentContrast = 3.0;
