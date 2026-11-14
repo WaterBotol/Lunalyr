@@ -124,11 +124,14 @@ struct SettingsDetail: View {
     private var pageWithTitle: some View {
         GeometryReader { proxy in
             let margins = Self.margins(for: proxy.size.width)
-            // Pages built on `ThemedForm(title:)` draw their own title band and
-            // column; only the split Timing & sources page needs both here.
-            let drawsOwnTitle = page != .lyrics
+            // The window draws the page's title in its band; Timing & sources,
+            // split into "This song" and "Every song", has none (SPEC §8).
+            // `ThemedForm` lays out its own 600 pt column 40 from the sidebar;
+            // only the split page needs the margins here.
+            let showsTitle = page != .lyrics
+            let drawsOwnColumn = page != .lyrics
             VStack(alignment: .leading, spacing: 0) {
-                if !drawsOwnTitle {
+                if showsTitle {
                     Text(page.title)
                         .font(LunalyrDesign.Studio.TypeScale.title)
                         .foregroundStyle(Color.studio(.ink))
@@ -139,8 +142,8 @@ struct SettingsDetail: View {
                 }
                 SettingsStatusHeader()
                 pageContent
-                    .contentMargins(.leading, drawsOwnTitle ? 0 : margins.leading, for: .scrollContent)
-                    .contentMargins(.trailing, drawsOwnTitle ? 0 : margins.trailing, for: .scrollContent)
+                    .contentMargins(.leading, drawsOwnColumn ? 0 : margins.leading, for: .scrollContent)
+                    .contentMargins(.trailing, drawsOwnColumn ? 0 : margins.trailing, for: .scrollContent)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)

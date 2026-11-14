@@ -57,8 +57,9 @@ struct LyricColourSection: View {
                 .revealRow()
             }
             InspectorCaption("Text backing keeps pastels readable on bright wallpapers.", more: "Automatic text backing helps the pastels stay visible on bright wallpapers. Colours fade between shades and hold almost still with Reduce Motion on.")
-            Divider()
+            // Space, not a rule, sets the highlight apart (docs/DESIGN.md: no decorative dividers).
             LyricHighlightColourControls()
+                .padding(.top, LunalyrDesign.Studio.Layout.inspectorRowSpacing)
         }
         .lunalyrReveal(options.mode)
         .lunalyrReveal(options.customHex.count)
