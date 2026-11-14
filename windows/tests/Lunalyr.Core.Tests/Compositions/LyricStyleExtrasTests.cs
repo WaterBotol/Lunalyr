@@ -19,7 +19,7 @@ public class LyricStyleExtrasTests
     public void EditorialAmountChangesTheType()
     {
         EditorialLine Set(double amount) => EditorialSetting.Layout(Words, new bool[Words.Length], 44, 11, 0, wordTimed: true,
-            editorial: true, evenRunsAlternate: true, editorialAmount: amount);
+            editorial: true, composition: CompositionKind.ConstellationEditorial, editorialAmount: amount);
         var low = Set(0);
         var high = Set(1);
         Assert.NotEqual(low.Runs.Select(run => run.Metrics), high.Runs.Select(run => run.Metrics));

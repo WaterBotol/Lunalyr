@@ -794,18 +794,15 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     {
         var ink = InkAt(inkTime);
         var planKind = kind ?? Kind;
-        var connections = wordTimed && planKind.HasConnections();
         var editorialAmount = EditorialAmountFor(editorial);
         var spec = new PlanSpec(
             BaseSize: baseSize, MinimumSize: 11 * Scale, LineIndex: lineIndex, WordTimed: wordTimed, Editorial: editorialAmount > 0,
-            Heavy: heavy, MaxWidth: maxWidth, Spacing: baseSize * ConstellationLayout.Spacing(connections),
-            LineSpacing: baseSize * 0.30, Fit: fit,
+            Heavy: heavy, MaxWidth: maxWidth, Fit: fit,
             RasterBoost: wordTimed ? 1.12 : 1.0,
             Shadow: wordTimed ? new ShadowSpec(0.52f, Points(7) * 0.5f, Points(2)) : new ShadowSpec(0.32f, Points(8) * 0.5f, Points(2)),
             Colour: TextColour, ReadingColour: LyricInks.Vector(ink.Base.Reading), LineReadingSize: baseSize * 0.38,
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
-            Connections: connections, Spread: StyleShown.ConstellationSpread,
-            EvenRunsAlternate: planKind == CompositionKind.ConstellationEditorial, EditorialAmount: editorialAmount,
+            Kind: FlowKind(planKind), Spread: StyleShown.ConstellationSpread, EditorialAmount: editorialAmount,
             RandomFonts: StyleShown.RandomFonts,
             TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
@@ -814,7 +811,6 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         {
             var box = BackingVocalLayout.Box(Stage);
             var backingKind = BackingFor(planKind);
-            var backingConnections = backingKind.HasConnections();
             var backing = new BackingPlan[groups.Count];
             for (var g = 0; g < groups.Count; g++)
             {
@@ -824,9 +820,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                     BaseSize = baseSize * 0.5, LineIndex = backingSeed + group.Id,
                     Editorial = EditorialAmountFor(backingKind.HasEditorialTypography()) > 0,
                     EditorialAmount = EditorialAmountFor(backingKind.HasEditorialTypography()), Heavy = false,
-                    MaxWidth = box.Width, Spacing = baseSize * 0.5 * ConstellationLayout.Spacing(backingConnections),
-                    LineSpacing = baseSize * 0.5 * 0.30, Fit = new LineFit(box, 1, 1), Connections = backingConnections,
-                    EvenRunsAlternate = backingKind == CompositionKind.ConstellationEditorial,
+                    MaxWidth = box.Width, Fit = new LineFit(box, 1, 1), Kind = FlowKind(backingKind),
                 }, null, null);
                 Decorate(sub, backingKind, group.Words, group.Glue, double.NaN, backingSeed + group.Id, baseSize * 0.5, box, ink);
                 backing[g] = new BackingPlan(group, sub);
@@ -835,6 +829,14 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         }
         return plan;
     }
+
+    /// <summary>
+    /// The flow layout a line is set in: its own for the flow layouts, else Editorial's typography (backing vocals and
+    /// credits under the rolling and stage layouts, which set no whole lines of their own).
+    /// </summary>
+    internal static CompositionKind FlowKind(CompositionKind kind) => kind is CompositionKind.Scattered
+        or CompositionKind.Constellation or CompositionKind.ConstellationEditorial or CompositionKind.Echo
+        ? kind : CompositionKind.Editorial;
 
     /// <summary>
     /// What a plan needs beyond its words, worked out once: each run's entrance (a mix picks per run), the highlight
@@ -850,7 +852,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         plan.Motions = new WordArrival[n];
         plan.HeldX = new double[n];
         plan.HeldY = new double[n];
-        plan.IdleFloat = kind.IdleFloat();
+        // Every flow layout but Echo lands its words without overshoot.
+        plan.Settles = FlowKind(kind) != CompositionKind.Echo;
         var highlights = false;
         for (var r = 0; r < n; r++)
         {
@@ -960,7 +963,6 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             * Matrix3x2.CreateTranslation(blockCentre.X, blockCentre.Y + (float)slide) * content;
         if (plan.Echo is { } echo) DrawEcho(dc, plan, echo, time, blockCentre, block, contentScale * swell, opacity * echoPresence);
         if (plan.Links.Length > 0) DrawLinks(dc, plan, Matrix3x2.CreateTranslation((float)origin.X, (float)origin.Y) * block, opacity);
-        var idle = OrganicMotion.IdleAmplitude(plan.IdleFloat, 1, reduce);
         foreach (var r in order)
         {
             var run = runs[r];
@@ -975,9 +977,13 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             if (!(visibility > 0.002)) continue;
             var heat = Math.Min(1, frame.Heat);
             var motion = plan.Motions[r];
-            var direction = r % 2 == 0 ? 1.0 : -1.0;
-            var transform = EntranceTransform.Make(presentation.Progress, presentation.Arrival, motion, size, direction, reduce);
-            var drift = LyricMotion.IdleDrift(run.Seed, Math.Floor(time * 12) / 12, idle);
+            // Words come in along the reading direction: from the right, or from the left in a right-to-left line.
+            var direction = run.RightToLeft ? -1.0 : 1.0;
+            // The calm layouts land without overshoot (their spring held at its rest); Echo keeps its small one.
+            var arrival = plan.Settles ? Math.Min(1, presentation.Arrival) : presentation.Arrival;
+            var transform = EntranceTransform.Make(presentation.Progress, arrival, motion, size, direction, reduce);
+            // Settled words hold still while they are read: the flow layouts no longer float idle words about.
+            var drift = WordPose.Rest;
             var lateral = LyricMotion.Jitter(run.Seed, 12) * 0.10;
             var swellCap = EditorialRunFrame.CappedSwell(
                 EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce), run.Inset.Width, ink.Unit.Width);
@@ -1062,8 +1068,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
     }
 
     /// <summary>
-    /// Echo's repeats of the phrase behind the live line: faint, at many sizes, two mirrored, each wandering slowly
-    /// and revealed with the line.
+    /// Echo's repeats of the phrase behind the live line: receding in steps above it and mirrored below it, in two
+    /// strengths, each wandering slowly and revealed with the line.
     /// </summary>
     private void DrawEcho(ID2D1DeviceContext dc, LinePlan plan, EchoPlan echo, double time, Vector2 blockCentre,
                           in Matrix3x2 block, double blockScale, double presence)
@@ -1074,7 +1080,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         if (!(revealed > 0)) return;
         for (var slot = 0; slot < EchoBackdrop.Repeats.Count; slot++)
         {
-            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, ReduceMotion);
+            // The repeats step off the live line's top and bottom edges, so they need its height.
+            var pose = EchoBackdrop.Pose(slot, echo.Seed, time, echo.BaseSize, ReduceMotion, plan.Block.Height);
             var ghost = pose.Repeat;
             var alpha = EchoBackdrop.Opacity(ghost, presence, StyleShown.EchoStrength);
             if (!(alpha > 0.002)) continue;

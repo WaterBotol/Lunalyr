@@ -91,8 +91,11 @@ internal sealed class LinePlan : IDisposable
     /// <summary>Per run: how much a held word grows across and up at full hold (see <see cref="EditorialRun.Sustain"/>).</summary>
     public double[] HeldX { get; set; } = [];
     public double[] HeldY { get; set; } = [];
-    /// <summary>The slow float settled words keep, for the composition the line is set in.</summary>
-    public double IdleFloat { get; set; } = Lunalyr.Core.Motion.OrganicMotion.DefaultLayoutFloat;
+    /// <summary>
+    /// Words land without overshoot: their spring is held at its rest instead of passing it. Every flow layout but Echo,
+    /// which keeps its small overshoot (the Mac's <c>ScatteredRunInk.settles</c>).
+    /// </summary>
+    public bool Settles { get; set; } = true;
 
     public PointD BlockOrigin => new((Content.Width - Block.Width) / 2, 0);
 
@@ -107,11 +110,12 @@ internal sealed class LinePlan : IDisposable
 }
 
 /// <summary>Everything a plan is set with.</summary>
+/// <param name="Kind">The flow layout the line is set in (its tiers, heights and rows, <see cref="FlowPlan"/>).</param>
 internal readonly record struct PlanSpec(
     double BaseSize, double MinimumSize, int LineIndex, bool WordTimed, bool Editorial, bool Heavy, double MaxWidth,
-    double Spacing, double LineSpacing, LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
+    LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
-    LyricInk? Ink = null, bool Connections = false, double Spread = 1, bool EvenRunsAlternate = false,
+    LyricInk? Ink = null, CompositionKind Kind = CompositionKind.Editorial, double Spread = 1,
     double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false);
 
 internal static class LinePlans
@@ -126,8 +130,7 @@ internal static class LinePlans
                                  IReadOnlyList<ReadingShares?>? runShares = null, string? translation = null)
     {
         var typography = EditorialSetting.Layout(words, glue, spec.BaseSize, spec.MinimumSize, spec.LineIndex, spec.WordTimed,
-                                                 spec.Editorial, runReadings, 1, spec.Connections, spec.Spread,
-                                                 spec.EvenRunsAlternate, spec.EditorialAmount);
+                                                 spec.Editorial, runReadings, 1, spec.Kind, spec.Spread, spec.EditorialAmount);
         var locale = TextKit.LocaleFor(string.Concat(words.Select(word => word.Text)));
         var count = typography.Runs.Count;
         var labels = new IDWriteTextLayout[count];
@@ -144,8 +147,10 @@ internal static class LinePlans
                 // "Randomise lyric fonts": each run takes one of the mix's faces by its seed (its weight as it would have it),
                 // ahead of the second face; its reading takes the same one.
                 var mix = spec.RandomFonts ? (int)(run.Seed % TextKit.MixFaces) : -1;
-                var face = mix >= 0 ? metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular
-                    : metrics.AlternateFace ? Face.Contrast : metrics.IsHero || spec.Heavy ? Face.Heavy : Face.Regular;
+                // The focal word is set in the heavy cut too (the Mac's hero font).
+                var heavy = metrics.IsHero || metrics.IsFocal || spec.Heavy;
+                var face = mix >= 0 ? heavy ? Face.Heavy : Face.Regular
+                    : metrics.AlternateFace ? Face.Contrast : heavy ? Face.Heavy : Face.Regular;
                 labels[r] = kit.Layout(run.Label, face, (float)metrics.Size, locale, run.RightToLeft, mix: mix);
                 var label = labels[r].Metrics;
                 double width = label.Width, height = label.Height;
@@ -162,12 +167,16 @@ internal static class LinePlans
                 slots[r] = EditorialFlow.Slot(units[r], metrics.Rotation, run.Inset, metrics.WaveOffset);
             }
             var centres = new PointD[count];
-            var alignment = spec.WordTimed ? typography.Setting.Rows : RowAlignment.Center;
-            // The constellations scatter into more room between rows on fuller lines.
-            var lineSpacing = spec.Connections ? spec.BaseSize * ConstellationLayout.LineSpacing(true, spec.WordTimed, typography.Fullness)
-                : spec.LineSpacing;
-            var block = EditorialFlow.Place(slots, spec.MaxWidth, spec.Spacing, lineSpacing, alignment,
-                                            typography.RightToLeft, centres);
+            // How the layout uses the stage (the Mac's FlowPlan): its measure, gaps, rows, steps and field, in ems.
+            var flow = FlowPlan.Make(spec.Kind, typography.Setting.Rows, spec.WordTimed, typography.Fullness);
+            var em = spec.BaseSize;
+            var breaks = new bool[count];
+            for (var r = 0; r < count; r++) breaks[r] = typography.Runs[r].Metrics.BreakBefore;
+            var shifts = flow.RowShifts is { } steps ? steps.Select(step => step * em).ToArray() : [];
+            var measure = flow.Measure is { } wrap ? Math.Min(spec.MaxWidth, wrap * em) : spec.MaxWidth;
+            var block = EditorialFlow.Place(slots, measure, em * flow.Spacing, em * flow.LineSpacing, flow.Alignment,
+                                            typography.RightToLeft, centres, breaks, flow.Balanced, shifts,
+                                            flow.Field * em);
 
             IDWriteTextLayout? lineLayout = null;
             var content = block;

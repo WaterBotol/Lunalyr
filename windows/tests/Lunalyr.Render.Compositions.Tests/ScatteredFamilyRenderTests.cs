@@ -464,7 +464,8 @@ public sealed class ScatteredFamilyRenderTests : IDisposable
         var columns = InkedColumns(pixels, Width, Height, 0, Height);
         var widest = Gaps(columns).DefaultIfEmpty(0).Max();
         var metrics = ViewportMetrics.For(Width, Height, Scale, LyricStyle.Default.SizeFraction);
-        var em = EditorialSetting.Layout(lines[4].Words, [false, false], metrics.BaseSize, 11, 4, true, false).Runs[0].Metrics.Size;
+        var em = EditorialSetting.Layout(lines[4].Words, [false, false], metrics.BaseSize, 11, 4, true, false,
+                                         composition: CompositionKind.Scattered).Runs[0].Metrics.Size;
         Assert.InRange(widest / em, 0.15, 0.55);
     }
 

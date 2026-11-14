@@ -23,8 +23,7 @@ public class ScatteredFamilyTests
     {
         words ??= KeepTheLight;
         return EditorialSetting.Layout(words, new bool[words.Count], size, 11, 0, wordTimed: true,
-                                       editorial: kind.HasEditorialTypography(), connections: kind.HasConnections(),
-                                       spread: spread, evenRunsAlternate: kind == CompositionKind.ConstellationEditorial);
+                                       editorial: kind.HasEditorialTypography(), composition: kind, spread: spread);
     }
 
     // ---- The compositions ----------------------------------------------------------------------------------------
@@ -44,9 +43,6 @@ public class ScatteredFamilyTests
         Assert.True(CompositionKind.ConstellationEditorial.HasEditorialTypography());
         Assert.False(CompositionKind.Constellation.HasEditorialTypography());
         Assert.False(CompositionKind.Echo.ArrivalOnly());
-        Assert.Equal(1.0, CompositionKind.Constellation.IdleFloat());
-        Assert.Equal(0.8, CompositionKind.Echo.IdleFloat());
-        Assert.Equal(0.6, CompositionKind.Scattered.IdleFloat());
     }
 
     [Fact]
@@ -87,38 +83,48 @@ public class ScatteredFamilyTests
     }
 
     [Fact]
-    public void ConstellationWordsSitAtScatteredHeightsAndHeldWordsCarryTheFigure()
+    public void ConstellationStarsSitAtDeliberateHeightsAroundTheFocalWord()
     {
         LyricWord[] words =
         [
             new("Paper", 10, 10.3), new("boats", 10.3, 10.6), new("sailing", 10.6, 12.2), new("down", 12.2, 12.5),
             new("avenue", 12.5, 12.8), new("tonight", 12.8, 13.1), new("again", 13.1, 13.4),
         ];
-        var scattered = Set(CompositionKind.Scattered, 100, words: words);
         var linked = Set(CompositionKind.Constellation, 100, words: words);
-        var heights = linked.Runs.Select(run => run.Metrics.WaveOffset).ToArray();
-        // Setting 0 has no wave: a constellation still scatters its words over about two base sizes.
-        Assert.All(scattered.Runs, run => Assert.Equal(0, run.Metrics.WaveOffset, 9));
-        Assert.True(heights.Max() - heights.Min() > 60, string.Join(", ", heights));
-        Assert.All(heights, offset => Assert.InRange(Math.Abs(offset), 0, (1.05 + 0.42) * 100));
-        for (var r = 0; r < words.Length; r++)
+        var focal = linked.Runs.Single(run => run.Metrics.IsFocal);
+        Assert.Equal("sailing", focal.Source.Text);
+        // The focal word holds its row's line, at the focal tier; every other star climbs or dips by its own height.
+        Assert.Equal(0, focal.Metrics.WaveOffset);
+        Assert.Equal(104, focal.Metrics.Size, 9);
+        foreach (var run in linked.Runs.Where(run => !run.Metrics.IsFocal))
         {
-            var ratio = linked.Runs[r].Metrics.Size / scattered.Runs[r].Metrics.Size;
-            Assert.Equal(linked.Runs[r].Metrics.IsHero ? 1.06 : 0.96, ratio, 9);
+            var star = EditorialSetting.StarHeights[run.Index % EditorialSetting.StarHeights.Count];
+            // reach = 0.45 + 0.55 × fullness (7 runs: 1), wobble within ±0.5 × 0.18.
+            Assert.InRange(run.Metrics.WaveOffset, (star - 0.09) * 100 - 1e-9, (star + 0.09) * 100 + 1e-9);
+            Assert.Equal(0, run.Metrics.Rotation);
         }
-        // A short line scatters less (fullness), and a wider spread more.
+        // Neighbours alternate up and down, so no link is level.
+        Assert.True(linked.Runs[0].Metrics.WaveOffset < 0 && linked.Runs[1].Metrics.WaveOffset > 0);
+        // A short line reaches less, and a wider spread more.
         var shortLine = Set(CompositionKind.Constellation, 100, words: words[..2]);
         var shortWider = Set(CompositionKind.Constellation, 100, 1.8, words[..2]);
-        Assert.True(Math.Abs(shortWider.Runs[0].Metrics.WaveOffset) > Math.Abs(shortLine.Runs[0].Metrics.WaveOffset));
+        var shortStar = shortLine.Runs.First(run => !run.Metrics.IsFocal);
+        Assert.True(Math.Abs(shortWider.Runs[shortStar.Index].Metrics.WaveOffset) > Math.Abs(shortStar.Metrics.WaveOffset));
     }
 
     [Fact]
-    public void ConstellationEditorialSetsEveryOtherRunInTheSecondFace()
+    public void ConstellationEditorialSetsEveryOtherRunAndTheFocalStarInTheSecondFace()
     {
         LyricWord[] words = [.. Enumerable.Range(0, 8).Select(i => new LyricWord("word" + i, 10 + i * 0.3, 10.28 + i * 0.3))];
         var line = Set(CompositionKind.ConstellationEditorial, 60, words: words);
         for (var r = 0; r < words.Length; r++)
-            Assert.Equal(r % 2 == 0 && !line.Runs[r].Metrics.IsHero, line.Runs[r].Metrics.AlternateFace);
+            Assert.Equal(r % 2 == 0 || line.Runs[r].Metrics.IsFocal, line.Runs[r].Metrics.AlternateFace);
+        // The focal star (ties go to the later word) sits on a row of its own, its satellites above and below.
+        var focal = line.Runs.Single(run => run.Metrics.IsFocal);
+        Assert.Equal(7, focal.Index);
+        Assert.True(focal.Metrics.BreakBefore);
+        Assert.Equal(0, focal.Metrics.WaveOffset);
+        Assert.Equal(EditorialSetting.StarHeights[3] * 0.45 * 60, line.Runs[0].Metrics.WaveOffset, 9);
         Assert.All(Set(CompositionKind.Constellation, 60, words: words).Runs, run => Assert.False(run.Metrics.AlternateFace));
         Assert.All(Set(CompositionKind.Scattered, 60, words: words).Runs, run => Assert.False(run.Metrics.AlternateFace));
     }
@@ -133,10 +139,6 @@ public class ScatteredFamilyTests
         var huge = Enumerable.Range(0, 300).Select(i => new LyricWord("syllables", i, i + 0.5)).ToArray();
         Assert.Equal(0.52, ConstellationLayout.DensityScale(huge));
         Assert.Equal(new SizeD(920, 860), ConstellationLayout.FitArea(new SizeD(1000, 1000)));
-        Assert.Equal(0.34 + 0.96 * 0.5, ConstellationLayout.LineSpacing(true, true, 0.5), 9);
-        Assert.Equal(0.30, ConstellationLayout.LineSpacing(true, false, 1));
-        Assert.Equal(0.06, ConstellationLayout.Spacing(true));
-        Assert.Equal(0.02, ConstellationLayout.Spacing(false));
     }
 
     [Fact]
@@ -418,36 +420,54 @@ public class ScatteredFamilyTests
             for (var slot = 0; slot < 5; slot++)
             {
                 _ = EchoBackdrop.WanderSeed(seed, slot);
-                var pose = EchoBackdrop.Pose(slot, seed, 3, 40, false);
+                var pose = EchoBackdrop.Pose(slot, seed, 3, 40, false, 60);
                 Assert.True(double.IsFinite(pose.X) && double.IsFinite(pose.Y) && double.IsFinite(pose.Angle));
             }
-            _ = EchoBackdrop.RepeatAt(0, seed);
+            _ = EchoBackdrop.Side(seed);
         }
         Assert.Equal(EchoBackdrop.WanderSeed(-7, 2), EchoBackdrop.WanderSeed(7, 2));
     }
 
     [Fact]
-    public void EchoRepeatsThePhraseFiveTimesTwoMirroredAndTheSeedPicksTheLead()
+    public void EchoRepeatsInStepsOffTheLinesEdgesWithTwoStrengths()
     {
         Assert.Equal(5, EchoBackdrop.Repeats.Count);
-        Assert.Equal(2, EchoBackdrop.Repeats.Count(ghost => ghost.Mirrored));
-        Assert.All(EchoBackdrop.Repeats, ghost => Assert.InRange(ghost.Strength, 0.05, 0.12));
-        Assert.All(EchoBackdrop.Repeats, ghost => Assert.InRange(ghost.SizeShare, 0.2, 0.85));
-        Assert.Equal(EchoBackdrop.Repeats[0], EchoBackdrop.RepeatAt(0, 0));
-        Assert.Equal(EchoBackdrop.Repeats[3], EchoBackdrop.RepeatAt(0, 8));
-        Assert.Equal(EchoBackdrop.Repeats[3], EchoBackdrop.RepeatAt(0, -3));
-        Assert.Equal(EchoBackdrop.Repeats.ToHashSet(), Enumerable.Range(0, 5).Select(slot => EchoBackdrop.RepeatAt(slot, 2)).ToHashSet());
-        // At rest under Reduce Motion; wandering a little otherwise, never far.
-        var still = EchoBackdrop.Pose(1, 4, 30, 50, true);
-        Assert.Equal(still.RestX, still.X);
-        Assert.Equal(still.Repeat.Tilt, still.Angle);
-        var moving = EchoBackdrop.Pose(1, 4, 30, 50, false);
-        Assert.InRange(Math.Abs(moving.X - moving.RestX), 0, 50 * 0.10 + 1e-9);
-        Assert.InRange(Math.Abs(moving.Angle - moving.Repeat.Tilt), 0, 0.9 + 1e-9);
+        // Two strengths only: the repeat next to the line, and those further off.
+        Assert.Equal([0.08, 0.18], EchoBackdrop.Repeats.Select(ghost => ghost.Strength).Distinct().Order());
+        // Three rise above the line, smaller and fainter with each step; two are mirrored below it as a reflection.
+        var above = EchoBackdrop.Repeats.Where(ghost => ghost.Down < 0).ToArray();
+        var below = EchoBackdrop.Repeats.Where(ghost => ghost.Down > 0).ToArray();
+        Assert.Equal(3, above.Length);
+        Assert.All(above, ghost => Assert.False(ghost.Mirrored));
+        Assert.All(below, ghost => Assert.True(ghost.Mirrored));
+        for (var k = 1; k < above.Length; k++)
+        {
+            Assert.True(above[k].SizeShare < above[k - 1].SizeShare);
+            Assert.True(above[k].Down < above[k - 1].Down);
+        }
+        Assert.All(EchoBackdrop.Repeats, ghost => Assert.Equal(0, ghost.Tilt));
+        // The seed picks the side the echo drifts to: lines alternate.
+        Assert.Equal(1, EchoBackdrop.Side(4));
+        Assert.Equal(-1, EchoBackdrop.Side(3));
+        Assert.Equal(-1, EchoBackdrop.Side(-3));
+        // At rest under Reduce Motion, stepped off the nearer edge of a 60-pixel line; wandering a little otherwise.
+        var still = EchoBackdrop.Pose(0, 4, 30, 50, true, 60);
+        Assert.Equal(0.30 * 50, still.X, 9);
+        Assert.Equal(-30 - 0.48 * 50, still.Y, 9);
+        Assert.Equal(0, still.Angle);
+        var mirrored = EchoBackdrop.Pose(3, 3, 30, 50, true, 60);
+        Assert.Equal(30 + 0.58 * 50, mirrored.Y, 9);
+        // Mirrored by the side: the last repeat leans the other way on an odd line.
+        Assert.Equal(0.30 * 50, EchoBackdrop.Pose(4, 3, 30, 50, true, 60).X, 9);
+        var moving = EchoBackdrop.Pose(1, 4, 30, 50, false, 60);
+        Assert.InRange(Math.Abs(moving.X - moving.RestX), 0, 50 * 0.08 + 1e-9);
+        Assert.InRange(Math.Abs(moving.Y - moving.RestY), 0, 50 * 0.03 + 1e-9);
+        Assert.InRange(Math.Abs(moving.Angle), 0, 0.4 + 1e-9);
         Assert.Equal(0.1 * 0.5 * 1.5, EchoBackdrop.Opacity(new EchoRepeat(1, 0, 0, 0, 0.1, false), 0.5, 1.5), 9);
-        // A ghost is shrunk to keep within two thirds of the stage, never grown.
+        // A ghost is shrunk to keep within the title-safe stage (90%), never grown.
         Assert.Equal(1, EchoBackdrop.Fit(new SizeD(10, 5), new SizeD(1200, 600), still));
-        Assert.True(EchoBackdrop.Fit(new SizeD(4000, 50), new SizeD(1200, 600), still) < 0.3);
+        var wide = EchoBackdrop.Fit(new SizeD(4000, 50), new SizeD(1200, 600), still);
+        Assert.Equal(((1080 / 2.0 - 0.30 * 50) - 4) * 2 / (4000 * 1.02), wide, 9);
     }
 
     [Fact]

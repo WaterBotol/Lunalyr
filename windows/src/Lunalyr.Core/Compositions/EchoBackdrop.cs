@@ -1,7 +1,8 @@
-// Echo's backdrop: the phrase repeated behind the live line. The table of repeats and which one leads are
-// re-implemented from the description in docs/compositions/scattered.md (EchoBackdrop in LyricComposition.swift traces
-// back to the squashed Verso import). Lunalyr's own parts are ported as they are: the drift seeds and wander, the fit
-// to the stage, the reveal sweep (LyricSweepMask) and the tint and strength.
+// Echo's backdrop: the phrase repeated behind the live line. The first table of repeats was re-implemented from the
+// description in docs/compositions/scattered.md (EchoBackdrop in LyricComposition.swift traces back to the squashed
+// Verso import). Test Build 88's table (repeats stepping off the line's edges, two strengths), the side the seed picks,
+// the drift seeds and wander, the fit to the title-safe stage, the reveal sweep (LyricSweepMask) and the tint and
+// strength are Lunalyr's own and ported.
 
 using Lunalyr.Core.Motion;
 
@@ -9,11 +10,11 @@ namespace Lunalyr.Core.Compositions;
 
 /// <summary>One repeat of the phrase in Echo's table.</summary>
 /// <param name="SizeShare">Type size as a share of the base size.</param>
-/// <param name="Across">Rightward from the line's centre, in steps of 3.2 base sizes.</param>
-/// <param name="Down">Downward from the line's centre, in steps of 1.5 base sizes.</param>
+/// <param name="Across">Sideways from the line's centre, in base sizes (mirrored by the line's seed, <see cref="EchoBackdrop.Side"/>).</param>
+/// <param name="Down">From the line's nearer edge, in base sizes: negative rises above the line, positive falls below it.</param>
 /// <param name="Tilt">Degrees.</param>
 /// <param name="Strength">Opacity, before the line's presence and the Repeats setting.</param>
-/// <param name="Mirrored">Drawn upside down (reflected about its horizontal axis).</param>
+/// <param name="Mirrored">Drawn upside down (reflected about its horizontal axis), as a reflection in glass.</param>
 public readonly record struct EchoRepeat(double SizeShare, double Across, double Down, double Tilt, double Strength, bool Mirrored);
 
 /// <summary>Where a repeat is drawn on one frame, relative to the line's centre (base-size units).</summary>
@@ -33,14 +34,18 @@ public static class EchoBackdrop
     /// <summary>The soft edge of the reveal sweep, as a share of the phrase.</summary>
     public const double Feather = 0.2;
 
-    /// <summary>The five repeats (see docs/compositions/scattered.md for the values).</summary>
+    /// <summary>
+    /// The five repeats (the Mac's Test Build 88 table): they recede in steps from the live line, smaller and fainter
+    /// with each step away, three rising above it and two mirrored below it as a reflection. Two strengths only: the
+    /// repeat next to the line, and those further off.
+    /// </summary>
     public static IReadOnlyList<EchoRepeat> Repeats { get; } =
     [
-        new(0.85, -0.30, -0.62, -2.0, 0.055, true),
-        new(0.42, 0.46, -0.44, 1.5, 0.085, false),
-        new(0.30, -0.50, 0.48, -1.0, 0.10, false),
-        new(0.60, 0.34, 0.66, 2.5, 0.065, true),
-        new(0.22, 0.10, -0.78, 0.0, 0.12, false),
+        new(0.62, 0.30, -0.48, 0, 0.18, false),
+        new(0.42, 0.62, -1.16, 0, 0.08, false),
+        new(0.28, 0.90, -1.66, 0, 0.08, false),
+        new(0.78, 0.0, 0.58, 0, 0.18, true),
+        new(0.52, -0.30, 1.44, 0, 0.08, true),
     ];
 
     /// <summary>A seed's magnitude: any value works, the most negative included.</summary>
@@ -49,36 +54,37 @@ public static class EchoBackdrop
     /// <summary>Each repeat's drift seed (wrapping, so it never traps however large or negative the seed).</summary>
     public static ulong WanderSeed(long seed, int slot) => unchecked(Magnitude(seed) * 31 + Magnitude(slot));
 
-    /// <summary>The repeat drawn in <paramref name="slot"/> (0…4): the line's seed shifts the table.</summary>
-    public static EchoRepeat RepeatAt(int slot, long seed)
-    {
-        var shift = (int)(Magnitude(seed) % (ulong)Repeats.Count);
-        return Repeats[(slot + shift) % Repeats.Count];
-    }
+    /// <summary>Which way the echo drifts: +1 (rightward) for an even seed, −1 for an odd one, so lines alternate.</summary>
+    public static double Side(long seed) => Magnitude(seed) % 2 == 0 ? 1 : -1;
 
-    /// <summary>The repeat in <paramref name="slot"/> at <paramref name="time"/>: its place and a slow seeded wander (none under Reduce Motion).</summary>
-    public static EchoRepeatPose Pose(int slot, long seed, double time, double baseSize, bool reduceMotion)
+    /// <summary>
+    /// The repeat in <paramref name="slot"/> at <paramref name="time"/>: its place, stepped off the line's top or bottom
+    /// edge (<paramref name="lineHeight"/> tall), and a slow seeded wander (none under Reduce Motion).
+    /// </summary>
+    public static EchoRepeatPose Pose(int slot, long seed, double time, double baseSize, bool reduceMotion, double lineHeight = 0)
     {
-        var repeat = RepeatAt(slot, seed);
+        var repeat = Repeats[Math.Clamp(slot, 0, Repeats.Count - 1)];
         var wander = WanderSeed(seed, slot);
         var drift = reduceMotion || !double.IsFinite(time) ? 0.0 : 1.0;
-        var restX = baseSize * repeat.Across * 3.2;
-        var restY = baseSize * repeat.Down * 1.5;
-        var x = restX + drift * LyricMotion.Noise2(wander, time * 0.09) * baseSize * 0.10;
-        var y = restY + drift * LyricMotion.Noise2(wander ^ 0x5EED, time * 0.07) * baseSize * 0.06;
-        var angle = repeat.Tilt + drift * LyricMotion.Noise(wander ^ 0xA9, time * 0.11) * 0.9;
+        var height = double.IsFinite(lineHeight) ? Math.Max(0, lineHeight) : 0;
+        var edge = (repeat.Down < 0 ? -height : height) / 2;
+        var restX = baseSize * repeat.Across * Side(seed);
+        var restY = edge + baseSize * repeat.Down;
+        var x = restX + drift * LyricMotion.Noise2(wander, time * 0.09) * baseSize * 0.08;
+        var y = restY + drift * LyricMotion.Noise2(wander ^ 0x5EED, time * 0.07) * baseSize * 0.03;
+        var angle = repeat.Tilt + drift * LyricMotion.Noise(wander ^ 0xA9, time * 0.11) * 0.4;
         return new EchoRepeatPose(repeat, x, y, angle, restX, restY);
     }
 
     /// <summary>
-    /// How much a repeat of <paramref name="ink"/> size is shrunk (never grown) to stay within two thirds of
-    /// <paramref name="stage"/> around its resting place.
+    /// How much a repeat of <paramref name="ink"/> size is shrunk (never grown) to stay within the title-safe area of
+    /// <paramref name="stage"/> (5% in from every edge) around its resting place.
     /// </summary>
     public static double Fit(SizeD ink, SizeD stage, in EchoRepeatPose pose)
     {
-        var area = new SizeD(stage.Width * 2 / 3, stage.Height * 2 / 3);
+        var area = new SizeD(stage.Width * 0.90, stage.Height * 0.90);
         var centre = new PointD(area.Width / 2 + pose.RestX, area.Height / 2 + pose.RestY);
-        return WordStageFit.Scale(ink, area, centre, 1.04, pose.Repeat.Tilt, 4);
+        return WordStageFit.Scale(ink, area, centre, 1.02, pose.Repeat.Tilt, 4);
     }
 
     /// <summary>A repeat's opacity: its strength times the line's presence and the Repeats setting.</summary>

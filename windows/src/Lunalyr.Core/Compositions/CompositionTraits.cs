@@ -1,6 +1,6 @@
 // What each composition is called and the traits that steer the shared stage code: re-implemented from the
 // description in docs/compositions/shared.md and scattered.md (LyricComposition in LyricComposition.swift traces back
-// to the squashed Verso import). The idle float bases are Lunalyr's own (OrganicMotion.idleAmplitude).
+// to the squashed Verso import). The flow layouts' gaps and rows are FlowPlan's (EditorialSetting.cs).
 
 using Lunalyr.Core.Motion;
 
@@ -73,12 +73,6 @@ public static class CompositionTraits
     /// <summary>A second, contrasting typeface and a wider range of sizes.</summary>
     public static bool HasEditorialTypography(this CompositionKind kind) =>
         kind is CompositionKind.Editorial or CompositionKind.ConstellationEditorial;
-
-    /// <summary>The base of the slow float settled words keep (<see cref="OrganicMotion.IdleAmplitude"/>).</summary>
-    public static double IdleFloat(this CompositionKind kind) =>
-        kind.HasConnections() ? OrganicMotion.ConnectedLayoutFloat
-        : kind == CompositionKind.Echo ? OrganicMotion.EchoLayoutFloat
-        : OrganicMotion.DefaultLayoutFloat;
 }
 
 /// <summary>The constellations' line-level quantities (see docs/compositions/scattered.md).</summary>
@@ -110,13 +104,6 @@ public static class ConstellationLayout
 
     /// <summary>The share of the stage a constellation line is fitted into (92% × 86%).</summary>
     public static SizeD FitArea(SizeD stage) => new(stage.Width * 0.92, stage.Height * 0.86);
-
-    /// <summary>Gap between runs, as a share of the base size.</summary>
-    public static double Spacing(bool connections) => connections ? 0.06 : 0.02;
-
-    /// <summary>Gap between rows, as a share of the base size: word-timed constellations scatter into more room.</summary>
-    public static double LineSpacing(bool connections, bool wordTimed, double fullness) =>
-        connections && wordTimed ? 0.34 + 0.96 * fullness : 0.30;
 
     /// <summary>
     /// A link's alpha: the Links opacity, brighter with the heat of either end (to at most 0.75), times the smaller of

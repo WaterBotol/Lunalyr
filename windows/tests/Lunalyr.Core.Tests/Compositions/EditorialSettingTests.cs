@@ -21,28 +21,138 @@ public class EditorialSettingTests
     }
 
     [Fact]
-    public void AHeldWordLeansHarderThanItsNeighbours()
+    public void AHeldWordIsTheFocalWordAndSetsTheSpread()
     {
         LyricWord[] words = [new("we", 10, 10.3), new("keep", 10.3, 10.6), new("dreaming", 10.6, 12.4), new("on", 12.4, 12.7)];
         var line = EditorialSetting.Layout(words, new bool[words.Length], 100, 11, 2, wordTimed: true, editorial: true);
         Assert.Equal(4, line.Runs.Count);
         var dreaming = line.Runs[2].Metrics;
         Assert.True(dreaming.IsHero);
+        Assert.True(dreaming.IsFocal);
         Assert.True(dreaming.Uppercased, "setting 2 capitalises heroes");
         Assert.Equal("DREAMING", line.Runs[2].Label);
-        Assert.False(dreaming.AlternateFace);
+        // Editorial's focal word: the focal tier, in the second face, on a row of its own (and the rest under it).
+        Assert.Equal(108, dreaming.Size, 9);
+        Assert.True(dreaming.AlternateFace);
+        Assert.True(dreaming.BreakBefore);
+        Assert.True(line.Runs[3].Metrics.BreakBefore);
+        // The kicker ("we keep") and the function word ("on") are the small tier; everything level and upright.
         foreach (var other in new[] { 0, 1, 3 })
         {
             Assert.False(line.Runs[other].Metrics.IsHero);
-            Assert.InRange(line.Runs[other].Metrics.Size, 64, 70 * 1.1);
-            Assert.InRange(line.Runs[other].Metrics.Rotation, -1.4 * 2.1 - 1e-9, 1.4 * 2.1 + 1e-9);
+            Assert.Equal(60, line.Runs[other].Metrics.Size, 9);
         }
+        Assert.All(line.Runs, run => Assert.Equal(0, run.Metrics.Rotation));
+        Assert.All(line.Runs, run => Assert.Equal(0, run.Metrics.WaveOffset));
         // A function word is never leaned on, however long it is held.
         Assert.Equal(0, EditorialSetting.Held(new LyricWord("the", 0, 5), 0.3));
         Assert.Equal(0, EditorialSetting.Held(new LyricWord("Youre,", 0, 5), 0.3));
         // The same line always sets the same way.
         var again = EditorialSetting.Layout(words, new bool[words.Length], 100, 11, 2, wordTimed: true, editorial: true);
         Assert.Equal(line.Runs.Select(run => run.Metrics), again.Runs.Select(run => run.Metrics));
+    }
+
+    [Fact]
+    public void TheFocalWordIsTheMostLeanedOnThenTheLongestWordThatCarriesMeaning()
+    {
+        // Held longest wins: drag × 6 + length (at most ten).
+        LyricWord[] held = [new("tonight", 0, 0.3), new("rain", 0.3, 2.0), new("again", 2.0, 2.3)];
+        Assert.Equal(1, EditorialSetting.FocalRun(held, 0.3));
+        // Nothing held: the longest word that carries meaning; ties go to the later word.
+        LyricWord[] even = [new("under", 0, 0.3), new("neon", 0.3, 0.6), new("light", 0.6, 0.9), new("the", 0.9, 1.2)];
+        Assert.Equal(2, EditorialSetting.FocalRun(even, 0.3));
+        // Function words lead only when nothing else is there (then the longest).
+        Assert.Equal(0, EditorialSetting.FocalRun([new("the", 0, 1), new("me", 1, 1.2)], 0.4));
+        Assert.Null(EditorialSetting.FocalRun([new("...", 0, 1)], 0.4));
+        Assert.Null(EditorialSetting.FocalRun([], 0.4));
+        Assert.True(EditorialSetting.IsFunctionWord("The,"));
+    }
+
+    [Fact]
+    public void EachFlowLayoutSetsThreeTiersWithinARatioOfAboutOnePointEight()
+    {
+        foreach (var kind in new[] { CompositionKind.Editorial, CompositionKind.Scattered, CompositionKind.Constellation,
+                                     CompositionKind.ConstellationEditorial, CompositionKind.Echo })
+        {
+            var (focal, normal, minor) = EditorialSetting.Tiers(kind);
+            Assert.True(focal > normal && normal > minor, kind.ToString());
+            Assert.True(focal / minor <= 1.8 + 1e-9, kind.ToString());
+        }
+        Assert.Equal((1.08, 0.74, 0.60), EditorialSetting.Tiers(CompositionKind.Editorial));
+        Assert.Equal((0.98, 0.80, 0.66), EditorialSetting.Tiers(CompositionKind.Echo));
+        Assert.Equal((1.04, 0.72, 0.60), EditorialSetting.Tiers(CompositionKind.Scattered));
+    }
+
+    [Fact]
+    public void ScatteredTiltsAndLiftsItsLooseWordsAndKeepsTheFocalWordLevel()
+    {
+        LyricWord[] words = [new("keep", 10, 10.3), new("dreaming", 10.3, 12.4), new("under", 12.4, 12.7), new("neon", 12.7, 13)];
+        var line = EditorialSetting.Layout(words, new bool[words.Length], 100, 11, 0, wordTimed: true, editorial: false,
+                                           composition: CompositionKind.Scattered);
+        var focal = line.Runs[1].Metrics;
+        Assert.True(focal.IsFocal);
+        Assert.Equal(0, focal.Rotation);
+        Assert.Equal(0, focal.WaveOffset);
+        Assert.Equal("DREAMING", line.Runs[1].Label);
+        Assert.Equal(104, focal.Size, 9);
+        foreach (var run in line.Runs.Where(run => !run.Metrics.IsFocal))
+        {
+            // Turns of up to four steps of 0.7 × the setting's spread (1.3), lifts within ±0.26 em (setting 0 has no wave).
+            Assert.InRange(run.Metrics.Rotation, -4 * 0.7 * 1.3 - 1e-9, 4 * 0.7 * 1.3 + 1e-9);
+            Assert.InRange(run.Metrics.WaveOffset, -26 - 1e-9, 26 + 1e-9);
+            Assert.InRange(run.Metrics.Size, 72, 75);
+        }
+    }
+
+    [Fact]
+    public void EachFlowLayoutUsesTheStageItsOwnWay()
+    {
+        var editorial = FlowPlan.Make(CompositionKind.Editorial, RowAlignment.Trailing, true, 1);
+        Assert.Equal(new FlowPlan(0.02, 0, RowAlignment.Leading, 10, true, null, 10), editorial);
+        var constellation = FlowPlan.Make(CompositionKind.Constellation, RowAlignment.Center, true, 0.5);
+        Assert.Equal(4 * FlowPlan.Unit, constellation.Spacing, 9);
+        Assert.Equal(2 * FlowPlan.Unit, constellation.LineSpacing, 9);
+        Assert.Equal([-6 * FlowPlan.Unit, 6 * FlowPlan.Unit], constellation.RowShifts!);
+        Assert.Equal([6 * FlowPlan.Unit, -6 * FlowPlan.Unit],
+                     FlowPlan.Make(CompositionKind.Constellation, RowAlignment.Trailing, true, 1).RowShifts!);
+        Assert.Equal(FlowPlan.Unit, FlowPlan.Make(CompositionKind.Constellation, RowAlignment.Center, true, 1).LineSpacing, 9);
+        Assert.Equal(13, FlowPlan.Make(CompositionKind.ConstellationEditorial, RowAlignment.Center, true, 1).Measure);
+        Assert.Equal(13, FlowPlan.Make(CompositionKind.Echo, RowAlignment.Center, true, 1).Measure);
+        var scattered = FlowPlan.Make(CompositionKind.Scattered, RowAlignment.Leading, true, 1);
+        Assert.Equal(9, scattered.Measure);
+        Assert.Equal([-9 * FlowPlan.Unit, 7 * FlowPlan.Unit, -2 * FlowPlan.Unit], scattered.RowShifts!);
+        // A line sung as one phrase is one level sentence.
+        Assert.Equal(new FlowPlan(0.06), FlowPlan.Make(CompositionKind.Constellation, RowAlignment.Leading, false, 1));
+        Assert.Equal(new FlowPlan(0.02), FlowPlan.Make(CompositionKind.Editorial, RowAlignment.Leading, false, 1));
+    }
+
+    [Fact]
+    public void RowsBreakWhereAskedBalanceStepAndKeepTheirField()
+    {
+        SizeD[] slots = [new(100, 40), new(100, 40), new(100, 40), new(100, 40)];
+        var centres = new PointD[4];
+        // A forced break starts a new row however much room is left.
+        var size = EditorialFlow.Place(slots, 1000, 10, 5, RowAlignment.Leading, false, centres, [false, false, true, false]);
+        Assert.Equal(new SizeD(210, 85), size);
+        Assert.Equal(new PointD(50, 65), centres[2]);
+        // Balanced: 3 + 1 at 330 becomes 2 + 2 (the narrowest measure that still takes two rows).
+        size = EditorialFlow.Place(slots, 330, 10, 5, RowAlignment.Leading, false, centres, balanced: true);
+        Assert.Equal(210, size.Width, 0);
+        Assert.Equal(centres[0].Y, centres[1].Y);
+        Assert.NotEqual(centres[1].Y, centres[2].Y);
+        // Steps: each row shifted by its own amount (mirrored right to left); the block widens to keep them inside.
+        size = EditorialFlow.Place(slots, 210, 10, 5, RowAlignment.Center, false, centres, rowShifts: [-20, 20]);
+        Assert.Equal(250, size.Width, 9);
+        Assert.Equal(50, centres[0].X, 9);
+        Assert.Equal(90, centres[2].X, 9);
+        EditorialFlow.Place(slots, 210, 10, 5, RowAlignment.Center, true, centres, rowShifts: [-20, 20]);
+        Assert.Equal(200, centres[0].X, 9);
+        // One row: no step.
+        size = EditorialFlow.Place(slots[..1], 210, 10, 5, RowAlignment.Center, false, centres, rowShifts: [-20, 20]);
+        Assert.Equal(100, size.Width);
+        // The field: rows align inside it, never past the measure.
+        Assert.Equal(400, EditorialFlow.Place(slots[..1], 1000, 10, 5, RowAlignment.Leading, false, centres, field: 400).Width);
+        Assert.Equal(300, EditorialFlow.Place(slots[..1], 300, 10, 5, RowAlignment.Leading, false, centres, field: 400).Width);
     }
 
     [Fact]

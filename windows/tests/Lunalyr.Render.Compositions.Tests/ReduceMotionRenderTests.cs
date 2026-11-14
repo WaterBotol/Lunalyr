@@ -153,10 +153,12 @@ public sealed class ReduceMotionRenderTests : IDisposable
         Assert.True(Lit(a) > 100);
         var later = Difference(a, Frame(calm, still, 4.05));
         Assert.True(later == 0, $"{id} moved {later} pixels while held");
-        // With motion the words float (and Echo's repeats wander) meanwhile.
+        // With motion too, settled words hold still while they are read (Mac Test Build 88: the flow layouts no longer
+        // float idle words about); only Echo's repeats may wander.
         using var moving = Layer(id);
         var full = Held(reduceMotion: false);
-        Assert.True(Difference(Frame(moving, full, 3.6), Frame(moving, full, 4.05)) > 0, $"{id} held still with full motion");
+        var drift = Difference(Frame(moving, full, 3.6), Frame(moving, full, 4.05));
+        Assert.True(drift == 0 || id == "echo", $"{id} moved {drift} pixels while held with full motion");
         Assert.Empty(_sink.Entries);
     }
 }
