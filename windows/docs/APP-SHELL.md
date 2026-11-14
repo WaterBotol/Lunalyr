@@ -341,7 +341,7 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `textBacking` | `0.35` | 0–1, "Text backing" when not automatic | `custom.textBacking` |
 | `useMotionArtwork` | `true` | Covers › Use animated covers (Match the music, Apple Music songs) | `useMotionArtwork` |
 | `motionPlacement` | `"fill"` | Covers › Placement: `fill`, `fillTop`, `fillBottom`, `fit` | `motionPlacement` |
-| `motionBlur` | `5` | 0–25, Covers › Softening (reaches the cover through the scene; Reset Adjustments puts it back) | `motionBlur` |
+| `motionBlur` | `5` | 0–25, Covers › Softening (reaches the cover through the scene; Reset adjustments puts it back) | `motionBlur` |
 | `motionExclusions` | `[]` | Covers › Excluded albums: each the artist and album in lower case, joined by a vertical bar | `motionExclusions` |
 | `visualizerStyle` | `"silk"` | Wallpaper › Visualiser › Scene: `silk`, `aurora`, `tunnel`, `curtainAurora`, `fosforaAurora`, `wavefield`, `wavefieldSphere`, `starTrails`, `colourStrata`, `overprint`; the Mac's web scenes read as their native stand-ins (`wavefieldOriginal` → `wavefield`, `wavecore` → `fosforaAurora`, `light3D` → `starTrails`), anything else as `silk` | `custom.visualizerStyle` |
 | `audioReactiveEnabled` | `false` | Wallpaper › Music response › System audio: WASAPI loopback of the default output, analysed in memory only (`--demo` uses a built-in signal and never captures) | `custom.audioReactiveEnabled` |
@@ -438,7 +438,10 @@ Mac's values and `AppSettings.SceneReveal` maps them for the renderer.
 `src/Lunalyr.App/SettingsWindow.xaml(.cs)` and `src/Lunalyr.App/Settings/`: Mica, a NavigationView grouped as the
 Mac's sidebar is (Look: Lyric style, Wallpaper, Covers; Words: Timing, Readings; App: Music players, General,
 Performance; About in the footer), Windows 11 settings cards with Segoe Fluent Icons, light/dark/accent from the
-theme. The window opens at Lyric style (or `--settings-page`).
+theme. The window opens at Lyric style (or `--settings-page`), 1120 × 832 DIPs at every display scale (inside its
+display's work area less 24 DIPs, centred; `SettingsWindowSize`). Until 14 Nov 2026 it was a fixed 1400 × 1040 physical
+pixels, which left 200 % a 700-DIP window; a card's control moves under its title when its texts would get less than 200
+DIPs (docs/sweep/settings.md).
 
 - **Built in code, no runtime binding.** Each page (`LyricStylePage`, `TimingPage`, `SettingsPages.cs`) is built on
   first visit from `SettingsKit` rows: cards, toggles, menus, sliders with their value beside them, number boxes,
@@ -548,7 +551,7 @@ poster shows. A recording fills its box around its focus (`OnboardingClips.Frame
   start (`--login`): Windows started Lunalyr at sign-in, quietly.
 - **When:** as soon as WinUI is up (`AppHost.ShowPendingUi`), before the players and the wallpaper have started; the
   music and last steps say "Looking for players…" until they have, and follow from then on.
-- **Again:** Settings › General › Welcome › Show Welcome… shows it from the first step (one already up comes forward).
+- **Again:** Settings › General › Welcome › Show welcome… shows it from the first step (one already up comes forward).
   Shown again, finishing just closes: the last step has Done only.
 - **While it is up**, Settings asked for from the tray or a second launch brings the welcome forward instead (the Mac's
   Settings window defers to onboarding the same way). Open Settings at the end closes it first, then opens Settings.
@@ -877,7 +880,7 @@ The Mac's lyric cards (`LyricCard*.swift`, `SongAudioRecorder.swift`): a shareab
 song playing, made in a window of its own. Details, what was ported and what was checked: [milestones/M7.md](milestones/M7.md),
 "Lyric cards". Previews: `docs/previews/lyric-cards/` (made by `tools/LyricCardPreview`, the app's own exporter).
 
-- **Where it opens:** the tray flyout's "Lyric card" tile and Settings › General › "Open Lyric Card…" (both off while nothing
+- **Where it opens:** the tray flyout's "Lyric card" tile and Settings › General › "Open lyric card…" (both off while nothing
   plays), as on the Mac (its menu-bar tile and Settings › Share). The Mac has no card button on its desktop player, so
   neither has Windows. `AppHost.OpenLyricCard()` is there for the shortcut and `lunalyr://card` (other branches), and
   `--lyric-card` opens it for checks.
@@ -1005,7 +1008,7 @@ per track for the session. See [compositions/matching.md](compositions/matching.
 - **Legibility:** Automatic text backing (caption by type, as the Mac's), and "Text backing" 0–100% when it is off.
   The Mac's "Shade under the menu bar" has no Windows counterpart (the taskbar draws its own material) and isn't offered.
 - **Adjustments** (hidden for Your wallpaper): Motion speed 0.2–2× and Colour richness 40–180% (not for Image or video),
-  Darkening 0–200%, Pattern visibility 0–100% (Line patterns), Reset Adjustments (also resets Covers › Softening, as on
+  Darkening 0–200%, Pattern visibility 0–100% (Line patterns), Reset adjustments (also resets Covers › Softening, as on
   the Mac; disabled while all are as Lunalyr comes). Everything applies at once on the wallpaper and the preview.
   The Mac's Increase Contrast floor under Darkening has no Windows setting behind it yet. Its power-saving banner isn't
   on this page: Performance says what power saving is doing (see "Power saving").
@@ -1325,7 +1328,7 @@ What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5)
 
 ### Tap to sync
 
-- **Start:** Settings › Timing › This song ("Tap to Sync Lyrics…", "Stop Tap to Sync" while it listens) or the tray
+- **Start:** Settings › Timing › This song ("Tap to sync lyrics…", "Stop tap to sync" while it listens) or the tray
   flyout's "Tap to sync…" (the flyout closes first). Off with nothing playing.
 - **The panel:** a small Acrylic window, 440 wide, at the top of the display with the pointer, always on top, no title
   bar, not in Alt+Tab; light/dark from the App theme or `--theme`. It shows the hand, "Tap to sync lyrics", the
@@ -1344,9 +1347,9 @@ What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5)
   the next tap after a song change, a pause or other lyrics arriving; 30 s without a first tap or 15 s without the
   next one end it too; a result stays 8 s (3 s for a failure), longer while the pointer is over
   the panel. Stopping hands the keyboard back to the window that had it at once; a result keeps it until it closes.
-- **Undo:** the panel's Undo (Ctrl+Z), Settings' "Undo Tap to Sync" and the flyout's "Undo tap sync", offered while the
+- **Undo:** the panel's Undo (Ctrl+Z), Settings' "Undo tap to sync" and the flyout's "Undo tap sync", offered while the
   tap sync's offset is still the one in force for the song playing.
-- **Narrator:** the panel and every button are named (Stop is "Stop Tap to Sync", Undo "Undo Tap to Sync" with its
+- **Narrator:** the panel and every button are named (Stop is "Stop tap to sync", Undo "Undo tap to sync" with its
   Ctrl+Z); each tap is announced ("Tap 2 of 4"), and so is the result.
 - **Checked live** (M5 "Lyric tools"): taps from the Tap button and from key messages to the panel (a letter, Space
   with the Tap button focused, Esc). **Not yet live:** Enter, Ctrl+Z and swallowed keys on a result, the keyboard after
@@ -1355,7 +1358,7 @@ What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5)
 ### Find lyrics, a saved choice, importing
 
 - **Search:** the song's title and artist fill the fields when a song starts (pausing never wipes what was typed);
-  "Use Playing Song" puts them back. Search (or Enter in a field) asks **every enabled source** (`ILyricLookup.SearchAsync`,
+  "Use playing song" puts them back. Search (or Enter in a field) asks **every enabled source** (`ILyricLookup.SearchAsync`,
   `LyricService.LookupAsync` with `force`: no cache, no miss cache) under those words, for the song playing: the
   matches are listed, and the best one shows on the wallpaper as after any lookup (a search that finds nothing leaves
   the song without lyrics, as on the Mac). Off with `--no-network`.
@@ -1363,10 +1366,10 @@ What Settings › Timing and the tray flyout do to a song's lyrics (milestone 5)
   ("LRCLIB · Word-by-word"), and the ranking's own source-list line ("Match found · 1 other source agrees · showing",
   `LyricRanking.Annotate`); "The service didn’t confirm which recording it matched" and "Saved pronunciation readings"
   where they apply. Close matches not used follow with the recording check's reason ("Rejected: duration 3:58 vs
-  0:45"). Each has "Use for This Song" (Narrator: "Use LRCLIB for this song").
+  0:45"). Each has "Use for this song" (Narrator: "Use LRCLIB for this song").
 - **A choice** stops whatever the lookup was doing, shows at once and is saved for the **recording** (never for the
   words typed) through `LyricService.Pin` (`pin-<sha256>.json` in `{data}\Lyrics`, the existing saved-lyrics store). This
-  song then shows "Using your saved choice" with "Return to Automatic", which forgets it and asks every source again.
+  song then shows "Using your saved choice" with "Return to automatic", which forgets it and asks every source again.
 - **Import LRC or TTML…:** the Windows App SDK's file picker (`.lrc`, `.ttml`, `.xml`, `.txt`), up to 1 MB, decoded by
   `LyricTextDecoder` (UTF-8/16, Shift_JIS, GB18030, Big5, EUC-KR), TTML when the text starts with "<", LRC otherwise;
   shown as "Imported lyrics" and saved as the recording's choice. A file that can't be used says why and changes nothing.
@@ -1413,7 +1416,7 @@ In the app:
   write says why. Disabled in `--demo` and `--data` runs. Narrator hears "Lunalyr will start when you sign in." (or
   why it didn't change).
 - **Settings › General › Updates** (`Lunalyr.Shell.Updates.UpdateService`): the version, the update status and one
-  button: Check for Updates, Download and Install, Restart and Update. A progress bar shows while checking and
+  button: Check for updates, Download and install, Restart and update. A progress bar shows while checking and
   downloading. "Check for updates automatically" is `automaticUpdateChecks`. Without a built-in feed and key the row
   says "An update service hasn’t been set up for this build yet." (the Mac's words) and the button explains.
 - **Tray menu:** a downloaded, verified update adds **Restart to update to Lunalyr <version>**.
