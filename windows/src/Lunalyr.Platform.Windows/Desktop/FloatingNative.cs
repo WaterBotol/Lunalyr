@@ -13,7 +13,8 @@ internal static unsafe partial class FloatingNative
     public const int SW_HIDE = 0;
     public const uint SWP_NOZORDER = 0x4, SWP_FRAMECHANGED = 0x20, SWP_SHOWWINDOW = 0x40, SWP_NOOWNERZORDER = 0x200;
     public static readonly nint HWND_TOPMOST = -1;
-    public const nint IDC_ARROW = 32512, IDC_SIZEALL = 32646, IDC_SIZENWSE = 32642, IDC_HAND = 32649;
+    public const nint IDC_ARROW = 32512, IDC_SIZEALL = 32646, IDC_SIZENWSE = 32642, IDC_SIZENESW = 32643, IDC_SIZEWE = 32644,
+        IDC_SIZENS = 32645, IDC_HAND = 32649;
 
     // SHAppBarMessage
     public const uint ABM_GETTASKBARPOS = 5, ABM_GETAUTOHIDEBAREX = 0xB;

@@ -126,6 +126,30 @@ public class FloatingLyricsTests
         Assert.True(huge.MinY >= area.MinY);
     }
 
+    // Windows' own: any edge or corner resizes, so the shape (aspect) can change freely.
+    [Fact]
+    public void ResizingFromAnEdgeMovesOnlyThatEdgeWithinTheAreaAndTheMinimum()
+    {
+        var area = new FloatingRect(0, 0, 1000, 800);
+        var start = new FloatingRect(100, 100, 400, 150); // y up: bottom 100, top 250
+        Assert.Equal(new FloatingRect(100, 100, 500, 150), FloatingFrame.Resized(start, 100, 0, FloatingEdges.Right, area));
+        Assert.Equal(new FloatingRect(50, 100, 450, 150), FloatingFrame.Resized(start, -50, 0, FloatingEdges.Left, area));
+        Assert.Equal(new FloatingRect(100, 100, 400, 200), FloatingFrame.Resized(start, 0, 50, FloatingEdges.Top, area));
+        Assert.Equal(new FloatingRect(100, 40, 400, 210), FloatingFrame.Resized(start, 0, -60, FloatingEdges.Bottom, area));
+        // The bottom-right corner matches the Mac's corner grip.
+        Assert.Equal(FloatingFrame.Dragged(start, 100, -50, resizing: true, area),
+            FloatingFrame.Resized(start, 100, -50, FloatingEdges.Right | FloatingEdges.Bottom, area));
+        // Never past the area, never below the minimum, and the other edges stay put.
+        var wide = FloatingFrame.Resized(start, 5000, 0, FloatingEdges.Right, area);
+        Assert.Equal((100.0, 1000.0), (wide.MinX, wide.MaxX));
+        var narrow = FloatingFrame.Resized(start, -5000, 0, FloatingEdges.Right, area);
+        Assert.Equal(FloatingFrame.MinimumSize.Width, narrow.Width);
+        var tall = FloatingFrame.Resized(start, 0, 5000, FloatingEdges.Top, area);
+        Assert.Equal((100.0, 800.0), (tall.MinY, tall.MaxY));
+        var leftMost = FloatingFrame.Resized(start, -5000, 0, FloatingEdges.Left, area);
+        Assert.Equal((0.0, 500.0), (leftMost.MinX, leftMost.MaxX));
+    }
+
     // Ported from FloatingLyricsTests.swift: testFramesEncodeAndDisplaysFallBackToTheMainOne
     [Fact]
     public void FramesEncodeAndDisplaysFallBackToTheMainOne()

@@ -249,6 +249,24 @@ public static class FloatingFrame
         return Clamped(start.OffsetBy(dx, dy), area);
     }
 
+    /// <summary>
+    /// A resize by hand from <paramref name="edges"/> (Windows: any edge or corner). <paramref name="dx"/> and
+    /// <paramref name="dy"/> are the pointer's movement in points, y up. Each moving edge stays inside
+    /// <paramref name="area"/> and keeps the window at least <see cref="MinimumSize"/>; the other edges stay put.
+    /// </summary>
+    public static FloatingRect Resized(FloatingRect start, double dx, double dy, FloatingEdges edges, FloatingRect area)
+    {
+        double left = start.MinX, right = start.MaxX, bottom = start.MinY, top = start.MaxY;
+        if (edges.HasFlag(FloatingEdges.Right)) right = Between(right + dx, left + MinimumSize.Width, Math.Max(area.MaxX, left + MinimumSize.Width));
+        else if (edges.HasFlag(FloatingEdges.Left)) left = Between(left + dx, Math.Min(area.MinX, right - MinimumSize.Width), right - MinimumSize.Width);
+        // On screen, Top is the frame's MaxY (y up) and Bottom its MinY.
+        if (edges.HasFlag(FloatingEdges.Top)) top = Between(top + dy, bottom + MinimumSize.Height, Math.Max(area.MaxY, bottom + MinimumSize.Height));
+        else if (edges.HasFlag(FloatingEdges.Bottom)) bottom = Between(bottom + dy, Math.Min(area.MinY, top - MinimumSize.Height), top - MinimumSize.Height);
+        return new FloatingRect(left, bottom, right - left, top - bottom);
+    }
+
+    private static double Between(double value, double low, double high) => Math.Min(Math.Max(value, low), high);
+
     public static double[] Encode(FloatingRect rect) => [rect.MinX, rect.MinY, rect.Width, rect.Height];
 
     public static FloatingRect? Decode(IReadOnlyList<double>? values)

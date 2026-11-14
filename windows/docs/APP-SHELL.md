@@ -874,6 +874,12 @@ actions and notes of `LunalyrExtras.swift`. Logic in `src/Lunalyr.Shell/Extras/`
   `--link` keeps a link with quotes in it from adding flags (`--data`, `--stats`…). Links go to the instance using the
   default data folder. Uninstalling removes the key while it still opens that install. See [PACKAGING.md](PACKAGING.md).
 
+**Resizing the floating window (14 Nov, after the owner found the corner didn't resize):** in Edit position any edge or
+corner resizes, as a window's own border does (the Mac has only the corner grip, which stays): within 8 points of an
+edge, that edge moves (two near a corner), within the screen's work area and never below 220 × 64 points; the cursor
+shows the direction. `FloatingEditChrome.EdgesAt`, `FloatingFrame.Resized`. Every edit-mode drag is logged ("moving
+from…", "resizing from Right, Bottom…", "placed at…") so a drag that doesn't take shows in the log.
+
 ### The action HUD
 
 - **What:** a capsule with a Segoe Fluent Icons glyph (standing in for the Mac's SF Symbol) and the note, centred at

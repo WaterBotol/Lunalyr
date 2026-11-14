@@ -212,3 +212,4 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Lyric cards follow the text colour (mode, strength, custom colours) | PC (offscreen, `LyricCardPreview -colour`) | `docs/previews/lyric-style-extras/card-{albumDrift,sungSweep}.png` |
 | Remembered style on lyric cards | not ported | — |
 | Performance › On battery (`onBattery`: Everything stays on / Lighter effects only, the default / Line patterns instead / Album colours only), Windows' own wording | unit (`PowerSavingShellTests.OnBatteryReachesTheRendererAndDefaultsToLighterEffects`); a real unplug needs the owner | — |
+| Floating window resized from any edge or corner in Edit position (shape changes freely), within the work area and the minimum, drags logged | unit (`EditChromeResizesFromEveryEdgeAndCorner`, `ResizingFromAnEdgeMovesOnlyThatEdgeWithinTheAreaAndTheMinimum`); a real drag needs the owner | — |

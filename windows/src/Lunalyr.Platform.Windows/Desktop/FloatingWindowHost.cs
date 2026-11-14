@@ -114,7 +114,7 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     private FloatingDisplay _geometry;
     private MBox _rect;
     private nint _foregroundHook;
-    private (MBox Start, POINT Cursor, bool Resizing)? _drag;
+    private (MBox Start, POINT Cursor, FloatingEdges Edges)? _drag;
     private bool _donePressed;
 
     public FloatingWindowHost(IFloatingWindowSink sink, FloatingLyricsOptions options, Logger? logger = null)
@@ -384,7 +384,11 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         else
         {
             if (!GetCursorPos(out var cursor)) return;
-            _drag = (_rect, cursor, hit == FloatingHit.Resize);
+            var edges = FloatingEditChrome.EdgesAt(x, y, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
+            _drag = (_rect, cursor, edges);
+            _log.Info(edges == FloatingEdges.None
+                ? $"Floating lyrics: moving from {_rect.X},{_rect.Y} ({_rect.Width}x{_rect.Height})"
+                : $"Floating lyrics: resizing from {edges} ({_rect.Width}x{_rect.Height})");
         }
         SetCapture(_hwnd);
     }
@@ -393,7 +397,10 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     {
         if (_drag is not { } drag || !GetCursorPos(out var p)) return;
         var (dx, dy) = _geometry.Delta(p.X - drag.Cursor.X, p.Y - drag.Cursor.Y);
-        var frame = FloatingFrame.Dragged(_geometry.ToPoints(drag.Start), dx, dy, drag.Resizing, _geometry.Area);
+        var start = _geometry.ToPoints(drag.Start);
+        var frame = drag.Edges == FloatingEdges.None
+            ? FloatingFrame.Dragged(start, dx, dy, resizing: false, _geometry.Area)
+            : FloatingFrame.Resized(start, dx, dy, drag.Edges, _geometry.Area);
         var rect = _geometry.ToPixels(frame);
         if (rect != _rect) Move(rect);
     }
@@ -419,6 +426,7 @@ public sealed unsafe class FloatingWindowHost : IDisposable
         _drag = null;
         if (GetCapture() == _hwnd) ReleaseCapture();
         if (!store || _display is null) return;
+        _log.Info($"Floating lyrics: placed at {_rect.X},{_rect.Y}, {_rect.Width}x{_rect.Height}");
         // The display's frame is at the origin in points, so the window's frame is already relative to it.
         var relative = FloatingFrame.Relative(_geometry.ToPoints(_rect), _geometry.ScreenFrame);
         _sink.Placed(_display.Key, relative);
@@ -426,14 +434,19 @@ public sealed unsafe class FloatingWindowHost : IDisposable
 
     private void SetCursorFor(int x, int y)
     {
-        var id = _applied is { Editing: true }
-            ? HitAt(x, y) switch
+        var id = IDC_ARROW;
+        if (_applied is { Editing: true })
+        {
+            var edges = _drag?.Edges ?? FloatingEditChrome.EdgesAt(x, y, _rect.Width, _rect.Height, _display?.Monitor.Scale ?? 1);
+            id = _drag is null && HitAt(x, y) == FloatingHit.Done ? IDC_HAND : edges switch
             {
-                FloatingHit.Done => IDC_HAND,
-                FloatingHit.Resize => IDC_SIZENWSE,
+                FloatingEdges.Left or FloatingEdges.Right => IDC_SIZEWE,
+                FloatingEdges.Top or FloatingEdges.Bottom => IDC_SIZENS,
+                FloatingEdges.Left | FloatingEdges.Top or FloatingEdges.Right | FloatingEdges.Bottom => IDC_SIZENWSE,
+                FloatingEdges.Right | FloatingEdges.Top or FloatingEdges.Left | FloatingEdges.Bottom => IDC_SIZENESW,
                 _ => IDC_SIZEALL,
-            }
-            : IDC_ARROW;
+            };
+        }
         SetCursor(LoadCursor(0, id));
     }
 

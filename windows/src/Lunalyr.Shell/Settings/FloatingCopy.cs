@@ -20,7 +20,7 @@ public static class FloatingCopy
     public const string LockedCaption = "Clicks pass through the lyrics. Edit position lets you drag them; Done locks them again.";
     public const string EditPosition = "Edit position…";
     public const string Done = "Done";
-    public const string EditHelp = "Shows the floating lyrics with handles: drag to move, drag the corner to resize. They never take the keyboard.";
+    public const string EditHelp = "Shows the floating lyrics with handles: drag to move, drag an edge or the corner to resize. They never take the keyboard.";
     public const string DoneHelp = "Locks the floating lyrics in place; clicks pass through them again.";
     public const string ResetSize = "Reset size";
     public const string ResetHelp = "Forgets sizes and places set by hand; the window follows the text size again.";
