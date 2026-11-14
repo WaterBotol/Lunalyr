@@ -362,7 +362,7 @@ final class Settings: ObservableObject {
         shaderStyle = (d.string(forKey: "shaderStyle")).flatMap(ShaderStyle.init(rawValue:))
         useMotionArtwork = d.object(forKey: "useMotionArtwork") as? Bool ?? true
         let savedComposition = d.string(forKey: "lyricComposition")
-        lyricComposition = savedComposition == "automatic" ? nil : savedComposition.flatMap(LyricComposition.init(rawValue:)) ?? .constellationEditorial
+        lyricComposition = savedComposition == "automatic" ? nil : savedComposition.flatMap(LyricComposition.saved) ?? .constellation
         constellationSpread = d.object(forKey: "constellationSpread") as? Double ?? 1.0
         constellationLinkOpacity = d.object(forKey: "constellationLinkOpacity") as? Double ?? 0.20
         wordRevealByStyle = d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? [:]
@@ -446,7 +446,7 @@ final class Settings: ObservableObject {
         }
         let savedComposition = d.string(forKey: "lyricComposition")
         set(\.lyricComposition, savedComposition == "automatic" ? nil
-            : savedComposition.flatMap(LyricComposition.init(rawValue:)) ?? .constellationEditorial)
+            : savedComposition.flatMap(LyricComposition.saved) ?? .constellation)
         set(\.constellationSpread, d.object(forKey: "constellationSpread") as? Double ?? 1.0)
         set(\.constellationLinkOpacity, d.object(forKey: "constellationLinkOpacity") as? Double ?? 0.20)
         set(\.wordRevealByStyle, d.dictionary(forKey: "custom.wordRevealByStyle") as? [String: Bool] ?? [:])

@@ -249,8 +249,9 @@ enum ScatteredTypography {
         /// The line's focal word: set largest and heaviest, so each line
         /// has one clear place for the eye to land.
         var isFocal = false
-        /// Starts a new row of the flow (`FlowRowBreakKey`): Editorial and
-        /// Constellation + Editorial give the focal word a row of its own.
+        /// Starts a new row of the flow (`FlowRowBreakKey`). No current
+        /// layout sets it; the cut Editorial layouts gave the focal word a
+        /// row of its own.
         var breakBefore = false
     }
 
@@ -304,8 +305,7 @@ enum ScatteredTypography {
         let isFocal = key.wordTimed && index == focal
         let isMinor = !isFocal && functionWords.contains(cleaned)
 
-        let editorialAmount = key.fontIdentity.editorial ? key.fontIdentity.editorialAmount
-            : composition.hasEditorialTypography ? 1 : 0
+        let editorialAmount = key.fontIdentity.editorial ? key.fontIdentity.editorialAmount : 0
         // Whether the hash lets this word take the second face at the
         // current editorial amount.
         let takesAlternate = Double((value / 700_000) % 100) < editorialAmount * 100
@@ -321,9 +321,7 @@ enum ScatteredTypography {
         // Tier sizes, in ems of the base size.
         let tiers: (focal: CGFloat, normal: CGFloat, minor: CGFloat)
         switch composition {
-        case .editorial: tiers = (1.08, 0.74, 0.60)
         case .constellation: tiers = (1.04, 0.70, 0.60)
-        case .constellationEditorial: tiers = (1.06, 0.70, 0.60)
         case .echo: tiers = (0.98, 0.80, 0.66)
         default: tiers = (1.04, 0.72, 0.60)
         }
@@ -336,9 +334,6 @@ enum ScatteredTypography {
             // A held word that is not the focus still sits a step up.
             size = tiers.normal + 0.03 * jitter + 0.14 * style.sizeContrast * CGFloat(held)
         }
-        // Editorial's kicker -- the words before the focal one -- is set
-        // small, so the spread reads kicker, headline, then text.
-        if composition == .editorial, !isFocal, let focal, index < focal { size = tiers.minor }
         size = min(size, tiers.focal) * baseSize
 
         var alternate = false
@@ -346,28 +341,7 @@ enum ScatteredTypography {
         var uppercased = isHero && style.uppercaseHeroes
         var rotation = 0.0
         var offset: CGFloat = 0
-        var breakBefore = false
-        // Words before the focal word in Editorial: the small kicker.
-        let kicker = focal.map { index < $0 } ?? false
         switch composition {
-        case .editorial:
-            // A spread: a small kicker, the focal word alone on its own
-            // row in the second face, then the rest of the line under it.
-            // Level and upright; the contrast is in the type, not the tilt.
-            if let focal, focal > 0 { breakBefore = index == focal || index == focal + 1 }
-            else if let focal { breakBefore = index == focal + 1 }
-            alternate = editorialAmount > 0 && takesAlternate
-                && (isFocal || (!kicker && (value / 10_000) % 3 == 0))
-        case .constellationEditorial:
-            // The focal word is the bright star on a row of its own; the
-            // other words spread above and below it as satellites, every
-            // other one in the second face.
-            if let focal { breakBefore = (index == focal && focal > 0) || index == focal + 1 }
-            alternate = editorialAmount > 0 && takesAlternate && (isFocal || index % 2 == 0)
-            if !isFocal {
-                let height = starHeights[(index + 3) % starHeights.count]
-                offset = height * 0.45 * baseSize * CGFloat(key.spread)
-            }
         case .constellation:
             // A field of stars at deliberate heights; the focal word holds
             // its row's line and the others climb and dip around it.
@@ -401,8 +375,7 @@ enum ScatteredTypography {
             waveOffset: offset,
             uppercased: uppercased,
             alternateFace: alternate,
-            isFocal: isFocal,
-            breakBefore: breakBefore && count > 1
+            isFocal: isFocal
         )
     }
 }

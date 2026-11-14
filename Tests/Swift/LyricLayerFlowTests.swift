@@ -321,7 +321,7 @@ final class LyricLayerFlowTests: XCTestCase {
         model.notFound = false
         model.isLoading = false
         model.lines = lines
-        settings.lyricComposition = .editorial
+        settings.lyricComposition = .echo
         extras.lyricsHidden = false
         var placed: [(LyricLineStack.Item, CGFloat)] = []
         LyricLineStack.recorder = { items, offsets in placed = Array(zip(items, offsets)) }

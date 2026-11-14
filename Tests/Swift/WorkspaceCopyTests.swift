@@ -35,15 +35,6 @@ final class WorkspaceCopyTests: XCTestCase {
         }
     }
 
-    func testEditorialSwitchIsExplainedWhereTheLayoutAlreadyMixesFaces() {
-        // Editorial typography is built into these, so the note explains the
-        // switch rather than leaving it to do nothing visible.
-        for layout in LyricComposition.allCases {
-            XCTAssertEqual(WorkspaceCopy.editorialNote(layout: layout) != nil, layout.hasEditorialTypography, layout.title)
-        }
-        XCTAssertNotNil(WorkspaceCopy.editorialNote(layout: nil), "Custom Mix can pick Editorial")
-    }
-
     /// Animated covers are looked up only for songs playing in Music and
     /// never for streams, so neither may be told nothing was found.
     func testTheCoversPageNeverReportsALookupThatNeverRan() {

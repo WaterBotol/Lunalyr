@@ -79,7 +79,7 @@ final class LyricReviewFixesTests: XCTestCase {
     func testAGluedRunSharesOneSizeFaceAndSlotAndFillsTokenByToken() throws {
         let line = words(["So", "beau", "ti", "ful"], step: 0.4)
         let key = ScatteredTypography.Key(words: line, baseSize: 60, style: .forLine(4), mood: .neutral,
-            composition: .constellationEditorial, spread: 1, fontIdentity: LyricFontIdentity(settings: .shared),
+            composition: .constellation, spread: 1, fontIdentity: LyricFontIdentity(settings: .shared),
             glue: LyricRuns.glue(line, in: "So beautiful"))
         let layout = ScatteredTypography.layout(key, settings: .shared)
         XCTAssertEqual(layout.runs.count, 2, "two words, not four chips")
@@ -96,7 +96,7 @@ final class LyricReviewFixesTests: XCTestCase {
             let time = 10.3 + Double(step) / 200
             let next = layout.words.firstIndex { $0.source.start > time }
             let states = layout.words.map { ScatteredWordFrame.state($0, nextIndex: next, time: time,
-                                                                      composition: .constellationEditorial) }
+                                                                      composition: .constellation) }
             let frame = ScatteredRunFrame.make(run, states: states, reveals: false, ink: .white)
             XCTAssertGreaterThanOrEqual(frame.fill, last - 1e-9)
             if last >= 0 { XCTAssertLessThan(frame.fill - last, 0.05) }

@@ -61,8 +61,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
         switch composition {
         case .scattered: return .pop
         case .constellation: return .orbit
-        case .constellationEditorial, .echo: return .lift
-        case .editorial: return .fade
+        case .echo: return .lift
         case .spoken: return .glide
         case .cascade: return .lift
         case .cutout: return .cutoutFold
@@ -83,7 +82,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
 /// `ScatteredLyricText`; the rolling layouts use `SpokenTypographyView`.
 /// Both renderers share timestamp-derived word entrances and preview state.
 enum LyricComposition: String, CaseIterable, Identifiable {
-    case scattered, constellation, constellationEditorial, echo, editorial, spoken, cascade, cutout, hinge, broadside, portal, mosaic, torque, fable
+    case scattered, constellation, echo, spoken, cascade, cutout, hinge, broadside, portal, mosaic, torque, fable
 
     var id: String { rawValue }
 
@@ -91,9 +90,7 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         switch self {
         case .scattered: return "Scattered"
         case .constellation: return "Constellation"
-        case .constellationEditorial: return "Constellation + Editorial"
         case .echo: return "Echo"
-        case .editorial: return "Editorial"
         case .spoken: return "Spoken"
         case .cascade: return "Cascade"
         case .cutout: return "Cutout"
@@ -110,9 +107,7 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         switch self {
         case .scattered: return "Words set loose across the line."
         case .constellation: return "Fragments linked by hairlines, like a star chart."
-        case .constellationEditorial: return "Connected fragments with Editorial’s contrasting typefaces."
         case .echo: return "The phrase repeated at many sizes, some inverted."
-        case .editorial: return "Two typefaces in one line, set like a spread."
         case .spoken: return "Each sung word takes focus; recent words settle around it."
         case .cascade: return "A moving column of words, arriving with the voice."
         case .cutout: return "Uneven type and album-colour labels, built word by word."
@@ -125,15 +120,27 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         }
     }
 
-    var hasConnections: Bool { self == .constellation || self == .constellationEditorial }
-    var hasEditorialTypography: Bool { self == .editorial || self == .constellationEditorial }
+    var hasConnections: Bool { self == .constellation }
+
+    /// A layout read back from saved data: settings, a Look, a remembered
+    /// style, a lyric card or the backing-vocal choice. The two layouts cut
+    /// in 2.2 come back as their nearest: "Constellation + Editorial" as
+    /// Constellation, "Editorial" as Scattered (the same loose renderer;
+    /// "Add Editorial typography" brings back its second typeface).
+    static func saved(_ raw: String) -> LyricComposition? {
+        switch raw {
+        case "constellationEditorial": return .constellation
+        case "editorial": return .scattered
+        default: return LyricComposition(rawValue: raw)
+        }
+    }
     var arrivalOnly: Bool { self == .spoken || self == .cascade || self == .cutout }
 
     /// A remembered "automatic" choice takes precedence over a global layout.
     @MainActor
     static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int,
                          track: String? = nil) -> Self {
-        if let remembered { return Self(rawValue: remembered) ?? matching(mood, seed: seed) }
+        if let remembered { return saved(remembered) ?? matching(mood, seed: seed) }
         return settings.resolvedComposition(for: mood, seed: seed, track: track)
     }
 
@@ -145,11 +152,10 @@ enum LyricComposition: String, CaseIterable, Identifiable {
     /// whole track, which is the right granularity for this.
     static func matching(_ mood: TrackMood, seed: Int) -> LyricComposition {
         // Dense, mechanical music suits the linked web; sparse organic music
-        // suits the echo; everything in between gets the editorial setting,
-        // with scattered as the general-purpose fallback.
+        // suits the echo; everything in between is scattered.
         if mood.energy > 0.68 && mood.organic < 0.45 { return .constellation }
         if mood.energy < 0.38 && mood.organic > 0.62 { return .echo }
-        return abs(seed) % 2 == 0 ? .editorial : .scattered
+        return .scattered
     }
 }
 
@@ -514,8 +520,8 @@ final class LyricLayoutRotation: ObservableObject {
 
     /// The order songs step through: contrasting looks sit next to each other.
     static let order: [LyricComposition] = [
-        .cutout, .hinge, .constellation, .broadside, .editorial, .portal, .spoken, .mosaic, .echo, .torque, .cascade,
-        .fable, .scattered, .constellationEditorial,
+        .cutout, .hinge, .constellation, .broadside, .portal, .spoken, .mosaic, .echo, .torque, .cascade,
+        .fable, .scattered,
     ]
 
     private let defaults: UserDefaults
@@ -554,7 +560,7 @@ final class LyricLayoutRotation: ObservableObject {
     /// fast, busy ones, and the busiest songs skip the slowest.
     static func suits(_ layout: LyricComposition, mood: TrackMood) -> Bool {
         switch layout {
-        case .cascade, .constellation, .constellationEditorial: return mood.energy >= 0.3
+        case .cascade, .constellation: return mood.energy >= 0.3
         case .echo: return mood.energy <= 0.8
         default: return true
         }
@@ -597,7 +603,7 @@ enum LyricCompositionGroup: String, CaseIterable, Identifiable {
 
     var layouts: [LyricComposition] {
         switch self {
-        case .calm: return [.scattered, .constellation, .constellationEditorial, .editorial, .spoken]
+        case .calm: return [.scattered, .constellation, .spoken]
         case .bold: return [.echo, .cascade, .hinge, .broadside, .torque]
         case .playful: return [.cutout, .portal, .mosaic, .fable]
         }

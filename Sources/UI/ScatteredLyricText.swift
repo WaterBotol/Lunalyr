@@ -732,11 +732,6 @@ struct FlowPlan: Equatable {
         // A line sung as one phrase is set as one level sentence.
         guard wordTimed else { return FlowPlan(spacing: composition.hasConnections ? 0.06 : 0.02) }
         switch composition {
-        case .editorial:
-            // A flush-left column of fixed measure, centred on the stage:
-            // every line hangs from the same left edge, as on a page.
-            return FlowPlan(spacing: 0.02, lineSpacing: 0, alignment: .leading, measure: 10, balanced: true,
-                            field: 10)
         case .constellation:
             // A wide field, rows stepping against each other, with real
             // gaps between the stars so the hairlines can be seen.
@@ -744,9 +739,6 @@ struct FlowPlan: Equatable {
             let shifts: [CGFloat] = style.rowAlignment == .trailing ? [step, -step] : [-step, step]
             return FlowPlan(spacing: 4 * unit, lineSpacing: (fullness < 0.6 ? 2 : 1) * unit, measure: 12,
                             balanced: true, rowShifts: shifts)
-        case .constellationEditorial:
-            // Satellites spread wide above and below the focal star.
-            return FlowPlan(spacing: 5 * unit, lineSpacing: unit, measure: 13, balanced: true)
         case .echo:
             return FlowPlan(spacing: 0.02, lineSpacing: 0, measure: 13, balanced: true)
         default:

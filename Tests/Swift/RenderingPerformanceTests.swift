@@ -30,7 +30,7 @@ final class RenderingPerformanceTests: XCTestCase {
             let identity = LyricFontIdentity(settings: settings)
             let scattered = try XCTUnwrap(ScatteredTypography.prepare(
                 .init(words: [word], baseSize: 80, style: .forLine(0), mood: .neutral,
-                    composition: .editorial, spread: 1, fontIdentity: identity, readings: readings), settings: settings).first)
+                    composition: .scattered, spread: 1, fontIdentity: identity, readings: readings), settings: settings).first)
             XCTAssertEqual(scattered.reading?.text, "hikari")
             // Same face, seed and alternate as the word; smaller and regular
             // weight, so the reading reads as secondary.
@@ -221,7 +221,7 @@ final class RenderingPerformanceTests: XCTestCase {
             LyricsFetcher.Word(text: String(repeating: "W", count: 9 + index * 2),
                 start: Double(index) * 0.2, end: Double(index) * 0.2 + 0.8)
         }
-        for style in [LyricComposition.constellation, .constellationEditorial] {
+        for style in [LyricComposition.constellation, .scattered] {
             let stage = LyricLineView(words: words, time: 2.4, stageSize: metrics.stageSize,
                 baseSize: metrics.baseSize, mood: .neutral, composition: style, seed: 2)
                 .modifier(FittedLyricStage(available: metrics.stageSize, userScale: 1.5))
@@ -374,7 +374,7 @@ final class RenderingPerformanceTests: XCTestCase {
         let token = ScatteredTypography.prepare(key(), settings: .shared)[2]
         func heat(_ time: Double) -> Double {
             ScatteredWordFrame.make(token, nextIndex: nil, time: time,
-                composition: .constellationEditorial).heat
+                composition: .constellation).heat
         }
         for boundary in [token.source.start, token.source.end, token.source.end + 0.3] {
             XCTAssertEqual(heat(boundary - 0.0001), heat(boundary + 0.0001), accuracy: 0.001)
@@ -387,7 +387,7 @@ final class RenderingPerformanceTests: XCTestCase {
     ]
     @MainActor
     private func key(size: CGFloat = 44, spread: Double = 1,
-                     style: LyricComposition = .constellationEditorial) -> ScatteredTypography.Key {
+                     style: LyricComposition = .constellation) -> ScatteredTypography.Key {
         .init(words: words, baseSize: size, style: .forLine(0), mood: .neutral,
               composition: style, spread: spread, fontIdentity: LyricFontIdentity(settings: .shared))
     }

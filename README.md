@@ -36,7 +36,7 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 ## Features
 
 - [Lyrics on your desktop](#lyrics-on-your-desktop)
-- [Fourteen layouts](#fourteen-layouts)
+- [Twelve layouts](#twelve-layouts)
 - [Japanese, Chinese and Korean readings](#japanese-chinese-and-korean-readings)
 - [Floating lyrics over your apps](#floating-lyrics-over-your-apps)
 - [Discord and listening along](#discord-and-listening-along)
@@ -57,24 +57,20 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 - **Instrumental breaks** fill with album-coloured ribbons and a cue for the next line.
 - **One wallpaper per display**, with a choice of 15, 30 or 60 frames a second, a low-power mode, and pausing while displays sleep or the desktop is covered.
 
-### Fourteen layouts
+### Twelve layouts
 
 [![A tour of twelve of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.webp)](docs/media/layouts-tour.mp4)
 
 Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Custom Mix** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
 
 <details>
-<summary><b>See all 14 layouts</b></summary>
+<summary><b>See all 12 layouts</b></summary>
 <br>
 
 <table>
   <tr>
     <td width="50%" align="center"><img src="docs/media/layout-scattered.webp" alt="Scattered layout"><br><b>Scattered</b> · Calm<br><sub>Words set loose across the line</sub></td>
     <td width="50%" align="center"><img src="docs/media/layout-constellation.webp" alt="Constellation layout"><br><b>Constellation</b> · Calm<br><sub>Fragments linked by hairlines, like a star chart</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-constellationEditorial.webp" alt="Constellation + Editorial layout"><br><b>Constellation + Editorial</b> · Calm<br><sub>Linked fragments in two contrasting typefaces</sub></td>
-    <td width="50%" align="center"><img src="docs/media/layout-editorial.webp" alt="Editorial layout"><br><b>Editorial</b> · Calm<br><sub>Two typefaces in one line, set like a magazine spread</sub></td>
   </tr>
   <tr>
     <td width="50%" align="center"><img src="docs/media/layout-spoken.webp" alt="Spoken layout"><br><b>Spoken</b> · Calm<br><sub>Each sung word takes focus, recent words settle around it</sub></td>
@@ -167,7 +163,7 @@ Apple Music's **animated album covers** can play behind the lyrics too.
     <td align="center"><b>Image or video</b></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/media/background-gpu-effect.jpg" alt="Lyrics in the Constellation + Editorial layout over the Plasma GPU effect"></td>
+    <td width="50%"><img src="docs/media/background-gpu-effect.jpg" alt="Lyrics over the Plasma GPU effect"></td>
     <td width="50%"><img src="docs/media/album-colours.jpg" alt="A background and lyrics tinted in the colours of the playing album's cover"></td>
   </tr>
   <tr>

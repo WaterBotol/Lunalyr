@@ -152,7 +152,7 @@ struct LyricStylePage: View {
                     .help("Bracketed backing words like (oh oh) sit small and soft behind the lead.")
                 if backingLayer {
                     ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
-                               selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition(rawValue: $0)?.title ?? "The lead’s layout") }) {
+                               selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition.saved($0)?.title ?? "The lead’s layout") }) {
                         Text("The lead’s layout").tag("")
                         ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
                     }
@@ -160,11 +160,6 @@ struct LyricStylePage: View {
                     .revealRow()
                 }
                 Toggle("Add Editorial typography", isOn: $s.editorialTypography)
-                if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
-                    InspectorCaption(note)
-                        .padding(.leading, 23)
-                        .revealRow()
-                }
                 if s.editorialTypography {
                     ValueSlider("Editorial amount", value: $s.editorialAmount, in: 0...1, step: 0.01,
                                 format: SettingsFormat.percent)

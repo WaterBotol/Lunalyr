@@ -99,7 +99,7 @@ final class ReadingSyllableRevealTests: XCTestCase {
     /// あなたを思い出す is one shaped run; its reading fills in as 思, い,
     /// 出 and す are sung (19.56, 20.57, 20.92, 21.13).
     func testScatteredReadingFillsInWithItsRun() {
-        for composition in [LyricComposition.scattered, .editorial, .echo] {
+        for composition in [LyricComposition.scattered, .echo] {
             XCTAssertEqual(scattered(line: 1, composition: composition, at: 19.0), ["anata o"], "\(composition)")
             XCTAssertEqual(scattered(line: 1, composition: composition, at: 19.8), ["anata o omo"], "\(composition)")
             XCTAssertEqual(scattered(line: 1, composition: composition, at: 20.7), ["anata o omoi"], "\(composition)")
@@ -187,15 +187,15 @@ final class ReadingSyllableRevealTests: XCTestCase {
                                         romanized: Self.readings[1], display: .below)
         XCTAssertEqual(StageRun.make(stage.words, glue: stage.glue).map { StageLyricView.reading(of: $0, in: stage.readings) },
                        ["anata o", "omoida", "su"])
-        let editorial = LyricCard.Animation(line: line, composition: .editorial, mood: .neutral, seed: 0,
+        let scattered = LyricCard.Animation(line: line, composition: .scattered, mood: .neutral, seed: 0,
                                             romanized: Self.readings[1], display: .below)
-        XCTAssertEqual(LyricReadingInk(tokens: editorial.words, readings: editorial.readings, font: Self.font)?.text,
+        XCTAssertEqual(LyricReadingInk(tokens: scattered.words, readings: scattered.readings, font: Self.font)?.text,
                        "anata o omoidasu")
     }
 
     // MARK: Previews
 
-    /// Editorial, Scattered, Constellation and Cutout part-way through
+    /// Scattered, Constellation and Cutout part-way through
     /// 思い出す, written to LUNALYR_READING_PREVIEWS (pass it as
     /// TEST_RUNNER_LUNALYR_READING_PREVIEWS=<dir>). Skipped otherwise.
     func testRenderReadingPreviews() throws {
@@ -210,7 +210,7 @@ final class ReadingSyllableRevealTests: XCTestCase {
         let readings = try XCTUnwrap(Self.readings[1])
         let stage = CGSize(width: 900, height: 360)
         let times = [19.2, 19.8, 20.7, 21.05, 21.8]
-        for composition in [LyricComposition.editorial, .scattered, .constellation, .cutout] {
+        for composition in [LyricComposition.scattered, .constellation, .cutout] {
             let frames = times.map { time -> AnyView in
                 let view: AnyView
                 if composition.arrivalOnly {

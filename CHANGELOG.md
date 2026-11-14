@@ -15,6 +15,9 @@ When merging, keep every entry and combine duplicate headings.
 ### Changed
 - **Match the music is now called Custom Mix** everywhere it appears: the wallpaper type, the layout, the GPU effect and pattern choices, Looks and remembered styles. Your settings are kept.
 
+### Removed
+- **The Editorial and Constellation + Editorial layouts.** Wherever either was chosen (the layout, a style remembered for a song or artist, a saved Look, the backing-vocal layout or a lyric card), Constellation + Editorial becomes Constellation and Editorial becomes Scattered. **Add Editorial typography** (Lyric style › Shown with the lyrics) still mixes in the second typeface on any layout. New installs start on Constellation.
+
 ## [2.1.0] - 2026-11-14
 
 ### Added

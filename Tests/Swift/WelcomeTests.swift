@@ -306,9 +306,9 @@ final class WelcomeTests: XCTestCase {
     func testTheLookStepShowsTheLayoutInUse() {
         XCTAssertEqual(LayoutChoices.shown(current: nil), LayoutChoices.featured)
         XCTAssertEqual(LayoutChoices.shown(current: .portal), LayoutChoices.featured)
-        let withEditorial = LayoutChoices.shown(current: .constellationEditorial)
-        XCTAssertEqual(withEditorial.first, .constellationEditorial)
-        XCTAssertEqual(withEditorial.count, LayoutChoices.featured.count)
+        let withEcho = LayoutChoices.shown(current: .echo)
+        XCTAssertEqual(withEcho.first, .echo)
+        XCTAssertEqual(withEcho.count, LayoutChoices.featured.count)
         XCTAssertEqual(LayoutThumbnail.time(after: 0), 0)
         XCTAssertEqual(LayoutThumbnail.time(after: LayoutThumbnail.cycle + 1), 1, accuracy: 0.0001)
         XCTAssertEqual(LayoutThumbnail.time(after: LayoutThumbnail.cycle * Double(LayoutThumbnail.plays) + 1),

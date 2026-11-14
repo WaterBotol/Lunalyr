@@ -133,7 +133,7 @@ final class LyricRunReadingTests: XCTestCase {
         let glue = LyricRuns.glue(line: today, words: today.words)
         // Scattered, Constellation, Echo and Editorial: one run, one reading.
         let key = ScatteredTypography.Key(words: today.words, baseSize: 60, style: .forLine(0), mood: .neutral,
-            composition: .constellationEditorial, spread: 1, fontIdentity: LyricFontIdentity(settings: .shared),
+            composition: .constellation, spread: 1, fontIdentity: LyricFontIdentity(settings: .shared),
             readings: LyricReadingPairs.match(below, to: today.words, glue: glue), glue: glue)
         let layout = ScatteredTypography.layout(key, settings: .shared)
         XCTAssertEqual(layout.runs.count, 1)

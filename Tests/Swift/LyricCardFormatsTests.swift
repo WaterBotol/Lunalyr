@@ -11,7 +11,7 @@ final class LyricCardFormatsTests: XCTestCase {
         }
         let line = LyricsFetcher.Line(start: 10, end: 10.3 * Double(words.count) + 0.4, text: text, words: words,
                                       isInstrumental: false, wordTimed: true)
-        let animation = LyricCard.Animation(line: line, composition: .editorial, mood: .neutral, seed: 0)
+        let animation = LyricCard.Animation(line: line, composition: .scattered, mood: .neutral, seed: 0)
         let art = NSImage(size: NSSize(width: 400, height: 400), flipped: false) { rect in
             NSGradient(colors: [.systemOrange, .systemPurple])?.draw(in: rect, angle: 60); return true
         }
@@ -123,7 +123,7 @@ final class BackingVocalPreviewTests: XCTestCase {
         let art = NSImage(size: NSSize(width: 400, height: 400), flipped: false) { rect in
             NSGradient(colors: [.systemTeal, .systemIndigo])?.draw(in: rect, angle: 60); return true
         }
-        for layout in [LyricComposition.editorial, .constellation, .cutout, .spoken] {
+        for layout in [LyricComposition.scattered, .constellation, .cutout, .spoken] {
             var content = LyricCard.Content(pages: [.init(words: pieces.map(\.0),
                 animation: LyricCard.Animation(line: line, composition: layout, mood: .neutral, seed: 0))],
                 title: "A Song", artist: "An Artist", artwork: art, palette: LyricCard.palette(for: art), reduceMotion: true)

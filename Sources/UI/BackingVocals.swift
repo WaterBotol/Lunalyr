@@ -31,18 +31,18 @@ enum BackingVocals {
     /// The layouts a backing group can animate in: the ones that set words
     /// loose or link them, not the three that roll a line in (Spoken,
     /// Cascade and Cutout), which would take over the stage.
-    static let choices: [LyricComposition] = [.scattered, .constellation, .constellationEditorial, .echo, .editorial]
+    static let choices: [LyricComposition] = [.scattered, .constellation, .echo]
 
     /// The saved choice, or nil to follow the lead's layout.
     static var chosenStyle: LyricComposition? {
-        UserDefaults.standard.string(forKey: styleKey).flatMap(LyricComposition.init(rawValue:)).flatMap { choices.contains($0) ? $0 : nil }
+        UserDefaults.standard.string(forKey: styleKey).flatMap(LyricComposition.saved).flatMap { choices.contains($0) ? $0 : nil }
     }
 
     /// What a group animates in: the choice, else the lead's own layout,
-    /// except that the rolling three become Editorial.
+    /// except that the rolling three become Scattered.
     static func style(forLead lead: LyricComposition, chosen: LyricComposition? = chosenStyle) -> LyricComposition {
         if let chosen { return chosen }
-        return choices.contains(lead) ? lead : .editorial
+        return choices.contains(lead) ? lead : .scattered
     }
 
     struct Split {

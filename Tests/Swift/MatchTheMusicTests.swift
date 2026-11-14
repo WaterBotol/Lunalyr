@@ -43,7 +43,7 @@ final class MatchTheMusicTests: XCTestCase {
         let rotation = LyricLayoutRotation(defaults: LunalyrTestEnvironment.isolatedDefaults("MatchTheMusicTests"))
         for index in 0..<16 {
             let layout = rotation.layout(for: "S|\(index)", mood: slow)
-            XCTAssertFalse([.cascade, .constellation, .constellationEditorial].contains(layout))
+            XCTAssertFalse([.cascade, .constellation].contains(layout))
         }
     }
 
@@ -96,17 +96,17 @@ final class LayoutRotationChoiceTests: XCTestCase {
         for index in 0..<40 { seen.insert(rotation.layout(for: "A|\(index)", mood: .neutral)) }
         XCTAssertFalse(seen.contains(.cutout))
         XCTAssertFalse(seen.contains(.echo))
-        XCTAssertTrue(seen.contains(.editorial))
+        XCTAssertTrue(seen.contains(.broadside))
     }
 
     func testACountOfThreeGivesThatLayoutThreeSongsInARow() {
         let rotation = rotation()
-        for layout in LyricComposition.allCases { rotation.setCount(layout == .editorial ? 3 : 0, for: layout) }
+        for layout in LyricComposition.allCases { rotation.setCount(layout == .broadside ? 3 : 0, for: layout) }
         rotation.setCount(1, for: .spoken)
         let picks = (0..<8).map { rotation.layout(for: "S|\($0)", mood: .neutral) }
-        XCTAssertEqual(picks.prefix(4).filter { $0 == .editorial }.count, 3)
-        XCTAssertEqual(Set(picks), [.editorial, .spoken])
-        XCTAssertEqual(picks.filter { $0 == .editorial }.count, 6)
+        XCTAssertEqual(picks.prefix(4).filter { $0 == .broadside }.count, 3)
+        XCTAssertEqual(Set(picks), [.broadside, .spoken])
+        XCTAssertEqual(picks.filter { $0 == .broadside }.count, 6)
     }
 
     func testOnlyOneLayoutChosenMeansEverySongGetsIt() {
@@ -130,5 +130,49 @@ final class LayoutRotationChoiceTests: XCTestCase {
         XCTAssertEqual(second.count(for: .echo), 4)
         XCTAssertEqual(second.count(for: .cascade), 0)
         XCTAssertEqual(second.count(for: .cutout), 1)
+    }
+}
+
+/// Editorial and Constellation + Editorial were cut; anything saved with
+/// them comes back as the nearest layout that remains, never as a crash or
+/// a lost Look.
+@MainActor
+final class RemovedLayoutMigrationTests: XCTestCase {
+    func testSavedRawValuesMapToTheNearestRemainingLayout() {
+        XCTAssertEqual(LyricComposition.saved("editorial"), .scattered)
+        XCTAssertEqual(LyricComposition.saved("constellationEditorial"), .constellation)
+        XCTAssertEqual(LyricComposition.saved("echo"), .echo)
+        XCTAssertNil(LyricComposition.saved("automatic"))
+        XCTAssertNil(LyricComposition(rawValue: "editorial"))
+    }
+
+    func testTheSavedGlobalLayoutFallsBack() {
+        for (raw, expected) in [("editorial", LyricComposition.scattered), ("constellationEditorial", .constellation)] {
+            let defaults = LunalyrTestEnvironment.isolatedDefaults("RemovedLayoutMigrationTests.\(raw)")
+            defaults.set(raw, forKey: "lyricComposition")
+            let settings = Settings(defaults: defaults, notifications: NotificationCenter())
+            XCTAssertEqual(settings.lyricComposition, expected, raw)
+            settings.reloadLyricStyle()
+            XCTAssertEqual(settings.lyricComposition, expected, raw)
+        }
+        let fresh = Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("RemovedLayoutMigrationTests.fresh"),
+                             notifications: NotificationCenter())
+        XCTAssertEqual(fresh.lyricComposition, .constellation, "the new default")
+    }
+
+    func testRememberedStylesLooksAndTheRotationKeepWorking() throws {
+        XCTAssertEqual(StyleMemory.Style(composition: "editorial", colour: nil).layout, .scattered)
+        XCTAssertEqual(StyleMemory.Style(composition: "constellationEditorial", colour: nil).layout, .constellation)
+        XCTAssertEqual(LyricComposition.selected(settings: .shared, remembered: "constellationEditorial", mood: .neutral, seed: 0),
+                       .constellation)
+        let json = #"{"id":"a","name":"Old","wallpaper":"auto","layout":"editorial","typeface":"manrope","highlight":"album"}"#
+        let stored = try JSONDecoder().decode(StoredLook.self, from: Data(json.utf8))
+        XCTAssertEqual(stored.look?.values.layout, .scattered, "the Look survives")
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("RemovedLayoutMigrationTests.rotation")
+        defaults.set(["editorial": 3, "constellationEditorial": 0, "scattered": 2], forKey: "custom.rotateLayoutCounts")
+        let rotation = LyricLayoutRotation(defaults: defaults)
+        XCTAssertEqual(rotation.count(for: .scattered), 2)
+        XCTAssertEqual(rotation.count(for: .constellation), 1)
+        XCTAssertEqual(BackingVocals.style(forLead: .spoken, chosen: nil), .scattered)
     }
 }

@@ -113,9 +113,9 @@ final class LyricExtrasTests: XCTestCase {
         memory.remember(.init(composition: LyricComposition.echo.rawValue, colour: nil), for: song, scope: .song)
         let globalBefore = Settings.shared.lyricComposition
         extras.cycleLayout(settings: .shared, memory: memory, track: song)
-        XCTAssertEqual(memory.remembered(for: song)?.style.layout, .editorial)
+        XCTAssertEqual(memory.remembered(for: song)?.style.layout, .spoken)
         XCTAssertEqual(Settings.shared.lyricComposition, globalBefore, "the global layout is left alone")
-        XCTAssertEqual(extras.note?.text, "Layout for this song: Editorial")
+        XCTAssertEqual(extras.note?.text, "Layout for this song: Spoken")
     }
 
     @MainActor
@@ -706,9 +706,9 @@ final class LyricExtrasTests: XCTestCase {
         let first = try middlePixels(source, 0)
         let singing = try middlePixels(source, 10)
         XCTAssertGreaterThan(zip(first, singing).filter { $0.0 != $0.1 }.count, 50, "the stage animates")
-        let editorial = try await render(.editorial)
-        let editorialSource = try XCTUnwrap(CGImageSourceCreateWithData(editorial as CFData, nil))
-        let differentStyle = try middlePixels(editorialSource, 10)
+        let scattered = try await render(.scattered)
+        let scatteredSource = try XCTUnwrap(CGImageSourceCreateWithData(scattered as CFData, nil))
+        let differentStyle = try middlePixels(scatteredSource, 10)
         XCTAssertGreaterThan(zip(singing, differentStyle).filter { $0.0 != $0.1 }.count, 50, "the layout affects the GIF")
     }
 
@@ -732,7 +732,7 @@ final class LyricExtrasTests: XCTestCase {
         let line = LyricsFetcher.Line(start: 10, end: 15, text: labels.joined(separator: " "), words: words,
                                       isInstrumental: false, wordTimed: true)
         let page = LyricCard.Page(words: labels,
-            animation: .init(line: line, composition: .constellationEditorial, mood: .neutral, seed: 1))
+            animation: .init(line: line, composition: .constellation, mood: .neutral, seed: 1))
         let content = LyricCard.Content(pages: [page], title: "Where the Night Begins", artist: "June Arcade & Noa Vale", artwork: artwork,
             palette: LyricCard.palette(for: artwork), reduceMotion: true)
         let encoded = await LyricCard.gif(content, scale: 0.5)

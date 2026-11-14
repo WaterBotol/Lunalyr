@@ -180,7 +180,7 @@ struct StoredLook: Codable, Equatable {
               let highlight = LyricHighlightMode(rawValue: highlight) else { return nil }
         var chosenLayout: LyricComposition?
         if let layout {
-            guard let parsed = LyricComposition(rawValue: layout) else { return nil }
+            guard let parsed = LyricComposition.saved(layout) else { return nil }
             chosenLayout = parsed
         }
         var chosenEntrance: WordArrival?

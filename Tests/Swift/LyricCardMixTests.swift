@@ -91,7 +91,7 @@ enum MixProbe {
             }
             let line = LyricsFetcher.Line(start: span.start, end: span.end, text: texts.joined(separator: " "), words: words,
                                           isInstrumental: false, wordTimed: true)
-            let animation = LyricCard.Animation(line: line, composition: .editorial, mood: .neutral, seed: index)
+            let animation = LyricCard.Animation(line: line, composition: .scattered, mood: .neutral, seed: index)
             return LyricCard.Page(words: texts, animation: animation)
         }
         let art = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { _ in true }

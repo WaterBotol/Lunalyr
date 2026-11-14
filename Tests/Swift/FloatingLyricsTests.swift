@@ -121,7 +121,7 @@ final class FloatingLyricsTests: XCTestCase {
 
     func testChangingFloatingNeverChangesTheDesktop() {
         let s = stores()
-        s.settings.lyricComposition = .editorial
+        s.settings.lyricComposition = .echo
         s.settings.lyricScale = 1.2
         s.settings.showInterludes = true
         s.colours.mode = .albumDrift
@@ -135,7 +135,7 @@ final class FloatingLyricsTests: XCTestCase {
         s.defaults.set(false, forKey: BackingVocals.settingKey)
 
         s.options.surface = .desktop
-        XCTAssertEqual(s.settings.lyricComposition, .editorial)
+        XCTAssertEqual(s.settings.lyricComposition, .echo)
         XCTAssertEqual(s.settings.lyricScale, 1.2)
         XCTAssertTrue(s.settings.showInterludes)
         XCTAssertEqual(s.settings.wordArrivalByStyle, [:])

@@ -80,7 +80,7 @@ final class FloatingLyricsPreviewTests: XCTestCase {
         model.plainLines = []
         model.notFound = false
         model.isLoading = false
-        settings.lyricComposition = .editorial
+        settings.lyricComposition = .echo
         extras.lyricsHidden = false
         if readings.display != .below { readings.display = .below }
         model.lines = LyricHighlightRenderTests.lines

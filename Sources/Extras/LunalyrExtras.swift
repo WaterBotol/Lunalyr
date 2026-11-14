@@ -272,7 +272,7 @@ final class LunalyrExtras: ObservableObject {
         self.defaults = defaults
         lyricCardLinesBefore = Self.clampedCardLineCount(defaults.integer(forKey: Keys.lyricCardLinesBefore))
         lyricCardLinesAfter = Self.clampedCardLineCount(defaults.integer(forKey: Keys.lyricCardLinesAfter))
-        lyricCardComposition = defaults.string(forKey: Keys.lyricCardComposition).flatMap(LyricComposition.init(rawValue:))
+        lyricCardComposition = defaults.string(forKey: Keys.lyricCardComposition).flatMap(LyricComposition.saved)
         showsMenuBarLine = defaults.bool(forKey: Keys.menuBarLine)
         showsDiscordPresence = defaults.bool(forKey: Keys.discordPresence)
         discordStatusText = defaults.string(forKey: Keys.discordStatusText).flatMap(DiscordStatusText.init(rawValue:)) ?? .lyric

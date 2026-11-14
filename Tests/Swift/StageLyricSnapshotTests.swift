@@ -220,7 +220,7 @@ final class CardLogoSnapshotTests: XCTestCase {
             LyricsFetcher.Word(text: String(w), start: 10 + Double(i) * 0.3, end: 10.28 + Double(i) * 0.3)
         }
         let line = LyricsFetcher.Line(start: 10, end: 12, text: "But I ignored your call", words: words, isInstrumental: false, wordTimed: true)
-        let animation = LyricCard.Animation(line: line, composition: .editorial, mood: .neutral, seed: 0)
+        let animation = LyricCard.Animation(line: line, composition: .scattered, mood: .neutral, seed: 0)
         let art = NSImage(size: NSSize(width: 400, height: 400), flipped: false) { rect in
             NSGradient(colors: [.systemOrange, .systemPurple])?.draw(in: rect, angle: 60); return true
         }

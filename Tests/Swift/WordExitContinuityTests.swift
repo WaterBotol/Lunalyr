@@ -343,7 +343,7 @@ final class WordExitContinuityTests: XCTestCase {
     }
 
     static let rollingLayouts: [LyricComposition] = [.spoken, .cascade, .cutout]
-    static let flowLayouts: [LyricComposition] = [.scattered, .editorial, .constellation, .constellationEditorial, .echo]
+    static let flowLayouts: [LyricComposition] = [.scattered, .constellation, .echo]
 
     /// Every layout's sampler, by name: all fourteen.
     static var samplers: [(name: String, sample: ([Word], Double) -> [Int: Sample])] {

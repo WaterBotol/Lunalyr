@@ -163,7 +163,7 @@ struct SampleLyricScene: View {
         GeometryReader { proxy in
             let metrics = LyricViewportMetrics(size: desktop)
             let stage = metrics.stageSize
-            let composition = settings.lyricComposition ?? .editorial
+            let composition = settings.lyricComposition ?? .scattered
             let words = Self.words
             let lineEnd = 1 + Double(words.count) * Self.beat
             let plain = [Bool](repeating: false, count: words.count)

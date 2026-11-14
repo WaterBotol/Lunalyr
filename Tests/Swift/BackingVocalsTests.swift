@@ -64,7 +64,7 @@ final class BackingVocalsTests: XCTestCase {
 
     func testBackingWordsNeverAnimateInTheRollingLayouts() {
         for lead in [LyricComposition.spoken, .cascade, .cutout] {
-            XCTAssertEqual(BackingVocals.style(forLead: lead, chosen: nil), .editorial, "\(lead)")
+            XCTAssertEqual(BackingVocals.style(forLead: lead, chosen: nil), .scattered, "\(lead)")
         }
         for lead in BackingVocals.choices {
             XCTAssertEqual(BackingVocals.style(forLead: lead, chosen: nil), lead)

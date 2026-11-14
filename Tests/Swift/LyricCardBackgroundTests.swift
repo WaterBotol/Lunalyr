@@ -46,7 +46,7 @@ final class LyricCardBackgroundTests: XCTestCase {
         }
         let line = LyricsFetcher.Line(start: 10, end: 11.6, text: "Hold on tight tonight", words: words,
                                       isInstrumental: false, wordTimed: true)
-        let animation = LyricCard.Animation(line: line, composition: .editorial, mood: .neutral, seed: 0)
+        let animation = LyricCard.Animation(line: line, composition: .scattered, mood: .neutral, seed: 0)
         let art = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { _ in true }
         var content = LyricCard.Content(pages: [.init(words: words.map(\.text), animation: animation)], title: "A Song",
                                         artist: "An Artist", artwork: art, palette: LyricCard.palette(for: art), reduceMotion: true)

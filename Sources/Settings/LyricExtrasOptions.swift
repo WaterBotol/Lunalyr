@@ -107,7 +107,7 @@ final class StyleMemory: ObservableObject {
         var composition: String?
         var colour: String?
 
-        var layout: LyricComposition? { composition.flatMap(LyricComposition.init(rawValue:)) }
+        var layout: LyricComposition? { composition.flatMap(LyricComposition.saved) }
         var colourMode: LyricColourMode? { colour.flatMap(LyricColourMode.savedChoice) }
         var plist: [String: String] {
             var result: [String: String] = [:]

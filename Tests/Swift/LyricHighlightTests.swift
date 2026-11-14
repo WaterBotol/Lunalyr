@@ -586,7 +586,7 @@ final class LyricHighlightTests: XCTestCase {
             }
         }
         // A constellation's words: the slots its links are drawn between.
-        for composition in [LyricComposition.constellation, .constellationEditorial] {
+        for composition in [LyricComposition.constellation] {
             func slots(_ arrival: WordArrival?) -> [Int: CGRect] {
                 withEntrance(arrival) {
                     var found: [Int: CGRect] = [:]

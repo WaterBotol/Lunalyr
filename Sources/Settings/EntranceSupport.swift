@@ -21,7 +21,7 @@ enum EntranceSupport {
         switch layout {
         case .hinge, .broadside, .portal, .mosaic: return false
         case .torque, .fable: return arrival != .fade && !arrival.isSwipe
-        case .scattered, .constellation, .constellationEditorial, .echo, .editorial, .spoken, .cascade, .cutout:
+        case .scattered, .constellation, .echo, .spoken, .cascade, .cutout:
             return true
         }
     }

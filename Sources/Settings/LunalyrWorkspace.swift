@@ -209,7 +209,7 @@ private struct SettingsStatusHeader: View {
 enum WorkspaceCopy {
     /// What Custom Mix does with the layout.
     static let automaticLayoutDetail =
-        "Picks Constellation, Echo, Editorial or Scattered to suit each track’s energy and feel."
+        "Picks Constellation, Echo or Scattered to suit each track’s energy and feel."
 
     /// Why "Reveal sung words" cannot be switched off, if it cannot.
     static func revealLockReason(_ lock: Settings.WordRevealLock?) -> String? {
@@ -219,16 +219,6 @@ enum WorkspaceCopy {
         case .mix?: return "Your custom mix includes entrances that unveil each word as it’s sung, so this stays on."
         case nil: return nil
         }
-    }
-
-    /// How "Add Editorial typography" relates to the chosen layout.
-    static func editorialNote(layout: LyricComposition?) -> String? {
-        guard let layout else {
-            return "Editorial picks already mix two typefaces; this adds the mix to the other layouts Custom Mix chooses."
-        }
-        return layout.hasEditorialTypography
-            ? "\(layout.title) already mixes two typefaces. Switch this on to set how many words take the second one."
-            : nil
     }
 
     /// Why the Darkening slider starts higher under Increase Contrast, and

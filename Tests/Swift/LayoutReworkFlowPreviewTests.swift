@@ -2,15 +2,14 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// Contact sheets of the flow layouts (Scattered, Editorial, Constellation,
-/// Constellation + Editorial, Echo), written only when
-/// LUNALYR_LAYOUT_PREVIEW_DIR is set (pass it as
+/// Contact sheets of the flow layouts (Scattered, Constellation, Echo),
+/// written only when LUNALYR_LAYOUT_PREVIEW_DIR is set (pass it as
 /// TEST_RUNNER_LUNALYR_LAYOUT_PREVIEW_DIR). One sheet per stage size and
 /// line: a row per layout, seven moments across. Each line is fitted to the
 /// stage as the wallpaper fits it (`FittedLyricStage`). Reads settings only.
 @MainActor
 final class LayoutReworkFlowPreviewTests: XCTestCase {
-    private static let layouts: [LyricComposition] = [.scattered, .editorial, .constellation, .constellationEditorial, .echo]
+    private static let layouts: [LyricComposition] = [.scattered, .constellation, .echo]
     private static let times: [Double] = [1.3, 2.1, 2.9, 3.7, 4.6, 5.6, 6.2]
 
     private struct Sample {

@@ -98,7 +98,7 @@ flowchart LR
 | `NowPlayingView.swift` | The desktop scene. One `TimelineView` drives each frame: the background, the lyric layer and interludes. |
 | `WallpaperViewport.swift` | Sizes the wallpaper independently of the lyric layer, so long lines cannot move or resize the background. |
 | `LyricComposition.swift` | The eight compositions and word entrances, and `LyricLineView`, which routes each composition to its renderer. |
-| `ScatteredLyricText.swift`, `SpokenTypographyView.swift` | The two lyric renderers: flowing compositions (Scattered, Constellation, Constellation + Editorial, Echo, Editorial) and word-arrival compositions (Spoken, Cascade, Cutout). |
+| `ScatteredLyricText.swift`, `SpokenTypographyView.swift` | The two lyric renderers: flowing compositions (Scattered, Constellation, Echo) and word-arrival compositions (Spoken, Cascade, Cutout). |
 | `LyricTypography.swift`, `LyricStageFit.swift`, `WordPresentation.swift` | Cached typography, fitting lines to the stage, and per-word reveal state. |
 | `InstrumentalInterludeView.swift` | The interlude ribbons and next-vocal cue. |
 | `ShaderBackgroundView.swift` + `Shaders.metal` | The 27 ambient GPU effects, run per pixel through SwiftUI's `colorEffect`. |
