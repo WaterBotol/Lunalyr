@@ -4,10 +4,26 @@ namespace Lunalyr.Core.Tests.MusicVideo;
 
 // Ported from MusicVideoPauseTests.swift: why the music video stopped, and a long pause closing YouTube's player. Every seam
 // is faked: no web view, no player, no network, no settings. The Mac's frozen-frame tests are not ported: Windows keeps
-// no frozen frame for YouTube, because YouTube's API policies don't allow covering the embedded player's interface (a
-// paused player stays on screen as YouTube draws it).
+// no frozen frame (a paused player is covered by the video's still instead; the owner asked for the Mac's hiding on
+// 14 Nov 2026, the frozen frame is a later item). The buffering grace is ported again with the hiding.
 public sealed class MusicVideoPauseTests
 {
+    // Ported from MusicVideoPauseTests.swift: testBufferingHidesThePlayerOnlyAfterAGrace
+    [Fact]
+    public void BufferingHidesThePlayerOnlyAfterAGrace()
+    {
+        var grace = YouTubeEmbed.BufferingGrace;
+        Assert.Equal(grace, YouTubeEmbed.HideDelay(true, MusicVideoHold.Live, false));
+        Assert.InRange(grace, 0.1001, 0.5);
+        Assert.Equal(0, YouTubeEmbed.HideDelay(true, MusicVideoHold.Live, true)); // a seek's picture covers it at once instead
+        Assert.Equal(0, YouTubeEmbed.HideDelay(false, MusicVideoHold.Live, false)); // a pause or the end
+        foreach (var hold in new[] { MusicVideoHold.UserPaused, MusicVideoHold.WallpaperPaused, MusicVideoHold.Outgoing, MusicVideoHold.Other })
+            Assert.Equal(0, YouTubeEmbed.HideDelay(true, hold, false));
+        var html = YouTubeEmbed.Html("4NRXx6U8ABQ", 0);
+        Assert.Contains("if (state === 3) return;", html); // the page itself does not fade out for buffering
+        Assert.DoesNotContain("transition:opacity .5s}", html); // eased like the other media reveals
+    }
+
     private sealed class FakeIdleHost : IMusicVideoIdleHost
     {
         public List<string> Events = [];
@@ -149,7 +165,7 @@ public sealed class MusicVideoPauseTests
     }
 
     // Windows' own, in place of testUserPauseTakesThePictureThenPauses (not ported): a pause just pauses. No picture is
-    // taken or shown; the paused player stays on screen as YouTube draws it.
+    // taken or shown; the paused player is covered by the video's still (YouTubePlayerReveal).
     [Fact]
     public void APauseJustPauses()
     {

@@ -1,6 +1,6 @@
 // Ported from the Mac's MusicVideoView.swift (MusicVideoPlaybackSurface, MusicVideoSyncLoop) and MusicVideoFreeze.swift
 // (MusicVideoHold, and the long-pause rule of MusicVideoFrozenFrame), Lunalyr's own code. The frozen frame itself is not
-// kept for YouTube (see MusicVideoIdlePlayer). The views and players around them are platform code and are not
+// kept on Windows (see MusicVideoIdlePlayer). The views and players around them are platform code and are not
 // translated: Windows' YouTube player is a WebView2 host (Lunalyr.App), and a local file needs no loop (its frames are
 // chosen by the song's clock, MusicVideoFrameSync). Timers are a seam, so the tests drive every check by hand.
 
@@ -281,9 +281,8 @@ public interface IMusicVideoIdleHost
 
 /// <summary>
 /// A YouTube player that has not played for a long while is closed, and opened again when the song plays. Windows keeps
-/// only this part of the Mac's MusicVideoFrozenFrame: YouTube's API policies don't allow covering or hiding the embedded
-/// player's interface, so a paused player stays on screen as YouTube draws it, with no picture taken of it or laid over it.
-/// Closing an idle player hides nothing: there is no player then, and the wallpaper shows the album colours.
+/// only this part of the Mac's MusicVideoFrozenFrame: a paused player is covered by the video's still (the Mac's rule that
+/// it shows only while it plays, YouTubePlayerReveal), but no picture of its last frame is taken or laid over it.
 /// </summary>
 public sealed class MusicVideoIdlePlayer
 {

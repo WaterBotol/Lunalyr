@@ -1,4 +1,5 @@
 using Lunalyr.Core.Colour;
+using Lunalyr.Core.MusicVideo;
 using Lunalyr.Render.Backgrounds;
 using Lunalyr.Render.Diagnostics;
 using Lunalyr.Render.Scene;
@@ -223,14 +224,50 @@ public sealed class MusicVideoLayerTests : IDisposable
         // Nor has the settings preview (offscreen).
         DrawTransparent(layer, desktop: false);
         Assert.Equal(255, MaxAlpha(_surface.ReadPixels()));
-        // The song or the wallpaper paused: the paused player stays on screen as YouTube draws it, nothing laid over it.
+        // The layer follows the host's word (PlayerVisible: the player plays and, shown whole, is past its hold), not the
+        // song's clock.
         feed.Inputs = feed.Inputs with { Playing = false };
         DrawTransparent(layer);
         Assert.Equal(0, MaxAlpha(_surface.ReadPixels()));
-        // No player (not ready yet, failed or closed after a long pause): the album colours.
+        // Covered (paused, buffering, held, not ready, failed or closed): the album colours (and the still, once loaded).
         feed.Inputs = feed.Inputs with { PlayerVisible = false };
         DrawTransparent(layer);
         Assert.Equal(255, MaxAlpha(_surface.ReadPixels()));
+    }
+
+    // Windows' own, for the Mac's WholeYouTubeVideo (MusicVideoFramingTests' layout, drawn): shown whole, the wallpaper is
+    // see-through only over the visible picture, where the host puts the player's window; the bands above and below are
+    // opaque (album colours and the blurred backdrop), never a hole onto the desktop.
+    [Fact]
+    public void ShownWholeTheYouTubeLayerIsSeeThroughOnlyOverThePicture()
+    {
+        var feed = new Feed
+        {
+            Inputs = new MusicVideoInputs(null, 3, true, 0, 0, 0, PlayerVisible: true, YouTubeFraming: MusicVideoFraming.Whole, YouTubeAspect: 2.39),
+        };
+        using var layer = new YouTubeVideoLayerFactory(feed, Plain).Create();
+        _surface.Prepare(layer);
+        DrawTransparent(layer);
+        var pixels = _surface.ReadPixels();
+        var (_, top, _, height) = MusicVideoFramings.VisiblePixels(2.39, Width, Height);
+        Assert.InRange(top, 10, 20); // 160 × 1.01 / 2.39 = 68 rows of picture in 96
+        int Alpha(int x, int y) => pixels[(y * Width + x) * 4 + 3];
+        Assert.Equal(0, Alpha(Width / 2, Height / 2));
+        Assert.Equal(0, Alpha(5, top + 2));
+        Assert.Equal(255, Alpha(Width / 2, top / 2));
+        Assert.Equal(255, Alpha(Width / 2, Height - 1 - top / 2));
+        Assert.Equal(255, Alpha(Width / 2, top - 1));
+        Assert.Equal(255, Alpha(Width / 2, top + height));
+        // Covered: opaque everywhere (the still in the picture, the backdrop around it).
+        feed.Inputs = feed.Inputs with { PlayerVisible = false };
+        DrawTransparent(layer);
+        pixels = _surface.ReadPixels();
+        Assert.Equal(255, Alpha(Width / 2, Height / 2));
+        Assert.Equal(255, Alpha(Width / 2, top / 2));
+        // Filled: see-through everywhere while it plays.
+        feed.Inputs = feed.Inputs with { PlayerVisible = true, YouTubeFraming = MusicVideoFraming.Fill };
+        DrawTransparent(layer);
+        Assert.Equal(0, MaxAlpha(_surface.ReadPixels()));
     }
 
     private void DrawTransparent(IRenderLayer layer, bool desktop = true, bool main = true)

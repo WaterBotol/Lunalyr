@@ -10,10 +10,14 @@
 //   off, as the player's own CC button does; no caption track is read.
 // - Messages go through WebView2's window.chrome.webview.postMessage; the page is served from a virtual https host so
 //   the embed gets a real origin and referrer (the Mac's baseURL).
-// - The Mac draws the player at 1.25x and clips it, hides it whenever it is not playing, and lays a frozen frame over a
-//   paused one, to keep YouTube's own interface off the wallpaper. YouTube's API policies don't allow obscuring, cropping
-//   or covering the embedded player's interface, so here the player fills the page as YouTube draws it, fitted
-//   (letterboxed) without cropping, and stays on screen in every state once it is ready.
+// - Framing, as on the Mac (the owner's decision, 14 Nov 2026, replacing milestone 6's "as YouTube draws it"): filled, the
+//   player covers the page and is drawn 1.25x larger, so YouTube's title bar and logo fall off-screen; shown whole
+//   (MusicVideoFraming.Whole) there is no overscan, the page is only as large as the visible picture and the player is
+//   sized inside it (Box, window.lunalyrBox) so YouTube's own letterbox bars fall outside. The player shows only while it
+//   plays (ShowsVideo): paused, ended or buffering, the wallpaper's layer covers it with the video's still. Shown whole, a
+//   player that starts playing stays covered for MusicVideoFramings.TitleOverlayHold (RevealDelay), and a buffering one is
+//   covered at once (HideDelay), so YouTube's start-of-play title overlay is never seen. The Mac's frozen frame (a picture
+//   of a paused player) is not part of this; the still shows instead.
 // Silence does not rest on the page: the host mutes the whole WebView2 (CoreWebView2.IsMuted) before it navigates.
 
 using System.Globalization;
@@ -48,13 +52,80 @@ public static class YouTubeEmbed
     }
 
     /// <summary>
-    /// Whether the player is on screen: from the moment it is ready, in every state (playing, paused, buffering, ended), as
-    /// YouTube draws it; never before it is ready or after it failed (there is no player to show then).
+    /// How much larger than the screen a filled player is drawn (and clipped): enough to push YouTube's title bar (top left)
+    /// and logo (bottom right) off the edges. The video is aspect-filled anyway. Shown whole, there is none
+    /// (<see cref="MusicVideoFramings.YouTubeOverscan"/>).
     /// </summary>
-    public static bool ShowsPlayer(bool ready, bool failed) => ready && !failed;
+    public const double Overscan = MusicVideoFramings.FillOverscan;
 
-    /// <summary>A sync sample of a video that is playing, not buffering (for the stuck-player check).</summary>
-    public static bool IsPlaying(MusicVideoDrift.Sample sample) => sample.VideoPlaying && !sample.Buffering;
+    /// <summary>
+    /// The player is visible only while it plays (state 1). Paused, ended, cued, unstarted or buffering, YouTube draws its
+    /// title bar and a big play or pause button over the video; the wallpaper shows the video's still instead. Buffering
+    /// hides it only after a grace (<see cref="HideDelay"/>).
+    /// </summary>
+    public static bool ShowsVideo(int state) => state == 1;
+
+    /// <summary>The same rule from a sync sample: playing, not buffering.</summary>
+    public static bool ShowsVideo(MusicVideoDrift.Sample sample) => sample.VideoPlaying && !sample.Buffering;
+
+    /// <summary>
+    /// A playing video that starts buffering (a drift seek, a stall) stays up this long before it is hidden: most seeks land
+    /// sooner, and hiding at once flashed the still on every one.
+    /// </summary>
+    public const double BufferingGrace = 0.3;
+
+    /// <summary>
+    /// How long to wait before hiding the player. Only buffering while the song plays waits, and not when a picture is ready
+    /// to cover it; anything else (a pause, the end, an error) hides at once. Shown whole, a buffering player hides at once:
+    /// YouTube shows its overlays again once the seek or stall is over.
+    /// </summary>
+    public static double HideDelay(bool buffering, MusicVideoHold hold, bool hasFrame, MusicVideoFraming framing = MusicVideoFraming.Fill) =>
+        buffering && hold == MusicVideoHold.Live && !hasFrame && framing == MusicVideoFraming.Fill ? BufferingGrace : 0;
+
+    /// <summary>
+    /// How long a player that starts playing stays hidden before it is shown: none when filled (YouTube's title is
+    /// off-screen) or when it shows already; YouTube's title overlay's while when shown whole.
+    /// </summary>
+    public static double RevealDelay(MusicVideoFraming framing, bool showing) => showing ? 0 : framing.RevealHold();
+
+    /// <summary>
+    /// Shown whole: the player's size in per cent of the web view, which is only as large as the visible picture. A video of
+    /// another shape than 16:9 is drawn larger so YouTube's own bars fall outside the view; nothing is ever drawn larger
+    /// than the screen.
+    /// </summary>
+    public sealed record Box
+    {
+        private Box(double width, double height)
+        {
+            Width = width;
+            Height = height;
+        }
+
+        public double Width { get; }
+        public double Height { get; }
+
+        /// <summary>A box of these per cents (each capped at 400), or null when either is not a positive number.</summary>
+        public static Box? Create(double width, double height) =>
+            double.IsFinite(width) && double.IsFinite(height) && width > 0 && height > 0
+                ? new Box(Math.Min(400, width), Math.Min(400, height))
+                : null;
+
+        /// <summary>The box as the page's script reads it: <c>[w,h]</c>, three decimals.</summary>
+        public string Script => string.Create(CultureInfo.InvariantCulture, $"[{Width:0.000},{Height:0.000}]");
+    }
+
+    /// <summary>The page's overscan, as the page's script reads it (one decimal at least: "1.0", "1.25", "2.0").</summary>
+    public static string Number(double value) => value.ToString(value == Math.Floor(value) ? "0.0" : "0.0##", CultureInfo.InvariantCulture);
+
+    /// <summary>The script that sets the page's overscan.</summary>
+    public static string OverscanScript(double overscan) => $"window.lunalyrOverscan && window.lunalyrOverscan({Number(ClampOverscan(overscan))})";
+
+    /// <summary>The script that sets (or, with null, clears) the player's box.</summary>
+    public static string BoxScript(Box? box) => box is null
+        ? "window.lunalyrBox && window.lunalyrBox(0, 0)"
+        : string.Create(CultureInfo.InvariantCulture, $"window.lunalyrBox && window.lunalyrBox({box.Width:0.000}, {box.Height:0.000})");
+
+    private static double ClampOverscan(double overscan) => double.IsFinite(overscan) ? Math.Min(2, Math.Max(1, overscan)) : Overscan;
 
     /// <summary>The interface language for the player's own text: Windows' (two or three ASCII letters, else "en").</summary>
     public static string PlayerLanguage(CultureInfo? culture = null)
@@ -77,23 +148,38 @@ public static class YouTubeEmbed
     private static string SafeLanguage(string language) =>
         language.Length > 0 && language.All(char.IsAsciiLetter) ? language : "en";
 
-    public static string Html(string videoId, double start, int page = 0, string? language = null)
+    /// <summary>
+    /// The player's page. <paramref name="overscan"/> is its zoom (1.25 filled, 1 whole; kept within 1…2), and
+    /// <paramref name="box"/> the player's size within the page when shown whole (null: it covers the page). Both can change
+    /// later without a reload (<see cref="OverscanScript"/>, <see cref="BoxScript"/>).
+    /// </summary>
+    public static string Html(string videoId, double start, int page = 0, string? language = null, double overscan = Overscan, Box? box = null)
     {
         var source = EmbedSource(videoId, start, language ?? PlayerLanguage());
         var pageText = page.ToString(CultureInfo.InvariantCulture);
+        var zoom = Number(ClampOverscan(overscan));
+        var boxText = box?.Script ?? "null";
         return $$"""
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="referrer" content="strict-origin-when-cross-origin">
             <style>
             html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
-            #frame{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+            #frame{position:absolute;left:50%;top:50%;width:max(100vw,177.78vh);height:max(100vh,56.25vw);
+            transform:translate(-50%,-50%) scale({{zoom}});pointer-events:none;opacity:0;
+            transition:opacity .6s cubic-bezier(0.22,1,0.36,1)}
             #frame iframe{width:100%;height:100%;border:0;pointer-events:none}
             </style></head><body><div id="frame"><iframe id="player" src="{{source}}" title="Music video"
             allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
             <script>
-            var player = null, ready = false;
+            var player = null, ready = false, blurPx = 0, overscan = {{zoom}}, box = {{boxText}};
             function post(type, value) {
               try { window.chrome.webview.postMessage({type: type, value: value, video: '{{videoId}}', page: {{pageText}}}); } catch (e) {}
+            }
+            function visibleFor(state) { return state === 1; }
+            function show(state) {
+              // Buffering keeps what shows: Lunalyr covers the player if it lasts.
+              if (state === 3) return;
+              document.getElementById('frame').style.opacity = visibleFor(state) ? '1' : '0';
             }
             function hideCaptions() {
               if (!player) return;
@@ -104,13 +190,14 @@ public static class YouTubeEmbed
             function onYouTubeIframeAPIReady() {
               player = new YT.Player('player', {
                 events: {
-                  onReady: function (event) { ready = true; event.target.mute(); hideCaptions(); post('ready', 0); },
-                  onError: function (event) { post('error', event.data); },
+                  onReady: function (event) { ready = true; event.target.mute(); hideCaptions(); show(-1); post('ready', 0); },
+                  onError: function (event) { show(-1); post('error', event.data); },
                   onApiChange: function () { hideCaptions(); },
                   onStateChange: function (event) {
                     var state = event.data;
                     if (state === 1 || state === 3) { player.mute(); }
                     if (state === -1 || state === 1 || state === 5) { hideCaptions(); }
+                    show(state);
                     post('state', state);
                   }
                 }
@@ -125,10 +212,17 @@ public static class YouTubeEmbed
             window.lunalyrPlay = function () { if (ready) { player.mute(); player.playVideo(); } };
             window.lunalyrPause = function () { if (ready) player.pauseVideo(); };
             window.lunalyrSeek = function (t) { if (ready) { player.mute(); player.seekTo(t, true); } };
-            window.lunalyrBlur = function (px) {
+            function applyLook() {
               var frame = document.getElementById('frame');
-              frame.style.filter = px > 0 ? 'blur(' + px + 'px)' : '';
-            };
+              frame.style.filter = blurPx > 0 ? 'blur(' + blurPx + 'px)' : '';
+              frame.style.transform = 'translate(-50%,-50%) scale(' + (overscan * (blurPx > 0 ? 1.04 : 1)) + ')';
+              frame.style.width = box ? box[0] + '%' : '';
+              frame.style.height = box ? box[1] + '%' : '';
+            }
+            window.lunalyrBlur = function (px) { blurPx = px; applyLook(); };
+            window.lunalyrOverscan = function (scale) { overscan = scale; applyLook(); };
+            window.lunalyrBox = function (w, h) { box = (w > 0 && h > 0) ? [w, h] : null; applyLook(); };
+            applyLook();
             </script>
             <script src="https://www.youtube.com/iframe_api"></script>
             </body></html>
@@ -253,8 +347,11 @@ public sealed class YouTubeEmbedSession
     public int Page { get; private set; }
     public bool Ready { get; private set; }
 
-    /// <summary>Whether the player is on screen now (<see cref="YouTubeEmbed.ShowsPlayer"/>).</summary>
-    public bool ShowsPlayer => YouTubeEmbed.ShowsPlayer(Ready, _failed);
+    /// <summary>
+    /// The page has a working player (ready, not failed): its window can be shown beneath the wallpaper, which covers it
+    /// except while it plays (<see cref="YouTubeEmbed.ShowsVideo(int)"/>).
+    /// </summary>
+    public bool HasPlayer => Ready && !_failed;
     public int Reloads { get; private set; }
 
     /// <summary>Effects that arrive on their own (the ready timeout), on a pool thread.</summary>
@@ -315,7 +412,7 @@ public sealed class YouTubeEmbedSession
             case MessageKind.Error:
                 return YouTubeEmbed.Failure(message.Value) is { } failure ? Fail(failure) : Effect.None;
             case MessageKind.State:
-                return Effect.Show(ShowsPlayer);
+                return _failed ? Effect.Show(false) : Effect.Show(YouTubeEmbed.ShowsVideo(message.Value));
             default:
                 return Effect.None;
         }

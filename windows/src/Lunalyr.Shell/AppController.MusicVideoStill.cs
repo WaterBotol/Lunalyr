@@ -21,11 +21,15 @@ public sealed partial class AppController
     /// <summary>The YouTube video's still, decoded, once it has loaded; null otherwise.</summary>
     public CoverArt? MusicVideoStill => _musicVideoStill;
 
-    /// <summary>Where YouTube videos' stills come from (YouTube's image host only), or null to fetch none this run.</summary>
+    /// <summary>
+    /// Where YouTube videos' stills come from (YouTube's image host), and their shapes when shown whole (YouTube's oEmbed,
+    /// AppController.MusicVideoShape.cs); null to fetch neither this run.
+    /// </summary>
     public void UseMusicVideoStills(IMusicVideoHttp? http)
     {
         lock (_gate) _stillHttp = http;
         FollowMusicVideoStill();
+        FollowMusicVideoShape();
     }
 
     /// <summary>Starts fetching the still of the YouTube video now on screen, or lets the last one go.</summary>

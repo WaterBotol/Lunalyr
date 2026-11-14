@@ -97,6 +97,10 @@ public sealed class MusicVideoPlatformTests
         Assert.False(MusicVideoHttpClient.Allows(new Uri("https://www.youtube.com/watch?v=4NRXx6U8ABQ")));
         Assert.False(MusicVideoHttpClient.Allows(new Uri("https://consent.youtube.com/m")));
         Assert.False(MusicVideoHttpClient.Allows(new Uri("https://example.com/")));
+        // "Show the whole video": exactly one video's oEmbed address (only its ID), nothing else on that path.
+        Assert.True(MusicVideoHttpClient.Allows(YouTubeVideoShape.Url("4NRXx6U8ABQ")!));
+        Assert.False(MusicVideoHttpClient.Allows(new Uri("https://www.youtube.com/oembed?url=https://example.com/")));
+        Assert.False(MusicVideoHttpClient.Allows(new Uri("https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D4NRXx6U8ABQ%26t%3D1")));
         // Refused before anything is sent: the handler would throw if it were reached.
         using var client = new MusicVideoHttpClient(new RefusingHandler());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
