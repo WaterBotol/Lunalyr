@@ -119,7 +119,10 @@ internal sealed partial class AppHost
     public bool QuietWindows => _options.QuietWindows;
 
     /// <summary>Windows' "Animation effects" is off (read, never changed).</summary>
-    public bool ReduceMotion => _motion?.ReduceMotion ?? false;
+    public bool SystemReducesMotion => _motion?.ReduceMotion ?? false;
+
+    /// <summary>The wallpaper moves less: Animation effects off, and "Follow Windows' Animation effects" on.</summary>
+    public bool ReduceMotion => _settings.Current.ReducesMotion(SystemReducesMotion);
 
     /// <summary>The readings services the wallpaper uses, once started (the settings preview draws with them).</summary>
     public ReadingServices? Readings => _readings;
@@ -253,13 +256,25 @@ internal sealed partial class AppHost
                 {
                     // "Match the music" carries on from where its rotation got to.
                     LayoutCursorChanged = cursor => _settings.Update(s => s with { RotateLayoutsCursor = cursor }),
-                    ReduceMotion = motion.ReduceMotion,
+                    ReduceMotion = ReduceMotion,
                 });
-            motion.Changed += (_, reduce) => controller.SetReduceMotion(reduce);
-            if (motion.ReduceMotion) _log.Info("Animation effects are off: the wallpaper moves less (Reduce Motion).");
+            motion.Changed += (_, _) =>
+            {
+                controller.SetReduceMotion(ReduceMotion);
+                MotionMayNeedNotice();
+            };
+            if (motion.ReduceMotion)
+                _log.Info(ReduceMotion
+                    ? "Animation effects are off: the wallpaper moves less (Reduce Motion)."
+                    : "Animation effects are off, but the wallpaper keeps its motion (Follow Windows' Animation effects is off).");
             controller.StatusChanged += (_, _) => QueueStatusUpdate();
             WireFloating(_wallpaper, controller);
-            _settings.Changed += (_, e) => controller.ApplySettings(e.NewValue);
+            _settings.Changed += (_, e) =>
+            {
+                controller.ApplySettings(e.NewValue);
+                if (e.OldValue.MotionFollowsWindows != e.NewValue.MotionFollowsWindows) controller.SetReduceMotion(ReduceMotion);
+                if (!e.OldValue.OnboardingDone && e.NewValue.OnboardingDone) MotionMayNeedNotice();
+            };
             controller.Start();
             controller.ApplySettings(_settings.Current); // anything changed while starting
             StartVisualisers(controller);
@@ -274,6 +289,7 @@ internal sealed partial class AppHost
             });
             QueueStatusUpdate();
             ExtrasReady();
+            MotionMayNeedNotice();
             _log.Info($"Start-up: following now playing {SinceLaunch():0} ms after launch ({_sessions.Sessions.Count} media session(s)). "
                 + $"Readings: {WindowsReadingServices.Describe(readings)}.");
             if (_options.StatsPath is not null)

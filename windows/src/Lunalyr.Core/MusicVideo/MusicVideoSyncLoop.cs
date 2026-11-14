@@ -77,6 +77,9 @@ public sealed class MusicVideoSyncLoop
     /// <summary>The check while the video's bar is dragged: the video follows the hand.</summary>
     public const double DragInterval = 1.0 / 15;
 
+    /// <summary>A sample unanswered for this long is given up, so the checks carry on.</summary>
+    public const double SampleTimeout = 3;
+
     private readonly Func<double> _songTime;
     private readonly Func<bool> _songPlaying;
     private readonly Func<double> _offset;
@@ -84,6 +87,8 @@ public sealed class MusicVideoSyncLoop
     private readonly Func<double, Action, IDisposable> _schedule;
     private IDisposable? _timer;
     private bool _inFlight;
+    private double _inFlightSince;
+    private int _generation;
     private double? _lastDuration;
     private double? _lastOffset;
 
@@ -171,14 +176,18 @@ public sealed class MusicVideoSyncLoop
         }
         // Before the sample: a closed player (a long pause) has none, and still needs to hear that the song plays again.
         surface.NoteHold(Hold(_lastDuration));
-        if (_inFlight) return;
+        // A sample that never answers (a page that went away mid-call, a closed player) must not stop every later check:
+        // after SampleTimeout it is given up, and its answer, should it still come, is ignored.
+        if (_inFlight && _uptime() - _inFlightSince < SampleTimeout) return;
         _inFlight = true;
+        var generation = ++_generation;
         // The player answers a moment later: its position was read somewhere between asking and the answer, so it is
         // compared with the song's position halfway between.
         var askedSong = _songTime();
-        var askedAt = _uptime();
+        var askedAt = _inFlightSince = _uptime();
         surface.Sample((sample, duration) =>
         {
+            if (generation != _generation) return;
             _inFlight = false;
             var answeredSong = _songTime();
             var answeredAt = _uptime();

@@ -426,7 +426,13 @@ internal sealed partial class YouTubeWallpaperHost : IMusicVideoPlaybackSurface,
         {
             json = await _controller.CoreWebView2.ExecuteScriptAsync("window.lunalyrSample && window.lunalyrSample()");
         }
-        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or ObjectDisposedException or OperationCanceledException)
+        {
+            // The page or the WebView2 went away mid-call (async void: nothing may escape).
+            done(null, null);
+            return;
+        }
+        if (_disposed || _controller is null)
         {
             done(null, null);
             return;

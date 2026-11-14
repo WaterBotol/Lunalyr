@@ -81,6 +81,8 @@ public sealed class AppSettingsTests
             "lyricCardBackgroundPath", "lyricCardUseSong", "lyricCardTextScale",
             // Updates and the first-run welcome (milestone 8)
             "automaticUpdateChecks", "onboardingDone", "onBattery",
+            // Windows' Animation effects: followed or not, and the notice saying why nothing moves
+            "motionFollowsWindows", "motionNoticeShown",
             // The last of the Lyric style page: backing vocals, typography, colour, word reveal and remembered styles
             "backingVocalsLayer", "backingVocalStyle", "editorialTypography", "editorialAmount", "randomizeLyricFonts",
             "lyricColourMode", "lyricColourSpeed", "lyricColourStrength", "lyricColourCustom", "wordRevealByStyle",

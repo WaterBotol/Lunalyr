@@ -14,7 +14,8 @@ internal sealed partial class AppHost
     private void StartVisualisers(AppController controller)
     {
         VisualiserServices.UseSettings(() => _settings.Current);
-        VisualiserServices.UseReduceMotion(() => _motion?.ReduceMotion ?? false);
+        // Windows' own setting, even with "Animate anyway": it also keeps beat flashes off, a safety matter, not a look.
+        VisualiserServices.UseReduceMotion(() => SystemReducesMotion);
         var audio = new SystemAudioService(() => _settings.Current, () =>
         {
             var status = controller.Status;

@@ -75,6 +75,9 @@ internal static class LyricStylePage
         page.Children.Add(Card("Lyric size", null, "",
             Slider(ctx, 0.7, 1.5, 0.01, SettingsCopy.Percent, s => s.LyricScale, (s, v) => s with { LyricScale = Math.Round(v, 2) }))
             .ShowWhen(ctx, s => !s.IsFloating));
+        page.Children.Add(Card("Follow Windows’ Animation effects",
+            "On: when Animation effects is off in Windows (Accessibility › Visual effects), lyrics keep still and the music video shows a still picture. Off: Lunalyr animates anyway. Visualiser beat flashes always follow Windows.",
+            "", Toggle(ctx, s => s.MotionFollowsWindows, (s, v) => s with { MotionFollowsWindows = v, MotionNoticeShown = true })));
 
         // ---- Typeface ----
         Section(page, "Typeface");

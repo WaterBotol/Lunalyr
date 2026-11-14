@@ -346,6 +346,47 @@ public sealed class MusicVideoTests
         loop.Stop();
     }
 
+    /// <summary>A surface whose first sample never answers (a WebView2 call lost when its page went away).</summary>
+    private sealed class LostFirstSampleSurface : IMusicVideoPlaybackSurface
+    {
+        public int Asked;
+        public Action<MusicVideoDrift.Sample?, double?>? Lost;
+        public bool Playing;
+        public readonly List<double> Seeks = [];
+        public double SeekLead => 0;
+
+        public void Sample(Action<MusicVideoDrift.Sample?, double?> done)
+        {
+            if (Asked++ == 0) Lost = done;
+            else done(new MusicVideoDrift.Sample(0, Playing), 300);
+        }
+
+        public void PlayVideo() => Playing = true;
+        public void PauseVideo() => Playing = false;
+        public void SeekVideo(double seconds) => Seeks.Add(seconds);
+    }
+
+    [Fact]
+    public void SyncLoopCarriesOnAfterASampleThatNeverAnswers()
+    {
+        double clock = 0;
+        var surface = new LostFirstSampleSurface();
+        var loop = new MusicVideoSyncLoop(() => 30, () => true, () => 0, () => clock) { Surface = surface };
+        loop.Tick();
+        clock += 1;
+        loop.Tick();
+        Assert.Equal(1, surface.Asked); // still waiting
+        clock += MusicVideoSyncLoop.SampleTimeout;
+        loop.Tick();
+        Assert.Equal(2, surface.Asked);
+        Assert.True(surface.Playing);
+        Assert.Equal([30.0], surface.Seeks);
+        // The lost answer arriving late changes nothing.
+        surface.Lost!(new MusicVideoDrift.Sample(999, false), 300);
+        Assert.Equal([30.0], surface.Seeks);
+        Assert.True(surface.Playing);
+    }
+
     // ---- Controller and fallback ----
 
     // Ported from MusicVideoTests.swift: testControllerFallsBackAndReportsWhy
