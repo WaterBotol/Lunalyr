@@ -24,6 +24,7 @@ import XCTest
 //   MenuBarSnapshots.swift       UISnapshotCatalogue.menuBar     (menu-bar panel)
 //   OnboardingSnapshots.swift    UISnapshotCatalogue.onboarding  (first run)
 //   DesignSystemSnapshots.swift  UISnapshotCatalogue.designSystem (Sources/UI/Design)
+//   LyricCardSnapshots.swift     UISnapshotCatalogue.lyricCard   (the lyric card window)
 // A case is a name (its path under the outdir, no extension), a note for the
 // index, the chrome and size to draw in, the fake player state, a `prepare`
 // that sets the isolated stores up, and the view:
@@ -188,7 +189,7 @@ final class UISnapshotTests: XCTestCase {
 /// Every case, surface by surface; each list lives in its own file.
 @MainActor
 enum UISnapshotCatalogue {
-    static var all: [UISnapshotCase] { settings + menuBar + onboarding + designSystem }
+    static var all: [UISnapshotCase] { settings + menuBar + onboarding + designSystem + lyricCard }
 }
 
 /// One snapshot: a surface in one state, drawn in each of `looks`.
