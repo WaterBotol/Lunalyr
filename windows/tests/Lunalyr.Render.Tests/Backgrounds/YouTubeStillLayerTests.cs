@@ -1,4 +1,5 @@
 using Lunalyr.Core.Colour;
+using Lunalyr.Core.MusicVideo;
 using Lunalyr.Render.Backgrounds;
 using Lunalyr.Render.Diagnostics;
 using Lunalyr.Render.Scene;
@@ -34,7 +35,7 @@ public sealed class YouTubeStillLayerTests : IDisposable
         return new CoverArt(48, 36, pixels);
     }
 
-    private (byte R, byte G, byte B, byte A) Centre(IRenderLayer layer, double now, bool desktop = true)
+    private (byte R, byte G, byte B, byte A) Centre(IRenderLayer layer, double now, bool desktop = true, bool main = true)
     {
         var dc = _surface.Context;
         dc.BeginDraw();
@@ -43,7 +44,7 @@ public sealed class YouTubeStillLayerTests : IDisposable
         {
             Dc = dc, DWrite = _surface.DWrite, D2DFactory = _surface.Factory, Size = _surface.Size, Scale = 1, WallSeconds = now,
             SongSeconds = double.NaN, IsPlaying = false, Scene = new SceneSnapshot { Palette = Palette.Default }, DeltaSeconds = 1 / 60.0,
-            AheadWork = desktop ? new Lunalyr.Render.Pacing.AheadWork() : null, IsMainDisplay = desktop,
+            AheadWork = desktop ? new Lunalyr.Render.Pacing.AheadWork() : null, IsMainDisplay = desktop && main,
         });
         dc.EndDraw().CheckError();
         var pixels = _surface.ReadPixels();
@@ -79,6 +80,30 @@ public sealed class YouTubeStillLayerTests : IDisposable
         // Dimming applies over the still.
         feed.Inputs = feed.Inputs with { PlayerVisible = false, Blur = 0, Dim = 0.5 };
         Assert.InRange(Centre(layer, 6).R, 110, 120);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnotherDisplayShowsTheAlbumColoursNotAFrozenStill(bool whole)
+    {
+        // The player plays on the main display only: elsewhere its still would sit frozen for the whole song.
+        var feed = new Feed
+        {
+            Inputs = new MusicVideoInputs(null, 3, true, 0, 0, 0) with
+            {
+                YouTubeFraming = whole ? MusicVideoFraming.Whole : MusicVideoFraming.Fill,
+            },
+        };
+        using var layer = new YouTubeVideoLayerFactory(feed, Plain).Create();
+        _surface.Prepare(layer);
+        var standIn = Centre(layer, 1, main: false);
+        Assert.Equal(255, standIn.A);
+        feed.Inputs = feed.Inputs with { Still = Solid(230, 20, 20) };
+        Assert.Equal(standIn, Centre(layer, 5, main: false));
+        // Nor is it see-through there when the main display's player is uncovered.
+        feed.Inputs = feed.Inputs with { PlayerVisible = true };
+        Assert.Equal(standIn, Centre(layer, 6, main: false));
     }
 
     public void Dispose() => _surface.Dispose();

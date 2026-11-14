@@ -629,9 +629,12 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         {
             var inputs = _feed.Read();
             // Only the main display's desktop surface has the player's window beneath it (the engine passes AheadWork and
-            // IsMainDisplay there): other displays and the offscreen settings preview show the still.
+            // IsMainDisplay there). The other displays' desktops never play it: they show the album's colours rather than
+            // the video's still, which there would sit frozen for the whole song (Windows' choice; the Mac shows the still).
+            // The offscreen settings preview shows the still.
             var uncovered = inputs.PlayerVisible && frame.AheadWork is not null && frame.IsMainDisplay;
-            if (inputs.YouTubeFraming.ShowsBackdrop()) DrawWhole(dc, frame, inputs, uncovered);
+            if (frame.AheadWork is not null && !frame.IsMainDisplay) _standIn.Draw(dc, frame.Scene.Palette, _size);
+            else if (inputs.YouTubeFraming.ShowsBackdrop()) DrawWhole(dc, frame, inputs, uncovered);
             else if (!uncovered)
             {
                 _standIn.Draw(dc, frame.Scene.Palette, _size);
