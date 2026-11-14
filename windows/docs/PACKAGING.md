@@ -3,7 +3,10 @@
 The decision and why are in [ARCHITECTURE.md](ARCHITECTURE.md#packaging-milestone-8). This file is how it works and
 how to use it.
 
-## The installer: `Lunalyr Setup <version>.exe`
+## The installer: `Lunalyr-Windows.exe`
+
+The one file people download, named plainly so it's obvious (GitHub turns spaces in release files into dots, so
+there is a dash). Once installed it keeps a copy of itself as `Lunalyr Setup.exe`, the uninstaller.
 
 One file, per user, no administrator rights:
 
@@ -77,7 +80,7 @@ the last dialog says where it is.
 Checking the installer without touching the real install (what milestone 8's checks did):
 
 ```powershell
-& "Lunalyr Setup 0.8.0.exe" --silent --no-launch --root $env:TEMP\lunalyr-check\Programs\Lunalyr `
+& "Lunalyr-Windows.exe" --silent --no-launch --root $env:TEMP\lunalyr-check\Programs\Lunalyr `
     --registry-base Software\Lunalyr\SetupCheck --start-menu $env:TEMP\lunalyr-check\StartMenu --log $env:TEMP\lunalyr-check\setup.log
 reg query HKCU\Software\Lunalyr\SetupCheck /s
 & "$env:TEMP\lunalyr-check\Programs\Lunalyr\Lunalyr Setup.exe" --uninstall --silent --root … (same three options)
@@ -91,7 +94,7 @@ tools\Packaging\build-installer.ps1 -Version 0.8.0
 ```
 
 publishes the app and the setup (Native AOT), drops the `.pdb` files, and writes
-`artifacts\installer\0.8.0\Lunalyr Setup 0.8.0.exe` (about 42 MB). With `-Thumbprint` it signs (below); with
+`artifacts\installer\0.8.0\Lunalyr-Windows.exe` (about 42 MB). With `-Thumbprint` it signs (below); with
 `-FeedUrl`/`-UpdateKey` the app is built with its update service; with `-DownloadUrl`/`-FeedKeyFile` it writes and signs
 `update.json`. It uploads nothing.
 
@@ -104,7 +107,7 @@ Re-implemented from the Mac's behaviour (Sparkle with an EdDSA-signed appcast; t
 
 - **The feed** is `update.json` at an HTTPS address, with its signature at `update.json.sig`:
   ```json
-  { "product": "Lunalyr", "version": "0.9.0", "url": "https://…/Lunalyr Setup 0.9.0.exe",
+  { "product": "Lunalyr", "version": "0.9.0", "url": "https://…/Lunalyr-Windows.exe",
     "sha256": "…", "size": 42512232, "notes": "…", "published": "2026-11-20T00:00:00+00:00" }
   ```
   The signature is ECDSA P-256 over SHA-256 of the file's exact bytes (Base64, IEEE P1363). .NET has no Ed25519, so
@@ -135,7 +138,7 @@ Re-implemented from the Mac's behaviour (Sparkle with an EdDSA-signed appcast; t
 ### Publishing an update (the owner's step, not done)
 
 1. `tools\InstallerBuilder` `keygen --private <somewhere safe, outside the repo>` once; keep the printed public key.
-2. `build-installer.ps1 -Version 0.9.0 -FeedUrl https://…/update.json -UpdateKey <public key> -DownloadUrl https://…/Lunalyr Setup 0.9.0.exe -FeedKeyFile <private key> [-Thumbprint …]`
+2. `build-installer.ps1 -Version 0.9.0 -FeedUrl https://…/update.json -UpdateKey <public key> -DownloadUrl https://github.com/WaterBotol/Lunalyr/releases/download/<tag>/Lunalyr-Windows.exe -FeedKeyFile <private key> [-Thumbprint …]`
 3. Upload the installer, then `update.json` and `update.json.sig` (in that order: the feed must never point at a file
    that isn't there yet). A GitHub release with `releases/latest/download/update.json` works.
 

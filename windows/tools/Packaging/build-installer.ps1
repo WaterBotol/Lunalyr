@@ -1,10 +1,10 @@
-# Builds "Lunalyr Setup <version>.exe": publishes the app and the setup program (Native AOT), zips the app into the
-# setup, and optionally signs everything and writes the update feed. Uploads nothing and publishes nothing: putting
+# Builds "Lunalyr-Windows.exe", the one file people download (in artifacts\installer\<version>\): publishes the app
+# and the setup program (Native AOT), zips the app into the setup, and optionally signs everything and writes the update feed. Uploads nothing and publishes nothing: putting
 # the installer and feed online is the owner's step. See docs/PACKAGING.md.
 #
 #   tools\Packaging\build-installer.ps1 -Version 0.8.0 [-Out <folder>]
 #       [-FeedUrl https://…/update.json -UpdateKey <Base64 public key>]     built into the app: its update service
-#       [-DownloadUrl https://…/Lunalyr.Setup.0.8.0.exe -FeedKeyFile <private .pem>]   writes and signs update.json
+#       [-DownloadUrl https://…/Lunalyr-Windows.exe -FeedKeyFile <private .pem>]   writes and signs update.json
 #       [-Thumbprint <cert thumbprint>]                                    signs the app, the setup and the installer
 param(
     [Parameter(Mandatory)][string]$Version,
@@ -49,7 +49,8 @@ try {
         & (Join-Path $PSScriptRoot "sign.ps1") -Thumbprint $Thumbprint -Files @((Join-Path $stage "Lunalyr.exe"), $inner)
     }
 
-    $installer = Join-Path $Out "Lunalyr Setup $Version.exe"
+    # One plain name for downloads and release files (GitHub turns spaces into dots); the version is inside it.
+    $installer = Join-Path $Out "Lunalyr-Windows.exe"
     dotnet run --project tools/InstallerBuilder -c Release -- make --app $stage --setup $inner --stub $stub --version $Version --out $installer | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Making the installer failed." }
     if ($sign) { & (Join-Path $PSScriptRoot "sign.ps1") -Thumbprint $Thumbprint -Files @($installer) }
