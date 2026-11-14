@@ -10,13 +10,16 @@ public static class LyricSourceCatalog
     public static IReadOnlyList<ILyricSource> CreateDefault(LyricHttpClient http, ILyricPayloadProbe? probe = null) =>
     [
         new LocalLyricsSource(probe),
+        // Lyrics+ rests its own mirrors one by one; the other services rest whole after repeated failures.
         new LyricsPlusSource(http),
-        new AmllSource(http, probe: probe),
-        new NetEaseSource(http, probe: probe),
-        new LrclibSource(http, probe: probe),
-        new QQMusicSource(http, probe: probe),
-        new KugouSource(http, probe: probe),
-        new KuwoSource(http, probe: probe),
-        new LyricsOvhSource(http),
+        Resting(new AmllSource(http, probe: probe), http),
+        Resting(new NetEaseSource(http, probe: probe), http),
+        Resting(new LrclibSource(http, probe: probe), http),
+        Resting(new QQMusicSource(http, probe: probe), http),
+        Resting(new KugouSource(http, probe: probe), http),
+        Resting(new KuwoSource(http, probe: probe), http),
+        Resting(new LyricsOvhSource(http), http),
     ];
+
+    private static RestingSource Resting(ILyricSource source, LyricHttpClient http) => new(source, http.Time);
 }
