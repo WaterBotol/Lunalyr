@@ -8,9 +8,13 @@
 //   (the lookup still running) it draws the stand-in, the Mac's musicVideoPending.
 // - "musicVideo.youtube": see-through (ISeeThroughLayer). YouTube's player is a WebView2 window of its own beneath the
 //   wallpaper surface (Lunalyr.App, YouTubeWallpaperHost); this layer draws over it only the dimming, the scrim and the
-//   text backing while the player is on screen (playing or paused, as YouTube draws it, never covered), and while there
-//   is no player the video's own still (the Mac's YouTubeThumbnail: under Reduce Motion, in the settings preview, on the
-//   other displays) once it has loaded, fading in over the stand-in.
+//   text backing while the player is uncovered (it plays: the Mac's rule, so YouTube's own pause button and title never
+//   show), and otherwise the video's own still (the Mac's YouTubeThumbnail: paused, loading, under Reduce Motion, in the
+//   settings preview, on the other displays) once it has loaded, fading in over the stand-in.
+// - Framing (the Mac's MusicVideoFraming, Test Build 88), per source: filled as before, or shown whole: the picture's width
+//   matched (1 % bleed) over the album colours and a blurred, darkened backdrop (MusicVideoBackdropDrawer: the cover, or
+//   the YouTube still), which shows in the bands a wider picture leaves. A YouTube video shown whole is see-through only
+//   over its visible picture (MusicVideoFramings.VisiblePixels, where the host puts the player's window).
 
 using System.Numerics;
 using Lunalyr.Core.Colour;
@@ -37,10 +41,14 @@ namespace Lunalyr.Render.Backgrounds;
 /// <param name="Offset">How far into the video the song starts (<see cref="MusicVideoController.CurrentOffset"/>).</param>
 /// <param name="Dim">"Video dimming", 0…0.85.</param>
 /// <param name="Blur">"Video blur", in points, 0…24.</param>
-/// <param name="PlayerVisible">YouTube's player is on screen (ready, in any state); false before that, or with no player.</param>
+/// <param name="PlayerVisible">YouTube's player is uncovered: it plays (and, shown whole, has played past YouTube's title overlay).</param>
 /// <param name="Still">The YouTube video's still, decoded, once it has loaded (shown wherever its player isn't); else null.</param>
+/// <param name="YouTubeFraming">How a YouTube video sits on the screen (<c>musicVideoFraming</c>).</param>
+/// <param name="FileFraming">How a video file sits on the screen (<c>libraryVideoFraming</c>).</param>
+/// <param name="YouTubeAspect">The YouTube video's own shape (oEmbed, asked only when shown whole), or null for 16:9.</param>
 public readonly record struct MusicVideoInputs(string? LocalPath, double SongTime, bool Playing, double Offset, double Dim, double Blur,
-    bool PlayerVisible = false, CoverArt? Still = null);
+    bool PlayerVisible = false, CoverArt? Still = null, MusicVideoFraming YouTubeFraming = MusicVideoFraming.Fill,
+    MusicVideoFraming FileFraming = MusicVideoFraming.Fill, double? YouTubeAspect = null);
 
 /// <summary>Where the music video layers get their inputs and tell what they saw. Every member is called on the render thread.</summary>
 public interface IMusicVideoFeed
@@ -137,6 +145,13 @@ internal sealed class MusicVideoPicture : IDisposable
     public void Draw(ID2D1DeviceContext dc, ID2D1Bitmap1 bitmap, int width, int height, Vector2 size, double blurPoints, float scale)
     {
         var (x, y, w, h) = WallpaperPlacements.Frame(width, height, size.X, size.Y, WallpaperPlacement.Fill);
+        DrawIn(dc, bitmap, width, height, new VideoRect(x, y, w, h), blurPoints, scale);
+    }
+
+    /// <summary>Draws a bitmap into <paramref name="rect"/> (which may run past the surface), softened by "Video blur".</summary>
+    public void DrawIn(ID2D1DeviceContext dc, ID2D1Bitmap1 bitmap, int width, int height, VideoRect rect, double blurPoints, float scale)
+    {
+        var (x, y, w, h) = (rect.X, rect.Y, rect.Width, rect.Height);
         var blur = double.IsFinite(blurPoints) ? Math.Clamp(blurPoints, 0, 24) : 0;
         if (blur <= 0.01)
         {
@@ -191,6 +206,7 @@ public sealed class MusicVideoLayer : PlacedLayer
     private readonly IMusicVideoFeed _feed;
     private readonly MusicVideoStandIn _standIn = new();
     private readonly MusicVideoPicture _picture = new();
+    private readonly MusicVideoBackdropDrawer _backdrop = new();
     private readonly object _gate = new();
     private readonly Queue<(VideoFrame Frame, int Generation)> _queue = new();
 
@@ -248,8 +264,26 @@ public sealed class MusicVideoLayer : PlacedLayer
             if (_worker is null) Start(dc);
             Follow(dc, frame, inputs);
         }
-        if (_bitmap is not null && !_failed) _picture.Draw(dc, _bitmap, _width, _height, Size, inputs.Blur, Scale);
-        else _standIn.Draw(dc, frame.Scene.Palette, Size);
+        if (_bitmap is not null && !_failed)
+        {
+            if (inputs.FileFraming.ShowsBackdrop())
+            {
+                // Shown whole: the width matched (the Mac's videoGravity: a fit for a wider picture, a fill for a taller one,
+                // grown by the bleed), over the stand-in and the cover's blurred backdrop, which show in the bands.
+                _standIn.Draw(dc, frame.Scene.Palette, Size);
+                _backdrop.Draw(dc, frame.Scene.Cover, Size, frame.WallSeconds);
+                var rect = inputs.FileFraming.Rect((double)_width / _height, new VideoSize(Size.X, Size.Y));
+                _picture.DrawIn(dc, _bitmap, _width, _height, rect, inputs.Blur, Scale);
+            }
+            else
+            {
+                _picture.Draw(dc, _bitmap, _width, _height, Size, inputs.Blur, Scale);
+            }
+        }
+        else
+        {
+            _standIn.Draw(dc, frame.Scene.Palette, Size);
+        }
         _standIn.Dim(dc, inputs.Dim, Size);
     }
 
@@ -517,6 +551,7 @@ public sealed class MusicVideoLayer : PlacedLayer
         _stillAt = null;
         _picture.Release();
         _standIn.Release();
+        _backdrop.Release();
         _bitmap?.Dispose();
         _bitmap = null;
         _texture?.Dispose();
@@ -531,14 +566,14 @@ public sealed class MusicVideoLayer : PlacedLayer
         base.Dispose();
         _picture.Dispose();
         _standIn.Dispose();
+        _backdrop.Dispose();
     }
 }
 
 /// <summary>
-/// Over YouTube's player window: see-through while the player is on screen (playing or paused, as YouTube draws it), with
-/// the dimming, scrim and text backing on top; while there is no player, the video's still (filled, softened by "Video
-/// blur") over the album's colours. Nothing is drawn in place of a paused player: YouTube's API policies don't allow
-/// covering its interface.
+/// Over YouTube's player window: see-through while the player is uncovered (it plays), with the dimming, scrim and text
+/// backing on top; otherwise the video's still (softened by "Video blur") over the album's colours. Filled, the still fills
+/// the surface; shown whole, it sits in the visible picture over the blurred backdrop (<see cref="DrawWhole"/>).
 /// </summary>
 public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
 {
@@ -549,6 +584,7 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
     private readonly WallpaperShadeDrawer _shade;
     private readonly MusicVideoStandIn _standIn = new();
     private readonly MusicVideoPicture _picture = new();
+    private readonly MusicVideoBackdropDrawer _backdrop = new();
     private readonly Logger _log;
     private Vector2 _size;
     private float _scale = 1;
@@ -593,11 +629,13 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         {
             var inputs = _feed.Read();
             // Only the main display's desktop surface has the player's window beneath it (the engine passes AheadWork and
-            // IsMainDisplay there): other displays and the offscreen settings preview show the album colours.
-            if (!inputs.PlayerVisible || frame.AheadWork is null || !frame.IsMainDisplay)
+            // IsMainDisplay there): other displays and the offscreen settings preview show the still.
+            var uncovered = inputs.PlayerVisible && frame.AheadWork is not null && frame.IsMainDisplay;
+            if (inputs.YouTubeFraming.ShowsBackdrop()) DrawWhole(dc, frame, inputs, uncovered);
+            else if (!uncovered)
             {
                 _standIn.Draw(dc, frame.Scene.Palette, _size);
-                DrawStill(dc, inputs, frame.WallSeconds);
+                DrawStill(dc, inputs, frame.WallSeconds, FilledStill(inputs.Still));
             }
             _standIn.Dim(dc, inputs.Dim, _size);
             _shade.Draw(frame, AssumedLuminance, scrim: true, grain: false);
@@ -609,8 +647,61 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         }
     }
 
-    /// <summary>The video's still over the stand-in, fading in over <see cref="YouTubeThumbnail.FadeIn"/> once it arrives.</summary>
-    private unsafe void DrawStill(ID2D1DeviceContext dc, MusicVideoInputs inputs, double now)
+    /// <summary>
+    /// Filled: the still where the filled player draws its picture, cover-sized and zoomed by <see cref="YouTubeEmbed.Overscan"/>
+    /// about the centre, so uncovering the player doesn't jump.
+    /// </summary>
+    private VideoRect? FilledStill(CoverArt? still)
+    {
+        if (still is null) return null;
+        var (x, y, w, h) = WallpaperPlacements.Frame(still.Width, still.Height, _size.X, _size.Y, WallpaperPlacement.Fill);
+        var zoom = MusicVideoFraming.Fill.YouTubeOverscan();
+        return new VideoRect(x + w / 2 - w * zoom / 2, y + h / 2 - h * zoom / 2, w * zoom, h * zoom);
+    }
+
+    /// <summary>
+    /// Shown whole (the Mac's WholeYouTubeVideo): the picture's width matched to the surface, its own shape from oEmbed
+    /// (16:9 until known). The bands above and below show the stand-in and the blurred backdrop (the still, else the cover).
+    /// The visible picture is see-through over the player's window when the player is uncovered; otherwise the still is
+    /// drawn there at the 16:9 player's size and clipped, so YouTube's letterbox bars baked into the still fall outside.
+    /// </summary>
+    private void DrawWhole(ID2D1DeviceContext dc, in FrameContext frame, MusicVideoInputs inputs, bool uncovered)
+    {
+        var container = new VideoSize(_size.X, _size.Y);
+        var layout = MusicVideoFramings.WholeLayoutFor(inputs.YouTubeAspect ?? MusicVideoFramings.YouTubeAspect, container);
+        var visible = layout.VisibleRect(container);
+        // The player's window is placed in whole pixels (MusicVideoFramings.VisiblePixels): the see-through part is that
+        // rectangle, so no seam of the desktop shows between it and the bands.
+        if (uncovered && _scale > 0)
+        {
+            var pixels = MusicVideoFramings.VisiblePixels(inputs.YouTubeAspect ?? MusicVideoFramings.YouTubeAspect,
+                (int)Math.Round(_size.X * _scale), (int)Math.Round(_size.Y * _scale));
+            // One pixel in from a band's edge: the bands overlap the player by a pixel rather than leave a gap.
+            var inset = pixels.Y > 0 ? 1 : 0;
+            visible = new VideoRect(pixels.X / _scale, (pixels.Y + inset) / _scale, pixels.Width / _scale,
+                Math.Max(1, pixels.Height - 2 * inset) / _scale);
+        }
+        var backdrop = inputs.Still ?? frame.Scene.Cover;
+        var cut = uncovered ? visible : (VideoRect?)null;
+        foreach (var band in MusicVideoBackdropDrawer.Bands(_size, cut))
+        {
+            dc.PushAxisAlignedClip(band, AntialiasMode.Aliased);
+            _standIn.Draw(dc, frame.Scene.Palette, _size);
+            dc.PopAxisAlignedClip();
+        }
+        _backdrop.Draw(dc, backdrop, _size, frame.WallSeconds, cut);
+        if (uncovered) return;
+        dc.PushAxisAlignedClip(new Vortice.RawRectF((float)visible.X, (float)visible.Y, (float)(visible.X + visible.Width),
+            (float)(visible.Y + visible.Height)), AntialiasMode.Aliased);
+        DrawStill(dc, inputs, frame.WallSeconds, layout.PlayerRect(container));
+        dc.PopAxisAlignedClip();
+    }
+
+    /// <summary>
+    /// The video's still over the stand-in, fading in over <see cref="YouTubeThumbnail.FadeIn"/> once it arrives: filling the
+    /// surface, or at <paramref name="rect"/> when given.
+    /// </summary>
+    private unsafe void DrawStill(ID2D1DeviceContext dc, MusicVideoInputs inputs, double now, VideoRect? rect)
     {
         if (!ReferenceEquals(inputs.Still, _still))
         {
@@ -631,9 +722,14 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         }
         var shown = Math.Clamp((now - _stillSince) / YouTubeThumbnail.FadeIn, 0, 1);
         if (!double.IsFinite(shown)) shown = 1;
+        void Picture(ID2D1Bitmap1 bitmap)
+        {
+            if (rect is { } at) _picture.DrawIn(dc, bitmap, still.Width, still.Height, at, inputs.Blur, _scale);
+            else _picture.Draw(dc, bitmap, still.Width, still.Height, _size, inputs.Blur, _scale);
+        }
         if (shown >= 1)
         {
-            _picture.Draw(dc, _stillBitmap, still.Width, still.Height, _size, inputs.Blur, _scale);
+            Picture(_stillBitmap);
             return;
         }
         // Eased out, as the Mac's opacity transition.
@@ -644,7 +740,7 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
             LayerOptions = LayerOptions1.None,
         };
         dc.PushLayer(ref layer, null);
-        _picture.Draw(dc, _stillBitmap, still.Width, still.Height, _size, inputs.Blur, _scale);
+        Picture(_stillBitmap);
         dc.PopLayer();
     }
 
@@ -652,6 +748,7 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
     {
         _standIn.Release();
         _picture.Release();
+        _backdrop.Release();
         _stillBitmap?.Dispose();
         _stillBitmap = null;
         _still = null;
@@ -664,5 +761,6 @@ public sealed class YouTubeVideoLayer : IRenderLayer, ISeeThroughLayer
         ReleaseResources();
         _shade.Dispose();
         _picture.Dispose();
+        _backdrop.Dispose();
     }
 }
