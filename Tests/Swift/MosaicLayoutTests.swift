@@ -30,7 +30,8 @@ final class MosaicLayoutTests: XCTestCase {
     }
 
     static func speed(_ runs: [StageRun]) -> Double {
-        let starts = runs.map(\.start).sorted()
+        // As `lineSpeed` reads it: every timed piece, syllables included.
+        let starts = runs.flatMap { $0.parts.map(\.start) }.sorted()
         let gaps = zip(starts, starts.dropFirst()).map { $1 - $0 }.filter { $0 > 0.02 }.sorted()
         guard !gaps.isEmpty else { return 1 }
         return min(3, max(1, 0.5 / max(gaps[gaps.count / 2], 0.1)))
@@ -124,38 +125,167 @@ final class MosaicLayoutTests: XCTestCase {
         let beat: Int
         let rect: CGRect
         let opacity: Double
+        let centre: CGPoint
+        let scale: Double
+        /// The big setting's and the small copy's own opacities (`opacity`
+        /// is the more visible of the two).
+        var big: Double = 0
+        var small: Double = 0
     }
+
+    static let seed = 3
 
     /// Where each beat is drawn at `time`, by Mosaic's own model, with each
     /// beat's size estimated from its text.
     static func boxes(_ runs: [StageRun], at time: Double, exitStart: Double = .infinity) -> [Box] {
         let beats = Mosaic.mosaicBeats(runs)
         let speed = speed(runs)
-        let moves = Mosaic.mosaicMoves(beats, runs: runs, at: time, speed: speed, exitStart: exitStart,
-                                     reduceMotion: false, arrived: runs.count)
-        let ranks = Mosaic.mosaicRanks(moves)
+        let motion = Mosaic.mosaicMotion(beats, runs: runs, at: time, speed: speed, exitStart: exitStart, seed: seed,
+                                         reduceMotion: false, arrived: runs.count)
         let bounds = CGRect(origin: .zero, size: stage)
         let step = Mosaic.mosaicStackStep(unit: unit, readings: false)
         var result: [Box] = []
         for (g, beat) in beats.enumerated() {
             let first = runs[beat.runs.lowerBound]
             let appear = Mosaic.mosaicAppear(first, at: time, speed: speed, reduceMotion: false, arrived: runs.count)
-            let fade = Mosaic.mosaicStackFade(rank: ranks[g])
+            let fade = Mosaic.mosaicStackFade(rank: motion.ranks[g])
             guard appear > 0.001, fade > 0.001 else { continue }
             let big = Mosaic.mosaicBigSize(beat.kind)
             let text = beat.runs.map { runs[$0].text }.joined(separator: " ")
-            let width = min(stage.width * 0.9, CGFloat(text.count) * 0.55 * big * unit)
-            let size = CGSize(width: width, height: big * unit * 1.1)
-            let morph = StageMotion.mosaicMorph(settle: moves[g], smallRatio: 0.6 / Double(big))
-            let centre = Mosaic.mosaicCentre(size, move: moves[g], rank: ranks[g], sway: 0, step: step, overhang: 0,
-                                           rightToLeft: false, in: bounds)
+            let size = estimate(text, big: big)
+            let morph = StageMotion.mosaicMorph(settle: motion.moves[g], smallRatio: 0.6 / Double(big))
+            let centre = Mosaic.mosaicCentre(size, move: motion.moves[g], rank: motion.ranks[g], sway: Mosaic.mosaicSway(g), step: step,
+                                             overhang: 0, rightToLeft: false, in: bounds)
+            var entrance = 1.0
+            if beat.kind == .huge { entrance = 0.8 + 0.2 * min(1.05, appear) }
+            if beat.kind == .bar { entrance = 0.7 + 0.3 * Mosaic.mosaicBarSpread(first, at: time, speed: speed) }
             let scale = CGFloat(morph.bigScale)
             let rect = CGRect(x: centre.x - size.width / 2, y: centre.y - size.height * scale / 2,
                               width: size.width * scale, height: size.height * scale)
-            let opacity = fade * max(min(1, appear * 1.6) * morph.bigOpacity, morph.smallOpacity)
-            result.append(Box(beat: g, rect: rect, opacity: opacity))
+            let bigOpacity = fade * min(1, appear * 1.6) * morph.bigOpacity
+            let smallOpacity = fade * morph.smallOpacity
+            result.append(Box(beat: g, rect: rect, opacity: max(bigOpacity, smallOpacity), centre: centre,
+                              scale: morph.bigScale * entrance, big: bigOpacity, small: smallOpacity))
         }
         return result
+    }
+
+    static func estimate(_ text: String, big: CGFloat) -> CGSize {
+        CGSize(width: min(stage.width * 0.9, CGFloat(text.count) * 0.55 * big * unit), height: big * unit * 1.1)
+    }
+
+    /// The ORIGINAL Mosaic (aa7f036), word by word, for calibration: each
+    /// word's kind by chance, its arrival spring, the shared ranks, settle
+    /// `glide(min(rank, 1.2) / 1.2)`, the huge word's 35 % slide, the morph.
+    static func originalBoxes(_ runs: [StageRun], at time: Double) -> [Box] {
+        let view = StageLyricView(words: [], glue: [], time: time, stageSize: stage, baseSize: unit, mood: .neutral,
+                                  composition: .mosaic, seed: seed, settings: settings())
+        let speed = speed(runs)
+        let shown = StageLyricView.shownRuns(runs, at: time)
+        let ranks = StageLyricView.ranks(shown, at: time, speed: speed, seed: seed, reduceMotion: false)
+        let bounds = CGRect(origin: .zero, size: stage)
+        let step = Mosaic.mosaicStackStep(unit: unit, readings: false)
+        var result: [Box] = []
+        for (index, run) in shown.enumerated() {
+            let kind = Int(view.chance(run.id, 20) * 3) % 3
+            let big: CGFloat = kind == 0 ? 3.0 : kind == 1 ? 2.3 : 2.4
+            let a = StageMotion.arrival(run.start, at: time, speed: speed)
+            let rank = ranks[index]
+            let settle = Mosaic.glide(min(rank, 1.2) / 1.2)
+            let size = estimate(run.text, big: big)
+            let overhang = kind == 1 ? unit * 2.3 * 0.45 : 0
+            let sway = CGFloat(view.chance(index, 21) - 0.5) * 0.06
+            let home = Mosaic.mosaicHome(size, sway: sway, step: step, overhang: overhang, in: bounds)
+            let stack = CGPoint(x: bounds.width * 0.14 + size.width / 2, y: Mosaic.mosaicRowY(rank: rank, step: step, in: bounds))
+            var centre = CGPoint(x: home.x + (stack.x - home.x) * CGFloat(settle), y: home.y + (stack.y - home.y) * CGFloat(settle))
+            if kind == 0 { centre.x += CGFloat(1 - min(a, 1)) * stage.width * 0.35 }
+            let morph = StageMotion.mosaicMorph(settle: settle, smallRatio: 0.6 / Double(big))
+            let fade = Mosaic.mosaicStackFade(rank: rank)
+            let bigOpacity = min(1, a * 1.6) * morph.bigOpacity
+            let smallOpacity = morph.smallOpacity * fade
+            result.append(Box(beat: index, rect: .zero, opacity: max(bigOpacity, smallOpacity), centre: centre,
+                              scale: morph.bigScale, big: bigOpacity, small: smallOpacity))
+        }
+        return result
+    }
+
+    /// The largest change of any item's position, scale and opacity over
+    /// 1/60 s, sampled at 120 Hz; items matched by index (an item new in the
+    /// later sample counts from nothing).
+    static func steps(_ model: (Double) -> [Box], from start: Double, to end: Double,
+                      around moments: [Double] = []) -> (position: CGFloat, scale: Double, opacity: Double) {
+        var worst: (position: CGFloat, scale: Double, opacity: Double) = (0, 0, 0)
+        var times: [Double] = []
+        var time = start
+        while time < end { times.append(time); time += 1.0 / 120 }
+        times += moments.map { $0 - 1.0 / 120 }
+        for t in times {
+            let before = Dictionary(model(t).map { ($0.beat, $0) }, uniquingKeysWith: { a, _ in a })
+            for box in model(t + 1.0 / 60) {
+                guard let old = before[box.beat] else {
+                    worst.opacity = max(worst.opacity, box.big, box.small)
+                    continue
+                }
+                worst.position = max(worst.position, hypot(box.centre.x - old.centre.x, box.centre.y - old.centre.y))
+                worst.scale = max(worst.scale, abs(box.scale - old.scale))
+                worst.opacity = max(worst.opacity, abs(box.big - old.big), abs(box.small - old.small))
+            }
+        }
+        return worst
+    }
+
+    /// Smooth as the original: on the short, long and fast lines, no item
+    /// moves, scales or fades more in 1/60 s than the original Mosaic's worst
+    /// on the same line plus 15 %, including across every arrival and onset.
+    func testAsSmoothAsTheOriginal() {
+        for line in Self.lines where line.name != "burst" {
+            let runs = line.runs
+            let start = (runs.first?.start ?? 0) - 0.3
+            let end = (runs.map(\.end).max() ?? 0) + 0.2
+            let original = Self.steps({ Self.originalBoxes(runs, at: $0) }, from: start, to: end)
+            var moments: [Double] = []
+            for run in runs { moments += [run.start, run.start - StageMotion.lead, run.start - Mosaic.mosaicLead] }
+            let ours = Self.steps({ Self.boxes(runs, at: $0) }, from: start, to: end, around: moments)
+            print("Mosaic smoothness \(line.name): original \(original), restored \(ours)")
+            XCTAssertLessThanOrEqual(ours.position, original.position * 1.15, "\(line.name) position")
+            XCTAssertLessThanOrEqual(ours.scale, original.scale * 1.15, "\(line.name) scale")
+            XCTAssertLessThanOrEqual(ours.opacity, original.opacity * 1.15 + 0.001, "\(line.name) opacity")
+        }
+    }
+
+    /// Nothing already on stage jumps on the frame a word arrives: across
+    /// ±1/120 s of every arrival and onset, every other beat changes about as
+    /// much as over the 1/60 s just before and just after (its own glide),
+    /// never by a step.
+    func testNothingJumpsWhenAWordArrives() {
+        func change(_ runs: [StageRun], beat: Int, from a: Double, to b: Double) -> (CGFloat, Double, Double)? {
+            guard let old = Self.boxes(runs, at: a).first(where: { $0.beat == beat }),
+                  let new = Self.boxes(runs, at: b).first(where: { $0.beat == beat }) else { return nil }
+            return (hypot(new.centre.x - old.centre.x, new.centre.y - old.centre.y),
+                    abs(new.scale - old.scale), max(abs(new.big - old.big), abs(new.small - old.small)))
+        }
+        let h = 1.0 / 120
+        for line in Self.lines {
+            let runs = line.runs
+            let beats = Mosaic.mosaicBeats(runs)
+            for run in runs {
+                let mine = beats.firstIndex { $0.runs.contains(run.id) } ?? -1
+                for moment in [run.start - Mosaic.mosaicLead, run.start - StageMotion.lead, run.start] {
+                    for box in Self.boxes(runs, at: moment + h) where box.beat != mine {
+                        guard let across = change(runs, beat: box.beat, from: moment - h, to: moment + h) else {
+                            XCTFail("\(line.name) \(run.text): beat \(box.beat) appeared with another word")
+                            continue
+                        }
+                        let before = change(runs, beat: box.beat, from: moment - 3 * h, to: moment - h) ?? (0, 0, 0)
+                        let after = change(runs, beat: box.beat, from: moment + h, to: moment + 3 * h) ?? (0, 0, 0)
+                        let label = "\(line.name) \(run.text): beat \(box.beat) jumped"
+                        XCTAssertLessThanOrEqual(across.0, max(before.0, after.0) * 1.5 + 0.5, label)
+                        XCTAssertLessThanOrEqual(across.1, max(before.1, after.1) * 1.5 + 0.002, label)
+                        XCTAssertLessThanOrEqual(across.2, max(before.2, after.2) * 1.5 + 0.005, label)
+                    }
+                }
+            }
+        }
     }
 
     /// Ten-plus words in 2.2 s, and three words inside 0.15 s: no two beats
@@ -212,19 +342,20 @@ final class MosaicLayoutTests: XCTestCase {
                 for index in beat.runs {
                     let run = runs[index]
                     let time = run.start
-                    let moves = Mosaic.mosaicMoves(beats, runs: runs, at: time, speed: speed, exitStart: .infinity,
-                                                 reduceMotion: false, arrived: runs.count)
+                    let moves = Mosaic.mosaicMotion(beats, runs: runs, at: time, speed: speed, exitStart: .infinity,
+                                                    seed: Self.seed, reduceMotion: false, arrived: runs.count).moves
                     XCTAssertLessThan(moves[g], 0.6, "\(line.name) \(run.text): already leaving when sung")
                     if beat.kind == .letters {
                         let next: Double? = index + 1 < runs.count ? runs[index + 1].start : nil
                         for (part, piece) in run.parts.enumerated() {
                             XCTAssertGreaterThanOrEqual(Mosaic.mosaicLetterReveal(part: part, letter: 0, of: run, next: next,
-                                                                                at: piece.start), 0.5, "\(line.name) \(run.text)")
-                            let following = part + 1 < run.parts.count ? run.parts[part + 1].start : (next ?? piece.start + 0.5)
+                                                                                  at: piece.start), 0.4, "\(line.name) \(run.text)")
+                            // All in within the original's own time (0.25 s rise, letters 0.05 s apart).
                             let last = max(0, piece.text.count - 1)
+                            let done = piece.start - Mosaic.mosaicLead + 0.25 + Double(last) * 0.05
                             XCTAssertGreaterThanOrEqual(Mosaic.mosaicLetterReveal(part: part, letter: last, of: run, next: next,
-                                                                                at: max(following, piece.start + 0.02)), 0.99,
-                                                        "\(line.name) \(run.text): letters still rising at the next onset")
+                                                                                  at: done), 0.99,
+                                                        "\(line.name) \(run.text): letters slower than the original")
                         }
                     } else {
                         let appear = Mosaic.mosaicAppear(run, at: time, speed: speed, reduceMotion: false, arrived: runs.count)
@@ -256,7 +387,7 @@ final class MosaicLayoutTests: XCTestCase {
         let ful = beautiful.parts[2].start
         XCTAssertLessThan(Mosaic.mosaicLetterReveal(part: 2, letter: 0, of: beautiful, next: burst[9].start,
                                                   at: ful - Mosaic.mosaicLead - 0.01), 0.01)
-        XCTAssertGreaterThan(Mosaic.mosaicLetterReveal(part: 2, letter: 0, of: beautiful, next: burst[9].start, at: ful), 0.5)
+        XCTAssertGreaterThan(Mosaic.mosaicLetterReveal(part: 2, letter: 0, of: beautiful, next: burst[9].start, at: ful), 0.4)
     }
 
     // MARK: Variety

@@ -131,44 +131,64 @@ extension StageLyricView {
         return zip(groups, kinds).map { MosaicBeat(runs: $0, kind: $1) }
     }
 
-    /// How far each beat has gone from where it landed into the stack, 0...1.
-    /// A beat leaves just ahead of the next beat's arrival (or of the line's
-    /// exit, for the last), but not before its last word has had a moment on
-    /// its own; the move is quicker on a quick line. `arrived` beats count
-    /// under Reduce Motion, where the moves are steps.
-    static func mosaicMoves(_ beats: [MosaicBeat], runs: [StageRun], at time: Double, speed: Double,
-                            exitStart: Double, reduceMotion: Bool, arrived: Int) -> [Double] {
-        beats.indices.map { g in
-            let followed = g + 1 < beats.count
-            if reduceMotion {
-                return followed && beats[g + 1].runs.lowerBound < arrived ? 1 : 0
-            }
+    /// When each beat starts to leave for the stack: a little ahead of the
+    /// next beat's arrival (or of the line's exit, for the last), so the two
+    /// never share the spot, but only once its own last word is in. Nil: it
+    /// stays (the last beat of a line that does not leave).
+    static func mosaicLeaves(_ beats: [MosaicBeat], runs: [StageRun], speed: Double, exitStart: Double) -> [Double?] {
+        let pace = min(3, max(1, speed))
+        return beats.indices.map { g in
             let next: Double
-            if followed {
+            if g + 1 < beats.count {
                 next = runs[beats[g + 1].runs.lowerBound].start - mosaicLead
             } else if exitStart.isFinite {
                 next = exitStart
             } else {
-                return 0
+                return nil
             }
-            let last = beats[g].runs.map { runs[$0].start }.max() ?? next
-            let gap = max(0, next - (last - mosaicLead))
-            let duration = min(0.42 / min(3, max(1, speed)) + 0.06, max(0.14, gap * 0.9))
-            let start = max(last - mosaicLead + min(0.18, gap * 0.5), next - duration * 0.6)
-            return glide((time - start) / duration)
+            // Ahead by about half the hand-off, which the pace shortens as
+            // it shortens the hand-off itself; never before the last word
+            // is in (`mosaicHeld`).
+            let ahead = mosaicLeaveAhead / pace
+            return max(next - ahead, mosaicHeld(beats[g], runs: runs, speed: speed))
         }
     }
 
-    /// Each beat's row in the stack: the sum of its own move and the moves
-    /// of every beat after it, so the stack climbs a row as each beat joins.
-    static func mosaicRanks(_ moves: [Double]) -> [Double] {
-        var after = 0.0
-        var result = [Double](repeating: 0, count: moves.count)
-        for index in moves.indices.reversed() {
-            after += moves[index]
-            result[index] = after
+    /// How far ahead of the next beat's arrival a beat starts to leave, at an
+    /// ordinary pace.
+    static let mosaicLeaveAhead = 0.22
+
+    /// Each beat's journey into the stack (`moves`, 0...1) and its row there
+    /// (`ranks`), with the original Mosaic's curves: each leave is the shared
+    /// hand-off spring (`StageMotion.handoff`, its cadence shortened only by
+    /// the line's pace), a beat's rank is the sum of its own and every later
+    /// beat's hand-off, and its move is `glide(min(rank, 1.2) / 1.2)`. Only
+    /// the leave's start differs (`mosaicLeaves`). Under Reduce Motion each
+    /// hand-off is a step once the next beat has `arrived`.
+    static func mosaicMotion(_ beats: [MosaicBeat], runs: [StageRun], at time: Double, speed: Double,
+                             exitStart: Double, seed: Int, reduceMotion: Bool,
+                             arrived: Int) -> (moves: [Double], ranks: [Double]) {
+        let leaves = mosaicLeaves(beats, runs: runs, speed: speed, exitStart: exitStart)
+        var handoffs = [Double](repeating: 0, count: beats.count)
+        for g in beats.indices {
+            guard let leave = leaves[g] else { continue }
+            if reduceMotion {
+                let followed = g + 1 < beats.count
+                handoffs[g] = (followed ? beats[g + 1].runs.lowerBound < arrived : time >= leave) ? 1 : 0
+                continue
+            }
+            let id = g + 1 < beats.count ? beats[g + 1].runs.lowerBound : runs.count
+            handoffs[g] = StageMotion.handoff(leave + StageMotion.lead, at: time, speed: speed,
+                                              seed: UInt64(abs(seed &+ id &* 7919)))
         }
-        return result
+        var after = 0.0
+        var ranks = [Double](repeating: 0, count: beats.count)
+        for g in beats.indices.reversed() {
+            after += handoffs[g]
+            ranks[g] = after
+        }
+        let moves = ranks.map { glide(min($0, 1.2) / 1.2) }
+        return (moves, ranks)
     }
 
     /// How much of a word is in, 0...1 (it may overshoot a little): fully in
@@ -177,6 +197,17 @@ extension StageLyricView {
         if reduceMotion { return run.id < arrived ? 1 : 0 }
         return StageMotion.arrival(run.start - (mosaicLead - StageMotion.lead), at: time, speed: speed)
     }
+
+    /// How far the bar (with its word) has spread to its full width: the
+    /// original wipe's ease and length (0.32 s, shortened by the line's
+    /// pace, but never under 0.2 s), from the word's first appearance.
+    static func mosaicBarSpread(_ run: StageRun, at time: Double, speed: Double) -> Double {
+        glide((time - (run.start - mosaicLead)) / max(0.2, 0.32 / min(3, max(1, speed))))
+    }
+
+    /// Beats land a little left and right of each other in turn, so one that
+    /// is just leaving is never quite where the next lands.
+    static func mosaicSway(_ beat: Int) -> CGFloat { beat.isMultiple(of: 2) ? -0.035 : 0.035 }
 
     /// The centre of a beat measured `size`: from where it lands (towards the
     /// lower right) to its row in the stack, flush to the stack's column.
@@ -190,19 +221,50 @@ extension StageLyricView {
         return CGPoint(x: home.x + (stack.x - home.x) * settle, y: home.y + (stack.y - home.y) * settle)
     }
 
-    /// When a letter of a word rises in: its syllable's own onset (less the
-    /// lead), the letters of the syllable a little apart, all of them in
-    /// before the next syllable or word is sung. `next` is the onset after
-    /// the run, if any.
+    /// When a letter of a word rises in: the original Mosaic's rise (0.25 s,
+    /// letters 0.05 s apart), from its syllable's own onset less the lead.
+    /// A quick syllable (the next one under 0.35 s away) rises a little
+    /// quicker, never under 0.2 s; a long word's letters follow each other
+    /// closer when the next onset is near, so the word is in by then. `next`
+    /// is the onset after the run, if any.
     static func mosaicLetterReveal(part: Int, letter: Int, of run: StageRun, next: Double?, at time: Double) -> Double {
-        guard run.parts.indices.contains(part) else { return 1 }
+        guard let timing = mosaicLetterTiming(part: part, of: run, next: next) else { return 1 }
         let onset = run.parts[part].start
-        let following = part + 1 < run.parts.count ? run.parts[part + 1].start : (next ?? onset + 0.5)
-        let window = min(0.6, max(0.08, following - onset))
+        return glide((time - (onset - mosaicLead + Double(letter) * timing.stagger)) / timing.rise)
+    }
+
+    /// The rise of each letter of a syllable and the delay between letters.
+    static func mosaicLetterTiming(part: Int, of run: StageRun, next: Double?) -> (rise: Double, stagger: Double)? {
+        guard run.parts.indices.contains(part) else { return nil }
+        let onset = run.parts[part].start
+        let following = part + 1 < run.parts.count ? run.parts[part + 1].start : (next ?? onset + 1)
+        let window = max(0, following - onset)
         let count = max(1, run.parts[part].text.count)
-        let rise = min(0.2, max(0.07, window * 0.55))
-        let stagger = count > 1 ? min(0.045, window * 0.45 / Double(count - 1)) : 0
-        return glide((time - (onset - mosaicLead + Double(letter) * stagger)) / rise)
+        let rise = window < 0.35 ? max(0.2, min(0.25, window + 0.05)) : 0.25
+        let stagger = count > 1 ? min(0.05, max(0.015, (window + mosaicLead - rise) / Double(count - 1))) : 0
+        return (rise, stagger)
+    }
+
+    /// When a beat's last word is far enough in for the beat to start
+    /// leaving: its arrival risen, or its letters well on their way up (the
+    /// last ones finish as the hand-off spring gathers pace).
+    static func mosaicHeld(_ beat: MosaicBeat, runs: [StageRun], speed: Double) -> Double {
+        let pace = min(3, max(1, speed))
+        var held = -Double.infinity
+        for index in beat.runs {
+            let run = runs[index]
+            held = max(held, run.start - mosaicLead + StageMotion.arrivalRise / pace)
+            guard beat.kind == .letters else { continue }
+            let next: Double? = index + 1 < runs.count ? runs[index + 1].start : nil
+            for part in run.parts.indices {
+                guard let timing = mosaicLetterTiming(part: part, of: run, next: next) else { continue }
+                let span = timing.rise + Double(max(0, run.parts[part].text.count - 1)) * timing.stagger
+                // A quick syllable's letters finish on the way (the next word is close).
+                let share = timing.rise < 0.25 ? 0.25 : 0.4
+                held = max(held, run.parts[part].start - mosaicLead + span * share)
+            }
+        }
+        return held
     }
 
     /// The size Mosaic's small stack sets its words at.
@@ -262,9 +324,10 @@ extension StageLyricView {
         let alone = Set(runs.filter { tiled($0) || Self.reading(of: $0, in: readings) != nil }.map(\.id))
         let tiles = Set(runs.filter { tiled($0) }.map(\.id))
         let beats = Self.mosaicBeats(runs, alone: alone, tiled: tiles)
-        let moves = Self.mosaicMoves(beats, runs: runs, at: time, speed: speed, exitStart: exitStart,
-                                     reduceMotion: reduceMotion, arrived: arrived)
-        let ranks = Self.mosaicRanks(moves)
+        let motion = Self.mosaicMotion(beats, runs: runs, at: time, speed: speed, exitStart: exitStart, seed: seed,
+                                       reduceMotion: reduceMotion, arrived: arrived)
+        let moves = motion.moves
+        let ranks = motion.ranks
         // A beat is drawn from just before its first word until it has faded off the top of the stack.
         let visible = beats.indices.filter { g in
             let first = runs[beats[g].runs.lowerBound]
@@ -280,7 +343,7 @@ extension StageLyricView {
                 let g = visible.indices.contains(index) ? visible[index] : 0
                 let overhang = beats[g].kind == .bar ? u * Self.mosaicBigSize(.bar) * Self.mosaicBarPadding.vertical * 2 : 0
                 return Self.mosaicCentre(measured[index], move: moves[g], rank: ranks[g],
-                                         sway: CGFloat(chance(g, 21) - 0.5) * 0.06, step: step, overhang: overhang,
+                                         sway: Self.mosaicSway(g), step: step, overhang: overhang,
                                          rightToLeft: rightToLeft, in: bounds)
             }
         }) {
@@ -326,7 +389,7 @@ extension StageLyricView {
                                 .padding(.horizontal, -size * pad.horizontal).padding(.vertical, -size * pad.vertical)
                         }
                         .rotationEffect(.degrees(tilt))
-                        .scaleEffect(x: reduceMotion ? 1 : 0.7 + 0.3 * appear[0], y: 1,
+                        .scaleEffect(x: reduceMotion ? 1 : 0.7 + 0.3 * Self.mosaicBarSpread(first, at: time, speed: speed), y: 1,
                                      anchor: UnitPoint(x: rightToLeft ? 1 : 0, y: 0.5))
                         .opacity(min(1, appear[0] * 1.6))
                 case .letters:
