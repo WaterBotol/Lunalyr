@@ -4,43 +4,42 @@ import SwiftUI
 // The accent (`Color.lunalyrAccent`, `LunalyrAccent`) lives with the other
 // design tokens in Sources/UI/Design/DesignTokens.swift.
 
-/// The Settings window: pages in a sidebar, and for each page the live
-/// preview on a stage beside the page's controls (above them in a narrow
-/// window). The page, the preview's state and the window frame are
-/// remembered between openings. Other surfaces open a page through
-/// `LunalyrNavigation` (`openSettings(_:)`); the window follows each request.
+/// The Settings window: the sidebar, then either the picture (the Look
+/// pages: canvas and inspector) or a page on the window's fill. The page and
+/// the window frame are remembered between openings. Other surfaces open a
+/// page through `LunalyrNavigation` (`openSettings(_:)`); the window follows
+/// each request, scrolling to the section a destination names.
 @MainActor
 struct SettingsWindowView: View {
     typealias Page = SettingsPage
 
     @ObservedObject var previewDisplay: SettingsPreviewDisplay
     @AppStorage("custom.settingsPage") private var page: SettingsPage = .wallpaper
-    /// Shown from the first run: the preview is how changes are judged.
-    @AppStorage("custom.settingsShowsPreview") private var showsPreview = true
-    @AppStorage("custom.settingsLargePreview") private var largePreview = false
     @Model(\.navigation) private var navigation
     @State private var scrollRequest: SettingsScrollRequest?
     @State private var scrollSerial = 0
+    /// The Look page last shown, so the Look row opens it again.
+    @State private var lastLook: SettingsPage = .wallpaper
     /// Where each page was scrolled to, so a page revisited opens there.
     @State private var scrollMemory = FormScrollMemory()
 
     var body: some View {
-        NavigationStack {
-            HStack(spacing: 0) {
-                SettingsSidebar(selection: pageSelection)
-                Divider()
-                SettingsDetail(page: page, previewDisplay: previewDisplay, showsPreview: showsPreview,
-                               largePreview: largePreview, scrollRequest: scrollRequest,
-                               select: select)
-                    .environment(\.formScrollMemory, scrollMemory)
-            }
-            .styledCanvas()
-            .navigationTitle(page.title)
-            .toolbar { previewToolbar }
+        HStack(spacing: 0) {
+            SettingsSidebar(selection: pageSelection, lastLook: lastLook)
+            SettingsDetail(page: page, previewDisplay: previewDisplay, scrollRequest: scrollRequest, select: select)
+                .environment(\.formScrollMemory, scrollMemory)
         }
+        .background(Color.studio(.window))
+        .ignoresSafeArea(.container, edges: .top)
         .lunalyrTint()
         .frame(minWidth: SettingsWindowController.minimumWidth, minHeight: SettingsWindowController.minimumHeight)
-        .onAppear(perform: followNavigation)
+        .onAppear {
+            if LookObject(page: page) != nil { lastLook = page }
+            followNavigation()
+        }
+        .onChange(of: page) { _, page in
+            if LookObject(page: page) != nil { lastLook = page }
+        }
         .onChange(of: navigation.settingsRequest) { _, _ in followNavigation() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             previewDisplay.refresh()
@@ -48,35 +47,6 @@ struct SettingsWindowView: View {
         // Each Space can have its own desktop picture.
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)) { _ in
             previewDisplay.refresh()
-        }
-    }
-
-    /// Larger/Smaller Preview and Show/Hide Preview, at the toolbar's
-    /// trailing end. About has no preview, so neither shows there.
-    @ToolbarContentBuilder private var previewToolbar: some ToolbarContent {
-        if page.showsStage {
-            // Pushes the preview's buttons to the trailing end.
-            ToolbarItem { Spacer() }
-            ToolbarItemGroup {
-                if showsPreview {
-                    Button {
-                        largePreview.toggle()
-                    } label: {
-                        Label(largePreview ? "Smaller Preview" : "Larger Preview",
-                              systemImage: largePreview ? "arrow.down.right.and.arrow.up.left"
-                                  : "arrow.up.left.and.arrow.down.right")
-                    }
-                    .help(largePreview ? "Give the controls their usual room again"
-                          : "Make the preview larger: the controls take less room")
-                }
-                Button {
-                    showsPreview.toggle()
-                } label: {
-                    Label(showsPreview ? "Hide Preview" : "Show Preview", systemImage: showsPreview ? "eye.slash" : "eye")
-                }
-                .help(showsPreview ? "Hide the preview and give the controls the whole window"
-                      : "Show the live preview beside the controls")
-            }
         }
     }
 
@@ -105,98 +75,78 @@ struct SettingsWindowView: View {
     }
 }
 
-/// The detail beside the sidebar: the stage and the page's inspector, side
-/// by side, or stacked in a narrow window; the inspector alone, centred,
-/// with the preview hidden; About on its own.
+/// The detail beside the sidebar: for a Look page, the picture and its
+/// inspector (`LookWorkspace`); for any other page, its title in a 56-point
+/// band and the page in one column, 40 points from the sidebar and at most
+/// 600 wide (spec §8); About on its own.
 @MainActor
-private struct SettingsDetail: View {
+struct SettingsDetail: View {
     let page: SettingsPage
     @ObservedObject var previewDisplay: SettingsPreviewDisplay
-    let showsPreview: Bool
-    let largePreview: Bool
     let scrollRequest: SettingsScrollRequest?
     let select: (SettingsPage) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The page column's width and its distance from the sidebar.
+    static let columnWidth: CGFloat = 600
+    static let columnInset: CGFloat = 40
+    /// `ThemedForm` pads its content by this much on each side.
+    static let formPadding: CGFloat = 20
+
+    /// The scroll content's side margins in a detail `width` wide: the
+    /// column starts 40 from the sidebar and stops at 600 wide.
+    static func margins(for width: CGFloat) -> (leading: CGFloat, trailing: CGFloat) {
+        let leading = columnInset - formPadding
+        let trailing = max(leading, width - columnInset - columnWidth - formPadding)
+        return (leading, trailing)
+    }
+
     var body: some View {
-        GeometryReader { proxy in
-            if page.showsStage {
-                arranged(in: proxy.size)
-            } else {
+        Group {
+            if let object = LookObject(page: page) {
+                LookWorkspace(object: object, previewDisplay: previewDisplay, scrollRequest: scrollRequest, select: select)
+                    .transition(.opacity)
+            } else if page == .about {
                 AboutPage()
+                    .padding(.top, 28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            } else {
+                pageWithTitle
                     .transition(.opacity)
             }
         }
-        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion), value: page)
-        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion), value: showsPreview)
-        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion), value: largePreview)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                   value: LookObject(page: page) == nil ? page.rawValue : "look")
     }
 
-    @ViewBuilder private func arranged(in size: CGSize) -> some View {
-        // The stage beside the inspector in a wide detail; above it in a
-        // narrow one. The axis follows the width alone, so Show/Hide Preview
-        // slides the stage out along it rather than flipping the layout
-        // mid-animation; crossing the width threshold still switches at once.
-        let wide = Self.stageBeside(width: size.width)
-        let beside = wide && showsPreview
-        // One layout that switches axis, so the live preview and the page
-        // keep their identity as the window narrows past the threshold.
-        let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
-        layout {
-            if showsPreview {
-                SettingsStage(previewDisplay: previewDisplay,
-                              stacked: beside ? nil : SettingsStageLimits(detailHeight: size.height, largePreview: largePreview))
-                    .transition(stageTransition(wide: wide))
-                Rectangle()
-                    .fill(Color(nsColor: .separatorColor))
-                    .frame(width: beside ? 1 : nil, height: beside ? nil : 1)
-                    .accessibilityHidden(true)
-                    .transition(.opacity)
+    private var pageWithTitle: some View {
+        GeometryReader { proxy in
+            let margins = Self.margins(for: proxy.size.width)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(page.title)
+                    .font(LunalyrDesign.Studio.TypeScale.title)
+                    .foregroundStyle(Color.studio(.ink))
+                    .accessibilityAddTraits(.isHeader)
+                    .frame(height: 56)
+                    .padding(.leading, Self.columnInset)
+                    .padding(.top, 12)
+                SettingsStatusHeader()
+                pageContent
+                    .contentMargins(.leading, margins.leading, for: .scrollContent)
+                    .contentMargins(.trailing, margins.trailing, for: .scrollContent)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            let fixedWidth = beside ? inspectorWidth : nil
-            // With the preview hidden, any status sits above the page.
-            VStack(spacing: 0) {
-                if !showsPreview { SettingsStatusHeader() }
-                inspector
-                    // A wide inspector keeps its forms to a readable column.
-                    .modifier(ReadableColumn(margin: fixedWidth == nil ? Self.margin(for: size.width) : nil))
-            }
-            .frame(width: fixedWidth)
-            .frame(maxWidth: fixedWidth == nil ? .infinity : nil, maxHeight: .infinity)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .focusSection()
         }
+        .background(Color.studio(.window))
     }
 
-    /// Whether a detail this wide puts the stage beside the inspector.
-    static func stageBeside(width: CGFloat) -> Bool {
-        width >= LunalyrDesign.Layout.stageBesideInspectorMinimum
-    }
-
-    /// The stage leaves toward the edge it sits on; a plain fade under Reduce Motion.
-    private func stageTransition(wide: Bool) -> AnyTransition {
-        reduceMotion ? .opacity : .move(edge: wide ? .leading : .top).combined(with: .opacity)
-    }
-
-    private var inspectorWidth: CGFloat {
-        largePreview ? LunalyrDesign.Layout.inspectorWidth - 60 : LunalyrDesign.Layout.inspectorWidth
-    }
-
-    /// The side margin that keeps a full-width form's content no wider than
-    /// `SettingsDetail.readableWidth`.
-    static func margin(for width: CGFloat) -> CGFloat {
-        max(0, ((width - readableWidth) / 2).rounded(.down))
-    }
-
-    /// The widest a page's controls get.
-    static let readableWidth: CGFloat = 640
-
-    @ViewBuilder private var inspector: some View {
+    @ViewBuilder private var pageContent: some View {
         Group {
             switch page {
-            case .wallpaper:
-                WallpaperPage(showPerformance: { select(.performance) }, scrollRequest: scrollRequest)
-            case .typography: LyricStylePage()
-            case .covers: CoversPage()
             case .lyrics: TimingPage()
             case .readings: ReadingsPage()
             case .players: MusicPlayersPage(scrollRequest: scrollRequest)
@@ -204,32 +154,17 @@ private struct SettingsDetail: View {
             case .extras: ExtrasInspector()
             case .share: ShareInspector()
             case .performance: PerformancePage()
-            case .about: AboutPage()
+            case .wallpaper, .typography, .covers, .about: EmptyView()
             }
         }
         .id(page)
         .environment(\.formScrollKey, page.rawValue)
         .environment(\.formScrollRestores, scrollRequest == nil)
-        .transition(.opacity)
     }
 }
 
-/// Insets a page's scrolling content so a wide window keeps it to a
-/// readable column, with the scroller still at the window's edge.
-private struct ReadableColumn: ViewModifier {
-    let margin: CGFloat?
-
-    func body(content: Content) -> some View {
-        if let margin, margin > 0 {
-            content.contentMargins(.horizontal, margin, for: .scrollContent)
-        } else {
-            content
-        }
-    }
-}
-
-/// With the preview hidden, what the stage would have said: the paused or
-/// hidden lyrics chip and Music's access banner, above the page.
+/// On a page without a picture, what the picture would have said: the
+/// paused or hidden lyrics chip and Music's access banner, above the page.
 @MainActor
 private struct SettingsStatusHeader: View {
     @Model(\.extras) private var extras
@@ -247,10 +182,10 @@ private struct SettingsStatusHeader: View {
                     if chip != nil { WallpaperStateNote().transition(.opacity) }
                     if banner { AutomationStatusBanner().transition(.opacity) }
                 }
-                .frame(maxWidth: SettingsDetail.readableWidth - 2 * LunalyrDesign.Spacing.xLarge, alignment: .leading)
-                .padding(.horizontal, LunalyrDesign.Spacing.xLarge)
-                .padding(.top, LunalyrDesign.Spacing.large)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: SettingsDetail.columnWidth, alignment: .leading)
+                .padding(.horizontal, SettingsDetail.columnInset)
+                .padding(.bottom, LunalyrDesign.Spacing.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .focusSection()
                 .transition(.opacity)
             }

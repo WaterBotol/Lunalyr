@@ -14,16 +14,20 @@ final class SettingsWindowController: NSObject {
     static let minimumWidth: CGFloat = 860
     /// Where AppKit keeps the frame between openings.
     private static let frameName = "custom.settingsWindow"
-    static let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+    /// The content runs under a transparent title bar: the sidebar and the
+    /// canvas reach the top edge, with the window's buttons over the sidebar.
+    static let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
 
     /// Everything about the window except its content and frame. The UI
     /// snapshot harness draws Settings in a window configured by this too.
     static func configure(_ window: NSWindow) {
         window.title = "Lunalyr"
         window.minSize = NSSize(width: minimumWidth, height: minimumHeight)
-        window.titlebarAppearsTransparent = false
-        window.titleVisibility = .visible
-        window.isMovableByWindowBackground = true
+        window.titlebarAppearsTransparent = true
+        // The title stays for the Window menu and Mission Control.
+        window.titleVisibility = .hidden
+        // The picture's handles are dragged; only the title bar moves the window.
+        window.isMovableByWindowBackground = false
         window.backgroundColor = .windowBackgroundColor
     }
     private var window: NSWindow?
