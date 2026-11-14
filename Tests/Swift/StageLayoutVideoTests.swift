@@ -110,7 +110,12 @@ final class StageLayoutVideoTests: XCTestCase {
         let first = clip.line.words.map(\.start).min() ?? clip.line.start
         let last = clip.line.words.map(\.start).max() ?? clip.line.start
         let exit = exitStart(of: [clip.line, clip.next], row: 0, at: last)
-        var times = (0..<4).map { first + 0.25 + (last + 0.3 - first - 0.25) * Double($0) / 3 }
+        let start: Double = first + 0.25
+        let reach: Double = last + 0.3 - start
+        var times: [Double] = (0..<4).map { (step: Int) -> Double in
+            let fraction: Double = Double(step) / 3
+            return start + reach * fraction
+        }
         times += [exit + 0.12, exit + 0.3, clip.next.start + 0.7]
         return times
     }
@@ -133,7 +138,9 @@ final class StageLayoutVideoTests: XCTestCase {
         let handsOffPreview = settings.revealsWords(in: composition) && settings.previewsNextWord(in: composition)
         let presence = handsOffPreview ? 1 : pose.progress
         let swell: CGFloat = 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
-        let slide = CGFloat((1 - pose.arrival) * 0.20 - pose.exit * 0.10) * size.base
+        let arrivalSlide: Double = (1 - pose.arrival) * 0.20
+        let exitSlide: Double = pose.exit * 0.10
+        let slide: CGFloat = CGFloat(arrivalSlide - exitSlide) * size.base
         if time >= line.start, time < LyricLayer.stageExitStart(line, pose: pose) + 1.5 {
             LyricLineView(words: line.words, time: time, stageSize: size.stage, baseSize: size.base, mood: .neutral,
                           composition: composition, seed: seed, readings: readings, lineEnd: line.end,

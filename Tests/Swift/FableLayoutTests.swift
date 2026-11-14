@@ -272,14 +272,23 @@ final class FableStyleTests: XCTestCase {
     /// word's box meets another's, each stays in the page, and right-to-left
     /// pages begin on the right.
     func testLayoutKeepsWordsApart() {
-        let pages: [([CGSize], [[Int]])] = [
-            ([CGSize(width: 120, height: 80)], [[0]]),
-            ([CGSize(width: 1900, height: 90), CGSize(width: 150, height: 90)], [[0, 1]]),
-            ((0..<6).map { CGSize(width: 90 + CGFloat($0 * 37 % 120), height: 80 + CGFloat($0 % 2) * 30) }, [[0, 1, 2], [3, 4, 5]]),
-            ((0..<8).map { CGSize(width: 60 + CGFloat($0 * 53 % 200), height: 70 + CGFloat($0 % 3) * 20) },
-             [[0, 1, 2, 3], [4, 5, 6, 7]]),
-            ((0..<4).map { _ in CGSize(width: 140, height: 170) }, [[0], [1, 2, 3]]),
-        ]
+        let six: [CGSize] = (0..<6).map { (i: Int) -> CGSize in
+            let width: CGFloat = 90 + CGFloat(i * 37 % 120)
+            let height: CGFloat = 80 + CGFloat(i % 2) * 30
+            return CGSize(width: width, height: height)
+        }
+        let eight: [CGSize] = (0..<8).map { (i: Int) -> CGSize in
+            let width: CGFloat = 60 + CGFloat(i * 53 % 200)
+            let height: CGFloat = 70 + CGFloat(i % 3) * 20
+            return CGSize(width: width, height: height)
+        }
+        let tall: [CGSize] = Array(repeating: CGSize(width: 140, height: 170), count: 4)
+        var pages: [([CGSize], [[Int]])] = []
+        pages.append(([CGSize(width: 120, height: 80)], [[0]]))
+        pages.append(([CGSize(width: 1900, height: 90), CGSize(width: 150, height: 90)], [[0, 1]]))
+        pages.append((six, [[0, 1, 2], [3, 4, 5]]))
+        pages.append((eight, [[0, 1, 2, 3], [4, 5, 6, 7]]))
+        pages.append((tall, [[0], [1, 2, 3]]))
         for shape in FableStyle.Shape.allCases {
             for (sizes, rows) in pages {
                 for rtl in [false, true] {
