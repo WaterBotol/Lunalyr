@@ -25,78 +25,6 @@ public class StageLayoutTests
     private static SizeD Stage => MacBook.Stage;
     private static double Base => MacBook.BaseSize * 0.8;
 
-    private static PointD[] TorquePlaces(List<StageRun> line, double t, double unit = 40)
-    {
-        var shown = StageRun.Shown(line, t);
-        var state = TorqueGeometry.State(shown, t, 1, 3, false);
-        var measured = shown.Select(_ => new SizeD(unit * 4, unit * 2 * 1.2)).ToList();
-        return TorqueGeometry.Stack(measured, state, 3, new StageRect(0, 0, 960, 520));
-    }
-
-    // Ported from StageMotionTests.swift: testTorqueStackNeverJumpsWhenAWordIsAdded
-    [Fact]
-    public void TorqueStackNeverJumpsWhenAWordIsAdded()
-    {
-        var line = Runs(8, 0.5);
-        foreach (var run in line.Skip(1))
-        {
-            var onset = run.Start - StageMotion.Lead;
-            var before = TorquePlaces(line, onset - 0.0005);
-            var after = TorquePlaces(line, onset + 0.0005);
-            for (var index = 0; index < before.Length; index++)
-                Assert.True(Math.Abs(after[index].Y - before[index].Y) < 1, $"Word {index} jumped when {run.Text} was added");
-        }
-    }
-
-    // Ported from StageMotionTests.swift: testTorqueLongLinesStayOnTheStage
-    [Fact]
-    public void TorqueLongLinesStayOnTheStage()
-    {
-        var line = Runs(18, 0.5);
-        var newest = new List<double>();
-        foreach (var count in new[] { 4, 10, 18 })
-        {
-            var t = line[count - 1].Start + 0.45;
-            var places = TorquePlaces(line, t);
-            Assert.Equal(count, places.Length);
-            var y = places[count - 1].Y;
-            Assert.True(y < 520, $"The newest word ran off the bottom at word {count}");
-            newest.Add(y);
-        }
-        // It used to sink by about 2.4 type sizes between word 4 and word 10.
-        Assert.True(Math.Abs(newest[1] - newest[0]) < 40 * 0.6);
-        Assert.True(Math.Abs(newest[2] - newest[1]) < 40 * 0.3, "Settles once old words fade");
-    }
-
-    // Ported from StageMotionTests.swift: testHingeFitNeverStepsAsTheColumnGrows
-    [Fact]
-    public void HingeFitNeverStepsAsTheColumnGrows()
-    {
-        var texts = "Dance under stars rain over the city can fly away tonight again".Split(' ');
-        var words = texts.Select((w, i) => new LyricWord(w, 1 + i * 0.6, 1.5 + i * 0.6)).ToList();
-        var line = StageRun.Make(words, new bool[words.Count]);
-        var stage = new SizeD(1200, 520);
-        (double Fit, double Shrink) Fit(double t)
-        {
-            var shown = StageRun.Shown(line, t);
-            var weights = shown.Select(run => StageMotion.Weight(StageMotion.Arrival(run.Start, t))).ToList();
-            var barStart = shown.Count > 2 ? shown[2].Start : double.PositiveInfinity;
-            var settle = Easing.Smoothstep((t - barStart - 0.25) / 0.5);
-            return HingeGeometry.Fit(shown.Select(run => run.Text).ToList(), weights, settle, 40, stage);
-        }
-        var previous = Fit(1);
-        var time = 1.0;
-        while (time < 9)
-        {
-            time += 0.001;
-            var now = Fit(time);
-            Assert.True(Math.Abs(now.Fit / previous.Fit - 1) < 0.005, $"The corner's scale stepped at {time:0.000} s");
-            Assert.True(Math.Abs(now.Shrink - previous.Shrink) < 0.005, $"The column shrank at once at {time:0.000} s");
-            previous = now;
-        }
-        Assert.Equal(0.85, previous.Shrink, 3); // A long column still ends 15% smaller
-    }
-
     // Ported from StageMotionTests.swift: testChosenEntrancesMatchTheOtherLayouts
     [Fact]
     public void ChosenEntrancesMatchTheOtherLayouts()
@@ -114,49 +42,34 @@ public class StageLayoutTests
         Assert.Null(StageShared.ChosenEntrance(WordArrival.Lift, 0, 40, 1, true));
     }
 
-    // Ported from StageReadingTests.swift: testHingeFitCountsReadings
+    // Ported from StageReadingTests.swift: testHingeFocalSizeCountsReadings
     [Fact]
-    public void HingeFitCountsReadings()
+    public void HingeFocalSizeCountsReadings()
     {
-        string[] texts = ["君の", "名前を", "呼んで", "夜空に", "消えた", "君を", "探して"];
-        var weights = Enumerable.Repeat(1.0, texts.Length).ToList();
-        var plain = HingeGeometry.Fit(texts, weights, 1, Base, Stage);
-        var none = HingeGeometry.Fit(texts, weights, 1, Base, Stage, new string?[texts.Length]);
-        var read = HingeGeometry.Fit(texts, weights, 1, Base, Stage,
-                                     ["kimi no", "namae wo", "yonde", "yozora ni", "kieta", "kimi wo", "sagashite"]);
-        Assert.Equal(plain.Fit, none.Fit); // No readings, no change
-        Assert.True(read.Fit < plain.Fit, "The corner with its readings is set smaller to fit");
-        Assert.Equal(plain.Shrink, read.Shrink);
+        var plain = HingeGeometry.FocalSize([new HingeSlab(true, true, false, false)], held: true, Base * 1.5, Stage.Height);
+        var read = HingeGeometry.FocalSize([new HingeSlab(true, true, true, true)], held: true, Base * 1.5, Stage.Height);
+        Assert.True(read < plain, "A page with readings sets its focal word smaller to fit");
     }
 
-    // Ported from StageReadingTests.swift: testTorqueStackMakesRoomForReadings (the StageLayout `needs` part is the
-    // Mac's SwiftUI layout; here the layer scales by TorqueGeometry.Height itself)
+    // Ported from StageReadingTests.swift: testTorqueFaceMakesRoomForReadings
     [Fact]
-    public void TorqueStackMakesRoomForReadings()
+    public void TorqueFaceMakesRoomForReadings()
     {
-        var runs = StageRun.Make(Words(["one", "two", "three"], 0.5), [false, false, false]);
-        var state = TorqueGeometry.State(runs, 5, 1, 3, true);
-        var rest = TorqueGeometry.RestSize(40);
-        var slot = TorqueGeometry.ReadingSlot(rest);
-        var bounds = new StageRect(0, 0, 800, 600);
         var plainSizes = Enumerable.Repeat(new SizeD(200, 100), 3).ToList();
-        var plain = TorqueGeometry.Stack(plainSizes, state, 3, bounds);
-        state.Slots = [slot, slot, slot];
-        var readSizes = plainSizes.Select(s => new SizeD(s.Width, s.Height + slot)).ToList();
-        var read = TorqueGeometry.Stack(readSizes, state, 3, bounds);
-        Assert.True(read[2].Y - read[1].Y > plain[2].Y - plain[1].Y, "Neighbours move apart for the reading");
-        Assert.True(read[2].Y - read[1].Y
-                    >= ((100 * 0.82 + slot * 1.2) * state.Scales[1] + (100 * 0.82 + slot * 1.2) * state.Scales[2]) / 2 - 0.5);
-        // Too tall for a short stage: the newest word stays whole on it.
-        var shortStage = new StageRect(0, 0, 800, 220);
-        var tall = TorqueGeometry.Stack(readSizes, state, 3, shortStage);
-        Assert.True(tall[2].Y + (100 * 0.82 + slot * 1.2) * state.Scales[2] / 2 <= shortStage.MaxY + 0.5);
-        // A stack with readings needs more room, which the layer scales to the stage.
-        state.Slots = [];
-        var plainHeight = TorqueGeometry.Height(plainSizes, state, rest);
-        state.Slots = [slot, slot, slot];
-        var readHeight = TorqueGeometry.Height(readSizes, state, rest);
-        Assert.True(readHeight > plainHeight);
+        int[][] rows = [[0, 1], [2]];
+        double[] baselines = [80, 80, 80];
+        var plain = TorqueGeometry.ArrangeFace(plainSizes, baselines, rows, trailing: false, rightToLeft: false, wordGap: 10, rowGap: 0);
+        const double slot = 50;
+        var readSizes = plainSizes.Select(size => size with { Height = size.Height + slot }).ToList();
+        var read = TorqueGeometry.ArrangeFace(readSizes, baselines, rows, trailing: false, rightToLeft: false, wordGap: 10, rowGap: 0);
+        Assert.True(read.Frames[2].MinY > plain.Frames[2].MinY, "The row below moves down for the reading");
+        Assert.True(read.Frames[2].MinY >= read.Frames[0].MaxY - 0.5, "Nothing overlaps a reading");
+        Assert.True(read.Size.Height > plain.Size.Height);
+        // Too tall for a short stage: fitted whole.
+        var available = new SizeD(800, 120);
+        var box = TorqueGeometry.Turn(0, read.Size, available).Apply(new StageRect(0, 0, read.Size.Width, read.Size.Height));
+        Assert.True(box.Height <= available.Height + 0.5);
+        Assert.Equal(read.Size.Height / 2, box.MidY, 0.5); // Fitted about its centre
     }
 
     // Ported from StageReadingTests.swift: testBroadsideKeepsWordsOnTheLine
@@ -170,8 +83,12 @@ public class StageLayoutTests
         var places = BroadsideGeometry.Places(measured, little, [slot, 0, 0], [1, 1, 1], 40, bounds);
         Assert.Equal(bounds.MidY, places[0].Y - slot / 2, 2); // The word, not its reading, sits on the line
         Assert.Equal(bounds.MidY, places[2].Y, 2);
-        Assert.Equal(bounds.MidY + 100 * 0.2, places[1].Y, 2); // The label lies across the word
-        var plain = BroadsideGeometry.Places(measured.Select(m => m with { Height = 100 }).ToList(), little, [0, 0, 0], [1, 1, 1], 40, bounds);
+        // The label rides on the shoulder of the word before: above its letters, flush with its end.
+        Assert.True(places[1].Y + 15 <= bounds.MidY - 100 * 0.36, "The label is clear of the word's letters");
+        Assert.Equal(places[0].X + 100, places[1].X + 30, 2); // The label is flush with the word's end
+        // Without the reading, the label sits in the same place: it rides on the word, not on the word and its reading.
+        SizeD[] plainSizes = [new(200, 100), measured[1], new(220, 100)];
+        var plain = BroadsideGeometry.Places(plainSizes, little, [0, 0, 0], [1, 1, 1], 40, bounds);
         Assert.Equal(places[1].Y, plain[1].Y, 2);
     }
 

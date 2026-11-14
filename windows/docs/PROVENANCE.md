@@ -287,3 +287,21 @@ row-wrap loop's tail, Echo's phrase text). Those were not translated: Windows al
 | `SpokenTypographyView.swift` (`handoff`, `gap`, focus height, `calmLabel`, `labelHold`, `tilePadding`, `recede`, column shift, indent, `align`, title-safe margins) | `RollingWords.Handoff`, `RollingStack.Gap/FocusHeight/Margins`, `RollingLabel.Calm/Hold/TilePadding`, `RollingTokenState.Recede`, `RollingStack.Slot.Align`, `SpokenLayer` | Faithful port |
 | `LyricMotion.c` (`vc_rolling_pose` styles 1 and 2) | `RollingMotion.Pose` | Faithful port of the new Lunalyr lines into the re-implemented curve |
 | `OpeningTitle.swift` (`glowStrength`, no rule, artist's own case, glows) | `OpeningTitle.GlowStrength`, `LyricCompositionLayer.OpeningTitle.cs` | Faithful port |
+
+## Mac Build 88 / Test Build 90 stage layouts (`mac88/stage-layouts`)
+
+Blame (`git blame -w -M -C --line-porcelain transfer/windows-port-14nov`, and at `0da342b` for Portal and Mosaic) on
+every file read; none has a line from `a99fd65`, so all were ported faithfully and nothing was re-implemented from
+behaviour.
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/UI/StageLayouts/StagePhrases.swift` | 0 | `Core/Compositions/StagePhrases.cs` | Faithful port |
+| `Sources/UI/StageLayouts/LyricWordIcons.swift` | 0 | `Core/Compositions/LyricWordIcons.cs` (SF names kept; `SegoeIcons` glyph table is Windows' own) | Faithful port |
+| `Sources/UI/StageLayouts/HingeLayout.swift` | 0 | `HingeGeometry.cs`, `Render/Compositions/Stage/HingeLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/BroadsideLayout.swift` | 0 | `StageGeometry.cs` (`BroadsideGeometry`), `BroadsideLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/PortalLayout.swift` (Test Build 90) | 0 | `PortalGeometry.cs`, `PortalLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/MosaicLayout.swift` (Test Build 90) | 0 | `MosaicGeometry.cs`, `MosaicLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/TorqueLayout.swift` | 0 | `TorqueGeometry.cs`, `TorqueLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/FableLayout.swift` | 0 | `FableGeometry.cs`, `FableLayer.cs` | Faithful port |
+| Tests: `StagePhrasesTests`, `LyricWordIconsTests`, `PortalLayoutTests`, `MosaicLayoutTests`, `TorqueLayoutTests`, `FableLayoutTests`, `HingeBroadsideChoreographyTests`, `StageMotionTests`, `StageReadingTests` | 0 | `tests/Lunalyr.Core.Tests/Compositions/*`, `StageLayoutRenderTests.cs` | Same inputs and values |

@@ -13,7 +13,7 @@ The lyric layer draws the current line(s) of a `SceneSnapshot` at `FrameContext.
 | `constellation` | Constellation: fragments linked by hairlines, like a star chart | `ScatteredLyricText` + `ConstellationLines` | `LineSetLayer` (`ConstellationFactory`), `ConstellationLayout`, `Lunalyr.Core.Motion.ConstellationGeometry` |
 | `constellationEditorial` | Constellation + Editorial: connected fragments with Editorial's contrasting typefaces | as Constellation | `LineSetLayer` (`ConstellationEditorialFactory`) |
 | `echo` | Echo: the phrase repeated at many sizes, some inverted | `ScatteredLyricText` + `EchoBackdrop` | `LineSetLayer` (`EchoFactory`), `Lunalyr.Core.Compositions.EchoBackdrop` |
-| `hinge` | Hinge: heavy words swing in on a hinge and fold into a stack | `StageLyricView` | `HingeLayer`, `Lunalyr.Core.Compositions.HingeGeometry` ([stage.md](stage.md)) |
+| `hinge` | Hinge: heavy words swing open on a spine, page by page, and the book snaps shut | `StageLyricView` | `HingeLayer`, `Lunalyr.Core.Compositions.HingeGeometry` ([stage.md](stage.md)) |
 | `broadside` | Broadside: one strip of big type that slides along, with little words as labels | `StageLyricView` | `BroadsideLayer`, `BroadsideGeometry` |
 | `portal` | Portal: the sung word in a pill; earlier words drift away as pale ones | `StageLyricView` | `PortalLayer`, `PortalGeometry` |
 | `mosaic` | Mosaic: a collage, each word set huge, on a colour bar, or letter by letter | `StageLyricView` | `MosaicLayer`, `MosaicGeometry` |

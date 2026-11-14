@@ -129,9 +129,6 @@ public static class StageMotion
     public const double ArrivalDamping = 0.62;
     /// <summary>The cadence a rank or camera hand-off is tuned to at an ordinary pace.</summary>
     public const double HandoffCadence = 0.5;
-    /// <summary>Hinge's faces swinging shut, and the extra delay of its last word's fold.</summary>
-    public const double HingeClose = 0.6;
-    public const double HingeFoldStagger = 0.24;
 
     /// <summary>A word's pose arrival, 0…1 with a little overshoot. Under Reduce Motion a step at the onset.</summary>
     public static double Arrival(double start, double time, double speed = 1, bool reduceMotion = false)
@@ -161,16 +158,6 @@ public static class StageMotion
 
     /// <summary>How much room a word takes in a stack: none until it starts to arrive, all of it once it has.</summary>
     public static double Weight(double arrival) => Math.Min(1, Math.Max(0, arrival));
-
-    /// <summary>Torque: how visible a word is from its rank. Old words fade out above the fourth.</summary>
-    public static double TorqueVisibility(double rank) => Math.Max(0, 1 - Math.Max(0, rank - 3) * 0.8);
-
-    /// <summary>Hinge: the column shrinks by 15% as its seventh word arrives, not at once.</summary>
-    public static double HingeColumnShrink(double arrived) => 1 - 0.15 * Easing.Smoothstep(arrived - 6);
-
-    /// <summary>Hinge: how far one word has folded shut. Oldest first; all shut by the end of the exit span.</summary>
-    public static double HingeFold(double order, double time, double exitStart) =>
-        LyricMotion.Settle(time - exitStart - HingeFoldStagger * Math.Min(1, Math.Max(0, order)), WallpaperMotion.LineExit);
 
     /// <summary>Reduce Motion: how far the stage has dissolved from its previous step (before the onset) to this one.</summary>
     public static double ReducedStep(double onset, double time) =>

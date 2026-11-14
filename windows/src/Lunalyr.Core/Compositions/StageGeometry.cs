@@ -1,5 +1,5 @@
-// Ported from the Mac app's StageLyricStyles.swift (StageLyricView's static geometry for Hinge, Broadside, Portal,
-// Mosaic and Torque; Star4, SketchyOutline): Lunalyr's own code, no line from the Verso import (git blame -w -M -C at
+// Ported from the Mac app's StageLyricStyles.swift (the shared stage helpers) and StageLayouts/BroadsideLayout.swift
+// (Build 88; Star4, SketchyOutline): Lunalyr's own code, no line from the Verso import (git blame -w -M -C at
 // next/integration), ported as it is. Units are whatever the caller measures in (pixels on Windows); the Mac's are
 // points. The per-frame functions write into spans and allocate nothing.
 
@@ -120,96 +120,33 @@ public static class StageShared
     public static int Count(string text) => TextElements.Count(text);
 }
 
-/// <summary>Hinge: the corner of a cube seen from a slant, a pair, a bar on the left face and a column down the right.</summary>
-public static class HingeGeometry
-{
-    /// <summary>How much more room than its own height a reading takes in Hinge's column and pair.</summary>
-    public const double ReadingRoom = 1.4;
-
-    /// <summary>A column word's type size (the column's j-th word, at rest).</summary>
-    public static double ColumnFont(int j, double unit) => unit * Math.Min(2.8, 1.2 + 0.24 * j);
-
-    /// <summary>The size the pair sizes its readings from: larger than the pair's own type.</summary>
-    public static double PairReadingBase(double unit) => unit * 0.95 * 1.4;
-
-    /// <summary>
-    /// How much the whole corner is scaled to fit the stage, and how much its column has shrunk. Every word counts by
-    /// its weight, so neither steps as a word is added. <paramref name="readingCounts"/> holds each word's reading's
-    /// length (0 for none; shorter than the words when there are none).
-    /// </summary>
-    public static (double Fit, double Shrink) Fit(ReadOnlySpan<int> textCounts, ReadOnlySpan<double> weights, double settle,
-                                                  double unit, SizeD stage, ReadOnlySpan<int> readingCounts = default,
-                                                  double point = 1)
-    {
-        var u = unit;
-        var n = Math.Min(textCounts.Length, weights.Length);
-        var columnCount = Math.Max(0, n - 3);
-        double arrived = 0;
-        for (var j = 0; j < columnCount; j++) arrived += weights[j + 3];
-        var shrink = StageMotion.HingeColumnShrink(arrived);
-        (double Height, double Width) Room(int index, double font, ReadOnlySpan<int> readings)
-        {
-            if (index >= readings.Length || readings[index] <= 0) return (0, 0);
-            return (StageShared.ReadingSlot(font, point: point), readings[index] * StageShared.ReadingSize(font, point) * 0.55);
-        }
-        double heightSum = 0;
-        for (var j = 0; j < columnCount; j++)
-        {
-            var font = ColumnFont(j, u);
-            heightSum += (font * 0.95 + Room(j + 3, font, readingCounts).Height * ReadingRoom) * shrink * weights[j + 3];
-        }
-        var barReading = textCounts.Length > 2 ? Room(2, u * 1.6, readingCounts) : (0, 0);
-        var barWidth = textCounts.Length > 2 ? Math.Max(textCounts[2] * u * 1.7 * 0.66, barReading.Width) : 0;
-        double columnWidth = 0;
-        for (var j = 0; j < columnCount; j++)
-        {
-            var font = ColumnFont(j, u);
-            var word = textCounts[j + 3] * font * 0.66;
-            columnWidth = Math.Max(columnWidth, Math.Max(word, Room(j + 3, font, readingCounts).Width) * shrink * 0.84 * weights[j + 3]);
-        }
-        var widest = Math.Max(barWidth, columnWidth);
-        var structureWidth = Math.Max(2 * widest + u * 0.3, u * 3);
-        double pairReadings = 0;
-        for (var i = 0; i < Math.Min(2, textCounts.Length); i++)
-            pairReadings += Room(i, PairReadingBase(u), readingCounts).Height * ReadingRoom * 0.6;
-        var structureHeight = Math.Max(heightSum, u * 2.4 + barReading.Item1) + u * 0.8 + pairReadings;
-        var fill = Math.Min(2.0, Math.Min(stage.Width * 0.8 / structureWidth, stage.Height * 0.78 / structureHeight));
-        var fitHeight = Math.Min(1, stage.Height * 0.74 / Math.Max(heightSum + u * 0.8 + pairReadings, 1));
-        var grow = (Math.Max(fill, 1) - 1) * settle;
-        return (fitHeight * (1 + grow), shrink);
-    }
-
-    /// <summary><see cref="Fit(ReadOnlySpan{int}, ReadOnlySpan{double}, double, double, SizeD, ReadOnlySpan{int}, double)"/> from the words' texts and readings.</summary>
-    public static (double Fit, double Shrink) Fit(IReadOnlyList<string> texts, IReadOnlyList<double> weights, double settle,
-                                                  double unit, SizeD stage, IReadOnlyList<string?>? readings = null)
-    {
-        ArgumentNullException.ThrowIfNull(texts);
-        ArgumentNullException.ThrowIfNull(weights);
-        var counts = texts.Select(StageShared.Count).ToArray();
-        var reading = (readings ?? []).Select(r => string.IsNullOrEmpty(r) ? 0 : StageShared.Count(r)).ToArray();
-        return Fit(counts, weights.ToArray(), settle, unit, stage, reading);
-    }
-}
-
-/// <summary>Broadside: one strip of big type sliding along, the little words laid across it as paper labels.</summary>
+/// <summary>
+/// Broadside (the Mac's BroadsideLayout.swift, Build 88; Lunalyr's own code, ported as it is): one strip of big type
+/// sliding along, the little words riding on the shoulder of the word before as paper labels. Words that slide toward an
+/// edge of the stage fade out whole rather than being cut off mid-letter.
+/// </summary>
 public static class BroadsideGeometry
 {
-    private static readonly HashSet<string> Little =
+    /// <summary>The little words ("the", "of", "and"...) Broadside sets as labels and Portal never ornaments.</summary>
+    public static readonly HashSet<string> Little =
     [
         "a", "an", "the", "of", "to", "in", "on", "at", "by", "for", "and", "or", "but", "so", "as", "if", "is", "it",
         "my", "me", "we", "i", "i'm", "i'll", "you", "be", "up", "us", "no", "oh", "can", "can't", "do", "did", "don't",
         "under", "over", "with", "from", "into", "out", "off", "all", "are", "was", "im", "ill",
     ];
 
-    /// <summary>A little word ("the", "of"): one of the list, trimmed of punctuation, and no longer than five characters.</summary>
-    public static bool IsLittle(string text)
+    /// <summary>Whether <paramref name="text"/>, lowercased and trimmed of punctuation, is one of <see cref="Little"/> (any length).</summary>
+    public static bool IsLittleWord(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         var trimmed = text.ToLowerInvariant().AsSpan();
         while (trimmed.Length > 0 && char.IsPunctuation(trimmed[0])) trimmed = trimmed[1..];
         while (trimmed.Length > 0 && char.IsPunctuation(trimmed[^1])) trimmed = trimmed[..^1];
-        return Little.Contains(trimmed.ToString()) && StageShared.Count(text) <= 5;
+        return Little.Contains(trimmed.ToString());
     }
+
+    /// <summary>A little word ("the", "of"): one of the list, trimmed of punctuation, and no longer than five characters.</summary>
+    public static bool IsLittle(string text) => IsLittleWord(text) && StageShared.Count(text) <= 5;
 
     /// <summary>Which words become labels: few, well apart; one only after a big word, and not within three words of the last.</summary>
     public static bool[] Labels(IReadOnlyList<string> texts)
@@ -244,42 +181,64 @@ public static class BroadsideGeometry
         }
     }
 
+    /// <summary>A word fades out, whole, as its box nears an edge of the stage this far in (a share of the stage's width).</summary>
+    public const double Margin = 0.05;
+    /// <summary>The distance (in type units) over which a word fades as it nears the margin.</summary>
+    public const double FadeSpan = 0.7;
+
     /// <summary>
-    /// Where Broadside puts each word's centre: big words in a row, the strip glided so the newest big word reaches the
-    /// centre; the first little word after a big one lies across it. <paramref name="slots"/> is the room each big
-    /// word's reading takes under it (0 for none): the word itself sits on the strip's line, its reading below.
+    /// Where Broadside puts each word's centre: the big words in one row, a little word as a small paper label riding on
+    /// the shoulder of the big word before it (above its letters, flush with its end, never on top of them), and the
+    /// strip glided so the line builds up centred until it is wider than the stage; after that the newest big word stays
+    /// near the right, the line read back to its left. A label does not move the strip, so the word it rides on stays in
+    /// view with it. <paramref name="slots"/> is the room each big word's reading takes under it (0 for none): the word
+    /// itself is what sits on the strip's line, its reading below.
     /// </summary>
     public static void Places(ReadOnlySpan<SizeD> measured, ReadOnlySpan<bool> little, ReadOnlySpan<double> slots,
                               ReadOnlySpan<double> moves, double unit, StageRect bounds, Span<PointD> places)
     {
         var n = measured.Length;
-        double Slot(int index, ReadOnlySpan<double> s) => index < s.Length ? s[index] : 0;
+        if (n == 0) return;
+        static double Slot(int index, ReadOnlySpan<double> s) => index < s.Length ? s[index] : 0;
+        static bool IsLabel(int index, ReadOnlySpan<bool> l) => index < l.Length && l[index];
         double cursor = 0;
         var previousBig = -1;
-        var littlesSinceBig = 0;
-        // xs and ys go into places; the camera is summed over the big words in order.
         for (var index = 0; index < n; index++)
         {
-            if (little[index] && previousBig >= 0 && littlesSinceBig == 0)
+            var width = measured[index].Width;
+            if (IsLabel(index, little) && previousBig >= 0)
             {
-                places[index] = new PointD(places[previousBig].X + measured[previousBig].Width * 0.2,
-                                           bounds.MidY + (measured[previousBig].Height - Slot(previousBig, slots)) * 0.2);
-                littlesSinceBig++;
+                // On the word's shoulder: just clear of the top of its letters.
+                var wordHeight = measured[previousBig].Height - Slot(previousBig, slots);
+                places[index] = new PointD(places[previousBig].X + measured[previousBig].Width / 2 - width / 2,
+                                           bounds.MidY - wordHeight * 0.36 - unit * 0.06 - measured[index].Height / 2);
                 continue;
             }
-            var width = measured[index].Width;
             places[index] = new PointD(cursor + width / 2, bounds.MidY + Slot(index, slots) / 2);
-            cursor += width + (little[index] ? unit * 0.2 : unit * 0.45);
-            if (little[index]) littlesSinceBig++;
-            else { previousBig = index; littlesSinceBig = 0; }
+            cursor += width + unit * 0.45;
+            previousBig = index;
         }
-        double camera = 0;
-        var priorBig = -1;
+        // Where the strip stands once each big word has arrived: the words so far centred while they fit, then the
+        // newest word's end held clear of the right edge, where the edge fade starts. A label keeps its word's stop.
+        var margin = bounds.Width * Margin + unit * FadeSpan + unit * 0.1;
+        var firstLeft = places[0].X - measured[0].Width / 2;
+        double camera = 0, previousStop = 0;
         for (var index = 0; index < n; index++)
         {
-            if (little[index]) continue;
-            camera = priorBig < 0 ? places[index].X : camera + moves[index] * (places[index].X - places[priorBig].X);
-            priorBig = index;
+            double stop;
+            if (IsLabel(index, little) && index > 0)
+            {
+                stop = previousStop;
+            }
+            else
+            {
+                var half = measured[index].Width / 2;
+                var row = places[index].X + half - firstLeft;
+                var shift = Math.Min(Math.Max(0, row / 2 - half), Math.Max(0, bounds.Width / 2 - margin - half));
+                stop = places[index].X - shift;
+            }
+            camera = index == 0 ? stop : camera + (index < moves.Length ? moves[index] : 1) * (stop - previousStop);
+            previousStop = stop;
         }
         for (var index = 0; index < n; index++)
             places[index] = new PointD(places[index].X - camera + bounds.MidX, places[index].Y);
@@ -294,205 +253,18 @@ public static class BroadsideGeometry
         Places(measured.ToArray(), little.ToArray(), slots.ToArray(), moves.ToArray(), unit, bounds, places);
         return places;
     }
-}
-
-/// <summary>Portal: the sung word in a pill with a badge; earlier words drift up a trail as paler, smaller pills.</summary>
-public static class PortalGeometry
-{
-    /// <summary>A pill's shown size against its resting size: older pills are smaller.</summary>
-    public static double Scale(double rank) => Math.Max(0.4, 1 - 0.4 * Math.Min(rank, 1.5));
 
     /// <summary>
-    /// <paramref name="centre"/> moved, if it must be, so a pill measured at <paramref name="size"/> and shown at
-    /// <paramref name="scale"/> stays inside <paramref name="bounds"/>, with a little room for its squash and tilt. A
-    /// pill too big for the stage is centred on it.
+    /// How visible a word is from where its box sits: 1 well inside the stage, fading to 0 as either end reaches the
+    /// margin. <paramref name="lead"/> widens the box to the left: a label passes it the width of the word it rides on
+    /// (estimated), so it leaves with that word, not after it.
     /// </summary>
-    public static PointD KeepOnStage(PointD centre, SizeD size, double scale, StageRect bounds)
+    public static double EdgeFade(StageRect frame, double stageWidth, double unit, double lead = 0)
     {
-        double halfWidth = size.Width * scale * 0.54, halfHeight = size.Height * scale * 0.54;
-        static double Clamp(double value, double low, double high) => low > high ? (low + high) / 2 : Math.Min(Math.Max(value, low), high);
-        return new PointD(Clamp(centre.X, bounds.MinX + halfWidth, bounds.MaxX - halfWidth),
-                          Clamp(centre.Y, bounds.MinY + halfHeight, bounds.MaxY - halfHeight));
-    }
-
-    /// <summary>The badges a line's pills may carry (the Mac's SF Symbols, drawn as shapes here).</summary>
-    public enum Badge { ArrowUpRight, ArrowRight, Sparkle, Play, Plus, Bolt }
-
-    /// <summary>One line's trail: which way it runs, where its pills sit, and its badge.</summary>
-    public readonly record struct Trail(PointD P0, PointD P1, PointD P2, PointD P3, double ShiftX, double Lift, Badge Badge)
-    {
-        /// <summary>Where a pill of <paramref name="rank"/> sits along the trail, from the stage's centre.</summary>
-        public PointD Along(double rank)
-        {
-            var capped = Math.Min(Math.Max(rank, 0), 3);
-            var low = (int)Math.Floor(capped);
-            var high = Math.Min(low + 1, 3);
-            var f = StageShared.Glide(capped - low);
-            PointD a = Point(low), b = Point(high);
-            return new PointD(a.X + (b.X - a.X) * f, a.Y + (b.Y - a.Y) * f);
-        }
-
-        private PointD Point(int index) => index switch { 0 => P0, 1 => P1, 2 => P2, _ => P3 };
-    }
-
-    /// <summary>Line <paramref name="seed"/>'s trail on a stage of <paramref name="stage"/>, at its pace.</summary>
-    public static Trail TrailFor(long seed, SizeD stage, double speed)
-    {
-        var flipX = StageShared.Chance(seed, null, 1) < 0.5 ? 1.0 : -1.0;
-        var flipY = StageShared.Chance(seed, null, 2) < 0.7 ? 1.0 : -1.0;
-        var reach = (0.8 + 0.5 * StageShared.Chance(seed, null, 3)) / Math.Sqrt(speed);
-        var shiftX = (StageShared.Chance(seed, null, 4) - 0.5) * 0.24 * stage.Width;
-        var lift = stage.Height * (flipY > 0 ? 0.1 + 0.1 * StageShared.Chance(seed, null, 5) : -0.1 - 0.08 * StageShared.Chance(seed, null, 5));
-        var badge = (Badge)((int)(StageShared.Chance(seed, null, 6) * 6) % 6);
-        return new Trail(
-            new PointD(0, 0),
-            new PointD(-0.1 * stage.Width * flipX * reach, -0.2 * stage.Height * flipY * reach),
-            new PointD(0.11 * stage.Width * flipX * reach, -0.3 * stage.Height * flipY * reach),
-            new PointD(-0.04 * stage.Width * flipX * reach, -0.38 * stage.Height * flipY * reach),
-            shiftX, lift, badge);
-    }
-}
-
-/// <summary>Mosaic: each word set a different way as it arrives, shrinking into a small stack above.</summary>
-public static class MosaicGeometry
-{
-    /// <summary>The size the small stack sets its words at.</summary>
-    public static double SmallSize(double unit) => unit * 0.6;
-
-    /// <summary>How far apart the stack sets its rows: a word, and its reading when the line has readings.</summary>
-    public static double StackStep(double unit, bool readings, double point = 1) =>
-        unit * 0.85 + (readings ? StageShared.ReadingSlot(SmallSize(unit), point: point) : 0);
-
-    /// <summary>One continuous path for word <paramref name="index"/>: where it landed, gliding into the stack by its rank.</summary>
-    public static PointD Place(int index, double rank, long seed, double step, StageRect bounds)
-    {
-        var settle = StageShared.Glide(Math.Min(rank, 1.2) / 1.2);
-        var sway = (StageShared.Chance(seed, index, 21) - 0.5) * 0.24 * bounds.Width;
-        var home = new PointD(bounds.MidX + sway, bounds.MidY + (StageShared.Chance(seed, index, 22) - 0.5) * 0.16 * bounds.Height);
-        var slot = Math.Min(3, Math.Max(rank, 1));
-        var stack = new PointD(bounds.MidX - bounds.Width * 0.2 + index % 2 * bounds.Width * 0.04,
-                               bounds.MinY + bounds.Height * 0.12 + (slot - 1) * step);
-        return new PointD(home.X + (stack.X - home.X) * settle, home.Y + (stack.Y - home.Y) * settle);
-    }
-}
-
-/// <summary>Torque's state for every shown word at one moment.</summary>
-/// <param name="Arrivals">Each word's arrival spring.</param>
-/// <param name="Ranks">How far each word has been pushed back.</param>
-/// <param name="Scales">Shown size over the resting (newest word's) size.</param>
-/// <param name="Weights">The share of its room each word takes in the stack.</param>
-/// <param name="Slots">The room each word's reading takes under it, at the resting size (0 for none).</param>
-public sealed record TorqueState(double[] Arrivals, double[] Ranks, double[] Scales, double[] Weights)
-{
-    public double[] Slots { get; set; } = [];
-}
-
-/// <summary>Torque: words wrung into place with a thick edge, stacking upwards.</summary>
-public static class TorqueGeometry
-{
-    /// <summary>Torque's words rest at this many units.</summary>
-    public static double RestSize(double unit) => unit * 2.0;
-
-    /// <summary>The gap between a word and its reading: clear of the thick edge.</summary>
-    public static double ReadingGap(double restSize) => restSize * 0.16;
-
-    /// <summary>The room a reading takes under a Torque word.</summary>
-    public static double ReadingSlot(double restSize, double point = 1) =>
-        StageShared.ReadingSlot(restSize, ReadingGap(restSize), point);
-
-    /// <summary>A word's shown size over the resting size, from its rank: set at the newest word's size, older words scaled down.</summary>
-    public static double ScaleFor(double rank) => Math.Max(0.55, 2.0 - 0.38 * Math.Min(rank, 3.5)) / 2.0;
-
-    /// <summary>The room a word takes: it grows as the word arrives and is given back as the word fades out at the top.</summary>
-    public static double WeightFor(double arrival, double rank) => StageMotion.Weight(arrival) * StageMotion.TorqueVisibility(rank);
-
-    /// <summary>Torque's state for the shown runs.</summary>
-    public static TorqueState State(IReadOnlyList<StageRun> runs, double time, double speed, long seed, bool reduceMotion)
-    {
-        ArgumentNullException.ThrowIfNull(runs);
-        var n = runs.Count;
-        var arrivals = new double[n];
-        var ranks = new double[n];
-        for (var i = 0; i < n; i++) arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed, reduceMotion);
-        StageMotion.Ranks(runs, n, time, speed, seed, reduceMotion, ranks);
-        var scales = ranks.Select(ScaleFor).ToArray();
-        var weights = new double[n];
-        for (var i = 0; i < n; i++) weights[i] = WeightFor(arrivals[i], ranks[i]);
-        return new TorqueState(arrivals, ranks, scales, weights);
-    }
-
-    /// <summary>
-    /// The room each word takes in the stack. Words overlap their neighbours' leading; a reading takes all its room and
-    /// a little more, as the stack sways and turns.
-    /// </summary>
-    public static void Heights(ReadOnlySpan<SizeD> measured, ReadOnlySpan<double> scales, ReadOnlySpan<double> weights,
-                               ReadOnlySpan<double> slots, Span<double> heights)
-    {
-        for (var i = 0; i < measured.Length; i++)
-        {
-            var slot = i < slots.Length ? slots[i] : 0;
-            heights[i] = ((measured[i].Height - slot) * 0.82 + slot * 1.2) * scales[i] * weights[i];
-        }
-    }
-
-    public static double[] Heights(IReadOnlyList<SizeD> measured, TorqueState state)
-    {
-        ArgumentNullException.ThrowIfNull(measured);
-        ArgumentNullException.ThrowIfNull(state);
-        var heights = new double[measured.Count];
-        Heights(measured.ToArray(), state.Scales, state.Weights, state.Slots, heights);
-        return heights;
-    }
-
-    /// <summary>The height the stack needs: its words, and room at either end for the overlap and the turn.</summary>
-    public static double Height(ReadOnlySpan<double> heights, double restSize)
-    {
-        double total = 0;
-        foreach (var h in heights) total += h;
-        return total + restSize * 0.3;
-    }
-
-    public static double Height(IReadOnlyList<SizeD> measured, TorqueState state, double restSize) =>
-        Height(Heights(measured, state), restSize);
-
-    /// <summary>
-    /// Where Torque puts each word's centre. The stack is centred by weight (the newest, biggest word sits lowest), as
-    /// far as the stage has room to move it; a stack taller than its bounds keeps its foot in them.
-    /// </summary>
-    public static void Stack(ReadOnlySpan<double> heights, ReadOnlySpan<double> ranks, long seed, StageRect bounds, Span<PointD> places)
-    {
-        var n = heights.Length;
-        double total = 0;
-        for (var i = 0; i < n; i++) total += heights[i];
-        var cursor = bounds.MidY + total / 2;
-        for (var index = n - 1; index >= 0; index--)
-        {
-            var height = heights[index];
-            var y = cursor - height / 2;
-            cursor -= height;
-            places[index] = new PointD(bounds.MidX + Math.Sin(index * 2.1 + seed % 5) * bounds.Width * 0.05 * Math.Min(ranks[index], 1), y);
-        }
-        double weight = 0, centroid = 0;
-        for (var i = 0; i < n; i++)
-        {
-            weight += heights[i] * heights[i];
-            centroid += heights[i] * heights[i] * places[i].Y;
-        }
-        if (total > 0 && weight > 0)
-        {
-            centroid /= weight;
-            var room = (bounds.Height - total) / 2;
-            var shift = room >= 0 ? Math.Max(-room, Math.Min(room, bounds.MidY - centroid)) : room;
-            for (var i = 0; i < n; i++) places[i] = places[i] with { Y = places[i].Y + shift };
-        }
-    }
-
-    public static PointD[] Stack(IReadOnlyList<SizeD> measured, TorqueState state, long seed, StageRect bounds)
-    {
-        var heights = Heights(measured, state);
-        var places = new PointD[measured.Count];
-        Stack(heights, state.Ranks, seed, bounds, places);
-        return places;
+        var minX = frame.MinX - lead;
+        var margin = stageWidth * Margin;
+        var span = Math.Max(unit * FadeSpan, 1);
+        return Easing.Smoothstep((minX - margin) / span) * Easing.Smoothstep((stageWidth - margin - frame.MaxX) / span);
     }
 }
 

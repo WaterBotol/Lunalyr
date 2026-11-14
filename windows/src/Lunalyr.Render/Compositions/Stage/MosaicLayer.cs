@@ -1,7 +1,11 @@
-// Mosaic (the Mac's StageLyricView.mosaic and Star4 in StageLyricStyles.swift; Lunalyr's own code, ported as it is). A
-// collage: each word is set a different way as it arrives -- huge and cut off by the edge of the stage with a star
-// beside it, white on a colour bar across a pale panel, or letter by letter on jumping baselines -- while the words
-// before it shrink into a small stack above.
+// Mosaic (the Mac's StageLayouts/MosaicLayout.swift, Test Build 90: mosaic, mosaicBeat, mosaicSetting, mosaicLetters,
+// MosaicLetterRenderer; Lunalyr's own code, ported as it is). A collage: each beat is set a different way as it arrives
+// -- huge, near the stage's width; white on a colour bar; or letter by letter, each letter rising onto one baseline --
+// and then shrinks into a small, flush-left stack above, read top to bottom, the oldest words fading out at its top.
+// Nothing else is drawn: no stars, no panels, and the bar is only ever the background of its own word. A quick run of
+// words shares one beat (one treatment), each word appearing in its place as it is sung; a beat leaves for the stack just
+// before the next one lands, on the original Mosaic's hand-off spring and eases, so nothing jumps as a word arrives.
+// Letters keep one size. The choreography is MosaicGeometry's.
 
 using System.Globalization;
 using System.Numerics;
@@ -16,123 +20,146 @@ namespace Lunalyr.Render.Compositions.Stage;
 
 internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageLayer(CompositionKind.Mosaic, breaker, logger)
 {
-    /// <summary>One letter of a word set letter by letter: its ink, place along the word, baseline jump and turn.</summary>
-    private readonly record struct Letter(Ink Ink, double X, double Y, double Turn);
+    /// <summary>One letter of a beat set letter by letter: its ink, its centre along the beat, and which part of which run it is.</summary>
+    private readonly record struct Letter(Ink Ink, double X, int Run, int Part, int Index);
+
+    private sealed class Setting
+    {
+        public required MosaicBeat Beat { get; init; }
+        /// <summary>The beat's box (its words side by side, and a single word's reading under it), at the treatment's size.</summary>
+        public SizeD Size { get; set; }
+        /// <summary>Each run's centre from the beat's centre (x), its words baked at the treatment's size.</summary>
+        public double[] X { get; init; } = [];
+        /// <summary>The beat's words over its height: shrunk to fit the stage's width (minimumScaleFactor).</summary>
+        public double Fit { get; set; } = 1;
+        public Letter[] Letters { get; set; } = [];
+        public double LetterY { get; set; }
+        public double Tilt { get; set; }
+        public double Sway { get; set; }
+    }
 
     private sealed class MosaicLine(StageSource source) : StageLine(source)
     {
-        public int[] Kinds { get; } = new int[Math.Max(1, source.Runs.Count)];
-        public StageWord?[] Small { get; } = new StageWord?[Math.Max(1, source.Runs.Count)];
-        public Letter[][] Letters { get; } = new Letter[Math.Max(1, source.Runs.Count)][];
-        /// <summary>The letter-by-letter kind's reading, and where it sits under the letters.</summary>
-        public StageWord?[] LetterReadings { get; } = new StageWord?[Math.Max(1, source.Runs.Count)];
-        public double[] LetterReadingY { get; } = new double[Math.Max(1, source.Runs.Count)];
-        public double[] LetterScale { get; } = new double[Math.Max(1, source.Runs.Count)];
-        public SizeD[] Bar { get; } = new SizeD[Math.Max(1, source.Runs.Count)];
+        public Setting[] Settings { get; set; } = [];
+        public MosaicBeat[] Beats { get; set; } = [];
+        public bool RightToLeft { get; init; }
 
         public override void Dispose()
         {
             base.Dispose();
-            foreach (var word in Small) word?.Dispose();
-            foreach (var word in LetterReadings) word?.Dispose();
-            foreach (var letters in Letters)
-                if (letters is not null) foreach (var letter in letters) letter.Ink.Dispose();
+            foreach (var setting in Settings)
+            foreach (var letter in setting.Letters) letter.Ink.Dispose();
         }
     }
-
-    private static readonly double[] BigSizes = [3.0, 2.3, 2.4];
 
     protected override StageLine Build(StageSource source)
     {
-        var line = new MosaicLine(source);
+        var line = new MosaicLine(source) { RightToLeft = ScriptDirection.LineIsRightToLeft(source.Runs.Select(run => run.Text)) };
+        var runs = source.Runs;
+        var seed = line.Seed;
         var u = Unit;
         var tileText = TileText(source.InkTime);
-        var words = new StageWord[source.Runs.Count];
-        for (var i = 0; i < words.Length; i++)
+        // A run with a reading under it makes a beat of its own.
+        var alone = new HashSet<int>(Enumerable.Range(0, runs.Count).Where(i => source.Readings[i] is not null));
+        var beats = MosaicGeometry.Beats(runs, alone);
+        line.Beats = [.. beats];
+        var words = new StageWord[runs.Count];
+        var settings = new Setting[beats.Count];
+        for (var g = 0; g < beats.Count; g++)
         {
-            var run = source.Runs[i];
-            var sample = Sample(line, run);
-            var reading = source.Readings[i];
-            var kind = (int)(StageShared.Chance(line.Seed, run.Id, 20) * 3) % 3;
-            line.Kinds[i] = kind;
-            var size = u * BigSizes[kind];
-            if (kind == 0)
+            var beat = beats[g];
+            var first = runs[beat.From];
+            var sample = Sample(line, first);
+            var size = u * MosaicGeometry.BigSize(beat.Kind);
+            var width = Stage.Width * (beat.Kind == MosaicKind.Huge ? 0.9 : beat.Kind == MosaicKind.Bar ? 0.7 : 0.8);
+            var bar = beat.Kind == MosaicKind.Bar;
+            // The big colour, and the plain small word it becomes (laid exactly over it, then shrunk with it).
+            Vector4 big = bar ? tileText : Colour(sample.Sung);
+            Vector4 rest = Colour(sample.Rest, 0.8);
+            var shadow = bar ? ShadowSpec.None : Shadow(0.28, 8, 3);
+            var xs = new double[beat.Count];
+            double total = 0, height = 0;
+            for (var k = 0; k < beat.Count; k++)
             {
-                // Huge, running off the edge, with a star beside it.
-                var spec = WithReading(new WordSpec(size, [Colour(sample.Sung)])
-                {
-                    MaxWidth = Stage.Width * 1.1, MinimumScale = 0.5, Shadow = Shadow(0.28, 8, 3), Raster = 1.1f,
-                }, reading, size, [Colour(sample.Reading)], maxWidth: Stage.Width * 1.1);
-                words[i] = Bake(run, run.Text, spec);
+                var id = beat.From + k;
+                var run = runs[id];
+                var spec = new WordSpec(size, [big, rest]) { Shadow = shadow, Raster = 1.1f };
+                if (k == 0)
+                    spec = WithReading(spec, source.Readings[id], size,
+                                       [bar ? Faded(tileText, LyricHighlight.ReadingOpacity) : Colour(sample.Reading)],
+                                       shadow: !bar, maxWidth: width);
+                words[id] = Bake(run, run.Text, spec);
+                if (k > 0) total += Joiner(run, size);
+                xs[k] = total + words[id].Size.Width / 2;
+                total += words[id].Size.Width;
+                height = Math.Max(height, words[id].Size.Height);
             }
-            else if (kind == 1)
+            for (var k = 0; k < xs.Length; k++) xs[k] -= total / 2;
+            if (line.RightToLeft) for (var k = 0; k < xs.Length; k++) xs[k] = -xs[k];
+            var setting = new Setting
             {
-                // White on a colour bar; a reading is printed on the bar under its word.
-                var spec = WithReading(new WordSpec(size, [tileText])
-                {
-                    MaxWidth = Stage.Width * 0.7, MinimumScale = 0.45, Shadow = Shadow(0.25, 8, 3), Raster = 1.1f,
-                }, reading, size, [Faded(tileText, LyricHighlight.ReadingOpacity)], shadow: false, maxWidth: Stage.Width * 0.7);
-                words[i] = Bake(run, run.Text, spec);
-                line.Bar[i] = new SizeD(words[i].Size.Width + size * 0.56, words[i].Size.Height + size * 0.12);
-            }
-            else
-            {
-                // Letter by letter, each on its own baseline: the word as a whole is only measured (no colour baked).
-                words[i] = Bake(run, run.Text, new WordSpec(size, []) { MaxWidth = Stage.Width * 0.8, MinimumScale = 0.4 });
-                BakeLetters(line, i, run, size, Colour(sample.Sung), reading, Colour(sample.Reading));
-            }
-            // The small version it becomes, taking over once the big one has shrunk to its size.
-            var small = MosaicGeometry.SmallSize(u);
-            line.Small[i] = Bake(run, run.Text, WithReading(new WordSpec(small, [Colour(sample.Rest, 0.75)])
-            {
-                MaxWidth = Stage.Width * 0.4, MinimumScale = 0.4, Shadow = Shadow(0.2, 6, 2),
-            }, reading, small, [Colour(sample.Reading)], maxWidth: Stage.Width * 0.4));
+                Beat = beat, Size = new SizeD(total, height), X = xs,
+                Fit = total > width && total > 0 ? Math.Max(0.4, width / total) : 1,
+                Tilt = (StageShared.Chance(seed, first.Id, 28) - 0.5) * 5,
+                Sway = MosaicGeometry.Sway(g),
+            };
+            if (beat.Kind == MosaicKind.Letters) BakeLetters(setting, line, runs, words, size, big);
+            settings[g] = setting;
         }
         line.Words = words;
+        line.Settings = settings;
         return line;
     }
 
-    private void BakeLetters(MosaicLine line, int i, Core.Motion.StageRun run, double size, Vector4 colour, string? reading,
-                             Vector4 readingColour)
+    /// <summary>The width of the joiner before <paramref name="run"/> in a beat (a space, or nothing for an unspaced script).</summary>
+    private double Joiner(StageRun run, double size)
+    {
+        if (MosaicGeometry.Joiner(run).Length == 0) return 0;
+        using var spaced = Kit!.Layout("a a", Face.Heavy, (float)size, "en-us", false);
+        using var tight = Kit.Layout("aa", Face.Heavy, (float)size, "en-us", false);
+        return spaced.Metrics.WidthIncludingTrailingWhitespace - tight.Metrics.WidthIncludingTrailingWhitespace;
+    }
+
+    /// <summary>Letter by letter: each letter baked on its own, at its place along its word (one size, one baseline).</summary>
+    private void BakeLetters(Setting setting, MosaicLine line, IReadOnlyList<StageRun> runs, StageWord[] words, double size, Vector4 colour)
     {
         var kit = Kit!;
-        var letters = new List<(Ink Ink, double Width, double Y, double Turn)>();
-        var enumerator = StringInfo.GetTextElementEnumerator(run.Text);
-        var k = 0;
-        double total = 0;
-        while (enumerator.MoveNext())
+        var letters = new List<Letter>();
+        for (var k = 0; k < setting.Beat.Count; k++)
         {
-            var text = enumerator.GetTextElement();
-            var salt = run.Id * 31 + k;
-            var letterSize = size * (0.85 + 0.3 * StageShared.Chance(line.Seed, salt, 24));
-            using var layout = kit.Layout(text, Face.Heavy, (float)letterSize, TextKit.LocaleFor(text), false);
-            var ink = kit.Bake(layout, colour, 1.1f, Shadow(0.28, 8, 3));
-            letters.Add((ink, layout.Metrics.WidthIncludingTrailingWhitespace, (StageShared.Chance(line.Seed, salt, 25) - 0.5) * size * 0.28,
-                         (StageShared.Chance(line.Seed, salt, 26) - 0.5) * 22));
-            total += layout.Metrics.WidthIncludingTrailingWhitespace;
-            k++;
-        }
-        var spacing = size * 0.02;
-        total += spacing * Math.Max(0, letters.Count - 1);
-        line.LetterScale[i] = total > Stage.Width * 0.8 ? Math.Max(0.4, Stage.Width * 0.8 / total) : 1;
-        var placed = new Letter[letters.Count];
-        var x = -total / 2;
-        for (var j = 0; j < letters.Count; j++)
-        {
-            placed[j] = new Letter(letters[j].Ink, x + letters[j].Width / 2, letters[j].Y, letters[j].Turn);
-            x += letters[j].Width + spacing;
-        }
-        line.Letters[i] = placed;
-        if (reading is not null)
-        {
-            var spec = WithReading(new WordSpec(size, [colour]), reading, size, [readingColour]);
-            var readingSize = spec.ReadingSize;
-            line.LetterReadings[i] = Bake(run, reading, new WordSpec(readingSize, [readingColour])
+            var id = setting.Beat.From + k;
+            var run = runs[id];
+            var word = words[id];
+            var rtl = ScriptDirection.IsRightToLeft(run.Text);
+            using var layout = kit.Layout(run.Text, Face.Heavy, (float)size, TextKit.LocaleFor(run.Text), rtl);
+            var layoutWidth = layout.Metrics.Width;
+            var offset = 0;
+            for (var part = 0; part < run.Parts.Count; part++)
             {
-                LabelIsReading = true, Face = Face.Quiet, MaxWidth = Stage.Width * 0.8, MinimumScale = 0.5, Shadow = spec.ReadingShadow,
-            });
-            line.LetterReadingY[i] = size * 0.6 + spec.ReadingGap + readingSize * 1.25 / 2;
+                var text = run.Parts[part].Text;
+                var enumerator = StringInfo.GetTextElementEnumerator(text);
+                var index = 0;
+                while (enumerator.MoveNext())
+                {
+                    var element = enumerator.GetTextElement();
+                    var at = offset + enumerator.ElementIndex;
+                    layout.HitTestTextPosition((uint)at, false, out var x, out _, out _);
+                    layout.HitTestTextPosition((uint)(at + element.Length), false, out var x2, out _, out _);
+                    var centre = (x + x2) / 2 - layout.Metrics.Left - layoutWidth / 2;
+                    if (string.IsNullOrWhiteSpace(element)) { index++; continue; }
+                    using var glyph = kit.Layout(element, Face.Heavy, (float)size, TextKit.LocaleFor(element), rtl);
+                    var ink = kit.Bake(glyph, colour, 1.1f, Shadow(0.28, 8, 3));
+                    // Along the word's own label, which the beat places by the word's centre.
+                    letters.Add(new Letter(ink, setting.X[k] + word.LabelOffset.X + centre * word.Label.Width / Math.Max(1, layoutWidth),
+                                           id, part, index));
+                    index++;
+                }
+                offset += text.Length;
+            }
         }
+        setting.Letters = [.. letters];
+        // The letters sit where the words' labels do: under them, a single word's reading.
+        setting.LetterY = setting.Beat.Count > 0 ? words[setting.Beat.From].LabelOffset.Y : 0;
     }
 
     protected override void DrawLine(ID2D1DeviceContext dc, StageLine stageLine, double time, double exitStart, in Matrix4x4 stage,
@@ -140,112 +167,141 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
     {
         var line = (MosaicLine)stageLine;
         var runs = line.Runs;
-        var n = shown;
-        if (n == 0) return;
+        var beats = line.Beats;
+        if (beats.Length == 0) return;
         var whole = (1 - StageMotion.Leave(time, exitStart)) * alpha;
         if (!(whole > 0.002)) return;
-        var speed = line.Speed;
         var reduce = ReduceMotion;
-        var seed = line.Seed;
+        // Mosaic reads the words that have arrived only under Reduce Motion, for the shared dissolve's steps.
+        var arrived = reduce ? shown : runs.Count;
+        var speed = line.Speed;
         var u = Unit;
-        var arrivals = line.A.AsSpan(0, n);
-        var ranks = line.B.AsSpan(0, n);
-        for (var i = 0; i < n; i++) arrivals[i] = StageMotion.Arrival(runs[i].Start, time, speed, reduce);
-        StageMotion.Ranks(runs, n, time, speed, seed, reduce, ranks);
+        var moves = line.A.AsSpan(0, beats.Length);
+        var ranks = line.B.AsSpan(0, beats.Length);
+        MosaicGeometry.Motion(beats, runs, time, speed, exitStart, line.Seed, reduce, arrived, line.C.AsSpan(0, beats.Length), moves, ranks);
         // The stack's rows make room for readings when the line has any.
         var step = MosaicGeometry.StackStep(u, line.HasReadings, Pt);
         var flat = Homography.Flat(stage);
         var tile = Tile(line.InkTime);
-        var white = new Vector4(1, 1, 1, 1);
-        for (var id = 0; id < n; id++)
+        var bar = Desaturated(tile, MosaicGeometry.AccentSaturation);
+        var rtl = line.RightToLeft;
+        for (var g = 0; g < beats.Length; g++)
         {
-            var run = runs[id];
-            var a = arrivals[id];
-            var rank = ranks[id];
-            var settle = StageShared.Glide(Math.Min(rank, 1.2) / 1.2);
-            var kind = line.Kinds[id];
-            var morph = StageMotion.MosaicMorph(settle, 0.6 / BigSizes[kind]);
-            var side = StageShared.Chance(seed, id, 23) < 0.5 ? 1.0 : -1.0;
-            var place = MosaicGeometry.Place(id, rank, seed, step, Bounds);
-            var at = Matrix3x2.CreateTranslation((float)place.X, (float)place.Y) * flat;
-            var bigOpacity = Math.Min(1, a * 1.6) * morph.BigOpacity * whole;
-            var size = u * BigSizes[kind];
-            var word = line.Words[id];
+            var beat = beats[g];
+            var setting = line.Settings[g];
+            var first = runs[beat.From];
+            // A beat is drawn from just before its first word until it has faded off the top of the stack.
+            var appear0 = MosaicGeometry.Appear(first, time, speed, reduce, arrived);
+            var fade = MosaicGeometry.StackFade(ranks[g]);
+            if (!(appear0 > 0.001 && fade > 0.001)) continue;
+            var size = u * MosaicGeometry.BigSize(beat.Kind);
+            var fit = setting.Fit;
+            var measured = new SizeD(setting.Size.Width * fit, setting.Size.Height * fit);
+            var overhang = beat.Kind == MosaicKind.Bar ? u * MosaicGeometry.BigSize(MosaicKind.Bar) * MosaicGeometry.BarPaddingY * 2 : 0;
+            var centre = MosaicGeometry.Centre(measured, moves[g], ranks[g], setting.Sway, step, overhang, rtl, Bounds);
+            var morph = StageMotion.MosaicMorph(moves[g], 0.6 / MosaicGeometry.BigSize(beat.Kind));
+            // The whole beat shrinks towards its own edge as it leaves for the stack.
+            var edge = (float)(rtl ? measured.Width / 2 : -measured.Width / 2);
+            var beatAt = Matrix3x2.CreateScale((float)fit)
+                * Matrix3x2.CreateScale((float)morph.BigScale, new Vector2(edge, 0))
+                * Matrix3x2.CreateTranslation((float)centre.X, (float)centre.Y) * flat;
+            var opacity = fade * whole;
+            var bigOpacity = morph.BigOpacity * opacity;
             if (bigOpacity > 0.002)
             {
-                // The big setting, shrinking and dimming as the next word takes over.
-                var big = Matrix3x2.CreateScale((float)morph.BigScale) * at;
-                if (kind == 0)
+                switch (beat.Kind)
                 {
-                    var unit = Matrix3x2.CreateTranslation(reduce ? 0 : (float)((1 - Math.Min(a, 1)) * Stage.Width * 0.35 * side), 0) * big;
-                    DrawLabel(dc, line, word, run, 0, time, Homography.Of(unit), bigOpacity, blur);
-                    DrawReading(dc, line, word, run, 0, time, Homography.Of(unit), bigOpacity, blur);
-                    var star = Matrix3x2.CreateRotation(Radians(reduce ? 0 : time * 40))
-                        * Matrix3x2.CreateTranslation((float)(word.Size.Width / 2 - size * 0.16 + size * 0.1),
-                                                      (float)(-word.Size.Height / 2 + size * 0.16 - size * 0.12)) * unit;
-                    FillStar(dc, star, size * 0.32, tile, bigOpacity);
-                }
-                else if (kind == 1)
-                {
-                    var wipe = reduce ? 1 : StageShared.Glide((time - (run.Start - 0.04)) / (0.32 / speed));
-                    var tilt = (StageShared.Chance(seed, id, 28) - 0.5) * 5;
-                    var bar = line.Bar[id];
-                    // The pale panel behind, a little off-square, arriving a beat after the bar.
-                    var panelIn = StageShared.Glide((time - (run.Start + 0.05)) / 0.3);
-                    var panel = Matrix3x2.CreateRotation(Radians(-tilt * 0.8))
-                        * Matrix3x2.CreateTranslation((float)(size * 0.12), (float)(size * 0.1))
-                        * Matrix3x2.CreateScale(reduce ? 1 : (float)(0.6 + 0.4 * panelIn), 1) * big;
-                    SoftRounded(dc, Matrix3x2.CreateTranslation(0, Points(3)) * panel, bar.Width + size * 1.1, bar.Height + size * 0.68,
-                                Points(4), Points(8), new Vector4(0, 0, 0, 1), 0.25 * panelIn * bigOpacity);
-                    FillRounded(dc, panel, bar.Width + size * 1.1, bar.Height + size * 0.68, Points(4), white, 0.9 * panelIn * bigOpacity);
-                    // The bar wipes across, then the word lands on it.
-                    var turned = Matrix3x2.CreateRotation(Radians(tilt)) * big;
-                    var wiped = bar.Width * wipe;
-                    var barCentre = side > 0 ? -bar.Width / 2 + wiped / 2 : bar.Width / 2 - wiped / 2;
-                    FillRounded(dc, Matrix3x2.CreateTranslation((float)barCentre, 0) * turned, wiped, bar.Height, 0, tile, bigOpacity);
-                    var landed = StageShared.Glide((time - (run.Start + 0.1)) / 0.2) * bigOpacity;
-                    var unit = Homography.Of(Matrix3x2.CreateRotation(Radians(tilt))
-                        * Matrix3x2.CreateTranslation((float)((1 - wipe) * size * 0.5 * side), 0) * big);
-                    DrawLabel(dc, line, word, run, 0, time, unit, landed, blur);
-                    DrawReading(dc, line, word, run, 0, time, unit, landed, blur);
-                    // A star above the word, which a reading under it lifts.
-                    var lift = word.HasReading ? StageShared.ReadingSlot(size, point: Pt) / 2 : 0;
-                    var star = Matrix3x2.CreateScale((float)wipe) * Matrix3x2.CreateRotation(Radians(reduce ? 0 : time * 50))
-                        * Matrix3x2.CreateTranslation((float)(side * size * 0.1), (float)(-size * 0.62 - lift)) * big;
-                    FillStar(dc, Matrix3x2.CreateTranslation(0, Points(1)) * star, size * 0.3, new Vector4(0, 0, 0, 1), 0.2 * bigOpacity);
-                    FillStar(dc, star, size * 0.3, white, bigOpacity);
-                }
-                else
-                {
-                    var letters = line.Letters[id];
-                    var fitted = Matrix3x2.CreateScale((float)line.LetterScale[id]) * big;
-                    var readingRow = line.LetterReadings[id] is null ? 0 : line.LetterReadings[id]!.Size.Height + size * 0.1;
-                    var lettersAt = Matrix3x2.CreateTranslation(0, (float)(-readingRow / 2)) * fitted;
-                    for (var k = 0; k < letters.Length; k++)
+                    case MosaicKind.Huge:
                     {
-                        var letter = letters[k];
-                        var reveal = StageShared.Glide((time - (run.Start + k * 0.05)) / 0.25);
-                        var local = Matrix3x2.CreateRotation(Radians(letter.Turn))
-                            * Matrix3x2.CreateTranslation((float)letter.X, (float)(letter.Y + (reduce ? 0 : (1 - reveal) * size * 0.3))) * lettersAt;
-                        DrawInk(dc, letter.Ink, Homography.Of(local), Vector2.Zero, reveal * bigOpacity, blur);
+                        // Punches in from a little smaller, never past its own room on the stage.
+                        var punch = Matrix3x2.CreateScale(reduce ? 1 : (float)(0.8 + 0.2 * Math.Min(1.05, appear0))) * beatAt;
+                        DrawWords(dc, line, setting, time, punch, 0, bigOpacity, blur, speed, arrived, syllables: true);
+                        break;
                     }
-                    if (line.LetterReadings[id] is { } under)
+                    case MosaicKind.Bar:
                     {
-                        var below = Matrix3x2.CreateTranslation(0, (float)(line.LetterReadingY[id] - readingRow / 2)) * fitted;
-                        // Set on its own, the reading still fills in part by part as the run is sung.
-                        var shares = line.ReadingOpacities(under, run, time);
-                        DrawInk(dc, under.Labels[0], Homography.Of(below), Vector2.Zero, bigOpacity, blur, 1,
-                                shares.IsEmpty ? default : under.ReadingSlices!.Boundaries, shares);
+                        // The bar and its word are one print: they come in together, and the bar never shows without the
+                        // whole word on it.
+                        var shown1 = Math.Min(1, appear0 * 1.6) * bigOpacity;
+                        var leading = (float)(rtl ? setting.Size.Width / 2 : -setting.Size.Width / 2);
+                        var print = Matrix3x2.CreateRotation(Radians(setting.Tilt))
+                            * Matrix3x2.CreateScale(reduce ? 1 : (float)(0.7 + 0.3 * MosaicGeometry.BarSpread(first, time, speed)), 1, new Vector2(leading, 0)) * beatAt;
+                        // The bar is the background of the whole setting: its word, and the word's reading printed on it.
+                        var word = line.Words[beat.From];
+                        var barWidth = word.Size.Width + 2 * size * MosaicGeometry.BarPaddingX;
+                        var barHeight = word.Size.Height + 2 * size * MosaicGeometry.BarPaddingY;
+                        var barAt = print;
+                        SoftRounded(dc, Matrix3x2.CreateTranslation(0, Points(3)) * barAt, barWidth, barHeight, 0, Points(8),
+                                    new Vector4(0, 0, 0, 1), 0.28 * shown1);
+                        FillRounded(dc, barAt, barWidth, barHeight, 0, bar, shown1);
+                        DrawWords(dc, line, setting, time, print, 0, shown1, blur, speed, arrived, syllables: false, whole1: true);
+                        break;
                     }
+                    default:
+                        DrawLetters(dc, line, setting, time, beatAt, size, bigOpacity, blur, arrived);
+                        break;
                 }
             }
-            if (morph.SmallOpacity > 0.002 && line.Small[id] is { } small)
-            {
-                var fade = Math.Max(0, 1 - (rank - 1.5) * 0.6);
-                var o = morph.SmallOpacity * fade * whole;
-                DrawLabel(dc, line, small, run, 0, time, Homography.Of(at), o, blur);
-                DrawReading(dc, line, small, run, 0, time, Homography.Of(at), o, blur);
-            }
+            // The plain small word it becomes, laid exactly over it.
+            if (morph.SmallOpacity > 0.002)
+                DrawWords(dc, line, setting, time, beatAt, 1, morph.SmallOpacity * opacity, blur, speed, arrived,
+                          syllables: beat.Kind != MosaicKind.Bar, shadow: 0);
         }
+    }
+
+    /// <summary>
+    /// A beat's words side by side, each in its place from the start (unsung ones clear), so nothing shifts as they
+    /// arrive; without <paramref name="syllables"/>, a word is printed whole (the bar's).
+    /// </summary>
+    private void DrawWords(ID2D1DeviceContext dc, MosaicLine line, Setting setting, double time, in Matrix3x2 at, int colour,
+                           double opacity, float blur, double speed, int arrived, bool syllables, bool whole1 = false, float shadow = 1)
+    {
+        var reduce = ReduceMotion;
+        for (var k = 0; k < setting.Beat.Count; k++)
+        {
+            var id = setting.Beat.From + k;
+            var run = line.Runs[id];
+            var word = line.Words[id];
+            var appear = MosaicGeometry.Appear(run, time, speed, reduce, arrived);
+            var shown = whole1 ? 1 : reduce ? (appear > 0 ? 1 : 0) : Math.Min(1, Math.Max(0, appear * 1.6));
+            if (!(shown * opacity > 0.002)) continue;
+            var unit = Homography.Of(Matrix3x2.CreateTranslation((float)setting.X[k], 0) * at);
+            if (syllables) DrawLabel(dc, line, word, run, colour, time, unit, shown * opacity, blur, shadow);
+            else DrawInk(dc, word.Labels[colour], unit, word.LabelOffset, shown * opacity, blur, shadow);
+            DrawReading(dc, line, word, run, 0, time, unit, shown * opacity, blur, shadow);
+        }
+    }
+
+    /// <summary>Letter by letter: each letter fades in rising onto the one baseline, in time with its syllable.</summary>
+    private void DrawLetters(ID2D1DeviceContext dc, MosaicLine line, Setting setting, double time, in Matrix3x2 at, double size,
+                             double opacity, float blur, int arrived)
+    {
+        var reduce = ReduceMotion;
+        var drop = reduce ? 0 : size * 0.22;
+        var runs = line.Runs;
+        foreach (var letter in setting.Letters)
+        {
+            var run = runs[letter.Run];
+            double? next = letter.Run + 1 < runs.Count ? runs[letter.Run + 1].Start : null;
+            var reveal = reduce ? (run.Id < arrived ? 1 : 0) : MosaicGeometry.LetterReveal(letter.Part, letter.Index, run, next, time);
+            if (!(reveal > 0.001)) continue;
+            var lowered = 1 - Math.Min(1, Math.Max(0, reveal));
+            var place = Matrix3x2.CreateTranslation((float)letter.X, (float)(setting.LetterY + lowered * drop)) * at;
+            DrawInk(dc, letter.Ink, Homography.Of(place), Vector2.Zero, Math.Min(1, reveal) * opacity, blur);
+        }
+        // A single word's reading, under the letters.
+        var first = setting.Beat.From;
+        var word = line.Words[first];
+        if (word.HasReading)
+            DrawReading(dc, line, word, runs[first], 0, time, Homography.Of(Matrix3x2.CreateTranslation((float)setting.X[0], 0) * at),
+                        opacity * (runs[first].Id < arrived || !reduce ? 1 : 0), blur);
+    }
+
+    /// <summary><paramref name="colour"/> with its saturation scaled (SwiftUI's saturation(), on luminance).</summary>
+    private static Vector4 Desaturated(Vector4 colour, double amount)
+    {
+        var luma = 0.2126f * colour.X + 0.7152f * colour.Y + 0.0722f * colour.Z;
+        var k = (float)amount;
+        return new Vector4(luma + (colour.X - luma) * k, luma + (colour.Y - luma) * k, luma + (colour.Z - luma) * k, colour.W);
     }
 }
