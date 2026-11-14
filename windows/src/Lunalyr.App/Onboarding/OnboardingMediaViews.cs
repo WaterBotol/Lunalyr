@@ -161,7 +161,7 @@ internal sealed class OnboardingClipView
             Stop();
             return;
         }
-        if (!MutedVideo.Exists(_clip.VideoPath())) return;
+        if (!_clip.HasVideo() || !MutedVideo.Exists(_clip.VideoPath())) return;
         var video = new MutedVideo(_clip.VideoPath(), loop: true);
         video.Element.Width = _frame.Width;
         video.Element.Height = _frame.Height;

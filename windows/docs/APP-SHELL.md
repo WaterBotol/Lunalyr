@@ -521,11 +521,12 @@ and `Hosting/AppHost.Onboarding.cs`. Previews: `docs/previews/onboarding/` (`onb
 being a step, `look-lyrics` or `opening`; `settings-loader-{light,dark}.png`).
 
 **Media** (`src/Lunalyr.App/Assets/Onboarding/`, copied to the app's folder): the owner's recordings
-`OnboardingHero.mp4`, `OnboardingReadings.mp4`, `OnboardingFloating.mp4` (960 × 620, H.264, no audio track, 8 s at
-most) with their first frames as `.jpg` posters, `WelcomeGlass.mp4` (the glass logo, 1080 × 1080, 3.25 s, no audio
+`OnboardingReadings.mp4` and `OnboardingFloating.mp4` (960 × 620, H.264, no audio track, 8 s at most) with their first
+frames as `.jpg` posters; the hero is a still only, `OnboardingHero.jpg` (Lunalyr's own Broadside drawing of the
+invented demo song, rendered with `CompositionPreview`), because the Mac's hero recording shows a real album's cover
+and another app; `WelcomeGlass.mp4` (the glass logo, 1080 × 1080, 3.25 s, no audio
 track), `DiscordStatus.gif` (a recording of a Discord member list) and `LunalyrIcon.png` (the 256 px frame of
-`Assets\Lunalyr.ico`), all byte for byte the Mac's. **Before any release: `OnboardingHero.mp4` shows a real album
-cover (OneRepublic, "Native"); the owner said keep it for now and re-record it before shipping.**
+`Assets\Lunalyr.ico`), the others byte for byte the Mac's. A re-recorded hero clip can replace the still later.
 
 **Playback:** each video is a `MediaPlayer` shown by a `MediaPlayerElement` (`MutedVideo`), muted with its volume at 0
 before a source is set, with its command manager and transport controls off, so it never becomes a media session in

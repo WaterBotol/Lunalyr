@@ -17,8 +17,9 @@ namespace Lunalyr.Shell.Onboarding;
 /// It plays muted and looping only while its step is on screen and the window is active; with Windows' animation
 /// effects off, in a quiet window and in captures, only the poster shows and no player is made.
 /// <para>
-/// <c>OnboardingHero.mp4</c> shows a real album's cover (the owner's recording): keep it for now, re-record it before
-/// any release (docs/APP-SHELL.md, "Onboarding").
+/// The Mac's <c>OnboardingHero.mp4</c> shows a real album's cover and another app, so Windows ships no hero recording:
+/// its poster is Lunalyr's own Broadside drawing of the invented demo song, held still (<see cref="HasVideo"/>). A
+/// re-recorded clip can take its place later.
 /// </para>
 /// </summary>
 public enum OnboardingClip
@@ -45,6 +46,9 @@ public static class OnboardingClips
 
     /// <summary>The recordings are 960 × 620.</summary>
     public const double Aspect = 960.0 / 620.0;
+
+    /// <summary>Whether the clip has a recording to play (the hero is a still: see the type's summary).</summary>
+    public static bool HasVideo(this OnboardingClip clip) => clip != OnboardingClip.Hero;
 
     /// <summary>The file's name without its extension: <c>OnboardingHero</c>, <c>OnboardingReadings</c>, <c>OnboardingFloating</c>.</summary>
     public static string Resource(this OnboardingClip clip) => "Onboarding" + clip;

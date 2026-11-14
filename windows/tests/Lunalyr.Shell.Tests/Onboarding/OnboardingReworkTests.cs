@@ -116,8 +116,15 @@ public sealed class OnboardingReworkTests
         {
             var video = AppFile(clip.VideoPath());
             var poster = AppFile(clip.PosterPath());
-            Assert.True(File.Exists(video), $"{clip.Resource()}.mp4 is bundled");
             Assert.True(File.Exists(poster), $"{clip.Resource()}.jpg is bundled");
+            if (!clip.HasVideo())
+            {
+                // Windows' hero is a still of Lunalyr's own drawing: no recording of a real album's cover ships.
+                Assert.False(File.Exists(video), $"{clip.Resource()}.mp4 must not ship");
+                bytes += new FileInfo(poster).Length;
+                continue;
+            }
+            Assert.True(File.Exists(video), $"{clip.Resource()}.mp4 is bundled");
             var movie = Mp4.Read(video);
             Assert.DoesNotContain("soun", movie.Handlers); // no audio track
             Assert.Equal(["vide"], movie.Handlers);
