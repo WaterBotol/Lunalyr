@@ -31,6 +31,7 @@ internal sealed class SettingsPreview : IDisposable
     private readonly byte[][] _buffers = [new byte[PixelWidth * PixelHeight * 4], new byte[PixelWidth * PixelHeight * 4]];
     private readonly ManualResetEventSlim _wake = new(false);
     private readonly TextBlock _note;
+    private readonly FloatingPreviewHandles _handles;
     private readonly Thread _thread;
     private volatile bool _active;
     private volatile bool _disposed;
@@ -51,7 +52,12 @@ internal sealed class SettingsPreview : IDisposable
         _note.HorizontalAlignment = HorizontalAlignment.Center;
         AutomationProperties.SetAccessibilityView(_note, AccessibilityView.Raw);
         var stack = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
-        var clip = new Border { CornerRadius = new CornerRadius(6), Child = image, HorizontalAlignment = HorizontalAlignment.Center };
+        // The floating lyrics' outline and handles, over the picture while the lyrics float.
+        _handles = new FloatingPreviewHandles(host);
+        var picture = new Grid();
+        picture.Children.Add(image);
+        picture.Children.Add(_handles.Overlay);
+        var clip = new Border { CornerRadius = new CornerRadius(6), Child = picture, HorizontalAlignment = HorizontalAlignment.Center };
         stack.Children.Add(clip);
         stack.Children.Add(_note);
         View = new Border
@@ -171,6 +177,7 @@ internal sealed class SettingsPreview : IDisposable
                 using (var stream = _bitmap.PixelBuffer.AsStream()) stream.Write(pixels, 0, pixels.Length);
                 _bitmap.Invalidate();
                 if (_note.Text != note) _note.Text = note;
+                _handles.Refresh();
             }
             finally
             {

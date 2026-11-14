@@ -256,14 +256,25 @@ public sealed unsafe class FloatingWindowHost : IDisposable
     /// <summary>Where the options put the window, in physical pixels, and on which display (null with no display).</summary>
     private MBox? Resolve(FloatingLyricsOptions options)
     {
+        if (Where(options) is not { } where) return null;
+        _display = where.Display;
+        _geometry = where.Geometry;
+        return where.Geometry.ToPixels(where.Frame);
+    }
+
+    /// <summary>
+    /// The display the options put the window on, its geometry, and the window's frame there in points (relative, y up),
+    /// or null with no display. The settings preview draws its handles from this too (any thread).
+    /// </summary>
+    public static (DisplayChoice Display, FloatingDisplay Geometry, FloatingRect Frame)? Where(FloatingLyricsOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
         var displays = DisplayIdentity.Connected();
         if (FloatingFrame.ChosenIndex(options.Display, [.. displays.Select(d => d.Key)]) is not { } index) return null;
         var display = displays[index];
         var geometry = DisplayIdentity.Display(display.Monitor);
         options.Frames.TryGetValue(display.Key, out var frame);
         options.Sizes.TryGetValue(display.Key, out var size);
-        _display = display;
-        _geometry = geometry;
         var custom = FloatingFrame.Decode(frame);
         var saved = FloatingFrame.Decode(size)?.Size;
         if (options.LayoutSize is { } own)
@@ -272,7 +283,7 @@ public sealed unsafe class FloatingWindowHost : IDisposable
             saved = own.Size;
             if (custom is { } shared) custom = own.Centred(shared);
         }
-        return geometry.Place(options.Placement, custom, saved, options.TextSize);
+        return (display, geometry, FloatingFrame.Resolve(options.Placement, custom, saved, options.TextSize, geometry.ScreenFrame, geometry.Area));
     }
 
     private void Apply(FloatingLyricsOptions options)

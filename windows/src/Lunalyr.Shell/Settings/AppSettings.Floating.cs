@@ -70,9 +70,11 @@ public sealed partial record AppSettings
     /// The window was resized in Edit position while <paramref name="layout"/> showed: that layout keeps the new size, its
     /// text scaled by the height's change (<paramref name="heightRatio"/>).
     /// </summary>
-    public AppSettings WithLayoutResized(string layout, Core.Compositions.SizeD size, double heightRatio)
+    /// <param name="baseText">The text size the resize started from (a live drag sends many steps; each scales the
+    /// start, never the step before); null for the layout's text now.</param>
+    public AppSettings WithLayoutResized(string layout, Core.Compositions.SizeD size, double heightRatio, double? baseText = null)
     {
-        var text = FloatingLayoutSize.ScaledText(FloatingTextSizeFor(layout), 1, heightRatio);
+        var text = FloatingLayoutSize.ScaledText(baseText ?? FloatingTextSizeFor(layout), 1, heightRatio);
         var sizes = new Dictionary<string, IReadOnlyList<double>>(FloatingLayoutSizes ?? new Dictionary<string, IReadOnlyList<double>>())
         {
             [layout] = new FloatingLayoutSize(size, text).Encode(),
