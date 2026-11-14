@@ -86,6 +86,7 @@ internal sealed partial class LyricCardWindow : Window
         _model = model;
         Title = LyricCardCopy.WindowTitle;
         SystemBackdrop = new MicaBackdrop();
+        Interop.AppIcon.Apply(AppWindow);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(Scaled(760), Scaled(720)));
         AppWindow.Closing += (_, e) =>
         {
