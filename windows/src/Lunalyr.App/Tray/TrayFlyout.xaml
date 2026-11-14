@@ -87,7 +87,7 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                 <TextBlock x:Name="PlayerText" Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
@@ -125,7 +125,7 @@
                                            TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <TextBlock x:Name="LyricFooter" Grid.Row="1" Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                         </Grid>
 

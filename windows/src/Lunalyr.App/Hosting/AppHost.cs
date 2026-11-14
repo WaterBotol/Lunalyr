@@ -346,6 +346,9 @@ internal sealed partial class AppHost
         _pendingSettings = false;
         if (flyout is { } f) app.ToggleFlyout(f.Anchor, f.Keyboard);
         if (_options.OpenLyricCard) app.ShowLyricCard();
+        // --flyout-capture (checks): the flyout off screen, never activated, captured, then Lunalyr quits.
+        if (_options.FlyoutCapturePath is { } flyoutCapture)
+            app.CaptureFlyout(_tray.IconRect() ?? new PixelRect(0, 0, 0, 0), flyoutCapture, TimeSpan.FromSeconds(_options.FlyoutCaptureAfter));
         ShowWelcomeIfDue(app);
     }
 
