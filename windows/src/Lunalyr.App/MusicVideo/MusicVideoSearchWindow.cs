@@ -50,7 +50,7 @@ internal sealed class MusicVideoSearchWindow : Window
         Title = "Search YouTube";
         SystemBackdrop = new MicaBackdrop();
         Interop.AppIcon.Apply(AppWindow);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(Scaled(Width0), Scaled(Height0)));
+        AppWindow.Resize(FittedSize(Width0, Height0));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsMinimizable = false;
@@ -166,6 +166,14 @@ internal sealed class MusicVideoSearchWindow : Window
 
     private static int Scaled(double dips) => (int)Math.Round(dips * Interop.Win32.GetDpiForSystem() / 96.0);
 
+    /// <summary>The window's size for <paramref name="widthDips"/> × <paramref name="heightDips"/>, cut to its display's work area.</summary>
+    private Windows.Graphics.SizeInt32 FittedSize(double widthDips, double heightDips)
+    {
+        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var (width, height) = Lunalyr.Shell.SmallWindowSize.Fit(widthDips, heightDips, Interop.Win32.GetDpiForSystem() / 96.0, work.Width, work.Height);
+        return new Windows.Graphics.SizeInt32(width, height);
+    }
+
     private void Centre()
     {
         var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
@@ -279,7 +287,7 @@ internal sealed class MusicVideoSearchWindow : Window
                 ShowSearching();
                 break;
             case MusicVideoSearchModel.SearchPhase.Idle:
-                ShowMessage("Press Enter to search.", null);
+                ShowMessage("Press Enter to search", null);
                 break;
             case MusicVideoSearchModel.SearchPhase.Empty:
                 ShowMessage("No videos found", "Try other words.");
@@ -330,7 +338,8 @@ internal sealed class MusicVideoSearchWindow : Window
 
     private void ShowSearching()
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 40, 0, 0) };
+        // At the top, where the messages that follow it sit (a horizontal panel would otherwise centre it in the window).
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 40, 0, 0) };
         panel.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
         panel.Children.Add(new TextBlock { Text = "Searching YouTube…", Style = Resource<Style>("SettingsCaption"), VerticalAlignment = VerticalAlignment.Center });
         AutomationProperties.SetName(panel, "Searching YouTube");

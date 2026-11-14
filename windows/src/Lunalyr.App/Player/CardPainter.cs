@@ -816,11 +816,14 @@ internal sealed partial class CardPainter : IDisposable
         dc.DrawEllipse(ellipse, _brush, width);
     }
 
-    /// <summary>A soft shadow under a rounded box: a few widening, fading rounded rectangles.</summary>
+    /// <summary>
+    /// A soft shadow under a rounded box: widening, fading rounded rectangles, about one per DIP of blur (five, 2.4 DIPs
+    /// apart for the cover's 12, showed as bands on the light card).
+    /// </summary>
     private void SoftShadow(ID2D1DeviceContext dc, RectF box, float blur, float strength)
     {
         if (strength <= 0.001f) return;
-        const int steps = 5;
+        var steps = Math.Max(5, (int)MathF.Ceiling(blur));
         for (var i = steps; i >= 1; i--)
         {
             var spread = blur * i / steps;

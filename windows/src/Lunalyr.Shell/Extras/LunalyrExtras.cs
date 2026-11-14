@@ -399,8 +399,8 @@ public sealed class LunalyrExtras
         if (_hooks.OpenLyricCard?.Invoke() != true) Post(LyricCardMissing, "photo");
     }
 
-    /// <summary>Until the lyric card window is wired in (another part of milestone 7).</summary>
-    public const string LyricCardMissing = "Lyric cards aren’t in this build yet";
+    /// <summary>The lyric card window couldn't open (Lunalyr is starting up or quitting).</summary>
+    public const string LyricCardMissing = "The lyric card can’t open right now";
 
     /// <summary>Music video on, or back to the type it replaced.</summary>
     public void ToggleMusicVideo()

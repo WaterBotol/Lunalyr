@@ -109,6 +109,16 @@ public sealed record ShellOptions
     public string? HudCapturePath { get; init; }
 
     /// <summary>
+    /// <c>--flyout-capture &lt;file&gt;</c>: open the tray flyout off screen, never activated, without a click on the icon;
+    /// after <see cref="FlyoutCaptureAfter"/> seconds write it as a PNG (PrintWindow), log whether it was ever the foreground
+    /// window, and quit. For checks (the sweep, 14 Nov 2026); not forwarded to a running instance.
+    /// </summary>
+    public string? FlyoutCapturePath { get; init; }
+
+    /// <summary><c>--flyout-capture-after &lt;seconds&gt;</c>: how long the flyout is open before it is captured (default 6).</summary>
+    public double FlyoutCaptureAfter { get; init; } = 6;
+
+    /// <summary>
     /// <c>--onboarding-capture &lt;file&gt;</c>: open the welcome (as a first run sees it) without activating it, at the bottom
     /// of the z-order, at <see cref="OnboardingStep"/>; once it has settled, write the window as a PNG (PrintWindow) and quit.
     /// Nothing is recorded as seen. For checks; not forwarded to a running instance.
@@ -267,6 +277,21 @@ public sealed record ShellOptions
                     {
                         if (hud.Trim().Length == 0) problems.Add("--hud-capture needs a file.");
                         else options = options with { HudCapturePath = Path.GetFullPath(hud.Trim()) };
+                    }
+                    break;
+                case "--flyout-capture":
+                    if (Value() is { } flyout)
+                    {
+                        if (flyout.Trim().Length == 0) problems.Add("--flyout-capture needs a file.");
+                        else options = options with { FlyoutCapturePath = Path.GetFullPath(flyout.Trim()) };
+                    }
+                    break;
+                case "--flyout-capture-after":
+                    if (Value() is { } after)
+                    {
+                        if (double.TryParse(after, NumberStyles.Float, CultureInfo.InvariantCulture, out var wait) && wait >= 0 && double.IsFinite(wait))
+                            options = options with { FlyoutCaptureAfter = wait };
+                        else problems.Add($"--flyout-capture-after {after}: expected a number of seconds.");
                     }
                     break;
                 case "--onboarding-capture":

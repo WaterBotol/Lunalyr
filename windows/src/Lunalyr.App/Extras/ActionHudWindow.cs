@@ -38,6 +38,7 @@ internal sealed unsafe class ActionHudWindow : IDisposable
     private readonly CategoryLogger _log;
     private readonly Func<PlayerLook> _readLook;
     private readonly string? _capturePath;
+    private readonly bool _quiet;
     private readonly ActionHudMotion _motion = new();
     private readonly long _epoch = Stopwatch.GetTimestamp();
     private ID2D1Factory? _d2d;
@@ -53,11 +54,14 @@ internal sealed unsafe class ActionHudWindow : IDisposable
     /// <param name="log">Where problems go (the App category).</param>
     /// <param name="readLook">Windows' look now (light or dark, transparency, contrast, Animation effects).</param>
     /// <param name="capturePath">For checks: each note's bitmap is also written here as a PNG (<c>--hud-capture</c>).</param>
-    public ActionHudWindow(CategoryLogger log, Func<PlayerLook> readLook, string? capturePath = null)
+    /// <param name="quiet"><c>--quiet-windows</c> (checks while someone works at the PC): each note is drawn (and captured)
+    /// but the window never shows, so nothing appears on that person's screen.</param>
+    public ActionHudWindow(CategoryLogger log, Func<PlayerLook> readLook, string? capturePath = null, bool quiet = false)
     {
         _log = log;
         _readLook = readLook;
         _capturePath = capturePath;
+        _quiet = quiet;
     }
 
     /// <summary>The window, once a note has made it (for checks).</summary>
@@ -157,6 +161,7 @@ internal sealed unsafe class ActionHudWindow : IDisposable
         {
             BlendOp = ExtrasNative.AC_SRC_OVER, SourceConstantAlpha = (byte)Math.Round(alpha * 255), AlphaFormat = ExtrasNative.AC_SRC_ALPHA,
         };
+        if (_quiet) return; // drawn (and captured) only
         if (!ExtrasNative.UpdateLayeredWindow(_hwnd, 0, &position, &size, _memDc, &source, 0, &blend, ExtrasNative.ULW_ALPHA))
             _log.Debug($"Action HUD: UpdateLayeredWindow failed ({Marshal.GetLastPInvokeError()}).");
         if (!_shown)

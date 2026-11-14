@@ -86,7 +86,8 @@ internal sealed partial class LyricCardWindow : Window
         _model = model;
         Title = LyricCardCopy.WindowTitle;
         SystemBackdrop = new MicaBackdrop();
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(Scaled(760), Scaled(720)));
+        Interop.AppIcon.Apply(AppWindow);
+        AppWindow.Resize(FittedSize(760, 720));
         AppWindow.Closing += (_, e) =>
         {
             // Closed, it is kept (with its lines, recording and any card being made) until Lunalyr quits.
@@ -344,7 +345,13 @@ internal sealed partial class LyricCardWindow : Window
         Refresh();
     }
 
-    private static int Scaled(double dips) => (int)Math.Round(dips * Interop.Win32.GetDpiForSystem() / 96.0);
+    /// <summary>The window's size for <paramref name="widthDips"/> × <paramref name="heightDips"/>, cut to its display's work area.</summary>
+    private Windows.Graphics.SizeInt32 FittedSize(double widthDips, double heightDips)
+    {
+        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var (width, height) = Lunalyr.Shell.SmallWindowSize.Fit(widthDips, heightDips, Interop.Win32.GetDpiForSystem() / 96.0, work.Width, work.Height);
+        return new Windows.Graphics.SizeInt32(width, height);
+    }
 
     internal void ApplyTheme()
     {

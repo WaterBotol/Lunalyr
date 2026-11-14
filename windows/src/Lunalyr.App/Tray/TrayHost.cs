@@ -307,7 +307,7 @@ internal sealed unsafe class TrayHost : IDisposable
         {
             Win32.AppendMenu(menu, Win32.MF_STRING | Win32.MF_GRAYED, 0, MenuText(nowPlaying));
             Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
-            Win32.AppendMenu(menu, Win32.MF_STRING, MenuOpenSettings, "Open settings");
+            Win32.AppendMenu(menu, Win32.MF_STRING, MenuOpenSettings, "Open Settings");
             Win32.AppendMenu(menu, Win32.MF_STRING, MenuTogglePause, paused ? "Resume wallpaper" : "Pause wallpaper");
             // A downloaded, verified update waits for the user's word (milestone 8).
             if (DescribeUpdate?.Invoke() is { } update) Win32.AppendMenu(menu, Win32.MF_STRING, MenuInstallUpdate, MenuText(update));

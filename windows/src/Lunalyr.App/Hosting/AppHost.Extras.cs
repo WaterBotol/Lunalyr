@@ -110,7 +110,7 @@ internal sealed partial class AppHost
     private void ShowHud(string text, string symbol)
     {
         if (_quitting) return;
-        _hud ??= new ActionHudWindow(Log.App, () => SystemLook.Read(_options.PlayerDebug), _options.HudCapturePath);
+        _hud ??= new ActionHudWindow(Log.App, () => SystemLook.Read(_options.PlayerDebug), _options.HudCapturePath, _options.QuietWindows);
         _hud.Show(text, symbol);
     }
 

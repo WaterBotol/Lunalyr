@@ -52,6 +52,7 @@ public sealed partial class TrayFlyout : Window
     private TrayFlyoutState? _state;
     private int _chromeHeight;
     private FocusState? _focusWhenPlaced;
+    private bool _capturing;
 
     internal TrayFlyout(AppHost host)
     {
@@ -131,6 +132,50 @@ public sealed partial class TrayFlyout : Window
         _host.Log.App.Info("Tray panel opened.");
     }
 
+    /// <summary>
+    /// <c>--flyout-capture</c> (checks): the flyout as it opens, but off screen, not topmost and never activated (no
+    /// focus goes in); after <paramref name="after"/> it is written as a PNG with PrintWindow, then <paramref name="then"/>.
+    /// </summary>
+    internal void CaptureQuietly(PixelRect anchor, string path, TimeSpan after, Action then)
+    {
+        _capturing = true;
+        _anchor = anchor;
+        if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.IsAlwaysOnTop = false;
+        Refresh();
+        AppWindow.MoveAndResize(new RectInt32(-32000, -32000, FlyoutPlacement.ToPixels(WidthDip, 96), 600));
+        AppWindow.Show(activateWindow: false);
+        Win32.SendToBottom(_hwnd);
+        _timer.Start();
+        var started = DateTime.UtcNow;
+        var wait = DispatcherQueue.CreateTimer();
+        wait.Interval = TimeSpan.FromMilliseconds(250);
+        wait.Tick += (_, _) =>
+        {
+            if (DateTime.UtcNow - started < after) return;
+            wait.Stop();
+            Refresh();
+            Place();
+            // One more layout pass for what the refresh changed, then the picture.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                try
+                {
+                    var size = Onboarding.WindowCapture.WritePng(_hwnd, path);
+                    _host.Log.App.Info(size is { } s
+                        ? $"Tray panel capture written to {path} ({s.Width}×{s.Height}); foreground: {Onboarding.WindowCapture.IsForeground(_hwnd)}."
+                        : "Tray panel capture couldn't be drawn.");
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    _host.Log.App.Warn($"Couldn't write the tray panel capture to {path}.", ex);
+                }
+                then();
+            });
+        };
+        wait.Start();
+        _host.Log.App.Info($"Tray panel opened off screen for --flyout-capture (captured after {after.TotalSeconds:0.#} s).");
+    }
+
     internal void Hide()
     {
         if (!AppWindow.IsVisible) return;
@@ -151,6 +196,7 @@ public sealed partial class TrayFlyout : Window
     {
         // A click anywhere else takes the focus away: the flyout goes, as the system's own do.
         _host.Log.App.Debug($"Tray panel: {args.WindowActivationState}.");
+        if (_capturing) return;
         if (args.WindowActivationState == WindowActivationState.Deactivated) Hide();
     }
 
@@ -178,11 +224,13 @@ public sealed partial class TrayFlyout : Window
         var height = FlyoutPlacement.ToPixels(contentHeight, dpi) + _chromeHeight - hidden.Top - hidden.Bottom;
         var visible = FlyoutPlacement.Place(width, height, _anchor, monitor, work, FlyoutPlacement.ToPixels(FlyoutPlacement.MarginDip, dpi));
         var rect = new PixelRect(visible.Left - hidden.Left, visible.Top - hidden.Top, visible.Right + hidden.Right, visible.Bottom + hidden.Bottom);
+        // --flyout-capture: the size it would have beside the taskbar, but off screen.
+        if (_capturing) rect = new PixelRect(-32000, -32000, -32000 + rect.Width, -32000 + rect.Height);
         var current = new PixelRect(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Position.X + AppWindow.Size.Width,
             AppWindow.Position.Y + AppWindow.Size.Height);
         if (current != rect) AppWindow.MoveAndResize(new RectInt32(rect.Left, rect.Top, rect.Width, rect.Height));
         _placedOnce = true;
-        if (_focusWhenPlaced is { } how)
+        if (_focusWhenPlaced is { } how && !_capturing)
         {
             _focusWhenPlaced = null;
             Focus(how);
@@ -502,8 +550,10 @@ public sealed partial class TrayFlyout : Window
     private Style ModeTileStyle() => (Style)Root.Resources["ModeTile"];
 
     /// <summary>
-    /// Every wallpaper type as a tile (the Mac's menu-bar grid): five small ones for what Lunalyr draws, three wide ones
+    /// Every wallpaper type as a tile (the Mac's menu-bar grid): five small ones for what Lunalyr draws, three wider ones
     /// for what starts from something of yours. Built here rather than in XAML, from <see cref="TrayFlyoutState.Backgrounds"/>.
+    /// Every tile puts its glyph over its name: beside it, "Your wallpaper" and "Image or video" were cut off in the
+    /// 364-DIP panel (a horizontal panel gives its text unlimited width, so they were clipped rather than trimmed).
     /// </summary>
     private void BuildModeTiles()
     {
@@ -513,20 +563,19 @@ public sealed partial class TrayFlyout : Window
         var types = TrayFlyoutState.Backgrounds;
         foreach (var row in new[] { types.Take(5).ToArray(), types.Skip(5).ToArray() })
         {
-            var wide = row.Length < 5;
             var line = new Grid { ColumnSpacing = 6 };
             for (var i = 0; i < row.Length; i++)
             {
                 var type = row[i];
                 line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                var content = new StackPanel { Orientation = wide ? Orientation.Horizontal : Orientation.Vertical, Spacing = wide ? 6 : 2 };
-                content.Children.Add(new FontIcon { Glyph = type.Glyph, FontSize = wide ? 13 : 15, HorizontalAlignment = HorizontalAlignment.Center });
+                var content = new StackPanel { Orientation = Orientation.Vertical, Spacing = 2 };
+                content.Children.Add(new FontIcon { Glyph = type.Glyph, FontSize = 15, HorizontalAlignment = HorizontalAlignment.Center });
                 content.Children.Add(new TextBlock { Text = type.ShortTitle, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis,
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
                 var tile = new ToggleButton
                 {
                     Style = ModeTileStyle(), Content = content, Tag = type.Value,
-                    Height = wide ? 34 : 50, Padding = new Thickness(2), IsEnabled = type.Available,
+                    Height = 50, Padding = new Thickness(2), IsEnabled = type.Available,
                 };
                 AutomationProperties.SetName(tile, type.Title);
                 AutomationProperties.SetHelpText(tile, type.Summary);

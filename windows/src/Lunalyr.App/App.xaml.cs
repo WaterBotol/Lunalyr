@@ -44,6 +44,13 @@ public partial class App : Application
         }
     }
 
+    /// <summary><c>--flyout-capture</c>: the flyout drawn off screen and never activated, written as a PNG, then Lunalyr quits.</summary>
+    internal void CaptureFlyout(PixelRect anchor, string path, TimeSpan after)
+    {
+        _flyout ??= new TrayFlyout(_host);
+        _flyout.CaptureQuietly(anchor, path, after, _host.Quit);
+    }
+
     /// <summary>
     /// Opens the settings window (at <paramref name="page"/> when given), or brings it to the front; while the welcome is
     /// up, it comes forward instead (App.Onboarding.cs).

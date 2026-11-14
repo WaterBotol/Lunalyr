@@ -81,13 +81,18 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
     private byte[]? _frame;
     private int _frameWidth, _frameHeight;
 
-    public TrayTickerWindow(Func<ExtrasNow> read, Func<double> length, Func<bool> reduceMotion, Logger? logger = null)
+    /// <param name="quiet"><c>--quiet-windows</c> (checks while someone works at the PC): the strip is drawn (and
+    /// <c>--ticker-capture</c> gets its frames) but never shown, so nothing appears beside that person's clock.</param>
+    public TrayTickerWindow(Func<ExtrasNow> read, Func<double> length, Func<bool> reduceMotion, Logger? logger = null, bool quiet = false)
     {
         _read = read;
         _length = length;
         _reduceMotion = reduceMotion;
         _log = (logger ?? Logger.Null).App;
+        _quiet = quiet;
     }
+
+    private readonly bool _quiet;
 
     /// <summary>The strip's window (0 before it is made or after it is gone).</summary>
     public nint Hwnd => _hwnd;
@@ -373,6 +378,12 @@ internal sealed unsafe class TrayTickerWindow : IDisposable
     private void Show()
     {
         if (_visible) return;
+        if (_quiet)
+        {
+            _visible = true;
+            _log.Info($"Tray lyric drawn ({_pixelWidth}x{_pixelHeight}) but not shown: --quiet-windows.");
+            return;
+        }
         SetWindowPos(_hwnd, HWND_TOPMOST, _position.X, _position.Y, _pixelWidth, _pixelHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
         _visible = true;
         _log.Info($"Tray lyric shown: {_pixelWidth}x{_pixelHeight} at {_position.X},{_position.Y}.");

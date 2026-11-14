@@ -1,4 +1,4 @@
-// PlayerCardPreview [out-folder] [-warp] [-prefix name-]: the desktop player's card drawn offscreen by the app's own
+// PlayerCardPreview [out-folder] [-warp] [-prefix name-] [-scale 1.25]: the desktop player's card drawn offscreen by the app's own
 // CardPainter, for looking at it without showing a window: every look (dark, light, Windows' contrast colours,
 // transparency off, animation effects off) and the states that draw differently (scrubbing with the capsules, the
 // music video's align mode, a note, a live stream, long names, keyboard focus). Each card sits over an
@@ -28,11 +28,14 @@ CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var warp = args.Contains("-warp");
 var prefixAt = Array.IndexOf(args, "-prefix");
 var prefix = prefixAt >= 0 && prefixAt + 1 < args.Length ? args[prefixAt + 1] : "card-";
-var output = Path.GetFullPath(args.Where((a, i) => !a.StartsWith('-') && (prefixAt < 0 || i != prefixAt + 1)).FirstOrDefault()
+// -scale: the display scale the card is drawn at (1 = 100 %, 2 = 200 %, the default).
+var scaleAt = Array.IndexOf(args, "-scale");
+var Scale = scaleAt >= 0 && scaleAt + 1 < args.Length ? float.Parse(args[scaleAt + 1], CultureInfo.InvariantCulture) : 2f;
+var output = Path.GetFullPath(args.Where((a, i) => !a.StartsWith('-') && (prefixAt < 0 || i != prefixAt + 1) && (scaleAt < 0 || i != scaleAt + 1)).FirstOrDefault()
                               ?? Path.Combine("docs", "previews", "player"));
 Directory.CreateDirectory(output);
 
-const float Scale = 2, Margin = 40;
+const float Margin = 40;
 using var stage = new Stage(warp);
 Console.WriteLine($"Adapter: {stage.AdapterName}{(stage.IsWarp ? " (WARP)" : "")}");
 
@@ -93,7 +96,10 @@ var shots = new (string Name, CardModel Model)[]
     ("paused", Song(teal, dark, m => { m.DisplayedPlaying = false; m.RecordOut = 0; })),
     ("pale-cover", Song(pale, dark)),
     ("pale-cover-light", Song(pale, light)),
-    ("no-cover", Song(null, dark, m => { m.Title = "Nothing playing"; m.Artist = null; m.Album = null; m.HasSong = false; m.RowKind = ScrubRowKind.Hidden; m.PlayerName = ""; })),
+    // Nothing playing, as DesktopPlayer builds it: no song, so nothing is displayed as playing (a play glyph, no record).
+    ("no-cover", Song(null, dark, NothingPlaying)),
+    ("no-cover-light", Song(null, light, NothingPlaying)),
+    ("no-cover-contrast", Song(null, new PlayerLook(HighContrast: true), NothingPlaying)),
     ("scrub-dark", Song(pink, dark, Scrubbing)),
     ("scrub-light", Song(pink, light, Scrubbing)),
     ("scrub-contrast", Song(pink, new PlayerLook(HighContrast: true), Scrubbing)),
@@ -125,8 +131,41 @@ var shots = new (string Name, CardModel Model)[]
         m.Album = "A Deluxe Edition of an Album With an Unusually Long Name (Remastered)";
         m.MusicVideoOffered = true;
     })),
+    ("long-names-light", Song(teal, light, m =>
+    {
+        m.Title = "The Song With the Very Long Title That Will Not Fit on One Line";
+        m.Artist = "An Artist Whose Name Also Runs On, featuring Several Friends";
+        m.Album = "A Deluxe Edition of an Album With an Unusually Long Name (Remastered)";
+        m.MusicVideoOffered = true;
+    })),
+    ("cjk", Song(pink, dark, m =>
+    {
+        m.Title = "夕暮れの窓";
+        m.Artist = "ザ・ルナリア・デモ・バンド";
+        m.Album = "港の灯り";
+        m.PlayerName = "Apple Music";
+    })),
+    ("cjk-long-light", Song(pale, light, m =>
+    {
+        m.Title = "夕暮れの窓から見えた港の灯りと、まだ名前のない歌のこと";
+        m.Artist = "周杰倫、陳奕迅、ザ・ルナリア・デモ・バンド";
+        m.Album = "港の灯り（デラックス・エディション）";
+        m.PlayerName = "Apple Music";
+    })),
     ("keyboard-focus", Song(pink, dark, m => { m.FocusVisible = true; m.FocusPart = CardPart.Next; m.MusicVideoOffered = true; })),
 };
+
+static void NothingPlaying(CardModel m)
+{
+    m.Title = Lunalyr.Shell.Flyout.FlyoutText.NothingPlaying;
+    m.Artist = Lunalyr.Shell.Flyout.FlyoutText.IdlePrompt; // as DesktopPlayer.ReadNow sets it
+    m.Album = null;
+    m.HasSong = false;
+    m.RowKind = ScrubRowKind.Hidden;
+    m.PlayerName = "";
+    m.DisplayedPlaying = false;
+    m.RecordOut = 0;
+}
 
 using var painter = new CardPainter();
 foreach (var (name, model) in shots)

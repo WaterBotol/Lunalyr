@@ -76,9 +76,13 @@ internal sealed partial class AppHost
         MusicVideoUi.Http = _musicVideoHttp;
         MusicVideoUi.OpenUrl = PlaybackGuard.Process.Reason is null ? url => ShellUrlLauncher.Instance.Launch(new Uri(url)) : null;
         // --player-debug fake-youtube (checks, only with playback off): invented results, so the Search YouTube window's rows
-        // can be seen without sending a song to YouTube.
-        var fakeYouTube = _options.PlayerDebug.Contains("fake-youtube") && PlaybackGuard.Process.IsBlocked;
-        MusicVideoUi.Search = new MusicVideoSearchModel(fakeYouTube ? new InventedSearching(new ControllerSearching(video, _log)) : new ControllerSearching(video, _log));
+        // can be seen without sending a song to YouTube; fake-youtube=empty, =rate-limited, =failed, =unavailable or =loading
+        // gives that outcome instead (=loading never answers), for the window's other states.
+        var fakeYouTube = _options.PlayerDebug.FirstOrDefault(d => d == "fake-youtube" || d.StartsWith("fake-youtube=", StringComparison.Ordinal));
+        var invent = fakeYouTube is not null && PlaybackGuard.Process.IsBlocked;
+        MusicVideoUi.Search = new MusicVideoSearchModel(invent
+            ? new InventedSearching(new ControllerSearching(video, _log), fakeYouTube!.Contains('=') ? fakeYouTube[(fakeYouTube.IndexOf('=') + 1)..] : "")
+            : new ControllerSearching(video, _log));
         // --youtube-search (checks): the window opens once there is a picker to show.
         if (_options.OpenYouTubeSearch) _uiDispatcher?.TryEnqueue(() => _app?.ShowMusicVideoSearch());
         _log.Info($"Music video: video files on; YouTube {(playerOff is null ? $"on (search: {(_settings.Current.MusicVideoSearch == "apiKey" ? "your API key" : "YouTube's site")}, an API key {(keys!.HasKey ? "is" : "isn't")} set)" : $"off for this run ({playerOff})")}.");
@@ -114,7 +118,7 @@ internal sealed partial class AppHost
     }
 
     /// <summary>The demo song's results, made up (no video id is real; nothing is fetched or played).</summary>
-    private sealed class InventedSearching(IMusicVideoSearching inner) : IMusicVideoSearching
+    private sealed class InventedSearching(IMusicVideoSearching inner, string outcome) : IMusicVideoSearching
     {
         public MusicVideoSong? SearchSong => inner.SearchSong;
         public string? ShowingYouTubeId => "aaaaaaaaaa1";
@@ -124,7 +128,14 @@ internal sealed partial class AppHost
 
         public async Task<MusicVideoSearchOutcome> SearchYouTubeAsync(string query, CancellationToken ct)
         {
-            await Task.Delay(600, ct);
+            await Task.Delay(outcome == "loading" ? Timeout.InfiniteTimeSpan : TimeSpan.FromMilliseconds(600), ct);
+            switch (outcome)
+            {
+                case "empty": return new MusicVideoSearchOutcome.Results([]);
+                case "rate-limited": return new MusicVideoSearchOutcome.RateLimited();
+                case "failed": return new MusicVideoSearchOutcome.Failed();
+                case "unavailable": return new MusicVideoSearchOutcome.Failed(Unavailable: true);
+            }
             var length = inner.SearchSong?.Duration;
             return new MusicVideoSearchOutcome.Results(
             [
@@ -132,6 +143,7 @@ internal sealed partial class AppHost
                 new("bbbbbbbbbb2", "Neon Harbour (Lyric Video)", "The Lunalyr Demo Band", VerifiedArtist: true, Duration: length, Views: "310K views", Uploaded: "2 years ago"),
                 new("cccccccccc3", "Neon Harbour – Live at the Pier, a very long title that runs on to show how two lines are cut short", "Harbour Sessions", Duration: (length ?? 200) + 41, Views: "48K views", Uploaded: "8 months ago"),
                 new("dddddddddd4", "neon harbour but it's slowed + reverb", "night drives", Duration: (length ?? 200) * 1.25, Views: "2.1K views", Uploaded: "3 weeks ago"),
+                new("eeeeeeeeee5", "夕暮れの窓【公式ミュージックビデオ】ザ・ルナリア・デモ・バンド 〜 港の灯りツアー 2026 フルバージョン", "ルナリア公式チャンネル", VerifiedArtist: true, Duration: (length ?? 200) + 3, Views: "86K views", Uploaded: "1 year ago"),
             ]);
         }
     }

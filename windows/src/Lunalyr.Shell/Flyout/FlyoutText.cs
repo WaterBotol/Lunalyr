@@ -152,7 +152,7 @@ public static class FlyoutText
 
     public const string OptionsHelp = "Opens Settings";
 
-    public const string WallpaperOptions = "Wallpaper Options…";
+    public const string WallpaperOptions = "Wallpaper options…";
 
     public const string WallpaperType = "Wallpaper type";
 
@@ -162,9 +162,9 @@ public static class FlyoutText
 
     public const string Resume = "Resume";
 
-    public const string PauseWallpaper = "Pause Wallpaper";
+    public const string PauseWallpaper = "Pause wallpaper";
 
-    public const string ResumeWallpaper = "Resume Wallpaper";
+    public const string ResumeWallpaper = "Resume wallpaper";
 
     public const string PauseHint = "Freezes the wallpaper, lyrics included. The music keeps playing.";
 

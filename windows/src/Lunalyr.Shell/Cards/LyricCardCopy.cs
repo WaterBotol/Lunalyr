@@ -8,7 +8,7 @@ namespace Lunalyr.Shell.Cards;
 
 public static class LyricCardCopy
 {
-    public const string WindowTitle = "Lyric Card";
+    public const string WindowTitle = "Lyric card";
 
     /// <summary>The action, wherever it is offered (the Mac's <c>LunalyrExtras.Titles.copyCard</c>).</summary>
     public const string OpenTitle = "Open lyric card…";
