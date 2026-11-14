@@ -99,11 +99,14 @@ public static class ThinkingOrb
         return new OrbColours(primary, n1, n2, halo, core);
     }
 
-    /// <summary>A hue step either side of the primary; a near-grey primary takes the accent and the accent turned (or stays grey with no album colour).</summary>
+    /// <summary>A hue step either side of the primary; a near-grey primary with an album colour takes the accent and the accent turned (chroma at least 0.06); otherwise a faint tint (chroma at least 0.06) either side, as on the Mac.</summary>
     private static (OkLab, OkLab) HueSteps(OkLab primary, OkLab? accent, Func<OkLab, OkLab> toned)
     {
-        if (primary.Chroma <= 0.03)
-            return accent is { } a ? (toned(a), toned(OkLab.FromLch(a.L, a.Chroma, a.Hue + 0.4))) : (primary, primary);
+        if (primary.Chroma <= 0.03 && accent is { } a)
+        {
+            var accentChroma = Math.Max(a.Chroma, 0.06);
+            return (toned(OkLab.FromLch(a.L, accentChroma, a.Hue)), toned(OkLab.FromLch(a.L, accentChroma, a.Hue + 0.4)));
+        }
         var chroma = Math.Max(primary.Chroma, 0.06);
         return (toned(OkLab.FromLch(primary.L, chroma, primary.Hue - 0.4)), toned(OkLab.FromLch(primary.L, chroma, primary.Hue + 0.4)));
     }

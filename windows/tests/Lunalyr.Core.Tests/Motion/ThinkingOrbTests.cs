@@ -101,10 +101,31 @@ public class ThinkingOrbTests
     }
 
     [Fact]
-    public void White_lyrics_with_no_album_colour_keep_a_white_orb()
+    public void A_grey_primary_with_no_album_colour_gets_faintly_tinted_neighbours()
     {
-        var colours = ThinkingOrb.Colours(new LyricInk { Dot = SrgbColour.White }, null);
-        Assert.True(colours.Neighbour1.Chroma < 0.01);
-        Assert.True(colours.Neighbour2.Chroma < 0.01);
+        // The Mac's rule: hue −0.4 and +0.4 rad at chroma 0.06, same lightness. (Pure white sits at full lightness,
+        // where no chroma fits in gamut, so its neighbours clip back to white.)
+        var colours = ThinkingOrb.Colours(new LyricInk { Dot = new SrgbColour(0.75, 0.75, 0.75) }, null);
+        Assert.InRange(colours.Neighbour1.Chroma, 0.03, 0.08);
+        Assert.InRange(colours.Neighbour2.Chroma, 0.03, 0.08);
+        Assert.NotEqual(Math.Round(colours.Neighbour1.Hue, 2), Math.Round(colours.Neighbour2.Hue, 2));
+    }
+
+    [Fact]
+    public void White_lyrics_take_a_grey_album_accent_at_least_faintly_tinted()
+    {
+        var grey = OkLab.FromLch(0.7, 0.01, 1.0);
+        var colours = ThinkingOrb.Colours(new LyricInk { Dot = SrgbColour.White }, grey);
+        Assert.True(colours.Neighbour1.Chroma > 0.03);
+    }
+
+    [Fact]
+    public void Sung_sweep_with_two_colours_uses_the_second_twice()
+    {
+        var red = OkLab.FromLch(0.7, 0.15, 0.5);
+        var blue = OkLab.FromLch(0.7, 0.15, 4.0);
+        var ink = new LyricInk { Mode = LyricColourMode.SungSweep, Stops = new InkStops(red, blue, red, blue), StopCount = 2 };
+        var colours = ThinkingOrb.Colours(ink, null);
+        Assert.Equal(colours.Neighbour1, colours.Neighbour2);
     }
 }
