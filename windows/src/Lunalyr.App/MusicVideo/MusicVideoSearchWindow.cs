@@ -50,7 +50,7 @@ internal sealed class MusicVideoSearchWindow : Window
         Title = "Search YouTube";
         SystemBackdrop = new MicaBackdrop();
         Interop.AppIcon.Apply(AppWindow);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(Scaled(Width0), Scaled(Height0)));
+        AppWindow.Resize(FittedSize(Width0, Height0));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsMinimizable = false;
@@ -165,6 +165,14 @@ internal sealed class MusicVideoSearchWindow : Window
     }
 
     private static int Scaled(double dips) => (int)Math.Round(dips * Interop.Win32.GetDpiForSystem() / 96.0);
+
+    /// <summary>The window's size for <paramref name="widthDips"/> × <paramref name="heightDips"/>, cut to its display's work area.</summary>
+    private Windows.Graphics.SizeInt32 FittedSize(double widthDips, double heightDips)
+    {
+        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var (width, height) = Lunalyr.Shell.SmallWindowSize.Fit(widthDips, heightDips, Interop.Win32.GetDpiForSystem() / 96.0, work.Width, work.Height);
+        return new Windows.Graphics.SizeInt32(width, height);
+    }
 
     private void Centre()
     {

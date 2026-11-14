@@ -68,7 +68,7 @@ internal sealed partial class OnboardingWindow : Window
             presenter.IsMaximizable = false;
             presenter.IsMinimizable = false;
         }
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(Scaled(OnboardingCopy.WindowWidth), Scaled(OnboardingCopy.WindowHeight)));
+        AppWindow.Resize(FittedSize(OnboardingCopy.WindowWidth, OnboardingCopy.WindowHeight));
         Centre();
 
         // ---- Title bar (see-through, the steps carry their own titles), the step, the footer ----
@@ -138,7 +138,13 @@ internal sealed partial class OnboardingWindow : Window
     /// <summary>How it ended, raised once, after the window has closed (Closed when it was closed early).</summary>
     public event Action<OnboardingEnding>? Ended;
 
-    private static int Scaled(double dips) => (int)Math.Round(dips * Interop.Win32.GetDpiForSystem() / 96.0);
+    /// <summary>The window's size for <paramref name="widthDips"/> × <paramref name="heightDips"/>, cut to its display's work area.</summary>
+    private Windows.Graphics.SizeInt32 FittedSize(double widthDips, double heightDips)
+    {
+        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var (width, height) = Lunalyr.Shell.SmallWindowSize.Fit(widthDips, heightDips, Interop.Win32.GetDpiForSystem() / 96.0, work.Width, work.Height);
+        return new Windows.Graphics.SizeInt32(width, height);
+    }
 
     private void Centre()
     {
