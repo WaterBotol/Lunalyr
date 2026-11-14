@@ -165,7 +165,7 @@ enum MusicVideoBackdrop {
         filter.setValue(input.clampedToExtent(), forKey: kCIInputImageKey)
         filter.setValue(blurRadius, forKey: kCIInputRadiusKey)
         guard let output = filter.outputImage?.cropped(to: extent) else { return nil }
-        return CIContext(options: [.useSoftwareRenderer: false]).createCGImage(output, from: extent)
+        return CIContext(options: [.useSoftwareRenderer: false, .allowLowPower: true]).createCGImage(output, from: extent)
     }
 }
 
