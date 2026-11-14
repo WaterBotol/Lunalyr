@@ -21,7 +21,7 @@
 // reveal=off, preview=off, lead=1.0); -tag adds a word to the file names so the variants sit side by side.
 //
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics; extras: japanesewords, japaneseinstead,
-// japanesesyllables, credits, highlight.
+// japanesesyllables, credits, highlight; stage review lines: fast, long.
 
 using System.Diagnostics;
 using System.Globalization;
@@ -115,6 +115,9 @@ var fixtures = new Dictionary<string, Func<SceneSnapshot>>
     ["japanesesyllables"] = () => ExtrasFixtures.JapaneseSyllables(),
     ["credits"] = () => ExtrasFixtures.Credits(),
     ["highlight"] = () => ExtrasFixtures.Highlight(),
+    // The stage layouts' review lines (StageFixtures.cs): fast word runs, and long lines with a pause and pictures.
+    ["fast"] = () => StageFixtures.Fast(style),
+    ["long"] = () => StageFixtures.Long(style),
 };
 if (shots.Count == 0)
 {
