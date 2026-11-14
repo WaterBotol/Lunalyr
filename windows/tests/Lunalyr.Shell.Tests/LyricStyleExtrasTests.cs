@@ -361,6 +361,7 @@ public class LyricStyleExtrasTests
         Assert.Equal("scattered", saved.CardComposition);
         Assert.Equal(["echo"], saved.RotateLayoutCounts.Keys);
         Assert.Equal("constellation", new AppSettings().LyricComposition);
+        Assert.Equal("hinge", new AppSettings { LyricComposition = "broadside" }.Normalized().LyricComposition);
         var remembered = RememberedStyle.FromStored(new Dictionary<string, string> { ["composition"] = "editorial" })!;
         Assert.Equal("scattered", remembered.Composition);
         // The typeface is remembered too; older styles without it leave the chosen one.

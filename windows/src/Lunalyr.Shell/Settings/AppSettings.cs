@@ -166,22 +166,24 @@ public sealed partial record AppSettings
     /// <summary>
     /// The layouts offered. Editorial and Constellation + Editorial were cut on the Mac (next/tester-fixes, 14 Nov 2026)
     /// and here: their layers stay registered, but nothing offers or picks them, and saved values move on
-    /// (<see cref="MigratedLayout"/>). "Add Editorial typography" stays.
+    /// (<see cref="MigratedLayout"/>). "Add Editorial typography" stays. Broadside went the same way (the owner, 15 Nov
+    /// 2026: its little words sat above the big ones), to Hinge.
     /// </summary>
     public static IReadOnlyList<string> Compositions { get; } =
         ["automatic", "scattered", "constellation", "echo", "spoken", "cascade", "cutout", "hinge",
-         "broadside", "portal", "mosaic", "torque", "fable"];
+         "portal", "mosaic", "torque", "fable"];
 
-    /// <summary>A saved layout id as it is now: Editorial is Scattered, Constellation + Editorial is Constellation.</summary>
+    /// <summary>A saved layout id as it is now: Editorial is Scattered, Constellation + Editorial is Constellation, Broadside is Hinge.</summary>
     public static string MigratedLayout(string? id) => id switch
     {
         "editorial" => "scattered",
         "constellationEditorial" => "constellation",
+        "broadside" => "hinge",
         _ => id ?? "",
     };
 
     /// <summary>Layouts no longer offered, for dropping their saved rotation counts.</summary>
-    public static bool IsRetiredLayout(string? id) => id is "editorial" or "constellationEditorial";
+    public static bool IsRetiredLayout(string? id) => id is "editorial" or "constellationEditorial" or "broadside";
 
     public static IReadOnlyList<string> WordArrivals { get; } =
         ["automatic", "fade", "lift", "pop", "orbit", "glide", "unfold", "cutoutFold", "cutoutSlide", "cutoutHighlight",

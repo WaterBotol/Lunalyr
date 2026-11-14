@@ -129,7 +129,7 @@ public sealed class LayoutRotation
 
     /// <summary>The order songs step through: contrasting looks sit next to each other.</summary>
     public static IReadOnlyList<string> Order { get; } =
-        ["cutout", "hinge", "constellation", "broadside", "portal", "spoken", "mosaic", "echo", "torque",
+        ["cutout", "hinge", "constellation", "portal", "spoken", "mosaic", "echo", "torque",
          "cascade", "fable", "scattered"];
 
     private readonly Dictionary<string, string> _assigned = new(StringComparer.Ordinal);

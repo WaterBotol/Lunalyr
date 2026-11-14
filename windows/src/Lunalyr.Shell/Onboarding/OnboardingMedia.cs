@@ -191,7 +191,7 @@ public static class SettingsLoader
 public static class LayoutChoices
 {
     /// <summary>A few of the reworked layouts; the one in use leads when it is another.</summary>
-    public static IReadOnlyList<string> Featured { get; } = ["broadside", "portal", "mosaic", "cascade"];
+    public static IReadOnlyList<string> Featured { get; } = ["hinge", "portal", "mosaic", "cascade"];
 
     public static IReadOnlyList<string> Shown(string? current)
     {
