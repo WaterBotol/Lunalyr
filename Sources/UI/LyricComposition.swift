@@ -116,7 +116,7 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .spoken: return "Each sung word takes focus; recent words settle around it."
         case .cascade: return "A moving column of words, arriving with the voice."
         case .cutout: return "Uneven type and album-colour labels, built word by word."
-        case .hinge: return "Heavy words swing in on a hinge and fold into a stack."
+        case .hinge: return "Heavy words swing open on a spine, page by page, and the book snaps shut."
         case .broadside: return "One strip of big type that slides along, with little words as labels."
         case .portal: return "The sung word in a pill; earlier words drift away as pale ones."
         case .mosaic: return "A collage: each word set huge, on a colour bar, or letter by letter."

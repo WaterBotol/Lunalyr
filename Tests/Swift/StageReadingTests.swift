@@ -255,19 +255,14 @@ final class StageReadingTests: XCTestCase {
 
     // MARK: Fitted
 
-    /// Hinge counts its readings when it fits the corner to the stage.
-    func testHingeFitCountsReadings() {
-        let texts = ["君の", "名前を", "呼んで", "夜空に", "消えた", "君を", "探して"]
-        let weights = [CGFloat](repeating: 1, count: texts.count)
+    /// Hinge counts its readings when it sizes a page's focal word.
+    func testHingeFocalSizeCountsReadings() {
         let stage = Self.stage
-        let plain = StageLyricView.hingeFit(texts, weights: weights, settle: 1, unit: Self.base, stage: stage)
-        let none = StageLyricView.hingeFit(texts, weights: weights, settle: 1, unit: Self.base, stage: stage,
-                                           readings: [String?](repeating: nil, count: texts.count))
-        let read = StageLyricView.hingeFit(texts, weights: weights, settle: 1, unit: Self.base, stage: stage,
-                                           readings: ["kimi no", "namae wo", "yonde", "yozora ni", "kieta", "kimi wo", "sagashite"])
-        XCTAssertEqual(plain.fit, none.fit, "No readings, no change")
-        XCTAssertLessThan(read.fit, plain.fit, "The corner with its readings is set smaller to fit")
-        XCTAssertEqual(read.shrink, plain.shrink)
+        let plain = StageLyricView.hingeFocalSize(slabs: [(true, true, false, false)], held: true, unit: Self.base * 1.5,
+                                                  stageHeight: stage.height)
+        let read = StageLyricView.hingeFocalSize(slabs: [(true, true, true, true)], held: true, unit: Self.base * 1.5,
+                                                 stageHeight: stage.height)
+        XCTAssertLessThan(read, plain, "A page with readings sets its focal word smaller to fit")
     }
 
     /// Torque sets a word's reading with it in its row, so a row with
