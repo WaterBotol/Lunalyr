@@ -21,9 +21,9 @@ internal static class ExtrasSections
     {
         page.Children.Add(Card(ExtrasCopy.TrayTitle, ExtrasCopy.TrayCaption, "",
             Toggle(ctx, s => s.TrayLyric, (s, v) => s with { TrayLyric = v })));
-        page.Children.Add(Card(ExtrasCopy.LongestLine, ExtrasCopy.TrayFollows, "",
+        page.Children.Add(Indented(Card(ExtrasCopy.LongestLine, ExtrasCopy.TrayFollows, "",
             Slider(ctx, TrayLyricTicker.LengthMin, TrayLyricTicker.LengthMax, 1, ExtrasCopy.Characters,
-                s => s.TrayLyricLength, (s, v) => s with { TrayLyricLength = Math.Round(v) }, minimumLabel: "Short", maximumLabel: "Long"))
+                s => s.TrayLyricLength, (s, v) => s with { TrayLyricLength = Math.Round(v) }, minimumLabel: "Short", maximumLabel: "Long")))
             .ShowWhen(ctx, s => s.TrayLyric));
     }
 
@@ -70,6 +70,7 @@ internal static class ExtrasSections
         options.Children.Add(Card(ExtrasCopy.LyricLead, ExtrasCopy.LyricLeadCaption, "",
             Slider(ctx, 0, DiscordPresence.LeadMax, 0.5, ExtrasCopy.Lead, s => s.DiscordLyricLead, (s, v) => s with { DiscordLyricLead = Math.Round(v * 2) / 2 },
                 minimumLabel: "With the music", maximumLabel: "Earlier")));
-        page.Children.Add(options.ShowWhen(ctx, s => s.DiscordPresence));
+        // Set in under the switch they belong to, as Lyric style's dependent rows are.
+        page.Children.Add(Indented(options).ShowWhen(ctx, s => s.DiscordPresence));
     }
 }
