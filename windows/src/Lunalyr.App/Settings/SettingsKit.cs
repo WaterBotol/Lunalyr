@@ -120,7 +120,7 @@ internal static class SettingsKit
 {
     public static T Resource<T>(string key) => (T)Application.Current.Resources[key];
 
-    private const string PageRoot = "LunalyrSettingsPage";
+    internal const string PageRoot = "LunalyrSettingsPage";
 
     public static StackPanel Page() => new() { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch, Tag = PageRoot };
 

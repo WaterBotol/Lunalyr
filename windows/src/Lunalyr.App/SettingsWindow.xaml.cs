@@ -143,7 +143,7 @@ public sealed partial class SettingsWindow : Window
         if (_pages.TryGetValue(page, out var built)) return built;
         try
         {
-            built = BuildPage(page);
+            built = SettingsGroups.Fold(BuildPage(page));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
