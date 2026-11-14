@@ -15,12 +15,12 @@ struct MusicPlayersPage: View {
                                                    localPlayers: players.followsLocalPlayers)
         let browsers = PlayerKind.browsers.filter(installed.contains)
         let localPlayers = PlayerKind.localPlayers.filter(installed.contains)
-        ThemedForm {
-            ThemedSection("Music players") {
+        ThemedForm(title: SettingsPage.players.title) {
+            ThemedSection("Follow") {
                 if offered.count <= 4 {
                     ChoiceSegments("Player", selection: $players.choice, cases: offered, label: \.title)
                 } else {
-                    Picker("Player", selection: $players.choice) {
+                    ChoiceMenu("Player", selection: $players.choice, selectedTitle: \.title) {
                         ForEach(offered) { Text($0.title).tag($0) }
                     }
                 }
@@ -31,14 +31,14 @@ struct MusicPlayersPage: View {
                 }
                 Toggle("Follow web players in browsers", isOn: $players.followsWebPlayers)
                 InspectorCaption(Self.webCaption, more: Self.webDetail(browsers))
-                PlayerAccessList()
-                    .padding(.vertical, LunalyrDesign.Spacing.xSmall)
-                InspectorCaption("Lunalyr only reads the song and its position.", more: "Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
             }
             .id(SettingsAnchor.players)
+            ThemedSection("Access") {
+                PlayerAccessList()
+                InspectorCaption("Lunalyr only reads the song and its position.", more: "Lunalyr reads the song and its position, and controls playback only when you use its buttons. Allow Access asks macOS; once refused, access is turned back on in Privacy & Security › Automation.")
+                    .environment(\.captionFollowsControl, false)
+            }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
     }
 

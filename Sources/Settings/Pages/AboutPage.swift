@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// About: what Lunalyr is, its version and project page, what it is built
-/// on, and what stays on this Mac. No preview: centred in the whole detail.
+/// on, and what stays on this Mac. Centred; the two sections are plain
+/// sections (no cards) in a 440 pt column.
 @MainActor
 struct AboutPage: View {
     static let projectURL = URL(string: "https://github.com/WaterBotol/Lunalyr")!
@@ -14,86 +15,70 @@ struct AboutPage: View {
                     // Centred in the window while it fits; scrolls when it doesn't.
                     .frame(minHeight: proxy.size.height)
             }
+            .scrollContentBackground(.hidden)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .themedFormControls()
     }
 
     private var content: some View {
-            VStack(spacing: LunalyrDesign.Spacing.xxLarge) {
-                VStack(spacing: LunalyrDesign.Spacing.small) {
-                    Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSApp.applicationIconImage)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 64, height: 64)
-                        .accessibilityHidden(true)
-                    Text("Lunalyr")
-                        .lunalyrText(.title)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("Desktop lyrics, in motion.")
-                        .foregroundStyle(.secondary)
-                    Text("Version \(GeneralPage.version)")
-                        .lunalyrText(.footnote)
-                        .textSelection(.enabled)
-                    Link("Project & Downloads", destination: Self.projectURL)
-                        // Text keeps the system link colour wherever a macOS
-                        // release would tint links with the window's mint.
-                        .tint(Color(nsColor: .linkColor))
-                        .padding(.top, LunalyrDesign.Spacing.xSmall)
-                        .help(Self.projectURL.absoluteString)
-                }
-                .multilineTextAlignment(.center)
-                AboutCard(title: "Built on open source", paragraphs: [
-                    "Based on Verso by Akki / AkkiCode06. The upstream GPLv3 with Commons Clause licence and attribution are preserved.",
-                    "Visualisers include work from Synesthia, Fosfora, Wavefield, Wavecore and Cymatic (MIT). Bundled components retain their licence notices.",
-                ]) {
+        VStack(spacing: 28) {
+            VStack(spacing: 6) {
+                Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 64, height: 64)
+                    .accessibilityHidden(true)
+                Text("Lunalyr")
+                    .font(LunalyrDesign.Studio.TypeScale.title)
+                    .foregroundStyle(Color.studio(.ink))
+                    .accessibilityAddTraits(.isHeader)
+                Text("Desktop lyrics, in motion.")
+                    .foregroundStyle(Color.studio(.ink2))
+                Text("Version \(GeneralPage.version)")
+                    .font(LunalyrDesign.Studio.TypeScale.caption)
+                    .foregroundStyle(Color.studio(.ink2))
+                    .textSelection(.enabled)
+                Link("Project & Downloads", destination: Self.projectURL)
+                    .font(LunalyrDesign.Studio.TypeScale.row)
+                    .foregroundStyle(Color.studio(.accentText))
+                    .tint(Color.studio(.accentText))
+                    .padding(.top, 4)
+                    .help(Self.projectURL.absoluteString)
+            }
+            .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 22) {
+                ThemedSection("Built on open source") {
+                    AboutParagraph("Based on Verso by Akki / AkkiCode06. The upstream GPLv3 with Commons Clause licence and attribution are preserved.")
+                    AboutParagraph("Visualisers include work from Synesthia, Fosfora, Wavefield, Wavecore and Cymatic (MIT). Bundled components retain their licence notices.")
                     Button("View Bundled Licences") {
                         if let folder = Bundle.main.resourceURL { NSWorkspace.shared.open(folder) }
                     }
+                    .controlSize(.small)
                     .help("Show the licence files in the Finder")
                 }
-                AboutCard(title: "Privacy", paragraphs: [
-                    "Audio analysis and readings stay on this Mac. Enabled lyric services receive song metadata. No Apple Music account cookies are requested.",
-                ])
+                ThemedSection("Privacy") {
+                    AboutParagraph("Audio analysis and readings stay on this Mac. Enabled lyric services receive song metadata. No Apple Music account cookies are requested.")
+                }
             }
-            .frame(maxWidth: 480)
-            .padding(.horizontal, LunalyrDesign.Spacing.section)
-            .padding(.vertical, LunalyrDesign.Spacing.section)
-            .frame(maxWidth: .infinity)
+            .frame(width: 440)
+        }
+        .padding(.vertical, 40)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
     }
 }
 
-/// A titled block of About's text, with an action beneath when it has one.
-private struct AboutCard<Action: View>: View {
-    let title: String
-    let paragraphs: [String]
-    @ViewBuilder let action: Action
+/// A paragraph of About's text: caption size, ink2, never folded.
+private struct AboutParagraph: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
-            Text(title)
-                .lunalyrText(.emphasis)
-                .accessibilityAddTraits(.isHeader)
-            ForEach(paragraphs, id: \.self) { paragraph in
-                Text(paragraph).lunalyrText(.caption)
-            }
-            action
-                .padding(.top, LunalyrDesign.Spacing.xSmall)
-        }
-        .padding(LunalyrDesign.Spacing.large)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                .fill(.quinary)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1)
-        )
-    }
-}
-
-extension AboutCard where Action == EmptyView {
-    init(title: String, paragraphs: [String]) {
-        self.init(title: title, paragraphs: paragraphs) { EmptyView() }
+        Text(text)
+            .font(LunalyrDesign.Studio.TypeScale.caption)
+            .foregroundStyle(Color.studio(.ink2))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

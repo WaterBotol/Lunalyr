@@ -189,7 +189,7 @@ final class UISnapshotTests: XCTestCase {
 /// Every case, surface by surface; each list lives in its own file.
 @MainActor
 enum UISnapshotCatalogue {
-    static var all: [UISnapshotCase] { settings + menuBar + onboarding + designSystem + lyricCard }
+    static var all: [UISnapshotCase] { settings + menuBar + onboarding + designSystem + lyricCard + pages }
 }
 
 /// One snapshot: a surface in one state, drawn in each of `looks`.
