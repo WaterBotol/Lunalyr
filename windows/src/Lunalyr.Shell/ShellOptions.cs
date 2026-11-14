@@ -78,6 +78,12 @@ public sealed record ShellOptions
     public string? FloatingCapturePath { get; init; }
 
     /// <summary>
+    /// <c>--diagnostics &lt;file&gt;</c>: on quitting, write what Settings › General › Copy diagnostics copies (GPUs, displays,
+    /// HDR, each surface, the last problems) to a text file. For checks, and for a tester to send without opening Settings.
+    /// </summary>
+    public string? DiagnosticsPath { get; init; }
+
+    /// <summary>
     /// <c>--lyric-card</c>: open the lyric card window once Lunalyr is up (for checks; with <c>--quiet-windows</c> it opens
     /// unactivated at the bottom, like the settings window). Not forwarded to a running instance.
     /// </summary>
@@ -246,6 +252,13 @@ public sealed record ShellOptions
                     {
                         if (theme.Trim().ToLowerInvariant() is "light" or "dark" or "system") options = options with { Theme = theme.Trim().ToLowerInvariant() };
                         else problems.Add($"--theme {theme}: expected light, dark or system.");
+                    }
+                    break;
+                case "--diagnostics":
+                    if (Value() is { } diagnostics)
+                    {
+                        if (diagnostics.Trim().Length == 0) problems.Add("--diagnostics needs a file.");
+                        else options = options with { DiagnosticsPath = Path.GetFullPath(diagnostics.Trim()) };
                     }
                     break;
                 case "--floating-capture":

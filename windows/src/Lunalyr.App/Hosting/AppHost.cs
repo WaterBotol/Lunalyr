@@ -513,6 +513,20 @@ internal sealed partial class AppHost
             // Read before the controller stops the renderer.
             if (_options.StatsPath is { } statsPath && _wallpaper is { } wallpaper) WriteStats(statsPath, wallpaper.Engine);
             if (_options.FloatingCapturePath is { } capturePath) WriteFloatingCapture(capturePath);
+            if (_options.DiagnosticsPath is { } diagnosticsPath)
+            {
+                try
+                {
+                    var text = await DiagnosticsAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                    Directory.CreateDirectory(Path.GetDirectoryName(diagnosticsPath)!);
+                    await File.WriteAllTextAsync(diagnosticsPath, text).ConfigureAwait(false);
+                    _log.Info($"Diagnostics written to {diagnosticsPath}.");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException)
+                {
+                    _log.Warn($"Couldn't write the diagnostics to {diagnosticsPath}.", ex);
+                }
+            }
             await StopDiscordAndTickerAsync().ConfigureAwait(false);
             StopVisualisers();
             StopMusicVideo();
