@@ -40,6 +40,19 @@ internal static class GeneralPage
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",
             Button("Show welcome…", () => App.CurrentHost?.ShowWelcomeAgain())));
 
+        // Tester feedback on 0.9.0: a log can be weeks away, a paste isn't.
+        Section(page, "Troubleshooting");
+        var copied = Caption("");
+        page.Children.Add(Card("Copy diagnostics",
+            "Your graphics card, displays, HDR and refresh rate, what each display's wallpaper is doing and the last problems, ready to paste into a message. Nothing is sent anywhere.",
+            "", Button("Copy diagnostics", async () =>
+            {
+                if (App.CurrentHost is not { } host) return;
+                copied.Text = "Collecting…";
+                copied.Text = await host.CopyDiagnosticsAsync() ? "Copied. Paste it into your message." : "Couldn't copy to the clipboard.";
+            })));
+        page.Children.Add(copied);
+
         Section(page, "Tray");
         ExtrasSections.AddTrayLyric(page, ctx);
 

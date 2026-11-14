@@ -149,6 +149,7 @@ internal sealed partial class AppHost
         // "Animation effects" may have been switched (WM_SETTINGCHANGE): read it again (never changed here).
         _tray.SettingChanged = () => _motion?.Refresh();
         _tray.OnError = ex => ReportCrash(ex, "window procedure", fatal: false);
+        WatchWallpaperProblems();
         _tray.Create();
         StartExtras();
         StartPackaging();
