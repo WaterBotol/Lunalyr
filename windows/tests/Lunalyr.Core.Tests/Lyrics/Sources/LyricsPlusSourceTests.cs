@@ -128,4 +128,15 @@ public class LyricsPlusSourceTests
         Assert.True(error.IsOffline);
         Assert.Single(handler.Requests);
     }
+
+    /// <summary>A busy node's own wait is honoured (the lyric-sourcing evaluation, 15 Nov 2026).</summary>
+    [Theory]
+    [InlineData("""{"error":"Too many requests. Please wait 7 seconds."}""", 7.0)]
+    [InlineData("Rate limited, retry in 2.5s", 2.5)]
+    [InlineData("wait 600 seconds", 60.0)]
+    public void ABusyNodesWaitIsRead(string body, double seconds) =>
+        Assert.Equal(TimeSpan.FromSeconds(seconds), LyricsPlusSource.BusyWait(System.Text.Encoding.UTF8.GetBytes(body)));
+
+    [Fact]
+    public void ABusyNodeNamingNoWaitGetsTheUsualRest() => Assert.Null(LyricsPlusSource.BusyWait([]));
 }

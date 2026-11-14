@@ -135,7 +135,9 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
                 // The service's own "no lyrics" answer, as opposed to a missing node's error page.
                 return new Attempt(AttemptKind.NotFound);
             case 429:
-                return new Attempt(AttemptKind.Failed, Reason: "busy", Rest: _options.BusyRest);
+                // The node says how long to wait ("Please wait 7 seconds"): rest it that long, not a fixed minute (the
+                // lyric-sourcing evaluation, 15 Nov 2026: one node allows 2 requests per 10 s).
+                return new Attempt(AttemptKind.Failed, Reason: "busy", Rest: BusyWait(body) ?? _options.BusyRest);
             default:
                 return new Attempt(AttemptKind.Failed, Reason: $"HTTP {response.StatusCode}", Rest: _options.FailureRest);
         }
@@ -177,6 +179,26 @@ public sealed class LyricsPlusSource(LyricHttpClient http, LyricsPlusOptions? op
     }
 
     private static bool HasText(JsonElement line) => !string.IsNullOrWhiteSpace(line.Str("text"));
+
+    /// <summary>The wait a busy node asks for ("wait 7 seconds"), between 1 s and a minute; null when it names none.</summary>
+    public static TimeSpan? BusyWait(byte[] body)
+    {
+        string text;
+        try
+        {
+            text = System.Text.Encoding.UTF8.GetString(body);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(?:\.\d+)?)\s*(?:s\b|sec|second)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(50));
+        if (!match.Success || !double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
+            return null;
+        return TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 60));
+    }
 
     /// <summary>A metadata name: a non-empty string, or a list of names joined with ", ".</summary>
     private static string? Name(JsonElement? metadata, string key)
