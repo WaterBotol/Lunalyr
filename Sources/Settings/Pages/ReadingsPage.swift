@@ -13,7 +13,7 @@ struct ReadingsPage: View {
     @State private var failed = false
 
     var body: some View {
-        ThemedForm(title: SettingsPage.readings.title) {
+        ThemedForm {
             ReadingPicture(display: o.display)
             ThemedSection("Romanisation") {
                 InspectorCaption(Self.styleNote(floating: floating.isFloating))

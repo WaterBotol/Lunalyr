@@ -357,7 +357,7 @@ struct ShareInspector: View {
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        ThemedForm(title: SettingsPage.share.title) {
+        ThemedForm {
             ThemedSection("Discord") {
                 Toggle("Show what I'm listening to on Discord", isOn: $extras.showsDiscordPresence)
                 InspectorCaption("Needs the Discord desktop app. Shows the line being sung.",
@@ -469,7 +469,7 @@ struct ExtrasInspector: View {
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        ThemedForm(title: SettingsPage.extras.title) {
+        ThemedForm {
             ThemedSection("Lyrics on screen") {
                 Toggle("Hide lyrics", isOn: $extras.lyricsHidden)
                 Toggle("Hide lyrics while a display is mirrored", isOn: $extras.hidesWhileMirroring)
