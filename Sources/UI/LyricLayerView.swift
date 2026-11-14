@@ -385,7 +385,7 @@ struct LyricLayer: View {
         case .synced:
             let lines = SceneLines(lines: content.lines, romanized: content.romanized, fingerprint: key.fingerprint,
                                    machineTranslations: content.machineTranslations)
-            // The scene's own breaks, so an outgoing scene's dots fade out
+            // The scene's own breaks, so an outgoing scene's orb fades out
             // with it instead of vanishing.
             let gap = settings.showInterludes
                 ? instrumentalGap(at: time, windows: content.vocalWindows, duration: content.duration) : nil
@@ -405,7 +405,7 @@ struct LyricLayer: View {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead, energy: energy) {
                         // In the floating window the opening title takes the
                         // middle, where the dots are: they wait for it.
-                        InstrumentalInterludeView(cue: cue, accent: accent, baseSize: baseSize)
+                        ThinkingOrbView(cue: cue, accent: accent, baseSize: baseSize)
                             .opacity(backdropOverride == nil ? 1
                                      : OpeningTitle.yields(to: openingSchedule(content, key: key), at: time))
                     }
@@ -1408,7 +1408,7 @@ final class LyricPace: ObservableObject {
     enum Level: Equatable {
         /// Something is entering, being sung, swelling or leaving.
         case active
-        /// Only slow motion: wandering interlude dots, drifting colour,
+        /// Only slow motion: the interlude orb, drifting colour,
         /// scrolling unsynced lyrics.
         case ambient
         /// Nothing visible changes beyond the slow float.

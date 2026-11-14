@@ -280,20 +280,26 @@ final class OrganicMotionTests: XCTestCase {
         XCTAssertEqual(last, 1, accuracy: 0.0001)
     }
 
-    func testInterludeDotsWanderIndependentlyAndSmoothly() throws {
+    func testInterludeOrbMorphsSmoothlyAndItsLobesMoveApart() throws {
         let gap = VCVocalGap(start: 30, end: 46, nextVocal: 4)
-        var previous = try XCTUnwrap(gap.instrumentalCue(at: 32, previewLead: 0.5))
+        func pose(_ time: Double) throws -> ThinkingOrb.Pose {
+            ThinkingOrb.pose(try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: 0.5)), reduceMotion: false,
+                             increaseContrast: false)
+        }
+        var previous = try pose(32)
         var differs = false
         for step in 1...4000 {
-            let cue = try XCTUnwrap(gap.instrumentalCue(at: 32 + Double(step) / 1000, previewLead: 0.5))
-            for dot in 0..<3 {
-                XCTAssertLessThan(abs(cue.bob(at: dot) - previous.bob(at: dot)), 0.02)
-                XCTAssertLessThanOrEqual(abs(cue.bob(at: dot)), 1)
+            let current = try pose(32 + Double(step) / 1000)
+            for lobe in 0..<3 {
+                XCTAssertLessThan(abs(current.lobes[lobe].dx - previous.lobes[lobe].dx), 0.01)
+                XCTAssertLessThan(abs(current.lobes[lobe].dy - previous.lobes[lobe].dy), 0.01)
+                XCTAssertLessThan(abs(current.lobes[lobe].radius - previous.lobes[lobe].radius), 0.01)
             }
-            if abs(cue.bob(at: 0) - cue.bob(at: 1)) > 0.2 { differs = true }
-            previous = cue
+            XCTAssertLessThan(abs(current.scale - previous.scale), 0.01)
+            if abs(current.lobes[0].dx - current.lobes[1].dx) > 0.2 { differs = true }
+            previous = current
         }
-        XCTAssertTrue(differs, "the dots should not move in lockstep")
+        XCTAssertTrue(differs, "the lobes should not move in lockstep")
     }
 
     @MainActor

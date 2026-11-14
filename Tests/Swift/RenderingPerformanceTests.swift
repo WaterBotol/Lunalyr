@@ -58,20 +58,27 @@ final class RenderingPerformanceTests: XCTestCase {
         XCTAssertNotEqual(try image(.satinRibbon), try image(.splitInk))
     }
 
-    func testInstrumentalDotsPulseAndLeaveRoomForTheNextWordPreview() throws {
+    func testInstrumentalOrbGlowsTowardTheEndAndLeavesRoomForTheNextWordPreview() throws {
         let gap = VCVocalGap(start: 10, end: 26, nextVocal: 3)
         XCTAssertNil(gap.instrumentalCue(at: 10, previewLead: 0.5))
         let cue = try XCTUnwrap(gap.instrumentalCue(at: 16, previewLead: 0.5))
         XCTAssertEqual(cue.opacity, 1)
-        XCTAssertNotEqual(cue.bob(at: 0), cue.bob(at: 1))
-        XCTAssertGreaterThan(cue.highlight(at: 0), cue.highlight(at: 2))
+        // The time-remaining cue the dots' filling gave: the glow rises
+        // through the second half of the break.
+        func glow(_ time: Double) throws -> Double {
+            ThinkingOrb.pose(try XCTUnwrap(gap.instrumentalCue(at: time, previewLead: 0.5)), reduceMotion: false,
+                             increaseContrast: false).glow
+        }
+        XCTAssertEqual(try glow(12), 0)
+        XCTAssertGreaterThan(try glow(22), try glow(19))
+        XCTAssertGreaterThan(try glow(25), 0.9)
         let unknown = VCVocalGap(start: 10, end: -1, nextVocal: -1).instrumentalCue(at: 17, previewLead: 0.5)
         XCTAssertNil(unknown?.progress)
         XCTAssertNil(gap.instrumentalCue(at: 25.55, previewLead: 0.5))
     }
 
     @MainActor
-    func testInstrumentalDotsRenderOverYourWallpaper() throws {
+    func testInstrumentalOrbRendersOverYourWallpaperInEveryLayout() throws {
         let music = FakeMusicApp()
         music.queue = [.init(id: "00000000000000A1", name: "First Light", duration: 30)]
         music.position = 10
@@ -80,7 +87,8 @@ final class RenderingPerformanceTests: XCTestCase {
 
         let model = LyricsViewModel.shared, settings = Settings.shared, extras = LunalyrExtras.shared
         let saved = (lines: model.lines, plain: model.plainLines, notFound: model.notFound, loading: model.isLoading,
-                     mode: settings.backgroundMode, dots: settings.showInterludes, hidden: extras.lyricsHidden)
+                     mode: settings.backgroundMode, dots: settings.showInterludes, hidden: extras.lyricsHidden,
+                     layout: settings.lyricComposition)
         defer {
             model.lines = saved.lines
             model.plainLines = saved.plain
@@ -89,6 +97,7 @@ final class RenderingPerformanceTests: XCTestCase {
             settings.backgroundMode = saved.mode
             settings.showInterludes = saved.dots
             extras.lyricsHidden = saved.hidden
+            settings.lyricComposition = saved.layout
         }
         model.lines = [
             LyricsFetcher.makeLine(text: "Before", start: 1, end: 3),
@@ -100,23 +109,42 @@ final class RenderingPerformanceTests: XCTestCase {
         extras.lyricsHidden = false
         settings.backgroundMode = .desktop
 
-        func litPixels(show: Bool) throws -> Int {
+        /// Lit pixels in the middle, and whether they make one round,
+        /// unbroken shape (the orb) rather than a row of separate dots.
+        func orb(show: Bool, floating: Bool = false) throws -> (lit: Int, solid: Bool) {
             settings.showInterludes = show
             let renderer = ImageRenderer(content: LyricLayer(time: 10, baseSize: 60, maxWidth: 350, maxHeight: 180,
                 mood: .neutral, accent: .orange, trackSeed: 0, animating: false)
                 .environmentObject(harness.monitor)
+                .environment(\.lyricBackdropOverride, floating ? 0.1 : nil)
                 .frame(width: 400, height: 220))
             let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
-            var lit = 0
+            func lit(_ x: Int, _ y: Int) -> Bool { (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 }
+            var count = 0
             for y in 85..<135 {
-                for x in 145..<255 where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 {
-                    lit += 1
-                }
+                for x in 145..<255 where lit(x, y) { count += 1 }
             }
-            return lit
+            let row = (100..<300).filter { lit($0, 110) }, column = (40..<180).filter { lit(200, $0) }
+            guard let left = row.first, let right = row.last, let top = column.first, let bottom = column.last else {
+                return (count, false)
+            }
+            let unbroken = row.count == right - left + 1 && column.count == bottom - top + 1
+            let width = Double(right - left), height = Double(bottom - top)
+            return (count, unbroken && abs(width - height) < 0.25 * max(width, height))
         }
-        XCTAssertGreaterThan(try litPixels(show: true), 200)
-        XCTAssertEqual(try litPixels(show: false), 0)
+        for layout in [nil] + LyricComposition.allCases.map(Optional.some) {
+            settings.lyricComposition = layout
+            let shown = try orb(show: true)
+            XCTAssertGreaterThan(shown.lit, 200, layout?.title ?? "Automatic")
+            XCTAssertTrue(shown.solid, "one orb, not three dots: \(layout?.title ?? "Automatic")")
+            XCTAssertEqual(try orb(show: false).lit, 0)
+        }
+        // Floating lyrics draw the same layer (once the opening title,
+        // which takes the middle there, has gone).
+        let title = UserDefaults.standard.object(forKey: OpeningTitle.settingKey)
+        UserDefaults.standard.set(false, forKey: OpeningTitle.settingKey)
+        defer { UserDefaults.standard.set(title, forKey: OpeningTitle.settingKey) }
+        XCTAssertTrue(try orb(show: true, floating: true).solid, "floating lyrics")
     }
 
     func testMotionCoverUsesTheAlbumHeaderAndMatchesTheRelease() throws {

@@ -381,13 +381,13 @@ struct TimingPage: View {
     }
 
     /// What "Treat long pauses as instrumental" changes. QQ Music's lines are
-    /// cut short; for other sources a break is shown only by the three dots,
-    /// so without them the setting changes nothing there.
+    /// cut short; for other sources a break is shown only by the orb,
+    /// so without it the setting changes nothing there.
     private var pauseCaption: String {
-        let caption = "Lyrics timed only by line don’t say when singing stops. With Show three dots during instrumental breaks on (Lyric style), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes."
+        let caption = "Lyrics timed only by line don’t say when singing stops. With Show a glowing orb during instrumental breaks on (Lyric style), a long gap after a line is shown as an instrumental break instead of one held line. Turn this off for songs with long held notes."
         return settings.showInterludes
             ? caption
-            : caption + " The three dots are off, so this changes only QQ Music’s lyrics, whose held lines end early, and how long the words of a line before a long gap take to light up."
+            : caption + " The orb is off, so this changes only QQ Music’s lyrics, whose held lines end early, and how long the words of a line before a long gap take to light up."
     }
 
     private func importLyrics() {

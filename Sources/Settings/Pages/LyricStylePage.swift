@@ -45,7 +45,7 @@ struct LyricStylePage: View {
             wordEntrances
             layoutNotes
             InspectorSection("Instrumental breaks") {
-                Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
+                Toggle("Show a glowing orb during instrumental breaks", isOn: $s.showInterludes)
                     .toggleStyle(StudioCheckboxStyle())
             }
             // Custom Mix can pick either, so both stay reachable there.

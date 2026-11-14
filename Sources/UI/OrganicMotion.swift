@@ -75,8 +75,8 @@ struct LyricSceneContent {
     var duration: Double = 0
     /// The song's seed, for its credits: an outgoing scene keeps its own.
     var seed = 0
-    /// Where the voice rests, for the interlude dots: an outgoing scene
-    /// keeps its own, so a skip during an intro fades them out.
+    /// Where the voice rests, for the interlude orb: an outgoing scene
+    /// keeps its own, so a skip during an intro fades it out.
     var vocalWindows: [VCVocalWindow] = []
     /// Wall time the lyrics started loading, for the loading notice.
     var loadingSince: Double?

@@ -523,7 +523,7 @@ final class LyricColourTests: XCTestCase {
     }
 
     @MainActor
-    func testInkReachesEveryCompositionAndTheInterludeDots() throws {
+    func testInkReachesEveryCompositionAndTheInterludeOrb() throws {
         let director = LyricInkDirector()
         let green = [LyricColourOptions.oklab(hex: "#2BD96B")!]
         var ink = LyricInk.white
@@ -542,10 +542,10 @@ final class LyricColourTests: XCTestCase {
                 .background(.black)
             XCTAssertGreaterThan(try greenPixels(view), 30, style.title)
         }
-        let dots = InstrumentalInterludeView(cue: InstrumentalCue(elapsed: 3, opacity: 1, progress: 0.5),
-                                             accent: .red, baseSize: 60)
+        let orb = ThinkingOrbView(cue: InstrumentalCue(elapsed: 3, opacity: 1, progress: 0.5),
+                                  accent: .red, baseSize: 60)
             .environment(\.lyricInk, ink).padding(30).background(.black)
-        XCTAssertGreaterThan(try greenPixels(dots), 30, "interlude dots")
+        XCTAssertGreaterThan(try greenPixels(orb), 30, "interlude orb")
     }
 
     @MainActor

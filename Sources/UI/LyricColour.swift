@@ -245,7 +245,7 @@ struct LyricInkSample: Equatable {
 }
 
 /// The lyric text palette for one frame. Read from the environment by every
-/// lyric view, so all eight compositions, readings, interlude dots and the
+/// lyric view, so all eight compositions, readings, the interlude orb and the
 /// settings preview are coloured from one place.
 struct LyricInk {
     /// WCAG AA for large text. Lyrics are display type (the smallest word
@@ -278,8 +278,12 @@ struct LyricInk {
     var tileText: Color { tile == nil ? LyricHighlight.fallbackText : onTile }
     /// Constellation hairlines.
     var link: Color = .white
-    /// Interlude dots. `nil` keeps the album accent.
+    /// The highlight colour as a single swatch (the interlude orb's
+    /// primary). `nil` keeps the album accent.
     var dot: Color?
+    /// The interlude orb's colours (`ThinkingOrb`): `dot`'s colour and two
+    /// neighbours, readable and toned like it. Empty keeps the album accent.
+    var orb: [OKLab] = []
 
     /// Sung sweep: the colour of words before the sweep reaches them.
     var sweepRest: OKLab = .white
@@ -682,6 +686,12 @@ final class LyricInkDirector {
                 whiteInk = white
             }
             var ink = whiteInk
+            // The orb keeps the album accent white type has always had.
+            if let accent = inputs.accent {
+                let primary = Perceptual.readable(accent, background: backdrop, ratio: ink.contrast)
+                ink.orb = ThinkingOrb.stops(primary: primary, neighbours: ThinkingOrb.neighbours(of: accent, tint: nil),
+                                            ink: ink)
+            }
             ink.settled = highlightSettled(on: goal)
             last = ink
             return ink
@@ -761,6 +771,17 @@ final class LyricInkDirector {
         let highlight = ink.toned(Perceptual.readable(highlightSource, background: behind, ratio: ratio),
                                   source: highlightSource)
         ink.dot = Perceptual.color(highlight)
+        // The orb: the highlight and the colours either side of it in the
+        // palette, or, with a single colour, its hue a step either way.
+        let orbNeighbours: (OKLab, OKLab)
+        if inputs.mode == .sungSweep, targets.count > 1 {
+            orbNeighbours = (followed.1, followed.2 == followed.0 ? followed.1 : followed.2)
+        } else if inputs.mode != .standard, targets.count > 1 {
+            orbNeighbours = (ink.gradient(slot: 0.15), ink.gradient(slot: 0.85))
+        } else {
+            orbNeighbours = ThinkingOrb.neighbours(of: highlightSource, tint: inputs.accent)
+        }
+        ink.orb = ThinkingOrb.stops(primary: highlight, neighbours: orbNeighbours, ink: ink)
         // Hairlines: half way to white under light text; the deep colour
         // itself, a little lighter, under dark text.
         ink.link = Perceptual.color(Perceptual.mix(highlight, .white, 0.5 * (1 - darkAmount) + 0.12 * darkAmount))
