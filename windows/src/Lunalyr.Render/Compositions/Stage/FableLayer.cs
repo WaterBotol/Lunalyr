@@ -208,8 +208,10 @@ internal sealed class FableLayer(IWordBreaker breaker, Logger? logger) : StageLa
         }
         try
         {
-            if (live < 0.999) DrawLabel(dc, line, word, run, 0, time, unit, alpha, blur);
-            if (live > 0.001) DrawLabel(dc, line, word, run, 1, time, unit, live * alpha, blur, live < 0.999 ? 0 : 1);
+            // In Sung sweep a reached word keeps its sung colour.
+            var tint = SungTint(line, run, time, live);
+            if (tint < 0.999) DrawLabel(dc, line, word, run, 0, time, unit, alpha, blur);
+            if (tint > 0.001) DrawLabel(dc, line, word, run, 1, time, unit, tint * alpha, blur, tint < 0.999 ? 0 : 1);
             DrawReading(dc, line, word, run, 0, time, unit, alpha, blur);
         }
         finally

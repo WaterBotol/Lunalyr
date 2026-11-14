@@ -202,14 +202,15 @@ internal sealed class TorqueLayer(IWordBreaker breaker, Logger? logger) : StageL
             }
         }
         var labelNudge = line.LabelAt[id] - word.LabelOffset;
-        if (live < 0.999) DrawLabel(dc, line, word, run, 0, time, unit, alpha, blur, 1, labelNudge);
-        if (live > 0.001) DrawLabel(dc, line, word, run, 1, time, unit, live * alpha, blur, live < 0.999 ? 0 : 1, labelNudge);
+        var tint = SungTint(line, run, time, live);
+        if (tint < 0.999) DrawLabel(dc, line, word, run, 0, time, unit, alpha, blur, 1, labelNudge);
+        if (tint > 0.001) DrawLabel(dc, line, word, run, 1, time, unit, tint * alpha, blur, tint < 0.999 ? 0 : 1, labelNudge);
         if (word.HasReading)
         {
-            // The reading takes the sung colour while its word is being sung.
+            // The reading takes the sung colour while its word is being sung (in Sung sweep, from then on).
             var readingUnit = Matrix4x4.CreateTranslation(0, line.ReadingAt[id].Y - word.ReadingOffset.Y, 0) * unit;
-            if (live < 0.999) DrawReading(dc, line, word, run, 0, time, readingUnit, alpha, blur);
-            if (live > 0.001) DrawReading(dc, line, word, run, 1, time, readingUnit, live * alpha, blur);
+            if (tint < 0.999) DrawReading(dc, line, word, run, 0, time, readingUnit, alpha, blur);
+            if (tint > 0.001) DrawReading(dc, line, word, run, 1, time, readingUnit, tint * alpha, blur);
         }
     }
 }

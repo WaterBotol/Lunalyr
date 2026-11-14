@@ -497,6 +497,14 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     protected LyricInkSample Sample(double inkTime, long seed, StageRun run, int count) =>
         InkSample(inkTime, count > 1 ? (double)run.Id / (count - 1) : 0.5, (ulong)Math.Abs(seed + run.Id));
 
+    /// <summary>
+    /// How much of the sung colour a word shows: <paramref name="live"/> while it is the word being sung, and in Sung sweep
+    /// all of it once reached, so a sung word keeps its colour when the next begins (the Mac's next/tester-fixes, 15 Nov
+    /// 2026: Torque, Fable and Portal turned it back to white).
+    /// </summary>
+    protected double SungTint(StageLine line, StageRun run, double time, double live) =>
+        InkAt(line.InkTime).Mode == LyricColourMode.SungSweep && time >= run.Start ? 1 : live;
+
     protected Vector4 Tile(double inkTime) => LyricInks.Vector(InkAt(inkTime).TileColour);
     protected Vector4 TileText(double inkTime) => LyricInks.Vector(InkAt(inkTime).TileText);
 

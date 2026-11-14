@@ -101,7 +101,8 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
             // Some pills are only outlined.
             var outlined = StageShared.Chance(seed, run.Id, 12) < 0.25;
             var live = outlined ? tile : tileText;
-            var spec = WithReading(new WordSpec(size, [Colour(sample.Rest, 0.85), live]) { MaxWidth = Stage.Width * 0.7, Raster = 1.2f },
+            // Third: the sung colour, for the trail's reached words in Sung sweep.
+            var spec = WithReading(new WordSpec(size, [Colour(sample.Rest, 0.85), live, Colour(sample.Sung, 0.85)]) { MaxWidth = Stage.Width * 0.7, Raster = 1.2f },
                                    source.Readings[i], size, [Colour(sample.Reading), Faded(live, LyricHighlight.ReadingOpacity)],
                                    shadow: false, maxWidth: Stage.Width * 0.7);
             words[i] = Bake(run, run.Text, spec);
@@ -308,7 +309,8 @@ internal sealed class PortalLayer(IWordBreaker breaker, Logger? logger) : StageL
         var unit = Homography.Of(Matrix3x2.CreateTranslation((float)wordX, 0) * pill);
         if (live < 0.999)
         {
-            DrawLabel(dc, line, word, run, 0, time, unit, opacity, blur);
+            // In Sung sweep a reached word off the pill keeps its sung colour (the Mac's next/tester-fixes).
+            DrawLabel(dc, line, word, run, SungTint(line, run, time, 0) > 0.5 ? 2 : 0, time, unit, opacity, blur);
             DrawReading(dc, line, word, run, 0, time, unit, opacity, blur);
         }
         if (live > 0.001)
