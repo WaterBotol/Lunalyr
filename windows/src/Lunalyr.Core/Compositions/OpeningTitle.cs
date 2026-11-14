@@ -20,6 +20,12 @@ public static class OpeningTitle
     // Type sizes, as shares of the title's own size (before a long title is set smaller), so the hierarchy holds at
     // every size.
     public const double ArtistShare = 0.32;
+
+    /// <summary>
+    /// How strongly the card glows in the album's colour: fully over a dark picture, gently when the type is dark on a
+    /// light one (<paramref name="dark"/>), where a glow would only muddy the words.
+    /// </summary>
+    public static double GlowStrength(bool dark) => dark ? 0.35 : 1;
     public const double ReadingShare = 0.32;
     public const double AlbumShare = 0.26;
 
@@ -147,7 +153,7 @@ public static class OpeningTitle
 /// <summary>How much of the card is drawn.</summary>
 public enum OpeningSize
 {
-    /// <summary>Rule, title, its reading, artist and album.</summary>
+    /// <summary>Title, its reading, artist and album.</summary>
     Full,
     /// <summary>A smaller title and the artist: a short intro, or a song joined part-way.</summary>
     Compact,
@@ -191,7 +197,8 @@ public readonly record struct OpeningReveal(double Rule, double Cover, double Ti
             var fade = Easing.Smoothstep(age / 0.6);
             return new OpeningReveal(fade, fade, fade, 1, fade, fade, fade);
         }
-        // Staged: the rule draws in, the title is wiped on beside it, then the reading, the artist and the album follow.
+        // Staged: the title is wiped on, then the reading, the artist and the album follow. Rule is the card's first
+        // beat (the corner shade comes in with it); no bar is drawn.
         var scale = size == OpeningSize.Full ? 1.0 : OpeningTitle.CompactEntrance / OpeningTitle.FullEntrance;
         double Part(double from, double span) => Easing.Settle(age - from * scale, span * scale);
         // The wipe travels at an even, eased pace; everything else settles.

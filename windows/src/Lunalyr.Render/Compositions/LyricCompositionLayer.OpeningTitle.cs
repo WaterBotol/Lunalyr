@@ -1,7 +1,8 @@
 // The song's opening title on the wallpaper (the Mac's OpeningTitleCard in OpeningTitle.swift, Lunalyr's own, ported;
 // the one Verso-attributed line of that file, its Settings.shared property, has no counterpart): the title in the lyric
-// typeface, a rule in the album accent, the artist tracked in capitals, the album, the title's reading and the album
-// cover, low on the left with a soft corner shade. Its timing is Lunalyr.Core.Compositions.OpeningTitle's.
+// typeface, the artist in its own case, the album, the title's reading and the album cover, low on the left with a
+// soft corner shade, the type and the cover glowing in the album's colour. Its timing is
+// Lunalyr.Core.Compositions.OpeningTitle's.
 
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -136,6 +137,8 @@ internal abstract partial class LyricCompositionLayer
             var world = Matrix3x2.CreateTranslation(0, -side) * Matrix3x2.CreateScale(grow)
                 * Matrix3x2.CreateTranslation(card.Left, card.Top + (float)card.CoverTop + side + lift);
             var alpha = (float)(reveal.Cover * opacity);
+            // The album-colour glow round the cover, then its shadow.
+            card.CoverGlow?.DrawShadow(dc, Matrix3x2.CreateTranslation(side / 2, side / 2) * world, alpha, 1);
             card.CoverShadow?.DrawShadow(dc, Matrix3x2.CreateTranslation(side / 2, side / 2) * world, alpha, 1);
             // Fill the square from the middle of the cover (a wide or tall cover is cropped, not squeezed).
             var fill = side / Math.Min(art.Width, art.Height);
@@ -148,68 +151,45 @@ internal abstract partial class LyricCompositionLayer
         }
 
         var x = card.Left + card.ColumnLeft;
-        // The rule draws in from its leading end, in the album's accent.
-        if (reveal.Rule * opacity > 0.002)
-        {
-            var accent = card.Accent;
-            _paint.Color = new Color4(accent.X, accent.Y, accent.Z, (float)(accent.W * reveal.Rule * opacity));
-            var width = (float)(card.RuleWidth * (reduce ? 1 : reveal.Rule));
-            var height = (float)card.RuleHeight;
-            dc.Transform = Matrix3x2.Identity;
-            var top = card.Top + lift;
-            // Centred in the floating window, it draws out from its middle.
-            var start = card.Centred ? x + card.ContentWidth / 2 - width / 2 : x;
-            dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(start, top, start + width, top + height), height / 2, height / 2), _paint);
-        }
-
-        // The title is wiped on beside the rule, rising into place.
+        // The title is wiped on, rising into place.
         var title = card.Title;
         var titleAlpha = Math.Min(1, reveal.Title * 1.6) * opacity;
         if (titleAlpha > 0.002)
         {
             var world = Matrix3x2.CreateTranslation(Mid(card, title, x), card.Top + (float)card.TitleTop + title.Box.Y / 2
                                                     + (float)((1 - reveal.Title) * rise) + lift);
-            DrawWiped(dc, title, world, (float)titleAlpha, blur, reduce ? 1 : reveal.Wipe);
+            DrawWiped(dc, title, card.TitleGlows, world, (float)titleAlpha, blur, reduce ? 1 : reveal.Wipe);
         }
 
         if (card.Reading is { } reading && reveal.Reading * opacity > 0.002)
         {
             var world = Matrix3x2.CreateTranslation(Mid(card, reading, x), card.Top + (float)card.ReadingTop + reading.Box.Y / 2
                                                     + (float)((1 - reveal.Reading) * rise * 0.5) + lift);
+            DrawGlows(dc, card.ReadingGlows, world, (float)(reveal.Reading * opacity));
             reading.Draw(dc, world, 1, (float)(reveal.Reading * opacity), blur, GlowSpec.None, 1);
         }
 
         if (card.Artist is { } artist && reveal.Artist * opacity > 0.002)
         {
-            // Wide tracking that closes up as it arrives: each letter's stretch of the baked line is drawn further
-            // along by the tracking still to close.
-            var extra = reduce ? 0 : card.ArtistSize * 0.3 * (1 - reveal.Artist);
-            var centre = new Vector2(Mid(card, artist, x), card.Top + (float)card.ArtistTop + artist.Box.Y / 2 + lift);
-            var alpha = (float)(reveal.Artist * opacity);
-            var edges = card.ArtistEdges;
-            if (extra < 0.05 || edges is null)
-            {
-                artist.Draw(dc, Matrix3x2.CreateTranslation(centre), 1, alpha, blur, GlowSpec.None, 1);
-            }
-            else
-            {
-                var half = artist.Box.X / 2;
-                var last = edges.Length - 2;
-                for (var i = 0; i <= last; i++)
-                {
-                    var clip = new InkClip(i == 0 ? float.NegativeInfinity : edges[i] - half,
-                                           i == last ? float.PositiveInfinity : edges[i + 1] - half);
-                    artist.Draw(dc, Matrix3x2.CreateTranslation(centre.X + (float)(extra * i), centre.Y), 1, alpha, blur,
-                                GlowSpec.None, 1, clip: clip);
-                }
-            }
+            // In the artist's own case, as the player shows it.
+            var world = Matrix3x2.CreateTranslation(Mid(card, artist, x), card.Top + (float)card.ArtistTop + artist.Box.Y / 2 + lift);
+            DrawGlows(dc, card.ArtistGlows, world, (float)(reveal.Artist * opacity));
+            artist.Draw(dc, world, 1, (float)(reveal.Artist * opacity), blur, GlowSpec.None, 1);
         }
 
         if (card.Album is { } album && reveal.Album * opacity > 0.002)
         {
             var world = Matrix3x2.CreateTranslation(Mid(card, album, x), card.Top + (float)card.AlbumTop + album.Box.Y / 2 + lift);
+            DrawGlows(dc, card.AlbumGlows, world, (float)(reveal.Album * opacity));
             album.Draw(dc, world, 1, (float)(reveal.Album * opacity), blur, GlowSpec.None, 1);
         }
+    }
+
+    /// <summary>A line's album-colour glow (its tight halo and wide bloom), drawn behind it.</summary>
+    private static void DrawGlows(ID2D1DeviceContext dc, Ink[]? glows, in Matrix3x2 world, float opacity, InkClip clip = default)
+    {
+        if (glows is null) return;
+        foreach (var glow in glows) glow.DrawShadow(dc, world, opacity, 1, clip: clip);
     }
 
     /// <summary>The centre of a line of the card: under the column's middle when centred, else from its left edge.</summary>
@@ -217,20 +197,26 @@ internal abstract partial class LyricCompositionLayer
 
     /// <summary>
     /// A soft left-to-right wipe over <paramref name="ink"/> (the Mac's card mask: solid up to the edge, then a feather
-    /// a quarter of the title's width), drawn as a few strips of falling opacity, with the title's shadow.
+    /// a quarter of the title's width), drawn as a few strips of falling opacity, with the title's shadow and glow.
     /// </summary>
-    private static void DrawWiped(ID2D1DeviceContext dc, Ink ink, in Matrix3x2 world, float opacity, float blur, double progress)
+    private static void DrawWiped(ID2D1DeviceContext dc, Ink ink, Ink[]? glows, in Matrix3x2 world, float opacity, float blur,
+                                  double progress)
     {
         const double feather = 0.25;
         var (solid, clear) = LyricSweep.Edges(progress, feather);
         if (solid >= 1)
         {
+            DrawGlows(dc, glows, world, opacity);
             ink.Draw(dc, world, 1, opacity, blur, GlowSpec.None, 1);
             return;
         }
         var width = ink.Box.X;
         // The wipe runs left to right on the card whatever the script (the card is anchored on the left).
-        if (solid > 0) ink.Draw(dc, world, 1, opacity, blur, GlowSpec.None, 1, clip: SweepSpan(-1, solid, width, false));
+        if (solid > 0)
+        {
+            DrawGlows(dc, glows, world, opacity, SweepSpan(-1, solid, width, false));
+            ink.Draw(dc, world, 1, opacity, blur, GlowSpec.None, 1, clip: SweepSpan(-1, solid, width, false));
+        }
         const int strips = 6;
         var step = (clear - solid) / strips;
         if (!(step > 0)) return;
@@ -238,8 +224,9 @@ internal abstract partial class LyricCompositionLayer
         {
             var from = solid + s * step;
             var alpha = LyricSweep.Alpha(from + step / 2, progress, feather);
-            if (alpha > 0.002)
-                ink.Draw(dc, world, 1, (float)(opacity * alpha), blur, GlowSpec.None, 1, clip: SweepSpan(from, from + step, width, false));
+            if (!(alpha > 0.002)) continue;
+            DrawGlows(dc, glows, world, (float)(opacity * alpha), SweepSpan(from, from + step, width, false));
+            ink.Draw(dc, world, 1, (float)(opacity * alpha), blur, GlowSpec.None, 1, clip: SweepSpan(from, from + step, width, false));
         }
     }
 
@@ -294,8 +281,15 @@ internal abstract partial class LyricCompositionLayer
         var readingSize = nominal * OpeningTitle.ReadingShare;
         var albumSize = nominal * OpeningTitle.AlbumShare;
         var showsReading = key.Reading is not null && !compact;
-        var ruleHeight = Math.Max(Points(2), unit * 0.04);
-        var ruleGap = unit * (compact ? 0.18 : 0.22);
+        // The card glows in the album's own colour: a tight halo and a wide, soft bloom on the type, and one round the
+        // cover, arriving and leaving with them (radii as the Mac's shadows', sigma half the radius).
+        var glow = OpeningTitle.GlowStrength(key.Dark);
+        var accent = new Vector3(key.Accent.X, key.Accent.Y, key.Accent.Z);
+        ShadowSpec[] typeGlows =
+        [
+            new((float)(0.45 * glow * key.Accent.W), (float)(unit * 0.6 * 0.5), 0, accent),
+            new((float)(0.7 * glow * key.Accent.W), (float)(unit * 0.18 * 0.5), 0, accent),
+        ];
         var readingTop = nominal * 0.1;
         var artistTop = nominal * (compact ? 0.2 : 0.26);
         // The cover is as tall as the title block: the title, its reading and the artist.
@@ -306,47 +300,53 @@ internal abstract partial class LyricCompositionLayer
         var columnWidth = key.Cover ? Math.Max(width * 0.4, width - side - gap) : width;
 
         var titleRtl = ScriptDirection.IsRightToLeft(key.Title);
-        var titleInk = BakeTitle(kit, key.Title, titleSize, columnWidth, titleRtl, new Vector4(type, 1), shadow);
-        var y = ruleHeight + ruleGap;
+        var titleInk = BakeTitle(kit, key.Title, titleSize, columnWidth, titleRtl, new Vector4(type, 1), shadow, typeGlows,
+                                 out var titleGlows);
+        // No bar above the title (the Mac's Test Build 88): the card starts with it.
+        var y = 0.0;
         var titleTop = y;
         y += titleInk.Box.Y;
         Ink? readingInk = null;
+        Ink[]? readingGlows = null;
         double readingY = 0;
         if (showsReading)
         {
-            readingInk = BakeLine(kit, key.Reading!, Face.Quiet, readingSize, columnWidth, 0, new Vector4(type, 0.78f), shadow, out _);
+            readingInk = BakeLine(kit, key.Reading!, Face.Quiet, readingSize, columnWidth, 0, new Vector4(type, 0.78f), shadow,
+                                  typeGlows, out readingGlows);
             y += readingTop;
             readingY = y;
             y += readingInk.Box.Y;
         }
         Ink? artistInk = null;
-        float[]? edges = null;
+        Ink[]? artistGlows = null;
         double artistY = 0;
         if (key.Artist.Trim().Length > 0)
         {
-            var upper = key.Artist.Trim().ToUpperInvariant();
-            artistInk = BakeLine(kit, upper, Face.Heavy, artistSize, columnWidth, 0.16, new Vector4(type, 0.92f), shadow, out edges,
-                                 clusters: ScriptDirection.AllowsGlyphMotion(upper) && !ScriptDirection.IsRightToLeft(upper));
+            // In the artist's own case, as the player shows it: no tracked capitals.
+            artistInk = BakeLine(kit, key.Artist.Trim(), Face.Quiet, artistSize, columnWidth, 0, new Vector4(type, 0.92f), shadow,
+                                 typeGlows, out artistGlows);
             y += artistTop;
             artistY = y;
             y += artistInk.Box.Y;
         }
         Ink? albumInk = null;
+        Ink[]? albumGlows = null;
         double albumY = 0;
         if (key.Album is { } album && !compact)
         {
-            albumInk = BakeLine(kit, album, Face.Quiet, albumSize, columnWidth, 0.02, new Vector4(type, 0.7f), shadow, out _);
+            albumInk = BakeLine(kit, album, Face.Quiet, albumSize, columnWidth, 0.02, new Vector4(type, 0.7f), shadow, typeGlows,
+                                out albumGlows);
             y += nominal * 0.1;
             albumY = y;
             y += albumInk.Box.Y;
         }
-        var coverTop = ruleHeight + ruleGap;
+        var coverTop = 0.0;
         var height = Math.Max(y, key.Cover ? coverTop + side : 0);
         var left = Math.Max(Points(40), SurfaceSize.X * 0.058);
         var bottom = Math.Max(Points(96), SurfaceSize.Y * 0.13);
         // The words' own width (the Mac's CappedWidth: a short title's card hugs its words).
-        var contentWidth = Math.Max(unit * (compact ? 0.7 : 1.0), Math.Max(titleInk.Box.X, Math.Max(readingInk?.Box.X ?? 0,
-            Math.Max(artistInk?.Box.X ?? 0, albumInk?.Box.X ?? 0))));
+        var contentWidth = Math.Max(titleInk.Box.X, Math.Max(readingInk?.Box.X ?? 0,
+            Math.Max(artistInk?.Box.X ?? 0, albumInk?.Box.X ?? 0)));
         if (floating)
         {
             // Centred in the window: the block (with its cover) across, the card up and down.
@@ -354,22 +354,28 @@ internal abstract partial class LyricCompositionLayer
             left = (SurfaceSize.X - block) / 2;
             bottom = (SurfaceSize.Y - height) / 2;
         }
-        Ink? coverShadow = null;
+        Ink? coverShadow = null, coverGlow = null;
         if (key.Cover)
         {
             coverShadow = kit.BakeTile(new Vector2((float)side, (float)side), (float)(side * 0.07), Vector4.One, 1,
                                        new ShadowSpec(0.45f, (float)(side * 0.08 * 0.5), (float)(side * 0.03)));
+            // Only its glow is drawn: the tile itself is clear.
+            coverGlow = kit.BakeTile(new Vector2((float)side, (float)side), (float)(side * 0.07), Vector4.Zero, 0.5f,
+                                     new ShadowSpec((float)(0.55 * glow * key.Accent.W), (float)(side * 0.22 * 0.5), 0, accent));
         }
         return new OpeningCard(key)
         {
             Unit = unit,
             Title = titleInk,
+            TitleGlows = titleGlows,
             Reading = readingInk,
+            ReadingGlows = readingGlows,
             Artist = artistInk,
-            ArtistEdges = edges,
-            ArtistSize = artistSize,
+            ArtistGlows = artistGlows,
             Album = albumInk,
+            AlbumGlows = albumGlows,
             CoverShadow = coverShadow,
+            CoverGlow = coverGlow,
             Cover = key.Cover,
             Side = side,
             Left = (float)left,
@@ -378,19 +384,16 @@ internal abstract partial class LyricCompositionLayer
             Centred = floating && !key.Cover,
             ContentWidth = (float)contentWidth,
             CoverTop = coverTop,
-            RuleWidth = unit * (compact ? 0.7 : 1.0),
-            RuleHeight = ruleHeight,
             TitleTop = titleTop,
             ReadingTop = readingY,
             ArtistTop = artistY,
             AlbumTop = albumY,
-            Accent = key.Accent,
         };
     }
 
     /// <summary>The title in the lyric typeface, bold, wrapped to the column in at most two lines (set smaller if it needs more).</summary>
     private static Ink BakeTitle(TextKit kit, string title, double size, double columnWidth, bool rightToLeft, Vector4 colour,
-                                 ShadowSpec shadow)
+                                 ShadowSpec shadow, ReadOnlySpan<ShadowSpec> glows, out Ink[]? glowInks)
     {
         var locale = TextKit.LocaleFor(title);
         var scale = 1.0;
@@ -405,6 +408,7 @@ internal abstract partial class LyricCompositionLayer
                 {
                     // Set flush with the card's left edge, whatever the script.
                     layout.TextAlignment = rightToLeft ? TextAlignment.Trailing : TextAlignment.Leading;
+                    glowInks = GlowInks(kit, layout, glows);
                     return kit.Bake(layout, colour, 1, shadow);
                 }
             }
@@ -418,11 +422,10 @@ internal abstract partial class LyricCompositionLayer
 
     /// <summary>
     /// One line (reading, artist, album) with <paramref name="tracking"/> (a share of its size) after each letter,
-    /// set smaller (down to 60%) rather than past the column. With <paramref name="clusters"/>, where each letter's
-    /// stretch begins along the line, so the tracking can be animated.
+    /// set smaller (down to 60%) rather than past the column, and its glows.
     /// </summary>
     private static Ink BakeLine(TextKit kit, string text, Face face, double size, double columnWidth, double tracking, Vector4 colour,
-                                ShadowSpec shadow, out float[]? edges, bool clusters = false)
+                                ShadowSpec shadow, ReadOnlySpan<ShadowSpec> glows, out Ink[]? glowInks)
     {
         var locale = TextKit.LocaleFor(text);
         var rightToLeft = ScriptDirection.IsRightToLeft(text);
@@ -444,14 +447,7 @@ internal abstract partial class LyricCompositionLayer
                     scale = Math.Max(0.6, columnWidth / width);
                     continue;
                 }
-                edges = null;
-                if (clusters)
-                {
-                    var metrics = new ClusterMetrics[Math.Max(1, text.Length)];
-                    layout.GetClusterMetrics(metrics, out var count);
-                    edges = new float[count + 1];
-                    for (var i = 0; i < count; i++) edges[i + 1] = edges[i] + metrics[i].Width;
-                }
+                glowInks = GlowInks(kit, layout, glows);
                 return kit.Bake(layout, colour, 1, shadow);
             }
             finally
@@ -459,6 +455,22 @@ internal abstract partial class LyricCompositionLayer
                 layout.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Glows of a laid-out line, baked once with the card: each only a soft image of the text in the glow's colour (the
+    /// text itself is clear), at half resolution, drawn with <see cref="Ink.DrawShadow"/>. None when no glow shows.
+    /// </summary>
+    private static Ink[]? GlowInks(TextKit kit, IDWriteTextLayout layout, ReadOnlySpan<ShadowSpec> glows)
+    {
+        var count = 0;
+        foreach (var glow in glows) if (glow.Alpha > 0.004f) count++;
+        if (count == 0) return null;
+        var result = new Ink[count];
+        var k = 0;
+        foreach (var glow in glows)
+            if (glow.Alpha > 0.004f) result[k++] = kit.Bake(layout, Vector4.Zero, 0.5f, glow);
+        return result;
     }
 
     /// <summary>The cover as a Direct2D bitmap and brush, made once per cover (never per frame).</summary>
@@ -537,11 +549,15 @@ internal abstract partial class LyricCompositionLayer
         public required Ink Title { get; init; }
         public Ink? Reading { get; init; }
         public Ink? Artist { get; init; }
-        /// <summary>Where each letter of the artist begins along its line (and where the last ends), layout pixels.</summary>
-        public float[]? ArtistEdges { get; init; }
-        public double ArtistSize { get; init; }
         public Ink? Album { get; init; }
+        /// <summary>Each line's album-colour glows (the wide bloom, then the tight halo); null for none.</summary>
+        public Ink[]? TitleGlows { get; init; }
+        public Ink[]? ReadingGlows { get; init; }
+        public Ink[]? ArtistGlows { get; init; }
+        public Ink[]? AlbumGlows { get; init; }
         public Ink? CoverShadow { get; init; }
+        /// <summary>The cover's album-colour glow (a clear tile with a coloured soft image).</summary>
+        public Ink? CoverGlow { get; init; }
         public bool Cover { get; init; }
         public double Side { get; init; }
         /// <summary>The card's left edge and top.</summary>
@@ -551,17 +567,14 @@ internal abstract partial class LyricCompositionLayer
         public float ColumnLeft { get; init; }
         /// <summary>Centred in the floating window without a cover: each line under the column's middle.</summary>
         public bool Centred { get; init; }
-        /// <summary>The widest line (or the rule), pixels.</summary>
+        /// <summary>The widest line, pixels.</summary>
         public float ContentWidth { get; init; }
         // Each piece's top, from the card's top.
         public double CoverTop { get; init; }
-        public double RuleWidth { get; init; }
-        public double RuleHeight { get; init; }
         public double TitleTop { get; init; }
         public double ReadingTop { get; init; }
         public double ArtistTop { get; init; }
         public double AlbumTop { get; init; }
-        public Vector4 Accent { get; init; }
 
         public void Dispose()
         {
@@ -570,6 +583,10 @@ internal abstract partial class LyricCompositionLayer
             Artist?.Dispose();
             Album?.Dispose();
             CoverShadow?.Dispose();
+            CoverGlow?.Dispose();
+            foreach (var glows in new[] { TitleGlows, ReadingGlows, ArtistGlows, AlbumGlows })
+                if (glows is not null)
+                    foreach (var glow in glows) glow.Dispose();
         }
     }
 }
