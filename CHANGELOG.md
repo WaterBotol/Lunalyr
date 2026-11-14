@@ -12,6 +12,8 @@ Removed, Fixed or Security. Several branches may add entries at the same time.
 When merging, keep every entry and combine duplicate headings.
 -->
 
+## [2.1.0] - 2026-11-14
+
 ### Added
 - **New Settings and menu-bar design ("On the picture").** Settings opens on a large live picture of your desktop: choose Wallpaper, Lyric style or Animated covers above it, or click the wallpaper or the lyric line on it, and the column beside it shows only that thing's settings. Wallpaper types and the 15 lyric layouts are now pictures you click, typefaces are shown in their own face, and dragging the handles around the lyric line sets Lyric size. With nothing playing the picture shows a sample, marked as one; with lyrics floating it shows them over other apps. The other pages are plain lists without boxes, and Timing & sources puts this song's tools apart from the settings for every song. Every setting is where search finds it, with the same keys as before.
 - **Looks:** Matched, Quiet, Night drive, Poster, Star chart and Collage each set the wallpaper type, layout, typeface, entrance and highlight together; change any of them and the Look shows as edited. Save as Look… keeps your own, which you can rename or delete. Choose them in Settings or in the menu-bar panel.
@@ -26,11 +28,9 @@ When merging, keep every entry and combine duplicate headings.
 - Sung words are no longer underlined.
 - The song-start title card glows softly in the album's colour, and the short bar above the title is gone.
 - Torque and Fable are redesigned around phrases. Torque is a turning column of heavy extruded type: each phrase is one tipped face, the column turns a quarter to the next face as it is sung, the phrase's main word is wrung into place with a punch, other words twist in less and small words simply appear, quick runs rise together and held words are wrung tighter; nothing sways once landed. Fable sets each line as a storybook page, one phrase a row, in the line's shape (arc, stair, wave or block): main words pop up or drop in, other words hop into place, small and held words are written in, and long lines turn the page by phrase. Fable no longer draws stars, brackets, rings, tiles or underlines.
-
 - Portal keeps its pill and burst, and now keeps up with fast songs: every word shows on its sung time, a quick run of words shares one burst, and pills never stack or get pushed off the stage. A word set in syllables (beau·ti·ful) or an unspaced Japanese or Chinese line is one pill per word. The pill varies its shape from word to word, and its symbol now means something: a heart for "love", a house for "home", a phone for "call"; other words get an occasional ornament, never the same one twice in a row.
 - Scattered, Editorial, Constellation, Constellation + Editorial and Echo each have their own composition now: one focal word per line set larger, Scattered's rows step loose of each other, Editorial sets a small kicker over a headline word in the second face on a fixed left edge, Constellation spreads its stars wider apart with visible links, Constellation + Editorial hangs its satellites around a central word, and Echo's repeats recede in clear steps above the line and reflect below it.
 - Spoken, Cascade and Cutout: words already sung step back so the sung word leads; Cascade is a steady flush column with clearer large and small sizes; Cutout's labels get more room, scale with the type and stay clear of the top of the stage.
-- Mosaic decluttered and fixed for fast songs: no stars, panels or other ornaments, the colour bar is printed with its whole word (never on its own), letter-by-letter words rise onto one baseline, a quick run of words shares one setting instead of piling up, each word is in by the time it is sung, the setting varies with the words (the longest-held one huge) instead of repeating, and glued syllables are always set as one word.
 - Broadside builds its line centred, keeps little words as labels riding their big word, and fades words out whole inside a 5% margin instead of cutting them at the edge; a big word is always in view.
 - The desktop player looks calmer: the album's colour is one flat tint instead of three layered gradients with a shining rim, borders are gone (they come back with Increase Contrast), labels are in sentence case ("Apple Music", "Queue", "Library") instead of spaced capitals, type uses three weights, small grey text is easier to read on bright wallpapers (the card's deep album shade is a little darker), and presses and the record settle without bouncing. Everything works as before. Section headers in the menu-bar panel and the Settings sidebar, and the artist on the song's opening title, are no longer in capitals. A design guide for the whole interface is in docs/DESIGN.md.
 - Onboarding is reworked: it opens on the glass logo over the whole window (click or press Return to skip), shows short recordings of the real desktop, readings and floating lyrics, and has shorter copy, every title in the same place, the lyric layouts to pick from live beside the wallpaper, and two new steps, Music videos (fill the screen or show the whole video, and whether to search YouTube, off by default) and Extras (the desktop player, floating lyrics and the Discord status, off by default). It asks for player access exactly as before.
@@ -663,7 +663,8 @@ Development build 4; not published. Date not recorded.
 
 Earlier history belongs to upstream Verso; see [docs/upstream](docs/upstream/README.md).
 
-[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/WaterBotol/Lunalyr/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.1.0
 [2.0.2]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.2
 [2.0.1]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.1
 [2.0.0]: https://github.com/WaterBotol/Lunalyr/releases/tag/v2.0.0
