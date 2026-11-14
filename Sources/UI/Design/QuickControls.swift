@@ -117,7 +117,7 @@ struct WallpaperModeGrid: View {
 
 private struct ModeTile: View {
     let mode: Settings.BackgroundMode
-    /// A wide tile lays its symbol beside the name.
+    /// A tile in the second row: symbol beside the name where it fits.
     let wide: Bool
     let selected: Bool
     /// Power saving draws this instead of the chosen type.
@@ -130,8 +130,8 @@ private struct ModeTile: View {
             content
                 .foregroundStyle(selected ? Color.white : Color.primary)
                 .frame(maxWidth: .infinity, minHeight: wide ? 34 : 50)
-                .padding(.horizontal, wide ? 10 : 2)
-                .styledSurface(radius: LunalyrDesign.Radius.card, selected: selected)
+                .padding(.horizontal, LunalyrDesign.Spacing.xSmall)
+                .styledSurface(radius: LunalyrDesign.Radius.card, selected: selected, recessed: true)
                 .overlay(alignment: .topTrailing) {
                     if standsIn {
                         Image(systemName: "leaf.fill")
@@ -153,22 +153,33 @@ private struct ModeTile: View {
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
+    /// A wide tile lays its symbol beside the name where the whole name
+    /// fits, and stacks them like the small tiles where it doesn't (the
+    /// narrow menu-bar panel), so a name never truncates ("Your wal…").
     @ViewBuilder private var content: some View {
         if wide {
-            HStack(spacing: 6) {
-                Image(systemName: mode.symbol).font(.system(size: 13, weight: .medium))
-                Text(mode.shortTitle).font(.callout).lineLimit(1).minimumScaleFactor(0.85)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    Image(systemName: mode.symbol).font(.system(size: 13, weight: .medium))
+                    Text(mode.shortTitle).font(.callout).lineLimit(1).fixedSize()
+                }
+                stacked
+                    .padding(.vertical, LunalyrDesign.Spacing.small)
             }
         } else {
-            VStack(spacing: 4) {
-                Image(systemName: mode.symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(height: 18)
-                Text(mode.shortTitle)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+            stacked
+        }
+    }
+
+    private var stacked: some View {
+        VStack(spacing: LunalyrDesign.Spacing.xSmall) {
+            Image(systemName: mode.symbol)
+                .font(.system(size: 15, weight: .medium))
+                .frame(height: 18)
+            Text(mode.shortTitle)
+                .font(.caption)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 }
@@ -214,7 +225,7 @@ struct ToggleTile: View {
         Button(action: action) {
             VStack(spacing: 5) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(isOn ? Color.white : Color.primary)
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(isOn ? AnyShapeStyle(Color.lunalyrAccent) : AnyShapeStyle(.quaternary)))
@@ -224,8 +235,7 @@ struct ToggleTile: View {
                     .minimumScaleFactor(0.8)
                 if let detail {
                     Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .lunalyrText(.footnote)
                         .lineLimit(1)
                 }
             }

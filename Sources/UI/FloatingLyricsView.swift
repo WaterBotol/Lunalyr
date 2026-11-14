@@ -115,15 +115,14 @@ struct FloatingLyricsBackdrop: View {
             if reduceTransparency {
                 RoundedRectangle(cornerRadius: min(22, size.height * 0.2), style: .continuous)
                     .fill(Color.black.opacity(0.86))
-                    .padding(4)
+                    .padding(LunalyrDesign.Spacing.xSmall)
             } else if strength > 0.01 {
                 // A plain fill under two gradient masks: soft on every
                 // side, no blur to redraw while the words above animate.
                 Rectangle()
                     .fill(Color.black.opacity(FloatingBackdrop.maximumShade * min(1, strength)))
-                    .mask(LinearGradient(stops: Self.fade(edge: 0.22),
-                                         startPoint: .leading, endPoint: .trailing))
-                    .mask(LinearGradient(stops: Self.fade(edge: 0.3), startPoint: .top, endPoint: .bottom))
+                    .mask { LinearGradient(stops: Self.fade(edge: 0.22), startPoint: .leading, endPoint: .trailing) }
+                    .mask { LinearGradient(stops: Self.fade(edge: 0.3), startPoint: .top, endPoint: .bottom) }
             }
         }
         .allowsHitTesting(false)
@@ -137,58 +136,69 @@ struct FloatingLyricsBackdrop: View {
     }
 }
 
-/// Edit position: an outline, a hint, Done, and a grip in the corner. The
-/// whole window moves with a drag; the grip resizes it.
+/// Edit position: the area lit with the card's veil and a focus-ring edge, a
+/// hint, Done, and a grip in the corner. The whole window moves with a drag;
+/// the grip resizes it. It sits on the desktop, so it draws in the player's
+/// white ink rather than the windows' violet.
 struct FloatingEditChrome: View {
+    private typealias P = LunalyrDesign.Player
+
     /// Nothing playing: say where the lyrics will be.
     let placeholder: Bool
     let onDrag: (_ resizing: Bool, _ ended: Bool) -> Void
     let onDone: () -> Void
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var look: PlayerLook {
+        PlayerLook(reduceMotion: reduceMotion, increaseContrast: contrast == .increased)
+    }
 
     var body: some View {
+        let area = RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card)
         ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.black.opacity(0.18))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.lunalyrAccent, style: StrokeStyle(lineWidth: 2, dash: [7, 5])))
+            area
+                .fill(Color.black.opacity(P.Fill.veil))
+                .strokeBorder(P.Line.focus(look), lineWidth: P.Line.focusWidth)
                 .contentShape(Rectangle())
                 .gesture(drag(resizing: false))
             if placeholder {
                 Text("Lyrics appear here")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .shadow(color: .black.opacity(0.6), radius: 4)
+                    .font(P.TypeScale.title)
+                    .foregroundStyle(P.Ink.secondary.color(look))
+                    .shadow(color: P.Shadow.coverColor, radius: P.Shadow.coverRadius, y: P.Shadow.coverY)
                     .allowsHitTesting(false)
             }
             VStack {
-                HStack(spacing: 8) {
+                HStack(spacing: LunalyrDesign.Spacing.small) {
                     Label("Drag to move, corner to resize", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                        .font(P.TypeScale.note)
+                        .foregroundStyle(P.Ink.primary.color(look))
+                        .padding(.horizontal, LunalyrDesign.Spacing.medium)
+                        .padding(.vertical, LunalyrDesign.Spacing.xSmall)
+                        .background(Color.black.opacity(FloatingBackdrop.maximumShade), in: Capsule())
+                        .overlay { Capsule().strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width) }
                         .allowsHitTesting(false)
                     Spacer(minLength: 0)
                     Button("Done", action: onDone)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                        .buttonStyle(FloatingDoneButtonStyle(look: look))
                         .help("Locks the floating lyrics in place; clicks pass through them again")
                 }
                 Spacer(minLength: 0)
                 HStack {
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(Color.lunalyrAccent))
-                        .contentShape(Rectangle().inset(by: -6))
+                        .font(P.Glyph.icon)
+                        .foregroundStyle(P.Ink.primary.color(look))
+                        .frame(width: P.Glyph.button, height: P.Glyph.button)
+                        .background(Color.black.opacity(FloatingBackdrop.maximumShade), in: Circle())
+                        .overlay { Circle().strokeBorder(P.Line.hairline(look), lineWidth: P.Line.width) }
+                        .contentShape(Rectangle().inset(by: -LunalyrDesign.Spacing.xSmall))
                         .gesture(drag(resizing: true))
                         .accessibilityLabel("Resize")
                 }
             }
-            .padding(8)
+            .padding(LunalyrDesign.Spacing.small)
         }
     }
 
@@ -198,5 +208,26 @@ struct FloatingEditChrome: View {
         DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .onChanged { _ in onDrag(resizing, false) }
             .onEnded { _ in onDrag(resizing, true) }
+    }
+}
+
+/// Done in edit position: a white pill with black type, like the player's
+/// play disc, sinking a little when pressed (no overshoot; still under
+/// Reduce Motion).
+private struct FloatingDoneButtonStyle: ButtonStyle {
+    private typealias P = LunalyrDesign.Player
+    let look: PlayerLook
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed && !look.reduceMotion
+        configuration.label
+            .font(P.TypeScale.rowTitle)
+            .foregroundStyle(.black)
+            .padding(.horizontal, LunalyrDesign.Spacing.medium)
+            .frame(minHeight: LunalyrDesign.Size.minimumHitTarget)
+            .background(.white, in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(pressed ? P.Motion.pressScale : 1)
+            .animation(pressed ? P.Motion.press : P.Motion.release, value: pressed)
     }
 }

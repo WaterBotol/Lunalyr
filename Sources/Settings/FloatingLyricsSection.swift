@@ -114,7 +114,7 @@ struct FloatingLocationPicker: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color.primary.opacity(0.06))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1))
+                        .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
                 VStack(spacing: 0) {
                     // The menu bar and the Dock, which the presets keep clear of.
                     UnevenRoundedRectangle(topLeadingRadius: 8, topTrailingRadius: 8, style: .continuous)
@@ -143,7 +143,7 @@ struct FloatingLocationPicker: View {
                 placement = .custom
             } label: {
                 Label("Custom", systemImage: placement == .custom ? "hand.draw.fill" : "hand.draw")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(Capsule().fill(placement == .custom ? Color.lunalyrAccent : Color.primary.opacity(0.1)))
@@ -166,7 +166,7 @@ struct FloatingLocationPicker: View {
                     .fill(selected ? Color.lunalyrAccent : Color.primary.opacity(0.22))
                     .frame(width: 50, height: 14)
                     .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(selected ? 0 : 0.15), lineWidth: 1))
+                        .strokeBorder(selected ? Color.clear : Color.lunalyrContrastBorder, lineWidth: 1))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }

@@ -141,8 +141,9 @@ extension Color {
 extension View {
     /// Raises this view as a control or card in the chosen look. Selected
     /// surfaces are the violet accent in both looks.
-    func styledSurface(radius: CGFloat = LunalyrDesign.Radius.card, selected: Bool = false) -> some View {
-        modifier(ThemedSurface(radius: radius, selected: selected, state: nil, isCard: true))
+    func styledSurface(radius: CGFloat = LunalyrDesign.Radius.card, selected: Bool = false,
+                       recessed: Bool = false) -> some View {
+        modifier(ThemedSurface(radius: radius, selected: selected, state: nil, isCard: true, recessed: recessed))
     }
 
     /// Paints the window or panel with the chosen look's canvas.
@@ -183,8 +184,10 @@ struct SettingsStylePicker: View {
                     }
                     .padding(LunalyrDesign.Spacing.medium)
                     .frame(maxWidth: .infinity)
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(selected ? Color.lunalyrAccentText : Color.primary.opacity(0.14), lineWidth: selected ? 2.5 : 1))
+                    // A fill, not a border, holds each option; the accent ring marks the chosen one.
+                    .background(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous).fill(.quinary))
+                    .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
+                        .strokeBorder(selected ? Color.lunalyrAccentText : Color.lunalyrContrastBorder, lineWidth: 2))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

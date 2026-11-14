@@ -469,7 +469,7 @@ struct LyricTapSyncView: View {
         .animation(animation(Motion.quick), value: session.phase)
         .padding(LunalyrDesign.Spacing.large)
         .frame(width: LyricTapPanel.size.width, height: LyricTapPanel.size.height)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous))
         .onHover { controller.pointerHovering($0) }
         .onChange(of: session.taps.count) { _, count in
             guard count > 0, controller.session.isListening else { return }

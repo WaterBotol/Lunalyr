@@ -44,7 +44,7 @@ struct QuickToggle: View {
         Button(action: action) {
             VStack(spacing: LunalyrDesign.Spacing.xSmall) {
                 Image(systemName: symbol)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .medium))
                     .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace.downUp))
                     .foregroundStyle(isOn ? Color.white : Color.primary)
                     .frame(width: Self.diameter, height: Self.diameter)

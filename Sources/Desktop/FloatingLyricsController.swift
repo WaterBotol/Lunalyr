@@ -177,12 +177,10 @@ final class FloatingLyricsController {
             done?()
             return
         }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.25
-            panel.animator().alphaValue = alpha
-        }, completionHandler: {
+        // Eases out arriving and in leaving, from the alpha shown now.
+        LunalyrDesign.Motion.CA.fade(panel, to: alpha, duration: LunalyrDesign.Motion.CA.standard) {
             MainActor.assumeIsolated { done?() }
-        })
+        }
     }
 
     /// Puts the panel where its placement says on the chosen display.
