@@ -335,6 +335,20 @@ public readonly struct FrameContext
     /// A background's text backing then stays away, as there is nothing to back.
     /// </summary>
     public bool LyricsElsewhere { get; init; }
+
+    /// <summary>
+    /// The luminance measured behind the lyric stage by the background drawn under it (an imported picture, "Your
+    /// wallpaper"), under its scrim and before the text backing; null when the background doesn't measure. The lyric
+    /// layer turns dark on it (dark lyrics).
+    /// </summary>
+    public double? StageUnbacked { get; init; }
+}
+
+/// <summary>A background that measures how bright it is behind the lyric stage (dark lyrics' switch).</summary>
+public interface IMeasuredStage
+{
+    /// <summary>Under its scrim, before the text backing; null until measured.</summary>
+    double? StageUnbacked { get; }
 }
 
 /// <summary>

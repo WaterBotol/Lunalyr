@@ -24,8 +24,47 @@ public sealed class DesktopLayerFactory(BackgroundOptions? options = null, Logge
 /// playing the desktop is left as it is (the Mac's caption). The backdrop's luminance is not known (it may be a
 /// wallpaper app), so the automatic backing assumes a middling one: <see cref="AssumedLuminance"/>.
 /// </summary>
-public sealed class DesktopLayer : IRenderLayer, ISeeThroughLayer
+public sealed class DesktopLayer : IRenderLayer, ISeeThroughLayer, IMeasuredStage
 {
+    // ---- Measuring Windows' own wallpaper picture (dark lyrics, 15 Nov 2026) ----
+
+    /// <summary>How often the wallpaper file is looked at for a change, seconds.</summary>
+    private const double CheckEvery = 10;
+
+    private double _nextCheck = double.NegativeInfinity;
+    private (string Path, DateTime Written)? _measuredFile;
+    private Task<Core.Colour.CoverArt?>? _decoding;
+    private double? _measured;
+    private Vector2 _size;
+
+    /// <summary>The measured brightness behind the stage (nothing is laid over it but the backing), or null unknown.</summary>
+    public double? StageUnbacked => _measured;
+
+    /// <summary>Looks at the wallpaper file now and then; a new picture is decoded small, off the render thread, and measured.</summary>
+    private void Measure(double now)
+    {
+        if (_decoding is { IsCompleted: true } done)
+        {
+            _decoding = null;
+            var picture = done.IsCompletedSuccessfully ? done.Result : null;
+            _measured = picture is null ? null
+                : Core.Colour.PictureLegibility.StageLuminance(picture.Pixels, picture.Width, picture.Height, _size.X, _size.Y,
+                                                               Core.Colour.WallpaperPlacement.Fill);
+            if (_measured is { } value) _log.Render.Info($"Your wallpaper: {value:0.00} luminance behind the lyrics.");
+        }
+        if (now < _nextCheck || _decoding is not null) return;
+        _nextCheck = now + CheckEvery;
+        var file = Platform.Wallpaper.DesktopWallpaperFile.Current();
+        if (file == _measuredFile) return;
+        _measuredFile = file;
+        if (file is not { } current)
+        {
+            _measured = null;
+            return;
+        }
+        _decoding = Platform.Wallpaper.WallpaperPicture.DecodeAsync(current.Path, maxSide: 256);
+    }
+
     /// <summary>
     /// The backdrop luminance the automatic backing is worked out for. Windows' wallpaper may be a picture, a slideshow,
     /// Spotlight or a wallpaper app drawing live, none of which Lunalyr reads, so it takes a light-middling desktop:
@@ -50,19 +89,29 @@ public sealed class DesktopLayer : IRenderLayer, ISeeThroughLayer
     public void CreateResources(ID2D1DeviceContext dc, IDWriteFactory dwrite, Vector2 size, float scale)
     {
         _shade.CreateResources(dc, size, scale);
+        _size = size;
+        _measuredFile = null; // measured again for this size
+        _nextCheck = double.NegativeInfinity;
         _ready = true;
         _failed = false;
     }
 
-    public void Resize(Vector2 size, float scale) => _shade.Resize(size, scale);
+    public void Resize(Vector2 size, float scale)
+    {
+        _shade.Resize(size, scale);
+        _size = size;
+        _measuredFile = null;
+        _nextCheck = double.NegativeInfinity;
+    }
 
     public void Render(in FrameContext frame)
     {
         if (!_ready || _failed) return;
         _lastNow = frame.WallSeconds;
+        Measure(frame.WallSeconds);
         try
         {
-            _shade.Draw(frame, AssumedLuminance, scrim: false, grain: false);
+            _shade.Draw(frame, _measured ?? AssumedLuminance, scrim: false, grain: false);
         }
         catch (SharpGenException ex)
         {

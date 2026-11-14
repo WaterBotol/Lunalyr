@@ -347,7 +347,11 @@ public sealed partial class RenderEngine
                 if (d.Opacity > 0) DrawLayer(s, d.Layer, frame, d.Opacity);
                 else if (d.Layer.Layer is IFirstFrameLayer { HasFirstFrame: false }) DrawLayer(s, d.Layer, frame, 0.001);
             var lyricOpacity = LyricFocusOpacity * LyricsShownPresence(now);
-            if (s.Lyric is not null && lyricOpacity > 0.001) DrawLayer(s, s.Lyric, frame, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
+            // Dark lyrics: the background in front (the one fading in, or the only one) says how bright it measured.
+            double? measured = null;
+            if (s.Backgrounds is { } backgrounds && backgrounds.Current.Layer is IMeasuredStage stage) measured = stage.StageUnbacked;
+            if (s.Lyric is not null && lyricOpacity > 0.001)
+                DrawLayer(s, s.Lyric, measured is null ? frame : frame with { StageUnbacked = measured }, lyricOpacity >= 0.999 ? 1 : lyricOpacity);
         }
         var result = dc.EndDraw();
         if (result.Failure)

@@ -36,8 +36,16 @@ public sealed class CustomLayerFactory(string path, WallpaperPlacement placement
 }
 
 /// <summary>What the picture and video layers share: black beneath, the placed frame, then the scrim and backing.</summary>
-public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer
+public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer, IMeasuredStage
 {
+    /// <summary>Whether <see cref="Luminance"/> was measured from the picture (else it is a guess).</summary>
+    private protected bool Measured;
+
+    private double? _unbacked;
+
+    /// <summary>The measured luminance behind the stage under the scrim, before the backing (dark lyrics' switch); null unmeasured.</summary>
+    public double? StageUnbacked => Measured ? _unbacked : null;
+
     private protected readonly WallpaperPlacement Placement;
     private protected readonly Logger Log;
     private protected string Path;
@@ -93,6 +101,8 @@ public abstract class PlacedLayer : IRenderLayer, IFirstFrameLayer
             Fail(ex);
         }
         _shade.Draw(frame, Luminance, scrim: DrawsScrim, grain: false, stageShade: StageShade(frame.Scene));
+        var scrim = StageShade(frame.Scene) ?? (DrawsScrim ? WallpaperShade.ScrimAtStage(Darkening(frame.Scene)) : 0);
+        _unbacked = Core.Colour.LyricLegibility.Darkened(Luminance, scrim);
     }
 
     private protected abstract void DrawContent(in FrameContext frame);
@@ -189,7 +199,9 @@ public sealed class PictureLayer : PlacedLayer
     /// <summary>The picture drawn once where it lands on the surface, scaled smoothly.</summary>
     private unsafe ID2D1Bitmap1 Place(ID2D1DeviceContext dc, CoverArt picture)
     {
-        Luminance = PictureLegibility.StageLuminance(picture.Pixels, picture.Width, picture.Height, Size.X, Size.Y, Placement) ?? 0.2;
+        var measured = PictureLegibility.StageLuminance(picture.Pixels, picture.Width, picture.Height, Size.X, Size.Y, Placement);
+        Luminance = measured ?? 0.2;
+        Measured = measured is not null;
         int width = Math.Max(1, (int)Size.X), height = Math.Max(1, (int)Size.Y);
         ID2D1Bitmap1 source;
         fixed (byte* pixels = picture.Pixels)

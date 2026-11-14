@@ -270,7 +270,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var saved = dc.Transform;
         try
         {
-            Sync(frame.Scene);
+            Sync(Measured(frame.Scene, frame.StageUnbacked));
             IsAnimating = false;
             var opening = PrepareOpening(frame);
             var time = frame.SongSeconds;
@@ -310,6 +310,23 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         {
             dc.Transform = saved;
         }
+    }
+
+    private (Palette Source, double Step, SceneSnapshot Scene, SceneSnapshot Measured)? _measured;
+
+    /// <summary>
+    /// The scene with the background's measured brightness behind the stage in place of the cover's estimate, in steps
+    /// of 0.05 (so a picture's small changes don't set every line again): dark lyrics then switch on a bright imported
+    /// picture or "Your wallpaper" too. The same scene while nothing is measured.
+    /// </summary>
+    private SceneSnapshot Measured(SceneSnapshot scene, double? unbacked)
+    {
+        if (unbacked is not { } value || !double.IsFinite(value)) return scene;
+        var step = Math.Round(Math.Clamp(value, 0, 1) * 20) / 20;
+        if (_measured is { } m && ReferenceEquals(m.Scene, scene) && m.Step == step) return m.Measured;
+        var measured = scene with { Palette = scene.Palette with { TextUnbacked = step } };
+        _measured = (scene.Palette, step, scene, measured);
+        return measured;
     }
 
     /// <summary>Notices a new scene: new lyrics, readings, style or colours set everything again.</summary>
