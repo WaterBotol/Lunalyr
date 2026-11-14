@@ -365,16 +365,27 @@ public sealed partial class RenderEngine
         {
             MarkLost(gpu, $"Present: 0x{present.Code:X8}, reason 0x{gpu.D3D.DeviceRemovedReason.Code:X8}");
         }
+        else if (present.Failure && IsWindow(s.Window.Hwnd) && ++s.PresentFailures < 3)
+        {
+            // The window is still there (a game switching the display mode or going full screen can leave a swap chain
+            // that no longer presents): a new swap chain, made at the next housekeeping. Before, the surface stayed dead
+            // until something else rebuilt it, which a mode switch never did.
+            _log.Warn($"Present failed on surface {s.Index} (0x{present.Code:X8}); recreating its swap chain");
+            ReleaseGpu(s);
+            return;
+        }
         else if (present.Failure)
         {
-            // Explorer took the window with it: stop drawing here; the host re-attaches.
+            // Explorer took the window with it, or new swap chains keep failing: stop drawing here, and rebuild the windows.
             s.Dead = true;
-            _log.Warn($"Present failed on surface {s.Index} (0x{present.Code:X8}); waiting for re-attach");
-            _host?.RequestVisibilityCheck();
+            s.PresentFailures = 0;
+            _log.Warn($"Present failed on surface {s.Index} (0x{present.Code:X8}); rebuilding the wallpaper windows");
+            _host?.RequestRebuild();
         }
         else
         {
             s.Presented = true;
+            s.PresentFailures = 0;
         }
         s.LastFrameWall = now;
         s.NeedsFrame = false;

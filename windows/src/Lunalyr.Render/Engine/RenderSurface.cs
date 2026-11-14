@@ -60,6 +60,8 @@ internal sealed class RenderSurface(int index, SurfaceWindow window)
     public bool Idle;
     /// <summary>Present failed for a reason other than device loss (the window went away): skipped until the next rebuild.</summary>
     public bool Dead;
+    /// <summary>Presents that failed in a row on a window that still exists (a game changing the display mode, say).</summary>
+    public int PresentFailures;
     public List<CaptureRequest>? Captures;
 
     public double ExpectedIntervalMs => Plan.IsGated ? Plan.GatePeriod * 1000 : Plan.SyncInterval * 1000.0 / Math.Max(1, Window.Monitor.RefreshHz);
