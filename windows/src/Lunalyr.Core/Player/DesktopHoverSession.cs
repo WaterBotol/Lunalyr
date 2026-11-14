@@ -30,8 +30,8 @@ public readonly record struct HoverRect(double Left, double Top, double Right, d
 
 /// <summary>
 /// One display as the hover logic sees it. <paramref name="HotZone"/> is where a reveal may start;
-/// <paramref name="KeepZone"/> is where a shown player stays without lingering (the card and a margin round it, which
-/// can reach past the hot zone on a short screen).
+/// <paramref name="KeepZone"/> is where a shown player stays without lingering. The app makes both from the card
+/// (<see cref="HoverZones"/>): the card plus 24 DIPs to reveal, plus 56 to keep.
 /// </summary>
 public readonly record struct HoverDisplay(long Id, HoverRect Bounds, HoverRect HotZone, HoverRect KeepZone);
 

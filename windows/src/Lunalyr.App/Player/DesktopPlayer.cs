@@ -134,7 +134,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         RefreshLook();
         SchedulePoll(_debugShow ? 100 : (uint)(HoverPolicy.Interval * 1000));
         if (_debug.Count > 0) _log.Info($"Desktop player: debug {string.Join(", ", _debug)}.");
-        _log.Info("Desktop player ready: it comes up where the pointer rests in the middle of the desktop.");
+        _log.Info("Desktop player ready: it comes up where the pointer rests near the card's place on the desktop.");
     }
 
     public nint Hwnd => _surface.Hwnd;
@@ -288,11 +288,10 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             var bounds = new HoverRect(info.Bounds.Left, info.Bounds.Top, info.Bounds.Right, info.Bounds.Bottom);
             var work = new HoverRect(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
             var s = info.Scale;
-            // The hot zone: the resting card's place and a margin round it, in the middle of the work area. The keep
-            // zone: wherever the card is now (it can grow later), and a smaller margin.
-            var rest = work.Centred(PlayerCard.Width * s, PlayerCard.RestHeight * s);
-            var hot = rest.Inflated(56 * s, 40 * s);
-            var keep = work.Centred(PlayerCard.Width * s, _cardHeightDip * s).Inflated(28 * s, 28 * s);
+            // The Mac's card zones (Test Build 88): the card as it is now, centred in the work area where it is drawn,
+            // grown by 24 DIPs to reveal and by 56 to keep it up. A change of height re-reads the displays.
+            var hot = HoverZones.Reveal(work, PlayerCard.Width, _cardHeightDip, s);
+            var keep = HoverZones.Keep(work, PlayerCard.Width, _cardHeightDip, s);
             _displays.Add(new HoverDisplay(id, bounds, hot, keep));
         }
     }
