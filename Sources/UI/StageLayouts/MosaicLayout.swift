@@ -8,11 +8,38 @@ import SwiftUI
 extension StageMotion {
     /// Mosaic: the big setting shrinks to the small one's size by settle 0.7,
     /// then the two cross-fade between 0.7 and 0.95, so the two copies are
-    /// never seen at different sizes.
-    static func mosaicMorph(settle: Double, smallRatio: Double) -> (bigScale: Double, bigOpacity: Double, smallOpacity: Double) {
+    /// never seen at different sizes. `swap`, when given, replaces that
+    /// cross-fade (see `mosaicSwap`).
+    static func mosaicMorph(settle: Double, smallRatio: Double,
+                            swap given: Double? = nil) -> (bigScale: Double, bigOpacity: Double, smallOpacity: Double) {
         let shrink = Easing.smoothstep(settle / 0.7)
-        let swap = Easing.smoothstep((settle - 0.7) / 0.25)
+        let swap = given ?? mosaicSwap(settle: settle)
         return (1 - (1 - smallRatio) * shrink, 1 - swap, swap)
+    }
+
+    /// The cross-fade from the big setting to the small one at `settle`.
+    static func mosaicSwap(settle: Double) -> Double {
+        Easing.smoothstep((settle - 0.7) / 0.25)
+    }
+
+    /// How long the cross-fade takes at least, at the line's pace: by
+    /// settle alone it was over in 2 to 5 frames (3 on a line sung a word
+    /// every 0.15 s), so the word being sung blinked from its colour to the
+    /// stack's dimmer one as it stepped back.
+    static func mosaicSwapSpan(speed: Double) -> Double {
+        0.2 / min(3, max(1, speed)).squareRoot()
+    }
+
+    /// The samples `mosaicSwap` is averaged over, oldest last.
+    static let mosaicSwapSamples = 9
+
+    /// The cross-fade averaged over `settles`, the word's settle now and at
+    /// even steps back over `mosaicSwapSpan`: it starts as before, when the
+    /// big setting has shrunk to the small one's size (so the two are still
+    /// never seen at different sizes), and runs for at least the span.
+    static func mosaicSwap(settles: [Double]) -> Double {
+        guard !settles.isEmpty else { return 0 }
+        return settles.reduce(0) { $0 + mosaicSwap(settle: $1) } / Double(settles.count)
     }
 }
 
@@ -43,10 +70,38 @@ extension StageLyricView {
         unit * 0.85 + (readings ? readingSlot(mosaicSmallSize(unit: unit)) : 0)
     }
 
+    /// Each run's cross-fade from its big setting to its small one
+    /// (`StageMotion.mosaicSwap(settles:)`). Under Reduce Motion the stage
+    /// steps and dissolves between steps, so the plain cross-fade is kept.
+    static func mosaicSwaps(_ runs: [StageRun], at time: Double, speed: Double, seed: Int,
+                            reduceMotion: Bool) -> [Double] {
+        func settles(at moment: Double) -> [Double] {
+            ranks(runs, at: moment, speed: speed, seed: seed, reduceMotion: reduceMotion)
+                .map { glide(min($0, 1.2) / 1.2) }
+        }
+        guard !reduceMotion else { return settles(at: time).map { StageMotion.mosaicSwap(settle: $0) } }
+        let count = StageMotion.mosaicSwapSamples
+        let span = StageMotion.mosaicSwapSpan(speed: speed)
+        let samples = (0..<count).map { settles(at: time - span * Double($0) / Double(count - 1)) }
+        return runs.indices.map { index in StageMotion.mosaicSwap(settles: samples.map { $0[index] }) }
+    }
+
+    /// How strongly a word in the stack is drawn, by its rank: the same
+    /// line as before, `1 - (rank - 1.5) * 0.6` (the word at three quarters
+    /// of it, its reading at all of it, each held to 0...1), gone by rank
+    /// 3.2, with its corners rounded off: clamped hard, a word in a fast
+    /// line, whose rank is still moving there, started to dim at full speed
+    /// (`StageMotion.softUnit`).
+    static func mosaicStackFade(rank: Double) -> (word: Double, reading: Double) {
+        let line = 1 - (rank - 1.5) * 0.6
+        return (StageMotion.softUnit(0.75 * line), StageMotion.softUnit(line))
+    }
+
     fileprivate func mosaic(_ runs: [StageRun], total: Int) -> some View {
         let speed = lineSpeed
         let arrivals = runs.map { arrive($0, speed: speed) }
         let ranks = ranks(runs, speed: speed)
+        let swaps = Self.mosaicSwaps(runs, at: time, speed: speed, seed: seed, reduceMotion: reduceMotion)
         let leaving = leave
         // A word on a tile (Cutout · Highlight) is always the huge kind, which can carry one.
         let kinds = runs.map { tiled($0) ? 0 : Int(chance($0.id, 20) * 3) % 3 }
@@ -75,7 +130,7 @@ extension StageLyricView {
                 let tile = tiled(run)
                 let side: Double = chance(run.id, 23) < 0.5 ? 1 : -1
                 let bigSize: CGFloat = kinds[run.id] == 0 ? 3.0 : kinds[run.id] == 1 ? 2.3 : 2.4
-                let morph = StageMotion.mosaicMorph(settle: settle, smallRatio: 0.6 / bigSize)
+                let morph = StageMotion.mosaicMorph(settle: settle, smallRatio: 0.6 / bigSize, swap: swaps[run.id])
                 ZStack {
                     // The big setting, shrinking and dimming as the next word takes over.
                     Group {
@@ -166,10 +221,10 @@ extension StageLyricView {
                     .opacity(min(1, a * 1.6) * morph.bigOpacity)
                     // The small version it becomes, taking over once the big one has
                     // shrunk to its size.
-                    let fade = max(0, 1 - (rank - 1.5) * 0.6)
+                    let fade = Self.mosaicStackFade(rank: rank)
                     let small = Self.mosaicSmallSize(unit: unit)
-                    withReading(run, size: small, colour: sample.reading.opacity(fade), maxWidth: stage.width * 0.4) {
-                        word(run, sample.rest.opacity(0.75 * fade))
+                    withReading(run, size: small, colour: sample.reading.opacity(fade.reading), maxWidth: stage.width * 0.4) {
+                        word(run, sample.rest.opacity(fade.word))
                             .font(font(small, hero: true, id: run.id))
                             .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
                     }

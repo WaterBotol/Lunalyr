@@ -373,13 +373,39 @@ enum OrganicMotion {
     /// How much the voice is carrying right now, from the timing alone:
     /// dense, quick delivery and long held notes both read as intensity.
     /// A pure function of time, so a seek lands on the same value.
-    static func vocalIntensity(_ words: [LyricsFetcher.Word], at time: Double) -> Double {
+    ///
+    /// Continuous in time: it springs every word's swell and gesture and
+    /// paces the rolling stages, so a step in it jolted the words on stage.
+    /// A held note used to count in full from 0.1 s before its onset to
+    /// 0.3 s after its end and not at all outside that, which snapped the
+    /// word being sung (up to 3% in scale, its place with it) just as it
+    /// handed over to a held note, and again as that note stepped back.
+    /// Each held note now eases in over the 0.2 s before that window and
+    /// out over 0.3 s from 0.15 s after its end; the onsets' sum is taken
+    /// relative to its value at the 2.5 s cut-off, so it reaches 0 there
+    /// instead of dropping by a sliver.
+    ///
+    /// `horizon`: how far ahead `words` is sure to hold every word. A
+    /// rolling stage's window takes a word in only `LyricLayerCache`'s lead
+    /// (at least 1.2 s) before it is sung, so the window's intensity rose by
+    /// a step as each one joined; given the horizon, a word yet to come
+    /// counts in full up to 0.4 s short of it and eases out to nothing at it.
+    static func vocalIntensity(_ words: [LyricsFetcher.Word], at time: Double,
+                               horizon: Double = .infinity) -> Double {
         var onsets = 0.0, held = 0.0
+        let cutoff = exp(-2.5 * 2.5 / 1.2)
         for word in words {
             let distance = abs(word.start - time)
-            if distance < 2.5 { onsets += exp(-distance * distance / 1.2) }
-            if time >= word.start - 0.1, time <= word.end + 0.3 {
-                held = max(held, Easing.smoothstep((word.end - word.start - 0.4) / 1.2))
+            if distance < 2.5 {
+                let ahead = word.start > time && horizon.isFinite
+                    ? 1 - Easing.smoothstep((distance - (horizon - 0.4)) / 0.4) : 1
+                onsets += (exp(-distance * distance / 1.2) - cutoff) * ahead
+            }
+            let gathers = Easing.smoothstep((time - (word.start - 0.3)) / 0.2)
+            let releases = 1 - Easing.smoothstep((time - (word.end + 0.15)) / 0.3)
+            let presence = gathers * releases
+            if presence > 0 {
+                held = max(held, presence * Easing.smoothstep((word.end - word.start - 0.4) / 1.2))
             }
         }
         return min(1, max(0, (onsets - 0.8) / 3.2) * 0.7 + held * 0.45)

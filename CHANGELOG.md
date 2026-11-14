@@ -33,6 +33,9 @@ When merging, keep every entry and combine duplicate headings.
 - Onboarding is reworked: it opens on the glass logo over the whole window (click or press Return to skip), shows short recordings of the real desktop, readings and floating lyrics, and has shorter copy, every title in the same place, the lyric layouts to pick from live beside the wallpaper, and two new steps, Music videos (fill the screen or show the whole video, and whether to search YouTube, off by default) and Extras (the desktop player, floating lyrics and the Discord status, off by default). It asks for player access exactly as before.
 - Hinge redesigned as an open book: each phrase is a page of heavy caps, its main word bursting in huge and swinging open on the spine, small words along the page; pages turn at each phrase, and at the end of the line the book snaps shut on its spine and slides away, handing its motion to the next line. Broadside stays as it was.
 
+### Fixed
+- A word stepping back once it has been sung no longer jumps or snaps. The voice's intensity, which sizes and moves the word being sung in Scattered, Editorial, Constellation, Echo, Spoken, Cascade and Cutout, now eases in and out of a held note instead of switching (the word in front jumped by up to 3% as it handed over to a held note and again as that note stepped back), and no longer steps as a word joins a rolling stage. Spoken, Cascade and Cutout ease their two steps back, and Spoken's sideways fan, so a fast line no longer sets a word off at full speed. Torque's column runs up to speed as it turns to the next phrase (it set off at about 15 degrees in its first frame). Mosaic's word cross-fades into the stack over at least 0.1-0.2 s (it blinked over two to five frames), and Mosaic's stack and Broadside's strip start fading old words gently. The last rolling word's fade no longer drops to 12 or 24 fps for its final quarter second.
+
 ## [2.0.2] - 2026-11-13
 
 ### Fixed

@@ -125,7 +125,9 @@ extension StageLyricView {
         let bigAfter: [Double] = runs.indices.map { index in
             ((anchor[index] + 1)..<max(runs.count, anchor[index] + 1)).filter { !little[$0] }.map { moves[$0] }.reduce(0, +)
         }
-        let keep: [Double] = bigAfter.map { max(0, min(1, 1 - ($0 - 1.6) * 0.9)) }
+        // Rounded corners: clamped hard, a word started to fade at full
+        // speed as the strip moved on.
+        let keep: [Double] = bigAfter.map { StageMotion.softUnit(1 - ($0 - 1.6) * 0.9) }
         // A big word's reading hangs under it, in a slot of known height,
         // so the words themselves stay on one line across the strip.
         let slots: [CGFloat] = runs.map {
