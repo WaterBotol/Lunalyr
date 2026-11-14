@@ -1,32 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Where the lyrics show, at the top of Lyric style: on the desktop or
-/// floating over the apps. The style controls below edit the chosen one's
-/// own style, and this says which.
-@MainActor
-struct LyricSurfaceSection: View {
-    @ObservedObject var options: FloatingLyricsOptions = .shared
-
-    var body: some View {
-        ThemedSection("Show lyrics") {
-            ChoiceSegments("Show lyrics", selection: $options.surface, cases: LyricsSurface.allCases, label: \.title)
-            InspectorCaption(Self.caption(options.surface))
-                .id(options.surface)
-                .transition(.opacity)
-        }
-    }
-
-    static func caption(_ surface: LyricsSurface) -> String {
-        switch surface {
-        case .desktop:
-            return "Editing the Desktop style. The lyrics sit on the wallpaper, under your windows."
-        case .floating:
-            return "Editing the Floating style. The desktop keeps its own and shows no lyrics while they float."
-        }
-    }
-}
-
 /// A short reminder, on pages whose settings belong to a lyric style
 /// (readings, translations), of which style they change.
 struct LyricStyleEditingNote: View {
@@ -39,7 +13,8 @@ struct LyricStyleEditingNote: View {
     }
 }
 
-/// The floating window's own settings: size, shade, place and display.
+/// The floating window's own settings, at the top of the Lyric style
+/// inspector in the Floating view: size, how they sit over apps, and where.
 @MainActor
 struct FloatingLyricsSection: View {
     @ObservedObject var options: FloatingLyricsOptions = .shared
@@ -47,24 +22,37 @@ struct FloatingLyricsSection: View {
     @State private var screens = FloatingDisplayChoice.connected()
 
     var body: some View {
-        ThemedSection("Floating lyrics") {
-            ChoiceSegments("Size", selection: Binding(
+        InspectorTitle(title: "Floating lyrics",
+                       subtitle: "The Floating style. The desktop keeps its own and shows no lyrics while they float.")
+        InspectorSection("Size") {
+            ThemedSegments("Size", selection: Binding(
                 get: { FloatingLyricsOptions.SizePreset(rawValue: options.textSize) },
                 set: { if let preset = $0 { options.textSize = preset.rawValue } }),
-                           cases: FloatingLyricsOptions.SizePreset.allCases.map(Optional.some),
-                           label: { $0?.title ?? "Custom" })
+                           options: FloatingLyricsOptions.SizePreset.allCases.map { (Optional($0), $0.title) })
             ValueSlider("Text size", value: $options.textSize, in: FloatingLyricsOptions.textSizeRange, step: 1,
                         format: { "\(Int($0.rounded())) pt" })
+        }
+        InspectorSection("Over apps") {
             ValueSlider("Shade behind lyrics", value: $options.backdrop, in: 0...1, step: 0.01,
                         format: SettingsFormat.percent)
-            InspectorCaption("A soft shade and shadow keep the words readable over any app.")
+                .help("A soft shade and shadow keep the words readable over any app.")
             Toggle("Fade when the pointer is over them", isOn: $options.fadesUnderPointer)
-            LabeledContent("Place") {
-                FloatingLocationPicker(placement: $options.placement)
+                .toggleStyle(StudioCheckboxStyle())
+        }
+        InspectorSection("Place", value: options.placement.title) {
+            HStack(alignment: .top, spacing: 14) {
+                FloatingPlaceGrid(placement: $options.placement)
+                VStack(alignment: .leading, spacing: 8) {
+                    Button(editing.editing ? "Done" : "Edit position…") {
+                        FloatingLyricsController.shared.toggleEditing()
+                    }
+                    .help(editing.editing ? "Locks the floating lyrics in place"
+                          : "Shows the floating lyrics with handles: drag to move, drag the corner to resize")
+                    Button("Reset size") { options.resetFrames() }
+                        .help("Forgets sizes and places set by hand; the window follows the text size again")
+                }
+                .controlSize(.small)
             }
-            Text(options.placement.title)
-                .lunalyrText(.caption)
-                .accessibilityHidden(true)
             if screens.count > 1 {
                 ChoiceMenu("Display", selection: $options.display,
                            selectedTitle: { key in screens.first { $0.key == key }?.name ?? "Main display" }) {
@@ -72,19 +60,53 @@ struct FloatingLyricsSection: View {
                     ForEach(screens, id: \.key) { Text($0.name).tag($0.key) }
                 }
             }
-            HStack(spacing: LunalyrDesign.Spacing.small) {
-                Button(editing.editing ? "Done" : "Edit position…") {
-                    FloatingLyricsController.shared.toggleEditing()
-                }
-                .help(editing.editing ? "Locks the floating lyrics in place"
-                      : "Shows the floating lyrics with handles: drag to move, drag the corner to resize")
-                Button("Reset size") { options.resetFrames() }
-                    .help("Forgets sizes and places set by hand; the window follows the text size again")
-            }
             InspectorCaption("Clicks pass through the lyrics. Edit position lets you drag them; Done locks them again.")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = FloatingDisplayChoice.connected()
+        }
+    }
+}
+
+/// Place as a small picture of the screen: nine spots in a 3 × 3 grid, the
+/// chosen one lit (none while the place is Custom, set by dragging).
+struct FloatingPlaceGrid: View {
+    @Binding var placement: FloatingPlacement
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { column in
+                        spot(FloatingPlacement.presets.first { $0.cell?.column == column && $0.cell?.row == row })
+                    }
+                }
+            }
+        }
+        .padding(5)
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.studio(.track).opacity(0.5)))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Place")
+        .accessibilityValue(placement.title)
+    }
+
+    @ViewBuilder private func spot(_ preset: FloatingPlacement?) -> some View {
+        if let preset {
+            let chosen = placement == preset
+            Button { placement = preset } label: {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(chosen ? Color.studio(.accent) : Color.studio(.control))
+                    .overlay(RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
+                    .frame(width: 26, height: 15)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(preset.title)
+            .accessibilityLabel(preset.title)
+            .accessibilityAddTraits(chosen ? [.isButton, .isSelected] : .isButton)
+        } else {
+            Color.clear.frame(width: 26, height: 15)
         }
     }
 }

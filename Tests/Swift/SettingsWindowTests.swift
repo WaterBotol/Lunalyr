@@ -33,67 +33,35 @@ final class SettingsWindowTests: XCTestCase {
         XCTAssertLessThanOrEqual(SettingsWindowController.minimumHeight, 550 - 40)
     }
 
-    /// The 13-inch Air's default window: the detail beside a 210-point
-    /// sidebar, the 380-point inspector, a 52-point toolbar and the stage's
-    /// 20-point margins.
-    private let airStage = CGSize(width: 1102 - 210 - 380 - 1 - 40, height: 780 - 52 - 40)
     private let airDesktop = CGSize(width: 1470, height: 956)
 
-    func testThePreviewTakesTheWholeColumnBesideTheInspector() {
+    /// The 13-inch Air's default window (1100 x 720): the canvas between the
+    /// 186-point sidebar and the 286-point inspector draws the picture
+    /// 584 x 380, the desktop's shape, as the spec has it.
+    func testThePictureFillsTheCanvasAtTheDesktopsShape() {
         let aspect = airDesktop.width / airDesktop.height
-        let plan = SettingsStagePlan.make(room: airStage, aspect: aspect, stacked: nil,
-                                          chip: nil, strip: { _ in 40 }, banner: nil)
-        XCTAssertEqual(plan.preview.width, airStage.width, accuracy: 1, "as wide as the column")
-        XCTAssertEqual(plan.preview.width / plan.preview.height, aspect, accuracy: 0.02, "the desktop's shape")
-        XCTAssertLessThanOrEqual(plan.height, airStage.height)
-        XCTAssertFalse(plan.beside)
-        // Larger Preview narrows the inspector to 320 points: a larger picture.
-        let larger = SettingsStagePlan.make(room: CGSize(width: airStage.width + 60, height: airStage.height), aspect: aspect,
-                                            stacked: nil, chip: nil, strip: { _ in 40 }, banner: nil)
-        XCTAssertGreaterThan(larger.preview.width, plan.preview.width)
+        let canvas = CGSize(width: 1100 - 186 - 286, height: 720)
+        let picture = LookCanvas.pictureSize(canvas: canvas, aspect: aspect, choices: 160)
+        XCTAssertEqual(picture.width, 584, accuracy: 1)
+        XCTAssertEqual(picture.width / picture.height, aspect, accuracy: 0.02)
     }
 
-    func testABannerAndChipShrinkThePreviewRatherThanSpillOut() {
+    /// The smallest window (860 x 420): the canvas narrows, and the picture
+    /// shrinks to leave the choices their room rather than spill out.
+    func testTheSmallestWindowShrinksThePictureNotTheChoices() {
         let aspect = airDesktop.width / airDesktop.height
-        // Larger Text: a short window, with the wallpaper paused and Music refused.
-        let room = CGSize(width: 984 - 210 - 380 - 1 - 40, height: 510 - 52 - 40)
-        // The banner wraps taller as it narrows; it keeps the column's width.
-        let banner: (CGFloat) -> CGFloat = { width in 60 + 12_000 / width }
-        let plan = SettingsStagePlan.make(room: room, aspect: aspect, stacked: nil,
-                                          chip: { _ in 26 }, strip: { _ in 40 }, banner: banner)
-        XCTAssertLessThanOrEqual(plan.height, room.height + 1, "everything stays in the column")
-        XCTAssertLessThan(plan.preview.width, room.width, "the preview gives way")
-        XCTAssertGreaterThanOrEqual(plan.preview.width, SettingsStagePlan.minimumPreviewWidth)
-        let expected = 26 + SettingsStagePlan.chipSpacing + plan.preview.height + SettingsStagePlan.spacing * 2 + 40
-            + banner(room.width)
-        XCTAssertEqual(plan.height, expected, accuracy: 0.5, "chip, preview, strip and banner")
-    }
-
-    func testAStackedStageKeepsThePreviewToItsShareOfTheWindow() {
-        let aspect = airDesktop.width / airDesktop.height
-        // A 700 x 700 window: the detail is narrower than the stage and the inspector need side by side.
-        let detail = CGSize(width: 700 - 210, height: 700 - 52)
-        for large in [false, true] {
-            let limits = SettingsStageLimits(detailHeight: detail.height, largePreview: large)
-            XCTAssertEqual(limits.preview, detail.height * (large ? 0.6 : 0.4), accuracy: 0.01)
-            let plan = SettingsStagePlan.make(room: CGSize(width: detail.width - 40, height: 0), aspect: aspect,
-                                              stacked: limits, chip: nil, strip: { _ in 40 }, banner: { _ in 120 })
-            XCTAssertLessThanOrEqual(plan.preview.height, limits.preview + 0.5)
-            XCTAssertLessThanOrEqual(plan.preview.width, detail.width - 40 + 0.5)
-            XCTAssertLessThanOrEqual(plan.height + 40, limits.stage + 0.5, "the inspector keeps a quarter of the window")
-        }
-        // The smallest window puts the song beside the preview.
-        let small = SettingsStagePlan.make(room: CGSize(width: 490 - 40, height: 0), aspect: aspect,
-                                           stacked: SettingsStageLimits(detailHeight: 420, largePreview: false),
-                                           chip: nil, strip: { _ in 72 }, banner: nil)
-        XCTAssertTrue(small.beside)
-        XCTAssertLessThanOrEqual(small.preview.width + SettingsStagePlan.spacing + SettingsStagePlan.besideColumnMinimum, 450)
-        XCTAssertEqual(small.height, small.preview.height, accuracy: 0.5, "the song fits beside the preview's height")
-        // A portrait display is height-bound and centred.
-        let portrait = SettingsStagePlan.make(room: airStage, aspect: 1080.0 / 1920.0, stacked: nil,
-                                              chip: nil, strip: { _ in 40 }, banner: nil)
-        XCTAssertLessThan(portrait.preview.width, airStage.width)
-        XCTAssertLessThanOrEqual(portrait.height, airStage.height + 0.5)
+        let canvas = CGSize(width: SettingsWindowController.minimumWidth - 186 - 286,
+                            height: SettingsWindowController.minimumHeight)
+        let choices: CGFloat = 150
+        let picture = LookCanvas.pictureSize(canvas: canvas, aspect: aspect, choices: choices)
+        XCTAssertLessThanOrEqual(picture.width, canvas.width - 44 + 0.5)
+        let used = LookCanvas.switchBand + picture.height + LookCanvas.stripGap + LookCanvas.stripHeight
+            + 16 + choices + LookCanvas.padding
+        XCTAssertLessThanOrEqual(used, canvas.height + 0.5, "everything stays in the window")
+        XCTAssertEqual(picture.width / picture.height, aspect, accuracy: 0.02)
+        // A portrait display is height-bound too.
+        let portrait = LookCanvas.pictureSize(canvas: CGSize(width: 628, height: 720), aspect: 1080.0 / 1920.0, choices: 160)
+        XCTAssertLessThan(portrait.width, 584)
     }
 
     /// Pages remembered by earlier versions still open, and every place
@@ -114,7 +82,6 @@ final class SettingsWindowTests: XCTestCase {
         XCTAssertEqual(Set(listed), Set(SettingsPage.allCases))
         XCTAssertEqual(listed.count, SettingsPage.allCases.count)
         XCTAssertEqual(listed.last, .about)
-        XCTAssertFalse(SettingsPage.about.showsStage)
     }
 
     /// Opening Settings at a destination (the menu panel's Options…, a

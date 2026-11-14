@@ -1,13 +1,20 @@
 import SwiftUI
 
-/// Lyric style: the layout, the typeface, the text colour, how words enter,
-/// the layouts' own controls, instrumental breaks and remembered styles.
+/// The Lyric style inspector: the Looks, what shows with the lyrics, the
+/// typeface, Lyric size, the colours, how words enter, the layouts' own
+/// controls, instrumental breaks and remembered styles. The layout itself is
+/// chosen on the canvas (`LayoutTileChoices`). In the Floating view the floating
+/// window's own settings come first and the Looks (desktop styles) don't show.
 @MainActor
 struct LyricStylePage: View {
     @Model(\.settings) private var s
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var familyDraft = ""
-    @ObservedObject private var floating = FloatingLyricsOptions.shared
+    @ObservedObject private var floating: FloatingLyricsOptions
+
+    init(floating: FloatingLyricsOptions? = nil) {
+        self.floating = floating ?? .shared
+    }
 
     /// The layout the word controls read from. Match the music saves them
     /// for every layout it picks; Scattered, its general-purpose pick, stands
@@ -16,26 +23,37 @@ struct LyricStylePage: View {
     private var automatic: Bool { s.lyricComposition == nil }
 
     var body: some View {
-        ThemedForm {
-            // Desktop or Floating, and which one's style the rest edits.
-            LyricSurfaceSection()
+        LookInspectorForm {
             if floating.isFloating {
-                FloatingLyricsSection()
+                FloatingLyricsSection(options: floating)
                     .revealRow()
+            } else {
+                LooksSection()
+                    .revealRow()
+                InspectorTitle(title: "Lyric style")
             }
-            layout
+            shownWithLyrics
             typeface
+            // Floating has its own size (Size, above).
+            if !floating.isFloating {
+                ValueSlider("Lyric size", value: $s.lyricScale, in: LyricSizeDrag.range, step: 0.01,
+                            format: SettingsFormat.percent)
+                    .fontWeight(.semibold)
+                    .help("Drag a corner of the line on the picture to change it there too")
+            }
             LyricColourSection()
             wordEntrances
+            layoutNotes
+            InspectorSection("Instrumental breaks") {
+                Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
+                    .toggleStyle(StudioCheckboxStyle())
+            }
             // Match the music can pick either, so both stay reachable there.
             if style.hasConnections || automatic {
                 constellation
             }
             if style == .echo || automatic {
                 echo
-            }
-            ThemedSection("Instrumental breaks") {
-                Toggle("Show three dots during instrumental breaks", isOn: $s.showInterludes)
             }
             LyricStyleMemorySection()
         }
@@ -49,14 +67,12 @@ struct LyricStylePage: View {
         .lunalyrReveal(s.fontChoice)
         .lunalyrReveal(s.googleFontState)
         .lunalyrReveal(EntranceSupport.note(selected: s.arrival(in: style), layout: s.lyricComposition, mix: chosenMix))
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
         .onAppear { familyDraft = s.googleFontFamily }
         .onChange(of: s.googleFontFamily) { _, family in familyDraft = family }
     }
 
     private var constellation: some View {
-        ThemedSection("Constellation") {
+        InspectorSection("Constellation") {
             ValueSlider("Spread", value: $s.constellationSpread, in: 0.4...1.8, step: 0.01,
                         format: SettingsFormat.percent)
             ValueSlider("Links", value: $s.constellationLinkOpacity, in: 0...0.6, step: 0.01,
@@ -70,7 +86,7 @@ struct LyricStylePage: View {
     }
 
     private var echo: some View {
-        ThemedSection("Echo") {
+        InspectorSection("Echo") {
             ValueSlider("Repeats", value: $s.echoStrength, in: 0...1.8, step: 0.01,
                         format: SettingsFormat.percent)
             if automatic {
@@ -89,84 +105,85 @@ struct LyricStylePage: View {
     @AppStorage(OpeningTitle.coverKey) private var showOpeningCover = true
     @ObservedObject private var rotation = LyricLayoutRotation.shared
 
-    private var layout: some View {
-        ThemedSection("Layout") {
-            ChoiceMenu("Layout", selection: $s.lyricComposition, selectedTitle: { $0?.title ?? "Match the music" }) {
-                Text("Match the music").tag(Optional<LyricComposition>.none)
-                LyricCompositionOptions()
-            }
+    /// What the chosen layout does, the rotation's counts (the switch for
+    /// it sits by the layout tiles) and a style remembered for this song.
+    private var layoutNotes: some View {
+        InspectorSection("Layout") {
             InspectorCaption(automatic ? WorkspaceCopy.automaticLayoutDetail : style.detail)
-            if automatic {
-                Group {
-                    Toggle("Change layout every song", isOn: $rotateLayouts)
-                    InspectorCaption("Each new song takes the next layout.", more: "Each new song takes the next layout, skipping ones that don’t suit its energy. Off: the layout follows the song’s energy alone.")
-                    if rotateLayouts {
-                        DisclosureGroup("Layouts in the rotation") {
-                            ForEach(LyricLayoutRotation.order) { layout in
-                                Stepper(value: Binding(get: { rotation.count(for: layout) },
-                                                       set: { rotation.setCount($0, for: layout) }),
-                                        in: 0...LyricLayoutRotation.maximumCount) {
-                                    HStack {
-                                        Text(layout.title)
-                                        Spacer()
-                                        Text(rotation.count(for: layout) == 0 ? "Never"
-                                             : rotation.count(for: layout) == 1 ? "1 song" : "\(rotation.count(for: layout)) songs in a row")
-                                            .lunalyrText(.caption)
-                                    }
-                                }
+            if automatic && rotateLayouts {
+                DisclosureGroup("Layouts in the rotation") {
+                    ForEach(LyricLayoutRotation.order) { layout in
+                        Stepper(value: Binding(get: { rotation.count(for: layout) },
+                                               set: { rotation.setCount($0, for: layout) }),
+                                in: 0...LyricLayoutRotation.maximumCount) {
+                            HStack {
+                                Text(layout.title)
+                                Spacer()
+                                Text(rotationLabel(rotation.count(for: layout)))
+                                    .lunalyrText(.caption)
                             }
-                            InspectorCaption("Songs in a row per layout. 0 leaves one out.", more: "How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
                         }
-                        .revealRow()
                     }
+                    InspectorCaption("Songs in a row per layout. 0 leaves one out.", more: "How many songs in a row each layout gets before the next one. 0 leaves a layout out.")
                 }
                 .revealRow()
             }
             RememberedStyleNote(aspect: .layout)
-            Toggle("Show the song title at the start", isOn: $showOpeningTitle)
-            Toggle("Show the album cover", isOn: $showOpeningCover)
-                .padding(.leading, 20)
-                .disabled(!showOpeningTitle)
-            InspectorCaption("The title and artist appear low on the left as the song begins.", more: "The song’s title, artist and album appear low on the left as a song begins, in the lyrics’ typeface, and leave before the first line is sung. A song that starts singing straight away gets a shorter one, or none.")
-            Toggle("Show credits in the background", isOn: $showCredits)
-            InspectorCaption("Credit lines appear one at a time behind the lyrics.", more: "Lines like “Produced by: …” and “作词 : …” appear one at a time behind the lyrics, at full size, in the same layout as backing vocals.")
-            Toggle("Backing vocals in the background", isOn: $backingLayer)
-            if backingLayer {
-                ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
-                           selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition(rawValue: $0)?.title ?? "The lead’s layout") }) {
-                    Text("The lead’s layout").tag("")
-                    ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
+        }
+    }
+
+    private func rotationLabel(_ count: Int) -> String {
+        if count == 0 { return "Never" }
+        return count == 1 ? "1 song" : "\(count) songs in a row"
+    }
+
+    /// The layers shown with the lyrics: checkboxes, as related options.
+    private var shownWithLyrics: some View {
+        InspectorSection("Shown with the lyrics") {
+            VStack(alignment: .leading, spacing: 7) {
+                Toggle("Show the song title at the start", isOn: $showOpeningTitle)
+                    .help("The title and artist appear low on the left as the song begins, in the lyrics’ typeface, and leave before the first line is sung.")
+                Toggle("Show the album cover", isOn: $showOpeningCover)
+                    .padding(.leading, 23)
+                    .disabled(!showOpeningTitle)
+                Toggle("Show credits in the background", isOn: $showCredits)
+                    .help("Lines like “Produced by: …” appear one at a time behind the lyrics.")
+                Toggle("Backing vocals in the background", isOn: $backingLayer)
+                    .help("Bracketed backing words like (oh oh) sit small and soft behind the lead.")
+                if backingLayer {
+                    ChoiceMenu("Backing vocals animate like", selection: $backingStyle,
+                               selectedTitle: { $0.isEmpty ? "The lead’s layout" : (LyricComposition(rawValue: $0)?.title ?? "The lead’s layout") }) {
+                        Text("The lead’s layout").tag("")
+                        ForEach(BackingVocals.choices) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .padding(.leading, 23)
+                    .revealRow()
                 }
-                .revealRow()
+                Toggle("Add Editorial typography", isOn: $s.editorialTypography)
+                if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
+                    InspectorCaption(note)
+                        .padding(.leading, 23)
+                        .revealRow()
+                }
+                if s.editorialTypography {
+                    ValueSlider("Editorial amount", value: $s.editorialAmount, in: 0...1, step: 0.01,
+                                format: SettingsFormat.percent)
+                        .padding(.leading, 23)
+                        .revealRow()
+                }
             }
-            InspectorCaption("Bracketed backing words sit small and soft behind the lead.", more: "Bracketed backing words like (oh oh) are animated word by word like the lyrics, but small and soft behind the lead, easing in and lingering. Spoken, Cascade and Cutout can’t be used here; they follow Editorial.")
-            Toggle("Add Editorial typography", isOn: $s.editorialTypography)
-            if let note = WorkspaceCopy.editorialNote(layout: s.lyricComposition) {
-                InspectorCaption(note)
-                    .revealRow()
-            }
-            if s.editorialTypography {
-                ValueSlider("Editorial amount", value: $s.editorialAmount, in: 0...1, step: 0.01,
-                            format: SettingsFormat.percent)
-                    .revealRow()
-            }
-            // Floating has its own size (Floating lyrics, above).
-            if !floating.isFloating {
-                ValueSlider("Lyric size", value: $s.lyricScale, in: 0.7...1.5, step: 0.01, format: SettingsFormat.percent)
-            }
+            .toggleStyle(StudioCheckboxStyle())
         }
     }
 
     private var typeface: some View {
-        ThemedSection("Typeface") {
+        InspectorSection("Typeface", value: s.fontChoice.title) {
+            TypefaceTiles()
             Toggle("Randomise lyric fonts", isOn: $s.randomizeLyricFonts)
+                .toggleStyle(StudioCheckboxStyle())
             if s.randomizeLyricFonts {
                 InspectorCaption("Words use a mix of built-in typefaces while this is on.")
                     .revealRow()
-            }
-            ChoiceMenu("Typeface", selection: Binding(get: { s.fontChoice }, set: { s.selectFontChoice($0) }),
-                       selectedTitle: \.title) {
-                ForEach(Settings.FontChoice.allCases) { Text($0.title).tag($0) }
             }
             if s.randomizeLyricFonts {
                 InspectorCaption(WorkspaceCopy.randomisedTypeface)
@@ -214,7 +231,7 @@ struct LyricStylePage: View {
     }
 
     private var wordEntrances: some View {
-        ThemedSection("Word entrances") {
+        InspectorSection("Word entrances") {
             Toggle("Reveal sung words", isOn: Binding(get: { s.revealsWords(in: style) },
                                                        set: { s.wordRevealByStyle[s.wordControlsKey] = $0 }))
                 .disabled(s.requiresWordEntrances(in: style))

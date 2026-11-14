@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Animated covers: Apple Music's motion artwork behind the lyrics, where it
-/// plays, how it is framed, and the albums left out.
+/// The Animated covers inspector: whether Apple Music's motion artwork plays
+/// behind the lyrics, how it is softened, and the albums left out. Placement
+/// is chosen on the canvas (`PlacementChoices`).
 @MainActor
 struct CoversPage: View {
     @Model(\.settings) private var s
@@ -47,9 +48,9 @@ struct CoversPage: View {
     }
 
     var body: some View {
-        ThemedForm {
-            ThemedSection("Animated covers") {
-                Toggle("Use animated covers", isOn: $s.useMotionArtwork)
+        LookInspectorForm {
+            VStack(alignment: .leading, spacing: 10) {
+                InspectorTitle(title: "Animated covers")
                 if s.useMotionArtwork && s.backgroundMode != .auto {
                     StatusBanner(.info, title: "Covers play with Match the music",
                                  message: "The wallpaper is \(s.backgroundMode.title) now, so animated covers don’t show.",
@@ -63,30 +64,34 @@ struct CoversPage: View {
                         .labelStyle(CaptionLabelStyle())
                         .accessibilityElement(children: .combine)
                 }
+            }
+            VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.captionGap) {
+                Toggle("Use animated covers", isOn: $s.useMotionArtwork)
+                InspectorCaption("Apple Music’s motion artwork, behind Match the music.")
                 if reduceMotion && s.useMotionArtwork {
                     InspectorCaption(WorkspaceCopy.reduceMotionCovers)
                 }
             }
-            ThemedSection("Framing") {
-                ChoiceMenu("Placement", selection: $s.motionPlacement, selectedTitle: \.title) {
-                    ForEach(Settings.MotionPlacement.allCases) { Text($0.title).tag($0) }
-                }
-                InspectorCaption(s.motionPlacement.detail)
+            InspectorSection("Framing") {
                 ValueSlider("Softening", value: $s.motionBlur, in: 0...25, step: 0.5,
                             format: { $0 == 0 ? "None" : SettingsFormat.percent($0 / 25) })
                 if let track = lookedUpTrack {
-                    Toggle("Exclude this album", isOn: Binding(
-                        get: { s.excludesMotion(artist: track.artist, album: track.album) },
-                        set: { _ in
-                            s.setMotionExcluded(!s.excludesMotion(artist: track.artist, album: track.album),
-                                                artist: track.artist, album: track.album)
-                        }))
-                    // Named as the excluded list below names it.
-                    InspectorCaption([track.artist, track.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Exclude this album", isOn: Binding(
+                            get: { s.excludesMotion(artist: track.artist, album: track.album) },
+                            set: { _ in
+                                s.setMotionExcluded(!s.excludesMotion(artist: track.artist, album: track.album),
+                                                    artist: track.artist, album: track.album)
+                            }))
+                            .toggleStyle(StudioCheckboxStyle())
+                        // Named as the excluded list below names it.
+                        InspectorCaption([track.artist, track.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                            .padding(.leading, 23)
+                    }
                 }
             }
             if !s.motionExclusions.isEmpty {
-                ThemedSection("Excluded albums") {
+                InspectorSection("Excluded albums") {
                     ForEach(s.motionExclusions, id: \.self) { name in
                         let album = name.replacingOccurrences(of: "|", with: " · ")
                         LabeledContent {
@@ -107,7 +112,5 @@ struct CoversPage: View {
         .lunalyrReveal(s.backgroundMode)
         .lunalyrReveal(s.useMotionArtwork)
         .lunalyrReveal(s.motionExclusions.isEmpty)
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 }

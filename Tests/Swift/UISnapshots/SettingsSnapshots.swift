@@ -25,12 +25,15 @@ extension UISnapshotCatalogue {
                                         prepare: { $0.showSettingsPage(page, preview: false) }, view: settingsWindow))
         }
         for page in SettingsPage.Group.allCases.flatMap(\.pages) where page.showsStage {
+            // The picture pages' inspector is 286 wide; the others' pages 600.
+            let width = LookObject(page: page) == nil ? SettingsDetail.columnWidth + 2 * SettingsDetail.formPadding
+                : LunalyrDesign.Studio.Layout.inspectorWidth
             cases.append(UISnapshotCase("settings/\(page.rawValue)-inspector",
-                                        note: "the whole inspector at its 380-point width, a song playing",
-                                        chrome: .plain, size: .fitting(width: LunalyrDesign.Layout.inspectorWidth),
+                                        note: "the whole inspector at its \(Int(width))-point width, a song playing",
+                                        chrome: .plain, size: .fitting(width: width),
                                         player: .playing, view: { _ in SettingsInspectorProbe(page: page) }))
         }
-        cases += wallpaperStates + otherPageStates + colourStates
+        cases += wallpaperStates + otherPageStates + colourStates + lookStates
         return cases
     }
 
@@ -248,6 +251,41 @@ extension UISnapshotCatalogue {
                            chrome: .settingsWindow, size: .settingsWindowLarge,
                            prepare: { $0.showSettingsPage("about") }, view: settingsWindow),
         ]
+    }
+
+    /// The picture pages (spec §3): each object with a song playing, nothing
+    /// playing, the Floating view, and the smallest window.
+    private static var lookStates: [UISnapshotCase] {
+        [
+            UISnapshotCase("settings/look-wallpaper-playing", note: "Look, Wallpaper selected, a song playing",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
+                           prepare: { $0.showSettingsPage("wallpaper") }, view: settingsWindow),
+            UISnapshotCase("settings/look-lyrics-playing", note: "Look, Lyric style selected: the line's handles",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
+                           prepare: { $0.showSettingsPage("typography") }, view: settingsWindow),
+            UISnapshotCase("settings/look-covers-playing", note: "Look, Animated covers selected",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
+                           prepare: { $0.showSettingsPage("covers") }, view: settingsWindow),
+            UISnapshotCase("settings/look-nothing-playing", note: "Look with nothing playing: the sample line",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)),
+                           prepare: { $0.showSettingsPage("typography") }, view: settingsWindow),
+            UISnapshotCase("settings/look-floating", note: "Look, Floating over apps, Lyric style selected",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)), player: .playing,
+                           prepare: { $0.showSettingsPage("typography") }, view: floatingSettingsWindow),
+            UISnapshotCase("settings/look-smallest", note: "Look at the smallest window, 860 x 420",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 860, height: 420)), player: .playing,
+                           prepare: { $0.showSettingsPage("typography") }, view: settingsWindow),
+            UISnapshotCase("settings/general-1100", note: "a page without a picture at 1100 x 720",
+                           chrome: .settingsWindow, size: .frame(CGSize(width: 1100, height: 720)),
+                           prepare: { $0.showSettingsPage("general") }, view: settingsWindow),
+        ]
+    }
+
+    /// Settings with the lyrics floating, from isolated floating options.
+    static func floatingSettingsWindow(_ scene: UISnapshotScene) -> some View {
+        let options = FloatingLyricsOptions(defaults: scene.defaults)
+        options.surface = .floating
+        return settingsWindow(scene).environment(\.lookFloatingOptions, options)
     }
 
     /// The window Settings draws in, configured as the app configures it.

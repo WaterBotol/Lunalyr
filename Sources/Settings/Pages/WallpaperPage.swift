@@ -1,33 +1,42 @@
 import AppKit
 import SwiftUI
 
-/// Wallpaper: the type, its own options, how visualisers hear the music,
-/// how the lyrics stay readable, and the adjustments every drawn type shares.
+/// The Wallpaper inspector: the Looks, the type's own options, how
+/// visualisers hear the music, how the lyrics stay readable, and the
+/// adjustments every drawn type shares. The type itself is chosen on the
+/// canvas, under the picture (`WallpaperTypeChoices`).
 @MainActor
 struct WallpaperPage: View {
     /// Opens the Performance page, where the power settings live.
     var showPerformance: () -> Void = {}
     var scrollRequest: SettingsScrollRequest?
+    /// Shared with the canvas's type tiles, whose Image or video tile asks
+    /// for a file through it, so its progress and errors show here.
+    @ObservedObject var importer: WallpaperImporter
     @Model(\.settings) private var s
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.undoManager) private var undoManager
-    @StateObject private var importer = WallpaperImporter()
+
+    init(showPerformance: @escaping () -> Void = {}, scrollRequest: SettingsScrollRequest? = nil,
+         importer: WallpaperImporter? = nil) {
+        self.showPerformance = showPerformance
+        self.scrollRequest = scrollRequest
+        // On its own (UI snapshots' inspector probe), a page keeps its own.
+        self.importer = importer ?? WallpaperImporter()
+    }
 
     var body: some View {
-        ThemedForm {
-            // Above the page's first section, outside its box: what power
-            // saving changed is about the whole page.
+        LookInspectorForm {
+            // Above everything: what power saving changed is about the whole picture.
             if let notice = s.powerSavingNotice {
                 PowerSavingBanner(notice: notice, override: { s.overridePowerSaving(notice.constraint) },
                                   showPerformance: showPerformance)
             }
-            ThemedSection("Wallpaper") {
-                WallpaperModeGrid(chooseImport: { importer.choose(into: s) })
-                InspectorCaption(s.backgroundMode.summary)
+            LooksSection()
+            VStack(alignment: .leading, spacing: LunalyrDesign.Studio.Layout.inspectorRowSpacing) {
+                InspectorTitle(title: "Wallpaper", subtitle: s.backgroundMode.summary)
                 // A failed import leaves the type as it was, so its error
                 // shows here rather than in a section that isn't showing.
-                // An import from the tiles shows its progress here too, as
-                // the Image or video section isn't showing yet.
                 if importer.showsProgress, s.backgroundMode != .custom {
                     ImportProgress()
                         .revealRow()
@@ -54,8 +63,6 @@ struct WallpaperPage: View {
         .lunalyrReveal(s.backgroundMode)
         .lunalyrReveal(importer.message)
         .lunalyrReveal(importer.showsProgress)
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
         .scrollsToSettingsAnchor(scrollRequest)
     }
 
@@ -63,29 +70,29 @@ struct WallpaperPage: View {
     @ViewBuilder private var typeSection: some View {
         switch s.backgroundMode {
         case .auto:
-            ThemedSection("Match the music") {
+            InspectorSection("Match the music") {
                 shaderPicker
                 patternPicker
                 InspectorCaption("Match the music picks one of each per song; choose one to pin it.")
             }
         case .shader:
-            ThemedSection("GPU effects") { shaderPicker }
+            InspectorSection("GPU effects") { shaderPicker }
         case .pattern:
-            ThemedSection("Line patterns") { patternPicker }
+            InspectorSection("Line patterns") { patternPicker }
         case .visualizer:
-            ThemedSection("Visualiser") { VisualiserSceneSection() }
+            InspectorSection("Visualiser") { VisualiserSceneSection() }
         case .desktop:
-            ThemedSection("Your wallpaper") {
+            InspectorSection("Your wallpaper") {
                 Text("Only lyrics are drawn over your desktop. Keep using your current macOS wallpaper or wallpaper app; Lunalyr leaves it in place.")
                     .fixedSize(horizontal: false, vertical: true)
                 InspectorCaption("Shows your macOS desktop picture behind the lyrics.", more: "The preview puts your macOS desktop picture behind the lyrics. A wallpaper app’s own artwork can’t be shown there, but stays visible on each monitor.")
             }
         case .custom:
-            ThemedSection("Image or video") { importedOptions }
+            InspectorSection("Image or video") { importedOptions }
         case .musicVideo:
-            ThemedSection("Music video") { MusicVideoSection() }
+            InspectorSection("Music video") { MusicVideoSection() }
         case .colourOnly:
-            ThemedSection("Colour only") {
+            InspectorSection("Colour only") {
                 Toggle("Album gradient", isOn: $s.albumGradientWallpaper)
                 InspectorCaption("Blends the cover’s colours into a moving gradient.", more: "Blend the colours from across the cover into a slowly moving gradient.")
             }
@@ -149,7 +156,7 @@ struct WallpaperPage: View {
     }
 
     private var adjustments: some View {
-        ThemedSection("Adjustments") {
+        InspectorSection("Adjustments") {
             if s.backgroundMode != .custom && s.backgroundMode != .musicVideo {
                 ValueSlider("Motion speed", value: $s.effectSpeed, in: 0.2...2, step: 0.05,
                             format: SettingsFormat.multiplier)
@@ -277,7 +284,7 @@ private struct MusicResponseSection: View {
     }
 
     var body: some View {
-        ThemedSection("Music response") {
+        InspectorSection("Music response") {
             Toggle("System audio", isOn: Binding(get: { s.audioReactiveEnabled }, set: { enabled in
                 if enabled { audio.start() } else { audio.stop() }
             }))
