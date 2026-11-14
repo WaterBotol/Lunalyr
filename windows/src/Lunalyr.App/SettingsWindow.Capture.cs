@@ -80,8 +80,13 @@ public sealed partial class SettingsWindow
         foreach (var block in Blocks(PageStack, 4000 / scale))
         {
             var bitmap = new RenderTargetBitmap();
-            await bitmap.RenderAsync(block);
+            // Asked for at its own size (in DIPs; drawn at the page's scale): left to itself it can shrink a block that fits.
+            int wanted = (int)Math.Round(block.ActualSize.X * scale), tall = (int)Math.Round(block.ActualSize.Y * scale);
+            if (wanted <= 0 || tall <= 0) continue;
+            await bitmap.RenderAsync(block, (int)Math.Round(block.ActualSize.X), (int)Math.Round(block.ActualSize.Y));
             if (bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0) continue;
+            if (bitmap.PixelWidth != wanted)
+                _host.Log.App.Info($"Settings capture: a block came back {bitmap.PixelWidth}×{bitmap.PixelHeight}, not {wanted}×{tall}.");
             var drawn = (await bitmap.GetPixelsAsync()).ToArray();
             var at = block.TransformToVisual(PageStack).TransformPoint(new Windows.Foundation.Point(0, 0));
             int left = (int)Math.Round(at.X * scale), top = (int)Math.Round(at.Y * scale);
@@ -173,16 +178,22 @@ public sealed partial class SettingsWindow
     private static IEnumerable<UIElement> Blocks(UIElement element, double tallest)
     {
         if (element.Visibility == Visibility.Collapsed || element.ActualSize.Y <= 0) yield break;
-        var children = element is Panel or ContentControl or ContentPresenter or Border ? VisualTreeHelper.GetChildrenCount(element) : 0;
-        if (element.ActualSize.Y <= tallest || children == 0)
+        IEnumerable<UIElement> children = element switch
+        {
+            Panel panel => panel.Children,
+            ContentControl { Content: UIElement content } => [content],
+            ContentPresenter { Content: UIElement content } => [content],
+            Border { Child: { } inner } => [inner],
+            _ => [],
+        };
+        if (element.ActualSize.Y <= tallest || !children.Any())
         {
             yield return element;
             yield break;
         }
-        for (var i = 0; i < children; i++)
+        foreach (var child in children)
         {
-            if (VisualTreeHelper.GetChild(element, i) is UIElement child)
-                foreach (var block in Blocks(child, tallest)) yield return block;
+            foreach (var block in Blocks(child, tallest)) yield return block;
         }
     }
 
