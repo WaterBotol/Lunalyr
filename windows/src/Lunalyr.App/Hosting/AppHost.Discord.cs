@@ -77,7 +77,13 @@ internal sealed partial class AppHost
             {
                 if (_ticker is null)
                 {
-                    _ticker = new TrayTickerWindow(controller.ReadExtras, () => _settings.Current.TrayLyricLength, () => ReduceMotion, Log);
+                    // --player-debug ticker-unpaused (checks, only with --quiet-windows): the strip shows the sung line
+                    // while the check's wallpaper stays paused, so the lyric states can be captured without drawing a
+                    // wallpaper over the desktop.
+                    Func<ExtrasNow> read = _options.QuietWindows && _options.PlayerDebug.Contains("ticker-unpaused")
+                        ? () => controller.ReadExtras() with { WallpaperPaused = false }
+                        : controller.ReadExtras;
+                    _ticker = new TrayTickerWindow(read, () => _settings.Current.TrayLyricLength, () => ReduceMotion, Log, _options.QuietWindows);
                     _ticker.Start();
                     _log.Info("Tray lyric is on.");
                 }
