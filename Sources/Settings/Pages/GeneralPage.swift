@@ -10,7 +10,7 @@ struct GeneralPage: View {
     @Model(\.updates) private var updates
 
     var body: some View {
-        ThemedForm(title: SettingsPage.general.title) {
+        ThemedForm {
             ThemedSection("Startup") {
                 Toggle("Launch at login", isOn: $s.launchAtLogin)
                 if let error = s.launchAtLoginError {

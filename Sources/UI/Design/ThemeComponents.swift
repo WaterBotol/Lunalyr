@@ -10,7 +10,7 @@ import SwiftUI
 // Standard (the design itself) and Bold, which keeps its 1.5 pt outlines and
 // hard shadows on every control (`ThemedSurface`) over the same structure.
 //
-//     ThemedForm(title: "General") {
+//     ThemedForm {                          // the window draws the page title
 //         ThemedSection("Startup") {
 //             Toggle("Launch at login", isOn: $on)            // a switch
 //         }
@@ -840,6 +840,8 @@ struct ThemedCard<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The form's controls even outside a `ThemedForm` (the Look inspector).
+        .themedFormControls()
     }
 }
 
@@ -950,8 +952,9 @@ struct StyleGallery: View {
 /// window fill, with the form's switches, buttons and rows applied to every
 /// control inside.
 ///
-/// `.page` density (the default): the title, 17 pt semibold in a 56 pt band,
-/// then a 600 pt column 40 from the sidebar, sections 28 apart.
+/// `.page` density (the default): a 600 pt column 40 from the sidebar,
+/// sections 28 apart. The window draws the page's title in its 56 pt band,
+/// so pages pass no `title` (it stays for a form shown outside the window).
 /// `.inspector` density: no title unless given, the inspector's 20 / 16
 /// padding, sections 22 apart.
 struct ThemedForm<Content: View>: View {
@@ -1256,6 +1259,8 @@ struct ThemedSection<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The form's controls even outside a `ThemedForm` (the Look inspector).
+        .themedFormControls()
     }
 }
 

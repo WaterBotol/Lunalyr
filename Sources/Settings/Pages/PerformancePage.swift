@@ -6,7 +6,7 @@ struct PerformancePage: View {
     @Model(\.settings) private var s
 
     var body: some View {
-        ThemedForm(title: SettingsPage.performance.title) {
+        ThemedForm {
             ThemedSection("Rendering and power") {
                 ChoiceSegments("Frame rate", selection: $s.animationRate,
                                cases: Array(Settings.AnimationRate.allCases), label: \.title)

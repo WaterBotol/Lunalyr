@@ -15,7 +15,7 @@ struct MusicPlayersPage: View {
                                                    localPlayers: players.followsLocalPlayers)
         let browsers = PlayerKind.browsers.filter(installed.contains)
         let localPlayers = PlayerKind.localPlayers.filter(installed.contains)
-        ThemedForm(title: SettingsPage.players.title) {
+        ThemedForm {
             ThemedSection("Follow") {
                 if offered.count <= 4 {
                     ChoiceSegments("Player", selection: $players.choice, cases: offered, label: \.title)
