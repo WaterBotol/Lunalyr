@@ -148,7 +148,8 @@ internal static class LyricToolsRows
         }
 
         // Importing a file of your own.
-        var import = new Button { Content = LyricToolsText.ImportLyrics };
+        // "Import…" beside the row's title, as Readings' Import reading LRC row has (the button repeated the title).
+        var import = new Button { Content = "Import…" };
         AutomationProperties.SetName(import, LyricToolsText.ImportLyrics);
         AutomationProperties.SetHelpText(import, LyricToolsText.ImportHelp);
         ToolTipService.SetToolTip(import, LyricToolsText.ImportHelp);
