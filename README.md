@@ -207,7 +207,7 @@ Lunalyr only reads a player that is already open; it never opens one itself.
 
 ### Menu bar, keyboard shortcuts and Shortcuts
 
-- **The menu-bar panel** shows what is playing and where its lyrics came from, with quick switches for the wallpaper, floating lyrics, the visualiser scene and lyric timing.
+- **The menu-bar panel** shows what is playing and where its lyrics came from, with Looks, lyric timing, the player, Pause, Hide lyrics, floating lyrics, your Discord status and Open Lyric Card…. The wallpaper type and the visualiser scene are chosen in **Settings › Wallpaper**.
 - **The current line in the menu bar**, if you like.
 - **Global keyboard shortcuts** (off until you turn them on in **Settings › Menu bar & shortcuts**) to show or hide the lyrics, nudge their timing, change layout, open a lyric card, pause the wallpaper, tap to sync, toggle the music video and change visualiser.
 - **Shortcuts actions** for the same jobs, so you can use them in your own shortcuts or with Siri.

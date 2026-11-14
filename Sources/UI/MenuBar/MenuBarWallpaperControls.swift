@@ -1,10 +1,10 @@
 import SwiftUI
 
 // The panel's rows under the Look switcher (SPEC.md section 7, items 4-6):
-// Lyric timing and Tap to sync…, the Wallpaper and Player submenus (with
-// the visualiser's Scene and the music video's rows beneath Wallpaper while
-// they apply), the Pause / Hide lyrics / Floating switches, and Open Lyric
-// Card….
+// Lyric timing and Tap to sync…, the music video's rows while it is the
+// wallpaper, the Player submenu, the Pause / Hide lyrics / Floating
+// switches, the Discord status switch, and Open Lyric Card…. The wallpaper
+// type and the visualiser's scene are chosen in Settings › Wallpaper.
 
 /// "Lyric timing   Earlier · 0.00 s · Later": this song's lyrics a tenth
 /// of a second earlier or later, the per-song, per-source offset the
@@ -75,10 +75,9 @@ struct MenuBarLyricTiming: View {
     }
 }
 
-/// Wallpaper › (the eight types, the chosen one checked) and, while they
-/// apply, the visualiser's Scene › and the music video's rows; then
-/// Player ›. Image or video with nothing imported opens Settings at
-/// Wallpaper, which has the importer: the panel never opens a file panel.
+/// The music video's rows while it is the wallpaper, then Player ›. The
+/// wallpaper type and the visualiser's scene are chosen in Settings ›
+/// Wallpaper, not here.
 @MainActor
 struct MenuBarWallpaperControls: View {
     @Model(\.settings) private var settings
@@ -87,27 +86,7 @@ struct MenuBarWallpaperControls: View {
     @ObservedObject private var musicVideo = MusicVideoController.shared
 
     var body: some View {
-        let navigation = models.resolved.navigation
         VStack(alignment: .leading, spacing: 0) {
-            MenuPanelSubmenuRow("Wallpaper", value: settings.backgroundMode.title) {
-                // Everything else about the wallpaper, as the panel's
-                // Options… link opened it.
-                Self.wallpaperItems(settings: settings) { navigation.openSettings(.wallpaper) }
-                    + [.separator(), MenuPanelMenuItem(id: "options", title: "Wallpaper Settings…",
-                                                       help: "Opens Settings at Wallpaper") {
-                        navigation.openSettings(.wallpaper)
-                    }]
-            }
-            if settings.backgroundMode == .visualizer {
-                MenuPanelSubmenuRow("Scene", value: settings.audioVisualizerStyle.title) {
-                    AudioVisualizerStyle.allCases.map { style in
-                        MenuPanelMenuItem(id: "\(style)", title: style.title,
-                                          checked: settings.audioVisualizerStyle == style,
-                                          help: style.detail) { settings.audioVisualizerStyle = style }
-                    }
-                }
-                .help(settings.audioVisualizerStyle.detail)
-            }
             if settings.backgroundMode == .musicVideo {
                 MenuBarMusicVideoRows(musicVideo: musicVideo)
             }
@@ -121,24 +100,6 @@ struct MenuBarWallpaperControls: View {
                 }
             }
             .help("Which music player Lunalyr follows")
-        }
-    }
-
-    /// The Wallpaper submenu: Lunalyr's five, then the three that start
-    /// from something of the person's, the chosen one checked; choosing one
-    /// does what a tile of `WallpaperModeGrid` does.
-    static func wallpaperItems(settings: Settings, chooseImport: @escaping () -> Void) -> [MenuPanelMenuItem] {
-        let modes = Settings.BackgroundMode.generated + Settings.BackgroundMode.own
-        return modes.map { mode in
-            var title = mode.title
-            // Power saving draws this one instead of the choice.
-            if settings.effectiveBackgroundMode == mode && settings.backgroundMode != mode {
-                title += " (power saving)"
-            }
-            return MenuPanelMenuItem(id: "\(mode)", title: title, checked: settings.backgroundMode == mode,
-                                     help: mode.summary) {
-                WallpaperModeGrid.choose(mode, settings: settings, chooseImport: chooseImport)
-            }
         }
     }
 }
@@ -309,5 +270,23 @@ struct MenuBarLyricCardRow: View {
         }
         .disabled(!enabled)
         .accessibilityHint(enabled ? "Opens the lyric card window for the line playing" : "Available while a song plays")
+    }
+}
+
+/// Shows what's playing as the Discord status, as the switch in Settings ›
+/// Share does.
+@MainActor
+struct MenuBarDiscordToggle: View {
+    @Model(\.extras) private var extras
+
+    static let title = "Discord status"
+
+    var body: some View {
+        QuickToggle(Self.title, isOn: extras.showsDiscordPresence, accessibilityTitle: "Show what’s playing on Discord",
+                    state: "Showing on Discord") {
+            extras.showsDiscordPresence.toggle()
+        }
+        .accessibilityHint(extras.showsDiscordPresence ? "Stops showing the song on Discord"
+                           : "Shows the song playing as your Discord status")
     }
 }

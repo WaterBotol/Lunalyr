@@ -5,8 +5,8 @@ import SwiftUI
 /// final/SPEC.md section 7). Top to bottom: a waiting update, when the daily
 /// check found one; the song, its transport and progress; the line being
 /// sung; anything that needs the person's attention, with its fix; the Look
-/// switcher; Lyric timing, Tap to sync…, Wallpaper ›, Player ›; the Pause,
-/// Hide lyrics and Floating switches; Open Lyric Card…; listen-along once a
+/// switcher; Lyric timing, Tap to sync…, the music video's rows, Player ›;
+/// the Pause, Hide lyrics, Floating and Discord status switches; Open Lyric Card…; listen-along once a
 /// relay is set; then Settings…, Check for Updates… and Quit, like a menu.
 /// Rows 24 high on frosted glass (opaque under Reduce Transparency), height
 /// to content, scrolling only past the screen. Esc closes it; ⌘, opens
@@ -90,6 +90,7 @@ struct MenuBarView: View {
             MenuPanelSeparator()
             MenuBarToggles()
                 .focusSection()
+            MenuBarDiscordToggle()
             MenuPanelSeparator()
             MenuBarLyricCardRow()
             if extras.listenAlongAvailable {

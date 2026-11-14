@@ -76,22 +76,10 @@ final class MenuBarPanelTests: XCTestCase {
         XCTAssertNil(MenuBarLookArt.art(for: "a-saved-look"))
     }
 
-    // MARK: Wallpaper submenu
+    // MARK: Submenus
 
-    func testTheWallpaperSubmenuListsAllEightAndChoosesLikeTheGrid() {
-        let s = stores()
-        s.settings.backgroundMode = .auto
-        var importAsked = 0
-        let items = MenuBarWallpaperControls.wallpaperItems(settings: s.settings) { importAsked += 1 }
-        XCTAssertEqual(items.count, 8)
-        XCTAssertEqual(items.filter(\.checked).map(\.title), [VersoCustom.Settings.BackgroundMode.auto.title])
-        items.first { $0.id == "\(VersoCustom.Settings.BackgroundMode.pattern)" }?.action()
-        XCTAssertEqual(s.settings.backgroundMode, .pattern)
-        // Image or video with nothing imported: Settings' importer instead.
-        s.settings.customWallpaperPath = ""
-        items.first { $0.id == "\(VersoCustom.Settings.BackgroundMode.custom)" }?.action()
-        XCTAssertEqual(importAsked, 1)
-        XCTAssertEqual(s.settings.backgroundMode, .pattern, "nothing to show yet: the type stays")
+    func testThePanelNoLongerOffersWallpaperChoicesButKeepsDiscord() {
+        XCTAssertEqual(MenuBarDiscordToggle.title, "Discord status")
     }
 
     func testSubmenuSeparatorsAreNotChoices() {
