@@ -1,6 +1,7 @@
 # Builds "Lunalyr-Windows.exe", the one file people download (in artifacts\installer\<version>\): publishes the app
-# and the setup program (Native AOT), zips the app into the setup, and optionally signs everything and writes the update feed. Uploads nothing and publishes nothing: putting
-# the installer and feed online is the owner's step. See docs/PACKAGING.md.
+# and the setup program (Native AOT), zips the app into the setup, and optionally signs everything and writes the
+# update feed. Uploads nothing and publishes nothing: putting the installer and feed online is the owner's step. See
+# docs/PACKAGING.md.
 #
 #   tools\Packaging\build-installer.ps1 -Version 0.8.0 [-Out <folder>]
 #       [-FeedUrl https://…/update.json -UpdateKey <Base64 public key>]     built into the app: its update service
