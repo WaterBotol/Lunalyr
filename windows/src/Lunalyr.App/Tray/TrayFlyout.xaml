@@ -108,7 +108,10 @@
                         <TextBlock x:Name="TransportNote" Style="{StaticResource Caption}" TextAlignment="Center"
                                    HorizontalAlignment="Center" Visibility="Collapsed" />
 
-                        <!-- The line being sung: one height whatever it shows, so nothing below moves as lines come and go. -->
+                        <!-- The lyric line and this song's timing: no longer in the panel (the owner, 15 Nov 2026: the
+                             panel keeps only Search YouTube, the lyric card and Discord). Kept collapsed, so the code that
+                             fills them stays as it is; Settings › Lyrics has the timing. -->
+                        <StackPanel x:Name="LyricTools" Spacing="8" Visibility="Collapsed">
                         <Grid x:Name="LyricBlock" Height="86" Padding="0,4,0,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" />
@@ -159,6 +162,7 @@
                             <Button x:Name="TapSyncButton" Content="Tap to sync…" Padding="10,4,10,5"
                                     Click="TapSyncButton_Click" />
                         </StackPanel>
+                        </StackPanel>
 
                         <!-- Search YouTube…: the Search YouTube window (the Mac's picker), never the browser. -->
                         <Grid ColumnSpacing="8">
@@ -178,8 +182,38 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== Wallpaper ===== -->
+                <!-- ===== Lyric card and Discord ===== -->
                 <Border Style="{StaticResource FlyoutCard}">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!-- The lyric card (milestone 7): opens the card window, as the Mac's menu-bar tile does. -->
+                            <StackPanel Spacing="4">
+                                <ToggleButton x:Name="LyricCardTile" Style="{StaticResource QuickToggle}" Click="LyricCardTile_Click"
+                                              AutomationProperties.Name="Lyric card">
+                                    <FontIcon Glyph="&#xE91B;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Lyric card" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <!-- Discord status on or off (discordPresence; its details are in Settings). -->
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <ToggleButton x:Name="DiscordToggle" Style="{StaticResource QuickToggle}" Click="DiscordToggle_Click"
+                                              AutomationProperties.Name="Discord status">
+                                    <FontIcon Glyph="&#xE8BD;" FontSize="16" />
+                                </ToggleButton>
+                                <TextBlock Text="Discord" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Wallpaper: no longer in the panel (the owner, 15 Nov 2026); collapsed, see LyricTools ===== -->
+                <Border x:Name="WallpaperCard" Style="{StaticResource FlyoutCard}" Visibility="Collapsed">
                     <StackPanel Spacing="10">
                         <Grid>
                             <TextBlock Style="{StaticResource SectionHeader}" Text="Wallpaper"
@@ -226,14 +260,6 @@
                                     <FontIcon Glyph="&#xE716;" FontSize="16" />
                                 </ToggleButton>
                                 <TextBlock Text="Credits" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
-                                           AutomationProperties.AccessibilityView="Raw" />
-                            </StackPanel>
-                            <!-- The lyric card (milestone 7): opens the card window, as the Mac's menu-bar tile does. -->
-                            <StackPanel Grid.Column="3" Spacing="4">
-                                <ToggleButton x:Name="LyricCardTile" Style="{StaticResource QuickToggle}" Click="LyricCardTile_Click">
-                                    <FontIcon Glyph="&#xE91B;" FontSize="16" />
-                                </ToggleButton>
-                                <TextBlock Text="Lyric card" HorizontalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}"
                                            AutomationProperties.AccessibilityView="Raw" />
                             </StackPanel>
                         </Grid>

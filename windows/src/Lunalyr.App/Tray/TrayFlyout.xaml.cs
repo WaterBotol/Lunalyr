@@ -304,6 +304,7 @@ public sealed partial class TrayFlyout : Window
         AutomationProperties.SetName(CreditsToggle, FlyoutText.CreditsTitle);
         AutomationProperties.SetHelpText(CreditsToggle, FlyoutText.CreditsHint);
         ToolTipService.SetToolTip(CreditsToggle, FlyoutText.CreditsTitle);
+        ToolTipService.SetToolTip(DiscordToggle, "Show what's playing on your Discord profile");
         PausedNote.Text = FlyoutText.PausedNote;
 
         AutomationProperties.SetName(SettingsButton, FlyoutText.Settings);
@@ -374,6 +375,7 @@ public sealed partial class TrayFlyout : Window
             ToolTipService.SetToolTip(PauseToggle, state.PauseTitle);
             ReadingsToggle.IsChecked = state.ReadingsOn;
             CreditsToggle.IsChecked = state.CreditsOn;
+            DiscordToggle.IsChecked = _host.Settings.Current.DiscordPresence;
             PausedNote.Visibility = state.WallpaperPaused ? Visibility.Visible : Visibility.Collapsed;
             RefreshMusicVideo();
         }
@@ -623,6 +625,15 @@ public sealed partial class TrayFlyout : Window
         if (_updating) return;
         var on = ReadingsToggle.IsChecked == true;
         _host.Settings.Update(s => s with { RomanizationDisplay = TrayFlyoutState.ReadingsValue(on, s.RomanizationDisplay) });
+        Refresh();
+    }
+
+    /// <summary>Discord status on or off; the rest of it (what it shows) is in Settings.</summary>
+    private void DiscordToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updating) return;
+        var on = DiscordToggle.IsChecked == true;
+        _host.Settings.Update(s => s with { DiscordPresence = on });
         Refresh();
     }
 
