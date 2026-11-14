@@ -31,7 +31,7 @@ public sealed class WelcomeTests
         // What lyric services receive, as the Mac's About › Privacy says.
         Assert.Contains("title, artist, album and length", OnboardingCopy.Sources);
         Assert.Contains("Lyrics are never sent anywhere to be translated", OnboardingCopy.Translations);
-        Assert.Contains("Win+Ctrl+Alt+[ and Win+Ctrl+Alt+]", OnboardingCopy.Timing("Win+Ctrl+Alt+[", "Win+Ctrl+Alt+]"));
+        Assert.DoesNotContain("shortcut", OnboardingCopy.Timing, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Play a song in Music and its lyrics appear on your desktop.",
             OnboardingCopy.Done(null, idlePrompt: "Play a song in Music"));
     }

@@ -156,7 +156,7 @@ public sealed partial class SettingsWindow : Window
     private UIElement BuildPage(string page) =>
         page switch
         {
-            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, _host.Hotkeys, _host.DiscordHooks, _host.Packaging,
+            "General" => GeneralPage.Build(_ctx, _host.Version, () => _host.ThemeOverride, _host.DiscordHooks, _host.Packaging,
                 _host.Mirroring),
             "Lyric style" => LyricStylePage.Build(_ctx, InstalledFonts.Families, () => _host.ReduceMotion, Preview(),
                 new FloatingHooks(AppHost.FloatingDisplays, () => _host.FloatingEditing, _host.SetFloatingEditing), () => _host.Controller),

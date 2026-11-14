@@ -483,9 +483,6 @@ raw values. The file also has `schemaVersion` (1). Unknown or out-of-range value
 | `hideLyricsWhileMirroring` | absent | General › Hide lyrics while a display is mirrored: while Windows duplicates a display (Win+P › Duplicate, a projector or TV) the lyrics leave every display until it ends. Absent means not yet chosen, which acts as on; written once chosen | `custom.hideLyricsWhileMirroring` |
 | `onBattery` | `"lightEffects"` | Performance › On battery: what the wallpaper eases off to on battery: `full` ("Everything stays on"), `lightEffects` ("Lighter effects only"), `patterns` ("Line patterns instead"), `colourOnly` ("Album colours only"); Windows' own wording, the Mac's titles being Verso lines | `custom.onBattery` |
 | `automaticUpdateChecks` | `true` | "Check for updates automatically": once a day, a newer version downloads and is verified in the background; it installs only on Restart and Update (milestone 8; builds without an update service never check) | Sparkle's automatic checks |
-| `globalShortcuts` | `false` | "Keyboard shortcuts": nothing is registered with Windows until this is on | `custom.globalShortcuts` |
-| `globalShortcutModifiers` | `"controlOptionCommand"` | `controlOptionCommand` (Win+Ctrl+Alt) or `controlShiftCommand` (Win+Ctrl+Shift), the Mac's raw values by key position | `custom.globalShortcutModifiers` |
-| `globalShortcutsOff`, `globalShortcutsOn` | `[]` | shortcuts on by default that were switched off, and newer ones (off by default) that were switched on, by name (`toggleLyrics`, `syncEarlier`, `syncLater`, `cycleLayout`, `copyCard`, `pauseWallpaper`, `tapSyncLyrics`, `toggleMusicVideo`, `nextVisualizer`); unknown names are dropped | `custom.globalShortcutsOff`, `custom.globalShortcutsOn` |
 | `onboardingDone` | `false` | the first-run welcome has been seen (finished, closed early, or open when Lunalyr quit); only ever set. A file without it (a test build's) is never a first run anyway: see "Onboarding" | `hasOnboarded` |
 
 The scene contract names reveals `softFocus`, `floatUp`…, not the Mac's `fade`, `lift`…; the settings keep the
@@ -818,46 +815,21 @@ actions and notes of `LunalyrExtras.swift`. Logic in `src/Lunalyr.Shell/Extras/`
 `src/Lunalyr.App/Extras/` and `Hosting/AppHost.Extras.cs`. Checks and what wasn't seen live:
 [milestones/M7.md](milestones/M7.md), "Shortcuts, links and HUD".
 
-### Global shortcuts
+### No global shortcuts
 
-- **Off until switched on**, as on the Mac: Settings › General › "Keyboard shortcuts" (`globalShortcuts`, default off)
-  registers nothing with Windows until it is on. Then the Mac's first six are on unless switched off one by one; the
-  three newest (Tap to sync, Music video, Next visualiser) wait to be switched on (`globalShortcutsOff`/`On`).
-- **Keys:** Win+Ctrl+Alt (default) or Win+Ctrl+Shift, the Mac's ⌃⌥⌘ and ⌃⇧⌘ by key position (the Win key where Command
-  is). Neither set is Ctrl+Alt on its own, which layouts with AltGr type characters with, so no typed character is ever
-  taken. Keys go by position (scan codes, turned into the layout's virtual key when registering), and the rows show
-  the character the layout in use puts there (`[` is `Ü` on a German keyboard). None uses the arrow keys (Windows'
-  snapping and virtual desktops).
-
-| Action | Key | Default | What it does (its HUD note) |
-|---|---|---|---|
-| Show or hide lyrics | L | on | Hide lyrics on or off ("Lyrics hidden" / "Lyrics shown") |
-| Lyrics 0.1 s earlier / later for this song | `[` / `]` | on | the flyout's Earlier / Later ("Lyrics 0.1 s earlier · +0.30 s for this song’s lyric source"; with nothing playing "Play a song to adjust its timing") |
-| Next layout | K | on | Match the music, each layout in turn, Match the music again ("Layout: Editorial") |
-| Open lyric card | C | on | the lyric card window; until it is wired in, "Lyric cards aren’t in this build yet" (nothing playing: "Play a song to make a lyric card") |
-| Pause or resume the wallpaper | P | on | `wallpaperPaused` ("Wallpaper paused" / "Wallpaper resumed") |
-| Tap to sync lyrics | T | off | starts or stops Tap to sync (its panel takes the keyboard, as from the flyout) |
-| Music video on or off | V | off | Music video, or back to "Without a video" ("Music video on" / "Music video off · Line patterns") |
-| Next visualiser | N | off | Visualisers, then the next scene ("Visualiser: Silk") |
-
-- **Registration:** `RegisterHotKey` on the tray's hidden window (`MOD_NOREPEAT`), ids 1–9 as the Mac's raw values;
-  `WM_HOTKEY` runs the action only while that id is live. A combination another app holds fails (it is exclusive): the
-  row says "In use by another app", a caption says it is left to that app, and Lunalyr tries again every 30 s (Windows
-  doesn't say when a hot key is freed; the Mac retries when an app quits). Switching one off releases it at once;
-  changing the keys registers them all again. The log says what is live and what is taken.
-- **Playback:** none of the nine is a playback command (nothing reaches a player), so `PlaybackGuard` has nothing to
-  refuse; Tap to sync sends nothing either.
-- **Settings › General › Tray & shortcuts:** Hide lyrics, Keyboard shortcuts, Keys, a row per shortcut (its combination
-  in a fixed-width font and its own switch, dimmed while off or taken) and the Mac's caption.
-- **Seam for the lyric card:** `AppHost.OpenLyricCard` (`Func<bool>`, false while there is no card window); the card
-  shortcut and `lunalyr://card` call it.
+Windows has no global keyboard shortcuts (the owner's call, 14 Nov 2026: "no keyboard shortcuts are needed"). Nothing is
+registered with Windows. The actions the Mac's shortcuts run (`HotkeyAction`, `LunalyrExtras.Perform`) stay for
+`lunalyr://` links and tests. Settings › General keeps **Tray** and **Lyrics on screen** (Hide lyrics, and hiding them
+while a display is mirrored). A settings file from an earlier build may hold `globalShortcuts`,
+`globalShortcutModifiers`, `globalShortcutsOff` and `globalShortcutsOn`: they are ignored when read and dropped when the
+file is next written. The lyric card's seam is `AppHost.OpenLyricCard` (`Func<bool>`), which `lunalyr://card` calls.
 
 ### `lunalyr://` links
 
 | Link | Does |
 |---|---|
 | `lunalyr://toggle` | Show or hide lyrics |
-| `lunalyr://card` | Open lyric card (as its shortcut) |
+| `lunalyr://card` | Open lyric card |
 | `lunalyr://settings` | Open Settings |
 | `lunalyr://floating` | Lyrics between the desktop and floating ("Lyrics floating over apps" / "Lyrics on the desktop", Windows' own note: the Mac's answer is its Shortcuts dialog) |
 | `lunalyr://join/<room>` | Checked (exactly ten `a–z0–9`), then a note: Windows has no listen-along relay yet. Nothing connects. |
@@ -926,7 +898,7 @@ open a URL (a `.url` file, a Stream Deck, AutoHotkey, the Run box) runs the same
 
 ## Tray lyric and Discord status (milestone 7)
 
-Settings › General's "Tray & shortcuts" and "Discord & lyric card" rows for these two are live. Both are **off by
+Settings › General's "Tray" and "Discord & lyric card" rows for these two are live. Both are **off by
 default**. Checks and ported tests: [milestones/M7.md](milestones/M7.md), "Discord and tray lyric".
 
 ### Tray lyric (the Mac's menu-bar line)

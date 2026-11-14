@@ -74,7 +74,7 @@ public sealed class AppSettingsTests
             "lyricsSurface", "floatingTextSize", "floatingBackdrop", "floatingFadeUnderPointer", "floatingPlacement", "floatingDisplay",
             "floatingFrames", "floatingSizes",
             // (hideLyricsWhileMirroring is written only once chosen; MirroringTests checks it)
-            "globalShortcuts", "globalShortcutModifiers", "globalShortcutsOff", "globalShortcutsOn", "lyricsHidden",
+            "lyricsHidden",
             // Discord status and the tray lyric (discordSongButton is written only once it is set)
             "discordPresence", "discordStatusText", "discordLyric", "discordCover", "discordButton", "discordProgress", "discordPaused",
             "discordLyricLead", "trayLyric", "trayLyricLength",

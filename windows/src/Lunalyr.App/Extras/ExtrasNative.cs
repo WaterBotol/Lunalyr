@@ -2,11 +2,10 @@ using System.Runtime.InteropServices;
 
 namespace Lunalyr.App.Extras;
 
-/// <summary>The Win32 calls the global shortcuts and the action HUD need. Source-generated marshalling (Native AOT safe).</summary>
+/// <summary>The Win32 calls the action HUD needs. Source-generated marshalling (Native AOT safe).</summary>
 internal static unsafe partial class ExtrasNative
 {
-    public const uint WM_TIMER = 0x0113, WM_MOUSEACTIVATE = 0x0021, WM_NCHITTEST = 0x0084, WM_HOTKEY = 0x0312;
-    public const uint MAPVK_VK_TO_CHAR = 2, MAPVK_VSC_TO_VK_EX = 3;
+    public const uint WM_TIMER = 0x0113, WM_MOUSEACTIVATE = 0x0021, WM_NCHITTEST = 0x0084;
     public const int SW_HIDE = 0, SW_SHOWNOACTIVATE = 4;
     public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
     public const nint HWND_TOPMOST = -1;
@@ -28,20 +27,6 @@ internal static unsafe partial class ExtrasNative
 
     [StructLayout(LayoutKind.Sequential)]
     public struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
-
-    [LibraryImport("user32", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint vk);
-
-    [LibraryImport("user32")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool UnregisterHotKey(nint hwnd, int id);
-
-    [LibraryImport("user32", EntryPoint = "MapVirtualKeyExW")]
-    public static partial uint MapVirtualKeyEx(uint code, uint mapType, nint layout);
-
-    [LibraryImport("user32")]
-    public static partial nint GetKeyboardLayout(uint threadId);
 
     [LibraryImport("user32")]
     public static partial nint MonitorFromPoint(Interop.Win32.POINT point, uint flags);

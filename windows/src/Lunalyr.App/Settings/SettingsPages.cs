@@ -8,11 +8,11 @@ using static Lunalyr.App.Settings.SettingsKit;
 
 namespace Lunalyr.App.Settings;
 
-/// <summary>General: how Lunalyr's windows look, starting at login, updates, the welcome, the tray's shortcuts and sharing.</summary>
+/// <summary>General: how Lunalyr's windows look, starting at login, updates, the welcome, the tray, lyrics on screen and sharing.</summary>
 internal static class GeneralPage
 {
     public static StackPanel Build(SettingsContext ctx, string version, Func<string?> themeOverride,
-                                   Lunalyr.Shell.Extras.GlobalHotkeys? hotkeys = null, DiscordHooks? discord = null,
+                                   DiscordHooks? discord = null,
                                    Lunalyr.App.Hosting.PackagingHooks? packaging = null, MirroringHooks? mirroring = null)
     {
         var page = Page();
@@ -40,9 +40,11 @@ internal static class GeneralPage
         page.Children.Add(Card("Show welcome again", "Music players, a look and the tray.", "",
             Button("Show Welcome…", () => App.CurrentHost?.ShowWelcomeAgain())));
 
-        Section(page, "Tray & shortcuts");
+        Section(page, "Tray");
         ExtrasSections.AddTrayLyric(page, ctx);
-        ShortcutsSection.Add(page, ctx, hotkeys, mirroring);
+
+        Section(page, "Lyrics on screen");
+        LyricsOnScreenSection.Add(page, ctx, mirroring);
 
         Section(page, "Discord & lyric card");
         ExtrasSections.AddDiscord(page, ctx, discord);

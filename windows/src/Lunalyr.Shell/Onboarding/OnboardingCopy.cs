@@ -106,9 +106,9 @@ public static class OnboardingCopy
 
     public const string TimingTitle = "Lyrics early or late?";
 
-    /// <summary>Nudging the timing, with the keys this keyboard types for the two shortcuts.</summary>
-    public static string Timing(string earlier, string later) =>
-        $"Nudge them a tenth of a second at a time from the tray panel, or press {earlier} and {later} once keyboard shortcuts are on. Lunalyr remembers the timing for each song.";
+    /// <summary>Nudging the timing.</summary>
+    public const string Timing =
+        "Nudge them a tenth of a second at a time from the tray panel. Lunalyr remembers the timing for each song.";
 
     public const string ReadingsTitle = "Readings for Japanese, Korean and Chinese";
 
@@ -148,7 +148,7 @@ public static class OnboardingCopy
             ? $"“{title}” is playing, so its lyrics are on your desktop now."
             : $"{idlePrompt} and its lyrics appear on your desktop.";
 
-    public const string DoneFirstRun = "Settings has the rest: lyric style, timing, shortcuts and more.";
+    public const string DoneFirstRun = "Settings has the rest: lyric style, timing and more.";
 
     public const string DoneAgain = "You can change all of this in Settings.";
 

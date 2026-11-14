@@ -270,10 +270,7 @@ internal sealed partial class OnboardingWindow
         var card = CardPanel();
         card.Children.Add(FeatureRow("", OnboardingCopy.SourcesTitle, OnboardingCopy.Sources));
         card.Children.Add(Divider());
-        var modifiers = HotkeyModifiersInfo.Parse(ctx.Current.GlobalShortcutModifiers) ?? HotkeyModifiers.ControlOptionCommand;
-        var earlier = _host.Hotkeys?.Label(HotkeyAction.SyncEarlier) ?? modifiers.Prefix() + "[";
-        var later = _host.Hotkeys?.Label(HotkeyAction.SyncLater) ?? modifiers.Prefix() + "]";
-        card.Children.Add(FeatureRow("", OnboardingCopy.TimingTitle, OnboardingCopy.Timing(earlier, later)));
+        card.Children.Add(FeatureRow("", OnboardingCopy.TimingTitle, OnboardingCopy.Timing));
         card.Children.Add(Divider());
 
         var readings = new Grid { ColumnSpacing = 12, RowSpacing = 8, Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };

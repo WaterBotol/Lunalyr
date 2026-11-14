@@ -211,7 +211,7 @@ public sealed partial record AppSettings
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             SpotifyClientId = Core.Player.Spotify.SpotifyOptions.NormalizeClientId(SpotifyClientId),
             Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
-        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating().NormalizedExtras()
+        }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()
             .NormalizedDiscord().NormalizedLyricExtras();
     }
 
