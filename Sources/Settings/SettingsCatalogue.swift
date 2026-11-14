@@ -253,7 +253,7 @@ enum SettingsCatalogue {
     private static let lyricStyle: [SettingsCatalogueEntry] = {
         let mix: [SettingsCatalogueEntry] = WordArrival.mixChoices.map { arrival in
             SettingsCatalogueEntry(.typography, "Word entrances", arrival.title, .toggle, keys: ["custom.wordEntranceMix"],
-                                   keywords: ["mixed entrances", "custom mix", "entrance", "animation"], name: true)
+                                   keywords: ["mixed entrances", "custom mix", "mix", "entrance", "animation"], name: true)
         }
         let before: [SettingsCatalogueEntry] = [
             .init(.typography, "Picture", "Show lyrics", .choice, keys: ["custom.lyricsSurface"],
@@ -322,7 +322,7 @@ enum SettingsCatalogue {
             .init(.typography, "Word entrances", "Reveal sung words", .toggle, keys: ["custom.wordRevealByStyle"],
                   keywords: ["word by word", "animation", "reveal"]),
             .init(.typography, "Word entrances", "Entrance", .choice, keys: ["custom.wordArrivalByStyle"],
-                  keywords: ["word arrival", "animation", "mixed entrances", "custom mix", "fade", "pop"]),
+                  keywords: ["word arrival", "animation", "mixed entrances", "custom mix", "mix", "fade", "pop"]),
         ]
         let after: [SettingsCatalogueEntry] = [
             .init(.typography, "Word entrances", "Faint next-word preview", .toggle, keys: ["custom.nextWordPreviewByStyle"],

@@ -216,7 +216,7 @@ enum WorkspaceCopy {
         switch lock {
         case .layout(let style)?: return "\(style.title) builds each line from the words as they’re sung, so they’re always revealed."
         case .entrance(let arrival)?: return "\(arrival.title) unveils each word as it’s sung, so this stays on."
-        case .mix?: return "Mixed entrances includes entrances that unveil each word as it’s sung, so this stays on."
+        case .mix?: return "Your mixed entrances include ones that unveil each word as it’s sung, so this stays on."
         case nil: return nil
         }
     }
