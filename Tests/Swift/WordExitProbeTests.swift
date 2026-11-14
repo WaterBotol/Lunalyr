@@ -147,7 +147,7 @@ extension WordExitProbeTests {
     static let strips: [(layout: LyricComposition, line: String, from: Double, to: Double)] = [
         (.torque, "fast", 1.45, 1.85), (.mosaic, "fast", 2.10, 2.45), (.mosaic, "held", 2.20, 2.70),
         (.cascade, "held", 1.90, 2.30), (.cascade, "held", 4.15, 4.50), (.spoken, "fast", 1.20, 1.60),
-        (.scattered, "held", 1.90, 2.30), (.cutout, "fast", 2.20, 2.60), (.broadside, "normal", 2.75, 3.25),
+        (.scattered, "held", 1.90, 2.30), (.cutout, "fast", 2.20, 2.60),
     ]
 
     func testWriteExitStrips() throws {

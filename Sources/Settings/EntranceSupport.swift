@@ -3,7 +3,7 @@ import Foundation
 /// Which word entrances a layout actually shows, for the Lyric style page.
 ///
 /// The stage layouts move word-timed lyrics their own way
-/// (`StageLyricView`): Hinge, Broadside, Portal and Mosaic never read the
+/// (`StageLyricView`): Hinge, Portal and Mosaic never read the
 /// chosen entrance's motion, and Torque and Fable take every chosen motion
 /// except Soft focus (their own default) and the swipes (Satin Ribbon,
 /// Split Ink). Every stage layout still draws Cutout · Highlight's tiles.
@@ -19,7 +19,7 @@ enum EntranceSupport {
         default: break
         }
         switch layout {
-        case .hinge, .broadside, .portal, .mosaic: return false
+        case .hinge, .portal, .mosaic: return false
         case .torque, .fable: return arrival != .fade && !arrival.isSwipe
         case .scattered, .constellation, .echo, .spoken, .cascade, .cutout:
             return true

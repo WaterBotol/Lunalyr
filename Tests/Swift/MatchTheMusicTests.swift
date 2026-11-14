@@ -96,17 +96,17 @@ final class LayoutRotationChoiceTests: XCTestCase {
         for index in 0..<40 { seen.insert(rotation.layout(for: "A|\(index)", mood: .neutral)) }
         XCTAssertFalse(seen.contains(.cutout))
         XCTAssertFalse(seen.contains(.echo))
-        XCTAssertTrue(seen.contains(.broadside))
+        XCTAssertTrue(seen.contains(.hinge))
     }
 
     func testACountOfThreeGivesThatLayoutThreeSongsInARow() {
         let rotation = rotation()
-        for layout in LyricComposition.allCases { rotation.setCount(layout == .broadside ? 3 : 0, for: layout) }
+        for layout in LyricComposition.allCases { rotation.setCount(layout == .hinge ? 3 : 0, for: layout) }
         rotation.setCount(1, for: .spoken)
         let picks = (0..<8).map { rotation.layout(for: "S|\($0)", mood: .neutral) }
-        XCTAssertEqual(picks.prefix(4).filter { $0 == .broadside }.count, 3)
-        XCTAssertEqual(Set(picks), [.broadside, .spoken])
-        XCTAssertEqual(picks.filter { $0 == .broadside }.count, 6)
+        XCTAssertEqual(picks.prefix(4).filter { $0 == .hinge }.count, 3)
+        XCTAssertEqual(Set(picks), [.hinge, .spoken])
+        XCTAssertEqual(picks.filter { $0 == .hinge }.count, 6)
     }
 
     func testOnlyOneLayoutChosenMeansEverySongGetsIt() {
@@ -141,6 +141,8 @@ final class RemovedLayoutMigrationTests: XCTestCase {
     func testSavedRawValuesMapToTheNearestRemainingLayout() {
         XCTAssertEqual(LyricComposition.saved("editorial"), .scattered)
         XCTAssertEqual(LyricComposition.saved("constellationEditorial"), .constellation)
+        XCTAssertEqual(LyricComposition.saved("broadside"), .hinge)
+        XCTAssertNil(LyricComposition(rawValue: "broadside"))
         XCTAssertEqual(LyricComposition.saved("echo"), .echo)
         XCTAssertNil(LyricComposition.saved("automatic"))
         XCTAssertNil(LyricComposition(rawValue: "editorial"))

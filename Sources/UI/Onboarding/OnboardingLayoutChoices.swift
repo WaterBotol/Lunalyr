@@ -11,7 +11,7 @@ struct LayoutChoices: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// A few of the reworked layouts; the one in use leads when it is another.
-    static let featured: [LyricComposition] = [.broadside, .portal, .mosaic, .cascade]
+    static let featured: [LyricComposition] = [.hinge, .portal, .mosaic, .cascade]
 
     static func shown(current: LyricComposition?) -> [LyricComposition] {
         guard let current, !featured.contains(current) else { return featured }

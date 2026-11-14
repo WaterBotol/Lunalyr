@@ -65,7 +65,7 @@ final class LooksTests: XCTestCase {
         XCTAssertEqual(matched.summary, "Custom Mix · SF Pro Display")
         XCTAssertEqual(builtIn("Collage").entrance, .cutoutHighlight)
         XCTAssertEqual(builtIn("Star chart").layout, .constellation)
-        XCTAssertEqual(builtIn("Poster").layout, .broadside)
+        XCTAssertEqual(builtIn("Poster").layout, .hinge)
         XCTAssertEqual(builtIn("Quiet").wallpaper, .desktop)
     }
 

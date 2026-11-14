@@ -3,7 +3,7 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// The stage layouts' shared motion (Hinge, Broadside, Portal, Mosaic, Torque,
+/// The stage layouts' shared motion (Hinge, Portal, Mosaic, Torque,
 /// Fable): arrivals that start from rest, ranks that carry their speed, a
 /// live word that hands over gradually, stacks that never jump at an onset,
 /// one exit for every layout, and Reduce Motion as dissolves. Each test

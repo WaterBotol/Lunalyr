@@ -3,7 +3,7 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// Contact sheets of Hinge, Broadside and Portal for reviewing their layout,
+/// Contact sheets of Hinge and Portal for reviewing their layout,
 /// written only when LUNALYR_LAYOUT_PREVIEW_DIR is set (pass it as
 /// TEST_RUNNER_LUNALYR_LAYOUT_PREVIEW_DIR); skipped otherwise. One sheet per
 /// stage size; one row per layout and line, seven moments across the line.
@@ -35,7 +35,7 @@ final class LayoutReworkStageAPreviewTests: XCTestCase {
         ]
     }
 
-    static let layouts: [(LyricComposition, Double)] = [(.hinge, 0.58), (.broadside, 0.85), (.portal, 0.05)]
+    static let layouts: [(LyricComposition, Double)] = [(.hinge, 0.58), (.portal, 0.05)]
 
     /// Hinge is drawn with `ImageRenderer`: a window's cached display draws
     /// a word that is mid-swing a second time, flat, at the stage's corner.

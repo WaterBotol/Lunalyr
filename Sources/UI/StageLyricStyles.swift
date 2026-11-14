@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Layouts that set the whole stage themselves
 //
-// Hinge, Broadside, Portal, Mosaic, Torque and Fable each build a line on a
+// Hinge, Portal, Mosaic, Torque and Fable each build a line on a
 // stage of their own. This file holds what they share: the runs a line is
 // cut into (`StageRun`), the shared timing (`StageMotion`), a measuring
 // layout (`StageLayout`), and `StageLyricView` itself -- its inputs, the
@@ -16,7 +16,7 @@ import SwiftUI
 
 extension LyricComposition {
     /// Layouts drawn by `StageLyricView`.
-    var fillsStage: Bool { [.hinge, .broadside, .portal, .mosaic, .torque, .fable].contains(self) }
+    var fillsStage: Bool { [.hinge, .portal, .mosaic, .torque, .fable].contains(self) }
 }
 
 /// One glued run of a line: "beau" "ti" "ful" is a single run, shown
@@ -463,7 +463,6 @@ struct StageLyricView: View {
     private func layout(_ runs: [StageRun], _ shown: [StageRun]) -> some View {
         switch composition {
         case .hinge: hingeBody(runs: runs, shown: shown)
-        case .broadside: broadsideBody(runs: runs, shown: shown)
         case .mosaic: mosaicBody(runs: runs, shown: shown)
         case .torque: torqueBody(runs: runs, shown: shown)
         case .fable: fableBody(runs: runs, shown: shown)
@@ -476,7 +475,6 @@ struct StageLyricView: View {
     static func ownsReduceMotion(_ composition: LyricComposition) -> Bool {
         switch composition {
         case .hinge: return hingeOwnsReduceMotion
-        case .broadside: return broadsideOwnsReduceMotion
         case .mosaic: return mosaicOwnsReduceMotion
         case .torque: return torqueOwnsReduceMotion
         case .fable: return fableOwnsReduceMotion
@@ -489,8 +487,7 @@ struct StageLyricView: View {
 // MARK: - Shared by several layouts
 
 extension StageLyricView {
-    /// The little words ("the", "of", "and"...) Broadside sets as labels and
-    /// Fable sets a touch smaller.
+    /// The little words ("the", "of", "and"...) Fable sets a touch smaller.
     static let little: Set<String> = [
         "a", "an", "the", "of", "to", "in", "on", "at", "by", "for", "and", "or", "but", "so", "as", "if", "is", "it",
         "my", "me", "we", "i", "i'm", "i'll", "you", "be", "up", "us", "no", "oh", "can", "can't", "do", "did", "don't",

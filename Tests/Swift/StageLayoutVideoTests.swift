@@ -48,7 +48,7 @@ final class StageLayoutVideoTests: XCTestCase {
     static let sizes = [Size(name: "desk", stage: CGSize(width: 1400, height: 520), base: 64),
                         Size(name: "small", stage: CGSize(width: 640, height: 360), base: 46)]
 
-    static let layouts: [LyricComposition] = [.hinge, .broadside, .portal, .mosaic, .torque, .fable]
+    static let layouts: [LyricComposition] = [.hinge, .portal, .mosaic, .torque, .fable]
 
     static let fps = 30.0
 

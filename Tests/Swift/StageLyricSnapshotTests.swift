@@ -34,7 +34,7 @@ final class StageLyricSnapshotTests: XCTestCase {
         let before = (settings.editorialTypography, settings.editorialAmount)
         settings.editorialTypography = true; settings.editorialAmount = 1
         defer { settings.editorialTypography = before.0; settings.editorialAmount = before.1 }
-        let kinds: [LyricComposition] = [.broadside, .mosaic, .torque, .fable]
+        let kinds: [LyricComposition] = [.hinge, .mosaic, .torque, .fable]
         let sheet = VStack(spacing: 2) {
             ForEach(kinds) { kind in HStack(spacing: 2) { ForEach([2.3, 3.2, 4.2, 5.4], id: \.self) { self.cell(kind, at: $0) } } }
         }
@@ -106,7 +106,7 @@ final class StageLyricSnapshotTests: XCTestCase {
     }
 
     /// A line whose word times run backwards (left as it came when its word
-    /// timing fails validation) used to crash Hinge, Broadside, Portal,
+    /// timing fails validation) used to crash Hinge, Portal,
     /// Mosaic and Torque once a later word had arrived before an earlier one.
     func testWordsOutOfOrderNeverCrashTheStageLayouts() throws {
         let words = [LyricsFetcher.Word(text: "hello", start: 12, end: 13), LyricsFetcher.Word(text: "world", start: 10, end: 11),
@@ -114,7 +114,7 @@ final class StageLyricSnapshotTests: XCTestCase {
         let runs = StageRun.make(words, glue: [false, false, false])
         XCTAssertEqual(StageLyricView.shownRuns(runs, at: 10.5).map(\.id), [], "Held back until the first word arrives")
         XCTAssertEqual(StageLyricView.shownRuns(runs, at: 12.5).map(\.id), [0, 1, 2])
-        for composition in [LyricComposition.hinge, .broadside, .portal, .mosaic, .torque] {
+        for composition in [LyricComposition.hinge, .portal, .mosaic, .torque] {
             for time in [10.5, 11.5, 12.5] {
                 let view = StageLyricView(words: words, glue: [false, false, false], time: time,
                                           stageSize: CGSize(width: 640, height: 300), baseSize: 40, mood: .neutral,

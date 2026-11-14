@@ -3,7 +3,7 @@ import SwiftUI
 import XCTest
 @testable import VersoCustom
 
-/// "Below lyrics" readings in the stage layouts Hinge, Broadside, Portal,
+/// "Below lyrics" readings in the stage layouts Hinge, Portal,
 /// Mosaic and Torque. Drawn in a real (never shown) window, as on the
 /// desktop: `ImageRenderer` leaves out some of these layouts' 3D effects.
 /// Preview sheets are written to LUNALYR_STAGE_READINGS_DIR when it is set
@@ -11,7 +11,7 @@ import XCTest
 /// isolated suite, never the real preferences.
 @MainActor
 final class StageReadingTests: XCTestCase {
-    static let layouts: [LyricComposition] = [.portal, .hinge, .broadside, .mosaic, .torque]
+    static let layouts: [LyricComposition] = [.portal, .hinge, .mosaic, .torque]
 
     /// The MacBook's stage, as `LyricViewportMetrics` makes it.
     static let screen = CGSize(width: 1512, height: 982)
@@ -218,7 +218,7 @@ final class StageReadingTests: XCTestCase {
 
     /// Readings never reach the edge of the screen round the stage, on both
     /// of the user's displays, Japanese and Korean, as the line builds and
-    /// once it is sung. (Broadside's strip and Mosaic's huge words run off
+    /// once it is sung. (Mosaic's huge words run off
     /// the stage by design.)
     func testReadingsStayOnScreen() throws {
         let settings = Self.settings()
@@ -287,30 +287,6 @@ final class StageReadingTests: XCTestCase {
         let box = CGRect(origin: .zero, size: read.size).applying(fitted)
         XCTAssertLessThanOrEqual(box.height, available.height + 0.5)
         XCTAssertEqual(box.midY, read.size.height / 2, accuracy: 0.5, "Fitted about its centre")
-    }
-
-    /// Broadside keeps its words on one line: a reading hangs below its
-    /// word, and a label rides above the word itself, not its reading.
-    func testBroadsideKeepsWordsOnTheLine() {
-        let bounds = CGRect(x: 0, y: 0, width: 1000, height: 400)
-        let slot: CGFloat = 40
-        let measured = [CGSize(width: 200, height: 100 + slot), CGSize(width: 60, height: 30), CGSize(width: 220, height: 100)]
-        let little = [false, true, false]
-        let places = StageLyricView.broadsidePlaces(measured, little: little, slots: [slot, 0, 0], moves: [1, 1, 1],
-                                                    unit: 40, in: bounds)
-        XCTAssertEqual(places[0].y - slot / 2, bounds.midY, accuracy: 0.01, "The word, not its reading, sits on the line")
-        XCTAssertEqual(places[2].y, bounds.midY, accuracy: 0.01)
-        // The label rides on the shoulder of the word before: above its
-        // letters (it used to lie across them), flush with its end.
-        XCTAssertLessThanOrEqual(places[1].y + 15, bounds.midY - 100 * 0.36, "The label is clear of the word's letters")
-        XCTAssertEqual(places[1].x + 30, places[0].x + 100, accuracy: 0.01, "The label is flush with the word's end")
-        // Without the reading, the label sits in the same place: it rides on
-        // the word, not on the word and its reading. (The label keeps its own
-        // height, which now sets how far above the word its centre sits.)
-        let plainSizes = [CGSize(width: 200, height: 100), measured[1], CGSize(width: 220, height: 100)]
-        let plain = StageLyricView.broadsidePlaces(plainSizes, little: little, slots: [0, 0, 0], moves: [1, 1, 1],
-                                                   unit: 40, in: bounds)
-        XCTAssertEqual(plain[1].y, places[1].y, accuracy: 0.01)
     }
 
     /// Portal keeps a pill, reading and all, inside the stage.

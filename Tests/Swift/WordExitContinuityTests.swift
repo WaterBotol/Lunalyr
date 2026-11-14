@@ -138,7 +138,7 @@ final class WordExitContinuityTests: XCTestCase {
         return result
     }
 
-    // MARK: Stage layouts (Hinge, Broadside, Portal, Mosaic, Torque, Fable)
+    // MARK: Stage layouts (Hinge, Portal, Mosaic, Torque, Fable)
 
     static func runs(_ words: [Word]) -> [StageRun] {
         StageRun.make(words, glue: [Bool](repeating: false, count: words.count))
@@ -217,26 +217,6 @@ final class WordExitContinuityTests: XCTestCase {
         for (index, pose) in poses.enumerated() {
             result[index] = ["y": Double(pose.y) / 100, "scale": Double(pose.scale), "opacity": pose.opacity,
                              "live": pose.live]
-        }
-        return result
-    }
-
-    /// Broadside: each word's arrival, its place on the strip (the camera
-    /// following the newest big word) and how far it has dropped out.
-    static func broadside(_ words: [Word], at time: Double) -> [Int: Sample] {
-        let shown = StageLyricView.shownRuns(runs(words), at: time)
-        let speed = PortalLayoutTests.speed(runs(words))
-        let moves = shown.map { StageLyricView.handoff($0, at: time, speed: speed, seed: 3, reduceMotion: false) }
-        let measured = shown.map { CGSize(width: CGFloat($0.text.count) * 46 * 0.9, height: 80) }
-        let places = StageLyricView.broadsidePlaces(measured, little: shown.map { _ in false },
-            slots: shown.map { _ in 0 }, moves: moves, unit: 46, in: CGRect(x: 0, y: 0, width: 900, height: 360))
-        var result: [Int: Sample] = [:]
-        for run in shown {
-            let after = moves[(run.id + 1)...].reduce(0, +)
-            let keep = StageMotion.softUnit(1 - (after - 1.6) * 0.9)
-            let arrival = StageMotion.arrival(run.start, at: time, speed: speed)
-            result[run.id] = ["x": Double(places[run.id].x) / 46, "opacity": min(1, arrival * 1.6) * keep,
-                              "scale": 0.86 + 0.14 * arrival]
         }
         return result
     }
@@ -355,7 +335,7 @@ final class WordExitContinuityTests: XCTestCase {
             result.append((composition.rawValue, { flow($0, composition: composition, at: $1) }))
         }
         result += [("torque", torque), ("fable", fable), ("mosaic", mosaic), ("portal", portal),
-                   ("broadside", broadside), ("hinge", hinge)]
+                   ("hinge", hinge)]
         return result
     }
 

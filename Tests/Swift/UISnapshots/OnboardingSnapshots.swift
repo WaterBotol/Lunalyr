@@ -25,7 +25,7 @@ extension UISnapshotCatalogue {
                      scene.settings.lowPowerVisuals = true
                  }),
             step("onboarding/3-look-lyrics", "Pick a look: the lyric layouts, the one in use first", .look,
-                 prepare: { $0.settings.lyricComposition = .broadside }, lookPart: .lyrics),
+                 prepare: { $0.settings.lyricComposition = .hinge }, lookPart: .lyrics),
             step("onboarding/4-videos", "Music videos: off, both framings, YouTube search off", .videos),
             step("onboarding/4-videos-on", "Music videos: on, library videos whole, YouTube search on", .videos,
                  looks: every, prepare: { scene in

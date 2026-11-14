@@ -18,6 +18,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Removed
 - **The Editorial and Constellation + Editorial layouts.** Wherever either was chosen (the layout, a style remembered for a song or artist, a saved Look, the backing-vocal layout or a lyric card), Constellation + Editorial becomes Constellation and Editorial becomes Scattered. **Add Editorial typography** (Lyric style › Shown with the lyrics) still mixes in the second typeface on any layout. New installs start on Constellation.
+- **The Broadside layout.** Wherever it was chosen (the layout, a remembered style, a saved Look, Custom Mix's rotation, a lyric card), it becomes Hinge, the other bold layout of big, heavy type built word by word. The built-in Poster Look now uses Hinge.
 
 ### Fixed
 - **Taking a layout out of Custom Mix now takes effect for songs with a remembered style.** While the layout is Custom Mix and its rotation is on, a layout remembered for a song or artist that is no longer in the mix is passed over for the rotation's pick. The remembered colour still applies, and the memory is kept.

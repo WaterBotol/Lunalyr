@@ -133,7 +133,7 @@ extension Look {
              values: LookValues(wallpaper: .visualizer, layout: .cascade, typeface: .sans,
                                 entrance: .glide, highlight: .album)),
         Look(id: "builtin.poster", name: "Poster", isBuiltIn: true,
-             values: LookValues(wallpaper: .colourOnly, layout: .broadside, typeface: .manrope,
+             values: LookValues(wallpaper: .colourOnly, layout: .hinge, typeface: .manrope,
                                 entrance: .pop, highlight: .complement)),
         Look(id: "builtin.starChart", name: "Star chart", isBuiltIn: true,
              values: LookValues(wallpaper: .pattern, layout: .constellation, typeface: .serif,

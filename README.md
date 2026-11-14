@@ -36,7 +36,7 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 ## Features
 
 - [Lyrics on your desktop](#lyrics-on-your-desktop)
-- [Twelve layouts](#twelve-layouts)
+- [Eleven layouts](#eleven-layouts)
 - [Japanese, Chinese and Korean readings](#japanese-chinese-and-korean-readings)
 - [Floating lyrics over your apps](#floating-lyrics-over-your-apps)
 - [Discord and listening along](#discord-and-listening-along)
@@ -57,14 +57,14 @@ Lunalyr is free and open source. It started as a fork of [Verso](https://github.
 - **Instrumental breaks** fill with album-coloured ribbons and a cue for the next line.
 - **One wallpaper per display**, with a choice of 15, 30 or 60 frames a second, a low-power mode, and pausing while displays sleep or the desktop is covered.
 
-### Twelve layouts
+### Eleven layouts
 
-[![A tour of twelve of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.webp)](docs/media/layouts-tour.mp4)
+[![A tour of Lunalyr's layouts, each on a different song and background: wallpapers, visualisers, GPU effects, album colours and your own desktop](docs/media/layouts-tour.webp)](docs/media/layouts-tour.mp4)
 
 Each layout sets the words in its own way, from calm and spacious to bold and playful. Pick one in **Settings › Lyric style**, or let **Custom Mix** choose one for each song. Every layout has a choice of word entrances (Float up, Pop, Orbit, Glide, Unfold and more), an optional faint preview of the next word, and an **Editorial** typography option. Use any Google Font, downloaded when you pick it, or one of the built-in typefaces. Lunalyr can remember the look you chose for a song or an artist.
 
 <details>
-<summary><b>See all 12 layouts</b></summary>
+<summary><b>See all 11 layouts</b></summary>
 <br>
 
 <table>
@@ -81,8 +81,8 @@ Each layout sets the words in its own way, from calm and spacious to bold and pl
     <td width="50%" align="center"><img src="docs/media/layout-hinge.webp" alt="Hinge layout"><br><b>Hinge</b> · Bold<br><sub>Heavy words swing in on a hinge and fold into a stack</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/media/layout-broadside.webp" alt="Broadside layout"><br><b>Broadside</b> · Bold<br><sub>One strip of big type that slides along</sub></td>
     <td width="50%" align="center"><img src="docs/media/layout-torque.webp" alt="Torque layout"><br><b>Torque</b> · Bold<br><sub>Words wrung into place with a thick edge, stacking upwards</sub></td>
+    <td width="50%"></td>
   </tr>
   <tr>
     <td width="50%" align="center"><img src="docs/media/layout-cutout.webp" alt="Cutout layout"><br><b>Cutout</b> · Playful<br><sub>Uneven type and album-colour labels, built word by word</sub></td>

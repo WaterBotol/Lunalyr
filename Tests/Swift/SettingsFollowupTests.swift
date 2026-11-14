@@ -45,7 +45,7 @@ final class SettingsFollowupTests: XCTestCase {
     // MARK: Entrances a layout leaves out
 
     func testStageLayoutsThatIgnoreEveryChosenMotion() {
-        for layout in [LyricComposition.hinge, .broadside, .portal, .mosaic] {
+        for layout in [LyricComposition.hinge, .portal, .mosaic] {
             for arrival in WordArrival.allCases {
                 let shown = arrival == .automatic || arrival == .mix || arrival == .cutoutHighlight
                 XCTAssertEqual(EntranceSupport.appliesToSungWords(arrival, in: layout), shown, "\(layout) \(arrival)")

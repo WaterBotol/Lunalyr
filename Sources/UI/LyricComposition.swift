@@ -65,7 +65,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
         case .spoken: return .glide
         case .cascade: return .lift
         case .cutout: return .cutoutFold
-        case .hinge, .broadside, .portal, .mosaic, .torque, .fable: return .fade
+        case .hinge, .portal, .mosaic, .torque, .fable: return .fade
         }
     }
 }
@@ -82,7 +82,7 @@ enum WordArrival: String, CaseIterable, Identifiable {
 /// `ScatteredLyricText`; the rolling layouts use `SpokenTypographyView`.
 /// Both renderers share timestamp-derived word entrances and preview state.
 enum LyricComposition: String, CaseIterable, Identifiable {
-    case scattered, constellation, echo, spoken, cascade, cutout, hinge, broadside, portal, mosaic, torque, fable
+    case scattered, constellation, echo, spoken, cascade, cutout, hinge, portal, mosaic, torque, fable
 
     var id: String { rawValue }
 
@@ -95,7 +95,6 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .cascade: return "Cascade"
         case .cutout: return "Cutout"
         case .hinge: return "Hinge"
-        case .broadside: return "Broadside"
         case .portal: return "Portal"
         case .mosaic: return "Mosaic"
         case .torque: return "Torque"
@@ -112,7 +111,6 @@ enum LyricComposition: String, CaseIterable, Identifiable {
         case .cascade: return "A moving column of words, arriving with the voice."
         case .cutout: return "Uneven type and album-colour labels, built word by word."
         case .hinge: return "Heavy words swing open on a spine, page by page, and the book snaps shut."
-        case .broadside: return "One strip of big type that slides along, with little words as labels."
         case .portal: return "The sung word in a pill; earlier words drift away as pale ones."
         case .mosaic: return "A collage: each word set huge, on a colour bar, or letter by letter."
         case .torque: return "Words wrung into place with a thick edge, stacking upwards."
@@ -123,14 +121,17 @@ enum LyricComposition: String, CaseIterable, Identifiable {
     var hasConnections: Bool { self == .constellation }
 
     /// A layout read back from saved data: settings, a Look, a remembered
-    /// style, a lyric card or the backing-vocal choice. The two layouts cut
-    /// in 2.2 come back as their nearest: "Constellation + Editorial" as
+    /// style, a lyric card or the backing-vocal choice. The layouts cut in
+    /// 2.2 come back as their nearest: "Constellation + Editorial" as
     /// Constellation, "Editorial" as Scattered (the same loose renderer;
-    /// "Add Editorial typography" brings back its second typeface).
+    /// "Add Editorial typography" brings back its second typeface), and
+    /// "Broadside" as Hinge (the other bold stage layout of big, heavy
+    /// type built word by word).
     static func saved(_ raw: String) -> LyricComposition? {
         switch raw {
         case "constellationEditorial": return .constellation
         case "editorial": return .scattered
+        case "broadside": return .hinge
         default: return LyricComposition(rawValue: raw)
         }
     }
@@ -531,7 +532,7 @@ final class LyricLayoutRotation: ObservableObject {
 
     /// The order songs step through: contrasting looks sit next to each other.
     static let order: [LyricComposition] = [
-        .cutout, .hinge, .constellation, .broadside, .portal, .spoken, .mosaic, .echo, .torque, .cascade,
+        .cutout, .hinge, .constellation, .portal, .spoken, .mosaic, .echo, .torque, .cascade,
         .fable, .scattered,
     ]
 
@@ -615,7 +616,7 @@ enum LyricCompositionGroup: String, CaseIterable, Identifiable {
     var layouts: [LyricComposition] {
         switch self {
         case .calm: return [.scattered, .constellation, .spoken]
-        case .bold: return [.echo, .cascade, .hinge, .broadside, .torque]
+        case .bold: return [.echo, .cascade, .hinge, .torque]
         case .playful: return [.cutout, .portal, .mosaic, .fable]
         }
     }

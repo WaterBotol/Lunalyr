@@ -3,8 +3,8 @@ import XCTest
 @testable import VersoCustom
 
 /// The phrase choreography of Hinge (a book: a page per phrase, turned on
-/// the spine) and Broadside (a printed strip inked as it is sung, read by a
-/// panning camera). Pure functions of the line and the time; nothing drawn.
+/// the spine). Pure functions of the line and the time; nothing drawn.
+/// (Broadside, once tested here too, was removed.)
 @MainActor
 final class HingeBroadsideChoreographyTests: XCTestCase {
     typealias Word = LyricsFetcher.Word
@@ -117,11 +117,9 @@ final class HingeBroadsideChoreographyTests: XCTestCase {
         XCTAssertTrue(drawn.contains { $0.page == 0 && $0.back })
     }
 
-    // MARK: Broadside
-
 }
 
-/// A fast line (ten words in two seconds) through Hinge and Broadside,
+/// A fast line (ten words in two seconds) through Hinge,
 /// written as 30 fps frames only when LUNALYR_HB_FAST_DIR is set (pass it
 /// as TEST_RUNNER_LUNALYR_HB_FAST_DIR): <dir>/<size>/<layout>/fast/frames.
 /// Drawn as StageLayoutVideoTests draws its clips.
