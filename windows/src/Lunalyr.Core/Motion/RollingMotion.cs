@@ -7,9 +7,9 @@ public enum RollingStyle
 {
     /// <summary>The sung word large, older words smaller and spread out sideways behind it.</summary>
     Fan = 0,
-    /// <summary>Words stacked in a gently wavering column, nearly all one size.</summary>
+    /// <summary>A steady flush column (the stage sets each word's indent): the sung word steps forward a size.</summary>
     Column = 1,
-    /// <summary>Words scattered left and right with stronger tilts, like pinned-up labels.</summary>
+    /// <summary>A loose collage of labels, each with its own offset and tilt, the sung word a size up.</summary>
     Collage = 2,
 }
 
@@ -25,8 +25,13 @@ public enum RollingStyle
 /// (0.70 × tanh(1.2 rank), 0.86 for the collage); the column sits 0.35 higher and the collage 0.30.</item>
 /// <item><b>Opacity</b> by rank is full up to 2.4 and gone at 4.1 (smoothstep), so words retire before a stage edge;
 /// it also fades over one second from 0.45 s after the word ends.</item>
-/// <item><b>Focus</b> (e^(−2.4 rank²)) is what makes rank 0 the hero: larger in the fan (0.70 → 1.04), a touch larger
-/// in the other two (0.94 → 1.04). Older words drift sideways and tilt by a per-word phase from the seed.</item>
+/// <item><b>Focus</b> (e^(−2.4 rank²)) is what makes rank 0 the hero: larger in the fan (0.70 → 1.04). Older fan words
+/// drift sideways and tilt by a per-word phase from the seed.</item>
+/// <item>The column and the collage (Lunalyr's own lines since Mac Test Build 88, ported): the column is flush (x 0;
+/// the stage sets each word's indent), its sung word steps forward and the words behind settle back a size
+/// (0.80 → 1.10), tilting by sin(phase) × 0.8 × (1 − focus); nothing varies with rank, so it does not snake as it
+/// rolls. The collage's labels keep their own offset, sin(1.3 phase) × 0.42 + sin(0.72 rank) × 0.12, and tilt,
+/// sin(phase + 0.18 rank) × (1.4 + 1.6 (1 − focus)), and the sung one is a size up (0.80 → 1.06).</item>
 /// <item><b>Breathing</b> while sung: seeded noise (never periodic, zero at the onset) lifts and swells the hero by
 /// how long the word is held and how loud the music is; older words blur from rank 2.4 on. Reduce Motion: no
 /// breathing, no tilt, no blur.</item>
@@ -107,14 +112,19 @@ public static class RollingMotion
                 angle = Math.Sin(phase + history * .6) * reach * 2.4;
                 break;
             case RollingStyle.Column:
-                x = Math.Sin(rank * .72 + phase * .12) * .28;
-                scale = .94 + .10 * focus;
-                angle = Math.Sin(phase) * 1.3 * (1 - focus);
+                // A flush column (the stage sets each word's indent): differences in type do the emphasis, and the
+                // word being sung steps forward while the words behind it settle back a size. Nothing here varies with
+                // rank, so the column does not snake as it rolls.
+                x = 0;
+                scale = .80 + .30 * focus;
+                angle = Math.Sin(phase) * .8 * (1 - focus);
                 break;
             default:
-                x = Math.Sin(rank * .72 + phase * .25) * .53;
-                scale = .94 + .10 * focus;
-                angle = Math.Sin(phase + rank * .28) * (1.6 + 2.5 * (1 - focus));
+                // Labels travel into a loose collage: each keeps its own offset and tilt, with only a gentle drift as
+                // the stack rolls, and the word being sung is a size up.
+                x = Math.Sin(phase * 1.3) * .42 + Math.Sin(rank * .72) * .12;
+                scale = .80 + .26 * focus;
+                angle = Math.Sin(phase + rank * .18) * (1.4 + 1.6 * (1 - focus));
                 break;
         }
 

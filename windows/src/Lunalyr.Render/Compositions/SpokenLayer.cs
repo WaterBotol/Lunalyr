@@ -110,7 +110,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         for (var i = 0; i < n; i++)
             if (prepared[i].Source.Start > time) { next = i; break; }
         var intensity = OrganicMotion.VocalIntensity(_window!.Words, time);
-        var cursor = RollingWords.Cursor(prepared, time, intensity, ReduceMotion);
+        var cursor = RollingWords.Cursor(prepared, time, intensity, ReduceMotion, Kind);
         var stacks = RollingWords.Stacks(cursor, ReduceMotion);
         // A word missing from the window's line ends releases its tile with the line on stage (the Mac's defaultEnd).
         var lineEnd = LyricHighlightTiming.LineEnd(Sheet!.Lines[row].End, _window.Words);
@@ -154,8 +154,10 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         }
         if (count == 0) return;
         // Rank 0, the word in focus, sits here; every other word is stacked above or below it by its measured size.
-        var anchor = new PointD(stage.Width * 0.5, stage.Height * 0.54 + RollingMotion.Baseline(Kind.RollingStyle(), 0) * lineBase);
-        RollingStack.Centres(_sizes.AsSpan(0, count), _slots.AsSpan(0, count), anchor, lineBase * 0.16,
+        // Cutout's focus sits a little lower, so its tall collage keeps off the top edge.
+        var anchor = new PointD(stage.Width * 0.5,
+                                stage.Height * RollingStack.FocusHeight(Kind) + RollingMotion.Baseline(Kind.RollingStyle(), 0) * lineBase);
+        RollingStack.Centres(_sizes.AsSpan(0, count), _slots.AsSpan(0, count), anchor, lineBase * RollingStack.Gap(Kind),
                              _centres.AsSpan(0, count), _order.AsSpan(0, count), _stack.AsSpan(0, count));
         // The word in focus is drawn last (on top).
         var order = _order.AsSpan(0, count);
@@ -168,7 +170,8 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             order[j + 1] = member;
         }
         var origin = StageOrigin;
-        var margin = lineBase * 0.22;
+        // Title-safe: kept about 5% in from every edge of the stage.
+        var (margin, marginY) = RollingStack.Margins(stage, lineBase);
         foreach (var m in order)
         {
             ref readonly var state = ref _states[m];
@@ -176,7 +179,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             if (!(opacity > 0.002)) continue;
             var slot = _slots[m];
             var centre = _centres[m];
-            var fit = RollingStack.Fit(_sizes[m], slot, centre, stage, margin);
+            var fit = RollingStack.Fit(_sizes[m], slot, centre, stage, margin, marginY);
             if (!(fit > 0)) continue;
             var token = prepared[_members[m]];
             var unit = _preparedUnits[_members[m]]!;
@@ -265,10 +268,14 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         var labelWorld = Matrix3x2.CreateTranslation(unit.LabelOffset) * world;
         var readingWorld = Matrix3x2.CreateTranslation(unit.ReadingOffset) * world;
         var reading = state.Presentation.Preview ? null : unit.Reading;
+        // Used with restraint: only the word in focus wears its label; as it steps back the label lifts away and it is
+        // plain type again (the Mac's RollingUnit.labelHold).
+        var hold = RollingLabel.Hold(state.Slot.Rank);
         // The label fades as one piece (its word stays dark on a fading tile, as on the Mac), so a label that is not
         // fully there is drawn in a layer at its opacity; a cutout's label is drawn in a layer cut to its unmasked part.
         if (clip.IsSet && !(clip.Right > clip.Left)) return;
-        var layered = opacity < 0.995f || clip.IsSet;
+        // Once its label has lifted away the word is plain type, drawn at its own opacity without a layer.
+        var layered = (opacity < 0.995f && hold > 0.001) || clip.IsSet;
         if (layered)
         {
             var margin = (float)(unit.Size.Height + unit.Size.Width * 0.1);
@@ -280,7 +287,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         try
         {
             DrawLabelParts(dc, token, unit, state, world, labelWorld, readingWorld, reading, scale, opacity, blur, boundaries, reveal,
-                           readingBoundaries, readingShares, ReduceMotion);
+                           readingBoundaries, readingShares, ReduceMotion, hold);
         }
         finally
         {
@@ -292,12 +299,19 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                                        in Matrix3x2 world, in Matrix3x2 labelWorld, in Matrix3x2 readingWorld, Ink? reading,
                                        float scale, float opacity, float blur, ReadOnlySpan<double> boundaries,
                                        ReadOnlySpan<double> reveal, ReadOnlySpan<double> readingBoundaries,
-                                       ReadOnlySpan<double> readingShares, bool reduce)
+                                       ReadOnlySpan<double> readingShares, bool reduce, double hold = 1)
     {
         // Under Reduce Motion the label is simply there (no press, no tilt) and fades in with its word.
         var rightToLeft = token.RightToLeft;
         unit.Label.DrawShadow(dc, labelWorld, opacity, 1, boundaries, reveal, rightToLeft);
         reading?.DrawShadow(dc, readingWorld, opacity, 1, readingBoundaries, readingShares);
+        if (!(hold > 0.001))
+        {
+            // The label has lifted away: plain type again.
+            unit.Label.Draw(dc, labelWorld, scale, opacity, blur, GlowSpec.None, 0, boundaries, reveal, rightToLeft);
+            reading?.Draw(dc, readingWorld, scale, opacity, blur, GlowSpec.None, 0, readingBoundaries, readingShares);
+            return;
+        }
 
         var width = (float)unit.Size.Width;
         var pressed = (float)RollingLabel.TileWidth(state.Presentation.Arrival, reduce);
@@ -305,7 +319,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         var tileWorld =
             Matrix3x2.CreateTranslation(-edge, 0) * Matrix3x2.CreateScale(pressed, 1) * Matrix3x2.CreateTranslation(edge, 0)
             * Matrix3x2.CreateRotation(Radians(reduce ? 0 : RollingLabel.DrawnTilt)) * world;
-        unit.Tile!.Draw(dc, tileWorld, scale, opacity, blur, GlowSpec.None, 1);
+        unit.Tile!.Draw(dc, tileWorld, scale, opacity * (float)hold, blur, GlowSpec.None, 1);
 
         // Where the tile has pressed in (from the leading edge; the word and reading are centred on the unit) they take
         // the colour set on it, and their own colour beyond. Each colour is drawn only on its side of the edge, so no
@@ -313,12 +327,17 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         var seam = rightToLeft ? width / 2 - width * pressed : -width / 2 + width * pressed;
         float onFrom = rightToLeft ? seam : float.NegativeInfinity, onTo = rightToLeft ? float.PositiveInfinity : seam;
         float offFrom = rightToLeft ? float.NegativeInfinity : seam, offTo = rightToLeft ? seam : float.PositiveInfinity;
+        // As the label lifts away, the word on it changes back to its own colour (the Mac's tile-text switch, at 0.4).
+        var on = (float)LyricHighlightTiming.TextOpacity(hold, 0.4);
         unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, offFrom, offTo, boundaries, reveal, rightToLeft);
-        unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+        // Mid-switch the word is whole in its own colour under the tile's text colour, as the Mac draws it.
+        if (on < 0.999f) unit.Label.DrawBetween(dc, labelWorld, scale, opacity, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
+        unit.LabelOnTile!.DrawBetween(dc, labelWorld, scale, opacity * on, blur, onFrom, onTo, boundaries, reveal, rightToLeft);
         if (reading is not null)
         {
             reading.DrawBetween(dc, readingWorld, scale, opacity, blur, offFrom, offTo, readingBoundaries, readingShares);
-            unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo, readingBoundaries, readingShares);
+            if (on < 0.999f) reading.DrawBetween(dc, readingWorld, scale, opacity, blur, onFrom, onTo, readingBoundaries, readingShares);
+            unit.ReadingOnTile?.DrawBetween(dc, readingWorld, scale, opacity * on, blur, onFrom, onTo, readingBoundaries, readingShares);
         }
     }
 
@@ -422,7 +441,7 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
         {
             var onTile = LyricInks.Vector(ink.TileText);
             tile = kit.BakeTile(new Vector2((float)width, (float)height), Points(RollingLabel.CornerRadius),
-                                LyricInks.Vector(ink.TileColour), raster, shadow);
+                                LyricInks.Vector(LabelColour(ink)), raster, shadow);
             labelOnTile = kit.Bake(label, onTile, raster, ShadowSpec.None);
             readingOnTile = reading is null ? null
                 : kit.Bake(reading, onTile with { W = onTile.W * (float)Core.Colour.LyricHighlight.ReadingOpacity }, raster, ShadowSpec.None);
@@ -446,9 +465,21 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     }
 
     /// <summary>
+    /// Cutout's label colour (the Mac's <c>labelColour</c>): the highlight's tile with its chroma eased back
+    /// (<see cref="RollingLabel.Calm"/>); the fallback tile likewise when the ink has none; a tile set without its tone
+    /// as given.
+    /// </summary>
+    internal static SrgbColour LabelColour(in LyricInk ink)
+    {
+        if (ink.Highlight is { } tone) return Perceptual.ToColour(RollingLabel.Calm(tone.Tile));
+        return ink.Tile is null ? Perceptual.ToColour(RollingLabel.Calm(Core.Colour.LyricHighlight.Fallback.Tile)) : ink.TileColour;
+    }
+
+    /// <summary>
     /// A rolling word and its reading laid out as the stage measures them: the word in the heavy cut (or, for a
     /// Cascade or Cutout word that is not a hero, the regular one), its reading under it (wrapping at 80% of the
-    /// stage), 2 points of padding at each side, or 11 by 3 round a Cutout label. The caller disposes the layouts.
+    /// stage), 2 points of padding at each side, or a Cutout label's padding (<see cref="RollingLabel.TilePadding"/>).
+    /// The caller disposes the layouts.
     /// </summary>
     /// <param name="alternate">Set in Editorial's contrasting face ("Add Editorial typography").</param>
     /// <param name="mix">One of "Randomise lyric fonts" faces, or −1.</param>
@@ -479,9 +510,12 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
     /// </summary>
     internal static SizeD FreeStage(SizeD stage, double band) => new(stage.Width, Math.Max(0, stage.Height - band));
 
-    /// <summary>The padding round a unit, in pixels: 2 points at each side, or 11 by 3 round a Cutout label.</summary>
+    /// <summary>
+    /// The padding round a unit, in pixels: 2 points at each side, or round a Cutout label in proportion to its type
+    /// (at least 11 by 3 points).
+    /// </summary>
     internal static (double X, double Y) Padding(RollingWord token, float scale) => token.Tile
-        ? (RollingLabel.PaddingX * scale, RollingLabel.PaddingY * scale)
+        ? RollingLabel.TilePadding(token.PointSize, scale)
         : (RollingLabel.PlainPaddingX * scale, 0);
 
     /// <summary>Backing vocals of the lines on the rolling stage, set in Editorial's typography (Spoken itself would take over the stage).</summary>

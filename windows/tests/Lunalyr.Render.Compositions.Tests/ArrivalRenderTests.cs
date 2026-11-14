@@ -201,9 +201,11 @@ public sealed class ArrivalRenderTests : IDisposable
         foreach (var cover in new[] { Cover(200, 30, 40), Cover(30, 60, 210) })
         {
             var ink = LyricInks.Settled(cover);
-            var colour = composition == "cascade" ? ink.Accent!.Value : ink.TileColour;
+            // Cutout's labels are the highlight's tile with its chroma eased back (Mac Test Build 88's calm labels).
+            var colour = composition == "cascade" ? ink.Accent!.Value : SpokenLayer.LabelColour(ink);
             colours.Add(colour);
-            var pixels = Frame(layer, scene with { Palette = cover }, 11.3);
+            // While "dreaming" is the word in focus: it steps back (and Cutout's label lifts away) once "under" is sung.
+            var pixels = Frame(layer, scene with { Palette = cover }, 11.15);
             Assert.True(Near(pixels, colour) > (composition == "cascade" ? 150 : 3000), $"{composition}: {Near(pixels, colour)} pixels of {colour}");
         }
         Assert.True(Math.Abs(colours[0].R - colours[1].R) + Math.Abs(colours[0].G - colours[1].G) + Math.Abs(colours[0].B - colours[1].B) > 0.2,
@@ -226,12 +228,12 @@ public sealed class ArrivalRenderTests : IDisposable
             return count;
         }
         var before = Tile(Frame(layer, scene, 10.6));
-        var landed = Tile(Frame(layer, scene, 11.3));
+        var landed = Tile(Frame(layer, scene, 11.15));
         Assert.True(landed > 4000, $"{landed}");
         Assert.True(before < landed / 4, $"{before} before, {landed} landed");
         // Cascade has no labels.
         using var cascade = Layer("cascade");
-        Assert.True(Tile(Frame(cascade, scene, 11.3)) < landed / 10);
+        Assert.True(Tile(Frame(cascade, scene, 11.15)) < landed / 10);
     }
 
     [Theory]

@@ -62,7 +62,7 @@ public class ReadingSyllableRevealTests
         var runShares = set.RunShares(line.Words, glue);
         var typography = EditorialSetting.Layout(line.Words, glue, 60, 11, index, wordTimed: true,
                                                  editorial: composition.HasEditorialTypography(), set.RunReadings(line.Words, glue),
-                                                 connections: composition.HasConnections());
+                                                 composition: composition);
         var tokens = typography.Tokens;
         int? next = null;
         for (var i = 0; i < tokens.Count; i++)

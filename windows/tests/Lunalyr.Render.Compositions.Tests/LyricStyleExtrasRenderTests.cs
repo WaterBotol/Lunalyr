@@ -72,11 +72,11 @@ public sealed class LyricStyleExtrasRenderTests : IDisposable
 
     /// <summary>
     /// Windows' own: switched off, bracketed backing words stay in the lead line instead of the band below it (to the
-    /// right of the rolling column in Spoken).
+    /// right of the rolling column in Spoken, where the band's Editorial spread hangs from its left edge).
     /// </summary>
     [Theory]
     [InlineData("editorial", 0.0)]
-    [InlineData("spoken", 0.58)]
+    [InlineData("spoken", 0.53)]
     public void BackingVocalsCanStayInTheLine(string id, double bandLeft)
     {
         var scene = Fixtures.English();

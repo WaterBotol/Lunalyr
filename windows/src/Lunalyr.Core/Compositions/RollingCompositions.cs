@@ -1,7 +1,9 @@
 // The arrival-only compositions (Spoken, Cascade, Cutout) and Cutout's labels. Which compositions roll and which
 // curves each takes are described in docs/compositions/shared.md and spoken.md (re-implemented from behaviour); the
-// label's width rule and its tile (RollingUnit.tileWidth, CutoutTile in the Mac app) are Lunalyr's own and ported.
+// label's width rule, padding, hold and calm colour and its tile (RollingUnit.tileWidth, tilePadding, labelHold,
+// SpokenTypographyView.calmLabel, CutoutTile in the Mac app) are Lunalyr's own and ported.
 
+using Lunalyr.Core.Colour;
 using Lunalyr.Core.Motion;
 
 namespace Lunalyr.Core.Compositions;
@@ -34,8 +36,30 @@ public static class RollingLabel
     /// <summary>The tile's corner radius, points (the cutout tile's).</summary>
     public const double CornerRadius = CutoutTile.CornerRadius;
 
-    /// <summary>Padding round a labelled word (and its reading), points.</summary>
+    /// <summary>The least padding round a labelled word (and its reading), points.</summary>
     public const double PaddingX = 11, PaddingY = 3;
+
+    /// <summary>
+    /// A label's padding round its word (the Mac's <c>RollingUnit.tilePadding</c>, Lunalyr's own): in proportion to
+    /// the type, so a label on a large stage is not a tight sliver; at least <see cref="PaddingX"/> by
+    /// <see cref="PaddingY"/> points. <paramref name="pointSize"/> and the result are pixels; <paramref name="scale"/>
+    /// is pixels per point.
+    /// </summary>
+    public static (double X, double Y) TilePadding(double pointSize, double scale) =>
+        (Math.Max(PaddingX * scale, pointSize * 0.26), Math.Max(PaddingY * scale, pointSize * 0.08));
+
+    /// <summary>
+    /// How much of a label is left as its word steps back from focus (the Mac's <c>RollingUnit.labelHold</c>): whole
+    /// until it is a third of the way to the next rank, gone by then. Only the word in focus wears its label.
+    /// </summary>
+    public static double Hold(double rank) => 1 - Easing.Smoothstep((rank - 0.35) / 0.65);
+
+    /// <summary>
+    /// A label's colour (the Mac's <c>calmLabel</c>): the highlight's own tile at the same lightness and hue, with its
+    /// chroma eased back in OKLab, so a stack of labels on a dark stage reads as coloured paper rather than a row of
+    /// warnings. Lightness is kept, so the text set on it stays as legible.
+    /// </summary>
+    public static OkLab Calm(OkLab tile) => OkLab.FromLch(tile.L, tile.Chroma * 0.78, tile.Hue);
 
     /// <summary>Padding at each side of an unlabelled rolling word, points.</summary>
     public const double PlainPaddingX = 2;

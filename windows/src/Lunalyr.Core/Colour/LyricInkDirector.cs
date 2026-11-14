@@ -174,16 +174,8 @@ public sealed class LyricInkDirector
             case LyricColourMode.SungSweep:
             {
                 var sung = Perceptual.Readable(followed.S1, behind, ratio, keepingColour: true);
-                var sample = LyricInk.SampleOf(Perceptual.Readable(followed.S0, behind, ratio, keepingColour: true), sung);
-                var fade = Easing.Smoothstep((sung.L - 0.91) / 0.07)
-                    * Easing.Smoothstep((0.065 - sung.Chroma) / 0.045)
-                    * Easing.Smoothstep((behind - 0.14) / 0.10) * Math.Min(1, strength);
-                if (fade > 0.001)
-                {
-                    var marker = OkLab.FromLch(0.33, 0.12, goals.S1.Hue);
-                    sample.SweepUnderline = Perceptual.ToColour(marker, fade);
-                }
-                ink.Base = sample;
+                // No underline under sung words (the owner, 14 Nov 2026): SweepUnderline is never set.
+                ink.Base = LyricInk.SampleOf(Perceptual.Readable(followed.S0, behind, ratio, keepingColour: true), sung);
                 break;
             }
             default:

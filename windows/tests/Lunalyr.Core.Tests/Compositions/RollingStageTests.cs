@@ -250,11 +250,8 @@ public class RollingStageTests
         static double Limit(string text, string? reading = null)
         {
             var word = new LyricWord(text, 10, 10.5);
-            var filler = RollingWords.IsFiller(text);
-            var hero = RollingWords.IsHero(word);
-            var size = 66 * (hero ? 0.88 : filler ? 0.62 : 0.74) * (reading is null ? 1 : 0.88);
-            var tile = hero || RollingWords.Fnv1a(text) % 4 == 1;
-            return RollingStack.TurnLimit(text, reading, size, tile);
+            var readings = reading is null ? null : new Dictionary<LyricWord, string> { [word] = reading };
+            return RollingWords.Prepare([word], 66, readings, composition: CompositionKind.Cutout)[0].TurnLimit;
         }
         Assert.Equal(12, Limit("love"));
         Assert.Equal(12, Limit("夢見る", "yumemiru"));

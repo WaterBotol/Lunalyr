@@ -306,9 +306,8 @@ public class LyricColourTests
         Assert.Null(accent.SweepUnderline);
         var washedOut = Sweep(0.62);
         Assert.True(Lab(washedOut.Sung).L > 0.98);
-        var marker = Assert.NotNull(washedOut.SweepUnderline);
-        Assert.True(marker.A > 0.8);
-        Assert.True(Perceptual.Contrast(Luminance(marker), 0.62) > 3);
+        // No underline under sung words, even when the sung colour is near white.
+        Assert.Null(washedOut.SweepUnderline);
         Assert.Null(Sweep(0.62, 0).SweepUnderline);
     }
 
