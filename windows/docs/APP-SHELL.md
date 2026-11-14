@@ -101,7 +101,7 @@ Lunalyr.exe --demo --seconds 60 --data $env:TEMP\lunalyr-demo
 
 Placeholder monochrome icon drawn in code (a crescent and a lyric line; white on a dark taskbar, near-black on a
 light one). Tooltip: "Lunalyr", the song, the status, "Wallpaper paused". Right-click menu: the song (disabled),
-Open settings, Pause wallpaper / Resume wallpaper, Quit Lunalyr. Left-click (or Enter/Space on the focused icon) opens
+Open Settings, Pause wallpaper / Resume wallpaper, Quit Lunalyr. Left-click (or Enter/Space on the focused icon) opens
 the tray flyout, and closes it again. No balloons (they make a sound). The line being sung can show beside the clock
 (Settings › General › Lyric by the tray; see "Tray lyric and Discord status").
 
