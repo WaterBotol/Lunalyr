@@ -80,21 +80,38 @@ internal static class FloatingLyricsSection
         // Display: only with more than one.
         var displays = new ComboBox { MinWidth = 260, MaxWidth = 360 };
         var displayCard = Card("Display", null, "", displays);
-        IReadOnlyList<DisplayChoice> known = [];
+        IReadOnlyList<DisplayChoice> shown = [];
+        var filling = false;
         ctx.OnRefresh(s =>
         {
-            known = hooks.Displays();
-            displays.Items.Clear();
-            displays.Items.Add(new ComboBoxItem { Content = FloatingCopy.MainDisplay, Tag = "" });
-            foreach (var d in known) displays.Items.Add(new ComboBoxItem { Content = d.Name, Tag = d.Key });
-            var index = 0;
-            for (var i = 0; i < known.Count; i++) if (known[i].Key == s.FloatingDisplay) index = i + 1;
-            displays.SelectedIndex = index;
-            displayCard.Visibility = known.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            var known = hooks.Displays();
+            filling = true;
+            try
+            {
+                // Rebuilt only when the displays themselves change. Rebuilding on every refresh cleared the menu while it
+                // was still closing over the item just picked (picking saves a setting, and a custom place saves another),
+                // and WinUI failed with "Element not found" (0x80070490), which crashed Lunalyr (14 Nov).
+                if (!known.Select(d => (d.Key, d.Name)).SequenceEqual(shown.Select(d => (d.Key, d.Name))))
+                {
+                    shown = known;
+                    displays.Items.Clear();
+                    displays.Items.Add(new ComboBoxItem { Content = FloatingCopy.MainDisplay, Tag = "" });
+                    foreach (var d in known) displays.Items.Add(new ComboBoxItem { Content = d.Name, Tag = d.Key });
+                }
+                var index = 0;
+                for (var i = 0; i < shown.Count; i++) if (shown[i].Key == s.FloatingDisplay) index = i + 1;
+                if (displays.SelectedIndex != index) displays.SelectedIndex = index;
+            }
+            finally
+            {
+                filling = false;
+            }
+            displayCard.Visibility = shown.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         });
         displays.SelectionChanged += (_, _) =>
         {
-            if (displays.SelectedItem is ComboBoxItem { Tag: string key }) ctx.Update(s => s with { FloatingDisplay = key });
+            if (filling || displays.SelectedItem is not ComboBoxItem { Tag: string key }) return;
+            if (key != ctx.Current.FloatingDisplay) ctx.Update(s => s with { FloatingDisplay = key });
         };
         section.Children.Add(displayCard);
 
