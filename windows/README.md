@@ -41,5 +41,8 @@ Build output goes to `artifacts/` (per project), so separate git worktrees never
 
 ## Licence
 
-The Windows port is written without any Verso code (see [docs/PROVENANCE.md](docs/PROVENANCE.md)), so it can be
-closed source. The owner will choose the final licence. Until then, all rights are reserved.
+Lunalyr for Windows is open source under the same licence as the rest of the Lunalyr repository: the GNU General
+Public License v3.0 with the Commons Clause (see the repository's `LICENSE`). Anyone may read, use, change and share
+it, and changed versions must stay open under the same terms; nobody may sell it, or a product or service whose value
+comes mainly from it. Third-party components keep their own licences ([THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
+The port is written without any Verso code ([docs/PROVENANCE.md](docs/PROVENANCE.md)).
