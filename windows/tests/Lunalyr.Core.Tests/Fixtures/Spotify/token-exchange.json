@@ -1,7 +1,0 @@
-{
-  "access_token": "AT-exchange",
-  "token_type": "Bearer",
-  "scope": "user-read-playback-state user-read-currently-playing user-modify-playback-state",
-  "expires_in": 3600,
-  "refresh_token": "RT-exchange"
-}

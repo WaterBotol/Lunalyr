@@ -59,7 +59,6 @@ public sealed class AppSettingsTests
             "pauseWhenCovered", "pauseOnBatterySaver", "pauseWhenFullScreen", "lyricOffset", "repairQQGaps", "songOffsets",
             "lyricSourceOrder", "lyricSources", "lyricMatchMode", "lyrimuseFolder", "artistAliases", "creditsLayer", "openingTitle", "openingTitleCover", "showInterludes",
             "lyricHighlightMode", "lyricHighlightCustom", "rotateLayouts", "rotateLayoutCounts", "rotateLayoutsCursor",
-            "spotifyClientId",
             "constellationSpread", "constellationLinkOpacity", "echoStrength", "wordEntranceMix", "wordArrivalByStyle", "appTheme",
             "showControlsOnHover", "desktopPlayerTimeMode", "player",
             "noLyrics", "showTranslations",
@@ -119,6 +118,27 @@ public sealed class AppSettingsTests
             TestContext.Current.CancellationToken);
         await using (var unknown = AppSettingsStore.Open(temp.Path, Logger.Null))
             Assert.Equal("automatic", unknown.Current.Player);
+    }
+
+    // Windows only: the desktop player's Spotify search was removed (14 Nov 2026). A settings file from a build that had
+    // it still loads, keeps everything else, and drops the old key on the next save.
+    [Fact]
+    public async Task AnOldSpotifyClientIdIsIgnoredAndDropped()
+    {
+        using var temp = new TempFolder();
+        var file = Path.Combine(temp.Path, "settings.json");
+        await File.WriteAllTextAsync(file, """{ "schemaVersion": 1, "spotifyClientId": "0123456789abcdef0123456789abcdef", "player": "spotify" }""",
+            TestContext.Current.CancellationToken);
+        await using (var store = AppSettingsStore.Open(temp.Path, Logger.Null))
+        {
+            Assert.Equal("spotify", store.Current.Player);
+            store.Update(s => s with { WallpaperPaused = true });
+            Assert.True(await store.FlushAsync());
+        }
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(file, TestContext.Current.CancellationToken)).RootElement;
+        Assert.False(json.TryGetProperty("spotifyClientId", out _));
+        Assert.Equal("spotify", json.GetProperty("player").GetString());
     }
 
     // Ported from LyricReviewFixesTests.swift: testTranslationsAreOnByDefaultAndPersist (the key without "custom."; the

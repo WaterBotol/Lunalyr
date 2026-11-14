@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Draws the desktop player's card offscreen with the app's own CardPainter (its source files compiled in here, no
+       window, no WinUI) for invented songs in every look and pane, to PNGs in docs/previews/player. Plays nothing and
+       touches no media session or network. Not part of the app or the solution. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64</Platforms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- SharpGen.Runtime (under Vortice) reports a reflection path the renderer never uses; see tools/EngineHarness.
+         CS0649: the card model's fields this tool leaves at their defaults. -->
+    <NoWarn>$(NoWarn);IL2104;CS0649</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lunalyr.Shell\Lunalyr.Shell.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.cs" Link="App\CardPainter.cs" />
+    <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.Parts.cs" Link="App\CardPainter.Parts.cs" />
+    <Compile Include="..\..\src\Lunalyr.App\Player\CardPainter.Align.cs" Link="App\CardPainter.Align.cs" />
+    <Compile Include="..\..\src\Lunalyr.App\Player\CardModel.cs" Link="App\CardModel.cs" />
+    <Compile Include="..\..\src\Lunalyr.App\Player\CardTheme.cs" Link="App\CardTheme.cs" />
+    <Compile Include="..\..\src\Lunalyr.App\Player\PlayerNative.cs" Link="App\PlayerNative.cs" />
+  </ItemGroup>
+</Project>

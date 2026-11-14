@@ -298,21 +298,15 @@ public sealed class PlayerCardTests
     [Fact]
     public void CardIsCentredAtEverySizeAndFitsThePanel()
     {
-        // At rest and with search or the queue open, the card's middle is the panel's (the screen's) middle.
-        foreach (var pane in new[] { PlayerPane.Song, PlayerPane.Search, PlayerPane.Queue })
+        // The card's middle is the panel's (the screen's) middle. (The Mac's search and queue panes, which grow the
+        // card, are not on Windows: the owner removed the player's search.)
+        var top = PlayerCard.CardTop(panelHeight: 780);
+        Assert.Equal(390, top + PlayerCard.RestHeight / 2, 0.5);
+        foreach (var height in new[] { 780.0, 700, 500, 300, 100 })
         {
-            var card = PlayerCard.CardHeight(pane, queueRows: 10);
-            var top = PlayerCard.CardTop(panelHeight: 780, cardHeight: card);
-            Assert.Equal(390, top + card / 2, 0.5);
-        }
-
-        Assert.Equal(PlayerCard.RestHeight, PlayerCard.CardHeight(PlayerPane.Song));
-        Assert.Equal(PlayerCard.TallestHeight, PlayerCard.CardHeight(PlayerPane.Queue));
-        foreach (var height in new[] { 780.0, 700, 500, 300 })
-        {
-            var top = PlayerCard.CardTop(panelHeight: height, cardHeight: PlayerCard.TallestHeight);
-            Assert.True(top >= 0);
-            if (height >= PlayerCard.TallestHeight) Assert.True(top + PlayerCard.TallestHeight <= height, $"the open queue fits, {height}");
+            var at = PlayerCard.CardTop(panelHeight: height);
+            Assert.True(at >= 0);
+            if (height >= PlayerCard.RestHeight) Assert.True(at + PlayerCard.RestHeight <= height, $"the card fits, {height}");
         }
 
         Assert.Equal(ScrubMath.BarWidth, PlayerCard.Column); // the bar spans the column

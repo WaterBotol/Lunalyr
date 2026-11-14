@@ -53,7 +53,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
     private readonly bool _debugShow;
     private readonly bool _debugTop;
     private PlayerAutomation? _automation;
-    private SearchField? _field;
+    private readonly float _cardHeightDip = CardPainter.Height;
 
     // Hover poll.
     private uint _pollMs;
@@ -129,12 +129,11 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         s_instance = this;
         _surface.CreateWindow(&WndProc);
         _automation = new PlayerAutomation(this, _surface.Hwnd);
-        StartSearch();
         _model.ShowsRemaining = _settings().DesktopPlayerTimeMode != "total";
         RefreshLook();
         SchedulePoll(_debugShow ? 100 : (uint)(HoverPolicy.Interval * 1000));
         if (_debug.Count > 0) _log.Info($"Desktop player: debug {string.Join(", ", _debug)}.");
-        _log.Info("Desktop player ready: it comes up where the pointer rests in the middle of the desktop.");
+        _log.Info("Desktop player ready: it comes up where the pointer rests near the card's place on the desktop.");
     }
 
     public nint Hwnd => _surface.Hwnd;
@@ -162,7 +161,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         }
 
         _controller()?.ClearScrubPreview();
-        StopSearch();
         _automation?.Dispose();
         _painter.Dispose();
         _surface.Dispose();
@@ -219,7 +217,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         {
             _hover.Reset();
             _intent.Reset();
-            Apply(Pinned(null), now);
+            Apply(null, now);
             return;
         }
 
@@ -236,7 +234,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         if (intentReady && previous is null && BusyFullScreen()) intentReady = false;
         var dragging = _interaction.Dragging && held;
         // Align mode keeps the card up too (the Mac's pinnedOpen while aligning).
-        var holds = previous is not null && (PlayerDismissGuard.Holds(dragging, _interaction.SearchFocused, _interaction.LastClick, now, blocked) || Aligning);
+        var holds = previous is not null && (PlayerDismissGuard.Holds(dragging, _interaction.LastClick, now, blocked) || Aligning);
         var active = HoverPolicy.Decide(stepped, previous, intentReady, holds);
         if (active is { } a)
         {
@@ -248,8 +246,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             _hover.Reset();
         }
 
-        // A typed search keeps the card on the display it was typed on.
-        Apply(Pinned(active), now);
+        Apply(active, now);
     }
 
     /// <summary>Whether the desktop (or Lunalyr's own card) is under the pointer, not an app's window.</summary>
@@ -261,7 +258,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         if (root != 0 && root == _lastHit.Root && now - _lastHit.At < 2) return _lastHit.Exposed;
         bool exposed;
         if (root == 0) exposed = false;
-        else if (root == _surface.Hwnd || (_field is not null && root == _field.Hwnd)) exposed = true;
+        else if (root == _surface.Hwnd) exposed = true;
         // The desktop: the wallpaper and its icons (Lunalyr's own wallpaper is a child of Progman). Hovering an icon
         // counts as the desktop, as on the Mac.
         else exposed = PlayerNative.ClassIs(root, "Progman") || PlayerNative.ClassIs(root, "WorkerW");
@@ -288,11 +285,10 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
             var bounds = new HoverRect(info.Bounds.Left, info.Bounds.Top, info.Bounds.Right, info.Bounds.Bottom);
             var work = new HoverRect(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
             var s = info.Scale;
-            // The hot zone: the resting card's place and a margin round it, in the middle of the work area. The keep
-            // zone: wherever the card is now (it can grow later), and a smaller margin.
-            var rest = work.Centred(PlayerCard.Width * s, PlayerCard.RestHeight * s);
-            var hot = rest.Inflated(56 * s, 40 * s);
-            var keep = work.Centred(PlayerCard.Width * s, _cardHeightDip * s).Inflated(28 * s, 28 * s);
+            // The Mac's card zones (Test Build 88): the card as it is now, centred in the work area where it is drawn,
+            // grown by 24 DIPs to reveal and by 56 to keep it up. A change of height re-reads the displays.
+            var hot = HoverZones.Reveal(work, PlayerCard.Width, _cardHeightDip, s);
+            var keep = HoverZones.Keep(work, PlayerCard.Width, _cardHeightDip, s);
             _displays.Add(new HoverDisplay(id, bounds, hot, keep));
         }
     }
@@ -331,8 +327,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _work = work;
         RefreshLook();
         ReadSong(now, force: true);
-        SearchShown(now);
-        UpdateSearch(now);
         var reduce = _model.Look.ReduceMotion;
         if (!_visible || moving)
         {
@@ -371,7 +365,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         ApplyLyricFocus();
         _automation?.Shown(false);
         ReleaseKeyboard();
-        SearchHidden();
         StartFrames(16);
     }
 
@@ -441,7 +434,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         ReadSong(now, force: false);
         ApplyLyricFocus();
         if (!double.IsNaN(_debugScrub) && _shownOn is not null && !_scrub.IsDragging && _scrub.Current.CanSeek) StartDebugScrub();
-        UpdateSearch(now);
         UpdateModel(now);
         if (_rise.Moving(now) || _rise.Value(now) != 0) Place(now);
         var animating = _reveal.Moving(now) || _rise.Moving(now) || _record.Moving(now) || _thickness.Moving(now) || _active.Moving(now)
@@ -519,7 +511,6 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
 
         UpdatePalette(song);
         UpdateContext(song);
-        SearchTrackChanged(song, now);
     }
 
     private void UpdatePalette(PlayerNow song)
@@ -578,7 +569,7 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         var song = _now;
         var reduce = m.Look.ReduceMotion;
         m.DisplayedPlaying = _toggle.Displayed(song?.IsPlaying ?? false, now);
-        _record.To(m.DisplayedPlaying || reduce ? 1 : 0, now, reduce ? 0 : 0.55);
+        _record.To(m.DisplayedPlaying || reduce ? 1 : 0, now, reduce ? 0 : PlayerTokens.Motion.Record);
         m.RowKind = ScrubRowKinds.Of(song?.HasSong ?? false, isAdvert: false, isStream: m.IsStream, song?.Duration ?? 0,
             _scrub.Current.CanSeek);
         if (song is { HasSong: true, HasTimeline: false }) m.RowKind = ScrubRowKind.Hidden;
@@ -597,13 +588,14 @@ internal sealed unsafe partial class DesktopPlayer : IDisposable
         _thickness.To(!seekable ? 4 : dragging ? 9 : active ? 7 : 4, now, reduce ? 0 : 0.18);
         _active.To(active ? 1 : 0, now, reduce ? 0.1 : 0.18);
         var capsulesUp = seekable && _scrub.CapsulesUp;
-        _capsules.To(capsulesUp ? 1 : 0, now, capsulesUp ? 0.12 : 0.10);
-        _titles.To((float)PlayerCard.TitleOpacity(capsulesUp), now, capsulesUp ? 0.10 : 0.14);
+        // The capsules rise (quick) while the titles dim (quick exit), and back.
+        _capsules.To(capsulesUp ? 1 : 0, now, capsulesUp ? PlayerTokens.Motion.Feedback : PlayerTokens.Motion.FeedbackOut);
+        _titles.To((float)PlayerCard.TitleOpacity(capsulesUp), now, capsulesUp ? PlayerTokens.Motion.FeedbackOut : PlayerTokens.Motion.Feedback);
         if (_scrub.Session is { } session) (m.CapsuleX, m.CapsuleTime) = (session.DisplayX, session.TargetTime);
         else if (_scrub.HoverState is { } hover) (m.CapsuleX, m.CapsuleTime) = (hover.X, hover.Time);
         else if (_scrub.Flash is { } flash) (m.CapsuleX, m.CapsuleTime) = (ScrubMath.X(flash, m.Duration), flash);
 
-        _note.To(now < _noteUntil ? 1 : 0, now, 0.3);
+        _note.To(now < _noteUntil ? 1 : 0, now, now < _noteUntil ? PlayerTokens.Motion.Feedback : PlayerTokens.Motion.FeedbackOut);
         m.Reveal = _reveal.Value(now);
         m.RecordOut = _record.Value(now);
         m.Thickness = _thickness.Value(now);

@@ -77,16 +77,16 @@ public sealed class HoverIntentTests
         Assert.Null(HoverPolicy.Decide(proposed: 2, previous: 1, intentReady: false, holds: false));
     }
 
-    // Ported from DesktopScrubberTests.swift: testDismissGuards
+    // Ported from DesktopScrubberTests.swift: testDismissGuards (its search-field case left out: Windows has no player
+    // search)
     [Fact]
     public void DismissGuards()
     {
-        Assert.True(PlayerDismissGuard.Holds(dragging: true, searchFocused: false, lastClick: null, now: 5, overWindow: true));
-        Assert.False(PlayerDismissGuard.Holds(dragging: false, searchFocused: true, lastClick: 4.5, now: 5, overWindow: true)); // a window always wins outside a drag
-        Assert.True(PlayerDismissGuard.Holds(dragging: false, searchFocused: true, lastClick: null, now: 5, overWindow: false));
-        Assert.True(PlayerDismissGuard.Holds(dragging: false, searchFocused: false, lastClick: 4, now: 5, overWindow: false));
-        Assert.False(PlayerDismissGuard.Holds(dragging: false, searchFocused: false, lastClick: 3.7, now: 5, overWindow: false));
-        Assert.False(PlayerDismissGuard.Holds(dragging: false, searchFocused: false, lastClick: null, now: 5, overWindow: false));
+        Assert.True(PlayerDismissGuard.Holds(dragging: true, lastClick: null, now: 5, overWindow: true));
+        Assert.False(PlayerDismissGuard.Holds(dragging: false, lastClick: 4.5, now: 5, overWindow: true)); // a window always wins outside a drag
+        Assert.True(PlayerDismissGuard.Holds(dragging: false, lastClick: 4, now: 5, overWindow: false));
+        Assert.False(PlayerDismissGuard.Holds(dragging: false, lastClick: 3.7, now: 5, overWindow: false));
+        Assert.False(PlayerDismissGuard.Holds(dragging: false, lastClick: null, now: 5, overWindow: false));
     }
 
     // Ported from DesktopScrubberTests.swift: testPollIsQuickWhileShownOrPending
@@ -110,12 +110,53 @@ public sealed class HoverIntentTests
         Assert.True(HoverPolicy.ShouldPoll(enabled: true, systemHidden: false, hidden: new HashSet<long>(), new HashSet<long>()));
     }
 
+    // Ported from desktop_test.c (Test Build 88): "With the card's size set, the zones hug the card." The Mac's
+    // vc_hover_set_card(640, 216) is the card's size passed in; its control-panel square was 780 pt.
     [Fact]
-    public void ATypedSearchKeepsThePlayerOnItsOneDisplay()
+    public void TheZonesHugTheCard()
     {
-        Assert.True(HoverPolicy.ShowsPlayer(1, active: 1, pinned: null, searching: false));
-        Assert.False(HoverPolicy.ShowsPlayer(2, active: 1, pinned: 1, searching: true));
-        Assert.True(HoverPolicy.ShowsPlayer(1, active: null, pinned: 1, searching: true));
-        Assert.False(HoverPolicy.ShowsPlayer(1, active: null, pinned: 1, searching: false));
+        var big = new HoverRect(0, 0, 2560, 1440);
+        var hot = HoverZones.Reveal(big, 640, 216);
+        var keep = HoverZones.Keep(big, 640, 216);
+        Assert.Equal(640 + 2 * HoverZones.RevealMargin, hot.Width);
+        Assert.Equal(216 + 2 * HoverZones.RevealMargin, hot.Height);
+        Assert.Equal((2560 - hot.Width) / 2, hot.Left);
+        Assert.Equal((1440 - hot.Height) / 2, hot.Top);
+        Assert.Equal(640 + 2 * HoverZones.KeepMargin, keep.Width);
+        Assert.True(keep.Width < 780 && keep.Height < 780);
+        var tiny = new HoverRect(0, 0, 500, 300);
+        Assert.Equal(500, HoverZones.Reveal(tiny, 640, 216).Width); // never past the screen
+    }
+
+    // Windows: the zones follow the card as it is now (whatever its height), at the display's scale, centred in its
+    // work area wherever that sits on the desktop.
+    [Fact]
+    public void TheZonesFollowTheCardsHeightAndScale()
+    {
+        var work = new HoverRect(-1920, 40, 0, 1080); // a display left of the main one, its taskbar on top
+        const double taller = PlayerCard.RestHeight + 100;
+        var rest = HoverZones.Reveal(work, PlayerCard.Width, PlayerCard.RestHeight, 1.25);
+        var tall = HoverZones.Reveal(work, PlayerCard.Width, taller, 1.25);
+        Assert.Equal((PlayerCard.RestHeight + 2 * HoverZones.RevealMargin) * 1.25, rest.Height, 9);
+        Assert.Equal(100 * 1.25, tall.Height - rest.Height, 9);
+        Assert.Equal(work.CentreX, tall.CentreX, 9);
+        Assert.Equal(work.CentreY, tall.CentreY, 9);
+        Assert.Equal((PlayerCard.Width + 2 * HoverZones.KeepMargin) * 1.25, HoverZones.Keep(work, PlayerCard.Width, PlayerCard.RestHeight, 1.25).Width, 9);
+    }
+
+    // Windows: with the card's zones, the pointer 40 DIPs off the card's edge does not start a reveal, but keeps a
+    // shown player up there; past 56 it lingers, then goes.
+    [Fact]
+    public void ThePointerRevealsNearTheCardAndKeepsItAFingerFurther()
+    {
+        var bounds = new HoverRect(0, 0, 2560, 1440);
+        var display = new HoverDisplay(1, bounds, HoverZones.Reveal(bounds, 640, 216), HoverZones.Keep(bounds, 640, 216));
+        var hover = new DesktopHoverSession();
+        var cardLeft = (2560 - 640) / 2.0;
+        Assert.Null(hover.Step([display], cardLeft - 40, 720, false, false, 0));
+        Assert.Equal(1, hover.Step([display], cardLeft - 20, 720, false, false, 1));
+        Assert.Equal(1, hover.Step([display], cardLeft - 40, 720, false, false, 5));
+        Assert.Equal(1, hover.Step([display], cardLeft - 60, 720, false, false, 5.5));
+        Assert.Null(hover.Step([display], cardLeft - 60, 720, false, false, 5.5 + HoverPolicy.Linger));
     }
 }

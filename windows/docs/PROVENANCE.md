@@ -320,3 +320,20 @@ Blame (`-w -M -C`, `transfer/windows-port-14nov`) run on every file read; nothin
 | `Sources/Settings/SettingsWindow.swift` (the loader's use) | 9 in the lines around it (window creation, delegate, `makeKeyAndOrderFront`, activation) | `SettingsWindow.xaml.cs` (three lines), `SettingsWindow.Loader.cs` | **Re-implemented from behaviour**: open on the logo, build behind it, fade after `remaining(after:)` |
 | `WelcomeTests.swift`, `WelcomeGlassTests.swift`, `SettingsLoaderTests.swift` | 0 in the tests ported | `WelcomeTests.cs`, `OnboardingReworkTests.cs` | Ported tests keep the Mac's inputs |
 | `Sources/Resources/Onboarding/*`, `WelcomeGlass.mp4`, `DiscordStatus.gif` | — (media) | `App/Assets/Onboarding/` | The owner's own recordings, copied byte for byte; none is a Verso asset. `WelcomeGlass.mp4` was made with ReactDrops' Liquid Glass Logo from Lunalyr's own logo |
+
+## Test Build 88: the desktop player's look and hover zones
+
+Blame (`-w -M -C`, `transfer/windows-port-14nov`) run on every Mac file read; nothing from an `a99fd65` line was
+translated.
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/UI/Design/PlayerTokens.swift`, `Tests/Swift/PlayerTokensTests.swift` | 0 | `Core/Player/PlayerTokens.cs`, `PlayerTokensTests` | Faithful port |
+| `Sources/UI/Design/MotionTokens.swift` (`quickExit`, `press`, `release`, `emphasised`) | 4 (a `smoothstep` helper, not used) | `PlayerTokens.Motion` | Faithful port of the Lunalyr lines |
+| `Sources/Player/ArtworkPalette.swift` (`cardTint`, `deepContrast` 9) | 0 | `ArtworkPalette.CardTint`, `DeepContrast` | Faithful port |
+| `Sources/Player/DesktopPlayerView.swift`, `DesktopScrubber.swift`, `PlayerControls.swift`, `SleeveParts.swift`, `VideoAlignRow.swift` | 1 (`DesktopPlayerView`'s observed `HoverState`, no counterpart) | `App/Player/CardPainter*.cs`, `CardTheme.cs`, `CardModel.cs` | The look re-drawn in Direct2D from the Mac's values |
+| `Sources/Support/DesktopInteraction.c` (`vc_hover_set_card`, `card_zone`, the card branches of the hot and keep zones), `Tests/desktop_test.c` (the card-zone block) | 42 in the file, none in these lines (`d5f73c92`; one closing brace in the test block) | `Core/Player/HoverZones.cs`, `HoverIntentTests.TheZonesHugTheCard` | Faithful port of the Lunalyr lines; the hover step around them stays re-implemented (`DesktopHoverSession`) |
+| `Sources/Desktop/HoverState.swift` (`vc_hover_set_card` per poll) | 45 in the file, none in these lines (`d5f73c92`) | `DesktopPlayer.ReadDisplays` (zones from the card's current height; a height change re-reads them) | Behaviour ported |
+
+The player's search and queue (milestone 5's port of `DesktopPlayerModel`, `SleeveParts`' search and queue columns and
+the Spotify service) were removed on 14 Nov 2026 at the owner's request; nothing of them is left to account for.

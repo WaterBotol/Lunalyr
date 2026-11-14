@@ -140,7 +140,7 @@ internal sealed record AutomationSnapshot(
 }
 
 /// <summary>One part as UI Automation reads it.</summary>
-/// <param name="ControlType">UIA's control type id (Button 50000, Edit 50004, ListItem 50007, Slider 50015).</param>
+/// <param name="ControlType">UIA's control type id (Button 50000, Slider 50015).</param>
 /// <param name="Rect">Where it is on the card, in DIPs.</param>
 /// <param name="Status">ItemStatus ("Selected", "Now playing", "Up next"…), or empty.</param>
 internal sealed record AutomationItem(CardPart Part, string Name, string Help, int ControlType, RectF Rect, bool Enabled, string Status);
@@ -195,7 +195,7 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
         _snapshot = next with { Items = items };
         if (!UiaClientsAreListening()) return;
         if (old.Playing != next.Playing) RaiseProperty(PartFor(CardPart.PlayPause), 30005);
-        // Rows came or went (a search answered, the queue was read): the card's children changed.
+        // Parts came or went (the film button, align mode): the card's children changed.
         if (!old.Items.Select(i => i.Part).SequenceEqual(items.Select(i => i.Part))) RaiseStructure(_root);
     }
 
@@ -216,7 +216,7 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
 
     private static (string Name, string Help, int ControlType, string Status) Describe(CardModel m, AutomationSnapshot s, CardPart part)
     {
-        const int Button = 50000, Edit = 50004, ListItem = 50007, Slider = 50015;
+        const int Button = 50000, Slider = 50015;
         switch (part)
         {
             case CardPart.Cover: return (s.CoverName, s.HasSong ? "Plays or pauses. Double-click brings the player forward" : "", Button, "");
@@ -225,32 +225,6 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
             case CardPart.Next: return ("Next track", "", Button, "");
             case CardPart.SeekBar: return ("Playback position", "", Slider, s.PositionText);
             case CardPart.TimeLabel: return (s.TimeLabelName, "", Button, "");
-            case CardPart.SearchButton: return ("Search", "Search and play a song (Ctrl+F)", Button, m.Pane == PlayerPane.Search ? "Open" : "");
-            case CardPart.QueueButton: return ("Queue", "What played and what plays next", Button, m.Pane == PlayerPane.Queue ? "Open" : "");
-            case CardPart.PlayerLabel: return ($"Playing in {m.PlayerName}", "Opens search, where you choose the player to search", Button, "");
-            case CardPart.PaneClose: return (m.Pane == PlayerPane.Queue ? "Close queue" : "Close search", "Esc", Button, "");
-            case CardPart.ClearSearch: return ("Clear search", "", Button, "");
-            case CardPart.PromptAction: return (m.Prompt?.ActionLabel ?? "", m.Prompt?.Text ?? "", Button, "");
-            case CardPart.SearchField:
-                return (m.SearchPlaceholder, m.Status.Kind == PlayerSearchStatusKind.Idle ? "" : m.Status.Text, Edit, "");
-        }
-
-        if (CardParts.IsPicker(part, out var picker) && picker < m.Pickers.Count)
-            return ($"Search {m.Pickers[picker]}", "Chooses the player search talks to", Button, picker == m.PickerSelected ? "Selected" : "");
-        if (CardParts.IsResult(part, out var index) && index < m.Results.Count)
-        {
-            var r = m.Results[index];
-            var kind = r.Kind == PlayerSearchResultKind.Album ? "album" : "song";
-            var by = r.Artist.Length == 0 ? r.Title : $"{r.Title} by {r.Artist}";
-            return ($"{by}, {kind}", index == m.Selection ? "Selected. Enter plays it" : "", ListItem, index == m.Selection ? "Selected" : "");
-        }
-
-        if (CardParts.IsQueueRow(part, out var row) && row < m.Queue.Count)
-        {
-            var q = m.Queue[row];
-            var current = m.Queue.ToList().FindIndex(x => x.IsCurrent);
-            var place = row == current ? "Now playing" : current >= 0 && row < current ? "Played earlier" : "Up next";
-            return (q.Artist.Length == 0 ? q.Title : $"{q.Title} by {q.Artist}", row == current ? "Plays or pauses" : "Plays it, then what is listed after it", ListItem, place);
         }
 
         if (DesktopPlayer.DescribeAlign(m, part) is { } align) return align;
@@ -489,19 +463,16 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
     {
         private bool IsBar => part == CardPart.SeekBar;
 
-        private bool IsField => part == CardPart.SearchField;
-
         public int get_ProviderOptions() => 1;
 
         public nint GetPatternProvider(int patternId)
         {
-            // Invoke for the buttons and rows; RangeValue and Value (the spoken position) for the seek bar; Value (what is
-            // typed) for the search box.
+            // Invoke for the buttons; RangeValue and Value (the spoken position) for the seek bar.
             return patternId switch
             {
-                10000 when !IsBar && !IsField => (nint)ComInterfaceMarshaller<IInvokeProvider>.ConvertToUnmanaged(this),
+                10000 when !IsBar => (nint)ComInterfaceMarshaller<IInvokeProvider>.ConvertToUnmanaged(this),
                 10003 when IsBar => (nint)ComInterfaceMarshaller<IRangeValueProvider>.ConvertToUnmanaged(this),
-                10002 when IsBar || IsField => (nint)ComInterfaceMarshaller<IValueProvider>.ConvertToUnmanaged(this),
+                10002 when IsBar => (nint)ComInterfaceMarshaller<IValueProvider>.ConvertToUnmanaged(this),
                 _ => 0,
             };
         }
@@ -579,12 +550,11 @@ internal sealed unsafe partial class PlayerAutomation : IDisposable
 
         public void SetValue(string value)
         {
-            // The spoken position is read-only; the search box takes what Narrator (or another client) types.
-            if (IsField) owner.Post(() => owner.Player.SetQueryFromAutomation(value ?? ""));
+            // The spoken position is read-only.
         }
 
-        string IValueProvider.get_Value() => IsField ? owner.Player.QueryText : owner.Snapshot.PositionText;
+        string IValueProvider.get_Value() => owner.Snapshot.PositionText;
 
-        int IValueProvider.get_IsReadOnly() => IsField ? 0 : 1;
+        int IValueProvider.get_IsReadOnly() => 1;
     }
 }

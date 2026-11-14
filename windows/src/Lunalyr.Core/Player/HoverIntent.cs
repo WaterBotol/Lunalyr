@@ -92,13 +92,13 @@ public static class PlayerDismissGuard
 
     /// <summary>
     /// Whether the player must stay up although the hover logic would let it go. A drag in flight holds it even over a
-    /// window; anything else gives way to a window (the user has clearly moved on).
+    /// window; anything else gives way to a window (the user has clearly moved on). (The Mac's search field holding the
+    /// keyboard also holds it; Windows has no player search.)
     /// </summary>
-    public static bool Holds(bool dragging, bool searchFocused, double? lastClick, double now, bool overWindow)
+    public static bool Holds(bool dragging, double? lastClick, double now, bool overWindow)
     {
         if (dragging) return true;
         if (overWindow) return false;
-        if (searchFocused) return true;
         if (lastClick is { } click && now - click >= 0 && now - click < AfterClick) return true;
         return false;
     }
@@ -112,9 +112,6 @@ public sealed class PlayerInteraction
 {
     /// <summary>A scrub is in flight (button down on the seek bar).</summary>
     public bool Dragging { get; set; }
-
-    /// <summary>The search field has the keyboard (search comes in a later round).</summary>
-    public bool SearchFocused { get; set; }
 
     /// <summary>Monotonic seconds of the last click on the player.</summary>
     public double? LastClick { get; set; }
@@ -169,15 +166,5 @@ public static class HoverPolicy
         if (proposed is not null && proposed != previous && !intentReady) return holds ? previous : null;
         if (proposed is null && holds) return previous;
         return proposed;
-    }
-
-    /// <summary>
-    /// Whether the player shows on <paramref name="displayId"/>: where the pointer hovers, and, while a search is typed,
-    /// on the one display it was typed on, not on every screen at once.
-    /// </summary>
-    public static bool ShowsPlayer(long displayId, long? active, long? pinned, bool searching)
-    {
-        if (active == displayId) return true;
-        return searching && active is null && pinned == displayId;
     }
 }
