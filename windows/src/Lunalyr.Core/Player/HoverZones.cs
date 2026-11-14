@@ -6,8 +6,8 @@
 namespace Lunalyr.Core.Player;
 
 /// <summary>
-/// Where the pointer reveals the player and where it keeps a shown player up: the card as it is now (taller with search
-/// or the queue open), centred where the card is drawn, grown by a margin and never past that area.
+/// Where the pointer reveals the player and where it keeps a shown player up: the card as it is now (at its current
+/// height), centred where the card is drawn, grown by a margin and never past that area.
 /// </summary>
 /// <remarks>
 /// The Mac's card is centred on its screen; the Windows card is centred in the display's work area, so its zones are

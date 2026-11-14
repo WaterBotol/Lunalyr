@@ -1,7 +1,7 @@
 // PlayerCardPreview [out-folder] [-warp] [-prefix name-]: the desktop player's card drawn offscreen by the app's own
 // CardPainter, for looking at it without showing a window: every look (dark, light, Windows' contrast colours,
-// transparency off, animation effects off) and the states that draw differently (scrubbing with the capsules, search,
-// the queue, the music video's align mode, a note, a live stream, long names, keyboard focus). Each card sits over an
+// transparency off, animation effects off) and the states that draw differently (scrubbing with the capsules, the
+// music video's align mode, a note, a live stream, long names, keyboard focus). Each card sits over an
 // invented wallpaper that is bright on the left and dark on the right, clipped to the 8 px corners DWM gives the
 // window, with its 1 px border drawn as DWM would (approximated for the system's default colour). Writes into
 // docs/previews/player by default. Uses the GPU (WARP with -warp).
@@ -81,43 +81,6 @@ void Scrubbing(CardModel m)
     m.Hover = new ScrubController.Hover(m.CapsuleX, 0, at, null);
 }
 
-void Searching(CardModel m)
-{
-    m.Pane = PlayerPane.Search;
-    m.Pickers = ["Spotify", "Apple Music"];
-    m.PickerSelected = 0;
-    m.Query = "evening";
-    m.FieldFocused = true;
-    m.SearchPlaceholder = "Search Spotify";
-    var target = new PlayerSearchTarget("demo:1");
-    m.Results =
-    [
-        new("1", PlayerSearchResultKind.Song, "Evening Tide", "Mira Sol", "Harbour Lights", null, target, InLibrary: true),
-        new("2", PlayerSearchResultKind.Album, "Evening Songs", "The Low Hours", "Evening Songs", null, target),
-        new("3", PlayerSearchResultKind.Song, "Evening Bell", "Kai Arden", "Northbound", null, target),
-        new("4", PlayerSearchResultKind.Song, "Every Evening", "Paper Moons", "Paper Moons", null, target),
-    ];
-    m.Selection = 0;
-    m.HoverPart = CardParts.Result(2);
-}
-
-void Queueing(CardModel m)
-{
-    m.Pane = PlayerPane.Queue;
-    m.ShuffleOn = true;
-    m.Queue =
-    [
-        new("a", "Low Light", "Mira Sol", 1, PersistentId: "a"),
-        new("b", "Evening Tide", "Mira Sol", 2, IsCurrent: true, PersistentId: "b"),
-        new("c", "Northbound", "Kai Arden", 3, PersistentId: "c"),
-        new("d", "Paper Moons", "Paper Moons", 4, PersistentId: "d"),
-        new("e", "Radio Hours", "The Low Hours", 5),
-        new("f", "Harbour Lights", "Mira Sol", 6, PersistentId: "f"),
-    ];
-    m.QueueRows = m.Queue.Count;
-    m.HoverPart = CardParts.QueueRow(2);
-}
-
 var dark = new PlayerLook();
 var light = new PlayerLook(Light: true);
 var shots = new (string Name, CardModel Model)[]
@@ -126,7 +89,7 @@ var shots = new (string Name, CardModel Model)[]
     ("light", Song(pink, light)),
     ("contrast", Song(pink, new PlayerLook(HighContrast: true))),
     ("opaque", Song(pink, new PlayerLook(ReduceTransparency: true))),
-    ("reduce-motion", Song(teal, new PlayerLook(ReduceMotion: true), m => { m.DisplayedPlaying = false; m.Active = 1; m.Thickness = 7; m.HoverPart = CardPart.SearchButton; })),
+    ("reduce-motion", Song(teal, new PlayerLook(ReduceMotion: true), m => { m.DisplayedPlaying = false; m.Active = 1; m.Thickness = 7; m.HoverPart = CardPart.Next; })),
     ("paused", Song(teal, dark, m => { m.DisplayedPlaying = false; m.RecordOut = 0; })),
     ("pale-cover", Song(pale, dark)),
     ("pale-cover-light", Song(pale, light)),
@@ -134,11 +97,6 @@ var shots = new (string Name, CardModel Model)[]
     ("scrub-dark", Song(pink, dark, Scrubbing)),
     ("scrub-light", Song(pink, light, Scrubbing)),
     ("scrub-contrast", Song(pink, new PlayerLook(HighContrast: true), Scrubbing)),
-    ("search-dark", Song(pink, dark, Searching)),
-    ("search-light", Song(pink, light, Searching)),
-    ("search-contrast", Song(pink, new PlayerLook(HighContrast: true), Searching)),
-    ("queue-dark", Song(teal, dark, Queueing)),
-    ("queue-light", Song(teal, light, Queueing)),
     ("align-dark", Song(pink, dark, m =>
     {
         m.MusicVideoOffered = true;
@@ -167,13 +125,13 @@ var shots = new (string Name, CardModel Model)[]
         m.Album = "A Deluxe Edition of an Album With an Unusually Long Name (Remastered)";
         m.MusicVideoOffered = true;
     })),
-    ("keyboard-focus", Song(pink, dark, m => { m.FocusVisible = true; m.FocusPart = CardPart.SearchButton; m.MusicVideoOffered = true; })),
+    ("keyboard-focus", Song(pink, dark, m => { m.FocusVisible = true; m.FocusPart = CardPart.Next; m.MusicVideoOffered = true; })),
 };
 
 using var painter = new CardPainter();
 foreach (var (name, model) in shots)
 {
-    var height = model.Pane == PlayerPane.Song ? CardPainter.Height : CardPainter.HeightFor(model.Pane, model.QueueRows);
+    var height = CardPainter.Height;
     var path = Path.Combine(output, $"{prefix}{name}.png");
     stage.Render(painter, model, (float)PlayerCard.Width, height, Scale, Margin, path);
     Console.WriteLine($"{path}");

@@ -218,7 +218,7 @@ A Win32 timer on the card's own window polls `GetCursorPos`, at the Mac's interv
 poll costs nothing while the pointer rests, since a resting pointer can't start a reveal.
 - **Where:** each display (`EnumDisplayMonitors`, re-read every 2 s, on `WM_DISPLAYCHANGE` and when the card's height
   changes) has a hot zone and a keep zone, the Mac's card zones (Test Build 88, `Core/Player/HoverZones.cs`): the card
-  as it is now (taller with search or the queue open), centred in the work area, plus 24 DIP reveals it; plus 56 DIP
+  as it is now (at its current height), centred in the work area, plus 24 DIP reveals it; plus 56 DIP
   keeps a shown card up. Both are kept within the work area. (Before: the resting card plus 56 × 40 DIP, and the card
   plus 28; the Mac's were the middle 30 % of the screen and a 780-pt square.) The card shows on the display under the
   pointer, centred in its work area at that display's DPI, and stays centred if it grows. One display at a time: another display, or a window under the pointer, hides it at

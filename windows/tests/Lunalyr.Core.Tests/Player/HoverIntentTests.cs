@@ -137,18 +137,19 @@ public sealed class HoverIntentTests
         Assert.Equal(500, HoverZones.Reveal(tiny, 640, 216).Width); // never past the screen
     }
 
-    // Windows: the zones follow the card as it is now (taller with search or the queue open), at the display's scale,
-    // centred in its work area wherever that sits on the desktop.
+    // Windows: the zones follow the card as it is now (whatever its height), at the display's scale, centred in its
+    // work area wherever that sits on the desktop.
     [Fact]
     public void TheZonesFollowTheCardsHeightAndScale()
     {
         var work = new HoverRect(-1920, 40, 0, 1080); // a display left of the main one, its taskbar on top
+        const double taller = PlayerCard.RestHeight + 100;
         var rest = HoverZones.Reveal(work, PlayerCard.Width, PlayerCard.RestHeight, 1.25);
-        var search = HoverZones.Reveal(work, PlayerCard.Width, PlayerCard.CardHeight(PlayerPane.Search), 1.25);
+        var tall = HoverZones.Reveal(work, PlayerCard.Width, taller, 1.25);
         Assert.Equal((PlayerCard.RestHeight + 2 * HoverZones.RevealMargin) * 1.25, rest.Height, 9);
-        Assert.Equal((PlayerCard.CardHeight(PlayerPane.Search) - PlayerCard.RestHeight) * 1.25, search.Height - rest.Height, 9);
-        Assert.Equal(work.CentreX, search.CentreX, 9);
-        Assert.Equal(work.CentreY, search.CentreY, 9);
+        Assert.Equal(100 * 1.25, tall.Height - rest.Height, 9);
+        Assert.Equal(work.CentreX, tall.CentreX, 9);
+        Assert.Equal(work.CentreY, tall.CentreY, 9);
         Assert.Equal((PlayerCard.Width + 2 * HoverZones.KeepMargin) * 1.25, HoverZones.Keep(work, PlayerCard.Width, PlayerCard.RestHeight, 1.25).Width, 9);
     }
 

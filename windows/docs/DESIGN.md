@@ -55,7 +55,7 @@ rounded:
   player-thumb: 5
   player-cover: 8
   player-row: 8
-  player-control: 10    # search field, capsules, notes
+  player-control: 10    # capsules, notes
   player-card: "28 on the Mac (= cover 8 + padding 20); DWM rounds the Windows card at 8"
   pill: 9999
 
@@ -76,9 +76,7 @@ components:
   player-cover: { size: 176, radius: "{rounded.player-cover}", edge: "{colors.player-edge}", shadow: "black 35 %, blur 12, y 6" }
   player-capsule: { radius: "{rounded.player-control}", fill: "album-deep 96 %", edge: "{colors.player-edge}", shadow: "black 24 %, blur 8, y 3" }
   player-icon-button: { size: 30, glyph: "Segoe Fluent Icons 13", ink: secondary, hover: "ink 8 %", on: "ink 16 %" }
-  player-play-disc: { size: "44 (34 small)", fill: ink, glyph: "the colour behind the ink" }
-  player-row: { radius: "{rounded.player-row}", selected: "ink 16 %", thumb: "36 or 30, {rounded.player-thumb}" }
-  player-field: { height: 36, radius: "{rounded.player-control}", fill: "black 24 % (light card: ink 8 %)", edge: "none at rest; focus ring ink 70 % at 1.5" }
+  player-play-disc: { size: 44, fill: ink, glyph: "the colour behind the ink" }
 ---
 
 # Lunalyr design (Windows)
@@ -147,8 +145,8 @@ The ink is white on the dark card. In Windows' light app mode (Windows only: the
 near-black on a light tint of the album's hue, lightened until near-black reaches 12:1, so every level above
 quaternary still reads 4.5:1 with a black wallpaper behind (`PlayerTokensTests.SmallTypeReadsOnTheLightCard`).
 
-Fills on the card: hover 8 %, selected or pressed 16 % ink; wells (search field, player switch) 24 % black (ink 8 % on
-the light card); placeholders 10 % ink. No edges; the focus ring is 70 % ink at 1.5.
+Fills on the card: hover 8 %, selected or pressed 16 % ink; wells 24 % black (ink 8 % on the light card); placeholders
+10 % ink. No edges; the focus ring is 70 % ink at 1.5.
 
 ### Contrast themes (the Mac's Increase Contrast)
 A Windows contrast theme is stronger than Increase Contrast: the card draws in the theme's own colours only
@@ -167,7 +165,7 @@ Segoe UI Variable only. In windows, Fluent's type ramp through its styles (`Capt
 Principles:
 - **Weights 400 / 500 / 600.** Bold (700) is not used in chrome; hierarchy comes from size and ink.
 - **Default tracking.** No negative kerning on titles and no letter-spaced labels.
-- **Sentence case.** "Queue", "Library", "Up next", "Live", never "QUEUE".
+- **Sentence case.** "Live", "Instrumental", "Reset", never "LIVE".
 - **Numbers that change are tabular** (times, offsets, counts), so they do not jitter.
 - **Nothing under 10**; anything a person reads to decide something is 11 or more on the card, 12 in windows.
 - One size per kind of element per surface.
@@ -181,7 +179,7 @@ Principles:
 - **Concentric corners**: an inner shape's radius plus its inset equals the outer radius (the Mac's player card 28 =
   cover 8 + padding 20).
 - **Desktop player geometry** (as the Mac's): card 640 wide, cover 176, right column 364, centred in its display's work
-  area at every height, so search and the queue grow it evenly up and down.
+  area at every height.
 - **Window silhouettes** (winui-design's app-shape anchors): Settings is a settings tool (`NavigationView` left with
   settings cards); onboarding, lyric cards and the music-video search are single-purpose utilities sized to their
   content.
@@ -206,18 +204,17 @@ the wallpaper, which is content.
 |---|---|---|
 | player thumb | 5 | small covers in rows |
 | player cover / row | 8 | covers, lit rows |
-| player control | 10 | search field, capsules, notes |
+| player control | 10 | capsules, notes |
 | Fluent control | 4 | buttons and boxes in windows |
 | Fluent overlay | 8 | cards, flyouts, the player card (DWM) |
-| pill | ∞ | the player switch, the play disc, the Done button |
+| pill | ∞ | the play disc, the Done button |
 
 No squircle-shaped badges or icon tiles as ornament.
 
 ## Icons
 
-Segoe Fluent Icons for every SF Symbol. The card's: search `E721`, queue `E8FD`, close `E711`, clear `E894`, chevron
-`E70D`, shuffle `E8B1`, return `E751`, music note `E8D6`, album `E93C`, playing `E995` (the Mac's waveform), paused
-`E769`, film `E714`, reset `E72C`. Transport glyphs (previous, play, pause, next) are drawn as paths. In windows, use
+Segoe Fluent Icons for every SF Symbol. The card's: chevron `E70D`, music note `E8D6`, film `E714`, reset `E72C`.
+Transport glyphs (previous, play, pause, next) are drawn as paths. In windows, use
 `FontIcon`/`SymbolIcon` with a theme brush, never a hard-coded fill, so they follow contrast themes.
 
 ## Components
@@ -230,14 +227,9 @@ Segoe Fluent Icons for every SF Symbol. The card's: search `E721`, queue `E8FD`,
 - **Seek row**: hairline track; thickens with a knob on hover; takes the album accent while dragging. Times in `time`,
   tertiary at rest, secondary while active. Capsules over it (lyric and time) use the card's deep shade: a piece of the
   card lifted on a soft shadow, not a second accent.
-- **Controls**: previous / the play disc / next on the left; film, search and queue on the right as 30-DIP icon
-  buttons (13-DIP glyphs, secondary; 16 % ink disc while pressed or while their pane is open). Press sinks to 94 % with
+- **Controls**: previous / the play disc / next on the left; icon buttons (the film button) on the right, 30 DIPs
+  (13-DIP glyphs, secondary; 16 % ink disc while pressed or while what they open is open). Press sinks to 94 % with
   `press`, releases with `release`; no overshoot.
-- **Search**: the player switch (a pill in a well, the chosen player in the ink), the field (36 tall, well fill, no
-  edge at rest; focus ring), results as rows with a 36-DIP thumb, a tertiary plain-text label ("Library", "Album",
-  never a pill) and a bare return glyph on the selected one.
-- **Queue**: a "Queue" heading in row-title type, the shuffle note in tertiary tags, "Earlier" and "Up next" in tags on
-  the rows' edge, earlier rows at 55 %, the playing row lit at 16 %, counts in tertiary tabular digits.
 - **Note**: `note` type in a capsule inside the card's top (the Windows window is the card, so it can't sit 12 above
   it as the Mac's does), readable for 2.5–7 s.
 
