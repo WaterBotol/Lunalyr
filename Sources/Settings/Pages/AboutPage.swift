@@ -39,6 +39,8 @@ struct AboutPage: View {
                     .foregroundStyle(Color.studio(.ink2))
                     .textSelection(.enabled)
                 Link("Project & Downloads", destination: Self.projectURL)
+                    // A link in the link colour, not a button face.
+                    .buttonStyle(.plain)
                     .font(LunalyrDesign.Studio.TypeScale.row)
                     .foregroundStyle(Color.studio(.accentText))
                     .tint(Color.studio(.accentText))

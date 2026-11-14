@@ -28,6 +28,7 @@ struct ReadingsPage: View {
                     Toggle("Prefer saved readings", isOn: $o.preferSaved)
                 }
                 InspectorCaption("Readings follow the original timing.", more: "Readings follow the original timing. Local transliteration can miss names and unusual pronunciations.")
+                    .environment(\.captionFollowsControl, false)
                 InspectorCaption("Cantonese shows only readings from the source.", more: "Lunalyr can’t generate Jyutping on this Mac. Lyrics written in Cantonese show only readings from the lyric source or an imported reading LRC, never Mandarin pinyin. Cantonese songs in standard written Chinese look like Mandarin, so choose Cantonese for them.")
                     .environment(\.captionFollowsControl, false)
             }

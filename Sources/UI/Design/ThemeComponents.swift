@@ -243,6 +243,8 @@ private struct ThemedButtonBody: View {
                 .font(.system(size: compact ? 12 : 12.5, weight: style == .bold ? .semibold : .regular))
                 .foregroundStyle(prominent ? Color.white : Color.studio(.ink))
                 .lineLimit(1)
+                // A button's title is never cut short ("E…" for Earlier).
+                .fixedSize()
                 .padding(.horizontal, compact ? 7 : 10)
                 .frame(minHeight: 24)
                 .themedControl(radius: 6, selected: prominent, state: state)

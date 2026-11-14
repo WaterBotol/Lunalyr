@@ -109,15 +109,17 @@ struct TimingPage: View {
 
     private var lyricTiming: some View {
         ThemedSection("Lyric timing") {
-            HStack(spacing: 6) {
-                SongTimingNudge()
-                Spacer(minLength: 8)
-                Button(tapSync.isListening ? LyricTapSyncController.stopTitle : LyricTapSyncController.menuTitle) {
-                    tapSync.toggle()
+            // Tap to sync beside the nudge while both fit, under it when not.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    SongTimingNudge()
+                    Spacer(minLength: 8)
+                    tapSyncButton
                 }
-                .controlSize(.small)
-                .disabled(query == nil)
-                .help("Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps")
+                VStack(alignment: .leading, spacing: 8) {
+                    SongTimingNudge()
+                    tapSyncButton
+                }
             }
             if tapSync.canUndo {
                 // Tap to sync's own Undo, as in the menu-bar panel.
@@ -139,6 +141,15 @@ struct TimingPage: View {
             }
             InspectorCaption("Positive offsets bring lyrics in earlier.", more: "Saved for this recording and the lyric source showing. Positive offsets bring lyrics in earlier.")
         }
+    }
+
+    private var tapSyncButton: some View {
+        Button(tapSync.isListening ? LyricTapSyncController.stopTitle : LyricTapSyncController.menuTitle) {
+            tapSync.toggle()
+        }
+        .controlSize(.small)
+        .disabled(query == nil)
+        .help("Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps")
     }
 
     private var lyricsSource: some View {
@@ -235,7 +246,7 @@ struct TimingPage: View {
                 ForEach(LyricSourceOptions.Mode.allCases) { Text($0.title).tag($0) }
             }
             InspectorCaption(options.mode.detail)
-            InspectorCaption(LyricSourceOptions.ranking)
+            InspectorCaption(Self.rankingCaption, more: LyricSourceOptions.ranking)
                 .environment(\.captionFollowsControl, false)
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(options.order) { source in
@@ -269,6 +280,9 @@ struct TimingPage: View {
                 .environment(\.captionFollowsControl, false)
         }
     }
+
+    /// The ranking in one line; `LyricSourceOptions.ranking` behind "More".
+    static let rankingCaption = "Word-by-word lyrics come first, then line-synced; Music\u{2019}s own and LRCLIB lead each."
 
     static let aliasesDetail = "When NetEase, QQ, Kugou or Kuwo find nothing under a name like “Kenshi Yonezu”, they search again as “米津玄師”. The other names come from MusicBrainz, which receives the artist’s name. A song listed under an English title, like “Racing into the Night”, is searched again under its Japanese title, “夜に駆ける”, from Apple’s catalogue, which receives the title and artist."
 

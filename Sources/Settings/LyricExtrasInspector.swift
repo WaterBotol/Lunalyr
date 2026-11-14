@@ -509,6 +509,7 @@ struct ExtrasInspector: View {
                     }
                 }
                 InspectorCaption("They work from any app; switch off any you need elsewhere.", more: Self.shortcutsCaption)
+                    .environment(\.captionFollowsControl, false)
                 if !hotkeys.unavailable.isEmpty && extras.shortcutsEnabled {
                     InspectorCaption("A shortcut another app uses is left to that app.", more: "A shortcut another app already uses is left to that app. Switch it off there, or choose other keys above.")
                         .environment(\.captionFollowsControl, false)
