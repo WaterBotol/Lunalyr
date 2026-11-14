@@ -173,6 +173,14 @@ public sealed class UpdateService : IDisposable
         {
             Set(new(UpdatePhase.Idle, UpdateCopy.Idle));
         }
+        catch (HttpRequestException notFound) when (notFound.StatusCode == HttpStatusCode.NotFound)
+        {
+            // No feed at the address yet (a GitHub release's latest/download before the first release): nothing to
+            // offer, so up to date, quietly, and asked again in a day.
+            RecordCheck();
+            _log.Info("Update check: no update has been published yet (the feed isn't there).");
+            Set(new(UpdatePhase.UpToDate, UpdateCopy.NonePublished(_current.ToString(), _env.Time.GetLocalNow())));
+        }
         catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException or UnauthorizedAccessException)
         {
             _log.Warn($"Update check failed: {ex.Message}");
@@ -402,6 +410,9 @@ public static class UpdateCopy
 
     public static string UpToDate(string version, DateTimeOffset at) =>
         $"Lunalyr {version} is the newest version. Checked {at.ToString("t", CultureInfo.CurrentCulture)}.";
+
+    public static string NonePublished(string version, DateTimeOffset at) =>
+        $"Lunalyr {version} is the newest version: no update has been published yet. Checked {at.ToString("t", CultureInfo.CurrentCulture)}.";
 
     public static string Available(string version) => $"Lunalyr {version} is available.";
 

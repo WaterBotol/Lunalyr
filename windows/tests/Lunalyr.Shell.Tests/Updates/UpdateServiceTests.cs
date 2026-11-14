@@ -211,6 +211,19 @@ public sealed class UpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task NoFeedYetIsQuietlyUpToDate()
+    {
+        // Before the first release, GitHub's latest/download answers 404: not a failure.
+        _server.Routes.Remove(FeedUrl);
+        using var service = Service();
+        await service.CheckAsync(download: true, TestContext.Current.CancellationToken);
+        Assert.Equal(UpdatePhase.UpToDate, service.State.Phase);
+        Assert.Contains("no update has been published yet", service.State.Status, StringComparison.Ordinal);
+        Assert.DoesNotContain("Couldn’t", service.State.Status, StringComparison.Ordinal);
+        Assert.False(service.AutomaticCheckDue(settingOn: true)); // asked again in a day, not at once
+    }
+
+    [Fact]
     public async Task ARedirectToPlainHttpIsRefused()
     {
         Publish("0.9.0");

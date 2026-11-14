@@ -128,6 +128,8 @@ Re-implemented from the Mac's behaviour (Sparkle with an EdDSA-signed appcast; t
 - **Installing**: an installed Lunalyr starts the verified installer with `--update` and quits; Setup swaps the app and
   starts it with `--updated 0.9.0`. A copy run from any other folder (a test build) opens the installer normally, which
   installs Lunalyr for this user.
+- **No feed yet** (404, as GitHub's `releases/latest/download/update.json` answers before the first release): up to
+  date, quietly ("no update has been published yet"), logged as info, asked again in a day.
 - **Never** in test runs: `--demo`, `--data` and `--no-network` turn checks off and say so.
 
 ### Publishing an update (the owner's step, not done)
