@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Lunalyr.App.MusicVideo;
 using Lunalyr.App.Tray;
+using Lunalyr.Core.Logging;
 using Lunalyr.Core.MusicVideo;
 using Lunalyr.Core.Playback;
 using Lunalyr.Platform.MusicVideo;
@@ -77,7 +78,7 @@ internal sealed partial class AppHost
         // --player-debug fake-youtube (checks, only with playback off): invented results, so the Search YouTube window's rows
         // can be seen without sending a song to YouTube.
         var fakeYouTube = _options.PlayerDebug.Contains("fake-youtube") && PlaybackGuard.Process.IsBlocked;
-        MusicVideoUi.Search = new MusicVideoSearchModel(fakeYouTube ? new InventedSearching(new ControllerSearching(video)) : new ControllerSearching(video));
+        MusicVideoUi.Search = new MusicVideoSearchModel(fakeYouTube ? new InventedSearching(new ControllerSearching(video, _log)) : new ControllerSearching(video, _log));
         // --youtube-search (checks): the window opens once there is a picker to show.
         if (_options.OpenYouTubeSearch) _uiDispatcher?.TryEnqueue(() => _app?.ShowMusicVideoSearch());
         _log.Info($"Music video: video files on; YouTube {(playerOff is null ? $"on (search: {(_settings.Current.MusicVideoSearch == "apiKey" ? "your API key" : "YouTube's site")}, an API key {(keys!.HasKey ? "is" : "isn't")} set)" : $"off for this run ({playerOff})")}.");
@@ -92,14 +93,24 @@ internal sealed partial class AppHost
     }
 
     /// <summary>The picker's view of the controller (the Mac's MusicVideoController: MusicVideoSearching).</summary>
-    private sealed class ControllerSearching(MusicVideoController video) : IMusicVideoSearching
+    private sealed class ControllerSearching(MusicVideoController video, CategoryLogger log) : IMusicVideoSearching
     {
         public MusicVideoSong? SearchSong => video.SearchSong;
         public string? ShowingYouTubeId => video.ShowingYouTubeId;
         public string? PickedVideoId => video.PickedVideoId;
         public Task<MusicVideoSearchOutcome> SearchYouTubeAsync(string query, CancellationToken ct) => video.SearchYouTubeAsync(query, ct);
-        public bool UsePickedVideo(string videoId, string songKey) => video.UsePickedVideo(videoId, songKey);
-        public void ClearPastedLink() => video.ClearPastedLink();
+        public bool UsePickedVideo(string videoId, string songKey)
+        {
+            var used = video.UsePickedVideo(videoId, songKey);
+            log.Info(used ? $"Music video: picked {videoId} from search for the song." : $"Music video: the pick {videoId} wasn't used (the song changed).");
+            return used;
+        }
+
+        public void ClearPastedLink()
+        {
+            log.Info("Music video: back to choosing automatically.");
+            video.ClearPastedLink();
+        }
     }
 
     /// <summary>The demo song's results, made up (no video id is real; nothing is fetched or played).</summary>

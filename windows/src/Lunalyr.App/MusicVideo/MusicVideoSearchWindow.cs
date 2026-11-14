@@ -116,6 +116,7 @@ internal sealed class MusicVideoSearchWindow : Window
         _query.KeyDown += OnQueryKey;
         _results.ItemClick += (_, e) =>
         {
+            // ItemClick passes the item's content (the row's grid), not the ListViewItem: both carry the video id.
             if (e.ClickedItem is FrameworkElement { Tag: string id }) _model?.Pick(id);
         };
         _results.SelectionChanged += (_, _) =>
@@ -358,7 +359,7 @@ internal sealed class MusicVideoSearchWindow : Window
     /// <summary>One result, as YouTube lays it out.</summary>
     private static ListViewItem Row(MusicVideoSearchRow row)
     {
-        var grid = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6) };
+        var grid = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6), Tag = row.Id };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ThumbnailWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(Thumbnail(row));
