@@ -85,12 +85,13 @@ public sealed partial class SettingsWindow
         foreach (var block in Blocks(PageStack, 4000 / scale))
         {
             var bitmap = new RenderTargetBitmap();
-            // Asked for at its own size (in DIPs; drawn at the page's scale): left to itself it can shrink a block that fits.
+            // Asked for at its own width (in DIPs; drawn at the page's scale), its height following what it draws: left to
+            // itself it can shrink a block that fits, and a height of its own stretches a panel taller than its content.
             int wanted = (int)Math.Round(block.ActualSize.X * scale), tall = (int)Math.Round(block.ActualSize.Y * scale);
             if (wanted <= 0 || tall <= 0) continue;
-            await bitmap.RenderAsync(block, (int)Math.Round(block.ActualSize.X), (int)Math.Round(block.ActualSize.Y));
+            await bitmap.RenderAsync(block, (int)Math.Round(block.ActualSize.X), 0);
             if (bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0) continue;
-            if (bitmap.PixelWidth != wanted)
+            if (Math.Abs(bitmap.PixelWidth - wanted) > 2)
                 _host.Log.App.Info($"Settings capture: a block came back {bitmap.PixelWidth}×{bitmap.PixelHeight}, not {wanted}×{tall}.");
             var drawn = (await bitmap.GetPixelsAsync()).ToArray();
             var at = block.TransformToVisual(PageStack).TransformPoint(new Windows.Foundation.Point(0, 0));
