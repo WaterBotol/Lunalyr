@@ -173,9 +173,10 @@ public sealed class LyricInkDirector
                 break;
             case LyricColourMode.SungSweep:
             {
-                var sung = Perceptual.Readable(followed.S1, behind, ratio, keepingColour: true);
+                // Unsung white, sung the middle of the drifting palette; each word samples its own (LyricInk.Sample).
                 // No underline under sung words (the owner, 14 Nov 2026): SweepUnderline is never set.
-                ink.Base = LyricInk.SampleOf(Perceptual.Readable(followed.S0, behind, ratio, keepingColour: true), sung);
+                var sung = Perceptual.Readable(ink.Gradient(0.5), behind, ratio, keepingColour: true);
+                ink.Base = LyricInk.SampleOf(Perceptual.Readable(OkLab.White, behind, ratio), sung);
                 break;
             }
             default:
@@ -185,7 +186,8 @@ public sealed class LyricInkDirector
         var baseSample = ink.Base;
         baseSample.Dim = ink.Dim;
         ink.Base = baseSample;
-        var highlight = Perceptual.Readable(inputs.Mode == LyricColourMode.SungSweep ? followed.S1 : ink.Gradient(0.5), behind, ratio);
+        // Sung sweep's highlight, dots and links take the palette's first colour (the Mac's rule).
+        var highlight = Perceptual.Readable(inputs.Mode == LyricColourMode.SungSweep ? followed.S0 : ink.Gradient(0.5), behind, ratio);
         ink.Dot = Perceptual.ToColour(highlight);
         ink.Link = Perceptual.ToColour(Perceptual.Mix(highlight, OkLab.White, 0.5));
         // The highlight complements the lyric colour as it is now (easing back to Static white, the one it will
@@ -193,7 +195,7 @@ public sealed class LyricInkDirector
         OkLab? basis = inputs.Mode switch
         {
             LyricColourMode.Standard => null,
-            LyricColourMode.SungSweep => followed.S1,
+            LyricColourMode.SungSweep => followed.S0,
             _ => ink.Gradient(0.5),
         };
         var stopTotal = Math.Max(1, Math.Min(4, count));
@@ -410,8 +412,16 @@ public sealed class LyricInkDirector
                 return (_albumStops, 4);
             case LyricColourMode.SungSweep:
             {
-                var sung = LyricInk.ApplyingStrength(1.35, LyricInk.Pastel(_vivid, _vivid.Hue));
-                return (new InkStops(OkLab.White, sung, OkLab.White, sung), 2);
+                // The sung colours: your colours (up to four) when set, else the cover's four lyric colours, each made
+                // pastel then strengthened ×1.35 (the Mac's next/tester-fixes, 15 Nov 2026).
+                if (inputs.Custom.Count > 0)
+                {
+                    var count = Math.Min(4, inputs.Custom.Count);
+                    OkLab Own(int index) => LyricInk.ApplyingStrength(1.35, LyricInk.Pastel(inputs.Custom[index % count]));
+                    return (new InkStops(Own(0), Own(1), Own(2), Own(3)), count);
+                }
+                OkLab Cover(int index) => LyricInk.ApplyingStrength(1.35, LyricInk.Pastel(_albumStops[index], _vivid.Hue));
+                return (new InkStops(Cover(0), Cover(1), Cover(2), Cover(3)), 4);
             }
             case LyricColourMode.MusicReactive:
             {

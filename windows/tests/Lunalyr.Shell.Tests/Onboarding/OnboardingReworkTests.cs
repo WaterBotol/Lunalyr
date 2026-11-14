@@ -28,7 +28,7 @@ public sealed class OnboardingReworkTests
         Assert.Contains("Apple", OnboardingCopy.DiscordPrivacy); // the cover lookup is named
         Assert.Equal("Custom Mix picks a layout to suit each song.", OnboardingCopy.LayoutCaption(null));
         Assert.Equal("Custom Mix picks a layout to suit each song.", OnboardingCopy.LayoutCaption("automatic"));
-        Assert.Equal(SettingsCopy.Layouts.Single(l => l.Value == "broadside").Detail, OnboardingCopy.LayoutCaption("broadside"));
+        Assert.Equal(SettingsCopy.Layouts.Single(l => l.Value == "hinge").Detail, OnboardingCopy.LayoutCaption("hinge"));
         // Sentence case, no periods in titles.
         foreach (var step in OnboardingSteps.All)
         {
@@ -86,8 +86,8 @@ public sealed class OnboardingReworkTests
     public void TheLayoutsFeaturedAreRealAndTheRestAreCounted()
     {
         Assert.All(LayoutChoices.Featured, id => Assert.Contains(id, AppSettings.Compositions));
-        Assert.Equal(12, LayoutChoices.AllCount);
-        Assert.Equal("8 more in Settings, with Custom Mix.", OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - LayoutChoices.Featured.Count));
+        Assert.Equal(11, LayoutChoices.AllCount);
+        Assert.Equal("7 more in Settings, with Custom Mix.", OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - LayoutChoices.Featured.Count));
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("no-such-layout")); // an unknown id leads nothing
     }
 

@@ -55,8 +55,9 @@ public static class LyricColourModes
         _ => "Custom gradient",
     };
 
+    /// <summary>The modes whose gradient drifts along the line over time (Sung sweep's sung colours too, the Mac's 15 Nov 2026 rule).</summary>
     public static bool Drifts(this LyricColourMode mode) =>
-        mode is LyricColourMode.AlbumDrift or LyricColourMode.CustomGradient;
+        mode is LyricColourMode.AlbumDrift or LyricColourMode.CustomGradient or LyricColourMode.SungSweep;
 }
 
 /// <summary>The pure parts of the text colour preferences (the Mac's <c>LyricColourOptions</c>).</summary>
@@ -182,13 +183,25 @@ public record struct LyricInk
         switch (Mode)
         {
             case LyricColourMode.Standard:
-            case LyricColourMode.SungSweep:
                 return Base;
+            case LyricColourMode.SungSweep:
+            {
+                // Unsung words stay white; each word sweeps to its own colour on the drifting gradient (the Mac's
+                // next/tester-fixes, 15 Nov 2026: not one colour for every word).
+                var sung = Perceptual.Readable(Gradient(slot, seed), Backdrop, Contrast, keepingColour: true);
+                var swept = SampleOf(Perceptual.Readable(OkLab.White, Backdrop, Contrast), sung);
+                swept.Dim = Dim;
+                return swept;
+            }
             default:
-                var colour = Perceptual.Readable(Gradient(slot, seed), Backdrop, Contrast);
+            {
+                // Lifted keeping its colour (chroma kept at 2.5:1 where it can be), so a custom gradient doesn't turn
+                // white on a mid or light wallpaper (the owner's approval, relayed 15 Nov 2026).
+                var colour = Perceptual.Readable(Gradient(slot, seed), Backdrop, Contrast, keepingColour: true);
                 var sample = SampleOf(colour);
                 sample.Dim = Dim;
                 return sample;
+            }
         }
     }
 

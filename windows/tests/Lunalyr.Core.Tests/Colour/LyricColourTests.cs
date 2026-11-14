@@ -352,23 +352,24 @@ public class LyricColourTests
         }
     }
 
-    // Ported from LyricColourTests.swift: testSungSweepUsesAContrastingAccentFromTheCover
+    // The Mac's next/tester-fixes (15 Nov 2026): Sung sweep varies from word to word along the drifting palette (your
+    // colours, else the cover's), unsung words stay white, and the sung colours stay readable.
     [Fact]
-    public void SungSweepUsesAContrastingAccentFromTheCover()
+    public void SungSweepGivesEachWordItsOwnColour()
     {
-        var field = new Vector3(0.12f, 0.30f, 0.74f);
-        var accent = new Vector3(0.78f, 0.45f, 0.12f);
-        Vector3[] album = [.. Enumerable.Repeat(field, 8), accent];
         const double backdrop = 0.14;
+        OkLab[] custom = [ColourHex.ToOkLab("#F28FAD")!.Value, ColourHex.ToOkLab("#9AD0F5")!.Value];
         var director = new LyricInkDirector();
         var ink = LyricInk.White;
         for (var frame = 0; frame <= 32; frame++)
-            ink = director.Ink(new LyricInkInputs(LyricColourMode.SungSweep) { Album = album, Backdrop = backdrop }, frame / 4.0);
-        var sung = Lab(ink.Base.Sung);
-        var source = Perceptual.ToOkLab(Double3.From(accent));
-        Assert.True(LyricHighlight.HueDistance(sung.Hue, source.Hue) < Math.PI / 16);
-        Assert.True(Perceptual.Contrast(Luminance(ink.Base.Sung), backdrop) >= 2.99);
-        Assert.True(Luminance(ink.Base.Rest) > 0.99);
+            ink = director.Ink(new LyricInkInputs(LyricColourMode.SungSweep) { Custom = custom, Backdrop = backdrop }, frame / 4.0);
+        var first = ink.Sample(0);
+        var later = ink.Sample(0.6);
+        Assert.True(first.Sweeps && later.Sweeps);
+        Assert.True(Luminance(first.Rest) > 0.99);
+        Assert.True(LyricHighlight.HueDistance(Lab(first.Sung).Hue, Lab(later.Sung).Hue) > Math.PI / 12);
+        foreach (var sample in new[] { first, later })
+            Assert.True(Perceptual.Contrast(Luminance(sample.Sung), backdrop) >= 2.49);
     }
 
     // Ported from LyricColourTests.swift: testBackdropEstimateFollowsTheWallpaperAndScrim
