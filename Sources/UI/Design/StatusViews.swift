@@ -54,23 +54,27 @@ struct StatusBanner<Actions: View>: View {
         self.actions = actions()
     }
 
-    private var padding: CGFloat { density == .compact ? LunalyrDesign.Spacing.small + 2 : LunalyrDesign.Spacing.medium }
+    private var padding: CGFloat { density == .compact ? 10 : 12 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: density == .compact ? 6 : LunalyrDesign.Spacing.small) {
-            HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.small) {
+        VStack(alignment: .leading, spacing: density == .compact ? 6 : 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: symbol ?? status.symbol)
-                    .foregroundStyle(status.text)
-                    .imageScale(.medium)
+                    .font(.system(size: 13))
+                    .foregroundStyle(StatusGlyph.color(status))
                     .contentTransition(LunalyrDesign.Motion.symbolSwap(reduceMotion: reduceMotion))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(density == .compact ? .callout.weight(.semibold) : .body.weight(.semibold))
+                        .font(.system(size: density == .compact ? 12.5 : 13, weight: .semibold))
+                        .foregroundStyle(Color.studio(.ink))
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                     if let message {
-                        Text(message).lunalyrText(.caption)
+                        Text(message)
+                            .font(LunalyrDesign.Studio.TypeScale.caption)
+                            .foregroundStyle(Color.studio(.ink2))
+                            .fixedSize(horizontal: false, vertical: true)
                             .contentTransition(.opacity)
                     }
                 }
@@ -82,20 +86,17 @@ struct StatusBanner<Actions: View>: View {
                     HStack(spacing: LunalyrDesign.Spacing.small) { actions }
                     VStack(alignment: .leading, spacing: 6) { actions }
                 }
-                .controlSize(density == .compact ? .small : .regular)
+                .controlSize(.small)
+                .buttonStyle(ThemedButtonStyle())
                 .padding(.leading, symbolIndent)
             }
         }
         .padding(padding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                .fill(status.fill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                .strokeBorder(status.border, lineWidth: 1)
-        )
+        // A fill, not a border (SPEC §1: no cards): the control fill, a
+        // canvas-grey step on the canvas; Bold's outline and shadow come
+        // from `ThemedSurface`, Increase Contrast's edge too.
+        .modifier(ThemedSurface(radius: 8, selected: false, state: .normal, isCard: false))
         // A banner that changes its state (a reconnect, a refusal answered)
         // cross-fades rather than cutting.
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
@@ -104,7 +105,7 @@ struct StatusBanner<Actions: View>: View {
     }
 
     /// Lines the actions up under the title, past the symbol.
-    private var symbolIndent: CGFloat { 22 }
+    private var symbolIndent: CGFloat { 21 }
 
     private var spokenSummary: String {
         [status.spokenName, title, message].compactMap { $0 }.joined(separator: ". ")
@@ -134,27 +135,23 @@ struct StatusChip<Action: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol ?? status.symbol)
-                .foregroundStyle(status.text)
-                .accessibilityHidden(true)
+        // A glyph and the words, no capsule: the glyph carries the status
+        // colour, the words stay ink2 (SPEC §2: status colours never text).
+        HStack(spacing: 5) {
+            StatusGlyph(status: status, symbol: symbol)
             Text(text)
+                .foregroundStyle(Color.studio(.ink2))
                 .lineLimit(1)
                 .accessibilityLabel([status.spokenName, text].compactMap { $0 }.joined(separator: ": "))
             if Action.self != EmptyView.self {
                 action
                     .controlSize(.small)
-                    .buttonStyle(.borderless)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.lunalyrAccentText)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.studio(.accentText))
+                    .padding(.leading, 4)
             }
         }
-        .font(.callout)
-        .padding(.leading, 10)
-        .padding(.trailing, Action.self == EmptyView.self ? 10 : 8)
-        .padding(.vertical, 4)
-        .background(Capsule(style: .continuous).fill(status.fill))
-        .overlay(Capsule(style: .continuous).strokeBorder(status.border, lineWidth: 1))
+        .font(LunalyrDesign.Studio.TypeScale.row)
         .fixedSize()
         .accessibilityElement(children: .contain)
     }

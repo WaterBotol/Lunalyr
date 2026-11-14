@@ -2,43 +2,47 @@ import SwiftUI
 
 // MARK: - Form and panel pieces
 //
-// Small building blocks for the Settings inspector, onboarding and the
-// menu-bar panel, so every explanation, disabled reason and value reads the
-// same everywhere:
+// Small building blocks for Settings pages, the Look inspector, onboarding
+// and the menu-bar panel, so every explanation, disabled reason and value
+// reads the same everywhere (SPEC.md §2 and §4):
 //
-//     Form {
-//         Section("Music response") {
-//             Toggle("System audio", isOn: $on).disabled(powerSaving)
-//             if powerSaving { DisabledReason("Available once Visualisers return.") }
-//             ValueSlider("Sensitivity", value: $sensitivity, in: 0.3...3,
-//                         format: { $0.formatted(.percent.precision(.fractionLength(0))) })
-//             InspectorCaption("Lunalyr analyses system audio on this Mac.")
-//         }
+//     ThemedSection("Music response") {
+//         Toggle("System audio", isOn: $on).disabled(powerSaving)
+//         if powerSaving { DisabledReason("Available once Visualisers return.") }
+//         ValueSlider("Sensitivity", value: $sensitivity, in: 0.3...3,
+//                     format: { $0.formatted(.percent.precision(.fractionLength(0))) })
+//         InspectorCaption("Lunalyr analyses system audio.", more: "The longer text about what is sent where.")
 //     }
-//     .formStyle(.grouped)
 //
 //     PanelSectionHeader("Wallpaper")                      // menu-bar panel groups
-//     SettingsIcon(symbol: "photo.artframe", tint: .indigo) // sidebar rows
 
-/// The explanation under a control: what it does, or what it changes.
-/// Secondary, 11 points, wrapping. Pass a `Text` for inline markdown. A
-/// caption with `more` shows a short line and an ⓘ that opens the rest; in a
-/// settings page (`ThemedForm`), any caption over about 90 characters is cut
-/// the same way, so a page stays short.
+/// The short caption under a control: 11.5 pt ink2, 3 points under it. With
+/// `more`, the caption ends in an accent "More" that opens the longer text
+/// in a popover (the spec's replacement for ⓘ buttons). In a settings form
+/// (`compactCaptions`), any caption over about 90 characters folds the same
+/// way at a sentence's end, so a page stays short.
 struct InspectorCaption: View {
-    private let text: Text
+    private let text: Text?
     private let string: String?
     private let more: String?
     @Environment(\.compactCaptions) private var compact
+    @Environment(\.captionFollowsControl) private var followsControl
+    @Environment(\.formDensity) private var density
+    @State private var shown = false
+
+    /// The link's words.
+    static let moreTitle = "More"
+    /// The link the "More" carries; opened in place, never sent anywhere.
+    static let moreURL = URL(string: "lunalyr-caption:more")!
 
     init(_ string: String) {
-        text = Text(string)
+        text = nil
         self.string = string
         more = nil
     }
 
     init(_ string: String, more: String) {
-        text = Text(string)
+        text = nil
         self.string = string
         self.more = more
     }
@@ -49,7 +53,7 @@ struct InspectorCaption: View {
         more = nil
     }
 
-    /// The line to show and the full text behind the ⓘ, if any. Only ever
+    /// The line to show and the full text behind "More", if any. Only ever
     /// folds at a sentence's end: a caption is never cut off mid-sentence
     /// ("…with animated covers where…"). A long first sentence shows whole.
     static func split(_ string: String, limit: Int = 90) -> (short: String, full: String?) {
@@ -60,41 +64,101 @@ struct InspectorCaption: View {
         return (first, string)
     }
 
+    /// What a caption shows and what its "More" opens (nil: no "More").
+    static func content(_ string: String, more: String?, compact: Bool) -> (shown: String, more: String?) {
+        if let more { return (string, more) }
+        guard compact else { return (string, nil) }
+        let split = split(string)
+        return (split.short, split.full)
+    }
+
     var body: some View {
         caption
-            // In a settings card the caption belongs to the control above it:
-            // it sits close under it rather than a whole row's gap away.
-            .padding(.top, compact ? -LunalyrDesign.Spacing.xSmall - 2 : 0)
+            .font(LunalyrDesign.Studio.TypeScale.caption)
+            .foregroundStyle(Color.studio(.ink2))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // In a form the caption belongs to the control above it: 3
+            // points under it rather than a whole row's gap away.
+            .padding(.top, compact && followsControl ? LunalyrDesign.Studio.Layout.captionGap - density.rowSpacing : 0)
     }
 
     @ViewBuilder private var caption: some View {
-        if let more, let string {
-            row(Text(string), full: more)
-        } else if compact, let string, case let split = Self.split(string), let full = split.full {
-            row(Text(split.short), full: full)
-        } else {
-            text.lunalyrText(.caption)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        if let string {
+            let content = Self.content(string, more: more, compact: compact)
+            if let full = content.more {
+                Text(Self.attributed(content.shown))
+                    .tint(Color.studio(.accentText))
+                    .environment(\.openURL, OpenURLAction { url in
+                        guard url == Self.moreURL else { return .systemAction }
+                        shown = true
+                        return .handled
+                    })
+                    .popover(isPresented: $shown, arrowEdge: .bottom) {
+                        ExplanationPopover(text: full)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(content.shown)
+                    .accessibilityAction(named: "More") { shown = true }
+                    .help(Self.moreTitle)
+            } else {
+                Text(content.shown)
+            }
+        } else if let text {
+            text
         }
     }
 
-    private func row(_ shown: Text, full: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            shown.lunalyrText(.caption)
-            ThemedInfoButton(text: full, label: "this setting")
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    /// The caption with its "More" link after two spaces.
+    static func attributed(_ shown: String) -> AttributedString {
+        var link = AttributedString(moreTitle)
+        link.link = moreURL
+        link.foregroundColor = Color.studio(.accentText)
+        return AttributedString(shown + "  ") + link
     }
 }
 
 private struct CompactCaptionsKey: EnvironmentKey { static let defaultValue = false }
+private struct CaptionFollowsControlKey: EnvironmentKey { static let defaultValue = true }
 
 extension EnvironmentValues {
-    /// Set by `ThemedForm`: long captions fold behind an ⓘ.
+    /// Set by `ThemedForm`: captions pull up under their control, and long
+    /// ones fold behind "More".
     var compactCaptions: Bool {
         get { self[CompactCaptionsKey.self] }
         set { self[CompactCaptionsKey.self] = newValue }
+    }
+
+    /// False where a caption sits inside its control's own label (under a
+    /// checkbox's title): it keeps its place instead of pulling up.
+    var captionFollowsControl: Bool {
+        get { self[CaptionFollowsControlKey.self] }
+        set { self[CaptionFollowsControlKey.self] = newValue }
+    }
+}
+
+/// A checkbox's title with its caption under it, lined up with the title.
+struct CheckboxLabel: View {
+    let title: String
+    let caption: String?
+    let more: String?
+
+    init(_ title: String, caption: String? = nil, more: String? = nil) {
+        self.title = title
+        self.caption = caption
+        self.more = more
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+            if let caption {
+                Group {
+                    if let more { InspectorCaption(caption, more: more) } else { InspectorCaption(caption) }
+                }
+                .environment(\.captionFollowsControl, false)
+            }
+        }
     }
 }
 
@@ -139,44 +203,46 @@ struct DelayedSpinner: View {
 }
 
 /// Something that went wrong, in the warning colour with its triangle, so it
-/// never reads like an informational caption (failed imports and downloads).
+
+/// Something that went wrong: the warning glyph in the warning colour, the
+/// words in ink (status colours are for glyphs, never text), so it never
+/// reads like an informational caption (failed imports and downloads).
 struct WarningCaption: View {
     let text: String
 
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Label {
-            Text(text).fixedSize(horizontal: false, vertical: true)
-        } icon: {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.studio(.warning))
+                .accessibilityHidden(true)
+            Text(text)
+                .foregroundStyle(Color.studio(.ink))
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .labelStyle(CaptionLabelStyle())
-        .foregroundStyle(LunalyrStatus.warning.text)
+        .font(LunalyrDesign.Studio.TypeScale.caption)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("Warning: \(text)")
     }
 }
 
-/// Why the control above is unavailable, and when it will be. Every disabled
-/// control that isn't self-explanatory gets one, directly beneath it.
+/// Why the control above is unavailable, and when it will be: a caption
+/// under it. Every disabled control that isn't self-explanatory gets one.
 struct DisabledReason: View {
     let text: String
 
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Label {
-            Text(text)
-        } icon: {
-            Image(systemName: "info.circle")
-        }
-        .labelStyle(CaptionLabelStyle())
-        .accessibilityElement(children: .combine)
+        InspectorCaption(text)
+            .accessibilityLabel(text)
     }
 }
 
-/// A full-width native slider with a stable readout above the track.
+/// A slider: title left (13 pt), value right (12 pt monospaced digits, ink2),
+/// the 4 pt track under them, optional end labels (11 pt ink2) under that.
 ///
 ///     ValueSlider("Lyric size", value: $scale, in: 0.7...1.5,
 ///                 format: { $0.formatted(.percent.precision(.fractionLength(0))) })
@@ -189,11 +255,12 @@ struct ValueSlider: View {
     let spoken: ((Double) -> String)?
     let minimumLabel: String?
     let maximumLabel: String?
+    var bold = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, step: Double? = nil,
-         minimumLabel: String? = nil, maximumLabel: String? = nil,
+         minimumLabel: String? = nil, maximumLabel: String? = nil, bold: Bool = false,
          format: @escaping (Double) -> String, spoken: ((Double) -> String)? = nil) {
         self.title = title
         _value = value
@@ -201,19 +268,22 @@ struct ValueSlider: View {
         self.step = step
         self.minimumLabel = minimumLabel
         self.maximumLabel = maximumLabel
+        self.bold = bold
         self.format = format
         self.spoken = spoken
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
+                    .font(.system(size: 13, weight: bold ? .semibold : .regular))
+                    .foregroundStyle(Color.studio(.ink))
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: LunalyrDesign.Spacing.small)
+                Spacer(minLength: 8)
                 Text(format(value))
-                    .lunalyrText(.value)
-                    .foregroundStyle(.secondary)
+                    .font(LunalyrDesign.Studio.TypeScale.value)
+                    .foregroundStyle(Color.studio(.ink2))
                     .fixedSize()
                     // Digits roll to a stepped or reset value.
                     .contentTransition(.numericText(value: value))
@@ -221,32 +291,28 @@ struct ValueSlider: View {
             }
             .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
             .accessibilityHidden(true)
-            slider
-                .labelsHidden()
+            ThemedSliderTrack(value: $value, range: range, step: step)
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel(title)
                 .accessibilityValue(spoken?(value) ?? format(value))
             if minimumLabel != nil || maximumLabel != nil {
                 HStack {
                     if let minimumLabel { Text(minimumLabel) }
-                    Spacer(minLength: LunalyrDesign.Spacing.small)
+                    Spacer(minLength: 8)
                     if let maximumLabel { Text(maximumLabel) }
                 }
-                .lunalyrText(.footnote)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.studio(.ink2))
                 .opacity(enabled ? 1 : ThemedSliderTrack.disabledOpacity)
                 .accessibilityHidden(true)
             }
         }
-        .padding(.vertical, 2)
-    }
-
-    private var slider: some View {
-        ThemedSliderTrack(value: $value, range: range, step: step)
     }
 }
 
-/// A native selection menu with a readable current choice. The title moves
-/// above the menu when the inspector can't fit both on one line.
+/// A pop-up: label left, the menu right as 12.5 pt text and an up-down
+/// chevron on the control fill (24 high, radius 6). The label moves above
+/// the menu when the column can't fit both on one line.
 struct ChoiceMenu<Selection: Hashable, Options: View>: View {
     let title: String
     @Binding var selection: Selection
@@ -263,21 +329,24 @@ struct ChoiceMenu<Selection: Hashable, Options: View>: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: LunalyrDesign.Spacing.small) {
+            HStack(spacing: 8) {
                 label.fixedSize()
-                Spacer(minLength: LunalyrDesign.Spacing.small)
+                Spacer(minLength: 8)
                 menu.fixedSize()
             }
-            VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
+            VStack(alignment: .leading, spacing: 6) {
                 label
                 menu
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
     }
 
     private var label: some View {
-        Text(title).accessibilityHidden(true)
+        Text(title)
+            .font(LunalyrDesign.Studio.TypeScale.row)
+            .foregroundStyle(Color.studio(.ink))
+            .accessibilityHidden(true)
     }
 
     private var menu: some View {
@@ -285,18 +354,59 @@ struct ChoiceMenu<Selection: Hashable, Options: View>: View {
             Picker(title, selection: $selection) { options }
                 .pickerStyle(.inline)
         } label: {
-            Text(selectedTitle(selection))
+            ThemedPopUpLabel(selectedTitle(selection))
         }
         .menuStyle(.button)
-        .buttonStyle(ThemedButtonStyle())
-        .menuIndicator(.visible)
+        .buttonStyle(ThemedPopUpButtonStyle())
+        .menuIndicator(.hidden)
         .help(selectedTitle(selection))
         .accessibilityLabel(title)
         .accessibilityValue(selectedTitle(selection))
     }
 }
 
-/// Short lists that are easier to choose from with every option visible.
+/// A pop-up's face: the choice and an up-down chevron.
+struct ThemedPopUpLabel: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(text).lineLimit(1)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 8.5, weight: .semibold))
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// A pop-up's button: as `ThemedButtonStyle`, 12.5 pt, padding 9.
+struct ThemedPopUpButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ThemedPopUpBody(configuration: configuration)
+    }
+}
+
+private struct ThemedPopUpBody: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 12.5))
+            .foregroundStyle(Color.studio(.ink))
+            .padding(.horizontal, 9)
+            .frame(minHeight: 24)
+            .themedControl(radius: 6, state: !enabled ? .disabled : configuration.isPressed ? .pressed : hovering ? .hover : .normal)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+    }
+}
+
+/// A short list easier to choose from with every option visible: label
+/// left, segments right; the label moves above when they don't fit.
 struct ChoiceSegments<Selection: Hashable>: View {
     let title: String
     @Binding var selection: Selection
@@ -311,11 +421,81 @@ struct ChoiceSegments<Selection: Hashable>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
-            Text(title).accessibilityHidden(true)
-            ThemedSegments(title, selection: $selection, options: cases.map { ($0, label($0)) })
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                titleText.fixedSize()
+                Spacer(minLength: 8)
+                segments
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                titleText
+                segments
+            }
         }
-        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(LunalyrDesign.Studio.TypeScale.row)
+            .foregroundStyle(Color.studio(.ink))
+            .accessibilityHidden(true)
+    }
+
+    private var segments: some View {
+        ThemedSegments(title, selection: $selection, options: cases.map { ($0, label($0)) })
+    }
+}
+
+/// A labelled text field: the label in a 52 pt column, the field filling the rest.
+struct LabeledField: View {
+    let label: String
+    @Binding var text: String
+    let prompt: String
+    var onSubmit: () -> Void = {}
+
+    init(_ label: String, text: Binding<String>, prompt: String, onSubmit: @escaping () -> Void = {}) {
+        self.label = label
+        _text = text
+        self.prompt = prompt
+        self.onSubmit = onSubmit
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(LunalyrDesign.Studio.TypeScale.row)
+                .foregroundStyle(Color.studio(.ink))
+                .frame(width: 52, alignment: .leading)
+                .accessibilityHidden(true)
+            TextField(label, text: $text, prompt: Text(prompt).foregroundStyle(Color.studio(.ink2)))
+                .textFieldStyle(ThemedTextFieldStyle())
+                .onSubmit(onSubmit)
+                .accessibilityLabel(label)
+        }
+    }
+}
+
+/// A status glyph for access and connection rows: success green, warning
+/// orange, otherwise ink2. Never text.
+struct StatusGlyph: View {
+    let status: LunalyrStatus
+    var symbol: String?
+
+    var body: some View {
+        Image(systemName: symbol ?? status.symbol)
+            .font(.system(size: 13))
+            .foregroundStyle(Self.color(status))
+            .accessibilityHidden(true)
+    }
+
+    static func color(_ status: LunalyrStatus) -> Color {
+        switch status {
+        case .success: return Color.studio(.success)
+        case .warning: return Color.studio(.warning)
+        case .critical: return status.text
+        case .info, .neutral: return Color.studio(.ink2)
+        }
     }
 }
 
@@ -363,17 +543,17 @@ struct SettingsIcon: View {
     }
 }
 
-/// Footnote-sized label with a secondary icon, for captions with a symbol.
+
+/// A caption with a symbol: 11.5 pt ink2, the symbol before it.
 struct CaptionLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.xSmall + 2) {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             configuration.icon
-                .foregroundStyle(.secondary)
             configuration.title
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .font(LunalyrTextStyle.caption.font)
-        .foregroundStyle(.secondary)
+        .font(LunalyrDesign.Studio.TypeScale.caption)
+        .foregroundStyle(Color.studio(.ink2))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
