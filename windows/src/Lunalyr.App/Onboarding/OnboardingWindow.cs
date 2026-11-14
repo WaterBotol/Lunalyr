@@ -346,9 +346,9 @@ internal sealed partial class OnboardingWindow : Window
         {
             var waited = DateTime.UtcNow - started;
             // The look step's preview needs the wallpaper's controller and a few frames; the others only a layout pass.
-            // The opening is caught with the glass formed, a little over a second into its video (it ends on the plain logo).
+            // The opening is caught with the glass formed, under a second into its 3.25 s video (it ends on the plain logo).
             var ready = _introOverlay is not null
-                ? waited > TimeSpan.FromSeconds(1.7)
+                ? waited > TimeSpan.FromSeconds(1.2)
                 : _flow.Step == OnboardingStep.Look
                 ? (_host.Controller is not null && waited > TimeSpan.FromSeconds(4)) || waited > TimeSpan.FromSeconds(12)
                 : (_host.Controller is not null && waited > TimeSpan.FromSeconds(2)) || waited > TimeSpan.FromSeconds(10);
@@ -360,7 +360,7 @@ internal sealed partial class OnboardingWindow : Window
             {
                 var size = WindowCapture.WritePng(hwnd, path);
                 _host.Log.App.Info(size is { } s
-                    ? $"Welcome capture ({name}) written to {path} ({s.Width}×{s.Height}); foreground: {WindowCapture.IsForeground(hwnd)}."
+                    ? $"Welcome capture ({name}) written to {path} ({s.Width}×{s.Height}); foreground: {WindowCapture.IsForeground(hwnd)}{(_introVideo is { } video ? $"; the opening: {video.Describe()}" : "")}."
                     : $"Welcome capture ({name}) couldn't be drawn.");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

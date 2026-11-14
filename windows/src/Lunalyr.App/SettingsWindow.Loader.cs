@@ -139,7 +139,7 @@ public sealed partial class SettingsWindow
         {
             var size = WindowCapture.WritePng(hwnd, path);
             _host.Log.App.Info(size is { } s
-                ? $"Settings loader capture written to {path} ({s.Width}×{s.Height}); foreground: {WindowCapture.IsForeground(hwnd)}."
+                ? $"Settings loader capture written to {path} ({s.Width}×{s.Height}); foreground: {WindowCapture.IsForeground(hwnd)}; the logo: {_loaderVideo?.Describe()}."
                 : "Settings loader capture couldn't be drawn.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

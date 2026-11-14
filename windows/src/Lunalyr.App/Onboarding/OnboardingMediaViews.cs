@@ -66,6 +66,13 @@ internal sealed class MutedVideo : IDisposable
 
     public MediaPlayerElement Element { get; }
 
+    /// <summary>Where playback is, and its state (for the capture's log line).</summary>
+    public string Describe()
+    {
+        var session = _player.PlaybackSession;
+        return $"{session.PlaybackState} at {session.Position.TotalSeconds:0.00} s of {session.NaturalDuration.TotalSeconds:0.00} s";
+    }
+
     /// <summary>The video played to its end (off the UI thread; looping players never say so).</summary>
     public event Action? Ended;
 
