@@ -255,3 +255,21 @@ Blame (`-w -M -C`) run on each Mac range read; nothing from an `a99fd65` line wa
 | `LyricLayerView.swift` 125–150, 672–682 (remembered colour and composition) | 0 | `AppController.StyleMemory.cs`, `StyleMemory.Applied` | Behaviour ported into the controller |
 | `LunalyrExtras.swift` 445–470 (`cycleLayout`) | 0 | `LunalyrExtras.CycleLayout`, `StyleMemory.CycledRemembered` | Faithful port |
 | `LyricExtrasInspector.swift` 1–260, `LyricStylePage.swift` 1–300 | 0, 1 (a SwiftUI environment line) | `LyricStylePage.cs`, `LyricStyleCopy.cs` | Rows rebuilt with `SettingsKit`, copy ported |
+
+## Mac Build 88 / Test Build 90 stage layouts (`mac88/stage-layouts`)
+
+Blame (`git blame -w -M -C --line-porcelain transfer/windows-port-14nov`, and at `0da342b` for Portal and Mosaic) on
+every file read; none has a line from `a99fd65`, so all were ported faithfully and nothing was re-implemented from
+behaviour.
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/UI/StageLayouts/StagePhrases.swift` | 0 | `Core/Compositions/StagePhrases.cs` | Faithful port |
+| `Sources/UI/StageLayouts/LyricWordIcons.swift` | 0 | `Core/Compositions/LyricWordIcons.cs` (SF names kept; `SegoeIcons` glyph table is Windows' own) | Faithful port |
+| `Sources/UI/StageLayouts/HingeLayout.swift` | 0 | `HingeGeometry.cs`, `Render/Compositions/Stage/HingeLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/BroadsideLayout.swift` | 0 | `StageGeometry.cs` (`BroadsideGeometry`), `BroadsideLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/PortalLayout.swift` (Test Build 90) | 0 | `PortalGeometry.cs`, `PortalLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/MosaicLayout.swift` (Test Build 90) | 0 | `MosaicGeometry.cs`, `MosaicLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/TorqueLayout.swift` | 0 | `TorqueGeometry.cs`, `TorqueLayer.cs` | Faithful port |
+| `Sources/UI/StageLayouts/FableLayout.swift` | 0 | `FableGeometry.cs`, `FableLayer.cs` | Faithful port |
+| Tests: `StagePhrasesTests`, `LyricWordIconsTests`, `PortalLayoutTests`, `MosaicLayoutTests`, `TorqueLayoutTests`, `FableLayoutTests`, `HingeBroadsideChoreographyTests`, `StageMotionTests`, `StageReadingTests` | 0 | `tests/Lunalyr.Core.Tests/Compositions/*`, `StageLayoutRenderTests.cs` | Same inputs and values |

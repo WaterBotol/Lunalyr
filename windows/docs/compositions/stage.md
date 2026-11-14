@@ -13,7 +13,7 @@ used here were blamed line by line (`git blame -w -M -C -L`):
 
 | Id | Title | One line | Windows type |
 |---|---|---|---|
-| `hinge` | Hinge | Heavy words swing in on a hinge and fold into a stack. | `HingeLayer` |
+| `hinge` | Hinge | Heavy words swing open on a spine, page by page, and the book snaps shut. | `HingeLayer` |
 | `broadside` | Broadside | One strip of big type that slides along, with little words as labels. | `BroadsideLayer` |
 | `portal` | Portal | The sung word in a pill; earlier words drift away as pale ones. | `PortalLayer` |
 | `mosaic` | Mosaic | A collage: each word set huge, on a colour bar, or letter by letter. | `MosaicLayer` |
@@ -24,12 +24,11 @@ used here were blamed line by line (`git blame -w -M -C -L`):
 
 - `src/Lunalyr.Core/Motion/StageMotion.cs` (already ported): `StageRun` (glued runs, syllable fade-in, readings by
   run) and `StageMotion` (arrival spring, hand-off ranks, liveness, exits, Hinge's fold, Mosaic's morph).
-- `src/Lunalyr.Core/Compositions/StageGeometry.cs`: the pure geometry of each layout, allocation-free on the frame
-  path. `StageShared` (the Mac's `chance`, `lineSpeed`, `glide`, reading sizes, `chosenEntrance`), `HingeGeometry`,
-  `BroadsideGeometry`, `PortalGeometry`, `MosaicGeometry`, `TorqueGeometry` and `TorqueState`, and `StageShapes`
-  (`Star4` and `SketchyOutline`).
-- `src/Lunalyr.Core/Compositions/FableGeometry.cs`: `FableStyle`, `FableShape`/`FableAccent`, `FableLayout.Arrange`
-  and `FableBrackets`.
+- `src/Lunalyr.Core/Compositions/StageGeometry.cs`: `StageShared` (the Mac's `chance`, `lineSpeed`, `glide`, reading
+  sizes, `chosenEntrance`), `BroadsideGeometry` and `StageShapes` (`Star4` and `SketchyOutline`).
+- `src/Lunalyr.Core/Compositions/StagePhrases.cs` and `LyricWordIcons.cs` (with `SegoeIcons`), shared by the layouts.
+- One file of pure choreography per layout: `HingeGeometry.cs`, `PortalGeometry.cs`, `MosaicGeometry.cs`,
+  `TorqueGeometry.cs`, `FableGeometry.cs`, allocation-free on the frame path.
 - `src/Lunalyr.Render/Compositions/Stage/`: `StageLayer` (the shared stage) and one class per layout, plus
   `StageFactories`.
 
@@ -45,8 +44,8 @@ used here were blamed line by line (`git blame -w -M -C -L`):
   previews hand off), swelled `0.965 + 0.035·arrival − 0.012·exit` and slid `((1 − arrival)·0.20 − exit·0.10) · base`.
   A line-timed line goes through the same layout (its estimated words arrive one by one), inside the chosen
   phrase entrance, at `presence · (1 − 0.5·yield)`. Each layout leaves on `StageMotion.Leave` from
-  `LineFlow.StageExitStart`: the phrase's exit, or 1.2 s after the last word is sung, whichever comes first. Hinge
-  is kept for 1.0 s after its exit starts (`LyricPhraseTiming.HingeExitSpan`), the others 0.7 s.
+  `LineFlow.StageExitStart`: the phrase's exit, or 1.2 s after the last word is sung, whichever comes first. Every
+  layout, Hinge's closing book included, is gone 0.7 s after its exit starts.
 - **Stage rules** (from `LyricLayerView`): no held-line shift (every line sits in the middle), no "making way",
   fitted with user scale 1 and neutral 1, and no preview. A word-timed preview draws nothing, and a line-timed next
   line is never previewed (`StageRules.FillsStage`).
@@ -69,84 +68,66 @@ used here were blamed line by line (`git blame -w -M -C -L`):
   (`docs/images/layouts/layout-hinge.webp` and `layout-torque.webp`): Hinge's faces come towards the viewer at their
   outer ends, a concave corner.
 
-## Hinge
+## The layouts (Mac Build 88; Portal and Mosaic Test Build 90)
 
-- Run 0–1: the pair, at `0.95 u`, in the rest colour at 95%. It starts 1.3/0.95 its size and is pushed into the
-  corner at 55% (`pushed` = smoothstep of `(t − bar + 0.05) / 0.4`). Run 2: the bar, at `1.6 u`, settling from
-  `3.4/1.6` to 1 (`settle` = smoothstep of `(t − bar − 0.25) / 0.5`). Run 3 on: the column, word j at
-  `u · min(2.8, 1.2 + 0.24 j)`, drawn 0.86 wide and 1.1 tall. All words are upper-case in the heavy cut, with a
-  shadow (30%, 7 pt, 2 pt down).
-- The corner is fitted by `HingeGeometry.Fit` (every word counted by its weight, so nothing steps; the column shrinks
-  15% as its seventh word arrives; readings counted at 1.4 times their room). It grows to fill the stage once it has
-  a bar, by up to 2×.
-- Faces turned ±52° (perspective 0.8), closing to ±88° over 0.6 s from the exit. Words unfold from the hinge edge
-  `84° · (1 − arrival)` (perspective 0.6), fold shut oldest first (`StageMotion.HingeFold`) and drop `0.25 u`. The
-  whole corner is tipped 9° about the horizontal (perspective 0.5).
+The Mac moved each layout into its own file under `Sources/UI/StageLayouts/` (`StagePhrases.swift`,
+`LyricWordIcons.swift`, and `<Name>Layout.swift`). Blame (`-w -M -C`, `transfer/windows-port-14nov`) gives every one of
+them, and their tests, 0 lines from `a99fd65`: all ported faithfully. Portal and Mosaic are from Test Build 90
+(`0da342b`), which put them back on the original layouts' smooth timing.
 
-## Broadside
-
-- Big words at `1.7 u` in the sung colour, with a hard shadow: an offset copy in 34% black, `0.05 u` across and
-  `0.0575 u` down. Little words ("the", "of"…, at most five characters) become labels at `0.52 u` on a tile with a 3 pt
-  corner, turned −3° or 2.5°. Labels are few and well apart: only after a big word, and three or more words after
-  the last label.
-- `BroadsideGeometry.Places`: big words in a row (gap `0.45 u`, `0.2 u` after a little one), the first little word
-  after a big one lying across it. The strip glides by the hand-offs, so the newest big word reaches the centre.
-  Words more than about two big words behind drop out (`Keep`).
-- Arrival: scale `0.86 + 0.14 a` (labels `0.8 + 0.2 a`), opacity `min(1, 1.6 a)`. The strip fades to clear over the
-  outer 10% at each side (an opacity-mask layer).
-
-## Portal
-
-- Each pill is set at `u · (1.2 + 0.3·chance(id, 10))`, padded `0.5` by `0.26` of that. Its corner is
-  `0.24…0.5` of the size, a quarter are outlined only, and it carries a badge before (60%) or after (25%) the word.
-- The badge is the line's choice of arrow-up-right, arrow, sparkle, play, plus or bolt (drawn as shapes here). It
-  collapses as the pill hands over.
-- The trail: four points scaled by the stage and the line's reach, flipped by the line's chance, shifted and lifted.
-  Pills glide along it by rank (the sum of later words' smootherstep settles over `0.6/speed` s). They bob and sway
-  on song time, come in from their own heading, and are kept on the stage (`KeepOnStage`).
-- Liveness drives the restyle. The resting pill (rest colour at 16%) cross-fades to the live one (tile colour, or a
-  `max(2 pt, 0.07·size)` tile-coloured border), the word cross-fades from the rest colour to the tile text, and a
-  ripple and two hand-drawn outlines appear. The outlines are `SketchyOutline`: 72 points, redrawn 8 times a second,
-  flattened into short segments.
-- Each pill tilts `4…14°` as it lands, squashes 7%, scales `0.9 + 0.1 a`, and older pills are `1 − 0.4·rank` the size
-  (at least 0.4). The line rises 10% of the stage as it leaves.
-
-## Mosaic
-
-- Each word takes one of three settings by `chance(id, 20)`:
-  - huge (`3.0 u`, may run past the stage, with a tile-coloured star turning 40°/s);
-  - white on a colour bar (`2.3 u`): the bar wipes in over `0.32/speed` s across a pale panel (white at 90%) that
-    arrives 0.05 s later, the word lands 0.1 s after the onset, with a white star above it;
-  - letter by letter (`2.4 u`), each letter its own size (0.85–1.15), baseline (±0.14) and turn (±11°), revealed
-    0.05 s apart.
-- As the next words arrive (rank), each word glides from where it landed into a small stack at the top left (rows
-  `0.85 u` apart, plus a reading's room). It shrinks to the small setting's size by settle 0.7, then the two
-  cross-fade (`StageMotion.MosaicMorph`). Small words fade out past rank 1.5.
-
-## Torque
-
-- Words rest at `2 u`. An older word is scaled `max(0.55, 2 − 0.38·min(rank, 3.5)) / 2`, fades out past rank 3, and
-  gives its room back as it does (`TorqueGeometry`).
-- The stack is centred by weight, so the newest, biggest word sits low. A stack taller than the stage keeps its foot
-  on it and is shrunk to fit.
-- Each word twists in about its vertical axis `110°·(1 − a)` (alternating sides), and breathes ±(5 + 6·live)° about
-  both axes on song time. It leans `−4°` while live and `±3°·min(rank, 2)` after, and wanders `±(0.08 + 0.06·live) u`.
-  While live it carries a thick edge: six darker copies (sung colour at 55%, 0.25 darker) stepping
-  `(0.012, 0.022)·rest` back. The whole stack is turned −10° (perspective 0.5).
-- A chosen entrance (Float up, Pop, Orbit, Glide, Unfold) replaces the twist, moving exactly as in the other layouts.
-
-## Fable
-
-- The line's style is `FableStyle.ForLine(row)`: five shapes (staircase, arch, zigzag, wave, ramp) against five
-  accents (underline, ring, tile, star, brackets). Neighbouring lines never share either, and all 25 pairs come round
-  before any repeats.
-- Sizes are fixed for the line: the longest word (lines of three or more) and lines of one or two words at `1.75 u`,
-  little words at `1.05 u`, others `1.28–1.42 u`. Each word is padded for its accent and laid out once by
-  `FableLayout.Arrange`. Row widths are tried until the block can be shown largest, a lone last word is pulled up,
-  right-to-left lines are mirrored, and the block is fitted inside the stage less a margin.
-- Each word makes one of four entrances (drop in, pop up, swing up from its foot, slide in) and holds still. Its
-  accent comes in over 0.18 s and passes to the next word over 0.3 s. Its reading (36% of the word, at least 12 pt,
-  rest colour at 90%) sits under it.
+- **Phrases** (`StagePhrases`): a line's runs become phrases, breaking at a pause of 0.35 s, after punctuation, and
+  before five runs (an overlong stretch cut into near-equal phrases at the best place). Each run gets a role: the
+  phrase's focal word (its longest-held content word), a quick run (three or more onsets under 0.25 s apart), held
+  (sung 0.8 s or more), a function word or content. Cached per line.
+- **Word icons** (`LyricWordIcons`, `SegoeIcons`): the Mac's tables of about 130 words with a picture (English with
+  their inflections, and common CJK words with a particle) keep its SF Symbol names; `SegoeIcons` maps each name to a
+  Segoe Fluent Icons glyph, chosen by looking at the font (`docs/previews/mac88-stage-layouts/word-icons-segoe.png`).
+  Where the font has no fitting glyph the closest meaningful one stands in: rain is the cloud with drops (EA91),
+  storm and thunder the bolt, road the turn sign, radio the broadcast mast, dance the music note, money a "$" from the
+  text face, snow and cold the thermometer, dream and sleep the Quiet hours crescent, raised hand a hand, flower and
+  tree the leaves, party and magic the sparkles, wind the wavy lines (as the sea), wine and drink the cup, earthquake
+  the waveform, and he and she the contact silhouette. Bird, bed, crown, mountain, beach umbrella, theatre masks,
+  smoke, cat, dog, rainbow and mouth have none: those words show bare.
+- **Hinge**: an open book on a spine (centre for a spread, a left third for a one-page line). Each phrase is a page of
+  heavy caps: its focal word huge (`2.5 u`, `3 u` held, shrunk so the page fits 88% of the stage) flush to the spine,
+  the words before it a small line (`0.62 u`) at its head, those after at its foot. The focal word swings open on the
+  spine (84°, bursting in 40% oversized and blurred), content words and quick runs flip open (70°, a run as one),
+  function words ink in. At the next phrase the page turns over (0.62 s, eased in and out) and lands dimmed (38%) on
+  the other side; at most two pages show. The line leaves by folding both pages shut onto the spine (0.4 s,
+  accelerating) and receding 12% of the stage in the reading direction; the next book arrives still moving that way.
+  Hinge draws Reduce Motion itself: page turns cross-fade and words fade in.
+- **Broadside**: the Build 85 state. Little words ride as labels on the shoulder of the big word before (above its
+  letters, flush with its end); the strip builds up centred until it is wider than the stage, then keeps the newest
+  word near the right. A word nearing either edge (5% in, over `0.7 u`) fades out whole; a label fades with the word
+  it rides on. (The old gradient mask is gone.)
+- **Portal** (Build 90): one pill per word: glued syllables are one pill (up to 24 characters), and an unspaced line is
+  parted into its words (`LyricRuns.SplittingWords`, the rolling layouts' word parting; readings pair with the same
+  pills). The pill bursts in, tilts in and squashes as it lands on the shared arrival spring, settling over
+  `0.6/pace` s with the trail lifting over `0.36/pace` s, all from the word's arrival; only a word followed within
+  0.35 s is quicker (never under 0.28 s / 0.2 s), and a quick run (under 0.16 s apart) shares one burst. The trail
+  climbs by the pills' own heights (`PortalGeometry.Column`): lowered so its top stays on the stage, never so far that
+  a pill leaves its foot, and a pill nearing the top fades as the next takes over. A word with a picture carries its
+  icon in a disc; other non-function words, about every other one, an ornament (arrow up-right, arrow, sparkle,
+  play, plus, bolt, star) never the same as any of the three pills before. Shapes rotate capsule, rounded, tag,
+  speech, slant, never the same twice in a row. All by the line's seed and the word's index.
+- **Mosaic** (Build 90): beats (a quick run under 0.28 s apart, up to three words and 16 characters, set as one) are
+  huge (`3 u`), on a bar (`2.3 u`, one word only, the bar the background of its word and reading, 72% saturated), or
+  letter by letter (`2.4 u`, one size, each letter rising onto one baseline with its syllable). Kinds never repeat in
+  a row; the longest-held word is huge. A beat leaves for the stack on the original hand-off spring, 0.22 s/pace
+  ahead of the next beat, never before its own last word is in; the stack fades out at its fourth row. No stars, no
+  panel, no wipe ahead of the word.
+- **Torque**: a turning column; a face per phrase, tipped ±4° alternately, flush left and right alternately. Rows by
+  grammar (the focal word's group on a row of its own). The focal word (`2.4 u`) is wrung in from 84° and punched
+  22% large, its thick edge (7 copies, 10% deep) growing after it and deepening while it is held; content words
+  (`1.7 u`) rise and turn 45% as far; function words (`1.1 u`) cut in. A quarter turn at each phrase (0.36 s,
+  easeOutBack); the line enters already turning 45° and leaves turning on 60°. Every turn is a flat squash and shear
+  (`TorqueGeometry.Turn`), never a perspective.
+- **Fable**: a storybook page per line in its own shape (arc, stair, wave, block; neighbours never share), one row per
+  phrase, at most two phrases or eight words a page; the old page folds away about its spine before the next is
+  begun. The line's hero (its longest-held focal word, `2 u`) and each phrase's focal word (`1.6 u`) pop up from
+  their foot or drop in, alternating by phrase; content words (`1.3 u`) hop up, a quick run as one; function and
+  held words (`0.95 u` for function words) are written in by a soft, slanted pen stroke (an opacity-mask layer).
+  Nothing decorates a word. Fable draws Reduce Motion itself: words fade.
 
 ## Constants not in the snapshot (gaps)
 
@@ -166,71 +147,68 @@ entrances or track mood for the stage layouts. The layouts take:
 
 **Reduce Motion** (`SceneSnapshot.ReduceMotion`) is honoured as on the Mac: arrivals and hand-offs step at each onset,
 and each step is a short dissolve between the layout without the newest run and with it (`StageMotion.ReducedDissolve`,
-drawn as two passes at `1 − step²` and `1 − (1 − step)²`; Fable needs none, as its words never travel). Every twist,
-tilt, fold, spin, squash, breath, wander, ripple and boil is gone, Hinge's faces lie flat with no look from above and
-its line fades out instead of folding, Portal's pills land settled, Mosaic's bar is there at once and its letters only
-fade in, Torque's stack is not turned, and Fable's accents only fade. The word-timed line's own swell and slide go too.
+drawn as two passes at `1 − step²` and `1 − (1 − step)²`). Hinge and Fable draw it themselves (the Mac's
+`ownsReduceMotion`): Hinge's page turns cross-fade, its words fade in and its line fades out instead of closing; Fable's
+words fade in instead of landing or being written. Every tilt, swing, wring, squash, float, burst and boil is gone,
+Torque's column steps to the newest word's face, and the word-timed line's own swell and slide go too.
 
 ## Differences from the Mac
 
-- **No blur under a turn.** Direct2D turns bitmaps in depth, not effects, so Hinge's and Torque's arrival blur is
-  not drawn while a word is turned. Flat words (Broadside, Portal, Mosaic, Fable, a line-timed line's entrance) blur
-  as on the Mac.
-- **Perspective.** SwiftUI's exact depth for `perspective` is not documented; the eye is taken
-  `max(width, height) / perspective` from each turned view. The direction of each turn was checked against the Mac's
-  gallery frames, and the strength looks similar by eye, but the depth itself is not verified.
-- **Shadows.** Shadows are baked under each word (a SwiftUI `compositingGroup` shadow, as on Fable's block, becomes a
-  shadow per word). Soft shadows and the ripple under shapes are a few widening translucent copies, not a blur.
-- **Shapes.** Portal's badges are simple shapes in place of SF Symbols, and its hand-drawn outline is flattened into
-  short lines.
-- **Held duet lines** overlap in the middle of the stage, as on the Mac (its held-line shift skips the stage layouts).
-- **Letter-by-letter Mosaic** words are split by grapheme cluster, as Swift's `Character`.
+- **Icons** are Segoe Fluent Icons glyphs, set at 0.55 of the word's size (the glyphs ink about half their em, the SF
+  Symbols at 0.34 nearly all of it), with the substitutions above.
+- **No tiles.** The scene snapshot has no Cutout · Highlight per word, so no layout presses a tile behind a word
+  (as before).
+- **Shadows.** A SwiftUI `compositingGroup` shadow becomes a shadow baked under each word; soft shadows and Portal's
+  burst under shapes are a few widening translucent copies, not a blur. Torque's face turned away darkens by fading
+  (its `brightness`), and its thick edge is two shades, not seven.
+- **Portal's speech pill outline** is drawn as lines and quarter arcs; the slant is a skew of the rounded rectangle.
+- **Portal's Japanese parting** uses Windows' word breaker: on the Mac's test line it parts 呼んで as 呼 んで, as
+  the rolling layouts do on Windows; the Mac keeps it whole.
+- **No blur under a turn.** Direct2D turns bitmaps in depth, not effects, so Hinge's swing blur is not drawn while a
+  word is turned.
+- **Hinge's readings** are aligned towards the spine of the side the page is sung on, also once it has turned over.
+- **Letter-by-letter Mosaic** words are split by grapheme cluster and set in the heavy face.
 
 ## Tests
 
-Mac tests ported with the same inputs and expected values:
+Mac tests ported with the same inputs and expected values (`tests/Lunalyr.Core.Tests/Compositions/`):
 
-- `tests/Lunalyr.Core.Tests/Compositions/StageLayoutTests.cs`: StageMotionTests (Torque never jumps, long Torque
-  lines stay on stage, the Hinge fit never steps, chosen entrances match), StageReadingTests (Hinge counts readings,
-  Torque makes room, Broadside keeps words on the line, Portal keeps pills on stage, Mosaic's step, reading sizes) and
-  StageLyricSnapshotTests (words out of order).
-- `FableLayoutTests.cs`: all seven of FableStyleTests.
-- `tests/Lunalyr.Render.Compositions.Tests/StageRenderTests.cs`, offscreen:
-  - every layout draws every fixture, and through hand-overs and the exit;
-  - out-of-order words and bad input never throw;
-  - a frame is a pure function of song time;
-  - settled frames allocate nothing (onsets, backing vocals, a hand-over and an exit);
-  - Fable stays on the stage for the Mac's eleven kinds of line on both displays, holds still once landed, is gone
-    after it leaves, and honours a chosen entrance;
-  - every layout draws readings (split by run, and under the stage), draws nothing more without them, keeps them on
-    screen at the largest size, and sets romanised words "Instead";
-  - the colours follow the album.
-- Earlier ports, already in the tree, cover the rest of StageMotionTests and StageReadingRevealTests.
+- `StagePhrasesTests.cs`: all of StagePhrasesTests.
+- `LyricWordIconsTests.cs`: all of LyricWordIconsTests (`testEverySymbolResolves` checks that every SF name has a
+  decided glyph, and `StageLayoutRenderTests.EveryIconGlyphIsInTheIconFont` that each is in the font).
+- `PortalLayoutTests.cs` (Build 90): glued syllables, Korean, ornaments, symbols, shapes, fast lines never stacking,
+  words entering on time, one burst per run, quick words only shortening, as smooth as the original, nothing jumping
+  at an arrival. The Japanese parting and the drawing are in `StageLayoutRenderTests`.
+- `MosaicLayoutTests.cs` (Build 90): the bar one word's, no overlaps on fast lines, quick runs sharing a beat, words in
+  on time, glued syllables, variety, as smooth as the original, nothing jumping at an arrival. The drawn bar
+  (`testBarNeverShowsWithoutItsWord`) is in `StageLayoutRenderTests`.
+- `TorqueLayoutTests.cs`, `FableLayoutTests.cs` (FableStyleTests), `HingeLayoutTests.cs` (HingeBroadsideChoreographyTests'
+  Hinge part and the fast-line pile-up check), and the Build 88 parts of StageMotionTests and StageReadingTests
+  (`StageMotionTests.cs`, `StageLayoutTests.cs`).
+- `tests/Lunalyr.Render.Compositions.Tests/StageRenderTests.cs` and `StageLayoutRenderTests.cs`, offscreen, as before
+  (every fixture, hand-overs, Reduce Motion, readings on screen, a frame a pure function of time, settled frames
+  allocating nothing, Fable on stage on both displays).
 
-Not ported: the sheet-writing tests (`testWriteLayoutGalleryFrames`, `testHingeSheet`, `testPortalSheet`,
-`testFastSheet`, `testWriteVarietySheet`, `testWritePreviewSheets`, `testEditorialTypographyDrawsInStageLayouts`);
-CompositionPreview writes the equivalent images. `testCardSheet` (lyric cards) is not a stage layout. Settings-only
-tests (`EntranceSupport`, `wordRevealLock`, Floating Lyrics' layout memory) have no Windows settings UI yet.
+Not ported: `testDrawsNoStarOrSymbol` (it reads SwiftUI's view types; Mosaic's code draws no star or panel at all), the
+frame and sheet writers (`testWritePortalFastVideoFrames`, `testWriteFastLineFrames`, `testWritePreviewSheets`,
+`testWriteVarietySheet`, StageLayoutVideoTests, MosaicFastVideoTests, LayoutReworkStage*PreviewTests:
+CompositionPreview's `fast` and `long` fixtures render the same lines), and the Mac-window drawing checks
+(`testHonoursEditorialTypographyAndChosenEntrances` beyond the chosen entrance: the snapshot has no editorial setting
+per stage). The superseded tests (Torque's stack, Hinge's corner fit and fold, Fable's accents and wrapping) went with
+the old layouts.
 
 ## Cost
 
-On the RTX 5060 at 2560×1440 (CompositionPreview `-bench`, Release), render-thread time per frame for the English and
-Japanese fixtures:
+On the RTX 5060 at 2560×1440 scale 1.25 (CompositionPreview `-bench`, Release), render-thread time per frame:
 
 | Layout | English | Japanese |
 |---|---|---|
-| Hinge | 0.16 ms | 0.03 ms |
-| Broadside | 0.17 ms | 0.13 ms |
-| Portal | 0.77 ms | 0.75 ms |
-| Mosaic | 0.11 ms | 0.11 ms |
-| Torque | 0.14 ms | 0.05 ms |
-| Fable | 0.13 ms | 0.08 ms |
+| Hinge | 0.16 ms | 0.08 ms |
+| Broadside | 0.24 ms | 0.09 ms |
+| Portal | 0.36 ms | 0.19 ms |
+| Mosaic | 0.14 ms | 0.08 ms |
+| Torque | 0.19 ms | 0.10 ms |
+| Fable | 0.12 ms | 0.11 ms |
 
-Nothing is allocated on any frame once a line is set. Portal costs most. It draws its live pill's two outlines as
-about 290 short lines, and its soft shapes as several translucent copies, but which of these costs most has not been
-profiled: halving the outline's segments saved only 0.13 ms.
-
-Setting a line (laying it out and baking every word, reading and colour variant) costs about 3–15 ms once the tool has
-warmed up. That is in the same range as Editorial in the same run, and it is done up to 1.5 s before the line starts.
-Torque and Mosaic cost most, with five and up to four baked pieces a word. The first lines of a run also pay for JIT in
-this non-AOT tool (20–55 ms).
+Nothing is allocated on any frame once a line is set (also pinned by `SettledFramesDoNotAllocate`). Phrasing, plans,
+page and face layouts are made once per line, when it is set.
