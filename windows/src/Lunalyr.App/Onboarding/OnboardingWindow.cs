@@ -41,19 +41,22 @@ internal sealed partial class OnboardingWindow : Window
     private TextBlock? _stepTitle;
     private Button? _primary;
     private SettingsPreview? _preview;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _lyricTimer;
+    private Border? _footerBand;
     private OnboardingEnding? _ending;
     private bool _active;
     private bool _closed;
 
+    /// <param name="lookPart">The look step's half it opens on (captures).</param>
+    /// <param name="opening">A capture of the glass logo opening (<c>--onboarding-step opening</c>).</param>
     internal OnboardingWindow(AppHost host, bool firstRun, OnboardingStep step, bool capture,
-                              Func<bool> isLaunchAtLoginOn, Func<bool, string?> setLaunchAtLogin)
+                              Func<bool> isLaunchAtLoginOn, Func<bool, string?> setLaunchAtLogin,
+                              OnboardingLookPart lookPart = OnboardingLookPart.Wallpaper, bool opening = false)
     {
         _host = host;
         _capture = capture;
         _isLaunchAtLoginOn = isLaunchAtLoginOn;
         _setLaunchAtLogin = setLaunchAtLogin;
-        _flow = new OnboardingFlow(firstRun, step, End);
+        _flow = new OnboardingFlow(firstRun, step, End) { LookPart = lookPart };
         _flow.StepChanged += (_, change) => ShowStep(change.Forward, animate: true);
 
         Title = OnboardingCopy.WindowTitle;
@@ -88,6 +91,7 @@ internal sealed partial class OnboardingWindow : Window
         var footerBand = new Border { Style = Resource<Style>("OnboardingFooter"), Padding = new Thickness(24, 16, 24, 16), Child = footer };
         Grid.SetRow(footerBand, 2);
         _root.Children.Add(footerBand);
+        _footerBand = footerBand;
 
         // ---- Keys ----
         _root.KeyDown += OnKeyDown;
@@ -102,7 +106,14 @@ internal sealed partial class OnboardingWindow : Window
 
         Content = _root;
         ApplyTheme();
-        Activated += (_, e) => _active = e.WindowActivationState != WindowActivationState.Deactivated;
+        Activated += (_, e) =>
+        {
+            _active = e.WindowActivationState != WindowActivationState.Deactivated;
+            // Under the opening, the keyboard goes to it (Enter or Space skip it) once the window is active.
+            if (_active && _introOverlay is { } intro) intro.Focus(FocusState.Programmatic);
+            // The recordings play only in the active window (the Mac's controlActiveState).
+            UpdateMotion();
+        };
         // The look step's preview draws only while the window is visible.
         AppWindow.Changed += (_, e) =>
         {
@@ -110,6 +121,12 @@ internal sealed partial class OnboardingWindow : Window
         };
         Closed += (_, _) => OnClosed();
         ShowStep(forward: true, animate: false);
+
+        // The glass logo opening, once per launch on the welcome step; a capture asks for it by name.
+        var glass = MutedVideo.Exists(OnboardingAssets.GlassVideo);
+        if (capture ? opening && glass
+            : !_host.QuietWindows && WelcomeGlass.OpensOnIntro(step, reduceMotion: !WindowsMotion.AnimationsEnabled(), s_glassPlayed, isUnitTesting: false, glass))
+            StartIntro();
     }
 
     /// <summary>First run (Open Settings at the end) or shown again from Settings.</summary>
@@ -175,7 +192,8 @@ internal sealed partial class OnboardingWindow : Window
     {
         if (_closed) return;
         _closed = true;
-        _lyricTimer?.Stop();
+        ReleaseStepMedia();
+        FinishIntro();
         _ctx?.Detach();
         _preview?.Dispose();
         _preview = null;
@@ -186,6 +204,13 @@ internal sealed partial class OnboardingWindow : Window
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Handled) return;
+        if (_introOverlay is not null && e.Key is VirtualKey.Enter or VirtualKey.Space)
+        {
+            // Under the opening, Enter (and Space) skip it rather than pressing Continue.
+            e.Handled = true;
+            if (!e.KeyStatus.WasKeyDown) EndIntro(TimeSpan.Zero);
+            return;
+        }
         if (e.Key == VirtualKey.Enter)
         {
             // A held Enter repeats: only a fresh press moves on, so holding it can't run through every step.
@@ -207,8 +232,7 @@ internal sealed partial class OnboardingWindow : Window
     private void ShowStep(bool forward, bool animate)
     {
         var step = _flow.Step;
-        _lyricTimer?.Stop();
-        _lyricTimer = null;
+        ReleaseStepMedia();
         _ctx?.Detach();
         _preview?.SetActive(false);
         if (_preview?.View is FrameworkElement { Parent: Panel holder } previewView) holder.Children.Remove(previewView);
@@ -216,9 +240,11 @@ internal sealed partial class OnboardingWindow : Window
         _ctx = new SettingsContext(_host.Settings, DispatcherQueue, message => _host.Log.App.Info(message.Replace("in the window", "in the welcome", StringComparison.Ordinal)));
         var content = BuildStep(step, _ctx);
 
-        // The step's frame: its content centred in the room between the title bar and the buttons, 48 from the sides,
-        // scrolling only when larger text makes it taller than the window.
-        var column = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(48, 8, 48, 16) };
+        // The step's frame, 48 from the sides: its title at the same height on every step and its content under it, or (the
+        // welcome and the end) centred in the room between the title bar and the buttons; scrolling only when larger text
+        // makes it taller than the window.
+        var top = StartsAtTitleLine(step);
+        var column = new StackPanel { VerticalAlignment = top ? VerticalAlignment.Top : VerticalAlignment.Center, Padding = new Thickness(48, top ? 12 : 8, 48, 16) };
         column.Children.Add(content);
         var fill = new Grid();
         fill.Children.Add(column);
@@ -231,21 +257,36 @@ internal sealed partial class OnboardingWindow : Window
 
         BuildDots(step);
         BuildButtons();
-        if (_active) _primary?.Focus(FocusState.Programmatic);
+        if (_active && _introOverlay is null) _primary?.Focus(FocusState.Programmatic);
         if (animate) Announce(step);
+        UpdateMotion();
     }
 
-    /// <summary>Windows' "Animation effects" (read each time, never changed).</summary>
-    private static bool AnimationsEnabled()
+    private static bool AnimationsEnabled() => WindowsMotion.AnimationsEnabled();
+
+    /// <summary>
+    /// Whether the step's pictures move now: a live window (not a capture or a quiet check), Windows' animation effects
+    /// on, the window active, and the opening over.
+    /// </summary>
+    private bool MotionAllowed() =>
+        _introOverlay is null && OnboardingClips.Plays(live: !_capture && !_host.QuietWindows, reduceMotion: !AnimationsEnabled(), windowActive: _active, isUnitTesting: false);
+
+    /// <summary>Starts or stops the step's recordings, the Discord recording and the chosen layout's line, as <see cref="MotionAllowed"/> says.</summary>
+    private void UpdateMotion()
     {
+        if (_closed) return;
+        var plays = MotionAllowed();
+        foreach (var clip in _clips) clip.Set(plays);
         try
         {
-            return new Windows.UI.ViewManagement.UISettings().AnimationsEnabled;
+            if (plays) _discordRecording?.Play();
+            else _discordRecording?.Stop();
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return false;
+            _host.Log.App.Debug($"The Discord status recording couldn't {(plays ? "play" : "stop")}: {ex.Message}");
         }
+        if (!plays) _thumbnails?.Hold();
     }
 
     /// <summary>A dot per step, the current one a lit bar; one element to Narrator: "Step 2 of 6", with the step's name.</summary>
@@ -298,7 +339,7 @@ internal sealed partial class OnboardingWindow : Window
     /// <c>--onboarding-capture</c>: once the step has settled (and the look step's preview has drawn), writes the window as
     /// a PNG with PrintWindow, logs whether it ever had the foreground, then runs <paramref name="then"/> (quit).
     /// </summary>
-    internal void CaptureWhenSettled(string path, Action then)
+    internal void CaptureWhenSettled(string path, string name, Action then)
     {
         var started = DateTime.UtcNow;
         var timer = DispatcherQueue.CreateTimer();
@@ -307,7 +348,10 @@ internal sealed partial class OnboardingWindow : Window
         {
             var waited = DateTime.UtcNow - started;
             // The look step's preview needs the wallpaper's controller and a few frames; the others only a layout pass.
-            var ready = _flow.Step == OnboardingStep.Look
+            // The opening is caught with the glass formed, under a second into its 3.25 s video (it ends on the plain logo).
+            var ready = _introOverlay is not null
+                ? waited > TimeSpan.FromSeconds(1.2)
+                : _flow.Step == OnboardingStep.Look
                 ? (_host.Controller is not null && waited > TimeSpan.FromSeconds(4)) || waited > TimeSpan.FromSeconds(12)
                 : (_host.Controller is not null && waited > TimeSpan.FromSeconds(2)) || waited > TimeSpan.FromSeconds(10);
             if (!ready) return;
@@ -318,8 +362,8 @@ internal sealed partial class OnboardingWindow : Window
             {
                 var size = WindowCapture.WritePng(hwnd, path);
                 _host.Log.App.Info(size is { } s
-                    ? $"Welcome capture ({_flow.Step.Name()}) written to {path} ({s.Width}×{s.Height}); foreground: {WindowCapture.IsForeground(hwnd)}."
-                    : $"Welcome capture ({_flow.Step.Name()}) couldn't be drawn.");
+                    ? $"Welcome capture ({name}) written to {path} ({s.Width}×{s.Height}); foreground: {WindowCapture.IsForeground(hwnd)}{(_introVideo is { } video ? $"; the opening: {video.Describe()}" : "")}."
+                    : $"Welcome capture ({name}) couldn't be drawn.");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

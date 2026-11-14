@@ -23,8 +23,8 @@ namespace Lunalyr.App.Settings;
 // as on the Mac (MusicVideo/MusicVideoSearchWindow.cs), opened by Search… beside the link.
 internal static partial class WallpaperPage
 {
-    public const string PrivacyCaption =
-        "Off by default. When on, the song’s title and artist are sent to YouTube to find its official video, which then streams from YouTube.";
+    // The welcome's music-video step says the same (OnboardingCopy.YouTubePrivacy, tested in Shell).
+    public const string PrivacyCaption = Lunalyr.Shell.Onboarding.OnboardingCopy.YouTubePrivacy;
 
     public const string PrivacyDetail =
         "A video file you chose for a song is always tried first and needs nothing sent. With this on, Lunalyr searches YouTube for “artist title official music video” and picks the artist’s own official upload. The video plays muted in YouTube’s privacy-enhanced player, and each song’s answer is remembered on this PC so it is searched for once. A link you paste for a song plays even with this off; only that video is loaded from YouTube. Search YouTube… works with this off too: it sends only what is in its search box, when you search, and loads the results’ thumbnails.";

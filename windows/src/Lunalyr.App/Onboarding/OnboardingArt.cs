@@ -1,9 +1,11 @@
 // The welcome's pictures, drawn with XAML brushes and text, so they need no wallpaper running yet. They are pictures of
 // a desktop, so they look the same in light and dark, and Narrator skips them: the step's words say what they show.
-// The sample wallpaper and the sample lyric are a faithful port of the Mac's OnboardingIllustrations.swift
-// (SampleWallpaper's colours, glow centres and radii; SampleLyric's lines, held word, beat, plays and cycle), whose lines
-// are Lunalyr's own apart from two SwiftUI reduce-motion declarations (a99fd65, not translated). The taskbar picture is
-// new for Windows (the Mac's is the menu bar): the overflow ^, Lunalyr's icon, the clock and the tray lyric strip.
+// The sample wallpaper is a faithful port of the Mac's OnboardingIllustrations.swift (SampleWallpaper's colours, glow
+// centres and radii), whose lines are Lunalyr's own apart from a SwiftUI reduce-motion declaration (a99fd65, not
+// translated). Test Build 88's pictures follow: the welcome's recording with the app's icon (WelcomeHero), the desktop
+// player in miniature (OnboardingPictures.swift's MiniDesktopPlayer) and the Discord status recording
+// (DiscordStatusPicture.swift). The taskbar picture is new for Windows (the Mac's is the menu bar): the overflow ^,
+// Lunalyr's icon, the clock and the tray lyric strip.
 
 using Microsoft.UI;
 using Microsoft.UI.Text;
@@ -19,24 +21,6 @@ namespace Lunalyr.App.Onboarding;
 
 internal static class OnboardingArt
 {
-    /// <summary>The sample song's two lines, a word at a time.</summary>
-    public static readonly string[][] Lines = [["Static", "on", "the", "radio,"], ["gold", "across", "the", "bay"]];
-
-    public static int WordCount => Lines.Sum(l => l.Length);
-
-    /// <summary>Where a still picture holds: "Static on the" sung, "radio," being sung.</summary>
-    public const int Held = 3;
-
-    /// <summary>A word every 0.45 s, then a breath with the lines full; it plays twice, then rests on the full lines.</summary>
-    public static readonly TimeSpan Beat = TimeSpan.FromSeconds(0.45);
-
-    public const int Plays = 2;
-
-    public static int Cycle => WordCount + 4;
-
-    /// <summary>How many words are sung <paramref name="beats"/> beats in; all of them once it has played out.</summary>
-    public static int Sung(int beats) => beats >= Plays * Cycle ? WordCount : Math.Min(Math.Max(beats, 0) % Cycle, WordCount);
-
     private static Color Rgb(double r, double g, double b, double a = 1) =>
         Color.FromArgb((byte)Math.Round(a * 255), (byte)Math.Round(r * 255), (byte)Math.Round(g * 255), (byte)Math.Round(b * 255));
 
@@ -70,56 +54,125 @@ internal static class OnboardingArt
         return new Border { Background = brush };
     }
 
-    /// <summary>The sample lines as text blocks, one run per word, lit by <see cref="Light"/>.</summary>
-    public static (StackPanel View, List<Run> Words) Lyric(double fontSize)
+    /// <summary>
+    /// The welcome's picture (the Mac's <c>WelcomeHero</c>): a recording of the real desktop with Lunalyr's lyrics on it,
+    /// with the app's icon resting on its lower edge. The glass logo opening plays before it, over the whole window.
+    /// </summary>
+    public static (FrameworkElement View, OnboardingClipView Clip) Hero(double width)
     {
-        var view = new StackPanel { Spacing = fontSize * 0.28, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        var words = new List<Run>();
-        foreach (var line in Lines)
+        var clip = new OnboardingClipView(Shell.Onboarding.OnboardingClip.Hero, width, Math.Round(width / Shell.Onboarding.OnboardingClips.Aspect), cornerRadius: 10);
+        var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(0, 0, 0, 30) };
+        grid.Children.Add(clip.View);
+        var icon = new Image
+        {
+            Width = 72, Height = 72, VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, -30),
+        };
+        try
+        {
+            icon.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, Shell.Onboarding.OnboardingAssets.Icon)));
+        }
+        catch (Exception ex) when (ex is UriFormatException or ArgumentException)
+        {
+            // No icon: the recording shows alone.
+        }
+        grid.Children.Add(icon);
+        Hide(grid);
+        return (grid, clip);
+    }
+
+    /// <summary>
+    /// The desktop player in miniature (the Mac's <c>MiniDesktopPlayer</c>): its card in the album's deep shade, the cover,
+    /// the song, the seek line and the play disc. Made-up song, drawn in code.
+    /// </summary>
+    public static Border MiniPlayer(double width, double height)
+    {
+        var row = new Grid { ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var cover = new LinearGradientBrush { StartPoint = new(0, 0), EndPoint = new(0, 1) };
+        cover.GradientStops.Add(new GradientStop { Color = Rgb(0.98, 0.62, 0.38), Offset = 0 });
+        cover.GradientStops.Add(new GradientStop { Color = Rgb(0.85, 0.30, 0.48), Offset = 0.5 });
+        cover.GradientStops.Add(new GradientStop { Color = Rgb(0.24, 0.16, 0.42), Offset = 1 });
+        row.Children.Add(new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(5), Background = cover });
+
+        var texts = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        texts.Children.Add(Text("Golden Hour Static", 11, FontWeights.SemiBold, 1));
+        texts.Children.Add(Text("Lunar Tides", 11, FontWeights.Normal, 0.62));
+        var seek = new Grid { Height = 2, Margin = new Thickness(0, 5, 0, 0) };
+        seek.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.4, GridUnitType.Star) });
+        seek.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.6, GridUnitType.Star) });
+        var track = new Border { CornerRadius = new CornerRadius(1), Background = new SolidColorBrush(Rgb(1, 1, 1, 0.22)) };
+        Grid.SetColumnSpan(track, 2);
+        seek.Children.Add(track);
+        seek.Children.Add(new Border { CornerRadius = new CornerRadius(1), Background = new SolidColorBrush(Colors.White) });
+        texts.Children.Add(seek);
+        Grid.SetColumn(texts, 1);
+        row.Children.Add(texts);
+
+        var disc = new Border
+        {
+            Width = 22, Height = 22, CornerRadius = new CornerRadius(11), Background = new SolidColorBrush(Colors.White), VerticalAlignment = VerticalAlignment.Center,
+        };
+        // The pause sign, filled (the Mac's pause.fill): two bars.
+        var pause = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2.5, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        for (var bar = 0; bar < 2; bar++)
+            pause.Children.Add(new Border { Width = 2.5, Height = 8, CornerRadius = new CornerRadius(0.75), Background = new SolidColorBrush(Colors.Black) });
+        disc.Child = pause;
+        Grid.SetColumn(disc, 2);
+        row.Children.Add(disc);
+
+        var card = new Border
+        {
+            Style = Settings.SettingsKit.Resource<Style>("OnboardingPicture"),
+            Width = width, Height = height, CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 8, 10, 8),
+            Background = new SolidColorBrush(Rgb(0.20, 0.10, 0.27)), Child = row,
+        };
+        Hide(card);
+        return card;
+
+        static TextBlock Text(string text, double size, Windows.UI.Text.FontWeight weight, double opacity)
         {
             var block = new TextBlock
             {
-                FontFamily = new FontFamily("Segoe UI Variable Display"), FontWeight = FontWeights.SemiBold, FontSize = fontSize,
-                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+                Text = text, FontSize = size, FontWeight = weight, Foreground = new SolidColorBrush(Rgb(1, 1, 1, opacity)),
+                TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1,
             };
-            for (var i = 0; i < line.Length; i++)
-            {
-                var run = new Run { Text = (i == 0 ? "" : " ") + line[i] };
-                block.Inlines.Add(run);
-                words.Add(run);
-            }
             Hide(block);
-            view.Children.Add(block);
+            return block;
         }
-        Hide(view);
-        return (view, words);
     }
 
-    private static readonly SolidColorBrush SungBrush = new(Color.FromArgb(235, 255, 255, 255));
-    private static readonly SolidColorBrush SingingBrush = new(Colors.White);
-    private static readonly SolidColorBrush WaitingBrush = new(Color.FromArgb(92, 255, 255, 255));
+    /// <summary>Discord's dark member list, behind the status recording (the Mac's <c>discordBacking</c>).</summary>
+    private static readonly Color DiscordBacking = Rgb(0.169, 0.176, 0.192);
 
-    /// <summary>Sung words bright, the word being sung brightest, the rest waiting.</summary>
-    public static void Light(List<Run> words, int sung)
+    /// <summary>
+    /// The Discord status as it looks in a member list (the Mac's <c>DiscordStatusPicture</c>): a recording of the real thing
+    /// (<c>DiscordStatus.gif</c>, 254 × 44 pixels, the line changing as the song plays), shown at 1.5 times its 2x size so
+    /// its name and line read clearly. Still on its first frame unless <paramref name="animates"/>.
+    /// </summary>
+    public static (Border View, Microsoft.UI.Xaml.Media.Imaging.BitmapImage? Recording) DiscordStatus(double width, double height, bool animates)
     {
-        for (var i = 0; i < words.Count; i++) words[i].Foreground = i < sung ? SungBrush : i == sung ? SingingBrush : WaitingBrush;
-    }
-
-    /// <summary>The welcome's picture: the desktop as Lunalyr draws it, in miniature.</summary>
-    public static (Border View, List<Run> Words) Hero(double width)
-    {
-        var height = Math.Round(width * 956 / 1470);
-        var stage = Wallpaper(width, height);
-        var (lyric, words) = Lyric(width * 0.064);
-        stage.Children.Add(lyric);
-        var frame = new Border
+        var image = new Image { Width = 190.5, Height = 33, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        Microsoft.UI.Xaml.Media.Imaging.BitmapImage? recording = null;
+        try
         {
-            Width = width, Height = height, CornerRadius = new CornerRadius(8), Child = stage,
-            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), BorderThickness = new Thickness(1),
-            HorizontalAlignment = HorizontalAlignment.Center,
+            recording = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage { AutoPlay = animates };
+            recording.UriSource = new Uri(Path.Combine(AppContext.BaseDirectory, Shell.Onboarding.OnboardingAssets.DiscordStatus));
+            image.Source = recording;
+        }
+        catch (Exception ex) when (ex is UriFormatException or ArgumentException)
+        {
+            recording = null;
+        }
+        var card = new Border
+        {
+            Style = Settings.SettingsKit.Resource<Style>("OnboardingPicture"),
+            Width = width, Height = height, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(DiscordBacking), Child = image,
         };
-        Hide(frame);
-        return (frame, words);
+        Hide(card);
+        return (card, recording);
     }
 
     public const string TrayLine = "Static on the radio, gold across the bay";

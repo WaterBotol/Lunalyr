@@ -115,8 +115,21 @@ public sealed record ShellOptions
     /// </summary>
     public string? OnboardingCapturePath { get; init; }
 
-    /// <summary><c>--onboarding-step &lt;name&gt;</c>: the step <c>--onboarding-capture</c> shows (welcome, music, look, lyrics, tray, done; or 1–6).</summary>
+    /// <summary>
+    /// <c>--onboarding-step &lt;name&gt;</c>: the step <c>--onboarding-capture</c> shows (welcome, music, look, videos, lyrics,
+    /// extras, tray, done; or 1–8), and <c>look-lyrics</c> or <c>opening</c> (<see cref="OnboardingPage"/>).
+    /// </summary>
     public Onboarding.OnboardingStep? OnboardingStep { get; init; }
+
+    /// <summary>The page <c>--onboarding-step</c> named: the step, the look step's half, or the glass logo opening.</summary>
+    public Onboarding.OnboardingCapturePage? OnboardingPage { get; init; }
+
+    /// <summary>
+    /// <c>--settings-loader-capture &lt;file&gt;</c>: open Settings quietly with its loader (the glass logo while it builds,
+    /// which quiet windows otherwise skip), write the window as a PNG while the logo is up, and quit. Implies
+    /// <c>--settings</c> and <c>--quiet-windows</c>. For checks; not forwarded to a running instance.
+    /// </summary>
+    public string? SettingsLoaderCapturePath { get; init; }
 
     /// <summary>
     /// <c>lunalyr://…</c> arguments, and every argument after <c>--link</c>: links to act on, each checked before
@@ -250,8 +263,15 @@ public sealed record ShellOptions
                 case "--onboarding-step":
                     if (Value() is { } stepName)
                     {
-                        if (Onboarding.OnboardingSteps.Parse(stepName) is { } step) options = options with { OnboardingStep = step };
-                        else problems.Add($"--onboarding-step {stepName}: expected welcome, music, look, lyrics, tray or done (or 1–6).");
+                        if (Onboarding.OnboardingSteps.ParsePage(stepName) is { } welcomePage) options = options with { OnboardingStep = welcomePage.Step, OnboardingPage = welcomePage };
+                        else problems.Add($"--onboarding-step {stepName}: expected welcome, music, look, look-lyrics, videos, lyrics, extras, tray, done or opening (or 1–8).");
+                    }
+                    break;
+                case "--settings-loader-capture":
+                    if (Value() is { } loader)
+                    {
+                        if (loader.Trim().Length == 0) problems.Add("--settings-loader-capture needs a file.");
+                        else options = options with { SettingsLoaderCapturePath = Path.GetFullPath(loader.Trim()), OpenSettings = true, QuietWindows = true };
                     }
                     break;
                 case "--stats":

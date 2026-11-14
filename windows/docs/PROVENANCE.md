@@ -305,3 +305,18 @@ behaviour.
 | `Sources/UI/StageLayouts/TorqueLayout.swift` | 0 | `TorqueGeometry.cs`, `TorqueLayer.cs` | Faithful port |
 | `Sources/UI/StageLayouts/FableLayout.swift` | 0 | `FableGeometry.cs`, `FableLayer.cs` | Faithful port |
 | Tests: `StagePhrasesTests`, `LyricWordIconsTests`, `PortalLayoutTests`, `MosaicLayoutTests`, `TorqueLayoutTests`, `FableLayoutTests`, `HingeBroadsideChoreographyTests`, `StageMotionTests`, `StageReadingTests` | 0 | `tests/Lunalyr.Core.Tests/Compositions/*`, `StageLayoutRenderTests.cs` | Same inputs and values |
+
+## Onboarding rework and the Settings loader (Mac Test Build 88, 14 Nov 2026)
+
+Blame (`-w -M -C`, `transfer/windows-port-14nov`) run on every file read; nothing from an `a99fd65` line was translated.
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/UI/Onboarding/OnboardingFlow.swift` | 0 | `Shell/Onboarding/OnboardingFlow.cs`, `OnboardingCopy.cs` | Faithful port, in Windows' terms |
+| `OnboardingSteps.swift`, `OnboardingView.swift`, `OnboardingClip.swift`, `OnboardingIllustrations.swift` | 1, 3, 1, 1: each a SwiftUI `@Environment(\.accessibilityReduceMotion)` declaration | `App/Onboarding/OnboardingWindow*.cs`, `OnboardingMediaViews.cs`, `OnboardingArt.cs`, `Shell/Onboarding/OnboardingMedia.cs` | Rebuilt in WinUI; reduce motion is Windows' own Animation effects setting, read afresh |
+| `WelcomeGlassIntro.swift`, `OnboardingLayoutChoices.swift`, `OnboardingPictures.swift`, `DiscordStatusPicture.swift` | 0 | `OnboardingWindow.Opening.cs`, `LayoutThumbnails.cs`, `OnboardingArt.cs`, `OnboardingMedia.cs` | Faithful port of the rules and sizes; the views rebuilt in WinUI (the layout tiles drawn by Windows' own composition layers) |
+| `OnboardingWindow.swift` | 9 (NSWindow plumbing) | — | Not read for this rework; the Windows window's showing and closing are its own (milestone 8) |
+| `Sources/Settings/SettingsLoader.swift` | 0 | `Shell/Onboarding/OnboardingMedia.cs` (`SettingsLoader`), `App/SettingsWindow.Loader.cs` | Faithful port |
+| `Sources/Settings/SettingsWindow.swift` (the loader's use) | 9 in the lines around it (window creation, delegate, `makeKeyAndOrderFront`, activation) | `SettingsWindow.xaml.cs` (three lines), `SettingsWindow.Loader.cs` | **Re-implemented from behaviour**: open on the logo, build behind it, fade after `remaining(after:)` |
+| `WelcomeTests.swift`, `WelcomeGlassTests.swift`, `SettingsLoaderTests.swift` | 0 in the tests ported | `WelcomeTests.cs`, `OnboardingReworkTests.cs` | Ported tests keep the Mac's inputs |
+| `Sources/Resources/Onboarding/*`, `WelcomeGlass.mp4`, `DiscordStatus.gif` | — (media) | `App/Assets/Onboarding/` | The owner's own recordings, copied byte for byte; none is a Verso asset. `WelcomeGlass.mp4` was made with ReactDrops' Liquid Glass Logo from Lunalyr's own logo |

@@ -49,5 +49,8 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The welcome's recordings and posters, its glass logo (also the Settings loader's), the Discord status recording and
+         Lunalyr's icon: the owner's own media, loaded by path next to Lunalyr.exe (docs/APP-SHELL.md, "Onboarding"). -->
+    <Content Include="Assets\Onboarding\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -41,9 +41,14 @@ public sealed partial class SettingsWindow : Window
             _ctx.Detach();
             // Edit position never outlives the window that turned it on: the lyrics lock again.
             _host.SetFloatingEditing(false);
+            RemoveLoader();
         };
-        ShowPage(page ?? "Lyric style");
-        RefreshStatus();
+        // The first opening of a launch builds its page behind the glass logo (SettingsWindow.Loader.cs).
+        if (!StartLoader(page))
+        {
+            ShowPage(page ?? "Lyric style");
+            RefreshStatus();
+        }
     }
 
     /// <summary>Shows a page by its title or a short name ("lyric-style", "players"…).</summary>

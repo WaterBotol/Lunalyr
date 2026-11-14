@@ -12,7 +12,7 @@ public static class TranslationsCopy
     public const string Description =
         "Shown when the lyric source has a translation. Lyrics are never sent anywhere to be translated.";
 
-    /// <summary>The welcome's caption under its checkbox.</summary>
+    /// <summary>The welcome's caption under its switch (the Mac's Test Build 88 wording).</summary>
     public const string Onboarding =
-        "Appears when the lyric source includes a translation for a line, such as bilingual LRC files. Lyrics are never sent anywhere to be translated.";
+        "When the lyrics include one, as bilingual LRC files do. Lyrics are never sent anywhere to be translated.";
 }

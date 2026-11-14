@@ -42,7 +42,8 @@ AOT, PerMonitorV2. The published folder is about 74 MB plus a 65 MB `Lunalyr.pdb
 | `--updated <version>` | The installer started this copy after an update: the action HUD says "Updated to Lunalyr <version>" once. |
 | `--hud-capture <file>` | Each action HUD note's bitmap is also written as a PNG (`file`, then `file-2`, `file-3`…), with the window's styles, display affinity and whether it is the foreground window in the log. For checks: the window itself is left out of screen captures. |
 | `--onboarding-capture <file>` | Opens the first-run welcome (as a first run sees it) unactivated at the bottom of the z-order, at `--onboarding-step`; once it has settled (2 s after start-up, 4 s on the look step for the live preview), writes it as a PNG with PrintWindow, logs whether it was ever the foreground window, and quits. Records nothing (`onboardingDone` is left alone). See "Onboarding". Not forwarded to a running instance. |
-| `--onboarding-step <name>` | The step `--onboarding-capture` shows: `welcome`, `music`, `look`, `lyrics`, `tray`, `done` (or its title, or 1–6). Default `welcome`. |
+| `--onboarding-step <name>` | The page `--onboarding-capture` shows: `welcome`, `music`, `look`, `videos`, `lyrics`, `extras`, `tray`, `done` (or its title, or 1–8), `look-lyrics` (the look step's Lyrics half) or `opening` (the glass logo opening). Default `welcome`. |
+| `--settings-loader-capture <file>` | Opens Settings quietly with its loader (the glass logo while the first page builds, which quiet windows otherwise skip, also with animation effects off), writes the window with the logo up as a PNG (PrintWindow) about 0.6 s in, logs the video's position and whether it was ever the foreground window, and quits. Implies `--settings` and `--quiet-windows`. Not forwarded to a running instance. |
 
 ## Demo mode (`--demo`)
 
@@ -665,17 +666,41 @@ theme. The window opens at Lyric style (or `--settings-page`).
   are theme resources set through styles (`App.xaml`), so the App theme, light, dark and high contrast all apply per
   element. The window adds no animations of its own; with Windows' "Animation effects" off, the entrance menu says
   every entrance plays as a simple fade, as the wallpaper and the preview do.
+- **The loader** (the Mac's `SettingsLoader`, Test Build 88; `SettingsWindow.Loader.cs`, rules in `OnboardingMedia`'s
+  `SettingsLoader`): the first Settings window of a launch opens on `WelcomeGlass.mp4` (muted, at 2×, the square video
+  1.6 times the window's shorter side, centred and clipped, on black, the caption buttons drawn light), builds its first
+  page behind it once the logo has been drawn, then fades it out over 0.25 s (ease in) `SettingsLoader.Remaining`
+  after opening: 0.75 s at most, never a wait of its own making (measured on this PC: the first page built in about
+  0.5 s behind it). A click removes it at once. Skipped with Windows' animation effects off, without the video, after
+  the first opening of the launch and in quiet windows (`--quiet-windows` checks), unless `--settings-loader-capture`
+  asks for it.
 - **App theme** (General): follow Windows, light or dark, for Lunalyr's windows only (`Root.RequestedTheme` and the
   title bar's caption buttons). `--theme` overrides it for one run.
 
-## Onboarding (milestone 8)
+## Onboarding (milestone 8; eight steps since the Mac's Test Build 88)
 
-The Mac's first-run welcome (`Sources/UI/Onboarding/`), adapted. The flow and its words are in
+The Mac's first-run welcome (`Sources/UI/Onboarding/`), adapted; reworked on 14 Nov 2026 to the Mac's Test Build 88
+(eight steps, a glass logo opening, real recordings). The flow, its words and the rules for its moving pictures are in
 `src/Lunalyr.Shell/Onboarding/` (`OnboardingFlow`, `OnboardingCopy`, `OnboardingGate`, `OnboardingNavigation`,
-`OnboardingPlayers`; tested without a window, `tests/Lunalyr.Shell.Tests/Onboarding/WelcomeTests.cs`); the window is
-`src/Lunalyr.App/Onboarding/` (`OnboardingWindow`, its steps, `OnboardingArt`, `WindowCapture`), shown by
-`App.Onboarding.cs` and `Hosting/AppHost.Onboarding.cs`. Previews: `docs/previews/onboarding/`
-(`onboarding-{step}-{light,dark}.png`).
+`OnboardingPlayers`, `OnboardingMedia`; tested without a window, `tests/Lunalyr.Shell.Tests/Onboarding/WelcomeTests.cs`
+and `OnboardingReworkTests.cs`); the window is `src/Lunalyr.App/Onboarding/` (`OnboardingWindow`, its steps and
+opening, `OnboardingArt`, `OnboardingMediaViews`, `LayoutThumbnails`, `WindowCapture`), shown by `App.Onboarding.cs`
+and `Hosting/AppHost.Onboarding.cs`. Previews: `docs/previews/onboarding/` (`onboarding-{page}-{light,dark}.png`, page
+being a step, `look-lyrics` or `opening`; `settings-loader-{light,dark}.png`).
+
+**Media** (`src/Lunalyr.App/Assets/Onboarding/`, copied to the app's folder): the owner's recordings
+`OnboardingHero.mp4`, `OnboardingReadings.mp4`, `OnboardingFloating.mp4` (960 × 620, H.264, no audio track, 8 s at
+most) with their first frames as `.jpg` posters, `WelcomeGlass.mp4` (the glass logo, 1080 × 1080, 3.25 s, no audio
+track), `DiscordStatus.gif` (a recording of a Discord member list) and `LunalyrIcon.png` (the 256 px frame of
+`Assets\Lunalyr.ico`), all byte for byte the Mac's. **Before any release: `OnboardingHero.mp4` shows a real album
+cover (OneRepublic, "Native"); the owner said keep it for now and re-record it before shipping.**
+
+**Playback:** each video is a `MediaPlayer` shown by a `MediaPlayerElement` (`MutedVideo`), muted with its volume at 0
+before a source is set, with its command manager and transport controls off, so it never becomes a media session in
+Windows' media controls (checked: the GSMTC session list doesn't change while one plays). A player exists only while it
+may play and is disposed when it may not: the recordings loop only while their step is on screen in the active window,
+with Windows' animation effects on, outside quiet windows and captures (`OnboardingClips.Plays`); otherwise the
+poster shows. A recording fills its box around its focus (`OnboardingClips.Frame`: the readings one zoomed 1.6×).
 
 ### When it shows
 
@@ -683,7 +708,7 @@ The Mac's first-run welcome (`Sources/UI/Onboarding/`), adapted. The flow and it
   folder at launch, and nothing went wrong reading them (`OnboardingGate.IsFirstRun`). Someone upgrading from a test
   build has a `settings.json`, so they never see it unasked; a damaged or unreadable file counts as an existing user too.
 - **Never** with `--demo`, a capture flag (`--onboarding-capture`, `--floating-capture`, `--ticker-capture`,
-  `--hud-capture`), `--stats`, `--seconds`, `--settings`, `--settings-page` or `--lyric-card`: a check, or a launch that
+  `--hud-capture`, `--settings-loader-capture`), `--stats`, `--seconds`, `--settings`, `--settings-page` or `--lyric-card`: a check, or a launch that
   asked for another window. `--quiet-windows`, `--no-playback`, `--data` and links don't stop it; with
   `--quiet-windows` it opens unactivated at the bottom of the z-order like every other window. Nor does a launch-at-login
   start (`--login`): Windows started Lunalyr at sign-in, quietly.
@@ -706,32 +731,43 @@ anything had written `settings.json` meanwhile, so it is one rule instead. `onbo
 
 A fixed-size Mica window, 680 × 640 DIPs (the Mac's is 640 × 540 points), centred on the main display's work area,
 with a see-through title bar and only a close button; in the taskbar and Alt+Tab while it is up, titled "Welcome to
-Lunalyr". The step sits centred above a footer with the step dots, Back, and Continue (Done and Open Settings on the
-last step of a first run). Light, dark and high contrast come from theme resources in `App.xaml`'s styles; the App
+Lunalyr". A step's title sits at the same height on every step with its line under it and its content below (the
+welcome and the end are centred), above a footer with the step dots, Back, and Continue (Done and Open Settings on the
+last step of a first run). No symbols over the titles but the end's check mark, as on the Mac. Light, dark and high contrast come from theme resources in `App.xaml`'s styles; the App
 theme setting and `--theme` apply as in Settings.
 
+- **The opening:** the first time the welcome opens in a launch, on its first step, a black overlay covers the whole
+  window with `WelcomeGlass.mp4` playing muted in the middle, sized so the logo's glass tile is half the window's
+  height (`WelcomeGlass.VideoSide`); the footer is hidden and does nothing, and the close button is drawn light. When
+  the video ends its last frame holds 0.35 s, then the overlay cross-fades (0.6 s) into the welcome; a click, Enter or
+  Space skips it (the same fade), and it gives up after 8 s whatever the player says. Never under animation effects off
+  (`WelcomeGlass.OpensOnIntro`), in a quiet window, Back to the first step, or the welcome shown again in the same
+  launch.
 - **Keys:** Enter presses the primary button (Continue, Open Settings, Done) unless the focused control takes Enter
   itself (a focused button presses itself); Alt+Left is Back; Esc closes it early. On each step the primary button
   gets the keyboard focus, but only while the window is active, so a quiet window never takes it.
-- **Narrator:** each step's title is a level-1 heading; a new step is announced ("Step 2 of 6, Your music") with a UI
+- **Narrator:** each step's title is a level-1 heading; a new step is announced ("Step 2 of 8, Your music") with a UI
   Automation notification, as VoiceOver moves to the Mac's new title, and the title's help text is its position; the
-  dots' panel is named "Step 2 of 6" with the step's name as help text (whether a panel surfaces that to Narrator was
+  dots' panel is named "Step 2 of 8" with the step's name as help text (whether a panel surfaces that to Narrator was
   not checked); every control is named after its row, with its caption as help text; the pictures are skipped.
   A held Enter doesn't repeat through the steps: only a fresh press moves on.
-- **Animation effects:** steps slide in from the side they came from (an entrance transition) and the welcome's
-  sample lyric lights word by word twice, only while Windows' Animation effects are on (read each time, never changed);
-  otherwise a step just appears and the lyric holds mid-line, as it does in a quiet window and in captures.
+- **Animation effects:** steps slide in from the side they came from (an entrance transition), the opening plays, the
+  recordings and the Discord recording move and the chosen layout tile plays its line, only while Windows' Animation
+  effects are on (read each time, never changed); otherwise a step just appears and the pictures hold still, as they do
+  in a quiet window and in captures.
 
 ### The steps
 
 | Step | What it shows and does |
 |---|---|
-| Welcome | A drawn desktop in an album's colours with two sample lines lit word by word, "Welcome to Lunalyr" and the Mac's sentence. (The Mac's Calm/Bold settings look has no Windows counterpart and isn't offered.) |
-| Your music | Windows' counterpart of the Mac's permission step: Lunalyr follows any app that shares what it plays with Windows (the media controls by the volume flyout), **Windows asks nothing and Lunalyr needs no permission**, and it only reads the song and its position. "Sharing with Windows now" lists the players GSMTC has sessions for, each Playing/Paused, the one followed marked (`OnboardingPlayers`, read only, never a command). Follow is Settings › Music players' Player, the same setting (`player`, `PlayerChoiceCombo`): Automatic, Apple Music, Spotify, each player sharing now and the current choice; with one player chosen the others are listed as "Not followed: Lunalyr follows … only" and what they play isn't read. Continue asks nothing of anyone. |
-| Pick a look | The Mac's look step: the live preview (Settings' `SettingsPreview`, 320 wide, drawn only on this step and while the window is visible), every wallpaper type as a tile (`backgroundMode`; Settings' own tile grid, so Image or video with nothing imported opens the file picker and imports), the Layout menu (`lyricComposition`, Match the music first) and a line on what the type draws (or the import's progress or failure). The wallpaper follows at once. |
-| Lyrics & readings | Where lyrics come from (lyric services such as LRCLIB, sent only the song's title, artist, album and length; Windows has no Apple Music lyrics of its own), nudging the timing from the tray panel or with the two shortcuts (labelled as this keyboard types them, e.g. Win+Ctrl+Alt+[), readings Display and Language (`romanizationDisplay`, `romanizationLanguage`), and the Mac's "Show translations under lyrics" checkbox (`showTranslations`) with its caption: translations that come with the lyrics, never sent anywhere to be translated. |
-| The tray | The Mac's menu-bar step: a picture of the taskbar's corner (the overflow ^, Lunalyr's icon lit, the clock, and the tray lyric strip while it is on); Lunalyr lives in the notification area with no taskbar button once Settings is closed, may be under ^ and can be dragged onto the taskbar to stay pinned, and opening it again brings back Settings. Switches: Lyric by the tray (`trayLyric`) and Launch at login. |
-| Done | The Mac's words: "“Title” is playing, so its lyrics are on your desktop now." or "Play a song in any music app and its lyrics appear on your desktop."; the players again and "Wallpaper: …" with what it draws; "Settings has the rest…" (first run) or "You can change all of this in Settings." (again). |
+| Welcome | The hero recording (the desktop with Lunalyr's lyrics, 392 wide) with Lunalyr's icon resting on its lower edge, "Welcome to Lunalyr" and the Mac's sentence ("Your desktop sings along: …"). |
+| Your music | Windows' counterpart of the Mac's permission step: Lunalyr follows any app that shares what it plays with Windows (the media controls by the volume flyout), **Windows asks nothing and Lunalyr needs no permission**, and it only reads the song and its position (that last sentence under the card, as the Mac's `permissionDetail`). "Sharing with Windows now" lists the players GSMTC has sessions for, each Playing/Paused, the one followed marked (`OnboardingPlayers`, read only, never a command). Follow is Settings › Music players' Player, the same setting (`player`, `PlayerChoiceCombo`): Automatic, Apple Music, Spotify, each player sharing now and the current choice; with one player chosen the others are listed as "Not followed: Lunalyr follows … only" and what they play isn't read. Continue asks nothing of anyone. |
+| Pick a look | The Mac's look step: the live preview (Settings' `SettingsPreview`, 280 wide, drawn only on this step and while the window is visible), then a `SelectorBar` (the Mac's segmented control) with two halves, kept in the flow so Back returns to the one showing (`OnboardingFlow.LookPart`). **Wallpaper:** every type as a tile (`backgroundMode`; Settings' own tile grid, so Image or video with nothing imported opens the file picker and imports) and a line on what the type draws (or the import's progress or failure). **Lyrics:** four layout tiles (Broadside, Portal, Mosaic, Cascade; the layout in use leads when it is another, `LayoutChoices.Shown`) drawn by the wallpaper's own composition layers with the sample line "Static on the radio, gold across the bay" (`LayoutThumbnails`: one 192 × 112 WARP surface laid out as a 210-line stage, released with the tiles); every tile holds the line just sung, and the chosen one plays it three times at 20 fps first; then what the chosen layout does ("Match the music picks a layout to suit each song." for Match the music) and "10 more in Settings, with Match the music." The wallpaper follows at once. |
+| Music videos | The Mac's line, with Windows' video file chosen for a song in place of the Music library's videos; "Play music videos as the wallpaper" (on: `backgroundMode` `musicVideo`, remembering the type it replaced; off: back to that type, `OnboardingCopy.WithVideoWallpaper`) and "Search YouTube for videos" (`musicVideoOnline`, off by default) with Settings' own caption on what YouTube receives. The Mac's two framing pictures and menus (YouTube and library videos: Fill the screen or Show the whole video) belong to "Show the whole video", another item of the port: they join this step once that setting is merged. Nothing here loads a video or a player. |
+| Lyrics & readings | Where lyrics come from (lyric services such as LRCLIB, sent only the song's title, artist, album and length; Windows has no Apple Music lyrics of its own), nudging the timing from the tray panel (only: the owner removed global shortcuts on 14 Nov 2026, so the welcome doesn't offer them), readings Display and Language (`romanizationDisplay`, `romanizationLanguage`) beside the readings recording (144 × 93), and the Mac's "Show translations under lyrics" switch (`showTranslations`) with its caption: translations that come with the lyrics, never sent anywhere to be translated. |
+| Extras | Each with a picture (196 × 64), its name and line, and a switch: the desktop player drawn in miniature (its line says what the card shows, without the search the owner removed on 14 Nov 2026) with "Show player on hover" (`showControlsOnHover`); the floating lyrics recording, with no switch ("Turn them on in Settings › Lyric style."); the Discord status recording (`DiscordStatus.gif` on Discord's dark list) with Discord status (`discordPresence`, off by default) and what it talks to: only the Discord app on this PC, covers from Apple's search, cleared when playback stops. |
+| The tray | The Mac's menu-bar step: its title and note, then a picture of the taskbar's corner (the overflow ^, Lunalyr's icon lit, the clock, and the tray lyric strip while it is on); Lunalyr lives in the notification area with no taskbar button once Settings is closed, may be under ^ and can be dragged onto the taskbar to stay pinned, and opening it again brings back Settings. Switches: Lyric by the tray (`trayLyric`) and Launch at login. |
+| Done | The Mac's words: "“Title” is playing, so its lyrics are on your desktop now." or "Play a song in any music app and its lyrics appear on your desktop."; the players again and "Wallpaper: …" with what it draws; "Settings has the rest: lyric style, timing, readings and more." (first run) or "You can change all of this in Settings." (again). |
 
 **Launch at login** is the same switch as Settings › General's (see "Startup, updates and packaging"). The window takes
 two delegates from its host, `AppHost.IsLaunchAtLoginOn` (`Func<bool>`) and `AppHost.SetLaunchAtLogin`
@@ -744,6 +780,10 @@ Windows' entry now says, and an error shows under it (in `--demo`/`--data` runs:
 Lunalyr.exe --demo --data $env:TEMP\lunalyr-welcome --quiet-windows --seconds 30 --theme dark `
   --onboarding-capture $env:TEMP\welcome-look-dark.png --onboarding-step look
 ```
+
+`--onboarding-step` takes a step (name, title or 1–8), `look-lyrics` (the look step on its Lyrics half) or `opening`
+(the glass logo opening, played muted in the quiet window for the capture and caught about 1.2 s in, with the glass
+formed; the log gives the video's position). Captures show the recordings' posters.
 
 The data folder's `settings.json` needs `"wallpaperPaused": true` (else the demo draws over the desktop). The window
 opens unactivated at the bottom, is drawn with `PrintWindow(PW_RENDERFULLCONTENT)` into a bitmap, cropped to its
