@@ -189,9 +189,10 @@ Checked at `next/integration` `79b84db` with `git blame -w -M -C`:
 
 The rules and tests are ported faithfully (`src/Lunalyr.Core/MusicVideo/`). The SwiftUI, AVPlayer and WKWebView views are
 platform code, written fresh for Direct2D and WebView2. Left out on purpose because they aren't official YouTube means:
-the still-image check (and its pasted-still note) and the undocumented caption calls. Not kept
-for YouTube because its API policies don't allow covering the player's interface: the 1.25× overscan and the frozen
-frame (`MusicVideoFreeze.swift`'s long-pause rule alone is ported, as `MusicVideoIdlePlayer`). See docs/milestones/M6.md, "Music video".
+the still-image check (and its pasted-still note) and the undocumented caption calls. Milestone 6 left out the 1.25×
+overscan and the hiding of a non-playing player; both came back with the Mac's framing on 14 Nov 2026 (see "Mac Test
+Build 88: Show the whole video" below). The frozen frame is still not kept (`MusicVideoFreeze.swift`'s long-pause rule
+alone is ported, as `MusicVideoIdlePlayer`). See docs/milestones/M6.md, "Music video".
 
 **Search the Mac's way (13 Nov 2026, the owner's decision):** the results-page reader is now ported faithfully, with no
 API key: `MusicVideoCore.swift`'s `YouTubeSearchPage` (request address, `ytInitialData` parsing, the verified-artist
@@ -255,3 +256,15 @@ Blame (`-w -M -C`) run on each Mac range read; nothing from an `a99fd65` line wa
 | `LyricLayerView.swift` 125–150, 672–682 (remembered colour and composition) | 0 | `AppController.StyleMemory.cs`, `StyleMemory.Applied` | Behaviour ported into the controller |
 | `LunalyrExtras.swift` 445–470 (`cycleLayout`) | 0 | `LunalyrExtras.CycleLayout`, `StyleMemory.CycledRemembered` | Faithful port |
 | `LyricExtrasInspector.swift` 1–260, `LyricStylePage.swift` 1–300 | 0, 1 (a SwiftUI environment line) | `LyricStylePage.cs`, `LyricStyleCopy.cs` | Rows rebuilt with `SettingsKit`, copy ported |
+
+## Mac Test Build 88: Show the whole video (14 Nov 2026)
+
+From `C:\dev\lunalyr-mac-88` (9db33cb). Blame (`-w -M -C`, `transfer/windows-port-14nov`) on each file read: no `a99fd65`
+lines, so everything is a faithful port of Lunalyr's own code.
+
+| Mac file | `a99fd65` lines | Windows |
+|---|---|---|
+| `Sources/MusicVideo/MusicVideoFraming.swift` (`MusicVideoFraming`, `MusicVideoBackdrop`) | 0 | `Core/MusicVideo/MusicVideoFraming.cs` (`MusicVideoFraming`, `MusicVideoFramings`, `MusicVideoBackdrop`: Core Image's blur rewritten as a small CPU Gaussian with clamped edges); `MusicVideoBackdropView` → `Render/Backgrounds/MusicVideoBackdropDrawer.cs` |
+| `Sources/MusicVideo/MusicVideoView.swift` (framing, `WholeYouTubeVideo`, `YouTubeVideoShape`, `YouTubeEmbed.Box`/`hideDelay`/`revealDelay`/`html`, the coordinator's reveal and box) | 0 | `YouTubeEmbed.cs`, `YouTubeVideoShape.cs`, `YouTubePlayerReveal.cs` (the coordinator's `setVisible`, apart from WebView2), `MusicVideoLayer.cs` (both layers), `App/MusicVideo/YouTubeWallpaperHost.cs` |
+| `Sources/Settings/MusicVideoSettings.swift` (`framingChoice`, caption and detail), `Settings.swift` (the two keys) | 0 | `App/Settings/WallpaperPage.MusicVideo.cs`, `Shell/Settings/AppSettings.MusicVideo.cs` |
+| `Tests/Swift/MusicVideoFramingTests.swift` | 0 | `Core.Tests/MusicVideo/MusicVideoFramingTests.cs`, `Shell.Tests/MusicVideoFramingSettingsTests.cs` |

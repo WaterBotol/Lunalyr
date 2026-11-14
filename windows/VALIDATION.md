@@ -212,3 +212,18 @@ order sources answer in. Four full runs in a row were green afterwards. See M3.m
 | Lyric cards follow the text colour (mode, strength, custom colours) | PC (offscreen, `LyricCardPreview -colour`) | `docs/previews/lyric-style-extras/card-{albumDrift,sungSweep}.png` |
 | Remembered style on lyric cards | not ported | — |
 | Performance › On battery (`onBattery`: Everything stays on / Lighter effects only, the default / Line patterns instead / Album colours only), Windows' own wording | unit (`PowerSavingShellTests.OnBatteryReachesTheRendererAndDefaultsToLighterEffects`); a real unplug needs the owner | — |
+
+## Music video: Show the whole video (Mac Test Build 88)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `musicVideoFraming` / `libraryVideoFraming` (fill, whole; default fill; unknown reads as fill), remembered per source | unit | `MusicVideoFramingSettingsTests`, `SettingsAndOptionsTests.TheFileUsesTheDocumentedKeysAndRoundTrips`, `MusicVideoFramingTests.UnknownStoredValuesFallBackToFill` |
+| Layout maths: 1 % bleed, width matched, fill's 1.25 overscan, player size, whole layout and box, never larger than the screen | unit (ported) | `MusicVideoFramingTests` (Core) |
+| Embed page: overscan and box in the HTML and live (`lunalyrOverscan`, `lunalyrBox`), shown only while playing, captions still off | unit (ported) | `MusicVideoFramingTests.EmbedPageZoomFollowsTheFraming`, `ThePageDrawsThePlayerAtTheBox`, `MusicVideoMatchTests.EmbedShowsOnlyTheVideo`, `CaptionsAreForcedOff` |
+| 5 s hold after each covered-to-playing change when whole; buffering hides at once whole, after 0.3 s filled | unit (hand-fired timers) | `MusicVideoFramingTests.WholeHoldsEveryRevealAndAnyHideCancelsIt`, `FillShowsAtOnceAndBufferingWaitsTheGrace`, `WholeHidesABufferingPlayerAtOnce`, `MusicVideoPauseTests.BufferingHidesThePlayerOnlyAfterAGrace` |
+| The video's shape from oEmbed (only the ID sent, cached per run, a fake in tests); the client allows that address alone | unit | `MusicVideoFramingTests.TheVideosShapeComesFromOEmbed`, `OnlyTheOEmbedAddressOfOneVideoIsRecognised`, `MusicVideoPlatformTests.TheHttpClientAsksOnlyTheResultsPageTheDataApiAndStillsOverHttps` |
+| Backdrop: 256 px, blurred, edges kept | unit (ported) | `MusicVideoFramingTests.BackdropIsSmallAndBlurred` |
+| Fill vs whole for 16:9, 4:3 and 21:9 clips on 16:9 and 16:10 surfaces: video files, YouTube covered (still) and playing (see-through only over the picture); bands never black or see-through | PC (offscreen, `MusicVideoPreview framing`) | `docs/previews/music-video/framing/*.png`, `framing.md`; `MusicVideoLayerTests.ShownWholeTheYouTubeLayerIsSeeThroughOnlyOverThePicture` |
+| Filled video file still in step with the song's clock | PC (offscreen, `MusicVideoPreview`, 50 s time-coded clip) | every moment in step |
+| YouTube player live (WebView2 sized to the picture, the page's box, the 5 s hold against YouTube's real overlays) | not verified live (no YouTube player may be loaded here); needs the owner with real music | — |
+| Settings › Wallpaper › Music video rows (YouTube videos, Video files) | built, not captured (the rows sit below the fold and the rules forbid scrolling by UI Automation) | — |

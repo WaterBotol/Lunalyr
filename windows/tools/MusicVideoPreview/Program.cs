@@ -17,6 +17,8 @@ using Lunalyr.Render.Diagnostics;
 using Lunalyr.Render.Scene;
 using Lunalyr.Shell.Demo;
 
+// "MusicVideoPreview framing <out folder> <clip.mp4>...": fill against whole (Framing.cs).
+if (args.Length > 0 && args[0] == "framing") return FramingPreview.Run(args[1..]);
 if (args.Length < 2)
 {
     Console.Error.WriteLine("usage: MusicVideoPreview <timecode.mp4> <out folder> [offset seconds] [clip fps]");
