@@ -87,4 +87,23 @@ public class FloatingDisplayTests
         Assert.Equal(FloatingHit.Move, FloatingEditChrome.HitTest(w / 2, h / 2, w, h, s));
         Assert.True(done.X + done.Width <= w && done.Y >= 0);
     }
+
+    [Fact]
+    public void EditChromeResizesFromEveryEdgeAndCorner()
+    {
+        const double w = 1045, h = 252, s = 1.25;
+        Assert.Equal(FloatingEdges.Left, FloatingEditChrome.EdgesAt(2, h / 2, w, h, s));
+        Assert.Equal(FloatingEdges.Right, FloatingEditChrome.EdgesAt(w - 2, h / 2, w, h, s));
+        Assert.Equal(FloatingEdges.Top, FloatingEditChrome.EdgesAt(w / 2, 2, w, h, s));
+        Assert.Equal(FloatingEdges.Bottom, FloatingEditChrome.EdgesAt(w / 2, h - 2, w, h, s));
+        Assert.Equal(FloatingEdges.Left | FloatingEdges.Top, FloatingEditChrome.EdgesAt(2, 2, w, h, s));
+        Assert.Equal(FloatingEdges.Left | FloatingEdges.Bottom, FloatingEditChrome.EdgesAt(2, h - 2, w, h, s));
+        Assert.Equal(FloatingEdges.Right | FloatingEdges.Bottom, FloatingEditChrome.EdgesAt(w - 2, h - 2, w, h, s));
+        // The grip is the bottom-right corner; Done stays Done though it sits by the top edge.
+        Assert.Equal(FloatingEdges.Right | FloatingEdges.Bottom, FloatingEditChrome.EdgesAt(w - (8 + 26 + 4) * s, h - 20 * s, w, h, s));
+        var done = FloatingEditChrome.Done(w, h, s);
+        Assert.Equal(FloatingHit.Done, FloatingEditChrome.HitTest(done.X + 2, done.Y + 2, w, h, s));
+        Assert.Equal(FloatingEdges.None, FloatingEditChrome.EdgesAt(w / 2, h / 2, w, h, s));
+        Assert.Equal(FloatingHit.Resize, FloatingEditChrome.HitTest(2, h / 2, w, h, s));
+    }
 }
