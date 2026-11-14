@@ -70,7 +70,12 @@ final class LayoutReworkStageAPreviewTests: XCTestCase {
                     let last = sample.words.map(\.start).max() ?? 1
                     let exit = last + 0.9
                     // Seven moments: across the line, the last two in its exit.
-                    var times = (0..<5).map { first + 0.25 + (last + 0.3 - first - 0.25) * Double($0) / 4 }
+                    let start: Double = first + 0.25
+                    let reach: Double = last + 0.3 - start
+                    var times: [Double] = (0..<5).map { (step: Int) -> Double in
+                        let fraction: Double = Double(step) / 4
+                        return start + reach * fraction
+                    }
                     times += [exit + 0.18, exit + 0.4]
                     for (column, time) in times.enumerated() {
                         let view = ZStack {

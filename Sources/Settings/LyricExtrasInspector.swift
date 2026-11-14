@@ -74,8 +74,10 @@ private struct CustomGradientSwatch: View {
 
     var body: some View {
         let ink = LyricInk(mode: .customGradient, stops: stops, stopCount: max(1, min(4, colours.count)))
-        let samples = (0...24).map { Perceptual.color(Perceptual.readable(ink.gradient(slot: Double($0) / 24 / 0.42 * 0.999),
-                                                                           background: 0.08)) }
+        let samples = (0...24).map { (step: Int) -> Color in
+            let slot: Double = Double(step) / 24 / 0.42 * 0.999
+            return Perceptual.color(Perceptual.readable(ink.gradient(slot: slot), background: 0.08))
+        }
         LinearGradient(colors: samples, startPoint: .leading, endPoint: .trailing)
             .frame(height: 18)
             .clipShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.tag, style: .continuous))

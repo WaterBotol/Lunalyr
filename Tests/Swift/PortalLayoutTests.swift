@@ -245,8 +245,16 @@ final class PortalLayoutTests: XCTestCase {
         if original {
             // (The original's lift started 0.08 s before the onset, before
             // the word arrived: its first frames jumped the trail.)
-            settle = shown.map { StageLyricView.glide((time - ($0.start - 0.05)) / (0.6 / speed)) }
-            lift = shown.map { StageLyricView.glide((time - ($0.start - 0.08)) / (0.36 / speed)) }
+            let settleSpan: Double = 0.6 / speed
+            settle = shown.map { (run: StageRun) -> Double in
+                let since: Double = time - (run.start - 0.05)
+                return StageLyricView.glide(since / settleSpan)
+            }
+            let liftSpan: Double = 0.36 / speed
+            lift = shown.map { (run: StageRun) -> Double in
+                let since: Double = time - (run.start - 0.08)
+                return StageLyricView.glide(since / liftSpan)
+            }
         } else {
             let motion = StageLyricView.portalMotion(runs, at: time, speed: speed, reduceMotion: false)
             settle = Array(motion.settle.prefix(shown.count))
@@ -261,7 +269,10 @@ final class PortalLayoutTests: XCTestCase {
             return StageLyricView.portalScale(rank: ranks[i]) * upright
         }
         let fadeFrom = speed > 1.6 ? 1.0 : 1.6
-        let visible = ranks.map { 1 - Easing.smoothstep(($0 - fadeFrom) / 0.9) }
+        let visible: [Double] = ranks.map { (rank: Double) -> Double in
+            let fade: Double = (rank - fadeFrom) / 0.9
+            return 1 - Easing.smoothstep(fade)
+        }
         // The live pill rests 70 points below the middle of the stage.
         let column = StageLyricView.portalColumn(heights: heights, lifts: lift, visible: visible, appear: settle, gap: 64 * 0.16,
                                                  above: 330, below: original ? 10_000 : 190)
