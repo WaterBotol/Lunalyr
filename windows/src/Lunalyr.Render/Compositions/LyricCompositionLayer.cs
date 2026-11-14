@@ -804,7 +804,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             LineReadingWidth: Stage.Width * 0.8, LineReadingShadow: new ShadowSpec(0.3f, Points(6) * 0.5f, Points(2)), Ink: ink,
             Kind: FlowKind(planKind), Spread: StyleShown.ConstellationSpread, EditorialAmount: editorialAmount,
             RandomFonts: StyleShown.RandomFonts,
-            TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale);
+            TranslationSize: BaseSize * LineTranslations.LineSize * Metrics.UserScale,
+            FillStage: Stage);
         var plan = LinePlans.Build(Kit!, words, glue, spec, runReadings, lineReading, runShares, translation);
         Decorate(plan, planKind, words, glue, lineEnd, lineIndex, baseSize, Stage, ink);
         if (groups is { Count: > 0 })
@@ -820,7 +821,7 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                     BaseSize = baseSize * 0.5, LineIndex = backingSeed + group.Id,
                     Editorial = EditorialAmountFor(backingKind.HasEditorialTypography()) > 0,
                     EditorialAmount = EditorialAmountFor(backingKind.HasEditorialTypography()), Heavy = false,
-                    MaxWidth = box.Width, Fit = new LineFit(box, 1, 1), Kind = FlowKind(backingKind),
+                    MaxWidth = box.Width, Fit = new LineFit(box, 1, 1), Kind = FlowKind(backingKind), FillStage = null,
                 }, null, null);
                 Decorate(sub, backingKind, group.Words, group.Glue, double.NaN, backingSeed + group.Id, baseSize * 0.5, box, ink);
                 backing[g] = new BackingPlan(group, sub);

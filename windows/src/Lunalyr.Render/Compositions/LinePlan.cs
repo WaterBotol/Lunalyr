@@ -116,7 +116,7 @@ internal readonly record struct PlanSpec(
     LineFit Fit, double RasterBoost, ShadowSpec Shadow, Vector4 Colour,
     Vector4 ReadingColour, double LineReadingSize, double LineReadingWidth, ShadowSpec LineReadingShadow,
     LyricInk? Ink = null, CompositionKind Kind = CompositionKind.Editorial, double Spread = 1,
-    double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false);
+    double TranslationSize = 0, double EditorialAmount = 1, bool RandomFonts = false, SizeD? FillStage = null);
 
 internal static class LinePlans
 {
@@ -174,9 +174,18 @@ internal static class LinePlans
             for (var r = 0; r < count; r++) breaks[r] = typography.Runs[r].Metrics.BreakBefore;
             var shifts = flow.RowShifts is { } steps ? steps.Select(step => step * em).ToArray() : [];
             var measure = flow.Measure is { } wrap ? Math.Min(spec.MaxWidth, wrap * em) : spec.MaxWidth;
+            // A word-timed Constellation line fills its stage (the Mac's next/tester-fixes): its own measure, and gaps
+            // that grow toward three quarters of the stage each way.
+            FlowFill? fill = null;
+            if (spec.Kind == CompositionKind.Constellation && spec.WordTimed && spec.FillStage is { } stage)
+            {
+                var (constellation, wrapAt) = FlowFill.Constellation(stage, em);
+                fill = constellation;
+                measure = Math.Min(spec.MaxWidth, wrapAt);
+            }
             var block = EditorialFlow.Place(slots, measure, em * flow.Spacing, em * flow.LineSpacing, flow.Alignment,
                                             typography.RightToLeft, centres, breaks, flow.Balanced, shifts,
-                                            flow.Field * em);
+                                            flow.Field * em, fill);
 
             IDWriteTextLayout? lineLayout = null;
             var content = block;

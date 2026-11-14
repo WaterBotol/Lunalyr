@@ -401,6 +401,34 @@ public readonly record struct FlowPlan(double Spacing = 0.02, double LineSpacing
 }
 
 /// <summary>
+/// Constellation's fill (the Mac's next/tester-fixes, 15 Nov 2026; testers saw word-timed lines bunched in the middle,
+/// most on a 21:9 display): the gaps between words in a row, and between rows, grow toward a target block of 75% of the
+/// stage each way, up to 2.5 ems between words and 1.2 ems between rows. Gaps only grow, so words never overlap.
+/// </summary>
+public readonly record struct FlowFill(double TargetWidth, double MaxWordGap, double TargetHeight, double MaxRowGap)
+{
+    /// <summary>The share of the stage a filled line aims for, each way.</summary>
+    public const double TargetShare = 0.75;
+
+    /// <summary>
+    /// A gap for <paramref name="items"/> laid out at <paramref name="natural"/> (gaps included): clamp(gap + (target −
+    /// natural) / (items − 1), gap, max(gap, most)); <paramref name="gap"/> itself for fewer than two.
+    /// </summary>
+    public static double Gap(double gap, double target, double natural, int items, double most) =>
+        items < 2 || !double.IsFinite(target) || !double.IsFinite(natural)
+            ? gap
+            : Math.Clamp(gap + (target - natural) / (items - 1), gap, Math.Max(gap, most));
+
+    /// <summary>Constellation's fill and measure on a stage of <paramref name="stage"/> with base size <paramref name="em"/>.</summary>
+    public static (FlowFill Fill, double Measure) Constellation(SizeD stage, double em)
+    {
+        double targetWidth = TargetShare * stage.Width, targetHeight = TargetShare * stage.Height;
+        var measure = Math.Min(targetWidth, Math.Max(12 * em, 0.7 * targetWidth));
+        return (new FlowFill(targetWidth, 2.5 * em, targetHeight, 1.2 * em), measure);
+    }
+}
+
+/// <summary>
 /// The flow layouts' rows: slots fill rows greedily in reading order, each row aligned within the line's width, a slot
 /// too wide for the stage kept on a row of its own (see docs/compositions/editorial.md); a slot may start a row of its
 /// own, and the rows may be balanced and stepped (Lunalyr's, Test Build 88).
@@ -423,10 +451,11 @@ public static class EditorialFlow
     /// <param name="rowShifts">Per row, cycling, a sideways shift from its aligned place, used only when there are two
     /// rows or more (mirrored for a right-to-left line); the block is widened by twice the largest so rows stay inside.</param>
     /// <param name="field">The narrowest the block may be (never past <paramref name="maxWidth"/>): rows align inside it.</param>
+    /// <param name="fill">Widens the gaps toward a target block (Constellation, <see cref="FlowFill"/>); null keeps them.</param>
     public static SizeD Place(ReadOnlySpan<SizeD> slots, double maxWidth, double spacing, double lineSpacing,
                               RowAlignment alignment, bool rightToLeft, Span<PointD> centres,
                               ReadOnlySpan<bool> breaks = default, bool balanced = false,
-                              ReadOnlySpan<double> rowShifts = default, double? field = null)
+                              ReadOnlySpan<double> rowShifts = default, double? field = null, FlowFill? fill = null)
     {
         var measure = maxWidth;
         if (balanced && double.IsFinite(maxWidth) && slots.Length > 1)
@@ -456,9 +485,22 @@ public static class EditorialFlow
             rows++;
             start = end;
         }
+        // Filling: the rows' gap grows toward the target height (gaps only grow, so nothing overlaps).
+        if (fill is { } grow && rows >= 2)
+        {
+            lineSpacing = FlowFill.Gap(lineSpacing, grow.TargetHeight, height, rows, grow.MaxRowGap);
+            height = 0;
+            for (int start = 0, row = 0; start < slots.Length; row++)
+            {
+                var end = RowEnd(slots, breaks, start, measure, spacing, out _, out var rowHeight);
+                height += rowHeight + (row > 0 ? lineSpacing : 0);
+                start = end;
+            }
+        }
         for (int start = 0, row = 0; start < slots.Length; row++)
         {
             var end = RowEnd(slots, breaks, start, measure, spacing, out var rowWidth, out _);
+            rowWidth = Widened(rowWidth, end - start, spacing, fill);
             width = Math.Max(width, rowWidth + 2 * Math.Abs(Shift(rowShifts, row, rows, rightToLeft)));
             start = end;
         }
@@ -471,6 +513,10 @@ public static class EditorialFlow
         for (int start = 0, row = 0; start < slots.Length; row++)
         {
             var end = RowEnd(slots, breaks, start, measure, spacing, out var rowWidth, out var rowHeight);
+            // A filled row's own word gap, the row centred at its new width.
+            var gap = fill is { } rowFill && end - start >= 2
+                ? FlowFill.Gap(spacing, rowFill.TargetWidth, rowWidth, end - start, rowFill.MaxWordGap) : spacing;
+            rowWidth = Widened(rowWidth, end - start, spacing, fill);
             var x = aligned switch
             {
                 RowAlignment.Leading => 0,
@@ -481,13 +527,17 @@ public static class EditorialFlow
             {
                 var item = rightToLeft ? end - 1 - k : start + k;
                 centres[item] = new PointD(x + slots[item].Width / 2, y + rowHeight / 2);
-                x += slots[item].Width + spacing;
+                x += slots[item].Width + gap;
             }
             y += rowHeight + lineSpacing;
             start = end;
         }
         return new SizeD(width, height);
     }
+
+    /// <summary>A row of <paramref name="items"/> as wide as it is set with its filled word gap.</summary>
+    private static double Widened(double rowWidth, int items, double spacing, FlowFill? fill) =>
+        fill is { } grow && items >= 2 ? rowWidth + (FlowFill.Gap(spacing, grow.TargetWidth, rowWidth, items, grow.MaxWordGap) - spacing) * (items - 1) : rowWidth;
 
     private static double Shift(ReadOnlySpan<double> shifts, int row, int rows, bool rightToLeft)
     {
