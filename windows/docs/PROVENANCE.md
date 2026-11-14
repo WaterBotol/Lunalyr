@@ -255,3 +255,17 @@ Blame (`-w -M -C`) run on each Mac range read; nothing from an `a99fd65` line wa
 | `LyricLayerView.swift` 125–150, 672–682 (remembered colour and composition) | 0 | `AppController.StyleMemory.cs`, `StyleMemory.Applied` | Behaviour ported into the controller |
 | `LunalyrExtras.swift` 445–470 (`cycleLayout`) | 0 | `LunalyrExtras.CycleLayout`, `StyleMemory.CycledRemembered` | Faithful port |
 | `LyricExtrasInspector.swift` 1–260, `LyricStylePage.swift` 1–300 | 0, 1 (a SwiftUI environment line) | `LyricStylePage.cs`, `LyricStyleCopy.cs` | Rows rebuilt with `SettingsKit`, copy ported |
+
+## Test Build 88: the desktop player's look and hover zones
+
+Blame (`-w -M -C`, `transfer/windows-port-14nov`) run on every Mac file read; nothing from an `a99fd65` line was
+translated.
+
+| Mac file | `a99fd65` lines | Windows | How |
+|---|---|---|---|
+| `Sources/UI/Design/PlayerTokens.swift`, `Tests/Swift/PlayerTokensTests.swift` | 0 | `Core/Player/PlayerTokens.cs`, `PlayerTokensTests` | Faithful port |
+| `Sources/UI/Design/MotionTokens.swift` (`quickExit`, `press`, `release`, `emphasised`) | 4 (a `smoothstep` helper, not used) | `PlayerTokens.Motion` | Faithful port of the Lunalyr lines |
+| `Sources/Player/ArtworkPalette.swift` (`cardTint`, `deepContrast` 9) | 0 | `ArtworkPalette.CardTint`, `DeepContrast` | Faithful port |
+| `Sources/Player/DesktopPlayerView.swift`, `DesktopScrubber.swift`, `PlayerControls.swift`, `SleeveParts.swift`, `VideoAlignRow.swift` | 1 (`DesktopPlayerView`'s observed `HoverState`, no counterpart) | `App/Player/CardPainter*.cs`, `CardTheme.cs`, `CardModel.cs` | The look re-drawn in Direct2D from the Mac's values |
+| `Sources/Support/DesktopInteraction.c` (`vc_hover_set_card`, `card_zone`, the card branches of the hot and keep zones), `Tests/desktop_test.c` (the card-zone block) | 42 in the file, none in these lines (`d5f73c92`; one closing brace in the test block) | `Core/Player/HoverZones.cs`, `HoverIntentTests.TheZonesHugTheCard` | Faithful port of the Lunalyr lines; the hover step around them stays re-implemented (`DesktopHoverSession`) |
+| `Sources/Desktop/HoverState.swift` (`vc_hover_set_card` per poll) | 45 in the file, none in these lines (`d5f73c92`) | `DesktopPlayer.ReadDisplays` (zones from the card's current height; a height change re-reads them) | Behaviour ported |

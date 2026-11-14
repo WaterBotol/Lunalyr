@@ -176,16 +176,18 @@ the app uses `EngineWallpaperRenderer` over `RenderEngine` with every background
 
 ## Desktop player
 
-The Mac's "Sleeve" player: a card washed in the playing album's colours that comes up in the middle of the display
-where the pointer rests on the empty desktop. Code: `src/Lunalyr.App/Player/` (window, drawing, input, UI
+The Mac's "Sleeve" player: a card in the playing album's colour that comes up in the middle of the display where the
+pointer rests on the empty desktop. Its look follows `docs/DESIGN.md` ("Desktop player"; the Mac's Test Build 88 look,
+tokens in `Core/Player/PlayerTokens.cs`). Code: `src/Lunalyr.App/Player/` (window, drawing, input, UI
 Automation), `src/Lunalyr.Core/Player/` (the portable rules, ported with the Mac's tests), `src/Lunalyr.Shell/Player/`
-(commands) and `AppController.Player.cs` (the scrub preview). Previews: `docs/previews/player/`.
+(commands) and `AppController.Player.cs` (the scrub preview). Previews: `docs/previews/player/` (`card-*.png` drawn
+offscreen by `tools/PlayerCardPreview` with the app's own painter; the `desktop-*.png` captures are from milestone 5's look).
 
 ### How it is drawn: a DirectComposition window, not WinUI
 
 The card is a borderless `WS_POPUP` tool window with `WS_EX_NOREDIRECTIONBITMAP`. Its one DirectComposition visual is a
 premultiplied-alpha flip swap chain, drawn with Direct2D and DirectWrite on the UI thread, on a small D3D11 device of
-its own. Windows 11 rounds the window at 8 px (`DWMWA_WINDOW_CORNER_PREFERENCE`) and draws its 1 px border in the album's colour (`DWMWA_BORDER_COLOR`). A pop-up gets no system shadow: seen on screen with `--player-debug top`, the card's edge is that border alone. The three
+its own. Windows 11 rounds the window at 8 px (`DWMWA_WINDOW_CORNER_PREFERENCE`) and draws its own 1 px border in the system's colour (`DWMWA_BORDER_COLOR` = `DWMWA_COLOR_DEFAULT`; the text colour in a contrast theme; until Test Build 88's look it was the album's colour, a tinted rim the design now rules out). A pop-up gets no system shadow: seen on screen with `--player-debug top`, the card's edge is that border alone. The three
 DirectComposition calls go through the COM vtables, so there is no new package. Why not a borderless WinUI window with
 Acrylic:
 - **WinUI is not running while Lunalyr idles.** It can only start by leaving the plain Win32 loop, once per process,
@@ -199,8 +201,8 @@ Acrylic:
   passes clicks to windows on the same thread). The window is exactly the card, so clicks beside it reach the
   desktop. DWM rounds it at Windows 11's own 8 px, not the Mac's 28.
 - **No Acrylic.** Windows' Acrylic backdrops are documented to fall back to a flat colour while the window is inactive, and the card is almost always inactive (not tried here).
-  The card's "glass" is the album wash at 93 % over the wallpaper instead (the Mac's preview look). With
-  transparency effects off it is solid.
+  The card is the Mac's veil (black at 24 %) and the album's flat tint (`ArtworkPalette.CardTint` at 92 %) over the
+  wallpaper instead, about 94 % opaque, unblurred. With transparency effects off it is solid.
 - **The price is accessibility, paid in code.** `PlayerAutomation.cs` is a UI Automation provider using
   source-generated COM, so it is AOT safe. The card is a pane holding the cover, Previous, Play/Pause, Next and time
   label buttons (Invoke), plus a "Playback position" slider. The slider has RangeValue (seconds; setting it seeks) and
@@ -214,10 +216,12 @@ A Win32 timer on the card's own window polls `GetCursorPos`, at the Mac's interv
 250 ms once it has rested 1.5 s, 45 ms while the card is up or a reveal is pending. A low-level mouse hook
 (`WH_MOUSE_LL`) would sit in front of every mouse event on the system for a decision needed a few times a second; the
 poll costs nothing while the pointer rests, since a resting pointer can't start a reveal.
-- **Where:** each display (`EnumDisplayMonitors`, re-read every 2 s and on `WM_DISPLAYCHANGE`) has a hot zone. The
-  hot zone is the resting card's place in the middle of the work area, plus 56 × 40 DIP. Its keep zone is the card
-  plus 28 DIP. The card shows on the display under the pointer, centred in its work area at that display's DPI, and
-  stays centred if it grows. One display at a time: another display, or a window under the pointer, hides it at
+- **Where:** each display (`EnumDisplayMonitors`, re-read every 2 s, on `WM_DISPLAYCHANGE` and when the card's height
+  changes) has a hot zone and a keep zone, the Mac's card zones (Test Build 88, `Core/Player/HoverZones.cs`): the card
+  as it is now (taller with search or the queue open), centred in the work area, plus 24 DIP reveals it; plus 56 DIP
+  keeps a shown card up. Both are kept within the work area. (Before: the resting card plus 56 × 40 DIP, and the card
+  plus 28; the Mac's were the middle 30 % of the screen and a 780-pt square.) The card shows on the display under the
+  pointer, centred in its work area at that display's DPI, and stays centred if it grows. One display at a time: another display, or a window under the pointer, hides it at
   once. Leaving the zone on the same display lingers 0.7 s.
 - **Exposed desktop:** `WindowFromPoint` → `GetAncestor(GA_ROOT)` must be `Progman` or `WorkerW` (the wallpaper and
   the icons; Lunalyr's own wallpaper is a child of Progman) or the card itself. Hovering a desktop icon counts as the
@@ -275,10 +279,10 @@ The Windows key (the Mac's Control) is left to the system. Alt never opens a win
 
 | Windows setting | The card |
 |---|---|
-| Animation effects off | no rise, no record slide (the record stays out), no press scale; short fades (0.15 s in, 0.12 s out) |
+| Animation effects off | no rise, no record slide (the record stays out), no press scale; 0.18 s fades in and out (the Mac's `reduced`) |
 | Transparency effects off | solid card and capsules (the Mac's Reduce Transparency colours) |
-| A contrast theme | the theme's own colours only (`COLOR_WINDOW`, `COLOR_WINDOWTEXT`, `COLOR_HIGHLIGHT`, `COLOR_GRAYTEXT`), a 2 px edge, no washes; the cover stays |
-| Light app mode | a light wash of the album's hue with near-black type, darkened only if 7:1 isn't met |
+| A contrast theme | the theme's own colours only (`COLOR_WINDOW`, `COLOR_WINDOWTEXT`, `COLOR_HIGHLIGHT`, `COLOR_HIGHLIGHTTEXT`, `COLOR_GRAYTEXT`), never faded, a 2 px edge, no tint; the cover stays |
+| Light app mode | a light flat tint of the album's hue under a white veil with near-black ink at the same four levels, lightened until near-black reaches 12:1 (Windows only: the Mac's card is always dark) |
 | Narrator | the UI Automation tree above |
 
 They are re-read on `WM_SETTINGCHANGE`, `WM_THEMECHANGED` and `WM_DWMCOLORIZATIONCOLORCHANGED`. `--player-debug`
