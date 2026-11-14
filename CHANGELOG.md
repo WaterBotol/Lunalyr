@@ -13,6 +13,7 @@ When merging, keep every entry and combine duplicate headings.
 -->
 
 ### Changed
+- **Remembering a style for a song or artist now saves the typeface too**, including a Google or installed family, and puts it back whenever that music plays. The general typeface is left as it is. Styles remembered before this keep using the general typeface.
 - **Match the music is now called Custom Mix** everywhere it appears: the wallpaper type, the layout, the GPU effect and pattern choices, Looks and remembered styles. Your settings are kept.
 
 ### Removed

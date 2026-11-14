@@ -174,6 +174,7 @@ struct LyricStylePage: View {
     private var typeface: some View {
         InspectorSection("Typeface", value: s.fontChoice.title) {
             TypefaceTiles()
+            RememberedStyleNote(aspect: .font)
             Toggle("Randomise lyric fonts", isOn: $s.randomizeLyricFonts)
                 .toggleStyle(StudioCheckboxStyle())
             if s.randomizeLyricFonts {

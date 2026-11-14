@@ -826,3 +826,54 @@ final class LyricExtrasTests: XCTestCase {
         XCTAssertLessThan(try centre(["I", "love"]), 0.5)
     }
 }
+
+/// A remembered style keeps the typeface too, and styles saved before it
+/// did still load.
+@MainActor
+final class RememberedFontTests: XCTestCase {
+    private let song = NowPlayingMonitor.Track(title: "Fontless", artist: "Someone", duration: 200, genre: nil, album: "Plain")
+
+    func testTheFontIsSavedAndRestoredWithTheStyle() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("RememberedFontTests.save")
+        let memory = StyleMemory(defaults: defaults)
+        memory.remember(.init(composition: "echo", colour: nil, font: "google", fontFamily: "Playfair Display"),
+                        for: song, scope: .song)
+        let restored = StyleMemory(defaults: defaults).remembered(for: song)?.style
+        XCTAssertEqual(restored?.songFont, Settings.SongFont(choice: .google, family: "Playfair Display"))
+        XCTAssertEqual(restored?.layout, .echo)
+        XCTAssertEqual(LyricStyleMemorySection.describe(restored!), "Echo · Playfair Display")
+        XCTAssertEqual(RememberedStyleNote.rememberedName(.font, in: restored!), "Playfair Display")
+        XCTAssertEqual(StyleMemory.Style(composition: nil, colour: nil, font: "serif").songFont, .init(choice: .serif))
+    }
+
+    func testAStyleSavedWithoutAFontStillLoadsAndKeepsTheGeneralTypeface() {
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("RememberedFontTests.old")
+        defaults.set([StyleMemory.songKey(LyricQuery(title: song.title, artist: song.artist, album: song.album,
+                                                     duration: song.duration)): ["composition": "spoken", "colour": "albumDrift"]],
+                     forKey: StyleMemory.Keys.songs)
+        let style = StyleMemory(defaults: defaults).remembered(for: song)?.style
+        XCTAssertEqual(style?.layout, .spoken)
+        XCTAssertNil(style?.songFont)
+        XCTAssertNil(RememberedStyleNote.rememberedName(.font, in: style!))
+        XCTAssertFalse(style!.isEmpty)
+        XCTAssertTrue(StyleMemory.Style(composition: nil, colour: nil).isEmpty)
+        XCTAssertFalse(StyleMemory.Style(composition: nil, colour: nil, font: "slab").isEmpty, "a font alone is kept")
+    }
+
+    func testTheSongsFontIsDrawnWithoutChangingTheGeneralChoice() {
+        let settings = Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("RememberedFontTests.settings"),
+                                notifications: NotificationCenter())
+        settings.selectFontChoice(.sans)
+        settings.applySongFont(.init(choice: .serif))
+        XCTAssertEqual(settings.effectiveFontChoice, .serif)
+        XCTAssertEqual(settings.fontChoice, .sans, "the picker keeps the general choice")
+        XCTAssertEqual(settings.face(for: .neutral), .serif)
+        XCTAssertEqual(LyricFontIdentity(settings: settings).choice, Settings.FontChoice.serif.rawValue)
+        settings.applySongFont(nil)
+        XCTAssertEqual(settings.effectiveFontChoice, .sans)
+        XCTAssertEqual(LyricFontIdentity(settings: settings).choice, Settings.FontChoice.sans.rawValue)
+        // A Google choice without a family is no choice at all.
+        settings.applySongFont(.init(choice: .google, family: ""))
+        XCTAssertNil(settings.songFont)
+    }
+}

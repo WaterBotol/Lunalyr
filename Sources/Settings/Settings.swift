@@ -331,6 +331,71 @@ final class Settings: ObservableObject {
     /// can set its second voice against it.
     @Published private(set) var googleVoice: LyricFace = .sans
 
+    /// A typeface remembered for the playing song or artist
+    /// (`StyleMemory`), drawn instead of `fontChoice` while it plays. Never
+    /// saved here: the pickers and Looks keep showing the general choice.
+    struct SongFont: Equatable {
+        var choice: FontChoice
+        /// The Google or installed family, for `.google`.
+        var family: String = ""
+    }
+    @Published private(set) var songFont: SongFont?
+    /// The remembered family's faces once loaded (`.google` only).
+    @Published private(set) var songFontRegular: String?
+    @Published private(set) var songFontBold: String?
+    @Published private(set) var songFontVoice: LyricFace = .sans
+    private var songFontLoadID = UUID()
+
+    /// The typeface the lyrics are drawn in now: the song's own, else the
+    /// general choice.
+    var effectiveFontChoice: FontChoice { songFont?.choice ?? fontChoice }
+
+    /// The regular and bold faces of the family in use, when it is a
+    /// Google or installed family that has loaded.
+    var activeCustomFaces: (regular: String?, bold: String?, voice: LyricFace) {
+        guard let songFont, songFont.choice == .google else { return (googleRegular, googleBold, googleVoice) }
+        if songFontRegular == nil, songFont.family == googleFontFamily, googleRegular != nil {
+            return (googleRegular, googleBold, googleVoice)
+        }
+        return (songFontRegular, songFontBold, songFontVoice)
+    }
+
+    /// Draws the lyrics in `font` while this song plays, or in the general
+    /// choice again for nil. A Google or installed family loads as the
+    /// general one does, and never inside the test host.
+    func applySongFont(_ font: SongFont?) {
+        var font = font
+        if font?.choice == .google, Self.normalizedFontFamily(font?.family ?? "") == nil { font = nil }
+        guard font != songFont else { return }
+        songFont = font
+        songFontLoadID = UUID()
+        songFontRegular = nil; songFontBold = nil
+        guard let font, font.choice == .google, !AppRuntime.isUnitTesting else { return }
+        let id = songFontLoadID
+        Task { await loadSongFont(family: font.family, id: id) }
+    }
+
+    private func loadSongFont(family: String, id: UUID) async {
+        guard let name = Self.normalizedFontFamily(family) else { return }
+        func current() -> Bool { songFontLoadID == id }
+        let provider = GoogleFontsProvider.shared
+        var loaded: GoogleFontsProvider.LoadedFont?
+        var spelling = name
+        if let cached = await provider.cachedFont(family: name) {
+            loaded = cached
+        } else if let installed = InstalledFontFamily.resolve(name) {
+            loaded = GoogleFontsProvider.LoadedFont(regular: installed.regular, bold: installed.bold)
+            spelling = installed.family
+        } else if case .success(let font) = await provider.load(family: name) {
+            loaded = font
+            spelling = font.family ?? name
+        }
+        guard current(), let loaded else { return }
+        songFontRegular = loaded.regular
+        songFontBold = loaded.bold
+        songFontVoice = GoogleFontsCatalog.voice(of: spelling) ?? Self.voice(ofFontNamed: loaded.regular) ?? .sans
+    }
+
     private let defaults: UserDefaults
     private let loginItem: LoginItemService
 
@@ -484,7 +549,7 @@ final class Settings: ObservableObject {
     /// The face to set lyrics in, honouring an override or deferring to the
     /// track's own character.
     func face(for mood: TrackMood) -> LyricFace {
-        switch fontChoice {
+        switch effectiveFontChoice {
         case .manrope, .appleMusic, .auto, .google: return mood.face
         case .sans: return .sans
         case .serif: return .serif
@@ -498,8 +563,9 @@ final class Settings: ObservableObject {
     /// face instead put Charter beside a chosen Charter, or a second sans
     /// beside Manrope.
     func renderedFace(for mood: TrackMood) -> LyricFace {
-        Self.renderedFace(choice: fontChoice, moodFace: mood.face, manropeLoaded: AppFont.regular != nil,
-                          customVoice: googleRegular == nil ? nil : googleVoice)
+        let custom = activeCustomFaces
+        return Self.renderedFace(choice: effectiveFontChoice, moodFace: mood.face, manropeLoaded: AppFont.regular != nil,
+                                 customVoice: custom.regular == nil ? nil : custom.voice)
     }
 
     /// - Parameters:
@@ -530,37 +596,39 @@ final class Settings: ObservableObject {
             return faces[Int(seed % UInt64(faces.count))].font(size: size, hero: hero)
         }
         if alternate { return renderedFace(for: mood).contrasting.font(size: size, hero: hero) }
+        let choice = effectiveFontChoice, custom = activeCustomFaces
         // Manrope is the shipped default, fetched and registered like any
         // other Google family.
-        if fontChoice == .manrope, let regular = AppFont.regular {
+        if choice == .manrope, let regular = AppFont.regular {
             return .custom(hero ? (AppFont.bold ?? regular) : regular, fixedSize: size)
         }
         // Apple Music sets its lyrics in SF Pro, heavy and tightly tracked --
         // which is simply the macOS system face, so this needs no download and
         // no licence. Bold even when idle, heavy on the word being sung, is
         // what gives that view its weight.
-        if fontChoice == .appleMusic {
+        if choice == .appleMusic {
             return .system(size: size, weight: hero ? .heavy : .bold, design: .default)
         }
-        if fontChoice == .google, let regular = googleRegular {
-            return .custom(hero ? (googleBold ?? regular) : regular, fixedSize: size)
+        if choice == .google, let regular = custom.regular {
+            return .custom(hero ? (custom.bold ?? regular) : regular, fixedSize: size)
         }
         return face(for: mood).font(size: size, hero: hero)
     }
 
     func uiFont(size: CGFloat, bold: Bool = false, mood: TrackMood) -> Font {
-        if fontChoice == .manrope, let regular = AppFont.regular {
+        let choice = effectiveFontChoice, custom = activeCustomFaces
+        if choice == .manrope, let regular = AppFont.regular {
             return .custom(bold ? (AppFont.bold ?? regular) : regular, fixedSize: size)
         }
         // Apple Music sets its lyrics in SF Pro, heavy and tightly tracked --
         // which is simply the macOS system face, so this needs no download and
         // no licence. Bold even when idle, heavy on the word being sung, is
         // what gives that view its weight.
-        if fontChoice == .appleMusic {
+        if choice == .appleMusic {
             return .system(size: size, weight: bold ? .bold : .medium, design: .default)
         }
-        if fontChoice == .google, let regular = googleRegular {
-            return .custom(bold ? (googleBold ?? regular) : regular, fixedSize: size)
+        if choice == .google, let regular = custom.regular {
+            return .custom(bold ? (custom.bold ?? regular) : regular, fixedSize: size)
         }
         return face(for: mood).uiFont(size: size, bold: bold)
     }

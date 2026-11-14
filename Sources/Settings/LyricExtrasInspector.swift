@@ -97,7 +97,8 @@ private struct CustomGradientSwatch: View {
     }
 }
 
-/// Remember the current layout and colour for the playing song or artist.
+/// Remember the current layout, colour and typeface for the playing song or
+/// artist.
 @MainActor
 struct LyricStyleMemorySection: View {
     @Model(\.styleMemory) private var memory
@@ -108,7 +109,9 @@ struct LyricStyleMemorySection: View {
     @State private var confirmsForgetAll = false
 
     private var chosen: StyleMemory.Style {
-        .init(composition: settings.lyricComposition?.rawValue ?? "automatic", colour: colours.mode.rawValue)
+        .init(composition: settings.lyricComposition?.rawValue ?? "automatic", colour: colours.mode.rawValue,
+              font: settings.fontChoice.rawValue,
+              fontFamily: settings.fontChoice == .google ? settings.googleFontFamily : nil)
     }
 
     var body: some View {
@@ -138,10 +141,10 @@ struct LyricStyleMemorySection: View {
                     if track.artist.isEmpty {
                         DisabledReason("This song names no artist, so its style can only be remembered for the song.")
                     }
-                    InspectorCaption("Saves this layout and colour. A song’s own wins.", more: "Saves the layout and text colour chosen above. A song’s own style wins over its artist’s.")
+                    InspectorCaption("Saves this layout, colour and typeface. A song’s own wins.", more: "Saves the layout, text colour and typeface chosen above. A song’s own style wins over its artist’s.")
                 }
             } else {
-                InspectorCaption("Play a song to remember a style for it.", more: "Play a song to remember a layout and colour for it or its artist.")
+                InspectorCaption("Play a song to remember a style for it.", more: "Play a song to remember a layout, colour and typeface for it or its artist.")
             }
             if !memory.songs.isEmpty || !memory.artists.isEmpty {
                 LabeledContent {
@@ -181,17 +184,17 @@ struct LyricStyleMemorySection: View {
 
     static func describe(_ style: StyleMemory.Style) -> String {
         let layout = style.composition == "automatic" ? "Custom Mix" : style.layout?.title ?? "Custom Mix"
-        return [layout, style.colourMode?.title].compactMap { $0 }.joined(separator: " · ")
+        return [layout, style.colourMode?.title, style.fontTitle].compactMap { $0 }.joined(separator: " · ")
     }
 }
 
-/// Under the Layout and Colour pickers: a style remembered for the playing
+/// Under the Layout, Colour and Typeface pickers: a style remembered for the playing
 /// song or artist is what the wallpaper shows, so the picker would otherwise
 /// look broken. Update saves the picker's choice there; Forget drops this
 /// part of the memory.
 @MainActor
 struct RememberedStyleNote: View {
-    enum Aspect { case layout, colour }
+    enum Aspect { case layout, colour, font }
     let aspect: Aspect
     @Environment(\.undoManager) private var undoManager
     @Model(\.styleMemory) private var memory
@@ -228,6 +231,8 @@ struct RememberedStyleNote: View {
             return raw == "automatic" ? "Custom Mix" : style.layout?.title ?? "Custom Mix"
         case .colour:
             return style.colourMode?.title
+        case .font:
+            return style.fontTitle
         }
     }
 
@@ -236,6 +241,9 @@ struct RememberedStyleNote: View {
         switch aspect {
         case .layout: style.composition = settings.lyricComposition?.rawValue ?? "automatic"
         case .colour: style.colour = colours.mode.rawValue
+        case .font:
+            style.font = settings.fontChoice.rawValue
+            style.fontFamily = settings.fontChoice == .google ? settings.googleFontFamily : nil
         }
         return style
     }
@@ -252,8 +260,9 @@ struct RememberedStyleNote: View {
         switch aspect {
         case .layout: style.composition = nil
         case .colour: style.colour = nil
+        case .font: style.font = nil; style.fontFamily = nil
         }
-        if style.composition == nil && style.colour == nil {
+        if style.isEmpty {
             memory.forget(for: track, scope: active.scope)
         } else {
             memory.remember(style, for: track, scope: active.scope)

@@ -32,8 +32,9 @@ extension LyricFontIdentity {
         editorial = settings.editorialTypography
         editorialAmount = settings.editorialAmount
         randomize = settings.randomizeLyricFonts
-        choice = settings.fontChoice.rawValue
-        customRegular = settings.googleRegular; customBold = settings.googleBold
+        choice = settings.effectiveFontChoice.rawValue
+        let custom = settings.activeCustomFaces
+        customRegular = custom.regular; customBold = custom.bold
         appRegular = AppFont.regular; appBold = AppFont.bold
     }
 }

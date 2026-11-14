@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CryptoKit
 import SwiftUI
 
@@ -96,29 +97,59 @@ final class LyricColourOptions: ObservableObject {
 }
 
 /// A lyric style remembered for one recording or for everything by one
-/// artist: the layout and the text colour. A song's own memory wins over
-/// its artist's; the general settings apply where neither exists.
+/// artist: the layout, the text colour and the typeface. A song's own
+/// memory wins over its artist's; the general settings apply where neither
+/// exists.
 @MainActor
 final class StyleMemory: ObservableObject {
-    static let shared = StyleMemory()
+    static let shared: StyleMemory = {
+        let memory = StyleMemory()
+        memory.followSongFonts(settings: .shared, nowPlaying: .shared)
+        return memory
+    }()
 
     struct Style: Equatable {
         /// A `LyricComposition` raw value, or "automatic" for Custom Mix.
         var composition: String?
         var colour: String?
+        /// A `Settings.FontChoice` raw value. Styles saved before fonts
+        /// were remembered have none and use the general typeface.
+        var font: String?
+        /// The Google or installed family, when `font` is "google".
+        var fontFamily: String?
 
         var layout: LyricComposition? { composition.flatMap(LyricComposition.saved) }
         var colourMode: LyricColourMode? { colour.flatMap(LyricColourMode.savedChoice) }
+        var songFont: Settings.SongFont? {
+            guard let choice = font.flatMap(Settings.FontChoice.init(rawValue:)) else { return nil }
+            if choice == .google {
+                guard let family = fontFamily, !family.isEmpty else { return nil }
+                return .init(choice: choice, family: family)
+            }
+            return .init(choice: choice)
+        }
+        /// "Serif — Charter", or the family's own name.
+        var fontTitle: String? {
+            guard let songFont else { return nil }
+            return songFont.choice == .google ? songFont.family : songFont.choice.title
+        }
+        var isEmpty: Bool { composition == nil && colour == nil && font == nil }
         var plist: [String: String] {
             var result: [String: String] = [:]
             result["composition"] = composition
             result["colour"] = colour
+            result["font"] = font
+            result["fontFamily"] = fontFamily
             return result
         }
-        init(composition: String?, colour: String?) { self.composition = composition; self.colour = colour }
+        init(composition: String?, colour: String?, font: String? = nil, fontFamily: String? = nil) {
+            self.composition = composition; self.colour = colour
+            self.font = font; self.fontFamily = fontFamily
+        }
         init?(plist: Any?) {
             guard let values = plist as? [String: String] else { return nil }
             composition = values["composition"]; colour = values["colour"]
+            font = values["font"]; fontFamily = values["fontFamily"]
         }
     }
     enum Scope: String { case song, artist }
@@ -227,6 +258,22 @@ final class StyleMemory: ObservableObject {
         defaults.removeObject(forKey: Keys.songs)
         defaults.removeObject(forKey: Keys.artists)
         cached = nil
+    }
+
+    private var fontFollower: AnyCancellable?
+
+    /// Keeps `settings.songFont` on the typeface remembered for the playing
+    /// song or artist, as the song or the memory changes.
+    func followSongFonts(settings: Settings, nowPlaying: NowPlayingMonitor) {
+        fontFollower = Publishers.Merge4(
+            nowPlaying.$current.map { _ in () },
+            $songs.map { _ in () }, $artists.map { _ in () }, $enabled.map { _ in () })
+            // The @Published values change after they publish.
+            .receive(on: RunLoop.main)
+            .sink { [weak self, weak settings] in
+                guard let self, let settings else { return }
+                settings.applySongFont(self.remembered(for: nowPlaying.current)?.style.songFont)
+            }
     }
 
     private static func query(_ track: NowPlayingMonitor.Track) -> LyricQuery {
