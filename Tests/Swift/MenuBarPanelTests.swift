@@ -94,6 +94,11 @@ final class MenuBarPanelTests: XCTestCase {
         XCTAssertEqual(s.settings.backgroundMode, .pattern, "nothing to show yet: the type stays")
     }
 
+    func testSubmenuSeparatorsAreNotChoices() {
+        XCTAssertTrue(MenuPanelMenuItem.separator().isSeparator)
+        XCTAssertFalse(MenuPanelMenuItem(id: "options", title: "Wallpaper Settings…") {}.isSeparator)
+    }
+
     // MARK: Open Lyric Card…
 
     func testOpenLyricCardIsAnActionNamedAsEverywhereAndNeedsASong() {

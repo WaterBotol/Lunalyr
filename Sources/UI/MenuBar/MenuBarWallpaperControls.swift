@@ -90,7 +90,13 @@ struct MenuBarWallpaperControls: View {
         let navigation = models.resolved.navigation
         VStack(alignment: .leading, spacing: 0) {
             MenuPanelSubmenuRow("Wallpaper", value: settings.backgroundMode.title) {
+                // Everything else about the wallpaper, as the panel's
+                // Options… link opened it.
                 Self.wallpaperItems(settings: settings) { navigation.openSettings(.wallpaper) }
+                    + [.separator(), MenuPanelMenuItem(id: "options", title: "Wallpaper Settings…",
+                                                       help: "Opens Settings at Wallpaper") {
+                        navigation.openSettings(.wallpaper)
+                    }]
             }
             if settings.backgroundMode == .visualizer {
                 MenuPanelSubmenuRow("Scene", value: settings.audioVisualizerStyle.title) {

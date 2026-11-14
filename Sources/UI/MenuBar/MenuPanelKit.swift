@@ -307,6 +307,14 @@ struct MenuPanelMenuItem: Identifiable {
     /// The item's tooltip.
     var help: String?
     let action: () -> Void
+
+    /// A line between groups of items.
+    static func separator(_ id: String = "separator") -> MenuPanelMenuItem {
+        MenuPanelMenuItem(id: "\(separatorPrefix)\(id)", title: "", enabled: false) {}
+    }
+
+    static let separatorPrefix = "menu.separator."
+    var isSeparator: Bool { id.hasPrefix(Self.separatorPrefix) }
 }
 
 /// A row that opens a real menu beside it, like a menu's submenu:
@@ -354,6 +362,10 @@ struct MenuPanelMenuAnchor: NSViewRepresentable {
             let menu = NSMenu()
             menu.autoenablesItems = false
             for item in items {
+                if item.isSeparator {
+                    menu.addItem(.separator())
+                    continue
+                }
                 let target = MenuPanelMenuTarget(item.action)
                 let entry = NSMenuItem(title: item.title, action: #selector(MenuPanelMenuTarget.run), keyEquivalent: "")
                 entry.target = target
