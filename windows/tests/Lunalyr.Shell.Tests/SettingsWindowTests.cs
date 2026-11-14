@@ -209,7 +209,7 @@ public sealed class SettingsCopyTests
     public void EveryLayoutIsOfferedOnceWithMatchTheMusicFirst()
     {
         Assert.Equal(AppSettings.Compositions, SettingsCopy.Layouts.Select(c => c.Value));
-        Assert.Equal("Match the music", SettingsCopy.Layouts[0].Title);
+        Assert.Equal("Custom Mix", SettingsCopy.Layouts[0].Title);
         Assert.All(SettingsCopy.Layouts.Skip(1), c => Assert.NotNull(SettingsCopy.Kind(c.Value)));
         Assert.All(SettingsCopy.Layouts, c => Assert.False(string.IsNullOrEmpty(c.Detail)));
         Assert.Null(SettingsCopy.Kind("automatic"));
@@ -344,7 +344,7 @@ public sealed class EntranceSupportTests
     {
         Assert.Equal("Satin Ribbon (whole lines only)", EntranceSupport.MenuTitle(WordArrival.SatinRibbon, CompositionKind.Hinge));
         Assert.Equal("Cutout · Highlight", EntranceSupport.MenuTitle(WordArrival.CutoutHighlight, CompositionKind.Hinge));
-        // Match the music marks nothing.
+        // Custom Mix marks nothing.
         Assert.Equal("Satin Ribbon", EntranceSupport.MenuTitle(WordArrival.SatinRibbon, null));
         Assert.Null(EntranceSupport.Note(WordArrival.SatinRibbon, null, []));
 

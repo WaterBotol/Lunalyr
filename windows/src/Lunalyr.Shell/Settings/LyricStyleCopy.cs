@@ -21,11 +21,11 @@ public static class LyricStyleCopy
         _ => null,
     };
 
-    /// <summary>How "Add Editorial typography" relates to the chosen layout (null for Match the music: the Mac's <c>editorialNote</c>).</summary>
+    /// <summary>How "Add Editorial typography" relates to the chosen layout (null for Custom Mix: the Mac's <c>editorialNote</c>).</summary>
     public static string? EditorialNote(CompositionKind? layout)
     {
         if (layout is not { } kind)
-            return "Editorial picks already mix two typefaces; this adds the mix to the other layouts Match the music chooses.";
+            return "Editorial picks already mix two typefaces; this adds the mix to the other layouts Custom Mix chooses.";
         return kind.HasEditorialTypography()
             ? $"{kind.Title()} already mixes two typefaces. Switch this on to set how many words take the second one."
             : null;

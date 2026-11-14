@@ -1,4 +1,4 @@
-// "Match the music" for the wallpaper: which kind of background a song gets (a GPU effect or a line pattern) and which
+// "Custom Mix" for the wallpaper: which kind of background a song gets (a GPU effect or a line pattern) and which
 // effect or pattern. Re-implemented from a description of the Mac's behaviour (NowPlayingView.layer(for:) and
 // ShaderStyle.matching, both on lines that trace back to the squashed Verso import, so nothing is translated); see
 // docs/compositions/matching.md, "The wallpaper". The catalogue of effects and patterns (ids, titles and where each
@@ -27,13 +27,13 @@ public readonly record struct WallpaperCharacter(double Energy, double Density, 
     private static double Clamp(double value) => double.IsFinite(value) ? Math.Clamp(value, 0, 1) : 0.5;
 }
 
-/// <summary>One effect or pattern a layer can draw, as "Match the music" sees it.</summary>
+/// <summary>One effect or pattern a layer can draw, as "Custom Mix" sees it.</summary>
 /// <param name="Id">The style's id ("aurora"); its layer is registered as <c>shader.&lt;id&gt;</c> or <c>pattern.&lt;id&gt;</c>.</param>
 /// <param name="Character">Where it sits on the three axes.</param>
 /// <param name="Heavy">Expensive per pixel: left out of the match while power is being saved.</param>
 public sealed record WallpaperCandidate(string Id, WallpaperCharacter Character, bool Heavy = false);
 
-/// <summary>The kind of background "Match the music" gives a song.</summary>
+/// <summary>The kind of background "Custom Mix" gives a song.</summary>
 public enum WallpaperKind
 {
     /// <summary>A GPU effect (<c>shader.&lt;id&gt;</c>).</summary>
@@ -51,12 +51,12 @@ public readonly record struct WallpaperPick(WallpaperKind Kind, string? StyleId)
 }
 
 /// <summary>
-/// Chooses a song's wallpaper for "Match the music", GPU effects and Line patterns (docs/compositions/matching.md, "The
+/// Chooses a song's wallpaper for "Custom Mix", GPU effects and Line patterns (docs/compositions/matching.md, "The
 /// wallpaper"). Deterministic: the same song, settings and catalogue always give the same pick.
 /// </summary>
 public static class WallpaperMatch
 {
-    /// <summary>Above this energy "Match the music" gives a song a GPU effect; at or below it, a line pattern.</summary>
+    /// <summary>Above this energy "Custom Mix" gives a song a GPU effect; at or below it, a line pattern.</summary>
     public const double EffectEnergy = 0.72;
 
     /// <summary>How many of the nearest styles a song chooses between, by its seed, so like songs don't all look alike.</summary>
@@ -66,7 +66,7 @@ public static class WallpaperMatch
     /// The kind and style for a song. <paramref name="mode"/> is the <c>backgroundMode</c> ("auto", "shader" or
     /// "pattern"); a pinned id that is in its catalogue is used as it is (an effect marked heavy only while power isn't
     /// being saved); otherwise the song is matched among <paramref name="effects"/> or <paramref name="patterns"/>.
-    /// "Match the music" with nothing in the kind it would choose takes the other kind. The pick's style is null when
+    /// "Custom Mix" with nothing in the kind it would choose takes the other kind. The pick's style is null when
     /// its catalogue is empty.
     /// </summary>
     public static WallpaperPick Pick(string mode, TrackCharacter song, string? pinnedEffect, string? pinnedPattern,

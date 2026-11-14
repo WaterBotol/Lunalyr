@@ -102,16 +102,16 @@ public static class OnboardingCopy
     public const string LayoutGroup = "Lyric layout";
 
     /// <summary>
-    /// Under the layouts: what the chosen one does (its name is on its tile), or Match the music's promise (the Mac's
-    /// <c>layoutCaption</c>; Windows calls Automatic "Match the music").
+    /// Under the layouts: what the chosen one does (its name is on its tile), or Custom Mix's promise (the Mac's
+    /// <c>layoutCaption</c>; Windows calls Automatic "Custom Mix").
     /// </summary>
     public static string LayoutCaption(string? layout) =>
         layout is null or AppSettings.AllLayoutsKey || SettingsCopy.Layouts.FirstOrDefault(l => l.Value == layout)?.Detail is not { Length: > 0 } detail
-            ? "Match the music picks a layout to suit each song."
+            ? "Custom Mix picks a layout to suit each song."
             : detail;
 
     /// <summary>How many more layouts Settings has than the look step shows (the Mac's <c>moreLayouts</c>).</summary>
-    public static string MoreLayouts(int count) => $"{count} more in Settings, with Match the music.";
+    public static string MoreLayouts(int count) => $"{count} more in Settings, with Custom Mix.";
 
     // ---- 4. Music videos ----
 
@@ -230,7 +230,7 @@ public static class OnboardingCopy
 
     public const string DoneAgain = "You can change all of this in Settings.";
 
-    /// <summary>The Done step's wallpaper row: "Wallpaper: Match the music".</summary>
+    /// <summary>The Done step's wallpaper row: "Wallpaper: Custom Mix".</summary>
     public static string WallpaperRow(AppSettings settings) =>
         $"Wallpaper: {SettingsCopy.WallpaperTypeOf(settings?.BackgroundMode).Title}";
 

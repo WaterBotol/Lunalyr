@@ -132,7 +132,7 @@ public sealed class LunalyrExtrasTests
         _settings = _settings with { LyricComposition = "fable" };
         extras.Perform(HotkeyAction.CycleLayout);
         Assert.Equal("automatic", _settings.LyricComposition);
-        Assert.Equal("Layout: Match the music", _shown[^1]);
+        Assert.Equal("Layout: Custom Mix", _shown[^1]);
     }
 
     // Ported from LyricExtrasTests.swift: testCyclingChangesARememberedLayoutInPlace

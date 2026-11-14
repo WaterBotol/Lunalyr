@@ -68,13 +68,13 @@ public sealed record AppControllerOptions
     public IReadOnlyList<TimeSpan> ArtworkRechecks { get; init; } = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
 
     /// <summary>
-    /// Called (off the controller's lock) when "Match the music" moves its rotation on, with the new cursor to save
+    /// Called (off the controller's lock) when "Custom Mix" moves its rotation on, with the new cursor to save
     /// (<c>rotateLayoutsCursor</c>), so the next launch carries on from it.
     /// </summary>
     public Action<int>? LayoutCursorChanged { get; init; }
 
     /// <summary>
-    /// The GPU effects and line patterns "Match the music" chooses among; null takes <c>WallpaperCatalog</c>'s (tests pass
+    /// The GPU effects and line patterns "Custom Mix" chooses among; null takes <c>WallpaperCatalog</c>'s (tests pass
     /// their own, as the catalogue is filled by the effect layers' own files).
     /// </summary>
     public Func<(IReadOnlyList<Lunalyr.Core.Compositions.WallpaperCandidate> Effects, IReadOnlyList<Lunalyr.Core.Compositions.WallpaperCandidate> Patterns)>? WallpaperStyles { get; init; }
@@ -370,7 +370,7 @@ public sealed partial class AppController : IAsyncDisposable
         if (BackgroundLayerFor(old) != BackgroundLayerFor(settings) || oldLayout != newLayout
             || old.RotateLayouts != settings.RotateLayouts)
             PublishLayers();
-        // Turned to Match the music: the song on screen is matched now if its lyrics (or their absence) are known;
+        // Turned to Custom Mix: the song on screen is matched now if its lyrics (or their absence) are known;
         // otherwise when they arrive. Other settings changes never decide it.
         if (newLayout == AutomaticComposition && (oldLayout != newLayout || old.RotateLayouts != settings.RotateLayouts))
             ChooseLayout(onlyWhenSettled: true);

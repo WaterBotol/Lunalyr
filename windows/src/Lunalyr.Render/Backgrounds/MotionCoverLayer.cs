@@ -1,5 +1,5 @@
 // "Use animated covers" (the Mac's .motion background): Apple Music's animated album cover, playing silently behind the
-// lyrics in Match the music. The Mac draws it in NowPlayingView's .motion case through MotionArtworkView; both carry
+// lyrics in Custom Mix. The Mac draws it in NowPlayingView's .motion case through MotionArtworkView; both carry
 // lines from the squashed Verso import (the softening blur, its overscan, the flat shade and the centre vignette), so
 // nothing of them is translated. Re-implemented from this description of what the Mac shows:
 //

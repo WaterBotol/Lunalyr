@@ -31,9 +31,9 @@ public sealed record MotionCoverStatus(MotionCoverState State, string? Artist = 
 
 // Animated covers (the Mac's NowPlayingMonitor.updateMotionArtwork and NowPlayingView.layer(for:), Lunalyr's own lines;
 // the gate's settings check is re-implemented from Settings.swift's behaviour). A cover is looked up only where it could
-// be shown: "Use animated covers" on, Match the music, the album not excluded, a song (not a stream) playing in Apple
+// be shown: "Use animated covers" on, Custom Mix, the album not excluded, a song (not a stream) playing in Apple
 // Music. Other players' listening is never sent to Apple. The cover found stays while the next song of the same album
-// plays, and until a different answer arrives; it is drawn in place of Match the music's effect or pattern, unless
+// plays, and until a different answer arrives; it is drawn in place of Custom Mix's effect or pattern, unless
 // power saving holds the wallpaper to patterns or colour only.
 public sealed partial class AppController
 {
@@ -226,7 +226,7 @@ public sealed partial class AppController
         }
         catch (Exception ex)
         {
-            _player.Warn("Animated cover: the lookup failed; showing Match the music's wallpaper.", ex);
+            _player.Warn("Animated cover: the lookup failed; showing Custom Mix's wallpaper.", ex);
             answer = new MotionCoverAnswer(null, Unreachable: true);
         }
         finally
@@ -245,8 +245,8 @@ public sealed partial class AppController
             _motionAnswer = answer;
         }
         _player.Info(answer.Files is not null ? "Animated cover: found; it plays behind the lyrics."
-            : answer.Unreachable ? "Animated cover: Apple Music couldn't be reached; Match the music's wallpaper stays."
-            : "Animated cover: this album has none; Match the music's wallpaper stays.");
+            : answer.Unreachable ? "Animated cover: Apple Music couldn't be reached; Custom Mix's wallpaper stays."
+            : "Animated cover: this album has none; Custom Mix's wallpaper stays.");
         ShowMotion(answer.Files, keepCurrent: false);
     }
 

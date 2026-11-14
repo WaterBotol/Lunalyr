@@ -225,7 +225,7 @@ public sealed class WelcomeTests
     {
         Assert.Equal("“Neon Harbour” is playing, so its lyrics are on your desktop now.", OnboardingCopy.Done("Neon Harbour"));
         Assert.Equal("Play a song in any music app and its lyrics appear on your desktop.", OnboardingCopy.Done(null));
-        Assert.Equal("Wallpaper: Match the music", OnboardingCopy.WallpaperRow(new AppSettings()));
+        Assert.Equal("Wallpaper: Custom Mix", OnboardingCopy.WallpaperRow(new AppSettings()));
         Assert.Equal("Wallpaper: Imported image or video", OnboardingCopy.WallpaperRow(new AppSettings { BackgroundMode = "custom" }));
         Assert.Equal("Beach.mp4", OnboardingCopy.WallpaperDetail(new AppSettings { BackgroundMode = "custom", WallpaperName = "Beach.mp4" }));
         Assert.StartsWith("Beach.mp4: ", OnboardingCopy.LookSummary(new AppSettings { BackgroundMode = "custom", WallpaperName = "Beach.mp4" }));

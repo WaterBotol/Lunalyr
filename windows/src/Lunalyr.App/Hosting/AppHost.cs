@@ -186,7 +186,7 @@ internal sealed partial class AppHost
     {
         var engine = new RenderEngine(new RenderEngineOptions { Performance = PerformanceFrom(_settings.Current) }, Log);
         // Every background and composition, as the settings preview has them (WallpaperLayers); the backgroundMode
-        // setting and "Match the music" pick the background (AppController.Wallpaper.cs).
+        // setting and "Custom Mix" pick the background (AppController.Wallpaper.cs).
         foreach (var factory in WallpaperLayers.Factories(readings.WordBreaker, Log)) engine.RegisterLayer(factory);
         _settings.Changed += (_, e) => engine.SetPerformance(PerformanceFrom(e.NewValue));
         _log.Info($"Wallpaper layers: {string.Join(", ", engine.LayerIds.Order())}.");
@@ -254,7 +254,7 @@ internal sealed partial class AppHost
             var controller = new AppController(_sessions, lookup, _wallpaper, _settings.Current, offsets, readings,
                 PlaybackGuard.Process, Log, _connectivity, new AppControllerOptions
                 {
-                    // "Match the music" carries on from where its rotation got to.
+                    // "Custom Mix" carries on from where its rotation got to.
                     LayoutCursorChanged = cursor => _settings.Update(s => s with { RotateLayoutsCursor = cursor }),
                     ReduceMotion = ReduceMotion,
                 });

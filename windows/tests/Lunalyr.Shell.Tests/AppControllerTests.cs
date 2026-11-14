@@ -150,7 +150,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         Assert.Equal("Spotify", controller.Status.Player);
         Assert.True(_renderer.IsRunning);
         Assert.Equal("editorial", _renderer.Layers.Composition);
-        // Match the music (the default type) gives the song one of the effects or patterns.
+        // Custom Mix (the default type) gives the song one of the effects or patterns.
         Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
         Assert.Equal(60, _renderer.FrameRate);
     }
@@ -533,7 +533,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         var controller = Controller();
         controller.Start();
         await WaitUntil(() => _lyrics.Queries.Count == 1);
-        // Turned to Match the music mid-lookup, then an unrelated change: nothing is decided without the lyrics.
+        // Turned to Custom Mix mid-lookup, then an unrelated change: nothing is decided without the lyrics.
         controller.ApplySettings(controller.Settings with { LyricComposition = "automatic" });
         controller.ApplySettings(controller.Settings with { LyricOffset = 0.5 });
         Assert.Null(controller.MatchedComposition);

@@ -167,7 +167,7 @@ internal static partial class WallpaperPage
     private static StackPanel MatchSection(SettingsContext ctx)
     {
         var section = new StackPanel { Spacing = 4 };
-        Section(section, "Match the music");
+        Section(section, "Custom Mix");
         section.Children.Add(EffectMenu(ctx));
         AddEffectOptions(section, ctx);
         section.Children.Add(PatternMenu(ctx));
@@ -200,13 +200,13 @@ internal static partial class WallpaperPage
     private static Card PatternMenu(SettingsContext ctx) => StyleMenu(ctx, "Pattern", "", WallpaperCatalog.Patterns,
         s => s.PatternStyle, (s, v) => s with { PatternStyle = v }, SettingsCopy.PatternsNotYet);
 
-    /// <summary>"Match the music" and every style the catalogue has; disabled, with why, while it has none.</summary>
+    /// <summary>"Custom Mix" and every style the catalogue has; disabled, with why, while it has none.</summary>
     private static Card StyleMenu(SettingsContext ctx, string title, string glyph, IReadOnlyList<WallpaperStyle> styles,
         Func<AppSettings, string> get, Func<AppSettings, string, AppSettings> set, string notYet)
     {
-        if (styles.Count == 0) return Card(title, null, glyph, FixedCombo("Match the music"), notYet: notYet);
+        if (styles.Count == 0) return Card(title, null, glyph, FixedCombo("Custom Mix"), notYet: notYet);
         var choices = SettingsCopy.StyleChoices(styles.Select(s => (s.Id, s.Title, s.Detail)));
-        // A pinned style this build doesn't have shows as Match the music (which is what draws).
+        // A pinned style this build doesn't have shows as Custom Mix (which is what draws).
         return Card(title, null, glyph, Combo(ctx, choices, s => choices.Any(c => c.Value == get(s)) ? get(s) : "", set));
     }
 
@@ -273,14 +273,14 @@ internal static partial class WallpaperPage
 
     /// <summary>
     /// GPU effects: rows of the effects' own options, added to <paramref name="section"/> under the "GPU effect" menu
-    /// (in the Match the music and GPU effects sections). Implement in <c>WallpaperPage.Effects.cs</c>; it is called once
+    /// (in the Custom Mix and GPU effects sections). Implement in <c>WallpaperPage.Effects.cs</c>; it is called once
     /// per section, so make fresh controls each time.
     /// </summary>
     static partial void AddEffectOptions(StackPanel section, SettingsContext ctx);
 
     /// <summary>
     /// Line patterns: rows of the patterns' own options, added to <paramref name="section"/> under the "Pattern" menu (in
-    /// the Match the music and Line patterns sections). Implement in <c>WallpaperPage.Patterns.cs</c>; called once per
+    /// the Custom Mix and Line patterns sections). Implement in <c>WallpaperPage.Patterns.cs</c>; called once per
     /// section.
     /// </summary>
     static partial void AddPatternOptions(StackPanel section, SettingsContext ctx);

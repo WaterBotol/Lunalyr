@@ -26,7 +26,7 @@ public static class EntranceSupport
         };
     }
 
-    /// <summary>The entrance as the menu lists it. <paramref name="layout"/> is null for Match the music, which marks nothing.</summary>
+    /// <summary>The entrance as the menu lists it. <paramref name="layout"/> is null for Custom Mix, which marks nothing.</summary>
     public static string MenuTitle(WordArrival arrival, CompositionKind? layout) =>
         layout is { } kind && !AppliesToSungWords(arrival, kind) ? $"{arrival.Title()} (whole lines only)" : arrival.Title();
 
@@ -36,7 +36,7 @@ public static class EntranceSupport
 
     /// <summary>
     /// Under the entrance menu: why the chosen entrance, or part of the custom mix, doesn't show on word-timed lyrics in
-    /// this layout. Null when it all shows (and always for Match the music).
+    /// this layout. Null when it all shows (and always for Custom Mix).
     /// </summary>
     public static string? Note(WordArrival selected, CompositionKind? layout, IReadOnlyList<WordArrival> mix)
     {

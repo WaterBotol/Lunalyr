@@ -1,4 +1,4 @@
-// The effects and patterns this build can draw, as the settings menus and "Match the music" see them. The layers that
+// The effects and patterns this build can draw, as the settings menus and "Custom Mix" see them. The layers that
 // draw them fill the lists from their own files by implementing the partial methods below (docs/APP-SHELL.md,
 // "Wallpaper types: hooks for other layers"); nothing here names an effect or a pattern itself.
 
@@ -6,12 +6,12 @@ using Lunalyr.Core.Compositions;
 
 namespace Lunalyr.Shell.Wallpaper;
 
-/// <summary>One GPU effect or line pattern: its id, what the menus call it and where it sits for "Match the music".</summary>
+/// <summary>One GPU effect or line pattern: its id, what the menus call it and where it sits for "Custom Mix".</summary>
 /// <param name="Id">Stable id, saved in <c>shaderStyle</c> / <c>patternStyle</c>; the layer is registered as
 /// <c>shader.&lt;Id&gt;</c> or <c>pattern.&lt;Id&gt;</c>.</param>
 /// <param name="Title">The menu's name for it ("Aurora").</param>
 /// <param name="Character">Where it sits on energy, density and organic (0...1 each).</param>
-/// <param name="Heavy">Expensive per pixel: "Match the music" leaves it out while power is being saved.</param>
+/// <param name="Heavy">Expensive per pixel: "Custom Mix" leaves it out while power is being saved.</param>
 /// <param name="Detail">An optional caption for the menu's help text.</param>
 public sealed record WallpaperStyle(string Id, string Title, WallpaperCharacter Character, bool Heavy = false, string? Detail = null)
 {
@@ -20,7 +20,7 @@ public sealed record WallpaperStyle(string Id, string Title, WallpaperCharacter 
 
 /// <summary>
 /// The GPU effects and line patterns registered in this build. Empty until their layers land: the Wallpaper page then
-/// offers only "Match the music" in their menus, and the types draw the album colours.
+/// offers only "Custom Mix" in their menus, and the types draw the album colours.
 /// </summary>
 public static partial class WallpaperCatalog
 {

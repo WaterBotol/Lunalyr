@@ -352,7 +352,7 @@ public sealed class LunalyrExtras
         return saved;
     }
 
-    /// <summary>The next layout: Match the music, then each layout in turn, then Match the music again.</summary>
+    /// <summary>The next layout: Custom Mix, then each layout in turn, then Custom Mix again.</summary>
     public void CycleLayout()
     {
         // A layout remembered for this song or artist is cycled in place, so the change shows and stays with the music.

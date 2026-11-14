@@ -136,7 +136,7 @@ public sealed record TrayFlyoutState
     public static IReadOnlyList<BackgroundChoice> Backgrounds { get; } =
         [.. SettingsCopy.WallpaperTypes.Select(t => new BackgroundChoice(t.Value, t.ShortTitle, t.Summary) { Glyph = t.Glyph, Available = t.Available, Title = t.Title })];
 
-    /// <summary>"Match the music" and every composition, in the settings' order.</summary>
+    /// <summary>"Custom Mix" and every composition, in the settings' order.</summary>
     public static IReadOnlyList<LayoutChoice> Layouts { get; } = BuildLayouts();
 
     private static LayoutChoice[] BuildLayouts()

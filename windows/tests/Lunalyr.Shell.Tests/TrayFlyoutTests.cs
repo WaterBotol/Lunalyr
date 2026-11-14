@@ -251,7 +251,7 @@ public sealed class TrayFlyoutTests
     public void TheLayoutPickerOffersMatchTheMusicAndEveryComposition()
     {
         Assert.Equal(AppSettings.Compositions, TrayFlyoutState.Layouts.Select(l => l.Value));
-        Assert.Equal("Match the music", TrayFlyoutState.Layouts[0].Title);
+        Assert.Equal("Custom Mix", TrayFlyoutState.Layouts[0].Title);
         Assert.All(TrayFlyoutState.Layouts, l => Assert.False(string.IsNullOrWhiteSpace(l.Title)));
         Assert.Equal(TrayFlyoutState.Layouts.Count, TrayFlyoutState.Layouts.Select(l => l.Title).Distinct().Count());
     }

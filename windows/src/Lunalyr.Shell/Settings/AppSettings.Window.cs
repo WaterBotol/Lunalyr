@@ -1,6 +1,6 @@
 // Settings added with the settings window (milestone 5). The keys and defaults are the Mac's UserDefaults names and
 // values. The Mac's per-layout entrance lookup (Settings.arrival(in:), on lines that trace back to the squashed Verso
-// import) is re-implemented here from its behaviour: with Match the music, an entrance saved under "automatic" applies
+// import) is re-implemented here from its behaviour: with Custom Mix, an entrance saved under "automatic" applies
 // to every layout it picks; otherwise a layout's own entry, else the one entrance for all. The custom mix
 // (custom.wordEntranceMix) and the sliders' ranges (LyricStylePage) are Lunalyr's own and are ported as they are.
 
@@ -12,7 +12,7 @@ namespace Lunalyr.Shell.Settings;
 
 public sealed partial record AppSettings
 {
-    /// <summary>The key "Match the music"'s own entrance is saved under in <see cref="WordArrivalByStyle"/>.</summary>
+    /// <summary>The key "Custom Mix"'s own entrance is saved under in <see cref="WordArrivalByStyle"/>.</summary>
     public const string AllLayoutsKey = "automatic";
 
     /// <summary>"Spread": how far Constellation and Constellation + Editorial throw their words apart, 0.4–1.8 (Mac <c>constellationSpread</c>).</summary>
@@ -29,7 +29,7 @@ public sealed partial record AppSettings
 
     /// <summary>
     /// An entrance per layout (Mac <c>custom.wordArrivalByStyle</c>): composition id → <see cref="WordArrival"/> raw
-    /// value, and "automatic" for Match the music's own. A layout without an entry uses <see cref="WordArrival"/>.
+    /// value, and "automatic" for Custom Mix's own. A layout without an entry uses <see cref="WordArrival"/>.
     /// </summary>
     public IReadOnlyDictionary<string, string> WordArrivalByStyle { get; init; } = new Dictionary<string, string>();
 
@@ -41,7 +41,7 @@ public sealed partial record AppSettings
     /// <summary>The slider ranges, from the Mac's Lyric style page.</summary>
     public const double SpreadMin = 0.4, SpreadMax = 1.8, LinksMin = 0, LinksMax = 0.6, RepeatsMin = 0, RepeatsMax = 1.8;
 
-    /// <summary>Where the Lyric style page's entrance controls read and write: the chosen layout, or "automatic" for Match the music.</summary>
+    /// <summary>Where the Lyric style page's entrance controls read and write: the chosen layout, or "automatic" for Custom Mix.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string EntranceKey => LyricComposition is { Length: > 0 } c ? c : AllLayoutsKey;
 
@@ -105,7 +105,7 @@ public sealed partial record AppSettings
         var perLayout = ValueMap.Empty;
         if (LyricComposition == AllLayoutsKey && byStyle.TryGetValue(AllLayoutsKey, out var all))
         {
-            // Match the music's own entrance is for every layout it picks.
+            // Custom Mix's own entrance is for every layout it picks.
             reveal = SceneReveal(all);
         }
         else

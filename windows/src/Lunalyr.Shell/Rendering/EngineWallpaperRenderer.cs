@@ -47,7 +47,7 @@ public sealed class EngineWallpaperRenderer : IWallpaperRenderer
 
     public void SetScene(SceneSnapshot scene) => _engine.SetScene(scene);
 
-    /// <summary>The layers registered with the engine: new compositions join "Match the music" as they are registered.</summary>
+    /// <summary>The layers registered with the engine: new compositions join "Custom Mix" as they are registered.</summary>
     public IReadOnlyCollection<string> LayerIds => _engine.LayerIds;
 
     /// <summary>

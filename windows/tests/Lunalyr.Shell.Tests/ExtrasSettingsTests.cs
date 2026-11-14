@@ -3,7 +3,7 @@ using Lunalyr.Shell.Settings;
 
 namespace Lunalyr.Shell.Tests;
 
-/// <summary>The settings behind the wallpaper extras: credits, interludes, highlight colours and Match the music.</summary>
+/// <summary>The settings behind the wallpaper extras: credits, interludes, highlight colours and Custom Mix.</summary>
 public class ExtrasSettingsTests
 {
     [Fact]
@@ -39,7 +39,7 @@ public class ExtrasSettingsTests
         Assert.Equal(5, repaired.RotateLayoutCounts["echo"]);
         Assert.Equal(0, repaired.RotateLayoutCounts["cutout"]);
         Assert.Equal(0, repaired.RotateLayoutsCursor);
-        Assert.Equal("automatic", repaired.LyricComposition); // Match the music is a choice of its own
+        Assert.Equal("automatic", repaired.LyricComposition); // Custom Mix is a choice of its own
         Assert.Equal("#2BD96B", new AppSettings { LyricHighlightCustom = " #2bd96b " }.Normalized().LyricHighlightCustom);
     }
 

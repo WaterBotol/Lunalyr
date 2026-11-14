@@ -1,4 +1,4 @@
-// Windows' own stand-in for the Mac's TrackMood (which is on the never-port list): what "Match the music" knows about a
+// Windows' own stand-in for the Mac's TrackMood (which is on the never-port list): what "Custom Mix" knows about a
 // song, worked out from what Windows has -- the cover's colours, the lyric's pace and evenness, its line lengths -- and
 // the choice of layout made from it when the rotation is off. Written from docs/compositions/matching.md, not from
 // any Mac code.
@@ -98,7 +98,7 @@ public readonly record struct TrackCharacter(double Energy, double Organic, int 
 }
 
 /// <summary>
-/// "Match the music" with the rotation off: a layout chosen by the song's character alone, among the layouts this build
+/// "Custom Mix" with the rotation off: a layout chosen by the song's character alone, among the layouts this build
 /// has. Deliberately coarse, since the layout changes how a whole song reads: dense, machine-even songs take the
 /// linked web (Constellation), sparse, played-by-hand ones the echo, and everything between Editorial or Scattered by
 /// the song's seed. A layout that is not available gives way to the next that is.
@@ -118,7 +118,7 @@ public static class LayoutMatch
 }
 
 /// <summary>
-/// "Match the music" (the Mac's <c>LyricLayoutRotation</c>, Lunalyr's own, ported): each new song takes the next layout
+/// "Custom Mix" (the Mac's <c>LyricLayoutRotation</c>, Lunalyr's own, ported): each new song takes the next layout
 /// in a rotation the user sets up -- which layouts take part and how many songs in a row each gets (0 leaves one out).
 /// Layouts that don't suit a song's energy are skipped for that song. A song keeps its layout for as long as the app
 /// runs, so replaying it looks the same. On Windows the rotation steps only through the layouts this build has.

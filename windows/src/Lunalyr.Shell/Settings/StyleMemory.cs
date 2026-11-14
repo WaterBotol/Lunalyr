@@ -15,11 +15,11 @@ namespace Lunalyr.Shell.Settings;
 /// A lyric style remembered for one recording or for everything by one artist: the layout and the text colour. A
 /// song's own memory wins over its artist's; the general settings apply where neither exists.
 /// </summary>
-/// <param name="Composition">A composition id, or "automatic" for Match the music; null leaves the layout to the settings.</param>
+/// <param name="Composition">A composition id, or "automatic" for Custom Mix; null leaves the layout to the settings.</param>
 /// <param name="Colour">A colour mode's raw value; null leaves the colour to the settings.</param>
 public sealed record RememberedStyle(string? Composition, string? Colour)
 {
-    /// <summary>The layout remembered, or null for none or Match the music.</summary>
+    /// <summary>The layout remembered, or null for none or Custom Mix.</summary>
     public CompositionKind? Layout => SettingsCopy.Kind(Composition);
 
     /// <summary>The colour remembered ("static" reads as Album drift), or null.</summary>
@@ -90,7 +90,7 @@ public static class StyleMemory
 
     /// <summary>
     /// The settings as the music playing sees them: the layout and colour remembered for it in place of the ones chosen
-    /// (a remembered "automatic" means Match the music even where a layout is chosen), the rest as chosen.
+    /// (a remembered "automatic" means Custom Mix even where a layout is chosen), the rest as chosen.
     /// </summary>
     public static AppSettings Applied(AppSettings settings, RememberedStyle? style)
     {
@@ -182,11 +182,11 @@ public static class StyleMemory
     public static string RememberedCount(int songs, int artists) =>
         $"{songs} {(songs == 1 ? "song" : "songs")} · {artists} {(artists == 1 ? "artist" : "artists")} remembered";
 
-    /// <summary>"Match the music · Album drift": what a remembered style holds.</summary>
+    /// <summary>"Custom Mix · Album drift": what a remembered style holds.</summary>
     public static string Describe(RememberedStyle style)
     {
         ArgumentNullException.ThrowIfNull(style);
-        var layout = style.Composition == AppSettings.AllLayoutsKey ? "Match the music" : style.Layout?.Title() ?? "Match the music";
+        var layout = style.Composition == AppSettings.AllLayoutsKey ? "Custom Mix" : style.Layout?.Title() ?? "Custom Mix";
         return style.ColourMode is { } colour ? $"{layout} · {colour.Title()}" : layout;
     }
 
@@ -199,7 +199,7 @@ public static class StyleMemory
         ArgumentNullException.ThrowIfNull(style);
         if (aspect == StyleAspect.Colour) return style.ColourMode?.Title();
         if (style.Composition is not { } raw) return null;
-        return raw == AppSettings.AllLayoutsKey ? "Match the music" : style.Layout?.Title() ?? "Match the music";
+        return raw == AppSettings.AllLayoutsKey ? "Custom Mix" : style.Layout?.Title() ?? "Custom Mix";
     }
 
     public static string ScopeName(StyleScope scope) => scope == StyleScope.Song ? "song" : "artist";

@@ -64,7 +64,7 @@ public sealed partial record AppSettings
 
     /// <summary>
     /// "Reveal sung words" per layout (Mac <c>custom.wordRevealByStyle</c>): composition id → on, and "automatic" for
-    /// every layout Match the music picks. A layout without an entry reveals its words.
+    /// every layout Custom Mix picks. A layout without an entry reveals its words.
     /// </summary>
     public IReadOnlyDictionary<string, bool> WordRevealByStyle { get; init; } = new Dictionary<string, bool>();
 
@@ -80,7 +80,7 @@ public sealed partial record AppSettings
     [System.Text.Json.Serialization.JsonIgnore]
     public LyricColourMode ColourMode => LyricColourModes.SavedChoice(LyricColourMode) ?? LyricColourModes.DefaultMode;
 
-    /// <summary>The layout the word controls stand for when reading back: the chosen one, or Scattered for Match the music.</summary>
+    /// <summary>The layout the word controls stand for when reading back: the chosen one, or Scattered for Custom Mix.</summary>
     private CompositionKind ControlsLayout => SettingsCopy.Kind(LyricComposition) ?? CompositionKind.Scattered;
 
     /// <summary>The entrance <paramref name="layout"/> draws its words with (the Mac's <c>arrival(in:)</c>).</summary>

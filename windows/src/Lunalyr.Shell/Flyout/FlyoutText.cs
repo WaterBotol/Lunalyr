@@ -189,8 +189,8 @@ public static class FlyoutText
 
     public const string CreditsHint = "Shows who wrote and produced the song after its title";
 
-    /// <summary>The Mac's "Match the music" composition (<c>automatic</c>).</summary>
-    public const string MatchTheMusic = "Match the music";
+    /// <summary>The Mac's "Custom Mix" composition (<c>automatic</c>).</summary>
+    public const string MatchTheMusic = "Custom Mix";
 
     // ---- Footer (MenuBarFooter) ----
 

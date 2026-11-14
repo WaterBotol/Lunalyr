@@ -1,4 +1,4 @@
-// The line patterns in the Wallpaper page's menus and "Match the music": Windows' own names and characters from
+// The line patterns in the Wallpaper page's menus and "Custom Mix": Windows' own names and characters from
 // Lunalyr.Core.Backgrounds.LinePatternCatalog (the Mac's tables are Verso). Implements the wallpaper-types hook
 // (docs/APP-SHELL.md, "Hooks for other layers").
 using Lunalyr.Core.Backgrounds;

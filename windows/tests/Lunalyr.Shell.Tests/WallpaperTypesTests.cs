@@ -118,7 +118,7 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         var picture = Path.Combine(_folder, "picture.png");
         await File.WriteAllBytesAsync(picture, await Png(), TestContext.Current.CancellationToken);
         var controller = Start(new AppSettings());
-        // Match the music, GPU effects and Line patterns draw one of the effects or patterns; Visualisers comes later.
+        // Custom Mix, GPU effects and Line patterns draw one of the effects or patterns; Visualisers comes later.
         Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
         string Draws(AppSettings settings)
         {
@@ -136,7 +136,7 @@ public sealed class WallpaperTypesTests : IAsyncDisposable
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "custom" })); // nothing imported
         Assert.Equal("gradient", Draws(new AppSettings { BackgroundMode = "custom", WallpaperPath = Path.Combine(_folder, "gone.png") }));
         Assert.Equal("custom", Draws(new AppSettings { BackgroundMode = "custom", WallpaperPath = picture }));
-        // Without a music video controller (or a video), Music video draws its fallback, Match the music by default.
+        // Without a music video controller (or a video), Music video draws its fallback, Custom Mix by default.
         Assert.True(TestBackgrounds.IsGpu(Draws(new AppSettings { BackgroundMode = "musicVideo" })));
         Assert.Equal("colour", Draws(new AppSettings { BackgroundMode = "musicVideo", MusicVideoFallback = "colourOnly" }));
     }

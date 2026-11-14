@@ -9,7 +9,7 @@ using Lunalyr.Shell.Wallpaper;
 namespace Lunalyr.Shell;
 
 // The wallpaper type (backgroundMode) as a background layer id: docs/APP-SHELL.md, "Wallpaper types (milestone 6)".
-// "Match the music", GPU effects and Line patterns draw the effect or pattern WallpaperMatch picks for the song. A song's
+// "Custom Mix", GPU effects and Line patterns draw the effect or pattern WallpaperMatch picks for the song. A song's
 // character is read once, when its lyrics (or the verdict that it has none) arrive, and kept for the session, so a late
 // cover or a second lookup never changes its wallpaper mid-song; the pick itself follows the settings at once.
 public sealed partial class AppController
@@ -24,7 +24,7 @@ public sealed partial class AppController
     /// <summary>The character the wallpaper is matched to: the song on screen's once read, else the last one's (kept while nothing plays).</summary>
     private TrackCharacter? _wallpaperCharacter;
 
-    /// <summary>The effect or pattern "Match the music" draws for the song on screen, or null before one is chosen.</summary>
+    /// <summary>The effect or pattern "Custom Mix" draws for the song on screen, or null before one is chosen.</summary>
     public WallpaperPick? MatchedWallpaper
     {
         get
@@ -86,9 +86,9 @@ public sealed partial class AppController
                 return video ?? BackgroundLayerFor(settings with { BackgroundMode = settings.MusicVideoFallback });
             }
         }
-        // Match the music: an animated cover, when the album has one, wins (AppController.MotionArtwork.cs).
+        // Custom Mix: an animated cover, when the album has one, wins (AppController.MotionArtwork.cs).
         if (settings.BackgroundMode == "auto" && MotionLayerFor(settings) is { } motion) return motion;
-        // Match the music, GPU effects, Line patterns.
+        // Custom Mix, GPU effects, Line patterns.
         TrackCharacter? song;
         lock (_gate) song = _wallpaperCharacter;
         return Pick(settings, song ?? TrackCharacter.Neutral, WallpaperPower.SparesGpu(power)).LayerId ?? FallbackBackground;
@@ -134,7 +134,7 @@ public sealed partial class AppController
             title = track.Title;
         }
         if (settings.BackgroundMode is not ("auto" or "shader" or "pattern" or "musicVideo") || before == after) return;
-        _app.Info($"Match the music: \"{title}\" takes the {after} wallpaper.");
+        _app.Info($"Custom Mix: \"{title}\" takes the {after} wallpaper.");
         PublishLayers();
     }
 

@@ -3,7 +3,7 @@ using Lunalyr.Core.Compositions;
 namespace Lunalyr.Core.Tests.Compositions;
 
 /// <summary>
-/// "Match the music" for the wallpaper (WallpaperMatch). The catalogue comes from the layers that draw effects and
+/// "Custom Mix" for the wallpaper (WallpaperMatch). The catalogue comes from the layers that draw effects and
 /// patterns, so these tests use invented ones spread over the three axes; the songs are the Mac test's.
 /// </summary>
 public class WallpaperMatchTests

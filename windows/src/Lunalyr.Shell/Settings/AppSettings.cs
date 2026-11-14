@@ -61,7 +61,7 @@ public sealed partial record AppSettings
     /// <summary>The custom highlight colour, <c>#RRGGBB</c> (Mac <c>custom.lyricHighlightCustom</c>).</summary>
     public string LyricHighlightCustom { get; init; } = Core.Colour.LyricHighlight.DefaultCustomHex;
 
-    /// <summary>With the layout on "automatic" (Match the music), each new song takes the next layout in a rotation (Mac <c>custom.rotateLayouts</c>); off chooses by the song's character alone.</summary>
+    /// <summary>With the layout on "automatic" (Custom Mix), each new song takes the next layout in a rotation (Mac <c>custom.rotateLayouts</c>); off chooses by the song's character alone.</summary>
     public bool RotateLayouts { get; init; } = true;
 
     /// <summary>Songs in a row per layout in the rotation, 0–5 (0 leaves it out); a layout missing here gets 1 (Mac <c>custom.rotateLayoutCounts</c>).</summary>
@@ -87,7 +87,7 @@ public sealed partial record AppSettings
     // ---- Wallpaper ----
 
     /// <summary>
-    /// The wallpaper type, the Mac's <c>backgroundMode</c> raw values: "auto" (Match the music, the default), "pattern",
+    /// The wallpaper type, the Mac's <c>backgroundMode</c> raw values: "auto" (Custom Mix, the default), "pattern",
     /// "shader", "colourOnly", "visualizer", "desktop" (Your wallpaper), "custom" (Imported image or video),
     /// "musicVideo". Windows' earlier "gradient" is read as Colour only with Album gradient off (see
     /// AppSettings.Wallpaper.cs); AppController.Wallpaper.cs turns the type into a background layer.

@@ -5,7 +5,7 @@ using Lunalyr.Core.Lyrics;
 namespace Lunalyr.Core.Tests.Compositions;
 
 /// <summary>
-/// "Match the music": the layout rotation (ported from the Mac's MatchTheMusicTests) and Windows' own track character,
+/// "Custom Mix": the layout rotation (ported from the Mac's MatchTheMusicTests) and Windows' own track character,
 /// which stands in for the Mac's TrackMood. The Mac's moods come from a genre, a pace and a cover saturation; Windows has
 /// no genre, so the same songs are described by pace and cover alone.
 /// </summary>

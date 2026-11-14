@@ -4,14 +4,14 @@ using Lunalyr.Shell.Settings;
 
 namespace Lunalyr.Shell;
 
-// "Match the music": with the layout setting on "automatic", each song gets a composition once, when its lyrics (or
+// "Custom Mix": with the layout setting on "automatic", each song gets a composition once, when its lyrics (or
 // the verdict that there are none) arrive: the next in the rotation that suits the song's character, or with the
 // rotation off the layout its character matches (docs/compositions/matching.md). A song keeps its layout for as long
 // as the app runs -- a second lookup or a late cover never changes it mid-song -- and only compositions the renderer
 // has registered are chosen, so new ones join as they are added.
 public sealed partial class AppController
 {
-    /// <summary>The <c>lyricComposition</c> value for "Match the music".</summary>
+    /// <summary>The <c>lyricComposition</c> value for "Custom Mix".</summary>
     public const string AutomaticComposition = "automatic";
 
     private const int RememberedLayouts = 512;
@@ -23,14 +23,14 @@ public sealed partial class AppController
     private string? _layout;
     private string? _layoutTrack;
 
-    /// <summary>The composition "Match the music" chose for the song on screen, or null.</summary>
+    /// <summary>The composition "Custom Mix" chose for the song on screen, or null.</summary>
     public string? MatchedComposition
     {
         get { lock (_gate) return _layout; }
     }
 
     /// <summary>
-    /// The composition drawn for the music playing now: the chosen one, the one remembered for it, or Match the music's
+    /// The composition drawn for the music playing now: the chosen one, the one remembered for it, or Custom Mix's
     /// choice (what the settings' preview draws too).
     /// </summary>
     public string ShownComposition => CompositionFor(Settings);
@@ -104,7 +104,7 @@ public sealed partial class AppController
             title = track.Title;
         }
 
-        _app.Info($"Match the music: \"{title}\" takes the {pick} layout.");
+        _app.Info($"Custom Mix: \"{title}\" takes the {pick} layout.");
         PublishLayers();
         if (cursor is { } moved) _options.LayoutCursorChanged?.Invoke(moved);
     }
@@ -116,7 +116,7 @@ public sealed partial class AppController
         lock (_gate)
         {
             if (!SameCounts(old.RotateLayoutCounts, settings.RotateLayoutCounts)) _rotation?.SetCounts(settings.RotateLayoutCounts);
-            // Turned to "Match the music" (or its rotation switched): the song on screen is matched afresh.
+            // Turned to "Custom Mix" (or its rotation switched): the song on screen is matched afresh.
             if (layoutChanged || old.LyricComposition != settings.LyricComposition || old.RotateLayouts != settings.RotateLayouts)
                 ResetMatchedLayoutLocked();
         }

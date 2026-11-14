@@ -26,8 +26,8 @@ public sealed class OnboardingReworkTests
         Assert.Contains("only to the Discord app on this PC", OnboardingCopy.DiscordPrivacy);
         Assert.Contains("clears when playback stops", OnboardingCopy.DiscordPrivacy);
         Assert.Contains("Apple", OnboardingCopy.DiscordPrivacy); // the cover lookup is named
-        Assert.Equal("Match the music picks a layout to suit each song.", OnboardingCopy.LayoutCaption(null));
-        Assert.Equal("Match the music picks a layout to suit each song.", OnboardingCopy.LayoutCaption("automatic"));
+        Assert.Equal("Custom Mix picks a layout to suit each song.", OnboardingCopy.LayoutCaption(null));
+        Assert.Equal("Custom Mix picks a layout to suit each song.", OnboardingCopy.LayoutCaption("automatic"));
         Assert.Equal(SettingsCopy.Layouts.Single(l => l.Value == "broadside").Detail, OnboardingCopy.LayoutCaption("broadside"));
         // Sentence case, no periods in titles.
         foreach (var step in OnboardingSteps.All)
@@ -62,7 +62,7 @@ public sealed class OnboardingReworkTests
     public void TheLookStepShowsTheLayoutInUse()
     {
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown(null));
-        Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("automatic")); // Windows' Match the music is the Mac's nil
+        Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("automatic")); // Windows' Custom Mix is the Mac's nil
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("portal"));
         var withEditorial = LayoutChoices.Shown("constellationEditorial");
         Assert.Equal("constellationEditorial", withEditorial[0]);
@@ -87,7 +87,7 @@ public sealed class OnboardingReworkTests
     {
         Assert.All(LayoutChoices.Featured, id => Assert.Contains(id, AppSettings.Compositions));
         Assert.Equal(14, LayoutChoices.AllCount);
-        Assert.Equal("10 more in Settings, with Match the music.", OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - LayoutChoices.Featured.Count));
+        Assert.Equal("10 more in Settings, with Custom Mix.", OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - LayoutChoices.Featured.Count));
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("no-such-layout")); // an unknown id leads nothing
     }
 

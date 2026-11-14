@@ -15,10 +15,10 @@ public sealed partial record AppSettings
     /// <summary>Colour only › "Album gradient": the cover's colours as a moving gradient (on), or the album colour field (off). Mac <c>custom.albumGradientWallpaper</c>.</summary>
     public bool AlbumGradientWallpaper { get; init; } = true;
 
-    /// <summary>The GPU effect chosen in its menu (an id from <c>WallpaperCatalog.Effects</c>), or "" for Match the music. Mac <c>shaderStyle</c>.</summary>
+    /// <summary>The GPU effect chosen in its menu (an id from <c>WallpaperCatalog.Effects</c>), or "" for Custom Mix. Mac <c>shaderStyle</c>.</summary>
     public string ShaderStyle { get; init; } = "";
 
-    /// <summary>The line pattern chosen in its menu (an id from <c>WallpaperCatalog.Patterns</c>), or "" for Match the music. Mac <c>patternStyle</c> (an Int there).</summary>
+    /// <summary>The line pattern chosen in its menu (an id from <c>WallpaperCatalog.Patterns</c>), or "" for Custom Mix. Mac <c>patternStyle</c> (an Int there).</summary>
     public string PatternStyle { get; init; } = "";
 
     /// <summary>Imported image or video: Lunalyr's own copy of the file, or "". Mac <c>custom.wallpaperPath</c>.</summary>
@@ -57,7 +57,7 @@ public sealed partial record AppSettings
 
     // ---- Covers ----
 
-    /// <summary>"Use animated covers" (Match the music). Mac <c>useMotionArtwork</c>.</summary>
+    /// <summary>"Use animated covers" (Custom Mix). Mac <c>useMotionArtwork</c>.</summary>
     public bool UseMotionArtwork { get; init; } = true;
 
     /// <summary>How an animated cover fits the screen: "fill", "fillTop", "fillBottom", "fit". Mac <c>motionPlacement</c>.</summary>
@@ -97,7 +97,7 @@ public sealed partial record AppSettings
     /// <summary>
     /// The wallpaper settings in range. <c>backgroundMode</c> "gradient" (Windows' own value until milestone 6: the album
     /// colour field) becomes the Mac's Colour only with Album gradient off, which draws the same; "colour" and
-    /// "colorOnly" become Colour only; anything unknown is Match the music, the Mac's default.
+    /// "colorOnly" become Colour only; anything unknown is Custom Mix, the Mac's default.
     /// </summary>
     private AppSettings NormalizedWallpaper()
     {

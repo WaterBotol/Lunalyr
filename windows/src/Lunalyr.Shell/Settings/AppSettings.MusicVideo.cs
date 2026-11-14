@@ -69,7 +69,7 @@ public sealed partial record AppSettings
 
     static partial void NormalizeMusicVideo(ref AppSettings settings) => settings = settings with
     {
-        // Never falls back to itself; anything unknown is Match the music.
+        // Never falls back to itself; anything unknown is Custom Mix.
         MusicVideoFallback = MusicVideoFallbacks.Contains(settings.MusicVideoFallback) ? settings.MusicVideoFallback : "auto",
         MusicVideoSearch = MusicVideoSearchModes.Contains(settings.MusicVideoSearch) ? settings.MusicVideoSearch : "site",
         MusicVideoDim = InRange(settings.MusicVideoDim, 0, MusicVideoDimMax, 0.35),

@@ -31,16 +31,16 @@ public static class SettingsCopy
 
     // ---- Lyric style ----
 
-    /// <summary>What Match the music does with the layout (the Mac's <c>WorkspaceCopy.automaticLayoutDetail</c>).</summary>
+    /// <summary>What Custom Mix does with the layout (the Mac's <c>WorkspaceCopy.automaticLayoutDetail</c>).</summary>
     public const string AutomaticLayoutDetail =
         "Picks Constellation, Echo, Editorial or Scattered to suit each track’s energy and feel.";
 
     public const string ReduceMotionEntrances = "Animation effects are off in Windows, so every entrance plays as a simple fade.";
 
-    /// <summary>Every layout, "Match the music" first, in the settings' order.</summary>
+    /// <summary>Every layout, "Custom Mix" first, in the settings' order.</summary>
     public static IReadOnlyList<SettingsChoice> Layouts { get; } =
     [
-        new(AppSettings.AllLayoutsKey, "Match the music", AutomaticLayoutDetail),
+        new(AppSettings.AllLayoutsKey, "Custom Mix", AutomaticLayoutDetail),
         .. AppSettings.Compositions.Where(id => id != AppSettings.AllLayoutsKey)
             .Select(id => Kind(id) is { } kind ? new SettingsChoice(id, kind.Title(), kind.Detail()) : new SettingsChoice(id, id)),
     ];
@@ -194,7 +194,7 @@ public static class SettingsCopy
     /// </summary>
     public static IReadOnlyList<WallpaperType> WallpaperTypes { get; } =
     [
-        new("auto", "Match the music", "Match", "",
+        new("auto", "Custom Mix", "Mix", "",
             "Each song picks a look to suit its energy and feel."),
         new("visualizer", "Visualisers", "Visualiser", "", "Scenes that move with the music itself, with System audio on."),
         new("shader", "GPU effects", "Effects", "", "Plasma, aurora, nebulae and more, drawn on the GPU in the album’s colours."),
@@ -219,7 +219,7 @@ public static class SettingsCopy
         new("fit", "Fit whole frame", "Nothing cropped; the sides are left black."),
     ];
 
-    public const string MatchTheMusicPicks = "Match the music picks one of each per song; choose one to pin it.";
+    public const string MatchTheMusicPicks = "Custom Mix picks one of each per song; choose one to pin it.";
 
     public const string EffectsNotYet = "GPU effects arrive in a later build of milestone 6. Until then this type shows the album’s colours.";
 
@@ -255,13 +255,13 @@ public static class SettingsCopy
     /// <summary>"None" or "35%".</summary>
     public static string PercentOrNone(double value) => value <= 0 ? "None" : Percent(value);
 
-    /// <summary>The menu for GPU effects or line patterns: "Match the music", then the catalogue's.</summary>
+    /// <summary>The menu for GPU effects or line patterns: "Custom Mix", then the catalogue's.</summary>
     public static IReadOnlyList<SettingsChoice> StyleChoices(IEnumerable<(string Id, string Title, string? Detail)> styles) =>
-        [new("", "Match the music"), .. styles.Select(s => new SettingsChoice(s.Id, s.Title, s.Detail))];
+        [new("", "Custom Mix"), .. styles.Select(s => new SettingsChoice(s.Id, s.Title, s.Detail))];
 
     // ---- Covers ----
 
-    public const string UseAnimatedCovers = "Apple Music’s moving album artwork behind the lyrics, with Match the music. Played muted.";
+    public const string UseAnimatedCovers = "Apple Music’s moving album artwork behind the lyrics, with Custom Mix. Played muted.";
 
     /// <summary>What covers are doing for the playing song, or why they aren't (the Mac's CoversPage.coverStatus).</summary>
     public static string CoverStatus(MotionCoverStatus status, string? offReason = null)
@@ -270,7 +270,7 @@ public static class SettingsCopy
         return status.State switch
         {
             MotionCoverState.Off => "Animated covers are off.",
-            MotionCoverState.NotMatchTheMusic => "Animated covers play in Match the music wallpaper mode.",
+            MotionCoverState.NotMatchTheMusic => "Animated covers play in Custom Mix wallpaper mode.",
             MotionCoverState.PausedForPower => $"{status.Power ?? "Power saving is on"}, so animated covers are paused.",
             MotionCoverState.Unavailable => $"Animated covers aren’t looked up in this run ({offReason ?? "lookups are off"}).",
             MotionCoverState.NothingPlaying => "Play an album in Apple Music to check its cover.",
@@ -284,7 +284,7 @@ public static class SettingsCopy
         };
     }
 
-    public const string CoversWithMatchTitle = "Covers play with Match the music";
+    public const string CoversWithMatchTitle = "Covers play with Custom Mix";
 
     /// <summary>The banner while another wallpaper type is chosen.</summary>
     public static string CoversWithMatch(string? backgroundMode) =>
@@ -294,7 +294,7 @@ public static class SettingsCopy
 
     public const string SofteningHelp = "A soft blur over the cover, so fine detail doesn’t fight the lyrics.";
 
-    /// <summary>The type's entry, or Match the music's.</summary>
+    /// <summary>The type's entry, or Custom Mix's.</summary>
     public static WallpaperType WallpaperTypeOf(string? backgroundMode)
     {
         var value = WallpaperTypeFor(backgroundMode);

@@ -135,13 +135,13 @@ public class LyricStyleExtrasTests
 
         Assert.Equal(WordRevealLock.ForEntrance(WordArrival.SatinRibbon), With("scattered", "satinRibbon").RevealLock(CompositionKind.Scattered));
 
-        // Match the music's entrance is for every layout it picks: it locks in a stage layout too, as before.
+        // Custom Mix's entrance is for every layout it picks: it locks in a stage layout too, as before.
         var automatic = With(AppSettings.AllLayoutsKey, "satinRibbon");
         Assert.Equal(WordRevealLock.ForEntrance(WordArrival.SatinRibbon), automatic.RevealLock(CompositionKind.Hinge));
     }
 
     // Ported from NextWordPreviewTests.swift: testAutomaticCutoutAppliesToAllResolvedLayouts (the settings half: the
-    // entrance and the lock reach every layout Match the music picks; WordPresentation's half is in Core's tests)
+    // entrance and the lock reach every layout Custom Mix picks; WordPresentation's half is in Core's tests)
     [Fact]
     public void AutomaticCutoutAppliesToAllResolvedLayouts()
     {
@@ -172,7 +172,7 @@ public class LyricStyleExtrasTests
         var spoken = new AppSettings { LyricComposition = "spoken" }.WithRevealsWordsForControls(false);
         Assert.True(spoken.RevealsWords(CompositionKind.Spoken));
         Assert.Equal(WordRevealLock.ForLayout(CompositionKind.Spoken), spoken.RevealLockForControls());
-        // Match the music's own entry is for every layout it picks.
+        // Custom Mix's own entry is for every layout it picks.
         var all = new AppSettings { LyricComposition = AppSettings.AllLayoutsKey }.WithPreviewsNextWordForControls(false);
         Assert.All(AppSettings.Compositions.Where(id => id != AppSettings.AllLayoutsKey),
             id => Assert.False(all.PreviewsNextWord(SettingsCopy.Kind(id)!.Value)));
@@ -203,7 +203,7 @@ public class LyricStyleExtrasTests
         // Editorial typography is built into these, so the note explains the switch rather than leaving it to do nothing visible.
         foreach (var layout in Enum.GetValues<CompositionKind>())
             Assert.True((LyricStyleCopy.EditorialNote(layout) is not null) == layout.HasEditorialTypography(), layout.Title());
-        Assert.NotNull(LyricStyleCopy.EditorialNote(null)); // Match the music can pick Editorial
+        Assert.NotNull(LyricStyleCopy.EditorialNote(null)); // Custom Mix can pick Editorial
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class LyricStyleExtrasTests
         memory = StyleMemory.Remember(memory, new RememberedStyle("spoken", null), Other, StyleScope.Artist);
         memory = StyleMemory.ForgetAll(memory);
         Assert.Null(Remembered(Relaunched(memory), Other));
-        Assert.Equal("Match the music · Album drift", StyleMemory.Describe(new RememberedStyle("automatic", "albumDrift")));
+        Assert.Equal("Custom Mix · Album drift", StyleMemory.Describe(new RememberedStyle("automatic", "albumDrift")));
     }
 
     // Ported from LyricExtrasTests.swift: testARememberedStyleIsNamedUnderThePickerItOverrides
@@ -274,7 +274,7 @@ public class LyricStyleExtrasTests
         Assert.Equal("Echo", StyleMemory.RememberedName(StyleAspect.Layout, both));
         Assert.Equal("Album drift", StyleMemory.RememberedName(StyleAspect.Colour, both));
         var layoutOnly = new RememberedStyle("automatic", null);
-        Assert.Equal("Match the music", StyleMemory.RememberedName(StyleAspect.Layout, layoutOnly));
+        Assert.Equal("Custom Mix", StyleMemory.RememberedName(StyleAspect.Layout, layoutOnly));
         Assert.Null(StyleMemory.RememberedName(StyleAspect.Colour, layoutOnly)); // the colour picker is not overridden
     }
 
@@ -308,7 +308,7 @@ public class LyricStyleExtrasTests
 
     /// <summary>
     /// Windows' own: what the music playing sees. A remembered layout and colour replace the chosen ones (a remembered
-    /// "automatic" means Match the music over a chosen layout), a part left to the settings keeps the chosen one, and
+    /// "automatic" means Custom Mix over a chosen layout), a part left to the settings keeps the chosen one, and
     /// nothing remembered changes nothing.
     /// </summary>
     [Fact]

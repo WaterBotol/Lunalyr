@@ -18,12 +18,12 @@ public enum GpuEffectCost
     Light,
     Medium,
 
-    /// <summary>Drawn at the smaller pixel budget; left out of "Match the music" while power is being saved.</summary>
+    /// <summary>Drawn at the smaller pixel budget; left out of "Custom Mix" while power is being saved.</summary>
     Heavy,
 }
 
 /// <summary>
-/// Where an effect or pattern sits for "Match the music", each 0...1: <paramref name="Energy"/> (still to lively),
+/// Where an effect or pattern sits for "Custom Mix", each 0...1: <paramref name="Energy"/> (still to lively),
 /// <paramref name="Density"/> (open to busy) and <paramref name="Organic"/> (geometric to flowing).
 /// </summary>
 public readonly record struct BackgroundCharacter(double Energy, double Density, double Organic);

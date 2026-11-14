@@ -199,7 +199,7 @@ public static class LayoutChoices
         return [current, .. Featured.Take(Featured.Count - 1)];
     }
 
-    /// <summary>How many layouts Settings has (Match the music aside).</summary>
+    /// <summary>How many layouts Settings has (Custom Mix aside).</summary>
     public static int AllCount => AppSettings.Compositions.Count(id => id != AppSettings.AllLayoutsKey);
 }
 

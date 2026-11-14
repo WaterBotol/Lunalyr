@@ -8,7 +8,7 @@ namespace Lunalyr.App.Settings;
 
 /// <summary>
 /// Covers (the Mac's CoversPage.swift, Lunalyr's own lines; its one Verso-attributed line is a declaration): Apple
-/// Music's animated covers behind the lyrics in Match the music, what they are doing for the playing song, how they are
+/// Music's animated covers behind the lyrics in Custom Mix, what they are doing for the playing song, how they are
 /// framed and softened, and the albums left out. Edit › Undo for "Allow" has no Windows counterpart.
 /// </summary>
 internal static class CoversPage
@@ -20,9 +20,9 @@ internal static class CoversPage
         page.Children.Add(Card("Use animated covers", SettingsCopy.UseAnimatedCovers, "",
             Toggle(ctx, s => s.UseMotionArtwork, (s, v) => s with { UseMotionArtwork = v })));
 
-        // On, with another wallpaper type: say so and offer Match the music; otherwise what covers are doing now.
+        // On, with another wallpaper type: say so and offer Custom Mix; otherwise what covers are doing now.
         var banner = new InfoBar { Severity = InfoBarSeverity.Informational, Title = SettingsCopy.CoversWithMatchTitle, IsClosable = false };
-        banner.ActionButton = Button("Use Match the music", () => ctx.Update(s => s with { BackgroundMode = "auto" }), "Use Match the music wallpaper");
+        banner.ActionButton = Button("Use Custom Mix", () => ctx.Update(s => s with { BackgroundMode = "auto" }), "Use Custom Mix wallpaper");
         page.Children.Add(banner);
         var status = Caption("");
         page.Children.Add(status);

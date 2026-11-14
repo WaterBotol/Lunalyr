@@ -11,7 +11,7 @@ using static Lunalyr.App.Settings.SettingsKit;
 namespace Lunalyr.App.Settings;
 
 /// <summary>
-/// Lyric style (the Mac's LyricStylePage): where lyrics show, the layout and Match the music's rotation, the opening
+/// Lyric style (the Mac's LyricStylePage): where lyrics show, the layout and Custom Mix's rotation, the opening
 /// title, credits and backing vocals, Editorial typography, size, typeface and mixed fonts, text and highlight colours,
 /// word entrances, the reveal and the next-word preview, the constellations' and Echo's own sliders, instrumental breaks
 /// and remembered styles.
@@ -152,7 +152,7 @@ internal static class LyricStylePage
             entrance.SelectedIndex = AppSettings.WordArrivals.ToList().IndexOf(current);
             var parts = new List<string>
             {
-                s.LyricComposition == Automatic ? "These controls apply to layouts picked by Match the music." : "These controls apply to the selected layout.",
+                s.LyricComposition == Automatic ? "These controls apply to layouts picked by Custom Mix." : "These controls apply to the selected layout.",
             };
             if (EntranceSupport.Note(WordArrivals.Parse(current), SettingsCopy.Kind(s.LyricComposition), s.MixEntrances()) is { } note) parts.Add(note);
             if (reduceMotion()) parts.Add(SettingsCopy.ReduceMotionEntrances);
@@ -184,14 +184,14 @@ internal static class LyricStylePage
                 Slider(ctx, AppSettings.LinksMin, AppSettings.LinksMax, 0.01, SettingsCopy.Percent, s => s.ConstellationLinkOpacity,
                     (s, v) => s with { ConstellationLinkOpacity = Math.Round(v, 2) }))
             .ShowWhen(ctx, s => s.LyricComposition is Automatic or "constellation" or "constellationEditorial"));
-        page.Children.Add(Caption("Used when Match the music picks Constellation.").ShowWhen(ctx, s => s.LyricComposition == Automatic));
+        page.Children.Add(Caption("Used when Custom Mix picks Constellation.").ShowWhen(ctx, s => s.LyricComposition == Automatic));
 
         Section(page, "Echo").ShowWhen(ctx, s => s.LyricComposition is Automatic or "echo");
         page.Children.Add(Card("Repeats", null, "",
                 Slider(ctx, AppSettings.RepeatsMin, AppSettings.RepeatsMax, 0.01, SettingsCopy.Percent, s => s.EchoStrength,
                     (s, v) => s with { EchoStrength = Math.Round(v, 2) }))
             .ShowWhen(ctx, s => s.LyricComposition is Automatic or "echo"));
-        page.Children.Add(Caption("Used when Match the music picks Echo.").ShowWhen(ctx, s => s.LyricComposition == Automatic));
+        page.Children.Add(Caption("Used when Custom Mix picks Echo.").ShowWhen(ctx, s => s.LyricComposition == Automatic));
 
         // ---- Instrumental breaks ----
         Section(page, "Instrumental breaks");
