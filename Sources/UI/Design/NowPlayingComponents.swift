@@ -28,6 +28,10 @@ struct ArtworkView: View {
     var size: CGFloat = LunalyrDesign.Size.artworkLarge
     /// How long a cover that just went missing shows only the fill.
     var placeholderDelay: TimeInterval = 0
+    /// The corner radius; nil picks one for the size.
+    var cornerRadius: CGFloat?
+    /// Under the symbol with no cover; nil is the system's quaternary fill.
+    var placeholderFill: Color?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var symbolVisible = true
     /// Bumped when the cover goes missing; starts the symbol's delay.
@@ -35,7 +39,11 @@ struct ArtworkView: View {
 
     var body: some View {
         ZStack {
-            Rectangle().fill(.quaternary)
+            if let placeholderFill {
+                Rectangle().fill(placeholderFill)
+            } else {
+                Rectangle().fill(.quaternary)
+            }
             if image == nil, symbolVisible {
                 Image(systemName: placeholderSymbol)
                     .font(.system(size: size * 0.36, weight: .medium))
@@ -71,7 +79,10 @@ struct ArtworkView: View {
         .accessibilityHidden(true)
     }
 
-    private var radius: CGFloat { size >= 48 ? LunalyrDesign.Radius.artwork : LunalyrDesign.Radius.artwork * 0.75 }
+    private var radius: CGFloat {
+        if let cornerRadius { return cornerRadius }
+        return size >= 48 ? LunalyrDesign.Radius.artwork : LunalyrDesign.Radius.artwork * 0.75
+    }
 }
 
 /// Cover, title and artist of the playing song, or Lunalyr's idle prompt.
@@ -147,6 +158,8 @@ struct TransportControls: View {
         case regular
         /// Beside the Settings preview.
         case small
+        /// The menu-bar panel's header: 13 pt, play/pause 16, 16 apart.
+        case panel
     }
 
     var size: Size
@@ -172,7 +185,7 @@ struct TransportControls: View {
         let waiting = playing.awaitsConsent
         let enabled = playing.canControlPlayback && !waiting
         let shownPlaying = Self.shownPlaying(actual: playing.isPlaying, pending: pending?.playing)
-        HStack(spacing: size == .regular ? LunalyrDesign.Spacing.medium : LunalyrDesign.Spacing.xSmall) {
+        HStack(spacing: spacing) {
             button("backward.fill", title: "Previous track") { playing.previousTrack() }
             button(shownPlaying ? "pause.fill" : "play.fill", title: Self.title(playing: shownPlaying),
                    prominent: true) {
@@ -182,7 +195,7 @@ struct TransportControls: View {
             button("forward.fill", title: "Next track") { playing.nextTrack() }
         }
         // Primary, not the accent; dimmed as AppKit dims a disabled control.
-        .foregroundStyle(enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(Color(nsColor: .disabledControlTextColor)))
+        .foregroundStyle(foreground(enabled: enabled))
         .disabled(!enabled)
         .help(waiting ? Self.consentHelp : "")
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
@@ -207,14 +220,38 @@ struct TransportControls: View {
     /// What the play/pause button shows: a press at once, then the player.
     static func shownPlaying(actual: Bool, pending: Bool?) -> Bool { pending ?? actual }
 
+    /// The panel dims to the spec's 35 %; elsewhere as AppKit dims a control.
+    private func foreground(enabled: Bool) -> AnyShapeStyle {
+        if size == .panel { return AnyShapeStyle(Color.studio(.ink).opacity(enabled ? 1 : 0.35)) }
+        return enabled ? AnyShapeStyle(.primary) : AnyShapeStyle(Color(nsColor: .disabledControlTextColor))
+    }
+
+    private var spacing: CGFloat {
+        switch size {
+        case .regular: return LunalyrDesign.Spacing.medium
+        case .small: return LunalyrDesign.Spacing.xSmall
+        // The symbols' frames are wider than the symbols: 16 apart as drawn.
+        case .panel: return 0
+        }
+    }
+
+    private func font(prominent: Bool) -> Font {
+        switch size {
+        case .regular: return prominent ? .title2 : .title3
+        case .small: return prominent ? .title3 : .body
+        case .panel: return .system(size: prominent ? 16 : 13)
+        }
+    }
+
     private func button(_ symbol: String, title: String, prominent: Bool = false,
                         action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let panel = size == .panel
+        return Button(action: action) {
             Image(systemName: symbol)
-                .font(prominent ? (size == .regular ? .title2 : .title3) : (size == .regular ? .title3 : .body))
+                .font(font(prominent: prominent))
                 .contentTransition(LunalyrDesign.Motion.symbolSwap(reduceMotion: reduceMotion))
-                .frame(width: LunalyrDesign.Size.minimumHitTarget + (prominent ? 8 : 0),
-                       height: LunalyrDesign.Size.minimumHitTarget)
+                .frame(width: panel ? 32 : LunalyrDesign.Size.minimumHitTarget + (prominent ? 8 : 0),
+                       height: panel ? 28 : LunalyrDesign.Size.minimumHitTarget)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)

@@ -11,10 +11,30 @@ extension UISnapshotCatalogue {
         let contrast: [UISnapshotRenderer.Look] = [.lightContrast, .darkContrast]
         return [
             // The states gui/spec.md §9 asks for.
-            UISnapshotCase("menu-bar/idle", note: "Music open, nothing playing", chrome: .menuBarPanel, size: .menuBarPanel,
-                           view: menuBarPanel),
+            UISnapshotCase("menu-bar/idle", note: "Music open, nothing playing (SPEC 7: menu-panel-nothing-playing)",
+                           chrome: .menuBarPanel, size: .menuBarPanel,
+                           prepare: { chooseMatched($0) }, view: menuBarPanel),
             UISnapshotCase("menu-bar/not-running", note: "no player open", chrome: .menuBarPanel, size: .menuBarPanel,
                            player: .notRunning, view: menuBarPanel),
+            UISnapshotCase("menu-bar/spec", note: "a song playing, Matched chosen (SPEC 7: menu-panel)",
+                           chrome: .menuBarPanel, size: .menuBarPanel, player: .playing,
+                           prepare: { scene in
+                               chooseMatched(scene)
+                               scene.lyricNow = menuBarSinging
+                           }, view: menuBarPanel),
+            UISnapshotCase("menu-bar/look-edited", note: "Matched chosen, then the wallpaper changed: \"Matched, edited\"",
+                           chrome: .menuBarPanel, size: .menuBarPanel, player: .playing,
+                           prepare: { scene in
+                               chooseMatched(scene)
+                               scene.settings.backgroundMode = .pattern
+                               scene.lyricNow = menuBarSinging
+                           }, view: menuBarPanel),
+            UISnapshotCase("menu-bar/saved-looks", note: "a saved Look chosen: the Saved Looks row",
+                           chrome: .menuBarPanel, size: .menuBarPanel, player: .playing,
+                           prepare: { scene in
+                               looks(for: scene).saveCurrent(as: "Late night")
+                               scene.lyricNow = menuBarSinging
+                           }, view: menuBarPanel),
             UISnapshotCase("menu-bar/playing", note: "a song playing, a line being sung, the song 0.25 s earlier",
                            chrome: .menuBarPanel, size: .menuBarPanel, player: .playing,
                            prepare: { scene in
@@ -138,5 +158,23 @@ extension UISnapshotCatalogue {
 
     static func menuBarPanel(_ scene: UISnapshotScene) -> some View {
         MenuBarView()
+            .environment(\.lunalyrLookStore, looks(for: scene))
+    }
+
+    /// The scene's Looks, over its own settings and suite.
+    /// The scene is kept with its store, so its address is never reused.
+    private static var sceneLooks: [ObjectIdentifier: (scene: UISnapshotScene, store: LookStore)] = [:]
+
+    static func looks(for scene: UISnapshotScene) -> LookStore {
+        let key = ObjectIdentifier(scene)
+        if let entry = sceneLooks[key] { return entry.store }
+        let store = LookStore(defaults: scene.defaults, settings: scene.settings, highlights: scene.models.highlightColours)
+        sceneLooks[key] = (scene, store)
+        return store
+    }
+
+    /// Matched chosen, as the final mock-ups show it.
+    static func chooseMatched(_ scene: UISnapshotScene) {
+        looks(for: scene).apply(Look.builtIns[0])
     }
 }

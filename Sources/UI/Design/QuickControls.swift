@@ -103,7 +103,14 @@ struct WallpaperModeGrid: View {
     }
 
     private func choose(_ mode: Settings.BackgroundMode) {
-        // Nothing imported yet, or the copy has gone: ask for a file.
+        Self.choose(mode, settings: settings, chooseImport: chooseImport)
+    }
+
+    /// Picks `mode`, or -- for Imported image or video with nothing imported
+    /// yet, or the copy gone -- calls `chooseImport` instead. The menu-bar
+    /// panel's Wallpaper submenu does exactly the same.
+    @MainActor
+    static func choose(_ mode: Settings.BackgroundMode, settings: Settings, chooseImport: () -> Void) {
         if mode == .custom && !CustomWallpaperStore.isAvailable(settings.customWallpaperPath) {
             chooseImport()
             return

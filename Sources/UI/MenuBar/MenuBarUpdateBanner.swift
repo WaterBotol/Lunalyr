@@ -10,8 +10,8 @@ struct MenuBarUpdateBanner: View {
 
     var body: some View {
         if updates.badge.showsBadge {
-            StatusBanner(.info, title: UpdateBadgeState.headline(for: updates.badge.pendingVersion),
-                         message: Self.message, symbol: Self.symbol, density: .compact) {
+            MenuPanelStatus(.info, title: UpdateBadgeState.headline(for: updates.badge.pendingVersion),
+                            message: Self.message, symbol: Self.symbol) {
                 Button("Update…") { updates.check() }
                     .help("See what’s new and install the update")
                 Button("Later") { updates.dismissBadge() }
