@@ -5,6 +5,7 @@
 // - YouTube: the "musicVideo.youtube" layer with a still painted in code as YouTube makes one (16:9, the picture
 //   letterboxed or pillarboxed inside it with black bars), filled and whole, covered (the still and the backdrop) and
 //   uncovered (the see-through part drawn magenta, where the player's window shows), at each clip's shape.
+//   Also as another display draws it (no player there: the album colours) and the stand-in before the still loads.
 // Writes <name>.png per render and framing.md. Checks: shown whole, the bands are never black and never see-through; the
 // see-through part is the visible picture only. Silent: only the clips' video streams are read; nothing reaches YouTube.
 
@@ -59,6 +60,11 @@ internal static class FramingPreview
                     // The smaller 4:3 still YouTube falls back to: cropped into the picture, never squashed.
                     failures += YouTubeRender(output, $"youtube-hq-{tag}-{w}x{h}-{framing.Value()}-covered", Still(aspect, hq: true), aspect, framing, w, h,
                         scene, false, report);
+                    // Another display (the still simply fills there; no player), and the stand-in before the still loads.
+                    failures += YouTubeRender(output, $"youtube-{tag}-{w}x{h}-{framing.Value()}-other-display", still, aspect, framing, w, h,
+                        scene, false, report, main: false);
+                    failures += YouTubeRender(output, $"youtube-{tag}-{w}x{h}-{framing.Value()}-stand-in", null, aspect, framing, w, h,
+                        scene, false, report);
                 }
             }
         }
@@ -110,8 +116,8 @@ internal static class FramingPreview
         return Check(report, name, "video file", w, h, framing, rect, pixels, seeThroughInside: false);
     }
 
-    private static int YouTubeRender(string output, string name, CoverArt still, double aspect, MusicVideoFraming framing, int w, int h,
-        SceneSnapshot scene, bool playing, StringBuilder report)
+    private static int YouTubeRender(string output, string name, CoverArt? still, double aspect, MusicVideoFraming framing, int w, int h,
+        SceneSnapshot scene, bool playing, StringBuilder report, bool main = true)
     {
         var feed = new Feed
         {
@@ -132,7 +138,7 @@ internal static class FramingPreview
             {
                 Dc = dc, DWrite = surface.DWrite, D2DFactory = surface.Factory, Size = surface.Size, Scale = 1, WallSeconds = 10 + i,
                 SongSeconds = 2, IsPlaying = true, Scene = scene, DeltaSeconds = 1 / 60.0,
-                AheadWork = new Lunalyr.Render.Pacing.AheadWork(), IsMainDisplay = true,
+                AheadWork = new Lunalyr.Render.Pacing.AheadWork(), IsMainDisplay = main,
             };
             layer.Render(frame);
             dc.EndDraw().CheckError();

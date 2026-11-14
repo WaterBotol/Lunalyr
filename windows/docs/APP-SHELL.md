@@ -1106,8 +1106,9 @@ as a video's thumbnails), through the same client (`MusicVideoHttpClient`: no co
 only), decodes it to at most 1280 px and hands it to the `musicVideo.youtube` layer through the feed. The layer draws
 it, softened by Video blur (filled, or at the picture's place when shown whole), wherever the player is covered: paused,
 buffering or held, under Reduce Motion (Windows' Animation
-effects off; the player is then never opened, as on the Mac), in the settings preview, on the other displays, and
-while the player loads or after it has closed. It fades in over the album colours in 0.4 s; dimming, scrim and backing
+effects off; the player is then never opened, as on the Mac), in the settings preview, and while the player loads or
+after it has closed. The other displays, where no player ever plays, show the album colours instead of a still frozen
+for the whole song (Windows' choice; the Mac shows the still there). It fades in over the album colours in 0.4 s; dimming, scrim and backing
 go over it as over the player. Nothing is fetched where no player could be shown (`--demo`, `--no-network`,
 `--no-playback`). Not seen live: the development rules allow no request to YouTube's hosts, so the fetch is tested with
 a fake image host and the drawing offscreen (`YouTubeThumbnailTests`, `MusicVideoStillTests`, `YouTubeStillLayerTests`).
@@ -1142,7 +1143,7 @@ default) or "Show the whole video" (`Core/MusicVideo/MusicVideoFraming.cs`, `Mus
   hand-fired timers). The covering is the wallpaper's layer, not a hidden WebView2: the page keeps playing beneath it.
   Each cover or uncover asks every surface for one frame (`RenderEngine.RequestFrame`), so a wallpaper frozen by Pause
   wallpaper still covers a player that stopped. Filled, the still is zoomed like the player only on the main desktop
-  surface; elsewhere (other displays, the preview, Reduce Motion) it simply fills.
+  surface; elsewhere (the preview, Reduce Motion) it simply fills.
 - **Not ported:** the Mac's frozen frame (a picture of the paused player's last frame laid in its place). A paused
   YouTube player shows its still instead.
 

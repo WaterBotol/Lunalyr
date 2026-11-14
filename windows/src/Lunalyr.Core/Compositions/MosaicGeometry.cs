@@ -2,11 +2,31 @@
 // code, no line from the Verso import, ported as it is). The owner preferred it to the Build 88/90 rework (14 Nov 2026),
 // so this is Windows' Mosaic from before that rework, unchanged.
 
+using Lunalyr.Core.Motion;
+
 namespace Lunalyr.Core.Compositions;
 
 /// <summary>Mosaic: each word set a different way as it arrives, shrinking into a small stack above.</summary>
 public static class MosaicGeometry
 {
+    /// <summary>The word is set huge, cut off by the stage's edge, with a star beside it.</summary>
+    public const int Huge = 0;
+    /// <summary>The word is set on a colour bar across a pale panel.</summary>
+    public const int Bar = 1;
+    /// <summary>The word is set letter by letter on jumping baselines.</summary>
+    public const int Letters = 2;
+
+    /// <summary>
+    /// How run <paramref name="run"/> of a line seeded <paramref name="seed"/> is set: the Mac's chance. A word whose
+    /// glyphs can't be drawn one at a time (Arabic and other right-to-left or joined scripts, combining marks) is never
+    /// set letter by letter, since splitting it would reverse its letters and break their joins: it is set huge instead.
+    /// </summary>
+    public static int Kind(long seed, int run, string text)
+    {
+        var kind = (int)(StageShared.Chance(seed, run, 20) * 3) % 3;
+        return kind == Letters && (ScriptDirection.IsRightToLeft(text) || !ScriptDirection.AllowsGlyphMotion(text)) ? Huge : kind;
+    }
+
     /// <summary>The size the small stack sets its words at.</summary>
     public static double SmallSize(double unit) => unit * 0.6;
 

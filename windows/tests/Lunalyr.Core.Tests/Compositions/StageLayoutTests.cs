@@ -115,6 +115,25 @@ public class StageLayoutTests
         Assert.Equal(StageShared.ReadingSlot(MosaicGeometry.SmallSize(40)), MosaicGeometry.StackStep(40, true) - plain, 3);
     }
 
+    // Windows' own (sweep, 14 Nov 2026): Mosaic's letter-by-letter kind drew an Arabic word's letters left to right and
+    // unjoined (حتى as ح ت ى); a word whose glyphs can't move one at a time is set huge instead.
+    [Fact]
+    public void MosaicNeverSetsRightToLeftOrJoinedWordsLetterByLetter()
+    {
+        string[] whole = ["حتى", "الصباح", "שלום", "नमस्ते"];
+        var lettered = 0;
+        for (var seed = 0L; seed < 40; seed++)
+        for (var run = 0; run < 6; run++)
+        {
+            if (MosaicGeometry.Kind(seed, run, "morning") == MosaicGeometry.Letters) lettered++;
+            foreach (var text in whole) Assert.NotEqual(MosaicGeometry.Letters, MosaicGeometry.Kind(seed, run, text));
+            // Latin and CJK keep the Mac's chance: every kind, the same one for the same seed and run.
+            Assert.Equal((int)(StageShared.Chance(seed, run, 20) * 3) % 3, MosaicGeometry.Kind(seed, run, "morning"));
+            Assert.Equal(MosaicGeometry.Kind(seed, run, "morning"), MosaicGeometry.Kind(seed, run, "夕焼け"));
+        }
+        Assert.True(lettered > 0, "some Latin words are still set letter by letter");
+    }
+
     // Ported from StageReadingTests.swift: testReadingSizes
     [Fact]
     public void ReadingSizes()

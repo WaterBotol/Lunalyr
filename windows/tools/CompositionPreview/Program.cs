@@ -3,7 +3,7 @@
 //   CompositionPreview [-out DIR] [-width 1920] [-height 1080] [-scale 1.25] [-only editorial|spoken|scattered|...]
 //                      [-reveal automatic|fade|lift|pop|orbit|glide|unfold|cutoutFold|cutoutSlide|cutoutHighlight|satinRibbon|splitInk|mix]
 //                      [-shot fixture@seconds ...] [-reduce] [-bench] [-warp] [-floating [-screen 2560|3200]]
-//                      [-style name=value ...] [-tag text]
+//                      [-style name=value ...] [-tag text] [-cover picture]
 //   CompositionPreview -setup [-runs 5] [-surfaces 1|2] [-only id] [-width 2560 -height 1440 -scale 1.25]
 //   CompositionPreview -hashes FILE [-only id] [-width 1280 -height 720 -scale 1]
 //
@@ -19,6 +19,10 @@
 // With -style, every scene takes the Lyric style extras given (backing=off, backingStyle=echo, editorial=0.5,
 // fonts=random, colour=sungSweep|musicReactive|customGradient|albumDrift, strength=1.6, speed=2, custom=#RRGGBB,#RRGGBB,
 // reveal=off, preview=off, lead=1.0); -tag adds a word to the file names so the variants sit side by side.
+//
+// With -cover, every scene takes the album colours of the picture given (decoded as the app decodes artwork) and the
+// lyrics are drawn over the album colour background ("gradient", with its scrim and text backing), as on the desktop,
+// so the lyrics can be judged over light and dark albums; the file names carry the picture's name.
 //
 // Fixtures: english, japanese, arabic, emoji, linetimed, plain, nolyrics; extras: japanesewords, japaneseinstead,
 // japanesesyllables, credits, highlight; stage review lines: fast, long.
@@ -50,6 +54,7 @@ string? hashes = null;
 var shots = new List<(string Fixture, double Time)>();
 var extras = new List<(string Name, string Value)>();
 string? tag = null;
+string? cover = null;
 for (var i = 0; i < args.Length; i++)
 {
     string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value");
@@ -72,6 +77,7 @@ for (var i = 0; i < args.Length; i++)
             extras.Add((pair[0], pair.Length > 1 ? pair[1] : ""));
             break;
         case "tag": tag = Next(); break;
+        case "cover": cover = Next(); break;
         case "dump":
             foreach (var line in ((Lunalyr.Core.Lyrics.LyricResult.Synced)Fixtures.English().Lyrics!).Lines)
                 Console.WriteLine($"{line.Start:0.00}-{line.End:0.00} wt={line.WordTimed} [{line.Text}] " + string.Join(" | ", line.Words.Select(w => $"{w.Text}@{w.Start:0.00}")));
@@ -203,6 +209,9 @@ foreach (var factory in factories)
     }
     using var layer = factory.Create();
     layer.CreateResources(stage.Dc, stage.DWrite, new System.Numerics.Vector2(width, height), scale);
+    using var ground = cover is null ? null : new Lunalyr.Render.Backgrounds.GradientLayerFactory().Create();
+    ground?.CreateResources(stage.Dc, stage.DWrite, new System.Numerics.Vector2(width, height), scale);
+    var coverPalette = cover is null ? null : CoverPalette(cover);
     var scenes = new Dictionary<string, SceneSnapshot>();
     foreach (var (name, time) in shots)
     {
@@ -213,15 +222,32 @@ foreach (var factory in factories)
             if (reveal is not null) scene = scene with { Style = scene.Style with { Reveal = reveal } };
             if (reduce) scene = scene with { ReduceMotion = true };
             if (extras.Count > 0) scene = scene with { Style = StyleExtras.Apply(scene.Style, extras) };
+            if (coverPalette is not null) scene = scene with { Palette = coverPalette };
             scenes[name] = scene;
         }
         // A few frames leading up to the shot, as the app would draw them.
-        for (var t = time - 0.2; t < time; t += 1.0 / 60) stage.Render(layer, scene, t, 10 + t, scale, background);
-        stage.Render(layer, scene, time, 10 + time, scale, background);
-        var path = Path.Combine(output, $"{factory.Id}{(reveal is null ? "" : "-" + reveal)}{(reduce ? "-reduced" : "")}{(tag is null ? "" : "-" + tag)}-{name}-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png");
+        if (ground is not null)
+        {
+            IRenderLayer[] layers = [ground, layer];
+            for (var t = time - 0.2; t < time; t += 1.0 / 60) stage.Render(layers, scene, t, 10 + t, scale);
+            stage.Render(layers, scene, time, 10 + time, scale);
+        }
+        else
+        {
+            for (var t = time - 0.2; t < time; t += 1.0 / 60) stage.Render(layer, scene, t, 10 + t, scale, background);
+            stage.Render(layer, scene, time, 10 + time, scale, background);
+        }
+        var path = Path.Combine(output, $"{factory.Id}{(reveal is null ? "" : "-" + reveal)}{(reduce ? "-reduced" : "")}{(tag is null ? "" : "-" + tag)}{(cover is null ? "" : "-" + Path.GetFileNameWithoutExtension(cover))}-{name}-{time.ToString("00.00", CultureInfo.InvariantCulture)}.png");
         stage.SavePng(path);
         Console.WriteLine(path);
     }
+}
+
+static Palette CoverPalette(string path)
+{
+    var pixels = Lunalyr.Platform.Imaging.ArtworkDecoder.Decode(File.ReadAllBytes(path))
+                 ?? throw new InvalidDataException($"{path} is not an image WIC can read.");
+    return PaletteMapper.FromAlbum(new Lunalyr.Core.Colour.AlbumWallpaperPalette(Lunalyr.Core.Colour.AlbumColourGrid.Extract(pixels)));
 }
 
 static void Bench(Offscreen stage, IRenderLayerFactory factory, SceneSnapshot scene, double from, double to, float scale)
