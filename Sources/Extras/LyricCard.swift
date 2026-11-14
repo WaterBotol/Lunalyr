@@ -161,6 +161,8 @@ enum LyricCard {
         let readings: [TimedWordKey: String]
         let rolling: LyricLayerCache.RollingWindow?
         let cardTypeSize: CGFloat
+        /// Word symbols and action words, as the wallpaper plans them.
+        let accents: WordAccentPlan
 
         var rolls: Bool { line.wordTimed && composition.arrivalOnly }
         var end: Double { LyricHighlightTiming.lineEnd(line.end, words: words) }
@@ -191,6 +193,14 @@ enum LyricCard {
             let weight = LyricCard.weight(labels)
             self.cardTypeSize = max(126, 224 * sqrt(5 / max(5, weight)))
             self.glue = rolling == nil ? glue : []
+            if !line.wordTimed || (display == .replace && romanized != nil) {
+                self.accents = .none
+            } else if let rolling {
+                self.accents = WordAccentPlan.line(line.words, glue: LyricRuns.rollingGlue(line: line, words: line.words))
+                    .rekeyed(for: rolling.words, parts: rolling.parts)
+            } else {
+                self.accents = WordAccentPlan.line(source, glue: glue)
+            }
             // Paired as the wallpaper pairs them, so a word's reading fills
             // in as it is sung here too: by each token's share of its run.
             self.readings = display != .below ? [:] : rolling?.readings ?? (composition.fillsStage
@@ -583,7 +593,8 @@ private struct LyricCardFrame: View {
                     baseSize: rolls ? min(base, stage.height / rollingHeight) : base * densityScale, mood: animation.mood,
                     composition: style, seed: animation.seed, presence: pose.progress, readings: animation.readings,
                     lineEnd: animation.end, glue: animation.glue,
-                    rollingHeightInTypeSizes: rollingHeight, ordinals: animation.rolling?.ordinals ?? [:], parts: animation.rolling?.parts ?? [:])
+                    rollingHeightInTypeSizes: rollingHeight, ordinals: animation.rolling?.ordinals ?? [:], parts: animation.rolling?.parts ?? [:],
+                    accents: animation.accents)
                     .opacity(rolls ? 1 : pose.progress)
             } else {
                 let phrase = LyricsFetcher.Word(text: line.text, start: line.start, end: line.end)

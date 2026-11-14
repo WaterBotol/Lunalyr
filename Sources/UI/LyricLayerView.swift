@@ -852,7 +852,8 @@ struct LyricLayer: View {
                             previewSince: previewSince,
                             glue: glue,
                             bottomInset: band, following: rolling?.following, ordinals: rolling?.ordinals ?? [:],
-                            rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:])
+                            rollingLineEnds: rolling?.lineEnds ?? [:], parts: rolling?.parts ?? [:],
+                            accents: wordAccents(index, words: words, glue: glue, rolling: rolling, scene: scene))
                         let swell: CGFloat = still ? 1 : 0.965 + 0.035 * pose.arrival - 0.012 * pose.exit
                         // A line leaving lifts away as the next one rises
                         // into the same place, rather than sitting under it.
@@ -1012,6 +1013,24 @@ struct LyricLayer: View {
         }
         guard live else { return build() }
         return cache.glue(line: index, fingerprint: scene.fingerprint, words: words, splitsWords: splitsWords, build: build)
+    }
+
+    /// Word symbols and action words for a word-timed line, planned on the
+    /// line's own words (none when readings replace them: a romanisation is
+    /// not English). A rolling stage's window spans several lines, so each
+    /// line is planned whole, with its own caps, and the plans are keyed by
+    /// the window's runs.
+    private func wordAccents(_ index: Int, words: [LyricsFetcher.Word], glue: [Bool],
+                             rolling: LyricLayerCache.RollingWindow?, scene: SceneLines) -> WordAccentPlan {
+        guard readingOptions.display != .replace || scene.romanized[index] == nil else { return .none }
+        guard let rolling else { return WordAccentPlan.line(words, glue: glue, settings: settings) }
+        var plan = WordAccentPlan()
+        for row in LyricPhraseTiming.rollingRange(around: index, lines: scene.lines) {
+            let line = scene.lines[row]
+            plan.merge(WordAccentPlan.line(line.words, glue: LyricRuns.rollingGlue(line: line, words: line.words),
+                                           settings: settings))
+        }
+        return plan.rekeyed(for: rolling.words, parts: rolling.parts)
     }
 
     /// Reading pairs for a line set in runs, built once per line rather

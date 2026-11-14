@@ -620,6 +620,7 @@ struct ScatteredLyricText: View {
     @StateObject private var typography = RenderMemo<ScatteredTypography.Key, ScatteredTypography.Layout>()
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
+    @Environment(\.lyricWordAccents) private var accents
 
     var body: some View {
         let key = ScatteredTypography.Key(words: words, baseSize: baseSize, style: style, mood: mood,
@@ -679,7 +680,9 @@ struct ScatteredLyricText: View {
             ForEach(layout.runs, id: \.index) { run in
                 if wordTimed {
                     runView(run, frame: frames[run.index], arrival: arrivals[run.index].motion(in: composition),
-                            leave: states[run.tokens.lowerBound].leave, idle: idle, floatTime: floatTime)
+                            leave: states[run.tokens.lowerBound].leave, idle: idle, floatTime: floatTime,
+                            accent: accents[prepared[run.tokens.lowerBound].source.presentationID],
+                            onset: prepared[run.tokens.lowerBound].source.start)
                 } else {
                     let colours = ink.sample(slot: run.order, seed: run.seed)
                     VStack(spacing: run.metrics.size * 0.04) {
@@ -726,13 +729,18 @@ struct ScatteredLyricText: View {
     /// composition branches folded in, the single expression exceeded what
     /// the type-checker will solve in reasonable time.
     private func runView(_ run: ScatteredTypography.Run, frame: ScatteredRunFrame, arrival: WordArrival, leave: Double,
-                         idle: Double, floatTime: Double) -> some View {
+                         idle: Double, floatTime: Double, accent: WordAccent? = nil, onset: Double = 0) -> some View {
         let index = run.index
+        // A word symbol fades in from the onset; a preview shows none.
+        let symbolOpacity = frame.presentation.preview ? 0 : WordSymbolMark.opacity(elapsed: time - onset)
         // The float and the exit sit outside the equatable ink, so a settled
         // word's glyph tree is reused and only its layer moves. They also sit
         // inside the slot, so the constellation's anchors never drift.
-        return ScatteredRunInk(run: run, frame: frame, arrival: arrival, settles: composition != .echo)
+        return ScatteredRunInk(run: run, frame: frame, arrival: arrival, settles: composition != .echo,
+                               symbol: accent?.symbol, symbolOpacity: symbolOpacity)
             .equatable()
+            // An action word's motion, over its entrance and inside its slot.
+            .wordAction(accent, start: onset, time: time, size: run.metrics.size, glow: frame.ink.glow)
             .modifier(WordFloat(drift: vc_idle_drift(run.seed, floatTime, idle), leave: leave,
                                 size: run.metrics.size, seed: run.seed, reduceMotion: reduceMotion))
             .background {
@@ -956,53 +964,87 @@ private struct ScatteredRunInk: View, Equatable {
     /// The calm layouts land without overshoot: the word's spring is held
     /// at its rest instead of passing it. Echo keeps its small overshoot.
     var settles = true
+    /// The word's symbol (`WordAccentPlan`), set beside it from the first
+    /// frame so the slot measures it, and shown at `symbolOpacity`.
+    var symbol: String? = nil
+    var symbolOpacity = 0.0
     @Environment(\.lyricReduceMotion) private var reduceMotion
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.run == rhs.run && lhs.frame == rhs.frame && lhs.arrival == rhs.arrival && lhs.settles == rhs.settles
+            && lhs.symbol == rhs.symbol && lhs.symbolOpacity == rhs.symbolOpacity
     }
     var body: some View {
         let size = run.metrics.size
-        let heat = CGFloat(min(1, frame.heat))
         let tiled = frame.highlight?.strength ?? 0
         WordSlotLayout(degrees: run.metrics.rotation, inset: run.inset) {
             VStack(spacing: size * 0.04) {
-                label(frame.ink, glow: frame.glow * (1 - tiled))
-                    .overlay {
-                        // On a tile the word takes the colour set on it, as
-                        // far as the tile has pressed in.
-                        if let highlight = frame.highlight {
-                            label(LyricInkSample(rest: highlight.text, sung: highlight.text, glow: .clear,
-                                                 reading: highlight.text, sweeps: false, dim: frame.ink.dim), glow: 0)
-                                .mask {
-                                    LyricHighlightMask(marks: highlight.marks, pointSize: size, rightToLeft: run.rightToLeft,
-                                                       switchAt: highlight.textSwitch)
-                                }
-                        }
+                HStack(spacing: size * WordSymbolMark.gap) {
+                    word(tiled: tiled)
+                    if let symbol {
+                        WordSymbolView(symbol: symbol, size: size, rest: frame.ink.rest, sung: frame.ink.sung,
+                                       tint: frame.ink.sweeps ? frame.tint : 0, opacity: symbolOpacity)
                     }
-                    .modifier(TokenReveal(boundaries: run.boundaries, opacities: frame.reveal, rightToLeft: run.rightToLeft))
-                    .background {
-                        if let highlight = frame.highlight {
-                            LyricHighlightTiles(marks: highlight.marks, colour: highlight.tile, pointSize: size,
-                                                rightToLeft: run.rightToLeft)
-                        }
-                    }
+                }
                 run.reading?.revealing(frame.readingReveal).tinted(frame.ink.reading).opacity(frame.readingOpacity)
             }
-            .rotationEffect(.degrees(run.metrics.rotation))
-            .modifier(CappedGrowth(scale: ScatteredRunFrame.swell(heat: frame.heat, glow: frame.glow,
-                                   gesture: frame.driftScale, reduceMotion: reduceMotion), inset: run.inset.width))
-            .rotationEffect(.degrees(reduceMotion ? 0 : frame.driftAngle))
-            .offset(x: reduceMotion ? 0 : CGFloat(frame.driftX) * size,
-                    y: reduceMotion ? 0 : CGFloat(frame.driftY) * size)
-            .modifier(WordEntrance(progress: frame.presentation.progress, style: arrival,
-                // Words come in along the reading direction: from the
-                // right, or from the left in a right-to-left line.
-                size: size, direction: run.rightToLeft ? -1 : 1,
-                visibility: frame.presentation.opacity,
-                arrival: settles ? min(1, frame.presentation.arrival) : frame.presentation.arrival))
-            .modifier(OptionalGlow(colour: frame.ink.glow, strength: 0.45 * frame.glow * frame.fill * (1 - tiled),
-                                   radius: 10 + 22 * frame.glow))
-            .lyricShadow(0.28 + 0.24 * heat, radius: 7 + 12 * heat, y: 2)
+            .modifier(Self.Motion(run: run, frame: frame, arrival: arrival, settles: settles, reduceMotion: reduceMotion))
+        }
+    }
+
+    /// The word, its tile and its reveal.
+    @ViewBuilder
+    private func word(tiled: Double) -> some View {
+        let size = run.metrics.size
+        label(frame.ink, glow: frame.glow * (1 - tiled))
+            .overlay {
+                // On a tile the word takes the colour set on it, as
+                // far as the tile has pressed in.
+                if let highlight = frame.highlight {
+                    label(LyricInkSample(rest: highlight.text, sung: highlight.text, glow: .clear,
+                                         reading: highlight.text, sweeps: false, dim: frame.ink.dim), glow: 0)
+                        .mask {
+                            LyricHighlightMask(marks: highlight.marks, pointSize: size, rightToLeft: run.rightToLeft,
+                                               switchAt: highlight.textSwitch)
+                        }
+                }
+            }
+            .modifier(TokenReveal(boundaries: run.boundaries, opacities: frame.reveal, rightToLeft: run.rightToLeft))
+            .background {
+                if let highlight = frame.highlight {
+                    LyricHighlightTiles(marks: highlight.marks, colour: highlight.tile, pointSize: size,
+                                        rightToLeft: run.rightToLeft)
+                }
+            }
+    }
+
+    /// The run's tilt, swell, drift, entrance, glow and shadow.
+    private struct Motion: ViewModifier {
+        let run: ScatteredTypography.Run
+        let frame: ScatteredRunFrame
+        let arrival: WordArrival
+        let settles: Bool
+        let reduceMotion: Bool
+
+        func body(content: Content) -> some View {
+            let size = run.metrics.size
+            let heat = CGFloat(min(1, frame.heat))
+            let tiled = frame.highlight?.strength ?? 0
+            content
+                .rotationEffect(.degrees(run.metrics.rotation))
+                .modifier(CappedGrowth(scale: ScatteredRunFrame.swell(heat: frame.heat, glow: frame.glow,
+                                       gesture: frame.driftScale, reduceMotion: reduceMotion), inset: run.inset.width))
+                .rotationEffect(.degrees(reduceMotion ? 0 : frame.driftAngle))
+                .offset(x: reduceMotion ? 0 : CGFloat(frame.driftX) * size,
+                        y: reduceMotion ? 0 : CGFloat(frame.driftY) * size)
+                .modifier(WordEntrance(progress: frame.presentation.progress, style: arrival,
+                    // Words come in along the reading direction: from the
+                    // right, or from the left in a right-to-left line.
+                    size: size, direction: run.rightToLeft ? -1 : 1,
+                    visibility: frame.presentation.opacity,
+                    arrival: settles ? min(1, frame.presentation.arrival) : frame.presentation.arrival))
+                .modifier(OptionalGlow(colour: frame.ink.glow, strength: 0.45 * frame.glow * frame.fill * (1 - tiled),
+                                       radius: 10 + 22 * frame.glow))
+                .lyricShadow(0.28 + 0.24 * heat, radius: 7 + 12 * heat, y: 2)
         }
     }
 

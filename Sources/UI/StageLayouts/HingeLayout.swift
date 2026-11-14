@@ -406,13 +406,14 @@ extension StageLyricView {
         return HingeCap(limit: room) {
             withReading(run, size: size, colour: sample.reading, alignment: side == .right ? .leading : .trailing,
                         maxWidth: room) {
-                word(run, tile ? ink.tileText : sample.sung, uppercase: true)
+                word(run, tile ? ink.tileText : sample.sung, uppercase: true, size: size)
                     .font(font(size, hero: true, id: run.id))
                     .lineLimit(1).minimumScaleFactor(shrink)
                     .background { tileBackground(tile, size: size) }
             }
         }
         .lyricShadow(tile ? 0 : 0.3, radius: max(2, size * 0.06), y: 2)
+        .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
         // The burst grows about a point a quarter in from the spine, so a big
         // word does not run far past the page's outer margin.
         .scaleEffect(pose.grow, anchor: UnitPoint(x: side == .right ? 0.25 : 0.75, y: 0.6))

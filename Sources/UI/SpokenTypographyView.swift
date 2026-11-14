@@ -52,6 +52,7 @@ struct SpokenTypographyView: View {
     var lineEnds: [TimedWordKey: Double] = [:]
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
+    @Environment(\.lyricWordAccents) private var accents
     @ObservedObject private var settings = Settings.shared
     @StateObject private var typography = RenderMemo<SpokenTypography.Key, [SpokenTypography.Word]>()
 
@@ -231,6 +232,8 @@ struct SpokenTypographyView: View {
             : highlight.isVisible
             ? .init(width: CGFloat(highlight.width), opacity: highlight.opacity, reach: RollingUnit.labelReach,
                     textSwitch: ink.tileTextSwitch) : nil
+        // Word symbols and action words: the plan is keyed by the run.
+        let wordAccent = accents[token.source.presentationID]
         return RollingUnit(token: token,
                            colour: hero ? (ink.accent ?? accent) : colours.rest,
                            sung: colours.sung, tint: colours.sweeps && !hero ? sung : 0,
@@ -241,7 +244,10 @@ struct SpokenTypographyView: View {
                            reveal: reveal,
                            readingReveal: token.reading?.shareOpacities(at: time, syllables: reveal,
                                                                          reduceMotion: reduceMotion),
-                           tile: tile, tileText: ink.tileText)
+                           tile: tile, tileText: ink.tileText,
+                           symbol: wordAccent?.symbol,
+                           symbolOpacity: presentation.preview ? 0
+                               : WordSymbolMark.opacity(elapsed: time - token.source.start))
             .background {
                 if let tile {
                     CutoutTile(colour: token.tile ? labelColour : ink.tileColour, width: tile.width,
@@ -267,6 +273,9 @@ struct SpokenTypographyView: View {
             }
             .scaleEffect(CGFloat(scale))
             .rotationEffect(.degrees(angle))
+            // An action word's motion: outside the stage fit, which measures
+            // where the stack placed the word, never where it moves to.
+            .wordAction(wordAccent, start: token.source.start, time: time, size: token.pointSize, glow: colours.glow)
             .blur(radius: state.pose.blur)
             .lyricShadow(0.25, radius: 7, y: 2)
             .layoutValue(key: RollingSlotKey.self, value: state.slot)
@@ -436,6 +445,10 @@ struct RollingUnit: View {
     /// its reading take where the tile has pressed in.
     var tile: Tile?
     var tileText: Color = .white
+    /// The word's symbol (`WordAccentPlan`): beside the word from its first
+    /// frame, so the stack measures it, shown at `symbolOpacity`.
+    var symbol: String? = nil
+    var symbolOpacity = 0.0
 
     /// Cutout's label, or the tile "Cutout · Highlight" presses in behind a
     /// sung word.
@@ -467,10 +480,16 @@ struct RollingUnit: View {
 
     private func content(colour: Color, sung: Color, tint: Double, reading: Color) -> some View {
         VStack(spacing: token.pointSize * 0.02) {
-            RollingWordText(text: token.source.text, font: token.font, colour: colour, sung: sung, tint: tint,
-                            rightToLeft: token.rightToLeft)
-                .modifier(LyricSweepUnderline(colour: sweepUnderline, progress: tint, rightToLeft: token.rightToLeft))
-                .modifier(TokenReveal(boundaries: token.boundaries, opacities: reveal, rightToLeft: token.rightToLeft))
+            HStack(spacing: token.pointSize * WordSymbolMark.gap) {
+                RollingWordText(text: token.source.text, font: token.font, colour: colour, sung: sung, tint: tint,
+                                rightToLeft: token.rightToLeft)
+                    .modifier(LyricSweepUnderline(colour: sweepUnderline, progress: tint, rightToLeft: token.rightToLeft))
+                    .modifier(TokenReveal(boundaries: token.boundaries, opacities: reveal, rightToLeft: token.rightToLeft))
+                if let symbol {
+                    WordSymbolView(symbol: symbol, size: token.pointSize, rest: colour, sung: sung, tint: tint,
+                                   opacity: symbolOpacity)
+                }
+            }
             if let reading = token.reading?.revealing(readingReveal).tinted(reading.opacity(readingOpacity)) {
                 if let readingWidth { reading.wrapping(at: readingWidth) } else { reading }
             }

@@ -232,6 +232,8 @@ struct StageLyricView: View {
     @ObservedObject var settings: Settings = .shared
     @Environment(\.lyricInk) var ink
     @Environment(\.lyricReduceMotion) var reduceMotion
+    /// Word symbols and action words (`WordAccentPlan`), by each run's first token.
+    @Environment(\.lyricWordAccents) var accents
 
     // MARK: Shared
 
@@ -268,9 +270,30 @@ struct StageLyricView: View {
         return result
     }
 
-    /// The text of a word in `colour`, its sung syllables fading in.
-    func word(_ run: StageRun, _ colour: Color, uppercase: Bool = false) -> Text {
-        Text(run.revealed(at: time, uppercase: uppercase, colour: colour)).foregroundStyle(colour)
+    /// The text of a word in `colour`, its sung syllables fading in. Given
+    /// the word's type `size`, a word symbol (`WordAccentPlan`) follows it in
+    /// the same text, so the layout measures and fits the two together;
+    /// it is there, clear, from the first frame and fades in from the
+    /// onset. Portal carries its symbols in its pills instead.
+    func word(_ run: StageRun, _ colour: Color, uppercase: Bool = false, size: CGFloat? = nil) -> Text {
+        let text = Text(run.revealed(at: time, uppercase: uppercase, colour: colour)).foregroundStyle(colour)
+        guard let size, composition != .portal, let symbol = accent(run)?.symbol else { return text }
+        return text + WordSymbolMark.inline(symbol, size: size, colour: colour,
+                                            opacity: WordSymbolMark.opacity(elapsed: time - run.start))
+    }
+
+    /// The run's word symbol and action, if any.
+    func accent(_ run: StageRun) -> WordAccent? {
+        accents[run.parts.first?.source]
+    }
+
+    /// The symbol a word of `size` sets after it, letter by letter.
+    @ViewBuilder
+    func symbol(_ run: StageRun, size: CGFloat, colour: Color) -> some View {
+        if composition != .portal, let symbol = accent(run)?.symbol {
+            WordSymbolView(symbol: symbol, size: size, rest: colour, sung: colour,
+                           opacity: WordSymbolMark.opacity(elapsed: time - run.start))
+        }
     }
 
     /// Eases 0...1 with no overshoot: the camera and the soft arrivals use this.

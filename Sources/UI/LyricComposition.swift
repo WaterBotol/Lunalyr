@@ -218,6 +218,10 @@ struct LyricLineView: View {
     /// song's title are not sung, so their brackets ("Song (Remix)",
     /// "(feat. …)") stay in the line.
     var liftsBackingVocals = true
+    /// Word symbols and action words for these words (`WordAccentPlan`),
+    /// planned by the caller once for the whole line. Empty draws none:
+    /// backing vocals, credits and the title wear none.
+    var accents: WordAccentPlan = .none
     @StateObject private var echoText = RenderMemo<EchoPhrase, (text: String, rightToLeft: Bool)>()
 
     /// The words Echo repeats, and how they run together.
@@ -231,15 +235,18 @@ struct LyricLineView: View {
         // lead (see BackingVocals). Only word-timed lines are split.
         let split = Self.liftsBacking(wordTimed: wordTimed, firstRunOnly: firstRunOnly, allowed: liftsBackingVocals)
             ? BackingVocals.split(words, glue: glue) : nil
-        if let split, !split.backing.isEmpty {
-            ZStack {
-                BackingVocalLayer(groups: split.backing, time: time, stageSize: stageSize, baseSize: baseSize,
-                                  seed: seed, composition: composition, mood: mood)
-                lineBody(words: split.main, glue: split.mainGlue)
+        Group {
+            if let split, !split.backing.isEmpty {
+                ZStack {
+                    BackingVocalLayer(groups: split.backing, time: time, stageSize: stageSize, baseSize: baseSize,
+                                      seed: seed, composition: composition, mood: mood)
+                    lineBody(words: split.main, glue: split.mainGlue)
+                }
+            } else {
+                lineBody(words: words, glue: glue)
             }
-        } else {
-            lineBody(words: words, glue: glue)
         }
+        .environment(\.lyricWordAccents, accents)
     }
 
     /// Whether a line's bracketed words are drawn apart as backing vocals:

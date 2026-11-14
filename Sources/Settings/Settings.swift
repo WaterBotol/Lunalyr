@@ -245,6 +245,60 @@ final class Settings: ObservableObject {
     @Published var lyricOffset: Double { didSet { store(lyricOffset, "custom.lyricOffset") } }
     @Published var lyricScale: Double { didSet { store(lyricScale, "lyricScale") } }
     @Published var showInterludes: Bool { didSet { store(showInterludes, "custom.showInterludes") } }
+    /// "Word symbols": a small symbol beside a listed word as it is sung.
+    @Published var wordSymbols: Bool {
+        didSet { store(wordSymbols, Self.wordSymbolsKey); refreshWordAccentLists() }
+    }
+    /// The user's word → SF Symbol list; nil is the default list
+    /// (`LyricWordIcons.defaultSymbols`).
+    @Published var wordSymbolList: [String: String]? {
+        didSet { store(wordSymbolList, Self.wordSymbolListKey); refreshWordAccentLists() }
+    }
+    /// "Action words": a short motion on a listed word as it is sung.
+    @Published var actionWords: Bool {
+        didSet { store(actionWords, Self.actionWordsKey); refreshWordAccentLists() }
+    }
+    /// The user's word → `WordAction` list; nil is the default list
+    /// (`WordAction.defaults`).
+    @Published var actionWordList: [String: String]? {
+        didSet { store(actionWordList, Self.actionWordListKey); refreshWordAccentLists() }
+    }
+    static let wordSymbolsKey = "custom.wordSymbols.enabled"
+    static let wordSymbolListKey = "custom.wordSymbols.words"
+    static let actionWordsKey = "custom.actionWords.enabled"
+    static let actionWordListKey = "custom.actionWords.words"
+
+    /// Both lists as the renderer matches them: keys folded (`englishKey`),
+    /// symbols this Mac cannot draw and unknown actions dropped, nil while
+    /// a feature is off. `version` changes with them.
+    struct WordAccentLists {
+        var symbols: [String: String]?
+        var actions: [String: WordAction]?
+        var version = 0
+    }
+    private(set) var wordAccentLists = WordAccentLists()
+
+    var effectiveWordSymbolList: [String: String] { wordSymbolList ?? LyricWordIcons.defaultSymbols }
+    var effectiveActionWordList: [String: String] { actionWordList ?? WordAction.defaults }
+
+    private func refreshWordAccentLists() {
+        var symbols: [String: String] = [:]
+        for (word, symbol) in effectiveWordSymbolList {
+            let name = symbol.trimmingCharacters(in: .whitespaces)
+            guard let key = LyricWordIcons.englishKey(word), LyricWordIcons.isDrawable(name) else { continue }
+            symbols[key] = name
+        }
+        var actions: [String: WordAction] = [:]
+        for (word, raw) in effectiveActionWordList {
+            guard let key = LyricWordIcons.englishKey(word), let action = WordAction(rawValue: raw) else { continue }
+            actions[key] = action
+        }
+        Self.accentListsGeneration &+= 1
+        wordAccentLists = WordAccentLists(symbols: wordSymbols ? symbols : nil, actions: actionWords ? actions : nil,
+                                          version: Self.accentListsGeneration)
+    }
+    /// Across every instance, so a plan kept for one never answers another.
+    private static var accentListsGeneration = 0
     @Published var animationRate: AnimationRate { didSet { store(animationRate.rawValue, "custom.animationRate") } }
     @Published var pauseWhenCovered: Bool { didSet { store(pauseWhenCovered, "custom.pauseWhenCovered") } }
     @Published var hasOnboarded: Bool { didSet { store(hasOnboarded, "hasOnboarded") } }
@@ -437,6 +491,10 @@ final class Settings: ObservableObject {
         lyricOffset = d.object(forKey: "custom.lyricOffset") as? Double ?? 0
         lyricScale = d.object(forKey: "lyricScale") as? Double ?? 1.0
         showInterludes = d.object(forKey: "custom.showInterludes") as? Bool ?? true
+        wordSymbols = d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true
+        wordSymbolList = d.dictionary(forKey: Self.wordSymbolListKey) as? [String: String]
+        actionWords = d.object(forKey: Self.actionWordsKey) as? Bool ?? true
+        actionWordList = d.dictionary(forKey: Self.actionWordListKey) as? [String: String]
         animationRate = AnimationRate(rawValue: d.integer(forKey: "custom.animationRate")) ?? .balanced
         pauseWhenCovered = d.object(forKey: "custom.pauseWhenCovered") as? Bool ?? true
         hasOnboarded = d.bool(forKey: "hasOnboarded")
@@ -471,6 +529,7 @@ final class Settings: ObservableObject {
         light3DColours = Light3DColours(rawValue: d.string(forKey: "custom.light3DColours") ?? "") ?? .album
         increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         if launchAtLogin && loginItem.status == .requiresApproval { launchAtLoginError = Self.loginItemNeedsApproval }
+        refreshWordAccentLists()
 
         // Every power input feeds `effectiveBackgroundMode`, so each change is
         // republished: the wallpaper redraws and audio capture reconciles at
@@ -523,6 +582,8 @@ final class Settings: ObservableObject {
         set(\.echoStrength, d.object(forKey: "echoStrength") as? Double ?? 1.0)
         set(\.lyricScale, d.object(forKey: "lyricScale") as? Double ?? 1.0)
         set(\.showInterludes, d.object(forKey: "custom.showInterludes") as? Bool ?? true)
+        set(\.wordSymbols, d.object(forKey: Self.wordSymbolsKey) as? Bool ?? true)
+        set(\.actionWords, d.object(forKey: Self.actionWordsKey) as? Bool ?? true)
         set(\.editorialTypography, d.bool(forKey: "custom.editorialTypography"))
         set(\.editorialAmount, d.object(forKey: "custom.editorialAmount") as? Double ?? 1)
         set(\.randomizeLyricFonts, d.bool(forKey: "custom.randomizeLyricFonts"))

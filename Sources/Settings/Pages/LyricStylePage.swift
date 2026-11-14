@@ -48,6 +48,7 @@ struct LyricStylePage: View {
                 Toggle("Show a glowing orb during instrumental breaks", isOn: $s.showInterludes)
                     .toggleStyle(StudioCheckboxStyle())
             }
+            WordAccentsSection()
             // Custom Mix can pick either, so both stay reachable there.
             if style.hasConnections || automatic {
                 constellation
@@ -63,6 +64,8 @@ struct LyricStylePage: View {
         .lunalyrReveal(rotateLayouts)
         .lunalyrReveal(backingLayer)
         .lunalyrReveal(s.editorialTypography)
+        .lunalyrReveal(s.wordSymbols)
+        .lunalyrReveal(s.actionWords)
         .lunalyrReveal(s.randomizeLyricFonts)
         .lunalyrReveal(s.fontChoice)
         .lunalyrReveal(s.googleFontState)

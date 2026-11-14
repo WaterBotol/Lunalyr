@@ -139,7 +139,7 @@ extension StageLyricView {
                             let size = unit * 3.0
                             ZStack(alignment: .topTrailing) {
                                 withReading(run, size: size, colour: sample.reading, maxWidth: stage.width * 1.1) {
-                                    word(run, tile ? ink.tileText : sample.sung)
+                                    word(run, tile ? ink.tileText : sample.sung, size: size)
                                         .font(font(size, hero: true, id: run.id))
                                         .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
                                         .background { tileBackground(tile, size: size) }
@@ -154,7 +154,7 @@ extension StageLyricView {
                             // White on a colour bar, laid across a pale panel.
                             let size = unit * 2.3
                             let wipe = reduceMotion ? 1 : Self.glide((time - (run.start - 0.04)) / (0.32 / lineSpeed))
-                            let plain = Text(run.revealed(at: time))
+                            let plain = word(run, .white, size: size)
                                 .font(font(size, hero: true, id: run.id))
                                 .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
                             let tilt = (chance(run.id, 28) - 0.5) * 5
@@ -180,7 +180,7 @@ extension StageLyricView {
                                     }
                                     .rotationEffect(.degrees(tilt))
                                 withReading(run, size: size, colour: readingInk, maxWidth: stage.width * 0.7, shadow: false) {
-                                    word(run, ink.tileText)
+                                    word(run, ink.tileText, size: size)
                                         .font(font(size, hero: true, id: run.id))
                                         .lineLimit(1).minimumScaleFactor(0.45).frame(maxWidth: stage.width * 0.7)
                                 }
@@ -211,6 +211,7 @@ extension StageLyricView {
                                         .rotationEffect(.degrees((chance(run.id * 31 + index, 26) - 0.5) * 22))
                                         .opacity(reveal)
                                 }
+                                symbol(run, size: size, colour: sample.sung)
                             }
                             .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.8)
                             }
@@ -224,12 +225,13 @@ extension StageLyricView {
                     let fade = Self.mosaicStackFade(rank: rank)
                     let small = Self.mosaicSmallSize(unit: unit)
                     withReading(run, size: small, colour: sample.reading.opacity(fade.reading), maxWidth: stage.width * 0.4) {
-                        word(run, sample.rest.opacity(fade.word))
+                        word(run, sample.rest.opacity(fade.word), size: small)
                             .font(font(small, hero: true, id: run.id))
                             .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.4)
                     }
                         .opacity(morph.smallOpacity)
                 }
+                .wordAction(accent(run), start: run.start, time: time, size: unit * 2.4, glow: sample.glow)
             }
         }
         .opacity(1 - leaving)

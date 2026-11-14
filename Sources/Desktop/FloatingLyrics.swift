@@ -72,6 +72,8 @@ struct LyricStyleProfiles {
         "custom.wordRevealByStyle", "custom.wordArrivalByStyle", "custom.nextWordPreviewByStyle",
         "custom.nextWordPreviewLead", "custom.wordEntranceMix", "echoStrength", "lyricScale", "custom.showInterludes",
         "custom.editorialTypography", "custom.editorialAmount", "custom.randomizeLyricFonts",
+        // The two switches; their word lists are shared by both surfaces.
+        Settings.wordSymbolsKey, Settings.actionWordsKey,
         // Layout rotation, backing vocals, credits, the opening title
         LyricLayoutRotation.enabledKey, BackingVocals.settingKey, BackingVocals.styleKey, LyricCreditCues.settingKey,
         OpeningTitle.settingKey, OpeningTitle.coverKey,

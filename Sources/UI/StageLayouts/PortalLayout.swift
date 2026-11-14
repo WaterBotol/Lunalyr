@@ -296,7 +296,9 @@ extension StageLyricView {
         let reach = (0.8 + 0.5 * chance(nil, 3)) / speed.squareRoot()
         let shiftX = (chance(nil, 4) - 0.5) * 0.24 * stageSize.width
         let lift = stageSize.height * (0.1 + 0.08 * chance(nil, 5))
+        // A word on the Word symbols list carries the user's symbol in its pill.
         let icons = Self.portalIcons(all.map(\.text)) { chance($0 < 0 ? nil : $0, 6) }
+            .enumerated().map { accent(all[$0.offset])?.symbol ?? $0.element }
         let shapes = Self.portalShapes(count: total) { chance($0, 16) }
         // The trail zig-zags a little either side; the pills' heights, not
         // the stage's, set how far apart they are, so no two overlap.
@@ -411,6 +413,7 @@ extension StageLyricView {
         }
         .padding(.horizontal, size * 0.5).padding(.vertical, size * 0.26)
         .background { portalBackground(pill, size: size, live: live, eased: eased, burst: burst, tile: tile, outlined: outlined, salt: index) }
+        .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
         .scaleEffect(scale)
         .lyricShadow(outlined ? 0 : 0.2 * live, radius: 9, y: 4)
         // It squashes as it lands, then settles.

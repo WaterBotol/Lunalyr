@@ -173,6 +173,8 @@ final class SettingsReachabilityTests: XCTestCase {
 /// added or removed, rerun the script and paste its output here.
 private enum SourceKeys {
     static let sourceCustomKeys: [String] = [
+        "custom.actionWords.enabled",
+        "custom.actionWords.words",
         "custom.albumGradientWallpaper",
         "custom.animationRate",
         "custom.artistAliases",
@@ -308,6 +310,8 @@ private enum SourceKeys {
         "custom.wordArrivalByStyle",
         "custom.wordEntranceMix",
         "custom.wordRevealByStyle",
+        "custom.wordSymbols.enabled",
+        "custom.wordSymbols.words",
     ]
     static let sourcePlainKeys: [String] = [
         "backgroundMode",

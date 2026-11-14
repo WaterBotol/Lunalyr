@@ -108,11 +108,12 @@ extension StageLyricView {
         let rest = tile ? ink.tileText : settled(run, sample).opacity(0.86)
         let lit = tile ? ink.tileText : sample.sung
         let word = ZStack {
-            if live < 0.999 { self.word(run, rest).font(face) }
-            if live > 0.001 { self.word(run, lit).font(face).opacity(live) }
+            if live < 0.999 { self.word(run, rest, size: size).font(face) }
+            if live > 0.001 { self.word(run, lit, size: size).font(face).opacity(live) }
         }
         .lineLimit(1).fixedSize()
         .background { tileBackground(tile, size: size) }
+        .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
         VStack(spacing: size * 0.06) {
             word
             if let reading {

@@ -129,18 +129,19 @@ extension StageLyricView {
                     ZStack {
                         ForEach((1...steps).reversed(), id: \.self) { step in
                             let share = CGFloat(step) / CGFloat(steps)
-                            word(run, liveColour)
+                            word(run, liveColour, size: size)
                                 .colorMultiply(Color(white: 0.5 - 0.22 * Double(share)))
                                 .offset(x: side * depth * share * 0.55, y: depth * share)
                         }
                     }
                 }
                 ZStack {
-                    if live < 0.999 { word(run, restColour) }
-                    if live > 0.001 { word(run, liveColour).opacity(live) }
+                    if live < 0.999 { word(run, restColour, size: size) }
+                    if live > 0.001 { word(run, liveColour, size: size).opacity(live) }
                 }
                 .background { tileBackground(tile, size: size) }
             }
+            .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
             .font(font(size, hero: true, id: run.id))
             .lineLimit(1).minimumScaleFactor(0.35)
             .frame(maxWidth: stage.width * 0.8)
