@@ -279,7 +279,7 @@ internal sealed class MusicVideoSearchWindow : Window
                 ShowSearching();
                 break;
             case MusicVideoSearchModel.SearchPhase.Idle:
-                ShowMessage("Press Enter to search.", null);
+                ShowMessage("Press Enter to search", null);
                 break;
             case MusicVideoSearchModel.SearchPhase.Empty:
                 ShowMessage("No videos found", "Try other words.");
