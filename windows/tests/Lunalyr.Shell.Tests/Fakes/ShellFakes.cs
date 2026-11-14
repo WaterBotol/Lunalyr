@@ -126,7 +126,7 @@ internal sealed class FakeRenderer : IWallpaperRenderer
         lock (_gate) _floating = options;
     }
 
-    /// <summary>The layers the fake says it has (empty: the controller assumes editorial and spoken).</summary>
+    /// <summary>The layers the fake says it has (empty: the controller assumes constellation and spoken).</summary>
     public IReadOnlyCollection<string> LayerIds { get; set; } = [];
 
     public void SetClock(Func<(double Seconds, bool Playing)> clock) => Clock = clock;

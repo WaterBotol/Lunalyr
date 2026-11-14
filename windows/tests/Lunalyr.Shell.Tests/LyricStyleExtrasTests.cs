@@ -161,12 +161,12 @@ public class LyricStyleExtrasTests
     [Fact]
     public void RevealAndPreviewFollowTheLayoutTheyAreSetFor()
     {
-        var editorial = new AppSettings { LyricComposition = "editorial" }.WithRevealsWordsForControls(false).WithPreviewsNextWordForControls(false);
-        Assert.False(editorial.RevealsWords(CompositionKind.Editorial));
-        Assert.True(editorial.RevealsWords(CompositionKind.Scattered)); // a layout without an entry reveals its words
-        var style = editorial.Style();
-        Assert.False(style.RevealOptionsFor(CompositionKind.Editorial).RevealsWords);
-        Assert.False(style.RevealOptionsFor(CompositionKind.Editorial).PreviewsNextWord);
+        var constellation = new AppSettings { LyricComposition = "constellation" }.WithRevealsWordsForControls(false).WithPreviewsNextWordForControls(false);
+        Assert.False(constellation.RevealsWords(CompositionKind.Constellation));
+        Assert.True(constellation.RevealsWords(CompositionKind.Scattered)); // a layout without an entry reveals its words
+        var style = constellation.Style();
+        Assert.False(style.RevealOptionsFor(CompositionKind.Constellation).RevealsWords);
+        Assert.False(style.RevealOptionsFor(CompositionKind.Constellation).PreviewsNextWord);
         Assert.True(style.RevealOptionsFor(CompositionKind.Echo).PreviewsNextWord);
         // Spoken builds its lines from the sung words: always revealed.
         var spoken = new AppSettings { LyricComposition = "spoken" }.WithRevealsWordsForControls(false);
@@ -345,5 +345,29 @@ public class LyricStyleExtrasTests
         // With the rotation off, or a layout chosen, the memory wins as before.
         Assert.Equal("echo", StyleMemory.Applied(mix with { RotateLayouts = false }, new RememberedStyle("echo", null)).LyricComposition);
         Assert.Equal("echo", StyleMemory.Applied(mix with { LyricComposition = "spoken" }, new RememberedStyle("echo", null)).LyricComposition);
+    }
+
+    /// <summary>Editorial and Constellation + Editorial were cut (the Mac's next/tester-fixes): saved values move on.</summary>
+    [Fact]
+    public void TheCutLayoutsMoveOnWhereverTheyAreSaved()
+    {
+        var saved = new AppSettings
+        {
+            LyricComposition = "constellationEditorial", BackingVocalStyle = "editorial", LyricCardComposition = "editorial",
+            RotateLayoutCounts = new Dictionary<string, int> { ["editorial"] = 3, ["echo"] = 2 },
+        }.Normalized();
+        Assert.Equal("constellation", saved.LyricComposition);
+        Assert.Equal("scattered", saved.BackingVocalStyle);
+        Assert.Equal("scattered", saved.CardComposition);
+        Assert.Equal(["echo"], saved.RotateLayoutCounts.Keys);
+        Assert.Equal("constellation", new AppSettings().LyricComposition);
+        var remembered = RememberedStyle.FromStored(new Dictionary<string, string> { ["composition"] = "editorial" })!;
+        Assert.Equal("scattered", remembered.Composition);
+        // The typeface is remembered too; older styles without it leave the chosen one.
+        var chosen = new AppSettings { FontChoice = "installed", FontFamily = "Georgia" };
+        var kept = RememberedStyle.FromStored(StyleMemory.Chosen(chosen).Stored())!;
+        Assert.Equal(("installed", "Georgia"), (kept.Font, kept.FontFamily));
+        Assert.Equal("Georgia", StyleMemory.Applied(new AppSettings(), kept).FontFamily);
+        Assert.Equal("Georgia", StyleMemory.Applied(chosen, remembered).FontFamily);
     }
 }

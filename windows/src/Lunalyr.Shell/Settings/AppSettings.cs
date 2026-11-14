@@ -21,8 +21,8 @@ public sealed partial record AppSettings
 
     // ---- Lyric style ----
 
-    /// <summary>The lyric layout (Mac <c>lyricComposition</c>; its raw values). Default "editorial".</summary>
-    public string LyricComposition { get; init; } = "editorial";
+    /// <summary>The lyric layout (Mac <c>lyricComposition</c>; its raw values). Default "constellation", as on the Mac.</summary>
+    public string LyricComposition { get; init; } = "constellation";
 
     /// <summary>
     /// How each word appears as it is sung: the Mac's <c>WordArrival</c> raw values ("automatic" = match the layout,
@@ -163,9 +163,25 @@ public sealed partial record AppSettings
 
     // ---- Derived values ----
 
+    /// <summary>
+    /// The layouts offered. Editorial and Constellation + Editorial were cut on the Mac (next/tester-fixes, 14 Nov 2026)
+    /// and here: their layers stay registered, but nothing offers or picks them, and saved values move on
+    /// (<see cref="MigratedLayout"/>). "Add Editorial typography" stays.
+    /// </summary>
     public static IReadOnlyList<string> Compositions { get; } =
-        ["automatic", "scattered", "constellation", "constellationEditorial", "echo", "editorial", "spoken", "cascade", "cutout", "hinge",
+        ["automatic", "scattered", "constellation", "echo", "spoken", "cascade", "cutout", "hinge",
          "broadside", "portal", "mosaic", "torque", "fable"];
+
+    /// <summary>A saved layout id as it is now: Editorial is Scattered, Constellation + Editorial is Constellation.</summary>
+    public static string MigratedLayout(string? id) => id switch
+    {
+        "editorial" => "scattered",
+        "constellationEditorial" => "constellation",
+        _ => id ?? "",
+    };
+
+    /// <summary>Layouts no longer offered, for dropping their saved rotation counts.</summary>
+    public static bool IsRetiredLayout(string? id) => id is "editorial" or "constellationEditorial";
 
     public static IReadOnlyList<string> WordArrivals { get; } =
         ["automatic", "fade", "lift", "pop", "orbit", "glide", "unfold", "cutoutFold", "cutoutSlide", "cutoutHighlight",
@@ -179,7 +195,7 @@ public sealed partial record AppSettings
         var defaults = new AppSettings();
         return (this with
         {
-            LyricComposition = Compositions.Contains(LyricComposition) ? LyricComposition : defaults.LyricComposition,
+            LyricComposition = Compositions.Contains(MigratedLayout(LyricComposition)) ? MigratedLayout(LyricComposition) : defaults.LyricComposition,
             WordArrival = WordArrivals.Contains(WordArrival) ? WordArrival : defaults.WordArrival,
             LyricScale = double.IsFinite(LyricScale) ? Math.Clamp(LyricScale, 0.5, 2) : defaults.LyricScale,
             FontChoice = FontChoice is "system" or "installed" ? FontChoice : defaults.FontChoice,
@@ -197,7 +213,8 @@ public sealed partial record AppSettings
             LyrimuseFolder = LyrimuseFolder ?? "",
             LyricHighlightMode = LyricHighlightMode is "complement" or "album" or "custom" ? LyricHighlightMode : defaults.LyricHighlightMode,
             LyricHighlightCustom = Core.Colour.ColourHex.ToOkLab(LyricHighlightCustom) is null ? defaults.LyricHighlightCustom : LyricHighlightCustom.Trim().ToUpperInvariant(),
-            RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
+            RotateLayoutCounts = (RotateLayoutCounts ?? new Dictionary<string, int>()).Where(pair => !IsRetiredLayout(pair.Key))
+                .ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0, Core.Compositions.LayoutRotation.MaximumCount)),
             RotateLayoutsCursor = Math.Max(0, RotateLayoutsCursor),
             Player = Core.NowPlaying.PlayerChoice.Normalize(Player),
         }).NormalizedWindowSettings().NormalizedLyricTools().NormalizedWallpaper().NormalizedFloating()

@@ -14,7 +14,7 @@ public sealed class AppSettingsTests
     public void DefaultsMatchTheBrief()
     {
         var settings = new AppSettings();
-        Assert.Equal("editorial", settings.LyricComposition);
+        Assert.Equal("constellation", settings.LyricComposition);
         Assert.Equal("auto", settings.BackgroundMode);
         Assert.Equal(60, settings.AnimationRate);
         Assert.Equal(0, settings.LyricOffset);
@@ -176,7 +176,7 @@ public sealed class AppSettingsTests
             """{ "schemaVersion": 1, "lyricComposition": "nope", "animationRate": 144, "lyricOffset": 9, "lyricScale": -3, "romanizationDisplay": "sideways" }""",
             TestContext.Current.CancellationToken);
         await using var store = AppSettingsStore.Open(temp.Path, Logger.Null);
-        Assert.Equal("editorial", store.Current.LyricComposition);
+        Assert.Equal("constellation", store.Current.LyricComposition);
         Assert.Equal(60, store.Current.AnimationRate);
         Assert.Equal(3, store.Current.LyricOffset);
         Assert.Equal(0.5, store.Current.LyricScale);

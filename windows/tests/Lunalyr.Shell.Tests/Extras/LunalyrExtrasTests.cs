@@ -127,8 +127,8 @@ public sealed class LunalyrExtrasTests
         _settings = _settings with { LyricComposition = "echo" };
         var extras = Extras();
         extras.Perform(HotkeyAction.CycleLayout);
-        Assert.Equal("editorial", _settings.LyricComposition);
-        Assert.Equal("Layout: Editorial", _shown[^1]);
+        Assert.Equal("spoken", _settings.LyricComposition);
+        Assert.Equal("Layout: Spoken", _shown[^1]);
         _settings = _settings with { LyricComposition = "fable" };
         extras.Perform(HotkeyAction.CycleLayout);
         Assert.Equal("automatic", _settings.LyricComposition);
@@ -144,9 +144,9 @@ public sealed class LunalyrExtrasTests
         var globalBefore = _settings.LyricComposition;
         var extras = Extras(new ExtrasHooks { PlayingSong = () => song });
         extras.CycleLayout();
-        Assert.Equal(Core.Compositions.CompositionKind.Editorial, StyleMemory.Remembered(_settings, song, song.Artist)?.Style.Layout);
+        Assert.Equal(Core.Compositions.CompositionKind.Spoken, StyleMemory.Remembered(_settings, song, song.Artist)?.Style.Layout);
         Assert.Equal(globalBefore, _settings.LyricComposition); // the global layout is left alone
-        Assert.Equal("Layout for this song: Editorial", extras.Note?.Text);
+        Assert.Equal("Layout for this song: Spoken", extras.Note?.Text);
     }
 
     // Ported from LyricTapSyncTests.swift: testMusicVideoAndVisualiserShortcuts.

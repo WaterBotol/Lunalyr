@@ -149,7 +149,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         Assert.Equal(StatusText.Showing, controller.Status.Status);
         Assert.Equal("Spotify", controller.Status.Player);
         Assert.True(_renderer.IsRunning);
-        Assert.Equal("editorial", _renderer.Layers.Composition);
+        Assert.Equal("constellation", _renderer.Layers.Composition);
         // Custom Mix (the default type) gives the song one of the effects or patterns.
         Assert.True(TestBackgrounds.IsGpu(_renderer.Layers.Background), _renderer.Layers.Background);
         Assert.Equal(60, _renderer.FrameRate);
@@ -487,7 +487,7 @@ public sealed class AppControllerTests : IAsyncDisposable
     {
         _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from A")));
         _lyrics.Answer("Song B", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from B")));
-        _renderer.LayerIds = ["gradient", "colour", "editorial", "spoken", "cascade"];
+        _renderer.LayerIds = ["gradient", "colour", "scattered", "spoken", "cascade"];
         var cursors = new List<int>();
         var session = _source.Add(Playing("Song A"));
         _controller = new AppController(_source, _lyrics, _renderer, new AppSettings { LyricComposition = "automatic" }, _offsets,
@@ -502,7 +502,7 @@ public sealed class AppControllerTests : IAsyncDisposable
         Assert.NotEqual("automatic", _renderer.Layers.Composition);
         await controller.WhenIdleAsync();
         var first = _renderer.Layers.Composition;
-        Assert.Contains(first, new[] { "editorial", "spoken", "cascade" });
+        Assert.Contains(first, new[] { "scattered", "spoken", "cascade" });
         Assert.Equal(first, controller.MatchedComposition);
 
         session.SetTrack("Song B");

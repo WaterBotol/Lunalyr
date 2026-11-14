@@ -14,7 +14,7 @@ namespace Lunalyr.Shell.Tests;
 public sealed partial class SurfacesCopyTests
 {
     /// <summary>Two capitalised words in a row that aren't names (Lunalyr, Windows, Apple Music, YouTube…).</summary>
-    [GeneratedRegex(@"\b(?!Lunalyr\b|Windows\b|Apple\b|Music\b|YouTube\b|Spotify\b|SoundCloud\b|Discord\b|Settings\b|LRCLIB\b|Match\b|Chinese\b|Japanese\b|Korean\b|Start\b|Explorer\b|GIF\b|PNG\b|MP4\b)[A-Z][a-z]+ (?!Lunalyr\b|Windows\b|Music\b|YouTube\b|Settings\b|Spotify\b|Discord\b|LRCLIB\b)[A-Z][a-z]+")]
+    [GeneratedRegex(@"\b(?!Custom Mix\b|Lunalyr\b|Windows\b|Apple\b|Music\b|YouTube\b|Spotify\b|SoundCloud\b|Discord\b|Settings\b|LRCLIB\b|Match\b|Chinese\b|Japanese\b|Korean\b|Start\b|Explorer\b|GIF\b|PNG\b|MP4\b)[A-Z][a-z]+ (?!Lunalyr\b|Windows\b|Music\b|YouTube\b|Settings\b|Spotify\b|Discord\b|LRCLIB\b)[A-Z][a-z]+")]
     private static partial Regex TitleCase();
 
     public static TheoryData<string, string> Constants()

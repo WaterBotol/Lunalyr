@@ -17,7 +17,10 @@ namespace Lunalyr.Shell.Settings;
 /// </summary>
 /// <param name="Composition">A composition id, or "automatic" for Custom Mix; null leaves the layout to the settings.</param>
 /// <param name="Colour">A colour mode's raw value; null leaves the colour to the settings.</param>
-public sealed record RememberedStyle(string? Composition, string? Colour)
+/// <param name="Font">The typeface choice ("system" or "installed"), as the Mac now remembers it (next/tester-fixes); null
+/// leaves it to the settings, as in styles saved before.</param>
+/// <param name="FontFamily">The installed family with <paramref name="Font"/> "installed".</param>
+public sealed record RememberedStyle(string? Composition, string? Colour, string? Font = null, string? FontFamily = null)
 {
     /// <summary>The layout remembered, or null for none or Custom Mix.</summary>
     public CompositionKind? Layout => SettingsCopy.Kind(Composition);
@@ -31,13 +34,18 @@ public sealed record RememberedStyle(string? Composition, string? Colour)
         var stored = new Dictionary<string, string>(StringComparer.Ordinal);
         if (Composition is not null) stored["composition"] = Composition;
         if (Colour is not null) stored["colour"] = Colour;
+        if (Font is not null) stored["font"] = Font;
+        if (FontFamily is not null) stored["fontFamily"] = FontFamily;
         return stored;
     }
 
+    /// <summary>A stored style; a layout since cut reads as the one that replaced it (Editorial as Scattered).</summary>
     public static RememberedStyle? FromStored(IReadOnlyDictionary<string, string>? stored) =>
         stored is null ? null
-            : new(stored.TryGetValue("composition", out var composition) ? composition : null,
-                  stored.TryGetValue("colour", out var colour) ? colour : null);
+            : new(stored.TryGetValue("composition", out var composition) ? AppSettings.MigratedLayout(composition) : null,
+                  stored.TryGetValue("colour", out var colour) ? colour : null,
+                  stored.TryGetValue("font", out var font) && font is "system" or "installed" ? font : null,
+                  stored.TryGetValue("fontFamily", out var family) ? family : null);
 }
 
 public enum StyleScope { Song, Artist }
@@ -99,9 +107,12 @@ public static class StyleMemory
         var composition = style.Composition is { } id && AppSettings.Compositions.Contains(id) && !LeftOutOfMix(settings, id)
             ? id : settings.LyricComposition;
         var colour = style.ColourMode is { } mode ? mode.RawValue() : settings.LyricColourMode;
-        return composition == settings.LyricComposition && colour == settings.LyricColourMode
+        var font = style.Font ?? settings.FontChoice;
+        var family = style.Font is null ? settings.FontFamily : style.FontFamily ?? "";
+        return composition == settings.LyricComposition && colour == settings.LyricColourMode && font == settings.FontChoice
+               && family == settings.FontFamily
             ? settings
-            : settings with { LyricComposition = composition, LyricColourMode = colour };
+            : settings with { LyricComposition = composition, LyricColourMode = colour, FontChoice = font, FontFamily = family };
     }
 
     /// <summary>
@@ -147,7 +158,7 @@ public static class StyleMemory
     public static AppSettings ForgetPart(AppSettings settings, LyricQuery song, StyleScope scope, RememberedStyle style, StyleAspect aspect)
     {
         var left = aspect == StyleAspect.Layout ? style with { Composition = null } : style with { Colour = null };
-        return left.Composition is null && left.Colour is null ? Forget(settings, song, scope) : Remember(settings, left, song, scope);
+        return left.Composition is null && left.Colour is null && left.Font is null ? Forget(settings, song, scope) : Remember(settings, left, song, scope);
     }
 
     /// <summary>The settings with nothing remembered (the switch keeps its place).</summary>
@@ -161,11 +172,12 @@ public static class StyleMemory
         };
     }
 
-    /// <summary>The layout and colour chosen in the settings, as a style to remember.</summary>
+    /// <summary>The layout, colour and typeface chosen in the settings, as a style to remember.</summary>
     public static RememberedStyle Chosen(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        return new(settings.LyricComposition, settings.ColourMode.RawValue());
+        return new(settings.LyricComposition, settings.ColourMode.RawValue(), settings.FontChoice,
+            settings.FontChoice == "installed" ? settings.FontFamily : null);
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> With(

@@ -81,7 +81,7 @@ public static class LyricCardBuilder
                                      LyricStyle style, bool reduceMotion)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var kind = LyricCardLayout.Composition(composition) ?? CompositionKind.Editorial;
+        var kind = LyricCardLayout.Composition(composition) ?? CompositionKind.Constellation;
         var display = style.Readings switch
         {
             ReadingPlacement.Instead => RomanizationDisplay.Replace,

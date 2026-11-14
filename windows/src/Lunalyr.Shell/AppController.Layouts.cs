@@ -15,7 +15,7 @@ public sealed partial class AppController
     public const string AutomaticComposition = "automatic";
 
     private const int RememberedLayouts = 512;
-    private static readonly string[] EveryBuildHas = ["editorial", "spoken"];
+    private static readonly string[] EveryBuildHas = ["constellation", "spoken"];
 
     private LayoutRotation? _rotation;
     private readonly Dictionary<string, string> _layouts = new(StringComparer.Ordinal);
@@ -46,7 +46,7 @@ public sealed partial class AppController
         {
             // A layout remembered for the music playing wins over the chosen one.
             var layout = Effective(settings).LyricComposition;
-            return layout == AutomaticComposition ? _layout ?? "editorial" : layout;
+            return layout == AutomaticComposition ? _layout ?? "constellation" : layout;
         }
     }
 
@@ -56,7 +56,7 @@ public sealed partial class AppController
         var ids = _renderer.LayerIds;
         if (ids.Count == 0) return EveryBuildHas;
         List<string> found = [.. AppSettings.Compositions.Where(id => id != AutomaticComposition && ids.Contains(id))];
-        return found.Count == 0 ? ["editorial"] : found;
+        return found.Count == 0 ? ["constellation"] : found;
     }
 
     /// <summary>

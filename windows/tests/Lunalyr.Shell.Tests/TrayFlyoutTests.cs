@@ -230,7 +230,7 @@ public sealed class TrayFlyoutTests
             RomanizationDisplay = "off",
             CreditsLayer = false,
             BackgroundMode = "colourOnly",
-            LyricComposition = "constellationEditorial",
+            LyricComposition = "cascade",
         };
         var state = TrayFlyoutState.From(Inputs(Playing()) with { Settings = settings });
         Assert.True(state.WallpaperPaused);
@@ -238,13 +238,13 @@ public sealed class TrayFlyoutTests
         Assert.False(state.ReadingsOn);
         Assert.False(state.CreditsOn);
         Assert.Equal("colourOnly", state.Background);
-        Assert.Equal("Constellation + Editorial", TrayFlyoutState.Layouts[state.LayoutIndex].Title);
+        Assert.Equal("Cascade", TrayFlyoutState.Layouts[state.LayoutIndex].Title);
 
         var defaults = TrayFlyoutState.From(Inputs(Playing()));
         Assert.Equal(("Pause", "Pause wallpaper"), (defaults.PauseLabel, defaults.PauseTitle));
         Assert.True(defaults.ReadingsOn && defaults.CreditsOn);
         Assert.Equal("auto", defaults.Background);
-        Assert.Equal("Editorial", TrayFlyoutState.Layouts[defaults.LayoutIndex].Title);
+        Assert.Equal("Constellation", TrayFlyoutState.Layouts[defaults.LayoutIndex].Title);
     }
 
     [Fact]

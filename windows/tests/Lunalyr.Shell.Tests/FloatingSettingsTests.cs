@@ -126,7 +126,7 @@ public class FloatingSettingsTests
     [Fact]
     public void ChangingFloatingNeverChangesTheDesktop()
     {
-        var s = new AppSettings { LyricComposition = "editorial", LyricScale = 1.2, ShowInterludes = true };
+        var s = new AppSettings { LyricComposition = "constellation", LyricScale = 1.2, ShowInterludes = true };
         s = Switch(s, LyricsSurface.Floating) with
         {
             LyricComposition = "scattered", LyricScale = 0.8, ShowInterludes = false,
@@ -135,7 +135,7 @@ public class FloatingSettingsTests
         };
 
         s = Switch(s, LyricsSurface.Desktop);
-        Assert.Equal("editorial", s.LyricComposition);
+        Assert.Equal("constellation", s.LyricComposition);
         Assert.Equal(1.2, s.LyricScale);
         Assert.True(s.ShowInterludes);
         Assert.Empty(s.WordArrivalByStyle);

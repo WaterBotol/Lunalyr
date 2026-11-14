@@ -107,10 +107,10 @@ public sealed class AppControllerStyleMemoryTests : IAsyncDisposable
     {
         _lyrics.Answer("Song A", TestLyrics.Found(TestLyrics.Synced("LRCLIB", "Line from A")));
         _source.Add(Playing("Song A", "Artist A"));
-        var controller = Controller(new AppSettings { LyricComposition = "editorial" });
+        var controller = Controller(new AppSettings { LyricComposition = "scattered" });
         controller.Start();
         await WaitUntil(() => _renderer.Last?.Lyrics is LyricResult.Synced && controller.CurrentQuery is not null);
-        Assert.Equal("editorial", _renderer.Layers.Composition);
+        Assert.Equal("scattered", _renderer.Layers.Composition);
 
         var song = controller.CurrentQuery!;
         controller.ApplySettings(StyleMemory.Remember(controller.Settings, new RememberedStyle("cascade", "musicReactive"), song, StyleScope.Artist));
@@ -118,7 +118,7 @@ public sealed class AppControllerStyleMemoryTests : IAsyncDisposable
         Assert.Equal(LyricColourMode.MusicReactive, _renderer.Last!.Style.ColourMode);
 
         controller.ApplySettings(StyleMemory.Forget(controller.Settings, song, StyleScope.Artist));
-        Assert.Equal("editorial", _renderer.Layers.Composition);
+        Assert.Equal("scattered", _renderer.Layers.Composition);
         Assert.Equal(LyricColourMode.AlbumDrift, _renderer.Last!.Style.ColourMode);
     }
 }

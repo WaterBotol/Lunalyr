@@ -75,7 +75,7 @@ public sealed class AppControllerSettingsWindowTests : IAsyncDisposable
         Assert.Equal(lookups, _lyrics.Queries.Count);
 
         controller.ApplySettings(controller.Settings.WithEntranceForControls("pop") with { WordEntranceMix = ["glide"] });
-        Assert.Equal("pop", _renderer.Last!.Style.RevealFor("editorial"));
+        Assert.Equal("pop", _renderer.Last!.Style.RevealFor("constellation"));
         Assert.Equal(["glide"], _renderer.Last.Style.MixEntrances!);
 
         // The same settings again hand nothing over.

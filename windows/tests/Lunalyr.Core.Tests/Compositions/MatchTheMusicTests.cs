@@ -37,8 +37,10 @@ public class MatchTheMusicTests
     public void WithOnlyTheLayoutsWindowsHasSongsTakeThemInTurn()
     {
         var rotation = new LayoutRotation();
-        var picks = Enumerable.Range(0, 6).Select(index => rotation.Layout($"A|{index}", TrackCharacter.Neutral, ["editorial", "spoken", "gradient"])).ToList();
-        Assert.Equal(["spoken", "editorial", "spoken", "editorial", "spoken", "editorial"], picks);
+        var picks = Enumerable.Range(0, 6).Select(index => rotation.Layout($"A|{index}", TrackCharacter.Neutral, ["scattered", "spoken", "gradient"])).ToList();
+        // Only the layouts there, in turn.
+        Assert.Equal(new HashSet<string> { "scattered", "spoken" }, picks.ToHashSet());
+        for (var i = 1; i < picks.Count; i++) Assert.NotEqual(picks[i - 1], picks[i]);
     }
 
     // Ported from MatchTheMusicTests.swift: testReplayingASongKeepsItsLayout
@@ -69,7 +71,7 @@ public class MatchTheMusicTests
         Assert.True(slow.Energy < 0.3, $"{slow.Energy}");
         var rotation = new LayoutRotation();
         for (var index = 0; index < 16; index++)
-            Assert.DoesNotContain(rotation.Layout($"S|{index}", slow, Every), new[] { "cascade", "constellation", "constellationEditorial" });
+            Assert.DoesNotContain(rotation.Layout($"S|{index}", slow, Every), new[] { "cascade", "constellation" });
     }
 
     // Ported from MatchTheMusicTests.swift: testSongsWithoutAGenreAreToldApartByCoverAndCadence
@@ -93,7 +95,7 @@ public class MatchTheMusicTests
         var seen = Enumerable.Range(0, 40).Select(index => rotation.Layout($"A|{index}", TrackCharacter.Neutral, Every)).ToHashSet();
         Assert.DoesNotContain("cutout", seen);
         Assert.DoesNotContain("echo", seen);
-        Assert.Contains("editorial", seen);
+        Assert.Contains("scattered", seen);
     }
 
     // Ported from MatchTheMusicTests.swift: testACountOfThreeGivesThatLayoutThreeSongsInARow
@@ -101,12 +103,12 @@ public class MatchTheMusicTests
     public void ACountOfThreeGivesThatLayoutThreeSongsInARow()
     {
         var rotation = new LayoutRotation();
-        foreach (var layout in LayoutRotation.Order) rotation.SetCount(layout == "editorial" ? 3 : 0, layout);
+        foreach (var layout in LayoutRotation.Order) rotation.SetCount(layout == "scattered" ? 3 : 0, layout);
         rotation.SetCount(1, "spoken");
         var picks = Enumerable.Range(0, 8).Select(index => rotation.Layout($"S|{index}", TrackCharacter.Neutral, Every)).ToList();
-        Assert.Equal(3, picks.Take(4).Count(pick => pick == "editorial"));
-        Assert.Equal(new HashSet<string> { "editorial", "spoken" }, picks.ToHashSet());
-        Assert.Equal(6, picks.Count(pick => pick == "editorial"));
+        Assert.Equal(3, picks.Take(4).Count(pick => pick == "scattered"));
+        Assert.Equal(new HashSet<string> { "scattered", "spoken" }, picks.ToHashSet());
+        Assert.Equal(6, picks.Count(pick => pick == "scattered"));
     }
 
     // Ported from MatchTheMusicTests.swift: testOnlyOneLayoutChosenMeansEverySongGetsIt
@@ -153,12 +155,12 @@ public class MatchTheMusicTests
         var sparse = new TrackCharacter(0.2, 0.9, 2);
         Assert.Equal("constellation", LayoutMatch.For(dense, Every));
         Assert.Equal("echo", LayoutMatch.For(sparse, Every));
-        Assert.Equal("editorial", LayoutMatch.For(new TrackCharacter(0.5, 0.5, 2), Every));
-        Assert.Equal("scattered", LayoutMatch.For(new TrackCharacter(0.5, 0.5, 3), Every));
-        IReadOnlyCollection<string> windows = ["editorial", "spoken"];
+        Assert.Equal("scattered", LayoutMatch.For(new TrackCharacter(0.5, 0.5, 2), Every));
+        Assert.Equal("constellation", LayoutMatch.For(new TrackCharacter(0.5, 0.5, 3), Every));
+        IReadOnlyCollection<string> windows = ["scattered", "spoken"];
         Assert.Equal("spoken", LayoutMatch.For(dense, windows));
-        Assert.Equal("editorial", LayoutMatch.For(sparse, windows));
-        Assert.Equal("editorial", LayoutMatch.For(new TrackCharacter(0.5, 0.5, 3), windows));
+        Assert.Equal("scattered", LayoutMatch.For(sparse, windows));
+        Assert.Equal("scattered", LayoutMatch.For(new TrackCharacter(0.5, 0.5, 3), windows));
     }
 
     [Fact]

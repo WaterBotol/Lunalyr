@@ -108,12 +108,12 @@ public static class LayoutMatch
     public static string For(TrackCharacter character, IReadOnlyCollection<string> available)
     {
         ArgumentNullException.ThrowIfNull(available);
-        string[] wanted = character.Energy > 0.68 && character.Organic < 0.45 ? ["constellation", "constellationEditorial", "spoken"]
-            : character.Energy < 0.38 && character.Organic > 0.62 ? ["echo", "editorial"]
-            : character.Seed % 2 == 0 ? ["editorial", "scattered"] : ["scattered", "editorial"];
-        foreach (var layout in wanted.Concat(["editorial", "spoken"]))
+        string[] wanted = character.Energy > 0.68 && character.Organic < 0.45 ? ["constellation", "spoken"]
+            : character.Energy < 0.38 && character.Organic > 0.62 ? ["echo", "scattered"]
+            : character.Seed % 2 == 0 ? ["scattered", "constellation"] : ["constellation", "scattered"];
+        foreach (var layout in wanted.Concat(["constellation", "spoken"]))
             if (available.Contains(layout)) return layout;
-        return available.FirstOrDefault(layout => layout != "automatic") ?? "editorial";
+        return available.FirstOrDefault(layout => layout != "automatic") ?? "constellation";
     }
 }
 
@@ -129,8 +129,8 @@ public sealed class LayoutRotation
 
     /// <summary>The order songs step through: contrasting looks sit next to each other.</summary>
     public static IReadOnlyList<string> Order { get; } =
-        ["cutout", "hinge", "constellation", "broadside", "editorial", "portal", "spoken", "mosaic", "echo", "torque",
-         "cascade", "fable", "scattered", "constellationEditorial"];
+        ["cutout", "hinge", "constellation", "broadside", "portal", "spoken", "mosaic", "echo", "torque",
+         "cascade", "fable", "scattered"];
 
     private readonly Dictionary<string, string> _assigned = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _counts = new(StringComparer.Ordinal);

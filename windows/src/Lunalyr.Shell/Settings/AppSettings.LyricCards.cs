@@ -39,7 +39,7 @@ public sealed partial record AppSettings
     /// <summary>The card's composition id, or null to follow the wallpaper.</summary>
     [JsonIgnore]
     public string? CardComposition =>
-        LyricCardLayout.Composition(LyricCardComposition) is { } kind ? Core.Compositions.CompositionTraits.Id(kind) : null;
+        LyricCardLayout.Composition(MigratedLayout(LyricCardComposition)) is { } kind ? Core.Compositions.CompositionTraits.Id(kind) : null;
 
     [JsonIgnore]
     public CardAspect CardAspect => CardAspects.Parse(LyricCardAspect) ?? Core.Cards.CardAspect.Portrait;

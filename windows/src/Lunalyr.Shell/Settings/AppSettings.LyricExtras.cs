@@ -30,7 +30,7 @@ public sealed partial record AppSettings
     public string BackingVocalStyle { get; init; } = "";
 
     /// <summary>The layouts backing words can animate in (the Mac's <c>BackingVocals.choices</c>).</summary>
-    public static IReadOnlyList<string> BackingVocalChoices { get; } = ["scattered", "constellation", "constellationEditorial", "echo", "editorial"];
+    public static IReadOnlyList<string> BackingVocalChoices { get; } = ["scattered", "constellation", "echo"];
 
     // ---- Typography ----
 
@@ -184,7 +184,7 @@ public sealed partial record AppSettings
         var lead = NextWordPreviewLead;
         return this with
         {
-            BackingVocalStyle = BackingVocalChoices.Contains(BackingVocalStyle ?? "") ? BackingVocalStyle! : "",
+            BackingVocalStyle = BackingVocalChoices.Contains(MigratedLayout(BackingVocalStyle)) ? MigratedLayout(BackingVocalStyle) : "",
             EditorialAmount = double.IsFinite(amount) ? Math.Clamp(amount, 0, 1) : defaults.EditorialAmount,
             LyricColourMode = (LyricColourModes.SavedChoice(LyricColourMode) ?? LyricColourModes.DefaultMode).RawValue(),
             LyricColourSpeed = double.IsFinite(speed) ? Math.Clamp(speed, LyricColourOptions.SpeedMin, LyricColourOptions.SpeedMax) : 1,

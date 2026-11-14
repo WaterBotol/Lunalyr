@@ -68,7 +68,7 @@ internal sealed partial class AppHost
                 if (_controller is not { } controller) return null;
                 var settings = _settings.Current;
                 var wallpaper = settings.LyricComposition == AppController.AutomaticComposition
-                    ? controller.MatchedComposition ?? "editorial" : settings.LyricComposition;
+                    ? controller.MatchedComposition ?? "constellation" : settings.LyricComposition;
                 var scene = controller.Scene;
                 return LyricCardBuilder.Build(scene, rows, layout ?? wallpaper, aspect, scene.Style, ReduceMotion);
             },

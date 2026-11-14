@@ -64,8 +64,8 @@ public sealed class OnboardingReworkTests
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown(null));
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("automatic")); // Windows' Custom Mix is the Mac's nil
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("portal"));
-        var withEditorial = LayoutChoices.Shown("constellationEditorial");
-        Assert.Equal("constellationEditorial", withEditorial[0]);
+        var withEditorial = LayoutChoices.Shown("constellation");
+        Assert.Equal("constellation", withEditorial[0]);
         Assert.Equal(LayoutChoices.Featured.Count, withEditorial.Count);
         Assert.Equal(0, LayoutThumbnail.Time(0));
         Assert.Equal(1, LayoutThumbnail.Time(LayoutThumbnail.Cycle + 1), 4);
@@ -86,8 +86,8 @@ public sealed class OnboardingReworkTests
     public void TheLayoutsFeaturedAreRealAndTheRestAreCounted()
     {
         Assert.All(LayoutChoices.Featured, id => Assert.Contains(id, AppSettings.Compositions));
-        Assert.Equal(14, LayoutChoices.AllCount);
-        Assert.Equal("10 more in Settings, with Custom Mix.", OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - LayoutChoices.Featured.Count));
+        Assert.Equal(12, LayoutChoices.AllCount);
+        Assert.Equal("8 more in Settings, with Custom Mix.", OnboardingCopy.MoreLayouts(LayoutChoices.AllCount - LayoutChoices.Featured.Count));
         Assert.Equal(LayoutChoices.Featured, LayoutChoices.Shown("no-such-layout")); // an unknown id leads nothing
     }
 
