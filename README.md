@@ -207,7 +207,7 @@ Lunalyr only reads a player that is already open; it never opens one itself.
 
 ### Menu bar, keyboard shortcuts and Shortcuts
 
-- **The menu-bar panel** is short: music video search, Open Lyric Card…, your Discord status, and Settings, Check for Updates… and Quit. Everything else is in Settings.
+- **The menu-bar panel** shows what is playing and where its lyrics came from, with quick switches for the wallpaper, floating lyrics, the visualiser scene and lyric timing.
 - **The current line in the menu bar**, if you like.
 - **Global keyboard shortcuts** (off until you turn them on in **Settings › Menu bar & shortcuts**) to show or hide the lyrics, nudge their timing, change layout, open a lyric card, pause the wallpaper, tap to sync, toggle the music video and change visualiser.
 - **Shortcuts actions** for the same jobs, so you can use them in your own shortcuts or with Siri.
@@ -305,7 +305,7 @@ Lunalyr has no Dock icon while Settings is closed. On a MacBook with a notch, me
   tccutil reset AppleEvents local.verso.custom
   ```
 
-- **Settings › Timing & sources** shows which source supplied the lyrics. If none did, use **Find lyrics** in **Settings › Timing & sources** to search by hand, turn on more sources, or import a lyric file (LRC or TTML, the usual formats for synced lyrics).
+- The menu-bar panel shows which source supplied the lyrics. If none did, use **Find lyrics** in **Settings › Timing & sources** to search by hand, turn on more sources, or import a lyric file (LRC or TTML, the usual formats for synced lyrics).
 
 </details>
 

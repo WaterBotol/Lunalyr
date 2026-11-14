@@ -118,18 +118,6 @@ final class MenuBarPanelTests: XCTestCase {
 
     // MARK: Sizes and words
 
-    /// The short panel: music video search, lyric cards and Discord, with
-    /// update and attention banners when raised, then Settings, updates and
-    /// Quit. No lyrics, song, Looks, wallpaper, player, timing or switches.
-    func testThePanelHoldsOnlyItsShortList() {
-        XCTAssertEqual(MenuBarView.items(updateWaiting: false, hasStatuses: false),
-                       [.musicVideo, .lyricCard, .discord, .footer])
-        XCTAssertEqual(MenuBarView.items(updateWaiting: true, hasStatuses: true),
-                       [.update, .statuses, .musicVideo, .lyricCard, .discord, .footer])
-        XCTAssertEqual(MenuBarMusicVideoSection.searchTitle, "Search YouTube…")
-        XCTAssertEqual(MenuBarDiscordToggle.title, "Discord status")
-    }
-
     func testThePanelScrollsOnlyPastTheSmallestScreen() {
         XCTAssertEqual(MenuBarView.maximumPanelHeight(screens: [NSRect(x: 0, y: 0, width: 1470, height: 853),
                                                                 NSRect(x: 0, y: 0, width: 2560, height: 1400)]), 829)
