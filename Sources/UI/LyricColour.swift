@@ -121,6 +121,33 @@ enum Perceptual {
         return tinted(lifted, from: colour, background: background)
     }
 
+    /// Dark text for a light wallpaper: the colour no lighter than
+    /// `deepLightness`, then darkened along its own hue (chroma kept where
+    /// sRGB allows) until it reaches `ratio` against `background`.
+    static func deep(_ lab: OKLab, background: Double, ratio: Double = LyricInk.minimumContrast) -> OKLab {
+        // `deepMargin` over the ratio: words settle at 85-95% opacity in
+        // several layouts, which drew dark type under it on the wallpaper.
+        let target = (min(1, max(0, background)) + 0.05) / (max(1, ratio) * deepMargin) - 0.05
+        let start = clipped(OKLab(l: min(lab.l, deepLightness), chroma: lab.chroma, hue: lab.hue))
+        guard target > 0 else { return OKLab(l: 0, a: 0, b: 0) }
+        if luminance(start) <= target { return start }
+        var low = 0.0, high = start.l
+        for _ in 0..<18 {
+            let mid = (low + high) / 2
+            if luminance(clipped(OKLab(l: mid, chroma: lab.chroma, hue: lab.hue))) <= target { low = mid } else { high = mid }
+        }
+        return clipped(OKLab(l: low, chroma: lab.chroma, hue: lab.hue))
+    }
+
+    static let deepMargin = 1.15
+    /// No dark lyric colour is lighter than this OKLab lightness: "deep".
+    static let deepLightness = 0.5
+    /// Words drawn in a neutral on a light wallpaper (Static's text, Sung
+    /// sweep's words not yet sung): a deep charcoal, tinted 0.025 towards
+    /// the palette's first hue where there is one.
+    static let deepNeutralLightness = 0.32
+    static let deepNeutralChroma = 0.025
+
     /// The least chroma a lifted lyric colour may lose before it reads as
     /// white. Lifting a pastel to reach 3:1 on a bright wallpaper used to
     /// fade every colour to white.
@@ -256,6 +283,24 @@ struct LyricInk {
 
     /// Sung sweep: the colour of words before the sweep reaches them.
     var sweepRest: OKLab = .white
+    /// 0 for light text (dark wallpapers), 1 for dark text on a light
+    /// wallpaper, in between while it eases over (`LyricInkDirector`).
+    var dark = 0.0
+    /// The wallpaper's luminance where the lyrics sit, before the automatic
+    /// dark backing (which dark text does without): what dark colours are
+    /// held to `contrast` against.
+    var lightBackdrop = 0.08
+    /// Shadows and halos under the type: black under light text, white
+    /// under dark text.
+    var shadow: Color { dark <= 0 ? .black : Perceptual.color(OKLab(l: dark, a: 0, b: 0)) }
+
+    /// `light` (a colour made readable as light text), eased towards the
+    /// deep version of `source` by `dark`.
+    func toned(_ light: OKLab, source: OKLab) -> OKLab {
+        guard dark > 0 else { return light }
+        let deep = Perceptual.deep(source, background: lightBackdrop, ratio: contrast)
+        return dark >= 1 ? deep : Perceptual.mix(light, deep, dark)
+    }
     /// Gradient stops for the drifting and reactive modes, and the colours
     /// Sung sweep fills words with.
     var stops: (OKLab, OKLab, OKLab, OKLab) = (.white, .white, .white, .white)
@@ -293,17 +338,19 @@ struct LyricInk {
             // Each word fills with its own colour: its place on the line
             // through the palette, so neighbours step smoothly and the
             // palette moves on slowly from line to line (`phase`).
-            let sung = Perceptual.readable(gradient(slot: slot, seed: seed), background: backdrop, ratio: contrast,
-                                           keepingColour: true)
-            var sample = Self.sample(sweepRest, sung: sung)
+            let source = gradient(slot: slot, seed: seed)
+            let sung = toned(Perceptual.readable(source, background: backdrop, ratio: contrast, keepingColour: true),
+                             source: source)
+            var sample = Self.sample(sweepRest, sung: sung, halo: dark)
             sample.dim = dim
             return sample
         case .albumDrift, .customGradient, .musicReactive:
             // Lifted like the line's base colour and Sung sweep: 3:1, or
             // where that would wash the colour out, a tint kept at 2.5:1.
-            let colour = Perceptual.readable(gradient(slot: slot, seed: seed), background: backdrop, ratio: contrast,
-                                             keepingColour: true)
-            var sample = Self.sample(colour)
+            let source = gradient(slot: slot, seed: seed)
+            let colour = toned(Perceptual.readable(source, background: backdrop, ratio: contrast, keepingColour: true),
+                               source: source)
+            var sample = Self.sample(colour, halo: dark)
             sample.dim = dim
             return sample
         }
@@ -354,11 +401,16 @@ struct LyricInk {
         return OKLab(l: colour.l - depth, a: colour.a * strength, b: colour.b * strength)
     }
 
-    static func sample(_ colour: OKLab, sung: OKLab? = nil) -> LyricInkSample {
+    /// `halo`: how far the glow turns into a light halo, for dark text.
+    static func sample(_ colour: OKLab, sung: OKLab? = nil, halo: Double = 0) -> LyricInkSample {
         let rest = Perceptual.color(colour)
         let fill = sung.map { Perceptual.color($0) } ?? rest
-        let glowSource = Perceptual.clipped(OKLab(l: min(1, (sung ?? colour).l + 0.06),
+        var glowSource = Perceptual.clipped(OKLab(l: min(1, (sung ?? colour).l + 0.06),
                                                   a: (sung ?? colour).a * 0.8, b: (sung ?? colour).b * 0.8))
+        if halo > 0 {
+            glowSource = Perceptual.mix(glowSource, OKLab(l: 0.97, a: (sung ?? colour).a * 0.1, b: (sung ?? colour).b * 0.1),
+                                        min(1, halo))
+        }
         return LyricInkSample(rest: rest, sung: fill, glow: Perceptual.color(glowSource),
                               reading: Perceptual.color(colour, opacity: 0.7), sweeps: sung != nil)
     }
@@ -523,6 +575,13 @@ final class LyricInkDirector {
         var highlight: LyricHighlightMode = .complement
         /// The user's own highlight colour, for `.custom`.
         var highlightCustom: OKLab?
+        /// The luminance behind the lyrics without the automatic dark
+        /// backing (a manual backing included), which decides light or
+        /// dark text. Nil: `backdrop`.
+        var toneBackdrop: Double?
+        /// Whether this director's tone is the one the wallpaper's backing
+        /// follows (`LyricTone`): the desktop lyrics, not floating ones.
+        var publishesTone = false
     }
     typealias Stops = (OKLab, OKLab, OKLab, OKLab)
 
@@ -534,6 +593,18 @@ final class LyricInkDirector {
     private var backdrop = VCFollower()
     private var level = VCFollower(), balance = VCFollower()
     private var phase = 0.0
+    /// Dark text on a light wallpaper: the decision (with hysteresis) and
+    /// how far the colours have eased towards it.
+    private(set) var darkText = false
+    private(set) var darkAmount = 0.0
+    private var lightBehind = VCFollower()
+    /// Dark text from above this luminance behind the lyrics (before the
+    /// automatic backing); light again below `lightBelow`. White reaches
+    /// 3:1 on its own up to 0.30, so the switch straddles it.
+    static let darkAbove = 0.34
+    static let lightBelow = 0.26
+    /// Seconds for the colours to cross over.
+    static let toneEase = 0.6
     private var lastWall: Double?
     private var last: LyricInk?
     private var albumKey: [SIMD3<Float>] = []
@@ -576,14 +647,25 @@ final class LyricInkDirector {
         // The system clock stepped back: carry on from the new time rather
         // than hold the colours until the old one comes round again.
         if let previous = lastWall, wall < previous - 1 { lastWall = nil }
+        let first = lastWall == nil && last == nil
         let dt = lastWall.map { min(0.25, max(0, wall - $0)) } ?? 0
         if lastWall != nil, dt == 0, let last { return last }
         lastWall = wall
+        // Light or dark text, from the wallpaper behind the lyrics.
+        let toneBehind = min(1, max(0, inputs.toneBackdrop ?? inputs.backdrop))
+        if darkText ? toneBehind < Self.lightBelow : toneBehind > Self.darkAbove { darkText.toggle() }
+        let toneGoal = darkText ? 1.0 : 0.0
+        darkAmount = first ? toneGoal
+            : darkAmount + max(-dt / Self.toneEase, min(dt / Self.toneEase, toneGoal - darkAmount))
+        if inputs.publishesTone { LyricTone.shared.report(darkAmount) }
+        let lightTarget = toneBehind
+        let lightNow = first ? lightTarget : vc_follow(&lightBehind, lightTarget, dt, 0.5, 0.6)
+        if first { _ = vc_follow(&lightBehind, lightTarget, 0, 0.5, 0.6) }
         refreshAlbum(inputs.album)
         let calm = inputs.reduceMotion
         let ratio = inputs.increaseContrast ? LyricInk.increasedContrast : LyricInk.minimumContrast
         let textRatio = inputs.increaseContrast ? LyricHighlight.increasedTextContrast : LyricHighlight.textContrast
-        if inputs.mode == .standard, atWhite {
+        if inputs.mode == .standard, atWhite, darkAmount == 0 {
             // The type is white, but the highlights have colour: white has
             // no hue to complement, so they take the album accent, or the
             // user's own colour.
@@ -638,29 +720,50 @@ final class LyricInkDirector {
         ink.phase = (phase * 720).rounded() / 720
         ink.contrast = ratio
         ink.dim = inputs.increaseContrast ? LyricInk.increasedUnsungDim : LyricInk.unsungDim
+        ink.dark = darkAmount
+        ink.lightBackdrop = Self.quantised(lightNow)
+        // The deep neutral that stands in for white on a light wallpaper.
+        let tintHue = followed.1.chroma > 0.02 ? followed.1.hue : followed.0.hue
+        let neutral = OKLab(l: Perceptual.deepNeutralLightness,
+                            chroma: inputs.mode == .standard ? 0 : Perceptual.deepNeutralChroma, hue: tintHue)
         switch inputs.mode {
         case .standard:
-            // Still easing back to white after another mode.
-            ink.mode = .albumDrift
+            // White, or easing back to it after another mode; on a light
+            // wallpaper, the deep neutral.
             ink.stopCount = 1
-            ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio))
+            if darkAmount > 0 {
+                ink.base = LyricInk.sample(ink.toned(Perceptual.readable(followed.0, background: behind, ratio: ratio),
+                                                     source: neutral), halo: darkAmount)
+            } else {
+                ink.mode = .albumDrift
+                ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio))
+            }
         case .sungSweep:
-            let rest = Perceptual.readable(.white, background: behind, ratio: ratio, keepingColour: true)
+            let rest = ink.toned(Perceptual.readable(.white, background: behind, ratio: ratio, keepingColour: true),
+                                 source: neutral)
             ink.sweepRest = rest
-            let sung = Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio, keepingColour: true)
-            ink.base = LyricInk.sample(rest, sung: sung)
+            let middle = ink.gradient(slot: 0.5)
+            let sung = ink.toned(Perceptual.readable(middle, background: behind, ratio: ratio, keepingColour: true),
+                                 source: middle)
+            ink.base = LyricInk.sample(rest, sung: sung, halo: darkAmount)
             // No underline under sung words (the user, 14 Nov 2026).
         default:
-            ink.base = LyricInk.sample(Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio,
-                                                           keepingColour: true))
+            let middle = ink.gradient(slot: 0.5)
+            ink.base = LyricInk.sample(ink.toned(Perceptual.readable(middle, background: behind, ratio: ratio,
+                                                                     keepingColour: true), source: middle),
+                                       halo: darkAmount)
         }
         ink.base.dim = ink.dim
         // Sung sweep's palette walks on by itself, so its highlight, dots
         // and links take its first colour, which holds still.
-        let highlight = Perceptual.readable(inputs.mode == .sungSweep ? followed.0 : ink.gradient(slot: 0.5),
-                                            background: behind, ratio: ratio)
+        let highlightSource = inputs.mode == .sungSweep ? followed.0
+            : inputs.mode == .standard && darkAmount > 0 ? neutral : ink.gradient(slot: 0.5)
+        let highlight = ink.toned(Perceptual.readable(highlightSource, background: behind, ratio: ratio),
+                                  source: highlightSource)
         ink.dot = Perceptual.color(highlight)
-        ink.link = Perceptual.color(Perceptual.mix(highlight, .white, 0.5))
+        // Hairlines: half way to white under light text; the deep colour
+        // itself, a little lighter, under dark text.
+        ink.link = Perceptual.color(Perceptual.mix(highlight, .white, 0.5 * (1 - darkAmount) + 0.12 * darkAmount))
         // The highlight complements the lyric colour as it is now (easing
         // back to Static white, the one it will settle on): the sung colour
         // for Sung sweep, the middle of the line otherwise, its hue carried
@@ -675,6 +778,12 @@ final class LyricInkDirector {
         let tile = followHighlight(goal, dt: dt, calm: calm)
         Self.highlight(&ink, tile: tile, backdrop: behind, textRatio: textRatio, ratio: ratio,
                        lyric: Perceptual.luminance(highlight))
+        // Cascade's held words are type, not tiles: deep on a light wallpaper.
+        // From the tile's colour: the held type, lifted for light text,
+        // is too pale to keep its hue once darkened.
+        if darkAmount > 0, let tone = ink.highlight {
+            ink.accent = Perceptual.color(ink.toned(tone.held, source: tone.tile))
+        }
         ink.settled = ink.settled && highlightSettled(on: goal)
         last = ink
         return ink
@@ -870,5 +979,47 @@ final class LyricInkDirector {
             func at(_ index: Int) -> OKLab { LyricInk.pastel(inputs.custom[index % count]) }
             return ((at(0), at(1), at(2), at(3)), count)
         }
+    }
+}
+
+
+/// How far the desktop lyrics have turned to dark text (0...1, in steps of
+/// 0.05), for the wallpaper: its automatic dark backing behind the lyrics
+/// fades out as they do, since dark text needs the light wallpaper.
+@MainActor
+final class LyricTone: ObservableObject {
+    static let shared = LyricTone()
+    @Published private(set) var dark = 0.0
+    private var reported = 0.0
+
+    /// Called while the lyrics are drawn, so the change is published after.
+    func report(_ value: Double) {
+        let stepped = (min(1, max(0, value)) * 20).rounded() / 20
+        guard stepped != reported else { return }
+        reported = stepped
+        DispatchQueue.main.async { [weak self] in self?.dark = stepped }
+    }
+}
+
+/// A shadow under lyric type that follows the ink: dark under light text,
+/// a light halo under dark text on a light wallpaper.
+private struct LyricShadow: ViewModifier {
+    let opacity: Double
+    let radius: CGFloat
+    let x: CGFloat
+    let y: CGFloat
+    @Environment(\.lyricInk) private var ink
+
+    func body(content: Content) -> some View {
+        // A halo reads best a little stronger and without the drop.
+        let halo = ink.dark
+        content.shadow(color: ink.shadow.opacity(min(1, opacity * (1 + 0.6 * halo))), radius: radius,
+                       x: x * (1 - halo), y: y * (1 - halo))
+    }
+}
+
+extension View {
+    func lyricShadow(_ opacity: Double, radius: CGFloat, x: CGFloat = 0, y: CGFloat = 0) -> some View {
+        modifier(LyricShadow(opacity: opacity, radius: radius, x: x, y: y))
     }
 }

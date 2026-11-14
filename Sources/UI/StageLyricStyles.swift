@@ -371,7 +371,7 @@ struct StageLyricView: View {
                 }
                 .frame(maxWidth: maxWidth)
                 .frame(height: Self.readingSize(size) * 1.25)
-                .shadow(color: .black.opacity(shadow ? 0.35 : 0), radius: max(2, Self.readingSize(size) * 0.18), y: 1)
+                .lyricShadow(shadow ? 0.35 : 0, radius: max(2, Self.readingSize(size) * 0.18), y: 1)
                 .opacity(shown)
             }
         } else {

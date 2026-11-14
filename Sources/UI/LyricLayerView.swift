@@ -144,11 +144,19 @@ struct LyricLayer: View {
             backing: DesktopOptions.shared.manualTextBacking,
             target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
             pastelText: colour != .standard, increaseContrast: contrast == .increased)
+        // Without the automatic dark backing: what decides dark text.
+        let unbacked = backdropOverride ?? LyricBackdrop.luminance(mode: mode,
+            motion: mode == .auto && settings.motionArtworkEnabled && nowPlaying.motionArtwork != nil,
+            palette: palette, scrim: settings.scrimStrength, measured: measuredBackdrop,
+            backing: DesktopOptions.shared.manualTextBacking ?? 0,
+            target: LyricLegibility.targetContrast(baseSize: baseSize), tinted: nowPlaying.artwork != nil,
+            pastelText: false, increaseContrast: contrast == .increased)
         return cache.ink(.init(mode: colour, speed: colours.speed, strength: colours.strength, custom: colours.customColours,
             album: palette, backdrop: backdrop, audio: audio.running ? audio.levels : nil,
             vocal: active.map { OrganicMotion.vocalIntensity(lyricsVM.lines[$0].words, at: time) } ?? energy,
             reduceMotion: reduceMotion, increaseContrast: contrast == .increased, accent: cache.oklab(accent),
-            highlight: highlights.mode, highlightCustom: highlights.customColour),
+            highlight: highlights.mode, highlightCustom: highlights.customColour,
+            toneBackdrop: unbacked, publishesTone: backdropOverride == nil),
             wall: wall)
     }
 
@@ -342,7 +350,7 @@ struct LyricLayer: View {
                 .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight),
                     userScale: CGFloat(settings.lyricScale)))
                 .frame(maxWidth: maxWidth)
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
+                .lyricShadow(0.5, radius: 10, y: 2)
             case .notice:
                 if let reportedAt = content.notFoundAt {
                     let age = Date().timeIntervalSince(reportedAt)
@@ -462,7 +470,7 @@ struct LyricLayer: View {
             plainBlock(plainLines, size: baseSize * CGFloat(min(1.5, max(0.7, settings.lyricScale))) * 0.3,
                        maxWidth: maxWidth, mood: mood, colour: colour)
                 .modifier(FittedLyricStage(available: CGSize(width: maxWidth, height: maxHeight), userScale: 1, neutral: 1))
-                .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                .lyricShadow(0.4, radius: 8, y: 2)
         }
     }
 
@@ -497,7 +505,7 @@ struct LyricLayer: View {
                                    .init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
                            startPoint: .top, endPoint: .bottom)
         }
-        .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+        .lyricShadow(0.4, radius: 8, y: 2)
     }
 
     /// The lines one scene draws from.
@@ -1844,7 +1852,7 @@ private struct TranslationLine: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: width)
-            .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+            .lyricShadow(0.3, radius: 6, y: 2)
     }
 }
 

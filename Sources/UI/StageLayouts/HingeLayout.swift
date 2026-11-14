@@ -412,7 +412,7 @@ extension StageLyricView {
                     .background { tileBackground(tile, size: size) }
             }
         }
-        .shadow(color: .black.opacity(tile ? 0 : 0.3), radius: max(2, size * 0.06), y: 2)
+        .lyricShadow(tile ? 0 : 0.3, radius: max(2, size * 0.06), y: 2)
         // The burst grows about a point a quarter in from the spine, so a big
         // word does not run far past the page's outer margin.
         .scaleEffect(pose.grow, anchor: UnitPoint(x: side == .right ? 0.25 : 0.75, y: 0.6))

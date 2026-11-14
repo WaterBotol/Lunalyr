@@ -42,7 +42,7 @@ extension StageLyricView {
                 fablePage(plan.pages[index], plan: plan, style: style, runs: runs, seed: seed)
                     // One shadow for the page, not one per word.
                     .compositingGroup()
-                    .shadow(color: .black.opacity(0.3), radius: max(3, unit * 0.08), y: 2)
+                    .lyricShadow(0.3, radius: max(3, unit * 0.08), y: 2)
                     // Long pages and big readings are shrunk to fit, never cut off.
                     .visualEffect { page, geometry in
                         page.scaleEffect(LyricStageFit.scale(content: geometry.size, available: available))

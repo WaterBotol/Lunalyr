@@ -693,7 +693,7 @@ struct ScatteredLyricText: View {
                     .padding(.horizontal, run.inset.width)
                     // Line-timed text keeps the same dark shadow as sung words,
                     // so it stays legible over a light wallpaper.
-                    .shadow(color: .black.opacity(0.32), radius: 8, y: 2)
+                    .lyricShadow(0.32, radius: 8, y: 2)
                     .opacity(firstRunOnly.map { run.index == 0 ? $0 : 0 } ?? 1)
                 }
             }
@@ -1002,7 +1002,7 @@ private struct ScatteredRunInk: View, Equatable {
                 arrival: settles ? min(1, frame.presentation.arrival) : frame.presentation.arrival))
             .modifier(OptionalGlow(colour: frame.ink.glow, strength: 0.45 * frame.glow * frame.fill * (1 - tiled),
                                    radius: 10 + 22 * frame.glow))
-            .shadow(color: .black.opacity(0.28 + 0.24 * heat), radius: 7 + 12 * heat, y: 2)
+            .lyricShadow(0.28 + 0.24 * heat, radius: 7 + 12 * heat, y: 2)
         }
     }
 

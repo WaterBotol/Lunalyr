@@ -412,7 +412,7 @@ extension StageLyricView {
         .padding(.horizontal, size * 0.5).padding(.vertical, size * 0.26)
         .background { portalBackground(pill, size: size, live: live, eased: eased, burst: burst, tile: tile, outlined: outlined, salt: index) }
         .scaleEffect(scale)
-        .shadow(color: .black.opacity(outlined ? 0 : 0.2 * live), radius: 9, y: 4)
+        .lyricShadow(outlined ? 0 : 0.2 * live, radius: 9, y: 4)
         // It squashes as it lands, then settles.
         .scaleEffect(x: reduceMotion ? 1 : 1 + 0.07 * (1 - min(a, 1)), y: reduceMotion ? 1 : 1 - 0.07 * (1 - min(a, 1)))
         .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * min(a, 1.05))

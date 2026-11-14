@@ -324,8 +324,11 @@ final class LyricColourTests: XCTestCase {
         let accent = sweep(on: 0.03)
         XCTAssertGreaterThan(Perceptual.oklab(sRGB: rgb(accent.sung)).chroma, 0.08)
         XCTAssertNil(accent.sweepUnderline)
+        // A light wallpaper turns the lyrics dark: deep colours at 4.5:1
+        // (Increase Contrast) instead of near-white.
         let washedOut = sweep(on: 0.62)
-        XCTAssertGreaterThan(Perceptual.oklab(sRGB: rgb(washedOut.sung)).l, 0.98)
+        XCTAssertLessThan(Perceptual.oklab(sRGB: rgb(washedOut.sung)).l, Perceptual.deepLightness + 0.001)
+        XCTAssertGreaterThanOrEqual(Perceptual.contrast(luminance(washedOut.sung), 0.62), 4.45)
         XCTAssertNil(washedOut.sweepUnderline, "no underline under sung words, even when the sung colour is near white")
         XCTAssertNil(sweep(on: 0.62, strength: 0).sweepUnderline)
     }
@@ -591,19 +594,23 @@ final class SungSweepPaletteTests: XCTestCase {
             XCTAssertTrue(words.allSatisfy(\.sweeps))
             let sung = words.map { lab($0.sung) }
             let spread = sung.indices.dropFirst().map { hueGap(sung[0], sung[$0]) }.max() ?? 0
-            // On a bright backdrop the 3:1 lift takes every colour up to
-            // near white, so only the dark one shows the palette.
-            if backdrop < 0.2 { XCTAssertGreaterThan(spread, 0.5, "the line is not one colour") }
+            // Light words on the dark wallpaper, deep ones on the light:
+            // the palette shows on both.
+            XCTAssertGreaterThan(spread, 0.5, "the line is not one colour")
             for index in sung.indices.dropFirst() {
                 XCTAssertLessThan(hueGap(sung[index - 1], sung[index]), 1.2, "neighbours step, not jump")
             }
             for word in words {
-                // 3:1 where any colour can reach it; on a bright backdrop
-                // no worse than white would be.
-                let ratio = Perceptual.contrast(Perceptual.luminance(sRGB: rgbOf(word.sung)), ink.backdrop)
-                let reachable = min(LyricInk.minimumContrast, Perceptual.contrast(1, ink.backdrop))
-                XCTAssertGreaterThanOrEqual(ratio, reachable * 0.95, "readable on \(backdrop)")
-                XCTAssertGreaterThan(lab(word.rest).l, 0.9, "unsung words stay white")
+                let ratio = Perceptual.contrast(Perceptual.luminance(sRGB: rgbOf(word.sung)), backdrop)
+                XCTAssertGreaterThanOrEqual(ratio, LyricInk.minimumContrast * 0.97, "readable on \(backdrop)")
+                if backdrop < 0.2 {
+                    XCTAssertGreaterThan(lab(word.rest).l, 0.9, "unsung words are white on a dark wallpaper")
+                } else {
+                    // A deep neutral, apart from the coloured sung words.
+                    XCTAssertLessThan(lab(word.rest).l, Perceptual.deepNeutralLightness + 0.01)
+                    XCTAssertLessThan(lab(word.rest).chroma, 0.04)
+                    XCTAssertGreaterThan(lab(word.sung).chroma, lab(word.rest).chroma + 0.03, "sung stands out")
+                }
             }
         }
     }

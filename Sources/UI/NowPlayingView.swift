@@ -8,6 +8,7 @@ struct NowPlayingView: View {
     var isSettingsPreview = false
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
+    @ObservedObject private var tone = LyricTone.shared
     @ObservedObject private var hover = HoverState.shared
     @ObservedObject var settings: Settings = .shared
     /// Passed to the web scenes, so a test can host this view with its own.
@@ -815,6 +816,12 @@ struct NowPlayingView: View {
 
     private func textBackingAmount(for layer: BackgroundLayer, cover: AlbumWallpaperPalette, size: CGSize) -> Double {
         if let manual = desktopOptions.manualTextBacking { return manual }
+        // Dark lyrics on a light wallpaper need the light behind them: the
+        // automatic backing fades out as they turn dark (`LyricTone`).
+        return automaticTextBacking(for: layer, cover: cover, size: size) * (1 - tone.dark)
+    }
+
+    private func automaticTextBacking(for layer: BackgroundLayer, cover: AlbumWallpaperPalette, size: CGSize) -> Double {
         // The lyric target whenever a song plays, not only once its lyrics
         // are in: switching then stepped the backing darker mid-fade.
         let hasLyrics = nowPlaying.current != nil || !lyricsVM.lines.isEmpty || !lyricsVM.plainLines.isEmpty

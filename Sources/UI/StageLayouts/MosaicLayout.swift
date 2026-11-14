@@ -143,7 +143,7 @@ extension StageLyricView {
                                         .font(font(size, hero: true, id: run.id))
                                         .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: stage.width * 1.1)
                                         .background { tileBackground(tile, size: size) }
-                                        .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                                        .lyricShadow(0.28, radius: 8, y: 3)
                                 }
                                 Star4().fill(ink.tileColour).frame(width: size * 0.32, height: size * 0.32)
                                     .rotationEffect(.degrees(reduceMotion ? 0 : time * 40))
@@ -188,14 +188,14 @@ extension StageLyricView {
                                     .opacity(Self.glide((time - (run.start + 0.1)) / 0.2))
                                     .offset(x: reduceMotion ? 0 : CGFloat(1 - wipe) * size * 0.5 * side)
                                 Star4().fill(Color.white).frame(width: size * 0.3, height: size * 0.3)
-                                    .shadow(color: .black.opacity(0.2), radius: 3)
+                                    .lyricShadow(0.2, radius: 3)
                                     .rotationEffect(.degrees(reduceMotion ? 0 : time * 50))
                                     // Above the word, which a reading under it lifts.
                                     .offset(x: side * size * 0.1, y: -size * 0.62
                                             - (Self.reading(of: run, in: readings) == nil ? 0 : Self.readingSlot(size) / 2))
                                     .scaleEffect(wipe)
                             }
-                            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                            .lyricShadow(0.25, radius: 8, y: 3)
                         } else {
                             // Letter by letter, each on its own baseline.
                             let size = unit * 2.4
@@ -214,7 +214,7 @@ extension StageLyricView {
                             }
                             .lineLimit(1).minimumScaleFactor(0.4).frame(maxWidth: stage.width * 0.8)
                             }
-                            .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                            .lyricShadow(0.28, radius: 8, y: 3)
                         }
                     }
                     .scaleEffect(morph.bigScale)

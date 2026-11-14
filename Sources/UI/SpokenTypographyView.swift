@@ -268,7 +268,7 @@ struct SpokenTypographyView: View {
             .scaleEffect(CGFloat(scale))
             .rotationEffect(.degrees(angle))
             .blur(radius: state.pose.blur)
-            .shadow(color: .black.opacity(0.25), radius: 7, y: 2)
+            .lyricShadow(0.25, radius: 7, y: 2)
             .layoutValue(key: RollingSlotKey.self, value: state.slot)
             .zIndex(state.focus)
             .accessibilityHidden(state.shown < 0.05)

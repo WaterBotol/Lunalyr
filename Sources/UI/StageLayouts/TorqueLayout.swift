@@ -78,7 +78,7 @@ extension StageLyricView {
                     // Each face is set a little tipped, the other way from its neighbours.
                     .rotationEffect(.degrees(reduceMotion ? 0 : (plan.faces[index].flushTrailing ? 4 : -4)))
                     .compositingGroup()
-                    .shadow(color: .black.opacity(0.28), radius: max(3, unit * 0.1), y: unit * 0.05)
+                    .lyricShadow(0.28, radius: max(3, unit * 0.1), y: unit * 0.05)
                     .modifier(TorqueTurn(angle: angle, available: available))
                     .brightness(-0.45 * (1 - cos(min(abs(angle), 90) * .pi / 180)))
                     .opacity(pow(max(0, cos(min(abs(angle), 90) * .pi / 180)), 1.5))

@@ -140,7 +140,7 @@ struct BackingVocalLayer: View {
                         .frame(width: box.width, height: box.height)
                         .layerExit(.backing, progress: Self.exitProgress(of: group, at: time), size: box.height)
                         .opacity(0.62 * level)
-                        .shadow(color: .black.opacity(0.3 * level), radius: 6)
+                        .lyricShadow(0.3 * level, radius: 6)
                         .position(position(of: group))
                 }
             }

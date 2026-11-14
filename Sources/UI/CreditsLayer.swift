@@ -127,7 +127,7 @@ struct CreditsLayer: View {
                         .layerExit(.credit(towardTop: cue.id.isMultiple(of: 2)),
                                    progress: LyricCreditCues.exitProgress(of: cue, at: time), size: box.height)
                         .opacity(level)
-                        .shadow(color: .black.opacity(0.3 * level), radius: 6)
+                        .lyricShadow(0.3 * level, radius: 6)
                         // High and low in turn, so one arriving as the last
                         // leaves never sits on it.
                         .position(x: stageSize.width * 0.5,
