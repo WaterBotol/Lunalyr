@@ -1,62 +1,124 @@
 import SwiftUI
 
-/// The top of the menu-bar panel: the song (or the idle prompt), the music's
-/// own transport centred beneath it, the line being sung with its source and
-/// precision, and -- right under the line it moves -- this song's lyric
-/// timing. Idle, the prompt, a dimmed transport, where the lyrics will
-/// appear and the (disabled) timing all stay in place, at the height they
-/// have with a song, so nothing jumps when a song starts or stops.
+/// The top of the menu-bar panel (SPEC.md section 7, item 1-2): the cover,
+/// title and artist with the music's transport at the right; the song's
+/// progress; then the line being sung, large, with the next line beneath.
+/// Nothing playing: a music note in the cover's place, "Nothing playing"
+/// and the players followed, the transport dimmed, no progress, and a
+/// sentence in place of the line, so the panel barely changes height.
 struct MenuBarNowPlaying: View {
+    @Model(\.nowPlaying) private var playing
+    @Environment(\.lunalyrModels) private var models
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
-            TrackSummary()
-            TransportControls()
-                .frame(maxWidth: .infinity)
+        let track = playing.current
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ArtworkView(image: playing.currentTrackArtwork, placeholderSymbol: TrackSummary<EmptyView>.placeholderSymbol(for: track),
+                            size: 40, placeholderDelay: LunalyrDesign.Motion.Hold.placeholderDelay, cornerRadius: 5,
+                            placeholderFill: Color.menuPanel(.fill))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(track?.title ?? "Nothing playing")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.studio(.ink))
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
+                    Text(subtitle(track))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.menuPanel(.secondary))
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
+                }
+                .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.standard, reduceMotion: reduceMotion),
+                           value: track?.title)
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 8)
+                TransportControls(size: .panel)
+            }
+            if let track, track.duration > 0 {
+                MenuBarProgress(duration: track.duration)
+            }
             MenuBarLyricLine()
-            MenuBarLyricTiming()
-                .padding(.top, LunalyrDesign.Spacing.hairline)
+                .padding(.top, 2)
         }
+        .padding(.horizontal, MenuPanel.inset)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private func subtitle(_ track: NowPlayingMonitor.Track?) -> String {
+        guard track != nil else {
+            let installed = Set(models.resolved.installedPlayers)
+            let followed = playing.followedPlayers.filter { installed.contains($0) }
+            return Self.followingLine(followed.isEmpty ? playing.followedPlayers : followed)
+        }
+        return TrackSummary<EmptyView>.subtitle(for: track, idlePrompt: playing.idlePrompt)
+    }
+
+    /// "Following Music and Spotify": the players Lunalyr follows, browsers
+    /// as "web players".
+    static func followingLine(_ kinds: [PlayerKind]) -> String {
+        var names = kinds.filter { !$0.isBrowser }.map(\.displayName)
+        if kinds.contains(where: \.isBrowser) { names.append("web players") }
+        guard let last = names.popLast() else { return "Following no players" }
+        guard !names.isEmpty else { return "Following \(last)" }
+        let head = names.joined(separator: ", ")
+        return "Following \(head) and \(last)"
     }
 }
 
-/// This song's lyrics earlier or later, a tenth of a second a click: the
-/// per-song, per-source offset the shortcuts and Timing & sources change too.
-struct MenuBarLyricTiming: View {
-    @ObservedObject private var tapSync = LyricTapSyncController.shared
-    @Model(\.offsets) private var offsets
+/// Elapsed and total time either side of a 3-point bar, read once a second
+/// while the music plays.
+struct MenuBarProgress: View {
+    let duration: Double
     @Model(\.nowPlaying) private var playing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xSmall) {
-            PanelSectionHeader("Lyric timing") {
-                SongTimingNudge()
-            }
-            // Tap to sync: a key pressed as each line starts sets the timing.
-            HStack(spacing: 6) {
-                Spacer(minLength: 0)
-                Button(tapSync.isListening ? "Stop tap to sync" : "Tap to sync…") { tapSync.toggle() }
-                    .help("Press any key each time a lyric line starts; Lunalyr sets this song’s timing from the taps")
-                if tapSync.canUndo {
-                    Button("Undo tap sync") { tapSync.undo() }
-                        .help("Back to the timing from before the last tap to sync")
+        TimelineView(.periodic(from: .now, by: playing.isPlaying ? 1 : 30)) { _ in
+            let elapsed = min(max(playing.playbackPosition(), 0), duration)
+            HStack(spacing: 8) {
+                Text(Self.time(elapsed))
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.studio(.track).opacity(1.4))
+                        Capsule().fill(Color.studio(.ink))
+                            .frame(width: proxy.size.width * Self.fraction(elapsed, of: duration))
+                    }
                 }
+                .frame(height: 3)
+                Text(Self.time(duration))
             }
-            .controlSize(.small)
-            // Belongs to a song: shown, but disabled, with nothing playing.
-            .disabled(playing.current == nil && !tapSync.isListening)
+            .font(.system(size: 11).monospacedDigit())
+            .foregroundStyle(Color.menuPanel(.secondary))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Song position")
+            .accessibilityValue("\(Self.time(elapsed)) of \(Self.time(duration))")
         }
+    }
+
+    /// "1:23", "12:05", "1:02:03".
+    static func time(_ seconds: Double) -> String {
+        let total = Int(max(seconds, 0).rounded(.down))
+        let hours = total / 3600, minutes = (total % 3600) / 60, rest = total % 60
+        if hours > 0 { return String(format: "%d:%02d:%02d", hours, minutes, rest) }
+        return String(format: "%d:%02d", minutes, rest)
+    }
+
+    static func fraction(_ elapsed: Double, of duration: Double) -> CGFloat {
+        guard duration > 0 else { return 0 }
+        return CGFloat(min(max(elapsed / duration, 0), 1))
     }
 }
 
-/// The line being sung, with its source and precision ("LRCLIB · Word by
-/// word"), from `LunalyrModels.lyricNow` like `CurrentLyricLine`, but in a
-/// block that keeps one height while a song is current, whatever it shows: a
-/// line that wraps drops the next line instead of growing, and a note between
-/// lines, "Looking for lyrics…" or hidden lyrics sit in the same space. The
-/// panel's window sizes itself to its content, so a block that grew and
-/// shrank with each line would move every control below it, under the
-/// pointer, several times a minute -- and Hide lyrics would jump away from the
-/// click that pressed it. Idle, the prompt sits in the same block.
+/// The line being sung, from `LunalyrModels.lyricNow` like
+/// `CurrentLyricLine`, in a block that keeps one height while a song is
+/// current, whatever it shows: a line that wraps drops the next line
+/// instead of growing, and a note between lines, "Looking for lyrics…" or
+/// hidden lyrics sit in the same space. The panel's window sizes itself to
+/// its content, so a block that grew and shrank with each line would move
+/// every row below it, under the pointer, several times a minute. Idle, the
+/// spec's sentence takes its place.
 ///
 /// Hidden lyrics, by the person or for a mirrored display, never show here
 /// (the menu-bar line says "Lyrics hidden" too), so presenting can't put them
@@ -69,7 +131,7 @@ struct MenuBarLyricLine: View {
     @Model(\.extras) private var extras
 
     enum Display: Equatable {
-        /// Nothing playing: "Lyrics appear here while a song plays."
+        /// Nothing playing: the spec's sentence.
         case prompt
         /// A song, its lyrics hidden.
         case hidden
@@ -83,27 +145,25 @@ struct MenuBarLyricLine: View {
     }
 
     static let hiddenText = MenuBarLyricTicker.hiddenText
+    static let idlePrompt = "Play a song and its lyrics show here and on your desktop."
 
     var body: some View {
         switch Self.display(hasTrack: playing.current != nil, lyricsVisible: extras.lyricsVisible) {
         case .prompt:
-            let prompt = LyricQuoteView(now: .none, hasTrack: false).placeholder
-            MenuBarLyricBlock(source: nil, centred: true) {
-                Text(prompt)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Current lyric")
-            .accessibilityValue(prompt)
+            Text(Self.idlePrompt)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.menuPanel(.secondary))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Current lyric")
+                .accessibilityValue(Self.idlePrompt)
         case .hidden:
-            // The source and precision still show: they reveal no lyrics.
+            // The source and precision still show on hover: they reveal no lyrics.
             let models = models.resolved
-            MenuBarLyricBlock(source: MenuBarLyricQuote.source(of: models.lyricNow(models)), centred: true) {
+            MenuBarLyricBlock(source: MenuBarLyricQuote.source(of: models.lyricNow(models))) {
                 Label(Self.hiddenText, systemImage: "eye.slash")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.menuPanel(.secondary))
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Current lyric")
@@ -118,9 +178,10 @@ struct MenuBarLyricLine: View {
 }
 
 /// A `LyricNow` in the panel's fixed block: the line (two rows at most), the
-/// next line beneath it when the line takes one row, the source at the foot.
-/// Between lines a note stands in, with the line to come beneath it. The
-/// words while looking and without lyrics are `LyricQuoteView`'s own.
+/// next line beneath it when the line takes one row. Between lines a note
+/// stands in, with the line to come beneath it. The words while looking and
+/// without lyrics are `LyricQuoteView`'s own. Where the lyrics came from
+/// ("LRCLIB · Word by word") is the block's tooltip and VoiceOver hint.
 struct MenuBarLyricQuote: View {
     let now: LyricNow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -143,7 +204,8 @@ struct MenuBarLyricQuote: View {
     var body: some View {
         let placeholder = LyricQuoteView(now: now).placeholder
         let content = Self.content(of: now)
-        MenuBarLyricBlock(source: Self.source(of: now), centred: content == .placeholder) {
+        let source = Self.source(of: now)
+        MenuBarLyricBlock(source: source) {
             // Old and new lines overlap while one gives way to the other.
             ZStack(alignment: .topLeading) {
                 switch content {
@@ -162,15 +224,15 @@ struct MenuBarLyricQuote: View {
                 case .between(let next):
                     VStack(alignment: .leading, spacing: MenuBarLyricBlock<EmptyView>.rowSpacing) {
                         Text(verbatim: "♪")
-                            .lunalyrText(.lyric)
-                            .foregroundStyle(.secondary)
+                            .font(MenuBarLyricBlock<EmptyView>.lineFont)
+                            .foregroundStyle(Color.menuPanel(.secondary))
                         nextText(next)
                     }
                     .transition(transition)
                 case .placeholder:
                     Text(placeholder)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .font(MenuBarLyricBlock<EmptyView>.nextFont)
+                        .foregroundStyle(Color.menuPanel(.secondary))
                         .lineLimit(2)
                 }
             }
@@ -180,6 +242,7 @@ struct MenuBarLyricQuote: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Current lyric")
         .accessibilityValue(Self.spoken(content, placeholder: placeholder))
+        .accessibilityHint(source.map { "From \($0)" } ?? "")
         .accessibilityAddTraits(.updatesFrequently)
     }
 
@@ -197,15 +260,16 @@ struct MenuBarLyricQuote: View {
 
     private func lineText(_ line: String) -> some View {
         Text(line)
-            .lunalyrText(.lyric)
+            .font(MenuBarLyricBlock<EmptyView>.lineFont)
+            .foregroundStyle(Color.studio(.ink))
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func nextText(_ next: String) -> some View {
         Text(next)
-            .font(.callout)
-            .foregroundStyle(.secondary)
+            .font(MenuBarLyricBlock<EmptyView>.nextFont)
+            .foregroundStyle(Color.menuPanel(.secondary))
             .lineLimit(1)
     }
 
@@ -224,19 +288,19 @@ struct MenuBarLyricQuote: View {
     }
 }
 
-/// Two lyric rows and a source row, measured in the fonts they are set in so
-/// the block follows the text size; `lines` fills what the source leaves.
-/// Stand-ins (`centred`) sit in the middle of the space they have.
+/// Two lyric rows, measured in the fonts they are set in (the line 16
+/// semibold, the next line 13), so the block keeps one height; `lines`
+/// fills it from the top.
 struct MenuBarLyricBlock<Lines: View>: View {
     let source: String?
-    let centred: Bool
     let lines: Lines
 
-    static var rowSpacing: CGFloat { LunalyrDesign.Spacing.xSmall }
+    static var rowSpacing: CGFloat { 3 }
+    static var lineFont: Font { .system(size: 16, weight: .semibold) }
+    static var nextFont: Font { .system(size: 13) }
 
-    init(source: String?, centred: Bool, @ViewBuilder lines: () -> Lines) {
+    init(source: String?, @ViewBuilder lines: () -> Lines) {
         self.source = source
-        self.centred = centred
         self.lines = lines()
     }
 
@@ -244,30 +308,21 @@ struct MenuBarLyricBlock<Lines: View>: View {
         template
             .hidden()
             .overlay(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: Self.rowSpacing) {
-                    lines
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: centred ? .leading : .topLeading)
-                    if let source {
-                        Text(source)
-                            .lunalyrText(.footnote)
-                            .lineLimit(1)
-                    }
-                }
+                lines
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .help(source.map { "Lyrics from \($0)" } ?? "")
     }
 
     /// The tallest the block's text gets: a line over two rows, or a line
-    /// and the next one, then the source.
+    /// and the next one.
     private var template: some View {
-        VStack(alignment: .leading, spacing: Self.rowSpacing) {
-            ZStack(alignment: .topLeading) {
-                Text(verbatim: "Ag\nAg").lunalyrText(.lyric)
-                VStack(alignment: .leading, spacing: Self.rowSpacing) {
-                    Text(verbatim: "Ag").lunalyrText(.lyric)
-                    Text(verbatim: "Ag").font(.callout)
-                }
+        ZStack(alignment: .topLeading) {
+            Text(verbatim: "Ag\nAg").font(Self.lineFont)
+            VStack(alignment: .leading, spacing: Self.rowSpacing) {
+                Text(verbatim: "Ag").font(Self.lineFont)
+                Text(verbatim: "Ag").font(Self.nextFont)
             }
-            Text(verbatim: "Ag").lunalyrText(.footnote)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityHidden(true)

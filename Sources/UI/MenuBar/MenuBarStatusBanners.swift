@@ -31,9 +31,11 @@ enum MenuBarStatus: CaseIterable, Hashable {
     }
 }
 
-/// What needs the person's attention, as compact banners under the song,
-/// each with its fix on the spot. Nothing at all while all is well:
-/// working audio capture, for one, says nothing here.
+/// What needs the person's attention, under the song, each with its fix
+/// on the spot: a glyph in the status colour, the title, a line of
+/// explanation and mini buttons -- rows in the panel's language, no cards.
+/// Nothing at all while all is well: working audio capture, for one, says
+/// nothing here.
 struct MenuBarStatusBanners: View {
     /// From `raised(…)`; the panel leaves the group out when it is empty.
     let statuses: [MenuBarStatus]
@@ -42,11 +44,11 @@ struct MenuBarStatusBanners: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(statuses, id: \.self) { status in
                 Group {
                     switch status {
-                    case .automation: AutomationStatusBanner(density: .compact)
+                    case .automation: MenuBarAutomationStatus()
                     case .audio: MenuBarAudioStatus(phase: audioPhase)
                     case .mirroring: MenuBarMirroringBanner()
                     case .powerSaving: MenuBarPowerSavingBanner()
@@ -57,6 +59,7 @@ struct MenuBarStatusBanners: View {
                 .transition(.asymmetric(insertion: .opacity, removal: .identity))
             }
         }
+        .padding(.vertical, 2)
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
                    value: statuses)
     }
@@ -130,14 +133,14 @@ struct MenuBarAudioStatus: View {
         Group {
             switch phase {
             case .reconnecting:
-                StatusBanner(.warning, title: Self.title, message: Self.reconnecting, density: .compact) {
-                    ProgressView().controlSize(.small)
+                MenuPanelStatus(.warning, title: Self.title, message: Self.reconnecting) {
+                    ProgressView().controlSize(.mini)
                         .accessibilityLabel(Self.reconnecting)
                 }
             case .recovered:
-                StatusBanner(.success, title: Self.recovered, density: .compact)
+                MenuPanelStatus(.success, title: Self.recovered)
             case .attention, .hidden:
-                StatusBanner(.warning, title: Self.title, message: status, density: .compact) {
+                MenuPanelStatus(.warning, title: Self.title, message: status) {
                     ForEach(fixes, id: \.self) { fix in
                         Button(fix.title) {
                             switch fix {
@@ -211,14 +214,14 @@ struct MenuBarMirroringBanner: View {
 
     var body: some View {
         if extras.asksAboutMirroring {
-            StatusBanner(.neutral, title: Self.title, message: Self.question, symbol: Self.symbol, density: .compact) {
+            MenuPanelStatus(.neutral, title: Self.title, message: Self.question, symbol: Self.symbol) {
                 Button("Keep Hiding") { extras.keepHidingWhileMirroring() }
                     .help("Hide the lyrics whenever a display is mirrored")
                 Button("Stop Hiding") { extras.stopHidingWhileMirroring() }
                     .help("Keep the lyrics on screen while a display is mirrored")
             }
         } else {
-            StatusBanner(.neutral, title: Self.title, message: Self.note, symbol: Self.symbol, density: .compact) {
+            MenuPanelStatus(.neutral, title: Self.title, message: Self.note, symbol: Self.symbol) {
                 Button("Show Anyway") { extras.showLyrics() }
                     .accessibilityLabel(LunalyrExtras.Titles.showLyricsAnyway)
                     .help("Show the lyrics on every display until mirroring ends")
@@ -244,7 +247,7 @@ struct MenuBarPowerSavingBanner: View {
 
     var body: some View {
         if let notice = settings.powerSavingNotice {
-            StatusBanner(.info, title: "Power saving", message: notice.message, symbol: "leaf.fill", density: .compact) {
+            MenuPanelStatus(.info, title: "Power saving", message: notice.message, symbol: "leaf.fill") {
                 Button(notice.constraint.overrideTitle) { settings.overridePowerSaving(notice.constraint) }
                 Button("Performance settings…") { models.resolved.navigation.openSettings(.performance) }
                     .help("Opens Settings at Performance")
@@ -255,5 +258,128 @@ struct MenuBarPowerSavingBanner: View {
     static func shows(chosen: Settings.BackgroundMode, drawn: Settings.BackgroundMode,
                       notice: Settings.PowerSavingNotice?) -> Bool {
         notice != nil && drawn != chosen
+    }
+}
+
+// MARK: - Players
+
+/// `AutomationStatusBanner` in the panel's language: a player Lunalyr may not
+/// read (or not yet), or a browser whose pages it may not script, with the
+/// same fixes.
+@MainActor
+struct MenuBarAutomationStatus: View {
+    @Model(\.nowPlaying) private var playing
+    @Model(\.players) private var players
+    @Environment(\.lunalyrModels) private var models
+
+    var body: some View {
+        if let content = AutomationStatusBanner.content(for: playing) {
+            MenuPanelStatus(content.undecided ? .info : .warning, title: content.title, message: content.message,
+                            symbol: content.undecided ? "lock.shield.fill" : nil) {
+                if content.undecided {
+                    Button("Allow Access…") { playing.requestAutomationAccess(for: content.player) }
+                        .help("macOS asks whether Lunalyr may read \(content.player.displayName)")
+                } else {
+                    Button("Open Privacy Settings") { models.resolved.navigation.openSystemSettings(.automation) }
+                        .help("Opens Privacy & Security › Automation in System Settings")
+                }
+                if let other = content.alternative {
+                    Button("Follow \(other.displayName) Only") { players.choice = .only(other) }
+                        .help("Lunalyr stops reading \(content.player.displayName). Set Player back to Automatic to follow both again.")
+                }
+            }
+            // The user may have just changed the setting.
+            .onAppear { playing.recheckAutomation() }
+        } else if let notice = WebScriptingNotice.notice(for: playing) {
+            MenuPanelStatus(.info, title: notice.title, message: notice.message, symbol: "curlybraces") {
+                if let other = playing.playerToFollowInstead(of: notice.browser) {
+                    Button("Follow \(other.displayName) Only") { players.choice = .only(other) }
+                        .help("Lunalyr stops reading \(notice.browser.displayName).")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - The status row
+
+/// One status in the panel: a glyph in its colour (success and warning use
+/// the spec's glyph colours; text stays ink), the title 13 semibold, the
+/// explanation 11.5 secondary, and its fixes as mini buttons under the
+/// words. No card: the panel's separators group it.
+struct MenuPanelStatus<Actions: View>: View {
+    let status: LunalyrStatus
+    let title: String
+    var message: String?
+    var symbol: String?
+    let actions: Actions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(_ status: LunalyrStatus, title: String, message: String? = nil, symbol: String? = nil,
+         @ViewBuilder actions: () -> Actions) {
+        self.status = status
+        self.title = title
+        self.message = message
+        self.symbol = symbol
+        self.actions = actions()
+    }
+
+    static var glyphWidth: CGFloat { 18 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: symbol ?? status.symbol)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Self.glyphColour(status))
+                    .frame(width: Self.glyphWidth)
+                    .contentTransition(LunalyrDesign.Motion.symbolSwap(reduceMotion: reduceMotion))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.studio(.ink))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let message {
+                        Text(message)
+                            .font(LunalyrDesign.Studio.TypeScale.caption)
+                            .foregroundStyle(Color.menuPanel(.secondary))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel([status.spokenName, title, message].compactMap { $0 }.joined(separator: ". "))
+            }
+            if Actions.self != EmptyView.self {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { actions }
+                    VStack(alignment: .leading, spacing: 4) { actions }
+                }
+                .buttonStyle(.menuPanelMini)
+                .padding(.leading, Self.glyphWidth + 6)
+            }
+        }
+        .padding(.horizontal, MenuPanel.inset - 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion),
+                   value: [status.rawValue, title, message ?? "", symbol ?? ""])
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The glyph's colour: the spec's success and warning glyph colours;
+    /// the accent for information; secondary for a plain state.
+    static func glyphColour(_ status: LunalyrStatus) -> Color {
+        switch status {
+        case .success: return .studio(.success)
+        case .warning, .critical: return .studio(.warning)
+        case .info: return .studio(.accent)
+        case .neutral: return .menuPanel(.secondary)
+        }
+    }
+}
+
+extension MenuPanelStatus where Actions == EmptyView {
+    init(_ status: LunalyrStatus, title: String, message: String? = nil, symbol: String? = nil) {
+        self.init(status, title: title, message: message, symbol: symbol) { EmptyView() }
     }
 }

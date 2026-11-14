@@ -115,7 +115,7 @@ final class MenuBarTests: XCTestCase {
         XCTAssertEqual(MenuBarView.transportTitle(playing: true), TransportControls.title(playing: true))
         XCTAssertEqual(MenuBarView.subtitle(for: nil, idlePrompt: "Play a song in Music"), "Play a song in Music")
         XCTAssertEqual(MenuBarView.placeholderSymbol(for: nil), "music.note")
-        XCTAssertFalse(MenuBarWallpaperControls.pausedNote.isEmpty)
+        XCTAssertFalse(MenuBarToggles.pausedNote.isEmpty)
         XCTAssertEqual(MenuBarMirroringBanner.title, "Lyrics hidden while mirroring")
         XCTAssertTrue(MenuBarMirroringBanner.question.hasSuffix("?"), "the first time, it asks")
     }
@@ -137,7 +137,9 @@ final class MenuBarTests: XCTestCase {
         }
     }
 
-    /// The panel stays under 700 points even when two statuses are visible.
+    /// Every state, two statuses and an update included, fits the 13-inch
+    /// Air's screen without scrolling (SPEC.md section 7: height to content,
+    /// scrolling only past the screen).
     @MainActor
     func testEveryPanelStateFitsTheHeightBudget() throws {
         let cases = UISnapshotCatalogue.menuBar
@@ -157,7 +159,7 @@ final class MenuBarTests: XCTestCase {
                                                        audioNeedsAttention: scene.audio.state.needsAttention)
             if statuses.count == 2 { twoStatuses += 1 }
             XCTAssertEqual(width, LunalyrDesign.Layout.menuPanelWidth, "\(snapshot.name) is \(width) points wide")
-            XCTAssertLessThan(height, 700,
+            XCTAssertLessThan(height, MenuBarView.maximumPanelHeight(screens: [UISnapshotDisplay.visibleFrame]),
                               "\(snapshot.name) is \(height) points tall with \(statuses)")
         }
         XCTAssertGreaterThan(twoStatuses, 0, "the catalogue holds a case with two statuses")

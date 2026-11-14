@@ -33,10 +33,12 @@ final class MenuBarPanelPolishTests: XCTestCase {
         XCTAssertFalse(TransportControls.consentHelp.isEmpty)
     }
 
-    func testQuickTogglesPressInExceptUnderReduceMotion() {
-        XCTAssertEqual(QuickToggle.pressScale(pressed: true, reduceMotion: false), 0.92)
-        XCTAssertEqual(QuickToggle.pressScale(pressed: true, reduceMotion: true), 1)
-        XCTAssertEqual(QuickToggle.pressScale(pressed: false, reduceMotion: false), 1)
+    func testSwitchRowsSayTheirStateLikeTheTilesDid() {
+        XCTAssertEqual(QuickToggle.spokenValue(isOn: true, state: "Wallpaper paused"), "Wallpaper paused")
+        XCTAssertEqual(QuickToggle.spokenValue(isOn: true, state: nil), "On")
+        XCTAssertEqual(QuickToggle.spokenValue(isOn: false, state: "Wallpaper paused"), "")
+        XCTAssertEqual(QuickToggle.help(title: "Pause Wallpaper", shortcut: "⌃⌥⌘P"), "Pause Wallpaper (⌃⌥⌘P)")
+        XCTAssertEqual(QuickToggle.help(title: "Floating lyrics", shortcut: nil), "Floating lyrics")
     }
 
     func testARepeatedLineIsStillANewLine() {

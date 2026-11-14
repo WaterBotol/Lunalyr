@@ -17,7 +17,7 @@ struct MenuBarListenAlong: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
-            PanelSectionHeader("Listen along") { EmptyView() }
+            MenuPanelLabel("Listen along")
             if let follower = listen.follower {
                 following(follower)
                     .transition(.opacity)
@@ -29,11 +29,10 @@ struct MenuBarListenAlong: View {
             if listen.follower == nil {
                 if let ended = listen.lastEnded {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        InspectorCaption(ended)
+                        MenuPanelCaption(inline: ended)
                         Spacer(minLength: 4)
                         Button("Dismiss") { listen.dismissLastEnded() }
-                            .buttonStyle(.borderless)
-                            .controlSize(.small)
+                            .buttonStyle(.menuPanelMini)
                             .accessibilityLabel("Dismiss: \(ended)")
                     }
                     .transition(.opacity)
@@ -44,12 +43,12 @@ struct MenuBarListenAlong: View {
                         .controlSize(.small)
                         .onSubmit(join)
                     Button("Join", action: join)
-                        .controlSize(.small)
+                        .buttonStyle(.menuPanelMini)
                         .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .transition(.opacity)
                 if invalid {
-                    InspectorCaption("That isn\u{2019}t a listen-along code.")
+                    MenuPanelCaption(inline: "That isn\u{2019}t a listen-along code.")
                         .transition(.opacity)
                 }
             }
@@ -87,16 +86,17 @@ struct MenuBarListenAlong: View {
     private func sharing(_ state: ListenAlong.SharingState) -> some View {
         HStack(spacing: 6) {
             Image(systemName: Self.sharingSymbol(state))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.menuPanel(.secondary))
                 .contentTransition(LunalyrDesign.Motion.symbolSwap(reduceMotion: reduceMotion))
             switch state {
             case .live(let room, let listeners):
                 Text(Self.sharingTitle(listeners: listeners))
-                    .font(.callout)
+                    .font(MenuPanel.rowFont)
                     .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(listeners)))
                 if newLinkAt != nil {
                     Text("New link")
-                        .lunalyrText(.footnote)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.menuPanel(.secondary))
                         .transition(.opacity)
                 }
                 Spacer(minLength: 4)
@@ -110,13 +110,12 @@ struct MenuBarListenAlong: View {
                         Text("Copy Link")
                     }
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+                .buttonStyle(.menuPanelMini)
                 .help("Copies the web listen-along page. The code is \(room).")
             case .waitingForMusic, .retrying:
                 Text(Self.sharingTitle(state))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(MenuPanel.rowFont)
+                    .foregroundStyle(Color.menuPanel(.secondary))
                 Spacer(minLength: 0)
             }
         }
@@ -146,44 +145,41 @@ struct MenuBarListenAlong: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "headphones")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.menuPanel(.secondary))
                     .symbolEffect(.pulse, options: .repeating,
                                   isActive: follower.isReconnecting && !reduceMotion)
                 Text(Self.followingTitle(phase: follower.phase, reconnecting: follower.isReconnecting,
                                          name: follower.displayName))
-                    .font(.callout)
+                    .font(MenuPanel.rowFont)
                     .lineLimit(1)
                     .contentTransition(.opacity)
-                Text("\u{00B7}").foregroundStyle(.secondary)
+                Text("\u{00B7}").foregroundStyle(Color.menuPanel(.secondary))
                 Button("Stop") { listen.stopFollowing() }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                    .buttonStyle(.menuPanelMini)
                     .accessibilityLabel("Stop listening along")
                 Spacer(minLength: 0)
             }
             if let hold = follower.hold {
                 HStack(spacing: 6) {
                     Image(systemName: hold == .paused ? "pause.circle" : "play.circle")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.menuPanel(.secondary))
                     Text(Self.holdTitle(hold))
-                        .font(.callout)
-                    Text("\u{00B7}").foregroundStyle(.secondary)
+                        .font(MenuPanel.rowFont)
+                    Text("\u{00B7}").foregroundStyle(Color.menuPanel(.secondary))
                     Button(Self.holdAction(hold)) { follower.resume() }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
+                        .buttonStyle(.menuPanelMini)
                         .accessibilityLabel(hold == .paused ? "Resume listening along" : "Play along")
                     Spacer(minLength: 0)
                 }
-                InspectorCaption(hold == .paused ? "You changed the music, so nothing is sent to your player until you resume."
+                MenuPanelCaption(inline: hold == .paused ? "You changed the music, so nothing is sent to your player until you resume."
                                                  : "Your player is open. Nothing plays until you click Play.")
             }
             if let note = follower.note {
-                InspectorCaption(note)
+                MenuPanelCaption(inline: note)
             }
             if let page = follower.songPageURL {
                 Button("Open on song.link") { NSWorkspace.shared.open(page) }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                    .buttonStyle(.menuPanelMini)
                     .help("Opens the song\u{2019}s song.link page, which lists it on every service")
             }
         }
