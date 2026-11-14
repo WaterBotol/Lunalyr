@@ -572,9 +572,11 @@ final class LyricCardPopoutModel: ObservableObject {
 
 struct LyricCardPopoutView: View {
     private typealias Motion = LunalyrDesign.Motion
+    private typealias Spacing = LunalyrDesign.Spacing
+    private typealias Radius = LunalyrDesign.Radius
 
     private func levelRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double> = 0...1.5) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Spacing.small) {
             Text(title).frame(width: 110, alignment: .leading)
             Slider(value: value, in: range)
             Text("\(Int((value.wrappedValue * 100).rounded()))%")
@@ -586,7 +588,7 @@ struct LyricCardPopoutView: View {
     /// A sound's level: the slider runs 0 to 150% and shows the gain in dB
     /// (0 dB is level with the other sounds; 150% is +12 dB).
     private func soundLevelRow<Title: View>(value: Binding<Double>, @ViewBuilder title: () -> Title) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Spacing.small) {
             title().frame(width: 110, alignment: .leading)
             Slider(value: value, in: 0...LyricCardMix.maximumLevel)
             Text(LyricCardMix.label(forLevel: value.wrappedValue))
@@ -642,12 +644,14 @@ struct LyricCardPopoutView: View {
     }
 
     private var lyricsList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.title.isEmpty ? "Nothing playing" : model.title).font(.headline).lineLimit(1)
-                if !model.artist.isEmpty { Text(model.artist).foregroundStyle(.secondary).lineLimit(1) }
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            VStack(alignment: .leading, spacing: Spacing.hairline) {
+                Text(model.title.isEmpty ? "Nothing playing" : model.title).lunalyrText(.emphasis).lineLimit(1)
+                if !model.artist.isEmpty {
+                    Text(model.artist).lunalyrText(.body).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
-            .padding([.horizontal, .top], 16)
+            .padding([.horizontal, .top], Spacing.large)
             if model.rows.isEmpty {
                 Text(model.hasSong ? "No lyrics found for this song." : "Play a song to make a lyric card.")
                     .foregroundStyle(.secondary)
@@ -655,7 +659,10 @@ struct LyricCardPopoutView: View {
             } else {
                 Group {
                     List(model.rows, selection: $model.selection) { row in
-                        Text(row.text).lineLimit(2).tag(row.id)
+                        // Dimmed while locked: the lines can't change under a card being made.
+                        Text(row.text).lineLimit(2)
+                            .foregroundStyle(model.isBusy ? HierarchicalShapeStyle.tertiary : .primary)
+                            .tag(row.id)
                     }
                     .scrollContentBackground(.hidden)
                     HStack {
@@ -664,24 +671,24 @@ struct LyricCardPopoutView: View {
                         Spacer()
                         Button("Whole song") { model.selectAll() }.controlSize(.small)
                     }
-                    .padding([.horizontal, .bottom], 16)
+                    .padding([.horizontal, .bottom], Spacing.large)
                 }
                 // The lines can't change under a card or recording being made.
                 .disabled(model.isBusy)
-                .opacity(model.isBusy ? 0.55 : 1)
                 .animation(animation(Motion.quick), value: model.isBusy)
             }
         }
     }
 
     private var options: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.medium) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: Spacing.medium) {
                     previewTile
                     settings
                 }
-                .padding(.trailing, 6)
+                // Clear of the scroller.
+                .padding(.trailing, Spacing.small)
                 .animation(animation(Motion.standard), value: rowKey)
             }
             .scrollIndicators(.automatic)
@@ -695,15 +702,15 @@ struct LyricCardPopoutView: View {
                     .disabled(!model.canMake)
             }
         }
-        .padding(16)
+        .padding(Spacing.large)
     }
 
     private var previewTile: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.quinary)
+            RoundedRectangle(cornerRadius: Radius.card).fill(.quinary)
             if let image = model.preview {
-                Image(nsImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .padding(8)
+                Image(nsImage: image).resizable().scaledToFit().clipShape(.rect(cornerRadius: Radius.control))
+                    .padding(Spacing.small)
                     .opacity(model.previewStale ? 0.6 : 1)
                     .id(model.previewGeneration)
                     .transition(.opacity)
@@ -717,7 +724,8 @@ struct LyricCardPopoutView: View {
                     .transition(.opacity)
                     .accessibilityLabel("Updating the preview")
             }
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            // The drop target lit (a state, not a frame): the accent at the focus ring's width.
+            RoundedRectangle(cornerRadius: Radius.card)
                 .strokeBorder(Color.lunalyrAccent, lineWidth: 2)
                 .opacity(dropTargeted ? 1 : 0)
                 .allowsHitTesting(false)
@@ -745,7 +753,7 @@ struct LyricCardPopoutView: View {
             }
 
             Text("Background").lunalyrText(.groupTitle)
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.small) {
                 Text(model.background?.name ?? "Album colours")
                     .lineLimit(1).truncationMode(.middle)
                     .foregroundStyle(model.background == nil ? .secondary : .primary)
@@ -754,6 +762,11 @@ struct LyricCardPopoutView: View {
                     Button("Remove") { model.clearBackground() }.controlSize(.small).transition(.opacity)
                 }
                 Button("Choose…") { model.chooseBackground() }.controlSize(.small)
+            }
+            if let background = model.background, background.isAnimated {
+                Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption).transition(reveal)
+            } else if model.background == nil {
+                Text("Pick or drop a picture, GIF or video.").lunalyrText(.caption).transition(reveal)
             }
             Text("Clip length (MP4)").lunalyrText(.groupTitle)
             if model.clipPlan?.offersChoice == true {
@@ -768,7 +781,6 @@ struct LyricCardPopoutView: View {
                 Text(plan.summary).lunalyrText(.caption).transition(reveal)
             }
             Text("Sound (MP4 only)").lunalyrText(.groupTitle)
-            Text("Mix as many as you like: the song, a background video’s sound, and audio files.").lunalyrText(.caption)
             Toggle("The song", isOn: $model.useSong).toggleStyle(.checkbox)
         }
         .disabled(locked)
@@ -779,8 +791,11 @@ struct LyricCardPopoutView: View {
                 if model.background?.hasAudio == true {
                     Toggle("Duck the song under the video’s sound", isOn: $model.duckSong).toggleStyle(.checkbox)
                 }
-                Text("Uses the song’s own file when it has one. Otherwise it plays the selected lines once and records them, which takes as long as they last. You’ll hear it, and macOS may ask to allow audio recording.")
-                    .lunalyrText(.caption)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.xSmall) {
+                    Text("Without a file of its own, the song plays once to be recorded.").lunalyrText(.caption)
+                    ThemedInfoButton(text: "Uses the song’s own file when it has one. Otherwise it plays the selected lines once and records them, which takes as long as they last. You’ll hear it, and macOS may ask to allow audio recording.",
+                                     label: "the song’s sound")
+                }
             }
             .disabled(locked)
             .transition(reveal)
@@ -790,7 +805,7 @@ struct LyricCardPopoutView: View {
                 soundLevelRow(value: $model.backgroundVolume) { Text("Background video") }.transition(reveal)
             }
             ForEach($model.soundFiles) { $file in
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.small) {
                     soundLevelRow(value: $file.volume) {
                         Text(file.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
                     }
@@ -805,25 +820,19 @@ struct LyricCardPopoutView: View {
                 Spacer(minLength: 0)
             }
             Text("You can also drop audio files on the preview.").lunalyrText(.caption)
-            Text("A GIF can’t carry sound, so make an MP4 when you want it.").lunalyrText(.caption)
-            if let background = model.background, background.isAnimated {
-                Text("Plays behind the lyrics and loops. PNG uses its first frame.").lunalyrText(.caption).transition(reveal)
-            } else if model.background == nil {
-                Text("Pick or drop a picture, GIF or video.").lunalyrText(.caption).transition(reveal)
-            }
 
             Text("Text size").lunalyrText(.groupTitle)
             levelRow("Lyrics", value: $model.textScale, range: 0.5...1.1)
             Text("Applies to every layout.").lunalyrText(.caption)
 
             Text("Shape").lunalyrText(.groupTitle)
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.small) {
                 ForEach(CardAspect.allCases) { aspect in
                     let on = model.aspect == aspect
                     Button { model.aspect = aspect } label: {
-                        VStack(spacing: 1) {
-                            Text(aspect.title).font(.body.weight(.semibold))
-                            Text(aspect.detail).font(.caption)
+                        VStack(spacing: Spacing.hairline) {
+                            Text(aspect.title).font(LunalyrTextStyle.emphasis.font)
+                            Text(aspect.detail).font(LunalyrTextStyle.footnote.font)
                         }
                         .foregroundStyle(on ? Color.white : Color.primary)
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -835,13 +844,13 @@ struct LyricCardPopoutView: View {
             .animation(animation(Motion.quick), value: model.aspect)
 
             Text("Make").lunalyrText(.groupTitle)
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.small) {
                 ForEach(CardFormat.allCases) { format in
                     let on = model.formats.contains(format)
                     Button { model.toggle(format) } label: {
-                        VStack(spacing: 1) {
-                            Text(format.title).font(.body.weight(.semibold))
-                            Text(format.detail).font(.caption).multilineTextAlignment(.center)
+                        VStack(spacing: Spacing.hairline) {
+                            Text(format.title).font(LunalyrTextStyle.emphasis.font)
+                            Text(format.detail).font(LunalyrTextStyle.footnote.font).multilineTextAlignment(.center)
                         }
                         .foregroundStyle(on ? Color.white : Color.primary)
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -865,15 +874,15 @@ struct LyricCardPopoutView: View {
     /// and a countdown while it records. Cancel stays usable while the rest
     /// of the window is locked.
     private var songRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            HStack(spacing: Spacing.small) {
                 if model.songBusy, model.recording == nil || model.recording == .starting {
                     ProgressView().controlSize(.small).transition(.opacity)
                 }
                 Text(model.songStatus.isEmpty
                      ? (model.songNeedsFetching ? "Not fetched for these lines yet" : "Ready for these lines")
                      : model.songStatus)
-                    .lineLimit(2).foregroundStyle(.secondary)
+                    .lunalyrText(.caption).lineLimit(2)
                 Spacer(minLength: 0)
                 Group {
                     if model.songBusy {
@@ -887,12 +896,12 @@ struct LyricCardPopoutView: View {
                 .frame(minWidth: 132, alignment: .trailing)
             }
             if case .recording(let elapsed, let needed, let left) = model.recording {
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.small) {
                     ProgressView(value: elapsed, total: needed)
                     Text("\(left) s left")
+                        .lunalyrText(.caption)
                         .monospacedDigit()
                         .contentTransition(.numericText(countsDown: true))
-                        .foregroundStyle(.secondary)
                         .frame(minWidth: 52, alignment: .trailing)
                 }
                 .controlSize(.small)
@@ -910,11 +919,11 @@ struct LyricCardPopoutView: View {
     private var footer: some View {
         ZStack(alignment: .leading) {
             if let progress = model.progress {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: Spacing.medium) {
+                    VStack(alignment: .leading, spacing: Spacing.xSmall) {
                         HStack {
                             Text(model.status).lunalyrText(.caption).lineLimit(1)
-                            Spacer(minLength: 4)
+                            Spacer(minLength: Spacing.xSmall)
                             Text("\(Int((progress * 100).rounded(.down)))%")
                                 .lunalyrText(.caption)
                                 .monospacedDigit()
@@ -938,7 +947,7 @@ struct LyricCardPopoutView: View {
     }
 
     private var resultLine: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: Spacing.small) {
             switch model.statusTone {
             case .success:
                 Image(systemName: LunalyrStatus.success.symbol)
@@ -956,16 +965,16 @@ struct LyricCardPopoutView: View {
                 .lunalyrText(.caption)
                 .foregroundStyle(model.statusTone == .plain ? Color.secondary : Color.primary)
                 .lineLimit(2)
-            Spacer(minLength: 4)
+            Spacer(minLength: Spacing.xSmall)
             if !model.warnings.isEmpty {
                 Button("Details") { showsDetails = true }
                     .controlSize(.small)
                     .popover(isPresented: $showsDetails, arrowEdge: .top) {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: Spacing.small) {
                             ForEach(model.warnings, id: \.self) { Text($0).fixedSize(horizontal: false, vertical: true) }
                         }
-                        .font(.callout)
-                        .padding(12)
+                        .lunalyrText(.body)
+                        .padding(Spacing.large)
                         .frame(width: 280, alignment: .leading)
                     }
             }
@@ -996,7 +1005,7 @@ private struct CardTileStyle: ButtonStyle {
         var body: some View {
             let state: ThemeState = !enabled ? .disabled : configuration.isPressed ? .pressed : hovering ? .hover : .normal
             configuration.label
-                .themedControl(radius: 10, selected: selected, state: state)
+                .themedControl(radius: LunalyrDesign.Radius.control, selected: selected, state: state)
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }
                 .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: hovering)
