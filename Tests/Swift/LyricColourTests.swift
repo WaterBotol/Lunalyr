@@ -375,10 +375,11 @@ final class LyricColourTests: XCTestCase {
         for frame in 0...32 {
             ink = director.ink(.init(mode: .sungSweep, album: album, backdrop: backdrop), wall: Double(frame) / 4)
         }
-        let sung = Perceptual.oklab(sRGB: rgb(ink.base.sung))
+        // The cover's accent is one of the colours the words step through.
         let source = Perceptual.oklab(sRGB: SIMD3<Double>(accent))
-        XCTAssertLessThan(LyricHighlight.hueDistance(sung.hue, source.hue), .pi / 16)
-        XCTAssertGreaterThanOrEqual(Perceptual.contrast(luminance(ink.base.sung), backdrop), 2.99)
+        let words = (0...20).map { ink.sample(slot: Double($0) / 20).sung }
+        XCTAssertTrue(words.contains { LyricHighlight.hueDistance(Perceptual.oklab(sRGB: rgb($0)).hue, source.hue) < .pi / 16 })
+        for word in words { XCTAssertGreaterThanOrEqual(Perceptual.contrast(luminance(word), backdrop), 2.99) }
         XCTAssertGreaterThan(luminance(ink.base.rest), 0.99)
     }
 
@@ -559,5 +560,64 @@ final class LyricColourTests: XCTestCase {
             }
         }
         return count
+    }
+}
+
+/// Sung sweep fills each word with its own colour from the palette, stepping
+/// smoothly along the line, readable on the backdrop.
+@MainActor
+final class SungSweepPaletteTests: XCTestCase {
+    private let album: [SIMD3<Float>] = [SIMD3(0.85, 0.15, 0.2), SIMD3(0.1, 0.3, 0.9), SIMD3(0.95, 0.75, 0.1),
+                                         SIMD3(0.1, 0.7, 0.4)]
+    private func lab(_ colour: Color) -> OKLab {
+        let c = NSColor(colour).usingColorSpace(.sRGB)!
+        return Perceptual.oklab(sRGB: SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent)))
+    }
+    private func settled(_ inputs: LyricInkDirector.Inputs) -> LyricInk {
+        let director = LyricInkDirector()
+        var ink = director.ink(inputs, wall: 0)
+        for frame in 1...240 { ink = director.ink(inputs, wall: Double(frame) / 60) }
+        return ink
+    }
+    private func hueGap(_ a: OKLab, _ b: OKLab) -> Double {
+        let d = abs(a.hue - b.hue).truncatingRemainder(dividingBy: 2 * .pi)
+        return min(d, 2 * .pi - d)
+    }
+
+    func testWordsTakeDifferentColoursThatStepSmoothly() {
+        for backdrop in [0.05, 0.6] {
+            let ink = settled(.init(mode: .sungSweep, album: album, backdrop: backdrop))
+            let words = (0...10).map { ink.sample(slot: Double($0) / 10) }
+            XCTAssertTrue(words.allSatisfy(\.sweeps))
+            let sung = words.map { lab($0.sung) }
+            let spread = sung.indices.dropFirst().map { hueGap(sung[0], sung[$0]) }.max() ?? 0
+            // On a bright backdrop the 3:1 lift takes every colour up to
+            // near white, so only the dark one shows the palette.
+            if backdrop < 0.2 { XCTAssertGreaterThan(spread, 0.5, "the line is not one colour") }
+            for index in sung.indices.dropFirst() {
+                XCTAssertLessThan(hueGap(sung[index - 1], sung[index]), 1.2, "neighbours step, not jump")
+            }
+            for word in words {
+                // 3:1 where any colour can reach it; on a bright backdrop
+                // no worse than white would be.
+                let ratio = Perceptual.contrast(Perceptual.luminance(sRGB: rgbOf(word.sung)), ink.backdrop)
+                let reachable = min(LyricInk.minimumContrast, Perceptual.contrast(1, ink.backdrop))
+                XCTAssertGreaterThanOrEqual(ratio, reachable * 0.95, "readable on \(backdrop)")
+                XCTAssertGreaterThan(lab(word.rest).l, 0.9, "unsung words stay white")
+            }
+        }
+    }
+
+    func testCustomColoursAreUsedWhenSet() {
+        let green = [OKLab(l: 0.8, chroma: 0.15, hue: 2.5)]
+        let ink = settled(.init(mode: .sungSweep, custom: green, album: album, backdrop: 0.05))
+        for slot in [0.0, 0.5, 1.0] {
+            XCTAssertLessThan(hueGap(lab(ink.sample(slot: slot).sung), green[0]), 0.35)
+        }
+    }
+
+    private func rgbOf(_ colour: Color) -> SIMD3<Double> {
+        let c = NSColor(colour).usingColorSpace(.sRGB)!
+        return SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent))
     }
 }

@@ -14,6 +14,7 @@ When merging, keep every entry and combine duplicate headings.
 
 ### Changed
 - **Remembering a style for a song or artist now saves the typeface too**, including a Google or installed family, and puts it back whenever that music plays. The general typeface is left as it is. Styles remembered before this keep using the general typeface.
+- **Sung sweep gives each word its own colour.** As words are sung they fill with colours stepping smoothly through the cover's colours (or your custom colours, when set) along the line, moving on slowly from line to line, instead of one colour for every word. Unsung words stay white, and the readability rules are unchanged.
 - **The menu-bar panel is shorter.** It keeps music video search (and the video's timing rows while it is the wallpaper), Open Lyric Card…, a Discord status switch, any update or attention banner, and Settings, Check for Updates… and Quit. The song and its lyric line, Looks, Wallpaper, Player, lyric timing and Tap to sync, Pause, Hide lyrics, Floating and listen-along moved out; each is still in Settings, and Pause, Hide lyrics and timing keep their shortcuts.
 - **Match the music is now called Custom Mix** everywhere it appears: the wallpaper type, the layout, the GPU effect and pattern choices, Looks and remembered styles. Your settings are kept.
 

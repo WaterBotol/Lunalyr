@@ -185,7 +185,7 @@ enum LyricColourMode: String, CaseIterable, Identifiable {
         switch self {
         case .standard: return "White type, as before."
         case .albumDrift: return "Colours from the cover drift slowly through the words."
-        case .sungSweep: return "White lyrics fill with a contrasting colour from the cover as each word or line is sung. Unsynced lyrics use Album Drift."
+        case .sungSweep: return "White lyrics fill with colour as each word or line is sung, stepping through the cover’s colours (or your custom colours) word by word. Unsynced lyrics use Album Drift."
         case .musicReactive: return "Bass and treble shift the emphasis between cover colours; brightness and depth follow loudness. Uses live audio when a visualiser is capturing it, and the vocal timing otherwise."
         case .customGradient: return "Your own two to four colours, drifting through the line."
         }
@@ -254,7 +254,10 @@ struct LyricInk {
     /// Interlude dots. `nil` keeps the album accent.
     var dot: Color?
 
-    /// Gradient stops for the drifting and reactive modes.
+    /// Sung sweep: the colour of words before the sweep reaches them.
+    var sweepRest: OKLab = .white
+    /// Gradient stops for the drifting and reactive modes, and the colours
+    /// Sung sweep fills words with.
     var stops: (OKLab, OKLab, OKLab, OKLab) = (.white, .white, .white, .white)
     var stopCount = 1
     /// 0...1 drift through the gradient.
@@ -281,8 +284,20 @@ struct LyricInk {
     /// The colours for a word at `slot`, its 0...1 position along the line.
     func sample(slot: Double, seed: UInt64 = 0) -> LyricInkSample {
         switch mode {
-        case .standard, .sungSweep:
+        case .standard:
             return base
+        case .sungSweep:
+            // One colour (a single custom colour, or ink made by hand)
+            // fills every word as before.
+            guard stopCount > 1 else { return base }
+            // Each word fills with its own colour: its place on the line
+            // through the palette, so neighbours step smoothly and the
+            // palette moves on slowly from line to line (`phase`).
+            let sung = Perceptual.readable(gradient(slot: slot, seed: seed), background: backdrop, ratio: contrast,
+                                           keepingColour: true)
+            var sample = Self.sample(sweepRest, sung: sung)
+            sample.dim = dim
+            return sample
         case .albumDrift, .customGradient, .musicReactive:
             let colour = Perceptual.readable(gradient(slot: slot, seed: seed), background: backdrop, ratio: contrast)
             var sample = Self.sample(colour)
@@ -589,7 +604,9 @@ final class LyricInkDirector {
         // Drift: about 45 s per loop at normal speed, ten times slower with
         // Reduce Motion. Quantised below, so a settled word can reuse its
         // glyphs between steps too small to see.
-        if inputs.mode.drifts {
+        // Sung sweep walks its palette at the same pace, so each line
+        // starts a little further on; it does not keep the clock running.
+        if inputs.mode.drifts || inputs.mode == .sungSweep {
             phase = (phase + dt * min(2, max(0.25, inputs.speed)) * 0.022 * (calm ? 0.1 : 1))
                 .truncatingRemainder(dividingBy: 1)
         }
@@ -625,16 +642,19 @@ final class LyricInkDirector {
             ink.stopCount = 1
             ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio))
         case .sungSweep:
-            let sung = Perceptual.readable(followed.1, background: behind, ratio: ratio, keepingColour: true)
-            ink.base = LyricInk.sample(Perceptual.readable(followed.0, background: behind, ratio: ratio, keepingColour: true),
-                                       sung: sung)
+            let rest = Perceptual.readable(.white, background: behind, ratio: ratio, keepingColour: true)
+            ink.sweepRest = rest
+            let sung = Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio, keepingColour: true)
+            ink.base = LyricInk.sample(rest, sung: sung)
             // No underline under sung words (the user, 14 Nov 2026).
         default:
             ink.base = LyricInk.sample(Perceptual.readable(ink.gradient(slot: 0.5), background: behind, ratio: ratio,
                                                            keepingColour: true))
         }
         ink.base.dim = ink.dim
-        let highlight = Perceptual.readable(inputs.mode == .sungSweep ? followed.1 : ink.gradient(slot: 0.5),
+        // Sung sweep's palette walks on by itself, so its highlight, dots
+        // and links take its first colour, which holds still.
+        let highlight = Perceptual.readable(inputs.mode == .sungSweep ? followed.0 : ink.gradient(slot: 0.5),
                                             background: behind, ratio: ratio)
         ink.dot = Perceptual.color(highlight)
         ink.link = Perceptual.color(Perceptual.mix(highlight, .white, 0.5))
@@ -644,7 +664,7 @@ final class LyricInkDirector {
         // round the wheel rather than through grey.
         let basis: OKLab? = switch inputs.mode {
         case .standard: nil
-        case .sungSweep: followed.1
+        case .sungSweep: followed.0
         default: ink.gradient(slot: 0.5)
         }
         let stops = [followed.0, followed.1, followed.2, followed.3].prefix(max(1, min(4, targets.count)))
@@ -819,8 +839,17 @@ final class LyricInkDirector {
             // has a different number of colours.
             return (albumStops, 4)
         case .sungSweep:
-            let sung = LyricInk.applyingStrength(1.35, to: LyricInk.pastel(vivid, fallbackHue: vivid.hue))
-            return ((.white, sung, .white, sung), 2)
+            // The cover's colours, or the custom colours when set, each
+            // made as strong as the single sung colour used to be.
+            func strong(_ colour: OKLab) -> OKLab {
+                LyricInk.applyingStrength(1.35, to: LyricInk.pastel(colour, fallbackHue: vivid.hue))
+            }
+            if !inputs.custom.isEmpty {
+                let count = min(4, inputs.custom.count)
+                func at(_ index: Int) -> OKLab { strong(inputs.custom[index % count]) }
+                return ((at(0), at(1), at(2), at(3)), count)
+            }
+            return ((strong(albumStops.0), strong(albumStops.1), strong(albumStops.2), strong(albumStops.3)), 4)
         case .musicReactive:
             let calm = inputs.reduceMotion
             let loud = inputs.audio.map { min(1, $0.rms * 2.4 + $0.bass * 0.6) } ?? inputs.vocal
