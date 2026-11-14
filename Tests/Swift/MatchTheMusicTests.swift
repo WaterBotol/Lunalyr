@@ -176,3 +176,35 @@ final class RemovedLayoutMigrationTests: XCTestCase {
         XCTAssertEqual(BackingVocals.style(forLead: .spoken, chosen: nil), .scattered)
     }
 }
+
+/// A layout remembered for a song gives way to Custom Mix's rotation once
+/// it is taken out of the mix; the rest of the memory still applies.
+@MainActor
+final class RememberedLayoutOutsideTheMixTests: XCTestCase {
+    func testALayoutLeftOutOfTheMixIsPassedOver() {
+        let settings = Settings(defaults: LunalyrTestEnvironment.isolatedDefaults("RememberedLayoutOutsideTheMixTests.settings"),
+                                notifications: NotificationCenter())
+        settings.lyricComposition = nil
+        let defaults = LunalyrTestEnvironment.isolatedDefaults("RememberedLayoutOutsideTheMixTests.rotation")
+        let rotation = LyricLayoutRotation(defaults: defaults)
+        func pick(_ remembered: String?, track: String = "A|One") -> LyricComposition {
+            LyricComposition.selected(settings: settings, remembered: remembered, mood: .neutral, seed: 0,
+                                      track: track, rotation: rotation)
+        }
+        XCTAssertEqual(pick("echo"), .echo, "in the mix, the memory wins")
+        rotation.setCount(0, for: .echo)
+        let replaced = pick("echo")
+        XCTAssertNotEqual(replaced, .echo)
+        XCTAssertEqual(replaced, rotation.layout(for: "A|One", mood: .neutral), "the rotation's pick for the song")
+        // The memory itself is untouched, and its colour still applies.
+        let style = StyleMemory.Style(composition: "echo", colour: LyricColourMode.albumDrift.rawValue)
+        XCTAssertEqual(style.layout, .echo)
+        XCTAssertEqual(style.colourMode, .albumDrift)
+        // A fixed global layout, or the rotation switched off, leaves the memory in charge.
+        defaults.set(false, forKey: LyricLayoutRotation.enabledKey)
+        XCTAssertEqual(pick("echo", track: "A|Two"), .echo)
+        defaults.set(true, forKey: LyricLayoutRotation.enabledKey)
+        settings.lyricComposition = .portal
+        XCTAssertEqual(pick("echo", track: "A|Three"), .echo)
+    }
+}

@@ -18,6 +18,9 @@ When merging, keep every entry and combine duplicate headings.
 ### Removed
 - **The Editorial and Constellation + Editorial layouts.** Wherever either was chosen (the layout, a style remembered for a song or artist, a saved Look, the backing-vocal layout or a lyric card), Constellation + Editorial becomes Constellation and Editorial becomes Scattered. **Add Editorial typography** (Lyric style › Shown with the lyrics) still mixes in the second typeface on any layout. New installs start on Constellation.
 
+### Fixed
+- **Taking a layout out of Custom Mix now takes effect for songs with a remembered style.** While the layout is Custom Mix and its rotation is on, a layout remembered for a song or artist that is no longer in the mix is passed over for the rotation's pick. The remembered colour still applies, and the memory is kept.
+
 ## [2.1.0] - 2026-11-14
 
 ### Added

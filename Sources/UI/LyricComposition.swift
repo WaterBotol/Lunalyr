@@ -137,10 +137,20 @@ enum LyricComposition: String, CaseIterable, Identifiable {
     var arrivalOnly: Bool { self == .spoken || self == .cascade || self == .cutout }
 
     /// A remembered "automatic" choice takes precedence over a global layout.
+    /// While the layout is Custom Mix with its rotation on, a remembered
+    /// layout taken out of the mix (count 0) is passed over for the
+    /// rotation's pick; the memory itself is kept.
     @MainActor
     static func selected(settings: Settings, remembered: String?, mood: TrackMood, seed: Int,
-                         track: String? = nil) -> Self {
-        if let remembered { return saved(remembered) ?? matching(mood, seed: seed) }
+                         track: String? = nil, rotation: LyricLayoutRotation = .shared) -> Self {
+        if let remembered {
+            guard let layout = saved(remembered) else { return matching(mood, seed: seed) }
+            if settings.lyricComposition == nil, rotation.isEnabled, rotation.count(for: layout) == 0 {
+                if let track { return rotation.layout(for: track, mood: mood) }
+                return matching(mood, seed: seed)
+            }
+            return layout
+        }
         return settings.resolvedComposition(for: mood, seed: seed, track: track)
     }
 
