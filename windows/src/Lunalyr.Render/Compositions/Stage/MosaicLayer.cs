@@ -53,7 +53,7 @@ internal sealed class MosaicLayer(IWordBreaker breaker, Logger? logger) : StageL
             var run = source.Runs[i];
             var sample = Sample(line, run);
             var reading = source.Readings[i];
-            var kind = (int)(StageShared.Chance(line.Seed, run.Id, 20) * 3) % 3;
+            var kind = MosaicGeometry.Kind(line.Seed, run.Id, run.Text);
             line.Kinds[i] = kind;
             var size = u * BigSizes[kind];
             if (kind == 0)
