@@ -1,16 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// The menu-bar panel: direction 2's short menu (work/ui-redesign-mockups/
-/// final/SPEC.md section 7). Top to bottom: a waiting update, when the daily
-/// check found one; the song, its transport and progress; the line being
-/// sung; anything that needs the person's attention, with its fix; the Look
-/// switcher; Lyric timing, Tap to sync…, Wallpaper ›, Player ›; the Pause,
-/// Hide lyrics and Floating switches; Open Lyric Card…; listen-along once a
-/// relay is set; then Settings…, Check for Updates… and Quit, like a menu.
-/// Rows 24 high on frosted glass (opaque under Reduce Transparency), height
-/// to content, scrolling only past the screen. Esc closes it; ⌘, opens
-/// Settings. The pieces live in Sources/UI/MenuBar.
+/// The menu-bar panel, kept short: a waiting update, when the daily check
+/// found one; anything that needs the person's attention, with its fix;
+/// the music video (Search… always, and its timing rows while it is the
+/// wallpaper); Open Lyric Card…; the Discord status switch; then
+/// Settings…, Check for Updates… and Quit, like a menu. The lyrics, the
+/// song and its transport, Looks, the wallpaper, player, timing, Pause,
+/// Hide lyrics, Floating and listen-along controls live in Settings (and
+/// the shortcuts) instead. Rows 24 high on frosted glass (opaque under
+/// Reduce Transparency), height to content, scrolling only past the
+/// screen. Esc closes it; ⌘, opens Settings. The pieces live in
+/// Sources/UI/MenuBar.
 struct MenuBarView: View {
     @Model(\.nowPlaying) private var playing
     @Model(\.settings) private var settings
@@ -60,48 +61,43 @@ struct MenuBarView: View {
         }
     }
 
+    /// What the panel shows, top to bottom.
+    enum Item: Equatable {
+        case update, statuses, musicVideo, lyricCard, discord, footer
+    }
+
+    static func items(updateWaiting: Bool, hasStatuses: Bool) -> [Item] {
+        (updateWaiting ? [.update] : []) + (hasStatuses ? [.statuses] : []) + [.musicVideo, .lyricCard, .discord, .footer]
+    }
+
     private func panel(_ statuses: [MenuBarStatus]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if updates.badge.showsBadge {
-                // First, as the dot on the icon is what was clicked.
-                MenuBarUpdateBanner()
-                    .padding(.top, 6)
-                    .focusSection()
-                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
-                MenuPanelSeparator()
+        let items = Self.items(updateWaiting: updates.badge.showsBadge, hasStatuses: !statuses.isEmpty)
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                if index > 0 { MenuPanelSeparator() }
+                switch item {
+                case .update:
+                    // First, as the dot on the icon is what was clicked.
+                    MenuBarUpdateBanner()
+                        .padding(.top, 6)
+                        .focusSection()
+                        .transition(.asymmetric(insertion: .opacity, removal: .identity))
+                case .statuses:
+                    MenuBarStatusBanners(statuses: statuses, audioPhase: audioPhase)
+                        .focusSection()
+                        .transition(.asymmetric(insertion: .opacity, removal: .identity))
+                case .musicVideo:
+                    MenuBarMusicVideoSection()
+                        .focusSection()
+                case .lyricCard:
+                    MenuBarLyricCardRow()
+                case .discord:
+                    MenuBarDiscordToggle()
+                case .footer:
+                    MenuBarFooter()
+                        .focusSection()
+                }
             }
-            MenuBarNowPlaying()
-                .focusSection()
-            if !statuses.isEmpty {
-                MenuPanelSeparator()
-                MenuBarStatusBanners(statuses: statuses, audioPhase: audioPhase)
-                    .focusSection()
-                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
-            }
-            MenuPanelSeparator()
-            MenuBarLookSwitcher(store: MenuBarLooks.store(injected: lookStore, models: models.resolved))
-                .focusSection()
-            MenuPanelSeparator()
-            VStack(alignment: .leading, spacing: 0) {
-                MenuBarLyricTiming()
-                MenuBarWallpaperControls()
-            }
-            .focusSection()
-            MenuPanelSeparator()
-            MenuBarToggles()
-                .focusSection()
-            MenuPanelSeparator()
-            MenuBarLyricCardRow()
-            if extras.listenAlongAvailable {
-                MenuPanelSeparator()
-                MenuBarListenAlong(listen: .shared)
-                    .padding(.horizontal, MenuPanel.inset)
-                    .padding(.vertical, 2)
-                    .focusSection()
-            }
-            MenuPanelSeparator()
-            MenuBarFooter()
-                .focusSection()
         }
         .padding(.vertical, MenuPanel.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)

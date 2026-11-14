@@ -311,3 +311,41 @@ struct MenuBarLyricCardRow: View {
         .accessibilityHint(enabled ? "Opens the lyric card window for the line playing" : "Available while a song plays")
     }
 }
+
+/// The panel's music video rows: its timing rows while the music video is
+/// the wallpaper (they include Search YouTube…), otherwise Search YouTube…
+/// on its own.
+@MainActor
+struct MenuBarMusicVideoSection: View {
+    @Model(\.settings) private var settings
+    @ObservedObject private var musicVideo = MusicVideoController.shared
+
+    static let searchTitle = "Search YouTube…"
+
+    var body: some View {
+        if settings.backgroundMode == .musicVideo {
+            MenuBarMusicVideoRows(musicVideo: musicVideo)
+        } else {
+            MenuPanelRow(Self.searchTitle) { MusicVideoSearchWindowController.shared.show() }
+                .help("Find a music video for the song playing")
+        }
+    }
+}
+
+/// Shows what's playing as the Discord status, as the switch in Settings ›
+/// Share does.
+@MainActor
+struct MenuBarDiscordToggle: View {
+    @Model(\.extras) private var extras
+
+    static let title = "Discord status"
+
+    var body: some View {
+        QuickToggle(Self.title, isOn: extras.showsDiscordPresence, accessibilityTitle: "Show what’s playing on Discord",
+                    state: "Showing on Discord") {
+            extras.showsDiscordPresence.toggle()
+        }
+        .accessibilityHint(extras.showsDiscordPresence ? "Stops showing the song on Discord"
+                           : "Shows the song playing as your Discord status")
+    }
+}
