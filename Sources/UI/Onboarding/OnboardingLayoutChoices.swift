@@ -30,13 +30,13 @@ struct LayoutChoices: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Lyric layout")
             Text(OnboardingCopy.layoutCaption(current))
-                .lunalyrText(.caption)
+                .onboardingCaption()
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .id(current)
                 .transition(.opacity)
             Text(OnboardingCopy.moreLayouts(LyricComposition.allCases.count - layouts.count))
-                .lunalyrText(.footnote)
+                .onboardingCaption()
         }
         .animation(LunalyrDesign.Motion.animation(LunalyrDesign.Motion.quick, reduceMotion: reduceMotion), value: current)
     }
@@ -52,16 +52,12 @@ struct LayoutChoices: View {
             VStack(spacing: LunalyrDesign.Spacing.xSmall) {
                 LayoutThumbnail(composition: layout, plays: selected)
                     .clipShape(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.artwork, style: .continuous))
-                    .overlay {
-                        // The selection ring: a state, like a chosen desktop picture.
-                        RoundedRectangle(cornerRadius: LunalyrDesign.Radius.artwork + 3, style: .continuous)
-                            .strokeBorder(selected ? Color.lunalyrAccent : .clear, lineWidth: 2)
-                            .padding(-3)
-                    }
+                    // The selection ring: a state, like a chosen desktop picture.
+                    .modifier(OnboardingChosenRing(chosen: selected, radius: LunalyrDesign.Radius.artwork))
                 Text(layout.title)
-                    .font(LunalyrTextStyle.caption.font)
+                    .font(LunalyrDesign.Studio.TypeScale.caption)
                     .fontWeight(selected ? .semibold : .regular)
-                    .foregroundStyle(selected ? AnyShapeStyle(Color.lunalyrAccentText) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(selected ? Color.studio(.ink) : Color.studio(.ink2))
                     .multilineTextAlignment(.center)
                     .lineLimit(2, reservesSpace: true)
                     .fixedSize(horizontal: false, vertical: true)

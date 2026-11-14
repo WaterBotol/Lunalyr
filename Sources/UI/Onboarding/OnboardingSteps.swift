@@ -36,12 +36,11 @@ struct MusicStep: View {
                        message: OnboardingCopy.permissionNote(installed: flow.models.installedPlayers), focus: focus) {
             OnboardingCard {
                 PlayerAccessList()
-                Divider()
                 VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.xSmall) {
                     LabeledContent("Follow") {
                         LunalyrPlayerPicker(title: "Follow").labelsHidden().fixedSize()
                     }
-                    Text(OnboardingCopy.followCaption).lunalyrText(.caption)
+                    Text(OnboardingCopy.followCaption).onboardingCaption()
                 }
             }
             let asking = flow.playersMacOSWillAsk
@@ -50,14 +49,12 @@ struct MusicStep: View {
                     .labelStyle(CaptionLabelStyle())
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, LunalyrDesign.Spacing.small)
-                    .padding(.horizontal, LunalyrDesign.Spacing.large)
                     .accessibilityElement(children: .combine)
             }
             Text(OnboardingCopy.permissionDetail(installed: flow.models.installedPlayers))
-                .lunalyrText(.caption)
+                .onboardingCaption()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, LunalyrDesign.Spacing.medium)
-                .padding(.horizontal, LunalyrDesign.Spacing.large)
         }
     }
 }
@@ -88,8 +85,10 @@ struct LookStep: View {
             ZStack(alignment: .top) {
                 switch flow.lookPart {
                 case .wallpaper:
-                    VStack(spacing: LunalyrDesign.Spacing.small) {
-                        WallpaperModeGrid(chooseImport: { importer.choose(into: settings) })
+                    VStack(spacing: 6) {
+                        OnboardingWallpaperTiles(chooseImport: { importer.choose(into: settings) },
+                                                 desktopPicture: previewDisplay.desktopPicture)
+                            .frame(width: OnboardingWallpaperTiles.width)
                         status
                     }
                     .transition(.opacity)
@@ -111,14 +110,20 @@ struct LookStep: View {
             if importer.showsProgress {
                 HStack(spacing: LunalyrDesign.Spacing.small) {
                     ProgressView().controlSize(.small)
-                    Text("Importing…").lunalyrText(.caption)
+                    Text("Importing…").onboardingCaption()
                 }
             } else if let message = importer.message {
-                StatusBanner(.warning, title: "Couldn’t import that file", message: message, density: .compact)
+                Label {
+                    Text("Couldn’t import that file. \(message)")
+                } icon: {
+                    Image(systemName: LunalyrStatus.warning.symbol).foregroundStyle(Color.studio(.warning))
+                }
+                .labelStyle(CaptionLabelStyle())
+                .accessibilityLabel("Warning: Couldn’t import that file. \(message)")
             } else if let notice = powerSaving {
                 // The leaf the tile power saving draws instead carries.
                 Label { Text(notice) } icon: {
-                    Image(systemName: "leaf.fill").foregroundStyle(LunalyrStatus.success.text)
+                    Image(systemName: "leaf.fill").foregroundStyle(Color.studio(.success))
                 }
                 .labelStyle(CaptionLabelStyle())
             } else if settings.backgroundMode == .custom {
@@ -127,7 +132,7 @@ struct LookStep: View {
                     .controlSize(.small)
             } else {
                 Text(settings.backgroundMode.summary)
-                    .lunalyrText(.caption)
+                    .onboardingCaption()
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
@@ -166,7 +171,7 @@ struct VideosStep: View {
                 ForEach(MusicVideoFraming.allCases) { framing in
                     VStack(spacing: LunalyrDesign.Spacing.small) {
                         VideoFramingPicture(framing: framing)
-                        Text(framing.title).lunalyrText(.caption)
+                        Text(framing.title).onboardingCaption()
                     }
                 }
             }
@@ -175,13 +180,11 @@ struct VideosStep: View {
             OnboardingCard {
                 OnboardingSwitchRow(title: OnboardingCopy.videoWallpaper, caption: OnboardingCopy.videoWallpaperCaption,
                                     isOn: videoWallpaper)
-                Divider()
                 Grid(alignment: .leading, horizontalSpacing: LunalyrDesign.Spacing.medium,
                      verticalSpacing: LunalyrDesign.Spacing.small) {
                     framingRow("YouTube videos", selection: $settings.musicVideoFraming)
                     framingRow("Library videos", selection: $settings.libraryVideoFraming)
                 }
-                Divider()
                 OnboardingSwitchRow(title: OnboardingCopy.searchYouTube, caption: OnboardingCopy.youTubePrivacy,
                                     isOn: $settings.musicVideoOnline)
             }
@@ -220,11 +223,9 @@ struct LyricsStep: View {
         OnboardingPage(step: .lyrics, title: OnboardingCopy.lyricsTitle, focus: focus) {
             OnboardingCard {
                 OnboardingFeatureRow(title: "Synced lyrics for each song", text: OnboardingCopy.sources)
-                Divider()
                 OnboardingFeatureRow(title: "Lyrics early or late?",
                                      text: OnboardingCopy.timing(earlier: hotkeys.label(for: .syncEarlier) ?? "⌃⌥⌘[",
                                                                  later: hotkeys.label(for: .syncLater) ?? "⌃⌥⌘]"))
-                Divider()
                 HStack(alignment: .top, spacing: LunalyrDesign.Spacing.large) {
                     OnboardingFeatureRow(title: "Readings for Japanese, Korean and Chinese", text: OnboardingCopy.readings) {
                         Grid(alignment: .leading, horizontalSpacing: LunalyrDesign.Spacing.small,
@@ -251,7 +252,6 @@ struct LyricsStep: View {
                         .frame(width: LunalyrDesign.Onboarding.readingsClip.width,
                                height: LunalyrDesign.Onboarding.readingsClip.height)
                 }
-                Divider()
                 OnboardingSwitchRow(title: "Show translations under lyrics", caption: OnboardingCopy.translations,
                                     isOn: $extras.showsTranslations)
             }
@@ -272,16 +272,14 @@ struct ExtrasStep: View {
                 row(picture: MiniDesktopPlayer(), title: OnboardingCopy.playerTitle, text: OnboardingCopy.player) {
                     Toggle("Show player on hover", isOn: $desktop.showsControlsOnHover)
                 }
-                Divider()
                 row(picture: OnboardingClipView(clip: .floating, cornerRadius: LunalyrDesign.Radius.control), title: OnboardingCopy.floatingTitle, text: OnboardingCopy.floating) {
                     EmptyView()
                 }
-                Divider()
                 row(picture: DiscordStatusPicture(), title: OnboardingCopy.discordTitle, text: OnboardingCopy.discord) {
                     Toggle("Show what I’m listening to on Discord", isOn: $extras.showsDiscordPresence)
                 }
                 Text(OnboardingCopy.discordPrivacy)
-                    .lunalyrText(.caption)
+                    .onboardingCaption()
                     .padding(.leading, LunalyrDesign.Onboarding.extraPicture.width + LunalyrDesign.Spacing.large)
                     .padding(.top, -LunalyrDesign.Spacing.xSmall)
             }
@@ -299,8 +297,8 @@ struct ExtrasStep: View {
                        height: LunalyrDesign.Onboarding.extraPicture.height)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.hairline) {
-                Text(title).lunalyrText(.emphasis)
-                Text(text).lunalyrText(.caption)
+                Text(title).onboardingEmphasis()
+                Text(text).onboardingCaption()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
@@ -327,13 +325,15 @@ struct MenuBarStep: View {
             OnboardingCard {
                 OnboardingSwitchRow(title: "Show the current line in the menu bar",
                                     caption: OnboardingCopy.menuBarLineCaption, isOn: $extras.showsMenuBarLine)
-                Divider()
                 OnboardingSwitchRow(title: "Launch at login", caption: OnboardingCopy.launchAtLoginCaption,
                                     isOn: $settings.launchAtLogin)
                 if let error = settings.launchAtLoginError {
-                    Label(error, systemImage: LunalyrStatus.warning.symbol)
-                        .font(LunalyrTextStyle.caption.font)
-                        .foregroundStyle(LunalyrStatus.warning.text)
+                    Label {
+                        Text(error).foregroundStyle(Color.studio(.ink))
+                    } icon: {
+                        Image(systemName: LunalyrStatus.warning.symbol).foregroundStyle(Color.studio(.warning))
+                    }
+                        .font(LunalyrDesign.Studio.TypeScale.caption)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Warning: \(error)")
                 }
@@ -354,7 +354,7 @@ struct DoneStep: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.largeTitle)
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(LunalyrStatus.success.text)
+                .foregroundStyle(Color.studio(.success))
                 .padding(.bottom, LunalyrDesign.Spacing.medium)
                 .accessibilityHidden(true)
             OnboardingHeader(step: .done, title: OnboardingCopy.doneTitle,
@@ -363,11 +363,10 @@ struct DoneStep: View {
                 .padding(.bottom, LunalyrDesign.Spacing.xLarge)
             OnboardingCard {
                 PlayerAccessList()
-                Divider()
                 lookRow
             }
             Text(flow.firstRun ? OnboardingCopy.doneFirstRun : OnboardingCopy.doneAgain)
-                .lunalyrText(.caption)
+                .onboardingCaption()
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.top, LunalyrDesign.Spacing.medium)
@@ -388,12 +387,12 @@ struct DoneStep: View {
         return HStack(alignment: .firstTextBaseline, spacing: LunalyrDesign.Spacing.small) {
             // As wide as the access rows' status circles, so the names line up.
             Image(systemName: mode.symbol)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.studio(.ink2))
                 .frame(width: 13)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.hairline) {
-                Text("Wallpaper: \(mode.title)").lunalyrText(.emphasis)
-                Text(detail).lunalyrText(.caption)
+                Text("Wallpaper: \(mode.title)").onboardingEmphasis()
+                Text(detail).onboardingCaption()
             }
             .accessibilityElement(children: .combine)
         }

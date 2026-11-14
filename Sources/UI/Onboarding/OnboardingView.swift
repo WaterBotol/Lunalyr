@@ -40,7 +40,6 @@ struct OnboardingView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
-                Divider()
                 OnboardingFooter(flow: flow, enabled: !intro)
             }
             .accessibilityHidden(intro)
@@ -50,8 +49,8 @@ struct OnboardingView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .lunalyrTint()
+        .background(Color.studio(.window))
+        .tint(Color.studio(.accent))
         .onAppear(perform: appear)
         .onChange(of: flow.step) { old, new in
             // First the step on screen learns which way it will leave, then
@@ -137,18 +136,18 @@ private struct OnboardingFooter: View {
                         .transition(.opacity)
                     Button("Open Settings") { flow.finish(.openSettings) }
                         .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.lunalyrProminent)
+                        .buttonStyle(.borderedProminent)
                         .transition(.opacity)
                 } else {
                     Button("Done") { flow.finish(.done) }
                         .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.lunalyrProminent)
+                        .buttonStyle(.borderedProminent)
                         .frame(minWidth: 88)
                 }
             } else {
                 Button("Continue") { flow.advance() }
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.lunalyrProminent)
+                    .buttonStyle(.borderedProminent)
                     .frame(minWidth: 88)
             }
         }
@@ -172,7 +171,7 @@ private struct StepDots: View {
         HStack(spacing: LunalyrDesign.Spacing.xSmall + LunalyrDesign.Spacing.hairline) {
             ForEach(OnboardingFlow.Step.allCases) { step in
                 Capsule(style: .continuous)
-                    .fill(step == current ? AnyShapeStyle(Color.lunalyrAccent) : AnyShapeStyle(Color.secondary.opacity(0.35)))
+                    .fill(step == current ? Color.studio(.accent) : Color.studio(.ink2).opacity(0.35))
                     .frame(width: step == current ? 18 : 7, height: 7)
             }
         }
@@ -257,15 +256,16 @@ struct OnboardingHeader: View {
     var body: some View {
         VStack(spacing: LunalyrDesign.Spacing.small) {
             Text(title)
-                .lunalyrText(.largeTitle)
+                .font(OnboardingType.title)
+                .foregroundStyle(Color.studio(.ink))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityFocused(focus, equals: step)
             if let message {
                 Text(message)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                    .font(LunalyrDesign.Studio.TypeScale.row)
+                    .foregroundStyle(Color.studio(.ink2))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: LunalyrDesign.Onboarding.messageWidth)
@@ -275,8 +275,9 @@ struct OnboardingHeader: View {
     }
 }
 
-/// A group of rows, as a grouped form draws its sections: a quiet fill, no
-/// edge except under Increase Contrast.
+/// A group of rows on the window itself: no card, no edge, no dividers
+/// (the redesign's language, DESIGN.md slop 6 and 8); the space between
+/// rows separates them.
 struct OnboardingCard<Content: View>: View {
     let content: Content
 
@@ -285,12 +286,28 @@ struct OnboardingCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.medium) { content }
-            .padding(LunalyrDesign.Spacing.large)
+        VStack(alignment: .leading, spacing: OnboardingType.rowSpacing) { content }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous).fill(.quinary))
-            .overlay(RoundedRectangle(cornerRadius: LunalyrDesign.Radius.card, style: .continuous)
-                .strokeBorder(Color.lunalyrContrastBorder, lineWidth: 1))
+    }
+}
+
+/// Onboarding's type, from the redesign's scale (SF Pro, regular and
+/// semibold): a step's title 22 semibold (a welcome window reads larger than
+/// a Settings page's 17), row names 13 semibold, captions 11.5 in ink2.
+enum OnboardingType {
+    static let title = Font.system(size: 22, weight: .semibold)
+    static let rowSpacing: CGFloat = 16
+}
+
+extension View {
+    /// A caption: 11.5 regular, ink2.
+    func onboardingCaption() -> some View {
+        font(LunalyrDesign.Studio.TypeScale.caption).foregroundStyle(Color.studio(.ink2))
+    }
+
+    /// A row's name: 13 semibold, ink.
+    func onboardingEmphasis() -> some View {
+        font(LunalyrDesign.Studio.TypeScale.section).foregroundStyle(Color.studio(.ink))
     }
 }
 
@@ -310,8 +327,8 @@ struct OnboardingFeatureRow<Accessory: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.small) {
             VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.hairline) {
-                Text(title).lunalyrText(.emphasis)
-                Text(text).lunalyrText(.caption)
+                Text(title).onboardingEmphasis()
+                Text(text).onboardingCaption()
             }
             .accessibilityElement(children: .combine)
             accessory
@@ -337,7 +354,9 @@ struct OnboardingSwitchRow: View {
         HStack(spacing: LunalyrDesign.Spacing.medium) {
             VStack(alignment: .leading, spacing: LunalyrDesign.Spacing.hairline) {
                 Text(title)
-                Text(caption).lunalyrText(.caption)
+                    .font(LunalyrDesign.Studio.TypeScale.row)
+                    .foregroundStyle(Color.studio(.ink))
+                Text(caption).onboardingCaption()
             }
             .accessibilityHidden(true)
             Spacer(minLength: 0)
