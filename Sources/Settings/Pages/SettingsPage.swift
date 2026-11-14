@@ -104,12 +104,17 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Whether `query` (several words allowed) finds this page.
+    /// Whether `query` (several words allowed) finds this page: by its
+    /// title and search terms, or by any one setting on it
+    /// (`SettingsCatalogue`), by that setting's label, section or keywords.
     func matches(_ query: String) -> Bool {
         let words = query.lowercased().split(separator: " ").map(String.init)
         guard !words.isEmpty else { return true }
         let haystack = ([title] + searchTerms).joined(separator: " ").lowercased()
-        return words.allSatisfy { haystack.contains($0) }
+        if words.allSatisfy({ haystack.contains($0) }) { return true }
+        let folded = SettingsCatalogue.searchWords(query)
+        guard !folded.isEmpty else { return false }
+        return SettingsCatalogue.entries(on: self).contains { $0.matches(words: folded) }
     }
 
     /// The page another surface's destination opens.
