@@ -90,19 +90,25 @@ public static class LyricStageFit
 /// </summary>
 public static class WordStageFit
 {
-    public static double Scale(SizeD ink, SizeD stage, PointD centre, double scale, double angle, double margin)
+    /// <param name="marginY">The margin above and below, when it differs from the one at the sides (title-safe on a
+    /// wide stage); null for <paramref name="margin"/>.</param>
+    public static double Scale(SizeD ink, SizeD stage, PointD centre, double scale, double angle, double margin,
+                               double? marginY = null)
     {
+        var verticalMargin = marginY ?? margin;
         if (!double.IsFinite(ink.Width) || !double.IsFinite(ink.Height) || !double.IsFinite(stage.Width)
             || !double.IsFinite(stage.Height) || !double.IsFinite(centre.X) || !double.IsFinite(centre.Y)
-            || !double.IsFinite(scale) || !double.IsFinite(angle) || !double.IsFinite(margin) || ink.Width <= 0
+            || !double.IsFinite(scale) || !double.IsFinite(angle) || !double.IsFinite(margin)
+            || !double.IsFinite(verticalMargin) || ink.Width <= 0
             || ink.Height <= 0 || stage.Width <= 0 || stage.Height <= 0 || scale <= 0) return 0;
         var radians = angle * Math.PI / 180;
         double cosine = Math.Abs(Math.Cos(radians)), sine = Math.Abs(Math.Sin(radians));
         var rotatedWidth = ink.Width * cosine + ink.Height * sine;
         var rotatedHeight = ink.Height * cosine + ink.Width * sine;
         var inset = Math.Max(0, margin);
+        var insetY = Math.Max(0, verticalMargin);
         var clearanceX = Math.Max(0, Math.Min(centre.X, stage.Width - centre.X) - inset);
-        var clearanceY = Math.Max(0, Math.Min(centre.Y, stage.Height - centre.Y) - inset);
+        var clearanceY = Math.Max(0, Math.Min(centre.Y, stage.Height - centre.Y) - insetY);
         return Math.Min(1, Math.Min(clearanceX * 2 / Math.Max(1, rotatedWidth * scale),
                                     clearanceY * 2 / Math.Max(1, rotatedHeight * scale)));
     }

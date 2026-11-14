@@ -119,7 +119,18 @@ public sealed class HeldLyricRenderTests : IDisposable
 
         using var fresh = Layer(id);
         _stage.Render(fresh, scene, time, 500, Scale, Background, playing: false);
-        Assert.Equal(held, _stage.Pixels());
+        // The same frame, but for a step in the last bit: since Mac Test Build 88 a rolling word already sung steps back
+        // (RollingTokenState.Recede), so its opacity sits on a slope, and the fresh layer's cursor, summed over a window
+        // set at another moment, can differ in its last bits and round a channel of a pixel or two by one step.
+        var freshPixels = _stage.Pixels();
+        int differ = 0, worst = 0;
+        for (var i = 0; i < held.Length; i++)
+        {
+            if (held[i] == freshPixels[i]) continue;
+            differ++;
+            worst = Math.Max(worst, Math.Abs(held[i] - freshPixels[i]));
+        }
+        Assert.True(differ <= 8 && worst <= 1, $"{id}: a fresh layer differs in {differ} bytes, by up to {worst}");
         Assert.Empty(_sink.Entries);
     }
 }

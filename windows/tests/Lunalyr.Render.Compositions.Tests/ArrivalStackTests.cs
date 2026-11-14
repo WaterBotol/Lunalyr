@@ -304,7 +304,7 @@ public sealed class ArrivalStackTests : IDisposable
     }
 
     [Fact]
-    public void ALabelIsPaddedElevenByThreePoints()
+    public void ALabelIsPaddedInProportionToItsType()
     {
         var word = new LyricWord("tonight", 10, 10.5);
         var label = RollingWords.Prepare([word], 60, composition: CompositionKind.Cutout)[0];
@@ -315,8 +315,12 @@ public sealed class ArrivalStackTests : IDisposable
             var (b, _, plainWidth, plainHeight) = SpokenLayer.Layout(_kit, plain, 1200, scale);
             a.Dispose();
             b.Dispose();
-            Assert.Equal(plainWidth - 4 * scale + 22 * scale, labelWidth, 3);
-            Assert.Equal(plainHeight + 6 * scale, labelHeight, 3);
+            // 0.26 by 0.08 of the type (Mac Test Build 88's tilePadding), never under 11 by 3 points.
+            var (padX, padY) = RollingLabel.TilePadding(label.PointSize, scale);
+            Assert.Equal(Math.Max(11 * scale, 57.6 * 0.26), padX, 9);
+            Assert.Equal(Math.Max(3 * scale, 57.6 * 0.08), padY, 9);
+            Assert.Equal(plainWidth - 4 * scale + 2 * padX, labelWidth, 3);
+            Assert.Equal(plainHeight + 2 * padY, labelHeight, 3);
         }
     }
 

@@ -45,10 +45,11 @@ public class ArrivalCompositionTests
         foreach (var composition in new[] { CompositionKind.Cascade, CompositionKind.Cutout })
         {
             var prepared = RollingWords.Prepare([hero, filler, plain, read], 60, readings, composition: composition);
-            Assert.Equal(60 * 0.88, prepared[0].PointSize, 9);
-            Assert.Equal(60 * 0.62, prepared[1].PointSize, 9);
-            Assert.Equal(60 * 0.74, prepared[2].PointSize, 9);
-            Assert.Equal(60 * 0.74 * 0.88, prepared[3].PointSize, 9);
+            // Three clear steps (Mac Test Build 88): heroes 0.96, fillers 0.56, the rest 0.70.
+            Assert.Equal(60 * 0.96, prepared[0].PointSize, 9);
+            Assert.Equal(60 * 0.56, prepared[1].PointSize, 9);
+            Assert.Equal(60 * 0.70, prepared[2].PointSize, 9);
+            Assert.Equal(60 * 0.70 * 0.88, prepared[3].PointSize, 9);
             Assert.Equal([true, false, false, false], prepared.Select(word => word.Heavy));
         }
         // Spoken: every word large and heavy, never on a label.
@@ -72,7 +73,7 @@ public class ArrivalCompositionTests
     }
 
     [Fact]
-    public void TheColumnRunsLeftOfCentreAndLabelsKeepRoomForTheirTilt()
+    public void TheColumnSitsOnTheLeftThirdAndLabelsKeepRoomForTheirTilt()
     {
         var word = new LyricWord("tonight", 10, 10.6);
         RollingTokenState State(CompositionKind composition, bool reduce = false) =>
@@ -81,10 +82,13 @@ public class ArrivalCompositionTests
         var spoken = State(CompositionKind.Spoken);
         var cascade = State(CompositionKind.Cascade);
         var cutout = State(CompositionKind.Cutout);
-        // The pose's own sideways place is within half a type size; the column is 13% of the stage to the left.
+        // The pose's own sideways place is within half a type size. Cascade is a flush column 19% of the stage to the
+        // left, its edge on the axis (a hero's; the rest tucked in 0.34 of a type size); Cutout's collage 16% left.
         Assert.InRange(spoken.Slot.Dx, -50, 50);
-        Assert.InRange(cascade.Slot.Dx, -0.13 * 1200 - 50, -0.13 * 1200 + 50);
-        Assert.InRange(cutout.Slot.Dx, -0.13 * 1200 - 50, -0.13 * 1200 + 50);
+        Assert.Equal(-0.19 * 1200, cascade.Slot.Dx, 9);
+        Assert.Equal(1, cascade.Slot.Align);
+        Assert.InRange(cutout.Slot.Dx, -0.16 * 1200 - 0.54 * 50, -0.16 * 1200 + 0.54 * 50);
+        Assert.Equal(0, cutout.Slot.Align);
         Assert.Equal(0, spoken.Slot.Tilt);
         Assert.Equal(0, cascade.Slot.Tilt);
         Assert.Equal(RollingLabel.Tilt, cutout.Slot.Tilt);
