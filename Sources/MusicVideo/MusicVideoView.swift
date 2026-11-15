@@ -27,6 +27,13 @@ struct MusicVideoBackground: View {
     var libraryFraming: MusicVideoFraming = .fill
     /// The album cover, for the backdrop around a video shown whole.
     var artwork: NSImage?
+    /// The wallpaper holds this layer at no opacity until its first picture
+    /// (`WallpaperTransition`): that picture shows at once, since the
+    /// wallpaper's crossfade is its fade.
+    var revealsAtOnce = false
+    /// Told once a picture is up: the player's first frame, or the video's
+    /// still where no player runs (Reduce Motion, the Settings preview).
+    var onFirstFrame: (() -> Void)?
     /// The glow around a video shown whole with an ambient glow.
     @State private var ambience = MusicVideoAmbience()
 
@@ -57,7 +64,11 @@ struct MusicVideoBackground: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
-        .onAppear { updateAmbience() }
+        .onAppear {
+            updateAmbience()
+            // No player in the unit-test host: nothing would ever report.
+            if AppRuntime.isUnitTesting { onFirstFrame?() }
+        }
         .onChange(of: ambienceActive) { updateAmbience() }
         .onChange(of: source) { ambience.reset() }
         .onDisappear { ambience.stop() }
@@ -82,24 +93,27 @@ struct MusicVideoBackground: View {
             Group {
                 switch source {
                 case .local(let url):
-                    LocalMusicVideoView(url: url, paused: paused || still, framing: libraryFraming, ambience: glow)
+                    LocalMusicVideoView(url: url, paused: paused || still, framing: libraryFraming, ambience: glow,
+                                        revealsAtOnce: revealsAtOnce, onFirstFrame: onFirstFrame)
                         // Softened like the animated covers; the overscan
                         // keeps the blur from showing the frame's edge.
                         .blur(radius: blur)
                         .scaleEffect((blur > 0 ? 1.04 : 1) * libraryFraming.bleedScale)
                 case .youTube(let id) where youTubeFraming.isWhole:
                     WholeYouTubeVideo(videoID: id, paused: paused, blur: blur, playing: !(preview || still),
-                                      large: !preview, framing: youTubeFraming, ambience: glow)
+                                      large: !preview, framing: youTubeFraming, ambience: glow,
+                                      revealsAtOnce: revealsAtOnce, onFirstFrame: onFirstFrame)
                 case .youTube(let id):
                     if preview || still {
                         // The preview does not start a second YouTube
                         // player, and Reduce Motion shows no moving video:
                         // the video's own still stands in, fading in over
                         // the stand-in once it has loaded.
-                        YouTubeThumbnail(videoID: id, large: !preview)
+                        YouTubeThumbnail(videoID: id, large: !preview, onLoaded: onFirstFrame)
                             .blur(radius: blur).scaleEffect(blur > 0 ? 1.04 : 1)
                     } else {
-                        YouTubeMusicVideoView(videoID: id, paused: paused, blur: blur)
+                        YouTubeMusicVideoView(videoID: id, paused: paused, blur: blur,
+                                              revealsAtOnce: revealsAtOnce, onFirstFrame: onFirstFrame)
                     }
                 }
             }
@@ -120,6 +134,9 @@ struct WholeYouTubeVideo: View {
     var large = true
     var framing: MusicVideoFraming = .whole
     var ambience: MusicVideoAmbience?
+    /// See `MusicVideoBackground`. The still counts as the first picture.
+    var revealsAtOnce = false
+    var onFirstFrame: (() -> Void)?
     @State private var still: NSImage?
     @State private var aspect: CGFloat = MusicVideoFraming.youTubeAspect
 
@@ -141,7 +158,8 @@ struct WholeYouTubeVideo: View {
                     // Never larger than the screen: the page draws the player
                     // at `box` inside it, so YouTube's own bars fall outside.
                     YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: framing,
-                                          box: layout.box, ambience: ambience)
+                                          box: layout.box, ambience: ambience,
+                                          revealsAtOnce: revealsAtOnce, onFirstFrame: onFirstFrame)
                         .frame(width: layout.visible.width, height: layout.visible.height)
                 }
             }
@@ -154,7 +172,20 @@ struct WholeYouTubeVideo: View {
             aspect = YouTubeVideoShape.cached(videoID) ?? MusicVideoFraming.youTubeAspect
             async let shape = YouTubeVideoShape.aspect(of: videoID)
             let image = await YouTubeThumbnail.load(videoID, large: large)
-            if !Task.isCancelled, let image { still = image }
+            if !Task.isCancelled, let image {
+                // Held by the wallpaper: shown at once, under its crossfade.
+                if revealsAtOnce {
+                    var instant = Transaction()
+                    instant.disablesAnimations = true
+                    withTransaction(instant) { still = image }
+                } else {
+                    still = image
+                }
+                onFirstFrame?()
+            } else if !Task.isCancelled, !playing {
+                // No still and no player: the stand-in is all there is.
+                onFirstFrame?()
+            }
             let found = await shape
             if !Task.isCancelled, let found { aspect = found }
         }
@@ -208,6 +239,8 @@ struct YouTubeThumbnail: View {
     let videoID: String
     /// Full screen: the largest still first, the usual one if the video has none.
     var large = false
+    /// Told once the still has loaded, or could not be.
+    var onLoaded: (() -> Void)?
     @State private var image: NSImage?
 
     /// How long the still takes to fade in once loaded.
@@ -250,7 +283,10 @@ struct YouTubeThumbnail: View {
         .task(id: videoID) {
             image = nil
             let loaded = await Self.load(videoID, large: large)
-            if !Task.isCancelled { image = loaded }
+            if !Task.isCancelled {
+                image = loaded
+                onLoaded?()
+            }
         }
     }
 }
@@ -490,9 +526,14 @@ struct LocalMusicVideoView: NSViewRepresentable {
     let paused: Bool
     var framing: MusicVideoFraming = .fill
     var ambience: MusicVideoAmbience?
+    /// See `MusicVideoBackground`.
+    var revealsAtOnce = false
+    var onFirstFrame: (() -> Void)?
 
     func makeNSView(context: Context) -> LocalMusicVideoNSView {
         let view = LocalMusicVideoNSView()
+        view.revealsAtOnce = revealsAtOnce
+        view.onFirstFrame = onFirstFrame
         view.setFraming(framing)
         view.setAmbience(ambience)
         view.load(url)
@@ -502,6 +543,8 @@ struct LocalMusicVideoView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: LocalMusicVideoNSView, context: Context) {
+        view.revealsAtOnce = revealsAtOnce
+        view.onFirstFrame = onFirstFrame
         view.setFraming(framing)
         view.setAmbience(ambience)
         view.load(url)
@@ -524,6 +567,10 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
 
     var seekLead: Double { 0.05 }
     var correctionStyle: MusicVideoCorrectionStyle { .rate }
+    /// See `MusicVideoBackground`: a held layer's first frame shows at once.
+    var revealsAtOnce = false
+    /// Told when the first frame of the loaded file is up.
+    var onFirstFrame: (() -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -643,9 +690,19 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         }
     }
 
-    /// The first frame is up: eased in from wherever the layer is now.
+    /// The first frame is up: eased in from wherever the layer is now, or
+    /// shown at once in a layer the wallpaper still holds.
     private func reveal() {
         guard playerLayer.opacity < 1 else { return }
+        onFirstFrame?()
+        guard !revealsAtOnce else {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            playerLayer.removeAnimation(forKey: "reveal")
+            playerLayer.opacity = 1
+            CATransaction.commit()
+            return
+        }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = playerLayer.presentation()?.opacity ?? playerLayer.opacity
         fade.toValue = 1
@@ -713,6 +770,9 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
     var box: YouTubeEmbed.Box?
     /// The ambient glow, sampled from this player.
     var ambience: MusicVideoAmbience?
+    /// See `MusicVideoBackground`.
+    var revealsAtOnce = false
+    var onFirstFrame: (() -> Void)?
 
     func makeCoordinator() -> YouTubeMusicVideoCoordinator { YouTubeMusicVideoCoordinator() }
 
@@ -720,6 +780,8 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         let coordinator = context.coordinator
         let host = YouTubeMusicVideoHostView(frame: .zero)
         coordinator.host = host
+        coordinator.revealsAtOnce = revealsAtOnce
+        coordinator.onFirstFrame = onFirstFrame
         coordinator.setFraming(framing)
         coordinator.setBox(box)
         coordinator.setAmbience(ambience)
@@ -732,6 +794,8 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
 
     func updateNSView(_ host: YouTubeMusicVideoHostView, context: Context) {
         let coordinator = context.coordinator
+        coordinator.revealsAtOnce = revealsAtOnce
+        coordinator.onFirstFrame = onFirstFrame
         coordinator.setFraming(framing)
         coordinator.setBox(box)
         coordinator.setAmbience(ambience)
@@ -1224,6 +1288,13 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private(set) var framing: MusicVideoFraming = .fill
     /// A playing player's reveal, waiting for YouTube's title overlay to fade.
     private var pendingReveal: DispatchWorkItem?
+    /// The wallpaper holds this player's layer until its first picture: that
+    /// picture shows at once (`WallpaperTransition.revealsAtOnce`).
+    var revealsAtOnce = false
+    /// Told when the player first shows a picture of the video asked for.
+    var onFirstFrame: (() -> Void)?
+    /// `onFirstFrame` was told for this video.
+    private var reportedFirstFrame = false
 
     /// The first seek's lead; later ones use the measured latency.
     var seekLead: Double { MusicVideoSeekLatency.initial }
@@ -1238,7 +1309,10 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     }
 
     func attach(videoID: String) {
-        if videoID != self.videoID { freeze.reset() }
+        if videoID != self.videoID {
+            freeze.reset()
+            reportedFirstFrame = false
+        }
         self.videoID = videoID
         if view == nil { openWebView() }
         loop.isCurrent = { MusicVideoController.shared.isShowing(.youTube(videoID)) }
@@ -1383,7 +1457,12 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
     private func reveal() {
         cancelPendingReveal()
         freeze.notePlayer(showing: true)
-        fade(visible: true)
+        let first = !reportedFirstFrame
+        fade(visible: true, atOnce: first && revealsAtOnce)
+        if first {
+            reportedFirstFrame = true
+            onFirstFrame?()
+        }
     }
 
     /// Fill or whole. Applied to a ready page at once; a page still loading
@@ -1411,11 +1490,16 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         run(String(format: "window.lunalyrBox && window.lunalyrBox(%.3f, %.3f)", box.width, box.height))
     }
 
-    private func fade(visible: Bool) {
+    /// `atOnce`: no animation (a held layer's first picture).
+    private func fade(visible: Bool, atOnce: Bool = false) {
         playerVisible = visible
         guard let view else { return }
         let alpha: CGFloat = visible ? 1 : 0
         guard view.alphaValue != alpha else { return }
+        guard !atOnce else {
+            view.alphaValue = alpha
+            return
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = visible ? WallpaperMotion.mediaReveal : WallpaperMotion.mediaHide
             context.timingFunction = visible ? LunalyrDesign.Motion.CA.easeOut : LunalyrDesign.Motion.CA.easeIn
