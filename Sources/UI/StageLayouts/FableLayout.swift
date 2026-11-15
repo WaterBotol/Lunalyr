@@ -114,6 +114,7 @@ extension StageLyricView {
         }
         .lineLimit(1).fixedSize()
         .background { tileBackground(tile, size: size) }
+        .highlightLayer(tile)
         .wordAction(accent(run), start: run.start, time: time, size: size, glow: sample.glow)
         // Word presence, about the word's centre with its action.
         .modifier(presence(run, size: size, speed: 1, live: !lineTimed))

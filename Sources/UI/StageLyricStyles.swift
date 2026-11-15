@@ -155,6 +155,14 @@ enum StageMotion {
         vc_settle(time - exitStart, WallpaperMotion.lineExit)
     }
 
+    /// A line of solid tiles or pills leaving (Portal, Mosaic): a
+    /// highlight's exit (`LyricHighlightTiming.exitProgress`), eased in and
+    /// out. The settle above drops a seventh in its first frame, which on a
+    /// big bright tile reads as a pop.
+    static func highlightLeave(at time: Double, exitStart: Double) -> Double {
+        LyricHighlightTiming.exitProgress(time - exitStart)
+    }
+
     /// How much a word is still the one being sung: 1 until the next word
     /// starts to take over, 0 once it has. Every live-only property is
     /// blended by this, so nothing restyles in a single frame.
