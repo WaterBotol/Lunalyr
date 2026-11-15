@@ -245,10 +245,21 @@ public class FloatingLyricsTests
     {
         var none = FloatingBackdrop.Luminance(0, reduceTransparency: false);
         var full = FloatingBackdrop.Luminance(1, reduceTransparency: false);
-        var solid = FloatingBackdrop.Luminance(0, reduceTransparency: true);
+        var solid = FloatingBackdrop.Luminance(1, reduceTransparency: true);
         Assert.Equal(LyricLegibility.UnknownBackdropLuminance, none, 4);
         Assert.True(full < none);
-        Assert.True(solid < full); // Reduce Transparency draws a nearly solid panel
+        Assert.True(solid < full); // Reduce Transparency draws a plain panel, darker than the soft shade
+    }
+
+    // Windows only: a tester with transparency effects off and the shade at 0% saw a constant black pill (15 Nov 2026).
+    [Fact]
+    public void With_transparency_off_the_panel_follows_the_shade_and_none_at_zero()
+    {
+        Assert.Equal(0, FloatingBackdrop.Panel(0));
+        Assert.Equal(0, FloatingBackdrop.Panel(double.NaN));
+        Assert.Equal(FloatingBackdrop.SolidShade, FloatingBackdrop.Panel(1), 6);
+        Assert.Equal(FloatingBackdrop.SolidShade * 0.6, FloatingBackdrop.Panel(0.6), 6);
+        Assert.Equal(LyricLegibility.UnknownBackdropLuminance, FloatingBackdrop.Luminance(0, reduceTransparency: true), 4);
     }
 
     // Ported from FloatingLyricsTests.swift: testFloatingTextSizeReplacesTheScreenBasedSize

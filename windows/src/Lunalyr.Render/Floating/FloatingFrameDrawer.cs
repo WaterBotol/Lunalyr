@@ -133,18 +133,23 @@ public sealed class FloatingFrameDrawer : IDisposable
         }
     }
 
-    /// <summary>A soft dark shade fading out towards every edge, so there is no box; with transparency effects off, a plain nearly solid panel.</summary>
+    /// <summary>
+    /// A soft dark shade fading out towards every edge, so there is no box; with transparency effects off, a plain panel
+    /// as dark as the shade's strength. Shade at 0% draws neither.
+    /// </summary>
     private void DrawBackdrop(ID2D1DeviceContext dc, double strength, bool reduceTransparency)
     {
         if (reduceTransparency)
         {
+            var panel = FloatingBackdrop.Panel(strength);
+            if (panel <= 0) return;
             var inset = 4 * _scale;
             var corner = (float)Math.Min(22 * _scale, (_size.Y - 2 * inset) * 0.2);
-            _brush!.Color = new Color4(0, 0, 0, (float)FloatingBackdrop.SolidShade);
+            _brush!.Color = new Color4(0, 0, 0, (float)panel);
             dc.FillRoundedRectangle(new RoundedRectangle(new RawRectF(inset, inset, _size.X - inset, _size.Y - inset), corner, corner), _brush);
             return;
         }
-        if (strength <= 0.01) return;
+        if (strength <= FloatingBackdrop.Off) return;
         dc.DrawBitmap(_shade!, new RawRectF(0, 0, _size.X, _size.Y), (float)(FloatingBackdrop.MaximumShade * Math.Min(1, strength)),
             InterpolationMode.Linear, null, null);
     }

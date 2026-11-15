@@ -329,12 +329,26 @@ public static class FloatingBackdrop
     /// <summary>Most an app behind is darkened, at full strength.</summary>
     public const double MaximumShade = 0.72;
 
-    /// <summary>The nearly solid panel drawn instead of the shade when transparency effects are off.</summary>
+    /// <summary>The panel drawn instead of the shade when transparency effects are off, at full strength.</summary>
     public const double SolidShade = 0.86;
+
+    /// <summary>Strengths at or below this draw no shade and no panel.</summary>
+    public const double Off = 0.01;
+
+    /// <summary>
+    /// How dark the plain panel is with transparency effects off: <see cref="SolidShade"/> scaled by the shade's
+    /// strength, and none at all when the shade is off. It used to be drawn at 0.86 whatever the setting, so a tester
+    /// with Windows' transparency effects off and the shade at 0% saw a constant black pill under the lyrics (15 Nov 2026).
+    /// </summary>
+    public static double Panel(double strength)
+    {
+        var s = double.IsFinite(strength) ? Math.Clamp(strength, 0, 1) : 0;
+        return s <= Off ? 0 : SolidShade * s;
+    }
 
     public static double Luminance(double strength, bool reduceTransparency)
     {
-        var shade = reduceTransparency ? SolidShade : MaximumShade * Math.Min(1, Math.Max(0, strength));
+        var shade = reduceTransparency ? Panel(strength) : MaximumShade * Math.Min(1, Math.Max(0, strength));
         return LyricLegibility.Darkened(LyricLegibility.UnknownBackdropLuminance, shade);
     }
 }
