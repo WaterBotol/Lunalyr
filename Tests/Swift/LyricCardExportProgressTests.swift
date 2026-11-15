@@ -73,7 +73,10 @@ final class LyricCardExportProgressTests: XCTestCase {
         XCTAssertEqual(mp4.upperBound, gif.lowerBound)
         XCTAssertEqual(gif.upperBound, png.lowerBound)
         XCTAssertEqual(png.upperBound, 1)
-        XCTAssertGreaterThan(mp4.upperBound - mp4.lowerBound, 0.5, "20 s of video is most of the work")
+        XCTAssertGreaterThan(gif.upperBound - gif.lowerBound, mp4.upperBound - mp4.lowerBound,
+                             "the GIF is drawn at full size at 25 fps, the video at two-thirds size at 30")
+        let videoAndStill = LyricCard.progressShares([.mp4, .png], duration: 20, pages: 4, hasSound: true)
+        XCTAssertGreaterThan(try XCTUnwrap(videoAndStill[.mp4]).upperBound, 0.9, "20 s of video is most of the work")
         XCTAssertLessThan(png.upperBound - png.lowerBound, 0.05, "one still is a sliver")
         XCTAssertEqual(LyricCard.progressShares([.png], duration: 3, pages: 1, hasSound: false)[.png], 0...1)
         XCTAssertTrue(LyricCard.progressShares([], duration: 3, pages: 1, hasSound: false).isEmpty)

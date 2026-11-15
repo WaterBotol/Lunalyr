@@ -662,14 +662,17 @@ final class LyricExtrasTests: XCTestCase {
         let gif = try XCTUnwrap(encoded)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
         let count = CGImageSourceGetCount(source)
-        XCTAssertEqual(count, 12)
+        XCTAssertGreaterThan(count, 3, "the sung line moves between the two held lines")
         func delay(_ index: Int) throws -> Double {
             let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any])
             let info = try XCTUnwrap(properties[kCGImagePropertyGIFDictionary] as? [CFString: Any])
             return try XCTUnwrap(info[kCGImagePropertyGIFDelayTime] as? Double)
         }
         XCTAssertEqual(try delay(0), 1.8, accuracy: 0.01)
-        XCTAssertEqual(try delay(5), 0.08, accuracy: 0.01)
+        let sung = try (1..<(count - 1)).map(delay)
+        XCTAssertTrue(sung.allSatisfy { $0 >= 0.02 }, "\(sung)")
+        XCTAssertEqual(sung.min() ?? 0, 0.04, accuracy: 0.011)
+        XCTAssertEqual(sung.reduce(0, +), 0.8, accuracy: 0.02)
         XCTAssertEqual(try delay(count - 1), 1.8, accuracy: 0.01)
     }
 
@@ -730,14 +733,34 @@ final class LyricExtrasTests: XCTestCase {
         XCTAssertEqual(CGImageSourceGetType(source) as String?, UTType.gif.identifier)
         let count = CGImageSourceGetCount(source)
         XCTAssertGreaterThan(count, 12)
+        /// The frame showing `seconds` into the GIF.
+        func frame(at seconds: Double, in frames: CGImageSource) throws -> Int {
+            var elapsed = 0.0
+            for index in 0..<CGImageSourceGetCount(frames) {
+                let timing = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(frames, index, nil) as? [CFString: Any])
+                let info = try XCTUnwrap(timing[kCGImagePropertyGIFDictionary] as? [CFString: Any])
+                elapsed += try XCTUnwrap(info[kCGImagePropertyGIFDelayTime] as? Double)
+                if elapsed > seconds { return index }
+            }
+            return CGImageSourceGetCount(frames) - 1
+        }
         let metadata = try XCTUnwrap(CGImageSourceCopyProperties(source, nil) as? [CFString: Any])
         let loop = metadata[kCGImagePropertyGIFDictionary] as? [CFString: Any]
         XCTAssertEqual(loop?[kCGImagePropertyGIFLoopCount] as? Int, 0)
         let timing = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
         let properties = try XCTUnwrap(timing[kCGImagePropertyGIFDictionary] as? [CFString: Any])
         let delay = try XCTUnwrap(properties[kCGImagePropertyGIFDelayTime] as? Double)
-        XCTAssertEqual(delay, 0.08, accuracy: 0.01)
-        XCTAssertGreaterThanOrEqual(Double(count) * delay, line.end - line.start)
+        XCTAssertGreaterThanOrEqual(delay, 0.04 - 0.001, "frames still before the first word are one longer frame")
+        var total = 0.0, shortest = Double.infinity
+        for index in 0..<count {
+            let timing = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any])
+            let info = try XCTUnwrap(timing[kCGImagePropertyGIFDictionary] as? [CFString: Any])
+            let delay = try XCTUnwrap(info[kCGImagePropertyGIFDelayTime] as? Double)
+            total += delay
+            shortest = min(shortest, delay)
+        }
+        XCTAssertEqual(shortest, 0.04, accuracy: 0.001, "the line moves at 25 fps")
+        XCTAssertGreaterThanOrEqual(total, line.end - line.start - 0.01)
 
         func middlePixels(_ frames: CGImageSource, _ index: Int) throws -> [Bool] {
             let frame = try XCTUnwrap(CGImageSourceCreateImageAtIndex(frames, index, nil))
@@ -752,11 +775,11 @@ final class LyricExtrasTests: XCTestCase {
         }
 
         let first = try middlePixels(source, 0)
-        let singing = try middlePixels(source, 10)
+        let singing = try middlePixels(source, try frame(at: 0.8, in: source))
         XCTAssertGreaterThan(zip(first, singing).filter { $0.0 != $0.1 }.count, 50, "the stage animates")
         let scattered = try await render(.scattered)
         let scatteredSource = try XCTUnwrap(CGImageSourceCreateWithData(scattered as CFData, nil))
-        let differentStyle = try middlePixels(scatteredSource, 10)
+        let differentStyle = try middlePixels(scatteredSource, try frame(at: 0.8, in: scatteredSource))
         XCTAssertGreaterThan(zip(singing, differentStyle).filter { $0.0 != $0.1 }.count, 50, "the layout affects the GIF")
     }
 
@@ -836,7 +859,16 @@ final class LyricExtrasTests: XCTestCase {
         let encoded = await LyricCard.gif(content, scale: 0.5)
         let gif = try XCTUnwrap(encoded)
         let source = try XCTUnwrap(CGImageSourceCreateWithData(gif as CFData, nil))
-        let frame = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 8, nil))
+        // The frame showing 0.64 s in.
+        var elapsed = 0.0, shown = 0
+        for index in 0..<CGImageSourceGetCount(source) {
+            let timing = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any])
+            let info = try XCTUnwrap(timing[kCGImagePropertyGIFDictionary] as? [CFString: Any])
+            elapsed += try XCTUnwrap(info[kCGImagePropertyGIFDelayTime] as? Double)
+            shown = index
+            if elapsed > 0.64 { break }
+        }
+        let frame = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, shown, nil))
         let bitmap = NSBitmapImageRep(cgImage: frame)
         var ink = CGRect.null
         for y in 165..<540 {
