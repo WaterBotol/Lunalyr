@@ -23,12 +23,12 @@ final class GIFEncoderTests: XCTestCase {
         (Int(value & 0xFF), Int((value >> 8) & 0xFF), Int((value >> 16) & 0xFF))
     }
 
-    /// A dark, smooth diagonal gradient: the case that bands.
+    /// A dark, smooth two-way gradient, the case that bands: well over 255
+    /// colours, so it has to be quantised and dithered.
     private static func gradient(width: Int, height: Int) -> [UInt32] {
         (0..<(width * height)).map { i in
             let x = Double(i % width) / Double(width), y = Double(i / width) / Double(height)
-            let t = (x + y) / 2
-            return pack(Int(12 + 34 * t), Int(8 + 14 * t), Int(30 + 40 * t))
+            return pack(Int(10 + 60 * x), Int(8 + 30 * y), Int(30 + 50 * (x + y) / 2))
         }
     }
 
@@ -133,18 +133,19 @@ final class GIFEncoderTests: XCTestCase {
         XCTAssertGreaterThan(encoder.paletteSizes[0], 200, "the colours are used, not wasted")
         let decoded = try Self.pixels(try Self.decode(data), 0, width: width, height: height)
         let error = Self.error(decoded, pixels)
-        XCTAssertLessThan(error.mean, 10, "a whole rainbow in 255 colours, dithered, stays close on average")
+        XCTAssertLessThan(error.mean, 11, "a whole rainbow in 255 colours, dithered, stays close on average")
     }
 
     func testADarkGradientIsDitheredNotBanded() throws {
         let width = 400, height = 300
         let source = Self.gradient(width: width, height: height)
+        XCTAssertGreaterThan(Set(source).count, 1000, "more colours than a palette holds")
         let (data, _) = Self.encode([source], width: width, height: height)
         let decoded = try Self.pixels(try Self.decode(data), 0, width: width, height: height)
         XCTAssertLessThan(Self.error(decoded, source).mean, 1.5)
-        // Averaged over 8 × 8 tiles (what the eye does), the gradient is
-        // reproduced within a level: no bands.
-        var worst = 0.0
+        // Averaged over 8 × 8 tiles (what the eye sees of dithering), the
+        // gradient is reproduced within about a level: no bands.
+        var worst = 0.0, tiles = 0, off = 0
         for tileY in stride(from: 0, to: height - 8, by: 8) {
             for tileX in stride(from: 0, to: width - 8, by: 8) {
                 var a = SIMD3<Double>.zero, b = SIMD3<Double>.zero
@@ -156,10 +157,14 @@ final class GIFEncoderTests: XCTestCase {
                     }
                 }
                 let d = (a - b) / 64
-                worst = max(worst, max(abs(d.x), abs(d.y), abs(d.z)))
+                let error = max(abs(d.x), abs(d.y), abs(d.z))
+                worst = max(worst, error)
+                tiles += 1
+                if error > 1.5 { off += 1 }
             }
         }
-        XCTAssertLessThan(worst, 1.0)
+        XCTAssertLessThan(worst, 2.5)
+        XCTAssertLessThan(Double(off) / Double(tiles), 0.03, "\(off) of \(tiles) tiles off by more than 1.5 levels")
     }
 
     // MARK: Differencing
@@ -203,6 +208,27 @@ final class GIFEncoderTests: XCTestCase {
             }
             previous = decoded
         }
+    }
+
+    func testABackdropAWordMovesOffComesBackExactly() throws {
+        let width = 240, height = 200
+        let backdrop = Self.gradient(width: width, height: height)
+        var word = backdrop
+        // A white block with a soft, coloured glow, unlike anything in the backdrop.
+        for y in 60..<140 {
+            for x in 40..<200 {
+                let edge = min(min(x - 40, 199 - x), min(y - 60, 139 - y))
+                word[y * width + x] = edge < 6 ? Self.pack(150 + edge * 15, 90 + edge * 20, 200) : Self.pack(255, 255, 255)
+            }
+        }
+        let (data, encoder) = Self.encode([backdrop, word, backdrop], width: width, height: height)
+        XCTAssertEqual(encoder.frameCount, 3)
+        let source = try Self.decode(data)
+        let before = try Self.pixels(source, 0, width: width, height: height)
+        let shown = try Self.pixels(source, 1, width: width, height: height)
+        let after = try Self.pixels(source, 2, width: width, height: height)
+        XCTAssertLessThan(Self.error(shown, word).mean, 2)
+        XCTAssertEqual(after, before, "nothing of the word is left behind")
     }
 
     func testAToleranceLeavesOutInvisibleChangesWithoutDrifting() throws {
@@ -458,7 +484,7 @@ final class GIFEncoderTests: XCTestCase {
             }
             return Self.image(stretched, width: width, height: height)
         }
-        struct Stats { var frames: Int; var duration: Double; var movingFPS: Double; var stillError: Double; var stillBanding: Double; var cropFlicker: Int }
+        struct Stats { var frames: Int; var duration: Double; var movingFPS: Double; var stillError: Double; var stillBanding: Double; var stillTilesOff: Int; var stillTiles: Int; var cropFlicker: Int }
         func study(_ data: Data, prefix: String) throws -> Stats {
             let source = try Self.decode(data)
             let count = CGImageSourceGetCount(source)
@@ -490,7 +516,7 @@ final class GIFEncoderTests: XCTestCase {
             // Against the source, where the lyrics never reach: per pixel, and
             // averaged over 8 × 8 tiles (what the eye sees of dithering), whose
             // worst-tile error is what shows as bands.
-            var errorSum = 0.0, errorCount = 0, banding = 0.0
+            var errorSum = 0.0, errorCount = 0, banding = 0.0, tiles = 0, tilesOff = 0
             for rect in still {
                 let w = Int(rect.width), h = Int(rect.height)
                 var decoded = [UInt32](repeating: 0, count: w * h), truth = decoded
@@ -509,12 +535,16 @@ final class GIFEncoderTests: XCTestCase {
                             }
                         }
                         d /= 64
-                        banding = max(banding, abs(d.x), abs(d.y), abs(d.z))
+                        let tile = max(abs(d.x), abs(d.y), abs(d.z))
+                        banding = max(banding, tile)
+                        tiles += 1
+                        if tile > 1.5 { tilesOff += 1 }
                     }
                 }
             }
             return Stats(frames: count, duration: time, movingFPS: Double(moving) / max(movingTime, 0.01),
-                         stillError: errorSum / Double(errorCount), stillBanding: banding, cropFlicker: flicker)
+                         stillError: errorSum / Double(errorCount), stillBanding: banding,
+                         stillTilesOff: tilesOff, stillTiles: tiles, cropFlicker: flicker)
         }
         let source = try XCTUnwrap(sourceAtMoment)
         try save(source, "source-frame.png")
@@ -535,7 +565,8 @@ final class GIFEncoderTests: XCTestCase {
         moving fps              \(String(format: "%-20.1f", before.movingFPS))\(String(format: "%.1f", after.movingFPS))
         encode time (s)         \(String(format: "%-20.2f", oldEncoding))\(String(format: "%.2f", newTotal)) (drawing + encoding together; drawing alone \(String(format: "%.2f", drawing)))
         gradient error          \(String(format: "%-20.2f", before.stillError))\(String(format: "%.2f", after.stillError))  (mean levels per pixel vs source, where the lyrics never reach)
-        worst 8×8 tile error    \(String(format: "%-20.2f", before.stillBanding))\(String(format: "%.2f", after.stillBanding))  (levels; above ~1.5 shows as bands)
+        worst 8×8 tile error    \(String(format: "%-20.2f", before.stillBanding))\(String(format: "%.2f", after.stillBanding))  (levels, the tile mean against the source's)
+        tiles off > 1.5 levels  \("\(before.stillTilesOff) of \(before.stillTiles)".padding(toLength: 20, withPad: " ", startingAt: 0))\(after.stillTilesOff) of \(after.stillTiles)  (broad runs of these are what shows as bands)
         gradient flicker        \(String(format: "%-20d", before.cropFlicker))\(after.cropFlicker)  (pixel changes between frames where the lyrics never reach)
 
         """

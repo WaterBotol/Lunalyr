@@ -313,14 +313,15 @@ final class GIFEncoder {
     static let baseSize = 208
 
     /// Sets the palette for a frame. The base is made from the whole frame
-    /// for the first frame and whenever most of the frame changes (a moving
+    /// for the first frame and whenever most of its pixels change (a moving
     /// background); otherwise it stays. The extra colours are made from the
     /// changed colours the base does not hold, and kept while the palette
     /// still holds them, so colours do not flicker from frame to frame.
     private func choosePalette(_ delta: [UInt32], rect: Rect, first: Bool) {
         let (colours, counts) = histogram(delta)
         var changedPalette = false
-        if first || rect.width * rect.height * 10 >= width * height * 6 {
+        let changed = counts.reduce(0, +)
+        if first || changed * 10 >= width * height * 6 {
             var all: [UInt32] = []
             count(reference, width * height, weight: 1, changesOnly: false, into: &all)
             // A frame of 255 colours or fewer keeps them all, exactly.
@@ -350,7 +351,6 @@ final class GIFEncoder {
                 if distance > Self.heldDistance { unheld += missingCounts[index] }
                 worst = max(worst, distance)
             }
-            let changed = counts.reduce(0, +)
             if unheld * 200 > changed || worst > 2 * Self.heldDistance {
                 extra = GIFQuantizer.palette(colours: missing, counts: missingCounts, maximum: 255 - base.count)
                 changedPalette = true
@@ -394,6 +394,7 @@ final class GIFEncoder {
     private func index(_ delta: [UInt32], rect: Rect, first: Bool) -> [UInt8]? {
         let transparent = UInt8(truncatingIfNeeded: palette.count)
         let spread = Int32(ditherSpread * ditherSpread)
+        lookup.spread = spread
         let width = width, shown = shown, nearest = lookup.nearest
         let colours = lookup.rgb
         let cancelled = UnsafeMutablePointer<Bool>.allocate(capacity: 1)
@@ -426,15 +427,7 @@ final class GIFEncoder {
                             let near = colours[chosen]
                             let er = r - (near & 0xFF), eg = g - ((near >> 8) & 0xFF), eb = b - ((near >> 16) & 0xFF)
                             if er > 1 || er < -1 || eg > 1 || eg < -1 || eb > 1 || eb < -1 {
-                                // The colour on the far side of `colour` from the nearest.
-                                var other = chosen
-                                var reach: Int32 = 1
-                                while reach <= 2, other == chosen {
-                                    let pr = GIFRows.clamp(r + reach * er), pg = GIFRows.clamp(g + reach * eg)
-                                    let pb = GIFRows.clamp(b + reach * eb)
-                                    other = nearest.index(Int(pr | (pg << 8) | (pb << 16)))
-                                    reach += 1
-                                }
+                                let other = nearest.partner(Int(colour), near: chosen)
                                 if other != chosen {
                                     let far = colours[other]
                                     let dr = (far & 0xFF) - (near & 0xFF), dg = ((far >> 8) & 0xFF) - ((near >> 8) & 0xFF)
@@ -516,6 +509,46 @@ final class GIFPaletteLookup {
         let count: Int
         let lab: UnsafeMutablePointer<Float>
         let cache: UnsafeMutablePointer<UInt8>
+        let rgb: UnsafeMutablePointer<Int32>
+        let partners: UnsafeMutablePointer<UInt8>
+        /// Squared sRGB distance two colours may be apart and be mixed.
+        let spread: Int32
+
+        /// The palette entry to dither `colour` with against its nearest,
+        /// `near`: of those within reach of it (`spread`, and not much
+        /// further than the error), on the colour's side, the one whose mix
+        /// with `near` comes closest to the colour. `near` itself when there
+        /// is none.
+        func partner(_ colour: Int, near: Int) -> Int {
+            let cached = partners[colour]
+            if cached != 0xFF { return Int(cached) }
+            let n = rgb[near]
+            let er = Float(Int32(colour & 0xFF) - (n & 0xFF)), eg = Float(Int32((colour >> 8) & 0xFF) - ((n >> 8) & 0xFF))
+            let eb = Float(Int32((colour >> 16) & 0xFF) - ((n >> 16) & 0xFF))
+            var best = near
+            var bestResidual = er * er + eg * eg + eb * eb
+            // A partner much further off than the error would sprinkle
+            // visible dots over a flat colour to fix an invisible error:
+            // allowed are 12 levels, or four times the error.
+            let reach = min(Float(spread), max(144, 16 * bestResidual))
+            var entry = 0
+            while entry < count {
+                let q = rgb[entry]
+                let dr = (q & 0xFF) - (n & 0xFF), dg = ((q >> 8) & 0xFF) - ((n >> 8) & 0xFF), db = ((q >> 16) & 0xFF) - ((n >> 16) & 0xFF)
+                let length = dr * dr + dg * dg + db * db
+                entry += 1
+                if length == 0 || Float(length) > reach { continue }
+                let fr = Float(dr), fg = Float(dg), fb = Float(db)
+                let along = er * fr + eg * fg + eb * fb
+                if along <= 0 { continue }
+                let t = min(1, along / Float(length))
+                let rr = er - t * fr, rg = eg - t * fg, rb = eb - t * fb
+                let residual = rr * rr + rg * rg + rb * rb
+                if residual < bestResidual { bestResidual = residual; best = entry - 1 }
+            }
+            partners[colour] = UInt8(best)
+            return best
+        }
 
         /// The palette entry nearest `colour` in OKLab.
         @inline(__always)
@@ -555,19 +588,30 @@ final class GIFPaletteLookup {
         rgb.deallocate()
         lab.deallocate()
         cache?.deallocate()
+        partners?.deallocate()
     }
+
+    /// Dithering partners, per colour, for `spread`.
+    private var partners: UnsafeMutablePointer<UInt8>?
+    var spread: Int32 = 56 * 56
 
     var nearest: Nearest {
         if cache == nil {
             cache = .allocate(capacity: 1 << 24)
             cache!.initialize(repeating: 0xFF, count: 1 << 24)
         }
-        return Nearest(count: count, lab: lab, cache: cache!)
+        if partners == nil {
+            partners = .allocate(capacity: 1 << 24)
+            partners!.initialize(repeating: 0xFF, count: 1 << 24)
+        }
+        return Nearest(count: count, lab: lab, cache: cache!, rgb: rgb, partners: partners!, spread: spread)
     }
 
     func release() {
         cache?.deallocate()
         cache = nil
+        partners?.deallocate()
+        partners = nil
     }
 
     func set(_ palette: [UInt32]) {
@@ -580,6 +624,7 @@ final class GIFPaletteLookup {
         }
         if cache == nil { cache = .allocate(capacity: 1 << 24) }
         cache!.initialize(repeating: 0xFF, count: 1 << 24)
+        partners?.initialize(repeating: 0xFF, count: 1 << 24)
     }
 }
 
@@ -653,6 +698,9 @@ enum GIFQuantizer {
             slot.initialize(repeating: -1, count: cells)
             defer { slot.deallocate() }
             var rgb: [Float] = [], weight: [Float] = []
+            // Each cell's heaviest colour, which stands for the cell when it
+            // is most of it (a flat fill keeps its exact colour).
+            var top: [UInt32] = [], topWeight: [Float] = []
             for index in colours.indices {
                 let colour = colours[index]
                 let key = Int((colour >> shift) & mask) | Int((colour >> (8 + shift)) & mask) << bits
@@ -663,15 +711,24 @@ enum GIFQuantizer {
                     slot[key] = Int32(at)
                     weight.append(0)
                     rgb += [0, 0, 0]
+                    top.append(colour)
+                    topWeight.append(0)
                 }
                 let w = Float(counts[index])
                 weight[at] += w
                 rgb[3 * at] += Float(colour & 0xFF) * w
                 rgb[3 * at + 1] += Float((colour >> 8) & 0xFF) * w
                 rgb[3 * at + 2] += Float((colour >> 16) & 0xFF) * w
+                if w > topWeight[at] { topWeight[at] = w; top[at] = colour }
             }
             for at in weight.indices {
-                rgb[3 * at] /= weight[at]; rgb[3 * at + 1] /= weight[at]; rgb[3 * at + 2] /= weight[at]
+                if topWeight[at] * 2 >= weight[at] {
+                    rgb[3 * at] = Float(top[at] & 0xFF)
+                    rgb[3 * at + 1] = Float((top[at] >> 8) & 0xFF)
+                    rgb[3 * at + 2] = Float((top[at] >> 16) & 0xFF)
+                } else {
+                    rgb[3 * at] /= weight[at]; rgb[3 * at + 1] /= weight[at]; rgb[3 * at + 2] /= weight[at]
+                }
             }
             return (rgb, weight)
         }
@@ -797,6 +854,8 @@ enum GIFQuantizer {
         let sums = UnsafeMutablePointer<Float>.allocate(capacity: 4 * k)
         defer { lab.deallocate(); sums.deallocate() }
         sums.initialize(repeating: 0, count: 4 * k)
+        var heaviest = [Float](repeating: 0, count: k)
+        var heaviestPoint = [Int](repeating: 0, count: k)
         for (index, centre) in centres.enumerated() {
             let (l, a, b) = GIFColour.oklab(GIFColour.linear(centre.0), GIFColour.linear(centre.1), GIFColour.linear(centre.2))
             lab[3 * index] = l; lab[3 * index + 1] = a; lab[3 * index + 2] = b
@@ -818,11 +877,19 @@ enum GIFQuantizer {
             sums[4 * best + 1] += points.rgb[3 * p + 1] * w
             sums[4 * best + 2] += points.rgb[3 * p + 2] * w
             sums[4 * best + 3] += w
+            if w > heaviest[best] { heaviest[best] = w; heaviestPoint[best] = p }
             p += 1
         }
+        // A centre most of whose weight is one colour (a flat fill: a box,
+        // the text, white) takes that colour exactly, so it needs no dither.
         return centres.enumerated().map { index, centre in
             let w = sums[4 * index + 3]
-            return w > 0 ? (sums[4 * index] / w, sums[4 * index + 1] / w, sums[4 * index + 2] / w) : centre
+            guard w > 0 else { return centre }
+            if heaviest[index] * 3 >= w {
+                let p = heaviestPoint[index]
+                return (points.rgb[3 * p], points.rgb[3 * p + 1], points.rgb[3 * p + 2])
+            }
+            return (sums[4 * index] / w, sums[4 * index + 1] / w, sums[4 * index + 2] / w)
         }
     }
 }
@@ -1037,20 +1104,28 @@ final class GIFWriter: @unchecked Sendable {
         let delays = changes.filter { !$0.rect.isEmpty }.map(\.delay).sorted()
         let cadence = max(2, delays.isEmpty ? 4 : delays[delays.count / 2])
         let full = Double(encoder.byteCount), first = Double(firstFrameBytes)
-        // Fewer frames per second first (down to about 10), then smaller.
-        let plans: [(rate: Double, scale: Double)] = [
-            (1.25, 1), (1.5, 1), (2, 1), (2.5, 1), (2.5, 0.85), (2.5, 0.72), (3, 0.6), (3, 0.5), (4, 0.4), (5, 0.3),
+        // Fewer frames per second first (20, 16.7, 12.5, then 10), then
+        // smaller, and only at the end below 10 fps. Gaps in centiseconds.
+        let ladder: [(gap: Int, scale: Double)] = [
+            (5, 1), (6, 1), (8, 1), (10, 1), (10, 0.85), (10, 0.72), (10, 0.6), (10, 0.5), (12, 0.42), (14, 0.35),
         ]
-        func estimate(_ plan: (rate: Double, scale: Double)) -> Double {
-            (first + (full - first) / pow(plan.rate, 0.85)) * plan.scale * plan.scale
+        var plans: [(gap: Int, scale: Double)] = []
+        for step in ladder {
+            let gap = max(step.gap, cadence)
+            if gap > cadence || step.scale < 1 { plans.append((gap, step.scale)) }
+        }
+        func estimate(_ plan: (gap: Int, scale: Double)) -> Double {
+            (first + (full - first) / pow(Double(plan.gap) / Double(cadence), 0.85)) * plan.scale * plan.scale
         }
         let candidates = plans.filter { estimate($0) <= Double(budget) * 0.95 }
-        let tries = Array((candidates.isEmpty ? [plans.last!] : candidates + [plans.last!]).prefix(4))
+        // At most four passes, the last always the smallest plan.
+        let smallest = plans[plans.count - 1], firsts = Array(candidates.prefix(3))
+        let tries = firsts.contains { $0.gap == smallest.gap && $0.scale == smallest.scale } ? firsts : firsts + [smallest]
         var passes = 1
         var best: GIFEncoder?
         var bestPlan = tries[0]
         for (number, plan) in tries.enumerated() {
-            guard let made = replay(rate: plan.rate, scale: plan.scale, cadence: cadence, progress: { fraction in
+            guard let made = replay(gap: Double(plan.gap), scale: plan.scale, progress: { fraction in
                 progress?((Double(number) + fraction) / Double(tries.count))
             }) else { return nil }
             passes += 1
@@ -1059,14 +1134,14 @@ final class GIFWriter: @unchecked Sendable {
         }
         guard let best, !isCancelled else { return nil }
         summary = Summary(bytes: best.byteCount, frames: best.frameCount, scale: bestPlan.scale,
-                          gap: Int((Double(cadence) * bestPlan.rate).rounded()), passes: passes, palettes: best.palettesBuilt)
+                          gap: bestPlan.gap, passes: passes, palettes: best.palettesBuilt)
         progress?(1)
         return best.data()
     }
 
-    /// The kept changes played back onto a canvas, every frame at least
-    /// `rate` × `cadence` after the last kept one, scaled by `scale`.
-    private func replay(rate: Double, scale: Double, cadence: Int, progress: (Double) -> Void) -> GIFEncoder? {
+    /// The kept changes played back onto a canvas and encoded again, a frame
+    /// every `gap` centiseconds, scaled by `scale`.
+    private func replay(gap: Double, scale: Double, progress: (Double) -> Void) -> GIFEncoder? {
         guard let source = encoder else { return nil }
         let width = source.width, height = source.height
         let outWidth = max(1, Int((Double(width) * scale).rounded())), outHeight = max(1, Int((Double(height) * scale).rounded()))
@@ -1076,7 +1151,6 @@ final class GIFWriter: @unchecked Sendable {
         var scaled = [UInt32](repeating: 0, count: outWidth * outHeight)
         // Frames go out on an even schedule `gap` apart, each showing the
         // latest frame by then, so the motion stays even at the lower rate.
-        let gap = Double(cadence) * rate
         let total = changes.reduce(0) { $0 + $1.delay }
         func due(_ step: Int) -> Int { min(total, Int((Double(step) * gap).rounded())) }
         var time = 0, step = 0
@@ -1135,6 +1209,8 @@ final class GIFWriter: @unchecked Sendable {
                                           bytesPerRow: width * 4, space: space,
                                           bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return }
             context.interpolationQuality = .high
+            // Replace, never blend over, the previous frame's pixels.
+            context.setBlendMode(.copy)
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
     }
