@@ -326,7 +326,7 @@ public class WindowsLyricRunReadingTests
         }
         Span<Core.Compositions.HighlightMark> marks = stackalloc Core.Compositions.HighlightMark[16];
         Assert.Equal(segments.Length, Core.Compositions.HighlightSegment.Marks(segments, 33.9, false, marks));
-        Assert.Equal(0, Core.Compositions.HighlightSegment.Marks(segments, 34.4, false, marks));
+        Assert.Equal(0, Core.Compositions.HighlightSegment.Marks(segments, 34.45, false, marks)); // the 0.42 s exit (436adda)
     }
 
     // Ported from LyricRunReadingTests.swift: testALineTimedJapaneseRunKeepsTheReadingsWordsApart
