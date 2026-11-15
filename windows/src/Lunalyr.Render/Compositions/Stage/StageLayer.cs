@@ -439,6 +439,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         EnsureShapes(dc);
         var source = line.Line;
         var exitStart = LineFlow.StageExitStart(source, pose);
+        _lineLeave = StageMotion.Leave(time, exitStart);
         foreach (var backing in line.Backing) DrawBackingGroup(dc, backing, time, opacity, row);
         // The line's own entrance: a word-timed line swells and slides in; a line-timed one makes the chosen entrance.
         var centre = new Vector2((float)(Stage.Width / 2), (float)(Stage.Height / 2));
@@ -824,7 +825,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
                              in Matrix4x4 unit, double opacity, float blur = 0, float shadow = 1, Vector2 nudge = default)
     {
         var parts = word.Boundaries is null ? default : line.PartOpacities(run, time);
-        if (word.Action is null && word.Symbols.Length == 0)
+        if (word.Action is null && word.Symbols.Length == 0 && (ReduceMotion || !(StyleShown.WordPresence > 1)))
         {
             DrawInk(dc, word.Labels[colour], unit, word.LabelOffset + nudge, opacity, blur, shadow, word.Boundaries, parts,
                     word.RightToLeft);
@@ -834,6 +835,7 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
         // its colour cue laid over it; the symbol beside it moves with it and fades in from the word's onset.
         var moved = Acting(word, run, time, unit, nudge, out var pose);
         var shown = opacity * pose.Opacity;
+        if (!ReduceMotion && StyleShown.WordPresence > 1) blur = Math.Max(blur, Points(PresenceOf(run, time).Blur));
         // An action's glow (and Reduce Motion's cue): a shadow in the word's own colour.
         var tone = word.Colours[Math.Min(colour, word.Colours.Length - 1)];
         var glow = pose.Glow > 0.002
@@ -858,12 +860,29 @@ internal abstract class StageLayer(CompositionKind kind, IWordBreaker breaker, L
     protected Matrix4x4 Acting(StageWord word, StageRun run, double time, in Matrix4x4 unit, Vector2 nudge, out WordActionPose pose)
     {
         pose = word.Action is { } action ? WordActionMotion.Pose(action, time - run.Start, ReduceMotion) : WordActionPose.Identity;
-        if (pose.IsIdentity) return unit;
+        // Word presence (Mac queue item 5): a rise and grow as the word arrives, a swell while it is sung, a drift up
+        // as the line leaves. None under Reduce Motion.
+        var (presenceDy, presenceScale, _) = ReduceMotion ? (0.0, 1.0, 0.0) : PresenceOf(run, time);
+        if (pose.IsIdentity && presenceDy == 0 && presenceScale == 1) return unit;
         var size = word.FontSize;
         var centre = (word.Symbols.Length > 0 ? word.Pivot : word.LabelOffset) + nudge;
+        var scale = pose.Scale * presenceScale;
         return Matrix4x4.CreateTranslation(-centre.X, -centre.Y, 0)
-            * Matrix4x4.CreateScale((float)(pose.TurnScale * pose.Scale), (float)pose.Scale, 1)
-            * Matrix4x4.CreateTranslation(centre.X + (float)(pose.Dx * size), centre.Y + (float)(pose.Dy * size), 0) * unit;
+            * Matrix4x4.CreateScale((float)(pose.TurnScale * scale), (float)scale, 1)
+            * Matrix4x4.CreateTranslation(centre.X + (float)(pose.Dx * size), centre.Y + (float)((pose.Dy + presenceDy) * size), 0) * unit;
+    }
+
+    /// <summary>The line being drawn: how far it has left (0 while it stays).</summary>
+    private double _lineLeave;
+
+    /// <summary>A stage word's presence at <paramref name="time"/>: its arrival spring, how much it is being sung, and the line's leave.</summary>
+    private (double Dy, double Scale, double Blur) PresenceOf(StageRun run, double time)
+    {
+        var strength = StyleShown.WordPresence;
+        if (!(strength > 1)) return (0, 1, 0);
+        var arrival = StageMotion.Arrival(run.Start, time);
+        var sung = Easing.Smoothstep((time - run.Start) / 0.12) * (1 - Easing.Smoothstep((time - Math.Max(run.End, run.Start + 0.15)) / 0.35));
+        return WordPresence.Stage(strength, arrival, sung, _lineLeave);
     }
 
     /// <summary>An action's warm or cool colour cue: the ink's colour multiplied, laid over it (never lighter).</summary>

@@ -160,10 +160,10 @@ public sealed record LyricStyle
     public bool Interludes { get; init; } = true;
 
     /// <summary>
-    /// How present word animations are (Mac queue item 5, a sample for the user before any default changes): 1 is
-    /// today's look; above it, words travel further in, swell and glow more while sung, and drift further out.
+    /// How present word animations are (Mac queue item 5): 1 is the look before 15 Nov 2026; above it, words travel
+    /// further in, swell and glow more while sung, and drift further out. 2, the stronger sample, is what the user chose.
     /// </summary>
-    public double WordPresence { get; init; } = 1;
+    public double WordPresence { get; init; } = Lunalyr.Core.Motion.WordPresence.Chosen;
 
     /// <summary>"Show symbols beside listed words" (the Mac's ad5a6a6): a small symbol beside a listed word of a word-timed line.</summary>
     public bool WordSymbols { get; init; } = true;

@@ -217,6 +217,26 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             if (!(opacity > 0.002)) continue;
             var slot = _slots[m];
             var centre = _centres[m];
+            // Word presence (Mac queue item 5): the entrance travels further (a soft one rises and grows), the word in
+            // focus swells more, and receding words blur more. Drawn only; the stack is measured as before.
+            var presence = WordPresence.At(StyleShown.WordPresence);
+            var stateScale = state.Scale;
+            var stateAngle = state.Angle;
+            if (!presence.IsToday && !reduce)
+            {
+                var soft = slot.EntranceX == 0 && slot.EntranceY == 0 && !state.Presentation.Preview;
+                var coming = 1 - state.Presentation.Progress;
+                var extra = presence.In - 1;
+                slot = slot with
+                {
+                    EntranceX = slot.EntranceX * presence.In,
+                    EntranceY = slot.EntranceY * presence.In + (soft ? Math.Clamp(coming, 0, 1) * prepared[_members[m]].PointSize * 0.32 * extra : 0),
+                    Turn = slot.Turn * presence.In,
+                    EntranceScale = (1 - (1 - slot.EntranceScale) * presence.In) * (soft ? 1 - 0.12 * extra * Math.Clamp(coming, 0, 1) : 1),
+                };
+                stateScale = 1 + (state.Scale - 1) * presence.Hold;
+                stateAngle = state.Angle * presence.Hold;
+            }
             var fit = RollingStack.Fit(_sizes[m], slot, centre, stage, margin, marginY);
             if (!(fit > 0)) continue;
             var token = prepared[_members[m]];
@@ -234,17 +254,17 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
             var world =
                 entrance
                 * Matrix3x2.CreateTranslation((float)slot.EntranceX, (float)slot.EntranceY)
-                * Matrix3x2.CreateScale((float)(fit * state.Scale))
-                * Matrix3x2.CreateRotation(Radians(state.Angle))
+                * Matrix3x2.CreateScale((float)(fit * stateScale))
+                * Matrix3x2.CreateRotation(Radians(stateAngle))
                 * Matrix3x2.CreateTranslation(origin.X + (float)centre.X, origin.Y + (float)centre.Y);
-            var scale = (float)(slot.EntranceScale * fit * state.Scale);
+            var scale = (float)(slot.EntranceScale * fit * stateScale);
             // An action word's motion, outside the stage fit: about the unit's centre on screen, its offset in ems of
             // the word as drawn.
             var action = unit.Action is { } act ? WordActionMotion.Pose(act, time - token.Source.Start, reduce) : WordActionPose.Identity;
             if (!action.IsIdentity)
             {
                 var at = world.Translation;
-                var em = (float)(token.PointSize * fit * state.Scale);
+                var em = (float)(token.PointSize * fit * stateScale);
                 world *= Matrix3x2.CreateTranslation(-at)
                     * Matrix3x2.CreateScale((float)(action.TurnScale * action.Scale), (float)action.Scale)
                     * Matrix3x2.CreateTranslation(at.X + (float)action.Dx * em, at.Y + (float)action.Dy * em);
@@ -252,7 +272,9 @@ internal sealed class SpokenLayer(IWordBreaker breaker, Logger? logger, Composit
                 opacity *= action.Opacity;
             }
             var progress = state.Presentation.Progress;
-            var blur = Combine(Points(motion.Blur(progress, reduce)), Points(state.Pose.Blur)) * scale;
+            // Presence sharpens the entrance's blur; a receding word keeps its own (stronger, it kept settling for a
+            // second on a paused clock).
+            var blur = Combine(Points(motion.Blur(progress, reduce) * presence.In), Points(state.Pose.Blur)) * scale;
             // A cutout is unmasked from its leading edge while it arrives (cutouts follow the reveal itself).
             var clip = InkClip.Leading(motion.PaperShown(reduce ? 1 : progress), unit.Size.Width, token.Direction < 0);
             var reveal = Span<double>.Empty;
