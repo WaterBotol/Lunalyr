@@ -6,11 +6,17 @@ struct LyricViewportMetrics {
     /// A text size set outright (the floating lyrics' own), instead of one
     /// following the screen; its stage then fills nearly the whole window.
     var textSize: CGFloat? = nil
+    /// The song title is kept on screen (`OpeningTitle.keeps`): in the
+    /// floating window it is a row above the lyrics, which give it room.
+    var titleRow = false
     var baseSize: CGFloat { textSize ?? min(124, max(24, min(size.width, size.height * 16 / 9) * 0.046)) }
     var stageSize: CGSize {
         textSize == nil ? CGSize(width: size.width * 0.80, height: size.height * 0.72)
-            : CGSize(width: size.width * 0.94, height: size.height * 0.88)
+            : CGSize(width: size.width * 0.94, height: max(baseSize, size.height * 0.88 - titleBand))
     }
+    /// The floating window's title row and its margin, kept clear above
+    /// the lyrics; none on the desktop, where the card sits beside them.
+    var titleBand: CGFloat { textSize != nil && titleRow ? OpeningTitle.rowBand(baseSize: baseSize) : 0 }
 
     static func previewScale(desktop: CGSize, inside box: CGSize) -> CGFloat {
         guard desktop.width > 0, desktop.height > 0 else { return 0 }

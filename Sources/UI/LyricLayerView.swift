@@ -34,6 +34,9 @@ struct LyricLayer: View {
     /// Told how much motion this frame has, so the stage can slow its clock
     /// while nothing moves.
     var pace: LyricPace?
+    /// Kept clear at the top for the floating window's title row
+    /// (`LyricViewportMetrics.titleBand`): the lyrics sit below it.
+    var titleBand: CGFloat = 0
     @EnvironmentObject private var nowPlaying: NowPlayingMonitor
     @ObservedObject private var lyricsVM = LyricsViewModel.shared
     @ObservedObject private var settings = Settings.shared
@@ -180,7 +183,8 @@ struct LyricLayer: View {
         let hold = opening.hold(track: key.track, kind: key.kind,
                                 card: key.kind == .loading ? openingSchedule(content, key: key, staying: false) : nil,
                                 at: time)
-        let staying = stay != nil || hold != nil ? openingSchedule(content, key: key) : nil
+        // A kept card is drawn there too, for the whole song.
+        let staying = stay != nil || hold != nil || OpeningTitle.keeps ? openingSchedule(content, key: key) : nil
         let transition = scenes.observe(key: key, content: content, time: time, wall: wall,
                                         jump: LyricClock.shared.lastJump)
         let energy = cache.liveEnergy(wall: wall)
@@ -203,6 +207,7 @@ struct LyricLayer: View {
                                 scene(leaving.scene.content, key: leaving.scene.key,
                                       time: leaving.scene.renderTime(at: wall), wall: wall, live: false, energy: energy,
                                       ink: ink)
+                                    .padding(.top, titleBand)
                                 // The staying card is drawn once, below;
                                 // a card this scene held before it leaves
                                 // with the scene.
@@ -220,6 +225,7 @@ struct LyricLayer: View {
                     }
                     ZStack {
                         scene(content, key: key, time: time, wall: wall, live: true, energy: energy, ink: ink)
+                            .padding(.top, titleBand)
                         if staying == nil { openingTitle(content, key: key, time: time) }
                     }
                         .opacity(transition.incomingPresence)
@@ -404,7 +410,7 @@ struct LyricLayer: View {
             // wait for the opening title to leave.
             let cues = LyricCreditCues.isOn
                 ? LyricCreditCues.cues(in: lines.lines, title: content.title, artist: content.artist,
-                                       notBefore: openingSchedule(content, key: key)?.end ?? 0) : []
+                                       notBefore: openingSchedule(content, key: key)?.clears ?? 0) : []
             currentLine(lines, time: time, live: live, energy: energy,
                 lyricOpacity: 1 - (gap?.presence(at: time) ?? 0))
                 .environment(\.lyricCreditBands, LyricCreditCues.bands(cues))
@@ -415,11 +421,13 @@ struct LyricLayer: View {
                     if let cue = gap?.instrumentalCue(at: time, previewLead: settings.nextWordPreviewLead,
                                                       audio: cache.orbAudio(wall: wall)) {
                         // In the floating window the opening title takes the
-                        // middle, where the dots are: they wait for it.
+                        // middle, where the dots are: they wait for it. A
+                        // kept title is a row above them instead.
+                        let card = openingSchedule(content, key: key)
                         ThinkingOrbView(cue: cue, accent: accent, baseSize: baseSize,
                                         state: cache.orbState(style: settings.thinkingOrbStyle, seed: cue.seed))
-                            .opacity(backdropOverride == nil ? 1
-                                     : OpeningTitle.yields(to: openingSchedule(content, key: key), at: time))
+                            .opacity(backdropOverride == nil || card?.kept == true ? 1
+                                     : OpeningTitle.yields(to: card, at: time))
                     }
                 }
         }
@@ -444,8 +452,10 @@ struct LyricLayer: View {
     private func openingSchedule(_ content: LyricSceneContent, key: LyricSceneKey,
                                  staying: Bool = true) -> OpeningTitle.Schedule? {
         guard OpeningTitle.isOn, !content.title.isEmpty, key.kind != .idle else { return nil }
-        if staying, let stay = opening.currentStay(track: key.track) {
-            let card = OpeningTitle.staying(joined: content.joined, found: stay.found, always: OpeningTitle.always && backdropOverride == nil)
+        let keep = OpeningTitle.keeps
+        // A kept card stays whatever the lookup finds.
+        if staying, !keep, let stay = opening.currentStay(track: key.track) {
+            let card = OpeningTitle.staying(joined: content.joined, found: stay.found)
             return stay.lyricsAt.map { OpeningTitle.leaving(card, at: $0) } ?? card
         }
         let words: OpeningTitle.Words
@@ -456,7 +466,7 @@ struct LyricLayer: View {
         case .synced: words = .timed(firstLine: OpeningTitle.firstSung(content.lines))
         }
         let card = OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead,
-                                         always: OpeningTitle.always && backdropOverride == nil)
+                                         keep: keep)
         if staying, let hold = opening.currentHold(track: key.track) {
             return OpeningTitle.carried(hold.card, into: card, at: hold.arrival)
         }
@@ -479,7 +489,8 @@ struct LyricLayer: View {
                              album: OpeningTitle.albumLine(album: content.album, title: content.title),
                              reading: opening.reading(of: content.title, options: readingOptions.snapshot),
                              cover: OpeningTitle.cover(content.artwork, enabled: OpeningTitle.showsCover),
-                             baseSize: baseSize, accent: accent, mood: mood, floating: backdropOverride != nil)
+                             baseSize: baseSize, accent: accent, mood: mood, floating: backdropOverride != nil,
+                             row: backdropOverride != nil && phase.kept)
         }
     }
 
@@ -1653,7 +1664,8 @@ struct LyricStage: View, Equatable {
     }
 
     var body: some View {
-        let layout = LyricViewportMetrics(size: size, textSize: textSize)
+        let layout = LyricViewportMetrics(size: size, textSize: textSize,
+                                          titleRow: OpeningTitle.isOn && OpeningTitle.keeps)
         let previewed = scrubPreview.songTime(on: displayID)
         TimelineView(.animation(minimumInterval: previewed == nil ? pace.interval(full: interval) : interval,
                                 paused: paused || (pace.rests && previewed == nil))) { timeline in
@@ -1667,7 +1679,8 @@ struct LyricStage: View, Equatable {
                 playing: nowPlaying.isPlaying)
             LyricLayer(time: time, baseSize: layout.baseSize, maxWidth: layout.stageSize.width,
                        maxHeight: layout.stageSize.height, mood: mood, accent: accent, trackSeed: trackSeed,
-                       wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace)
+                       wall: now, palette: palette, measuredBackdrop: backdrop, animating: !paused, pace: pace,
+                       titleBand: layout.titleBand)
         }
     }
 }

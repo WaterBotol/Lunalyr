@@ -17,13 +17,16 @@ enum OpeningTitle {
 
     static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
 
-    /// The full card every time, not only at a song's start: also a song
-    /// joined part-way (opening Lunalyr mid-song, skipping ahead), and a song
-    /// whose singing starts too soon for it. It then shows beside the lyrics,
-    /// low on the left where it always sits. Testers asked for it (Nov 2026).
+    /// Keep the song title on screen: the card enters as usual (at the
+    /// song's start, or when Lunalyr joins it part-way) and stays for the
+    /// whole song, settling to `restOpacity` once it would have left, so
+    /// there is always a name for what is playing. Low on the left beside
+    /// the lyrics on the desktop; a compact row above them in the floating
+    /// window. Testers asked for it (Nov 2026). The key predates the
+    /// setting's present meaning ("show it in full mid-song too").
     static let alwaysKey = "custom.openingTitleAlways"
 
-    static var always: Bool { UserDefaults.standard.bool(forKey: alwaysKey) }
+    static var keeps: Bool { UserDefaults.standard.bool(forKey: alwaysKey) }
 
     /// The album cover beside the title.
     static let coverKey = "custom.openingTitleCover"
@@ -78,6 +81,20 @@ enum OpeningTitle {
         /// No lyrics were found: the card stays, resting after `restAfter`.
         /// Its leave and end are infinite until lyrics arrive (`leaving`).
         var stays = false
+        /// Kept on screen for the whole song (`keeps`): it stays, and only
+        /// a new song ends it.
+        var kept = false
+        /// A kept card: where the ordinary card would have left and been
+        /// gone (`start` when there would have been none). It rests from
+        /// `ordinaryLeave`, and what waits for the card (the credits)
+        /// waits for `ordinaryEnd` instead of for ever.
+        var ordinaryLeave: Double? = nil
+        var ordinaryEnd: Double? = nil
+
+        /// When what waits for the card to go may start.
+        var clears: Double { ordinaryEnd ?? end }
+        /// When a staying card starts to ease to rest.
+        var restsFrom: Double { ordinaryLeave ?? settled + OpeningTitle.restAfter }
     }
 
     // Timing (seconds of song time).
@@ -119,28 +136,23 @@ enum OpeningTitle {
     /// The card's timing for a song first seen at `joined` seconds in, or
     /// nil when there is no room for it.
     static func schedule(words: Words, joined: Double = 0, previewLead: Double = 0.45,
-                         always: Bool = false) -> Schedule? {
+                         keep: Bool = false) -> Schedule? {
         let partWay = joined > midSong
         let start = partWay ? joined + joinLead : lead
+        if keep {
+            // The full card, from the usual moment, for the whole song.
+            let ordinary = schedule(words: words, joined: joined, previewLead: previewLead)
+            let settled = start + fullEntrance
+            return Schedule(start: start, settled: settled, leave: .infinity, end: .infinity, size: .full, stays: true,
+                            kept: true, ordinaryLeave: max(settled, ordinary?.leave ?? settled),
+                            ordinaryEnd: ordinary?.end ?? start)
+        }
         func card(_ size: Size, leave: Double) -> Schedule {
             let entrance = size == .full ? fullEntrance : compactEntrance
             let exit = size == .full ? fullExit : compactExit
             return Schedule(start: start, settled: start + entrance, leave: leave, end: leave + exit, size: size)
         }
         let brief = card(.compact, leave: start + compactEntrance + briefHold)
-        if always {
-            // The full card, held as through a long intro (`always`); where
-            // the words leave it room, it still goes before they start.
-            if case .timed(firstLine: let first?) = words, !partWay {
-                let gone = deadline(firstLine: first, previewLead: previewLead)
-                if gone - start >= fullEntrance + fullMinimumHold + fullExit {
-                    return card(.full, leave: min(gone - fullExit, start + fullEntrance + lyricHold))
-                }
-            }
-            if case .none = words, !partWay { return card(.full, leave: start + fullEntrance + wordlessHold) }
-            if case .timed(firstLine: nil) = words, !partWay { return card(.full, leave: start + fullEntrance + wordlessHold) }
-            return card(.full, leave: start + fullEntrance + lyricHold)
-        }
         switch words {
         case .showing:
             return brief
@@ -165,11 +177,11 @@ enum OpeningTitle {
     /// `found`: it enters as usual (full, or compact for a song joined
     /// part-way) and stays for the rest of the song. When the lookup ran on
     /// after the card it held had begun to leave, it enters afresh.
-    static func staying(joined: Double = 0, found: Double = 0, always: Bool = false) -> Schedule {
+    static func staying(joined: Double = 0, found: Double = 0) -> Schedule {
         let partWay = joined > midSong
         var start = partWay ? joined + joinLead : lead
-        if let held = schedule(words: .none, joined: joined, always: always), found > held.leave { start = found + joinLead }
-        let size: Size = partWay && !always ? .compact : .full
+        if let held = schedule(words: .none, joined: joined), found > held.leave { start = found + joinLead }
+        let size: Size = partWay ? .compact : .full
         let entrance = size == .full ? fullEntrance : compactEntrance
         return Schedule(start: start, settled: start + entrance, leave: .infinity, end: .infinity, size: size, stays: true)
     }
@@ -177,7 +189,7 @@ enum OpeningTitle {
     /// A staying card once lyrics arrive at song time `arrival`: it leaves
     /// from then, or once it has settled, with its ordinary exit.
     static func leaving(_ schedule: Schedule, at arrival: Double) -> Schedule {
-        guard schedule.leave == .infinity else { return schedule }
+        guard schedule.leave == .infinity, !schedule.kept else { return schedule }
         var card = schedule
         card.leave = max(arrival, schedule.settled)
         card.end = card.leave + (schedule.size == .full ? fullExit : compactExit)
@@ -209,7 +221,7 @@ enum OpeningTitle {
     /// How far a staying card has eased to rest at `time`, 0...1.
     static func rest(_ schedule: Schedule, at time: Double) -> Double {
         guard schedule.stays else { return 0 }
-        return Easing.smoothstep((time - schedule.settled - restAfter) / restEase)
+        return Easing.smoothstep((time - schedule.restsFrom) / restEase)
     }
 
     /// The start of the first line that is sung (credits and breaks are not).
@@ -231,6 +243,8 @@ enum OpeningTitle {
         var rest: Double = 0
         /// Staying with no leave due: only an input (lyrics arriving) ends it.
         var stays = false
+        /// Kept for the whole song (`Schedule.kept`).
+        var kept = false
 
         /// The card's strength before its exit.
         var opacity: Double { 1 - (1 - OpeningTitle.restOpacity) * rest }
@@ -239,11 +253,11 @@ enum OpeningTitle {
     static func phase(_ schedule: Schedule?, at time: Double) -> Phase? {
         guard let schedule, time >= schedule.start, time < schedule.end else { return nil }
         let exit = time <= schedule.leave ? 0 : (time - schedule.leave) / (schedule.end - schedule.leave)
-        let restStart = schedule.settled + restAfter
+        let restStart = schedule.restsFrom
         let resting = schedule.stays && time >= restStart && time <= restStart + restEase
         return Phase(age: time - schedule.start, exit: min(1, max(0, exit)), size: schedule.size,
                      moving: time < schedule.settled || time > schedule.leave || resting,
-                     rest: rest(schedule, at: time), stays: schedule.leave == .infinity)
+                     rest: rest(schedule, at: time), stays: schedule.leave == .infinity, kept: schedule.kept)
     }
 
     /// 0...1: how much of something else naming the song (the loading
@@ -302,6 +316,17 @@ enum OpeningTitle {
                           artist: part(0.45, 1.1), album: part(0.75, 0.85))
         }
     }
+
+    // The floating window's kept title: one row above the lyrics.
+    /// Its margin from the window's top, the cover's side and its type, as
+    /// shares of the lyric size.
+    static let rowMargin: CGFloat = 0.18
+    static let rowCover: CGFloat = 0.62
+    static let rowTitle: CGFloat = 0.38
+    static let rowArtist: CGFloat = 0.3
+    /// The height kept clear for the row: its margin, the cover, and a gap
+    /// before the lyrics.
+    static func rowBand(baseSize: CGFloat) -> CGFloat { baseSize * (rowMargin + rowCover + 0.16) }
 
     /// 1 for a title of up to 24 characters, down to 0.7 for a long one.
     static func lengthScale(_ title: String) -> CGFloat {
@@ -408,12 +433,15 @@ final class OpeningTitleMemory: ObservableObject {
     }
 
     /// The song time at which `track` was first seen: 0 for a song seen from
-    /// its start, or once playback is back at its start.
+    /// its start, or once playback is back at its start. Playback sought
+    /// back before that moment joins the song there instead, so a card
+    /// (a kept one above all) is not missing until the old moment returns.
     func joined(track: Int, at time: Double) -> Double {
         if track != self.track {
             self.track = track
             joinedAt = time
         }
+        if time < joinedAt { joinedAt = time }
         if time < OpeningTitle.midSong { joinedAt = 0 }
         return joinedAt
     }
@@ -456,6 +484,9 @@ struct OpeningTitleCard: View {
     let mood: TrackMood
     /// The floating lyrics: centred in the window, compact, no scrim of its own.
     var floating = false
+    /// A kept title in the floating window: one compact row at the top,
+    /// above the lyrics (`OpeningTitle.rowBand`), instead of the card.
+    var row = false
     @ObservedObject private var settings = Settings.shared
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
@@ -468,6 +499,10 @@ struct OpeningTitleCard: View {
             let leaving = Easing.smoothstep(phase.exit)
             let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize)
             let dark = Self.isDark(ink.base.rest)
+            if row {
+                titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * 0.9)
+                    .frame(width: size.width, height: size.height, alignment: .top)
+            } else {
             let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
                              width: floating ? size.width * 0.9 : size.width * 0.46)
                 .opacity((1 - leaving) * phase.opacity)
@@ -492,6 +527,7 @@ struct OpeningTitleCard: View {
                         .padding(.bottom, max(96, size.height * 0.13))
                 }
                 .frame(width: size.width, height: size.height, alignment: .bottomLeading)
+            }
             }
         }
         .allowsHitTesting(false)
@@ -596,6 +632,49 @@ struct OpeningTitleCard: View {
             }
             }
         }
+    }
+
+    /// The floating window's kept title: the cover, the title and the
+    /// artist on one centred line, settling down from above as it enters
+    /// and lifting away as it leaves.
+    private func titleRow(reveal: OpeningTitle.Reveal, leaving: Double, dark: Bool, width: CGFloat) -> some View {
+        let type: Color = dark ? Color(white: 0.08) : .white
+        let side = baseSize * OpeningTitle.rowCover
+        let glow = OpeningTitle.glowStrength(dark: dark)
+        let arrival = reduceMotion ? reveal.title : Easing.smoothstep(reveal.title)
+        return HStack(spacing: baseSize * 0.2) {
+            if let cover {
+                Image(nsImage: cover)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: side, height: side)
+                    .clipShape(RoundedRectangle(cornerRadius: side * 0.14, style: .continuous))
+                    .shadow(color: .black.opacity(0.4), radius: side * 0.08, y: side * 0.03)
+                    .opacity(reveal.cover)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: baseSize * 0.16) {
+                Text(title)
+                    .font(settings.lyricFont(size: baseSize * OpeningTitle.rowTitle, hero: true, mood: mood))
+                    .foregroundStyle(type)
+                    .layoutPriority(1)
+                if !artist.isEmpty {
+                    Text(artist)
+                        .font(settings.uiFont(size: baseSize * OpeningTitle.rowArtist, mood: mood))
+                        .foregroundStyle(type.opacity(0.78))
+                        .opacity(reveal.artist)
+                }
+            }
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .compositingGroup()
+            .shadow(color: (dark ? Color.white : .black).opacity(0.5), radius: baseSize * 0.1, y: baseSize * 0.015)
+            .shadow(color: accent.opacity(0.45 * glow), radius: baseSize * 0.3)
+        }
+        .frame(maxWidth: width)
+        .opacity(min(1, arrival * 1.4) * (1 - leaving) * phase.opacity)
+        .offset(y: reduceMotion ? 0 : -(1 - arrival + leaving) * baseSize * 0.18)
+        .padding(.top, baseSize * OpeningTitle.rowMargin)
     }
 
     /// A soft left-to-right wipe: `progress` 0 hides everything, 1 shows it all.

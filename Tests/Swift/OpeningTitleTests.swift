@@ -396,32 +396,90 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertNil(memory.hold(track: 3, kind: .synced, card: nil, at: 1))
     }
 
-    // MARK: Shown in full mid-song too
+    // MARK: Kept on screen for the whole song
 
-    func testAlwaysShowsTheFullCardWhenJoinedPartWay() throws {
-        let normal = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60))
-        XCTAssertEqual(normal.size, .compact)
-        let always = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60, always: true))
-        XCTAssertEqual(always.size, .full)
-        XCTAssertEqual(always.start, 60 + OpeningTitle.joinLead, accuracy: 1e-9)
-        XCTAssertEqual(always.leave - always.settled, OpeningTitle.lyricHold, accuracy: 1e-9)
-        XCTAssertEqual(OpeningTitle.schedule(words: .showing, joined: 60, always: true)?.size, .full)
-    }
-
-    func testAlwaysShowsItWhenTheSingingStartsAtOnce() throws {
-        XCTAssertNil(OpeningTitle.schedule(words: .timed(firstLine: 1)))
-        let always = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 1), always: true))
-        XCTAssertEqual(always.size, .full)
-        XCTAssertEqual(always.start, OpeningTitle.lead, accuracy: 1e-9)
-    }
-
-    func testAlwaysLeavesALongIntroAsBefore() {
-        for first in [6.0, 9.0, 20.0, 40.0] {
-            XCTAssertEqual(OpeningTitle.schedule(words: .timed(firstLine: first), always: true),
-                           OpeningTitle.schedule(words: .timed(firstLine: first)), "first line at \(first)")
+    func testAKeptCardEntersAsUsualAndNeverLeaves() throws {
+        let ordinary = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14)))
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        XCTAssertEqual(kept.start, ordinary.start, accuracy: 1e-9)
+        XCTAssertEqual(kept.size, .full)
+        XCTAssertTrue(kept.kept)
+        XCTAssertTrue(kept.stays)
+        XCTAssertEqual(kept.leave, .infinity)
+        XCTAssertEqual(kept.end, .infinity)
+        for time in [3.0, 30.0, 200.0, 1_000.0] {
+            XCTAssertNotNil(OpeningTitle.phase(kept, at: time), "on screen at \(time) s")
         }
-        XCTAssertEqual(OpeningTitle.schedule(words: .none, always: true), OpeningTitle.schedule(words: .none))
-        XCTAssertEqual(OpeningTitle.staying(joined: 60, always: true).size, .full)
+        // Lyrics arriving after a lookup found none do not end it.
+        XCTAssertEqual(OpeningTitle.leaving(kept, at: 40), kept)
+    }
+
+    func testAKeptCardRestsWhenTheOrdinaryOneWouldHaveLeft() throws {
+        let ordinary = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14)))
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        XCTAssertEqual(kept.restsFrom, ordinary.leave, accuracy: 1e-9)
+        XCTAssertEqual(OpeningTitle.rest(kept, at: ordinary.leave - 0.1), 0, accuracy: 1e-9)
+        XCTAssertEqual(OpeningTitle.rest(kept, at: ordinary.leave + OpeningTitle.restEase), 1, accuracy: 1e-9)
+        let phase = try XCTUnwrap(OpeningTitle.phase(kept, at: 60))
+        XCTAssertEqual(phase.opacity, OpeningTitle.restOpacity, accuracy: 1e-9)
+        XCTAssertFalse(phase.moving, "held at rest, nothing on it changes")
+        XCTAssertTrue(phase.kept)
+    }
+
+    func testWhatWaitsForAKeptCardWaitsOnlyForTheOrdinaryOne() throws {
+        let ordinary = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14)))
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        XCTAssertEqual(kept.clears, ordinary.end, accuracy: 1e-9, "credits start where they always did")
+        XCTAssertEqual(ordinary.clears, ordinary.end)
+        // Singing at once: no ordinary card, so nothing is held up.
+        let soon = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 1), keep: true))
+        XCTAssertEqual(soon.clears, soon.start, accuracy: 1e-9)
+        XCTAssertEqual(soon.restsFrom, soon.settled, accuracy: 1e-9, "quiet as soon as it has arrived")
+    }
+
+    @MainActor func testAKeptCardShowsWhenLunalyrOpensMidSong() throws {
+        let memory = OpeningTitleMemory()
+        let joined = memory.joined(track: 7, at: 120)
+        XCTAssertEqual(joined, 120)
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: joined, keep: true))
+        XCTAssertEqual(kept.start, 120 + OpeningTitle.joinLead, accuracy: 1e-9)
+        XCTAssertEqual(kept.size, .full)
+        XCTAssertNotNil(OpeningTitle.phase(kept, at: 125))
+        XCTAssertNotNil(OpeningTitle.phase(kept, at: 200))
+        // Even when the song was first seen before its position was known.
+        let unknown = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 0, keep: true))
+        XCTAssertNotNil(OpeningTitle.phase(unknown, at: 120))
+    }
+
+    @MainActor
+    func testSeekingBackBeforeTheJoinJoinsThere() throws {
+        let memory = OpeningTitleMemory()
+        XCTAssertEqual(memory.joined(track: 7, at: 120), 120)
+        XCTAssertEqual(memory.joined(track: 7, at: 130), 120, "playing on")
+        XCTAssertEqual(memory.joined(track: 7, at: 60), 60, "sought back")
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60, keep: true))
+        XCTAssertNotNil(OpeningTitle.phase(kept, at: 61), "not missing until 120 s comes round again")
+        XCTAssertEqual(memory.joined(track: 7, at: 1), 0, "back at the start")
+    }
+
+    func testAKeptCardIsNotKeptWithoutTheSetting() throws {
+        XCTAssertFalse(try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14))).kept)
+        XCTAssertNil(OpeningTitle.schedule(words: .timed(firstLine: 1)))
         XCTAssertEqual(OpeningTitle.staying(joined: 60).size, .compact)
+    }
+
+    func testTheFloatingRowHasRoomAboveTheLyrics() {
+        let size = CGSize(width: 836, height: 202)
+        let plain = LyricViewportMetrics(size: size, textSize: 44)
+        let row = LyricViewportMetrics(size: size, textSize: 44, titleRow: true)
+        XCTAssertEqual(plain.titleBand, 0)
+        XCTAssertEqual(row.titleBand, OpeningTitle.rowBand(baseSize: 44))
+        XCTAssertEqual(row.stageSize.height, plain.stageSize.height - row.titleBand, accuracy: 0.001)
+        // The lyrics' top (centred under the band) stays below the row.
+        let lyricsTop = row.titleBand + (size.height - row.titleBand - row.stageSize.height) / 2
+        let rowBottom = 44 * (OpeningTitle.rowMargin + OpeningTitle.rowCover)
+        XCTAssertGreaterThan(lyricsTop, rowBottom)
+        XCTAssertEqual(LyricViewportMetrics(size: CGSize(width: 1512, height: 982), titleRow: true).titleBand, 0,
+                       "the desktop card sits beside the lyrics")
     }
 }
