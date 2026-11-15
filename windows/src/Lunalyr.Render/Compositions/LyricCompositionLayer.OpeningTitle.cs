@@ -39,7 +39,8 @@ internal abstract partial class LyricCompositionLayer
     /// </summary>
     private OpeningSchedule? PrepareOpening(in FrameContext frame)
     {
-        var schedule = Staying(OpeningScheduleFor(frame.Scene, frame.SongJoined), frame.Scene.Title, frame.SongSeconds);
+        var schedule = Staying(Handed(OpeningScheduleFor(frame.Scene, frame.SongJoined), frame.Scene.Title, frame.SongSeconds),
+                               frame.Scene.Title, frame.SongSeconds);
         // Credits wait for the opening title of synced lyrics to leave (the Mac's notBefore).
         CreditsNotBefore(Sheet is { Count: > 0 } && schedule is { } s ? s.End : 0);
         _openingSchedule = schedule;
@@ -107,12 +108,45 @@ internal abstract partial class LyricCompositionLayer
         return schedule;
     }
 
+    /// <summary>What the schedule was made from this frame: looking the lyrics up (None), lyrics, plain lines or none found.</summary>
+    private OpeningWords _openingWords;
+    /// <summary>The card that entered while the lyrics were looked up, and the card it became when they arrived.</summary>
+    private (OpeningSchedule Schedule, string? Title)? _loadingCard;
+    private OpeningSchedule? _handedCard;
+
+    /// <summary>
+    /// One card across the lyrics arriving (the Mac's 5fb4a15): a card that entered while they were looked up is kept,
+    /// becoming the lyrics' card or leaving in time for the first line, instead of switching size or vanishing in a frame.
+    /// A new song or a replay forgets it; a song with no lyrics found keeps its staying card (Staying).
+    /// </summary>
+    private OpeningSchedule? Handed(OpeningSchedule? schedule, string? title, double time)
+    {
+        if (_loadingCard is { } card && (card.Title != title || !(time >= card.Schedule.Start)))
+        {
+            _loadingCard = null;
+            _handedCard = null;
+        }
+        if (_openingWords.Kind == OpeningWordsKind.None)
+        {
+            // Looking up: remember the card once it has entered.
+            if (schedule is { } loading && time >= loading.Start && _handedCard is null) _loadingCard = (loading, title);
+            return _handedCard ?? schedule;
+        }
+        if (_openingWords.Kind == OpeningWordsKind.Absent || _loadingCard is not { } entered) return schedule;
+        _handedCard ??= OpeningTitle.Handover(entered.Schedule, schedule, _openingWords.FirstLine, Options.PreviewLead, time);
+        return _handedCard;
+    }
+
     /// <summary>The last schedule shown while not staying, for the card coming back in when a lookup ends late.</summary>
     private (OpeningSchedule Schedule, string? Title)? _before;
 
     private OpeningSchedule? OpeningScheduleFor(SceneSnapshot scene, double joined)
     {
-        if (!scene.Style.OpeningTitle || string.IsNullOrWhiteSpace(scene.Title)) return null;
+        if (!scene.Style.OpeningTitle || string.IsNullOrWhiteSpace(scene.Title))
+        {
+            _openingWords = new OpeningWords(OpeningWordsKind.Absent);
+            return null;
+        }
         OpeningWords words;
         if (Sheet is { Count: > 0 } sheet)
         {
@@ -137,6 +171,7 @@ internal abstract partial class LyricCompositionLayer
             // Looking lyrics up, offline: nothing to sing along to (yet).
             words = OpeningWords.None;
         }
+        _openingWords = words;
         return OpeningTitle.Schedule(words, double.IsFinite(joined) ? joined : 0, Options.PreviewLead);
     }
 

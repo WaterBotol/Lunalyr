@@ -122,6 +122,30 @@ public static class OpeningTitle
         return staying with { Leave = leave, End = leave + exit };
     }
 
+    /// <summary>
+    /// The card that entered while the lyrics were looked up (<paramref name="loading"/>, on the no-words schedule), now
+    /// that they arrived at <paramref name="at"/> (the Mac's 5fb4a15): one card for the rest of its life, never a second.
+    /// It becomes the lyrics' own card when that is the same card (same start and size); otherwise it keeps its size and
+    /// leaves in time for the first line (at once when there is no room). A card already leaving keeps its exit.
+    /// </summary>
+    /// <param name="lyrics">The lyrics' own schedule, or null when they leave it no room.</param>
+    /// <param name="firstLine">When the first line is sung, if known.</param>
+    public static OpeningSchedule Handover(OpeningSchedule loading, OpeningSchedule? lyrics, double? firstLine,
+                                           double previewLead, double at)
+    {
+        if (!(at < loading.Leave)) return loading;
+        var exit = loading.Size == OpeningSize.Full ? FullExit : CompactExit;
+        double leave;
+        if (lyrics is { } own && own.Start == loading.Start && own.Size == loading.Size) leave = own.Leave;
+        else
+        {
+            leave = loading.Leave;
+            if (firstLine is { } first) leave = Math.Min(leave, Deadline(first, previewLead) - exit);
+        }
+        leave = Math.Max(leave, at);
+        return loading with { Leave = leave, End = leave + exit };
+    }
+
     /// <summary>A staying card entering again from <paramref name="at"/>: the holding card had already left when the lookup ended.</summary>
     public static OpeningSchedule Reentering(OpeningSchedule staying, double at)
     {

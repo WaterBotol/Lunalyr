@@ -96,6 +96,45 @@ public sealed class NoneFoundRenderTests : IDisposable
         Assert.Equal(0, Count(Width / 3, Width * 2 / 3, Height / 3, Height / 2));
     }
 
+    /// <summary>
+    /// The card that entered while the lyrics were looked up stays the one card when they arrive (the Mac's 5fb4a15):
+    /// with the first line soon after, it keeps its full size and leaves in time, rather than turning compact at once.
+    /// </summary>
+    [Fact]
+    public void TheCardFromTheLookupStaysOneCardWhenLyricsArrive()
+    {
+        using var layer = Layer();
+        var loading = Missing(NoLyricsDisplay.TrackName, noneFound: false, status: "Looking up lyrics…", opening: true);
+        var lyrics = loading with
+        {
+            NoneFound = false, Status = null,
+            Lyrics = new Lunalyr.Core.Lyrics.LyricResult.Synced(
+            [
+                new() { Start = 4.5, End = 6, Text = "first line", WordTimed = true, Words = [new("first", 4.5, 5), new("line", 5, 6)] },
+            ], new Lunalyr.Core.Lyrics.LyricProvenance("Word-by-word", "Test")),
+        };
+        int Card(SceneSnapshot scene, double time)
+        {
+            _stage.Render(layer, scene, time, 100 + time, 1, Background);
+            var pixels = _stage.Pixels();
+            var count = 0;
+            for (var y = Height / 2; y < Height; y++)
+            for (var x = 0; x < Width / 2; x++)
+            {
+                var i = (y * Width + x) * 4;
+                if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 3 * 90) count++;
+            }
+            return count;
+        }
+        var before = 0;
+        for (var t = 0.0; t <= 2.4; t += 0.1) before = Card(loading, t);
+        Assert.True(before > 200, $"the card entered while looking up ({before} pixels)");
+        var after = Card(lyrics, 2.5);
+        Assert.True(after > 0.8 * before, $"the card is still the full card when the lyrics arrive ({after} against {before} pixels)");
+        // It has gone by the first line.
+        Assert.Equal(0, Card(lyrics, 4.4));
+    }
+
     [Fact]
     public void NothingLeavesTheStageEmpty()
     {

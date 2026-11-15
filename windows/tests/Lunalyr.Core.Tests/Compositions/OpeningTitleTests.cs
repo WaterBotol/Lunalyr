@@ -286,4 +286,37 @@ public class OpeningTitleTests
         Assert.True(OpeningTitle.Stays(again));
         Assert.Equal(0, OpeningTitle.Phase(again, 20)!.Value.Age);
     }
+
+    // The Mac's 5fb4a15: the card that entered while the lyrics were looked up is the one card, across their arrival.
+    [Fact]
+    public void A_loading_card_becomes_the_lyrics_card_when_it_is_the_same_card()
+    {
+        var loading = OpeningTitle.Schedule(OpeningWords.None)!.Value;
+        var lyrics = OpeningTitle.Schedule(OpeningWords.Timed(12))!.Value;
+        Assert.Equal(lyrics, OpeningTitle.Handover(loading, lyrics, 12, 0.45, 3));
+    }
+
+    [Fact]
+    public void A_loading_card_keeps_its_size_and_leaves_in_time_for_an_early_first_line()
+    {
+        var loading = OpeningTitle.Schedule(OpeningWords.None)!.Value;
+        // First line at 4.5 s: the lyrics' own card would be compact; the full card already up stays full.
+        var lyrics = OpeningTitle.Schedule(OpeningWords.Timed(4.5));
+        Assert.Equal(OpeningSize.Compact, lyrics!.Value.Size);
+        var handed = OpeningTitle.Handover(loading, lyrics, 4.5, 0.45, 2.5);
+        Assert.Equal(OpeningSize.Full, handed.Size);
+        Assert.Equal(loading.Start, handed.Start);
+        Assert.Equal(OpeningTitle.Deadline(4.5, 0.45), handed.End, 6);
+    }
+
+    [Fact]
+    public void With_no_room_it_leaves_at_once_and_one_already_leaving_keeps_its_exit()
+    {
+        var loading = OpeningTitle.Schedule(OpeningWords.None)!.Value;
+        var handed = OpeningTitle.Handover(loading, null, 2, 0.45, 3);
+        Assert.Equal(3, handed.Leave, 6);
+        Assert.Equal(3 + OpeningTitle.FullExit, handed.End, 6);
+        var leaving = OpeningTitle.Handover(loading, null, 2, 0.45, loading.Leave + 0.1);
+        Assert.Equal(loading, leaving);
+    }
 }
