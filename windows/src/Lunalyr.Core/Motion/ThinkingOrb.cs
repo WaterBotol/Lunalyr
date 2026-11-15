@@ -60,11 +60,7 @@ public static class ThinkingOrb
     /// <summary>The orb's colours from the lyric ink: the old dot colour and two neighbours, all readable and toned for dark lyrics.</summary>
     public static OrbColours Colours(LyricInk ink, OkLab? albumAccent)
     {
-        OkLab Toned(OkLab source)
-        {
-            var light = Perceptual.Readable(source, ink.Backdrop, ink.Contrast);
-            return ink.Dark > 0.0005 ? Perceptual.Mix(light, Perceptual.Deep(source, ink.DeepBackdrop, ink.Contrast), Math.Min(1, ink.Dark)) : light;
-        }
+        OkLab Toned(OkLab source) => ToneFor(ink, source);
         // The primary is the old dots' colour exactly (the director's toned, readable highlight).
         var primary = ink.Dot is { } dot ? Perceptual.ToOkLab(new Double3(dot.R, dot.G, dot.B))
             : Toned(ink.Mode == LyricColourMode.SungSweep ? ink.Stops.S0 : ink.Gradient(0.5));
@@ -73,7 +69,7 @@ public static class ThinkingOrb
         switch (ink.Mode)
         {
             case LyricColourMode.Standard:
-                (n1, n2) = HueSteps(primary, albumAccent, Toned);
+                (n1, n2) = HueSteps(primary, albumAccent, ink);
                 break;
             case LyricColourMode.SungSweep:
                 if (stops > 1)
@@ -81,7 +77,7 @@ public static class ThinkingOrb
                     n1 = Toned(ink.Stops.S1);
                     n2 = Toned(ink.Stops.S2 == ink.Stops.S0 ? ink.Stops.S1 : ink.Stops.S2);
                 }
-                else (n1, n2) = HueSteps(primary, albumAccent, Toned);
+                else (n1, n2) = HueSteps(primary, albumAccent, ink);
                 break;
             default:
                 if (stops > 1 || ink.Mode == LyricColourMode.MusicReactive)
@@ -89,7 +85,7 @@ public static class ThinkingOrb
                     n1 = Toned(ink.Gradient(0.15));
                     n2 = Toned(ink.Gradient(0.85));
                 }
-                else (n1, n2) = HueSteps(primary, albumAccent, Toned);
+                else (n1, n2) = HueSteps(primary, albumAccent, ink);
                 break;
         }
         var dark = Math.Clamp(ink.Dark, 0, 1);
@@ -100,8 +96,15 @@ public static class ThinkingOrb
     }
 
     /// <summary>A hue step either side of the primary; a near-grey primary with an album colour takes the accent and the accent turned (chroma at least 0.06); otherwise a faint tint (chroma at least 0.06) either side, as on the Mac.</summary>
-    private static (OkLab, OkLab) HueSteps(OkLab primary, OkLab? accent, Func<OkLab, OkLab> toned)
+    private static OkLab ToneFor(in LyricInk ink, OkLab source)
     {
+        var light = Perceptual.Readable(source, ink.Backdrop, ink.Contrast);
+        return ink.Dark > 0.0005 ? Perceptual.Mix(light, Perceptual.Deep(source, ink.DeepBackdrop, ink.Contrast), Math.Min(1, ink.Dark)) : light;
+    }
+
+    private static (OkLab, OkLab) HueSteps(OkLab primary, OkLab? accent, LyricInk ink)
+    {
+        OkLab toned(OkLab source) => ToneFor(ink, source);
         if (primary.Chroma <= 0.03 && accent is { } a)
         {
             var accentChroma = Math.Max(a.Chroma, 0.06);
