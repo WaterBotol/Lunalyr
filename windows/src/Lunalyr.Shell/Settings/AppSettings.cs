@@ -55,6 +55,12 @@ public sealed partial record AppSettings
     /// <summary>Three dots during instrumental breaks (Mac <c>custom.showInterludes</c>).</summary>
     public bool ShowInterludes { get; init; } = true;
 
+    /// <summary>
+    /// The thinking orb's style (Mac <c>custom.thinkingOrb.style</c>, 13b8ed6): one of thinking-orbs' nine states
+    /// ("listening", "searching", …) or "mix". Unknown values read as listening. Per surface.
+    /// </summary>
+    public string ThinkingOrbStyle { get; init; } = "listening";
+
     /// <summary>Where highlight tiles take their colour from: "complement", "album" or "custom" (Mac <c>custom.lyricHighlightMode</c>).</summary>
     public string LyricHighlightMode { get; init; } = "complement";
 
@@ -259,6 +265,7 @@ public sealed partial record AppSettings
         OpeningTitle = OpeningTitle,
         OpeningTitleCover = OpeningTitleCover,
         Interludes = ShowInterludes,
+        OrbStyle = ThinkingOrbStyle ?? "listening",
         HighlightMode = LyricHighlightMode,
         HighlightCustom = LyricHighlightCustom,
         Readings = (RomanizationOptions.ParseDisplay(RomanizationDisplay) ?? Core.Lyrics.Readings.RomanizationDisplay.Below) switch

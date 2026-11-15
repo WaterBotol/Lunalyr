@@ -1,3 +1,4 @@
+using Lunalyr.Core.Motion.ThinkingOrbs;
 using Lunalyr.Core.Colour;
 using Lunalyr.Core.Compositions;
 using Lunalyr.Shell;
@@ -197,6 +198,23 @@ internal static class LyricStylePage
         Section(page, "Instrumental breaks");
         page.Children.Add(Card("Show a glowing orb during instrumental breaks", null, "",
             Toggle(ctx, s => s.ShowInterludes, (s, v) => s with { ShowInterludes = v })));
+        // The orb's style (the Mac's 13b8ed6): thinking-orbs' nine states, or Mix, with a live 64 pt preview.
+        var orbPreview = new OrbPreview(() => ctx.Current.ThinkingOrbStyle, reduceMotion);
+        SettingsChoice[] orbStyles =
+        [
+            new("listening", "Listening"), new("searching", "Searching"), new("solving", "Solving"), new("working", "Working"),
+            new("weaving", "Weaving"), new("connecting", "Connecting"), new("composing", "Composing"), new("shaping", "Shaping"),
+            new("breathing", "Breathing"), new("mix", "Mix"),
+        ];
+        var orbPicker = Combo(ctx, orbStyles,
+            s => ThinkingOrbStage.StyleValues.Contains(s.ThinkingOrbStyle ?? "") ? s.ThinkingOrbStyle! : "listening",
+            (s, v) => s with { ThinkingOrbStyle = v }, width: 180);
+        ctx.OnRefresh(_ => orbPreview.Refresh());
+        var orbControls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        orbControls.Children.Add(orbPreview);
+        orbControls.Children.Add(orbPicker);
+        page.Children.Add(Card("Orb style", "How the orb moves while the music plays on. Mix picks a different one for each break.", "",
+            orbControls).ShowWhen(ctx, s => s.ShowInterludes));
 
         // ---- Word symbols and action words (the Mac's ad5a6a6 and cba108f) ----
         Section(page, "Word symbols");

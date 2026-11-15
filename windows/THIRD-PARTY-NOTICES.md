@@ -284,3 +284,37 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## thinking-orbs 0.3.1: the thinking orb's geometry
+
+- **What:** the dotted orb drawn during instrumental breaks. Its geometry engine and presets (`src/engine` and
+  `src/presets.ts`) are transcribed to C# in `src/Lunalyr.Core/Motion/ThinkingOrbs/ThinkingOrbEngine.cs`; upstream's
+  golden frames (`ThirdParty/ThinkingOrbs/orbs-golden.json`) are the port's test fixture. Modified: one option ("swell")
+  added to the listening state's wave.
+- **Source:** <https://github.com/Jakubantalik/thinking-orbs>, commit `de85557ca220332586d070d8788c0e1d6e877a0d`
+  (npm `thinking-orbs` 0.3.1, spec 1.0.0).
+- **Licence:** MIT.
+
+```text
+MIT License
+
+Copyright (c) 2026 Jakub Antalik
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
