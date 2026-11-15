@@ -402,6 +402,7 @@ final class LyricsFetcher {
     /// is in hand, or `source` could give one.
     static func couldDemote(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
                             query: LyricQuery) -> Bool {
+        if couldShift(best, from: source, among: found, query: query) { return true }
         guard best.source == .lrclib, source != .lrclib, source.timingCeiling >= 1, rankedTiming(best.result) == 2,
               !best.agreement.timingOutlier, fitsVersion(best, query) else { return false }
         let others = found.filter { $0.source != .lrclib && fitsVersion($0, query) }
@@ -413,6 +414,21 @@ final class LyricsFetcher {
         guard !backed else { return false }
         let rival = others.contains { rankedTiming($0.result) == 2 && !hasTimingFault($0.result) }
         return rival || source.timingCeiling >= 2
+    }
+    /// Whether `source`'s answer could show the timing on screen to be
+    /// shifted to another recording (`LyricAgreement.shift`), taking away
+    /// its lead: Music's own cache could on its own; another source only
+    /// when a match in hand already runs steadily off from it and no other
+    /// service's timing in hand agrees with it.
+    static func couldShift(_ best: LyricCandidate, from source: LyricSourceID, among found: [LyricCandidate],
+                           query: LyricQuery) -> Bool {
+        guard best.source != .appleMusicCache, best.agreement.shift == nil, source != best.source, source.timingCeiling >= 1,
+              rankedTiming(best.result) >= 1, fitsVersion(best, query) else { return false }
+        if source == .appleMusicCache { return true }
+        let family = agreementFamily(best), timing = agreementTiming(best)
+        let others = found.filter { agreementFamily($0) != family && fitsVersion($0, query) }.map(agreementTiming).filter { !$0.isEmpty }
+        guard !others.contains(where: { timingAgrees(timing, $0) }) else { return false }
+        return others.contains { isShifted($0, timing) != nil }
     }
     private static func nanoseconds(_ seconds: Double) -> UInt64 { UInt64(max(0, seconds) * 1_000_000_000) }
 
@@ -598,8 +614,12 @@ final class LyricsFetcher {
     /// other sources at its timing, when two other services agree on the
     /// timing and LRCLIB's disagrees with both
     /// (`LyricAgreement.timingOutlier`): its timing is made by listeners.
+    /// Timing shifted to another recording or master
+    /// (`LyricAgreement.shift`) ranks after the other sources at its timing
+    /// in the same way.
     private static func lead(_ candidate: LyricCandidate, timing: Int) -> Int {
         if candidate.source == .lrclib, candidate.agreement.timingOutlier { return 5 }
+        if candidate.agreement.shift != nil { return 5 }
         if candidate.source == .lyricsPlus, !isAppleRelay(candidate) { return 4 }
         return lead(candidate.source, timing: timing)
     }
@@ -696,7 +716,10 @@ final class LyricsFetcher {
             if timingTier(candidate.result) >= 2, hasEvenlySpreadWordTiming(candidate.result) {
                 found += " · word timing spread evenly over each line (ranked as line timing)"
             }
-            if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
+            if let shift = candidate.agreement.shift {
+                found += " · timed to another recording (\(String(format: "%.1f", abs(shift))) s \(shift > 0 ? "later" : "earlier") than "
+                    + (screened.accepted.contains { $0.source == .appleMusicCache } ? "Music’s own" : "the others") + ")"
+            } else if candidate.agreement.timingOutlier { found += " · timing differs from other sources" }
             else if candidate.agreement.peers > 0 {
                 found += candidate.agreement.peers == 1 ? " · 1 other source agrees" : " · \(candidate.agreement.peers) other sources agree"
             }

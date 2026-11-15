@@ -2,7 +2,8 @@ import XCTest
 @testable import VersoCustom
 
 /// How lyrics are weighed beyond their sources' leads: word stamps a tool
-/// spread over each line rank as line timing.
+/// spread over each line rank as line timing, and a timeline shifted to
+/// another recording ranks after those that agree.
 final class LyricRankingQualityTests: XCTestCase {
     typealias Line = LyricsFetcher.Line
     typealias Word = LyricsFetcher.Word
@@ -122,5 +123,92 @@ final class LyricRankingQualityTests: XCTestCase {
         // Spread, it ranks with line timing: Musixmatch's line timing leads it.
         let musixmatch = candidate(.musixmatch, real.map { line in LyricsFetcher.makeLine(text: line.text, start: line.start, end: line.end) })
         XCTAssertEqual(LyricsFetcher.screen([fake, musixmatch], query: query, options: options(order)).accepted.first?.source, .musixmatch)
+    }
+
+    // MARK: - Shifted timeline
+
+    static let verses = ["Morning comes around again", "Walking down the empty street", "Every light is turning green",
+                         "I can hear you calling out", "Hold the line and wait for me", "Nothing ever stays the same",
+                         "Count the stars above the town", "Never let the music fade"]
+
+    /// Line-timed verses, every line `shift` seconds later, plus `jitter(i)`.
+    func timed(_ source: LyricSourceID, shift: Double = 0, jitter: (Int) -> Double = { _ in 0 }) -> LyricCandidate {
+        candidate(source, Self.verses.enumerated().map { index, text in
+            let start = Double(index) * 4.5 + 10 + shift + jitter(index)
+            return LyricsFetcher.makeLine(text: text, start: start, end: start + 4)
+        })
+    }
+
+    func testATimelineOffFromTwoThatAgreeIsShifted() {
+        let order: [LyricSourceID] = [.musixmatch, .netEase, .qqMusic]
+        for mode in LyricSourceOptions.Mode.allCases {
+            let screened = LyricsFetcher.screen([timed(.musixmatch, shift: 2.1, jitter: { $0 % 2 == 0 ? 0.1 : -0.1 }),
+                                                 timed(.netEase), timed(.qqMusic, shift: 0.2)],
+                                                query: query, options: options(order, mode)).accepted
+            XCTAssertEqual(screened.map(\.source), [.netEase, .qqMusic, .musixmatch], "\(mode)")
+            XCTAssertEqual(screened.last?.agreement.shift ?? 0, 2.0, accuracy: 0.15)
+            XCTAssertNil(screened[0].agreement.shift)
+            XCTAssertNil(screened[1].agreement.shift)
+        }
+    }
+
+    func testTwoThatDisagreeCannotTellWhichIsShifted() {
+        let order: [LyricSourceID] = [.musixmatch, .netEase, .qqMusic, .kugou]
+        let pair = LyricsFetcher.screen([timed(.musixmatch, shift: 2.5), timed(.netEase)], query: query, options: options(order)).accepted
+        XCTAssertEqual(pair.first?.source, .musixmatch)
+        XCTAssertTrue(pair.allSatisfy { $0.agreement.shift == nil })
+        // Two against two: no telling either.
+        let even = LyricsFetcher.screen([timed(.musixmatch, shift: 2.5), timed(.kugou, shift: 2.4), timed(.netEase), timed(.qqMusic)],
+                                        query: query, options: options(order)).accepted
+        XCTAssertTrue(even.allSatisfy { $0.agreement.shift == nil })
+        XCTAssertEqual(even.first?.source, .musixmatch)
+    }
+
+    func testAnUnsteadyOffsetIsNotAShift() {
+        let order: [LyricSourceID] = [.musixmatch, .netEase, .qqMusic]
+        // Off by two seconds at the median, but scattered from one to four: badly synced, not another master.
+        let scattered = timed(.musixmatch, jitter: { [1, 4, 2, 3.5, 1.2, 2.1, 3.8, 1.5][$0] })
+        let screened = LyricsFetcher.screen([scattered, timed(.netEase), timed(.qqMusic)], query: query, options: options(order)).accepted
+        XCTAssertTrue(screened.allSatisfy { $0.agreement.shift == nil })
+    }
+
+    func testMusicsOwnTimingIsTheReference() {
+        let order: [LyricSourceID] = [.appleMusicCache, .musixmatch, .netEase]
+        let screened = LyricsFetcher.screen([timed(.appleMusicCache), timed(.musixmatch, shift: -1.8)], query: query, options: options(order)).accepted
+        XCTAssertEqual(screened.first?.source, .appleMusicCache)
+        XCTAssertEqual(screened.last?.agreement.shift ?? 0, -1.8, accuracy: 0.01)
+        // Music's own is never the shifted one, whatever the others say.
+        let outvoted = LyricsFetcher.screen([timed(.appleMusicCache, shift: 3), timed(.musixmatch), timed(.netEase, shift: 0.1)],
+                                            query: query, options: options(order)).accepted
+        XCTAssertNil(outvoted.first { $0.source == .appleMusicCache }?.agreement.shift)
+        XCTAssertNotNil(outvoted.first { $0.source == .musixmatch }?.agreement.shift)
+    }
+
+    func testAPendingSourceThatCouldShowTheShiftStillMatters() {
+        let order: [LyricSourceID] = [.musixmatch, .netEase, .qqMusic, .vibe]
+        let options = options(order)
+        let found = LyricsFetcher.screen([timed(.musixmatch), timed(.netEase, shift: 2)], query: query, options: options).accepted
+        let best = found[0]
+        XCTAssertEqual(best.source, .musixmatch)
+        // VIBE (line timing only) cannot outrank Musixmatch, but agreeing with NetEase it would show Musixmatch shifted.
+        XCTAssertFalse(LyricsFetcher.couldBeat(best, from: .vibe, query: query, options: options))
+        XCTAssertTrue(LyricsFetcher.matters(.vibe, best: best, onlineBest: best, query: query, options: options, among: found))
+        // With another service backing Musixmatch's timing, nothing could.
+        let backed = LyricsFetcher.screen([timed(.musixmatch), timed(.netEase, shift: 2), timed(.qqMusic, shift: 0.1)],
+                                          query: query, options: options).accepted
+        XCTAssertFalse(LyricsFetcher.matters(.vibe, best: backed[0], onlineBest: backed[0], query: query, options: options, among: backed))
+    }
+
+    func testTheSourceListSaysWhyAShiftedMatchRanksLower() async {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("shift-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let answers: [LyricSourceID: LyricCandidate] = [.musixmatch: timed(.musixmatch, shift: 2), .netEase: timed(.netEase),
+                                                        .qqMusic: timed(.qqMusic, shift: 0.3)]
+        let fetcher = LyricsFetcher(cacheFolder: folder, timing: .init(grace: 0.2, upgradeSettle: 0.1, appleRetry: 0.3, lrclibLimit: 3, sourceLimit: 3),
+                                    isOnline: { true }) { id, _, _ in answers[id] }
+        let report = await fetcher.lookup(query, force: true, options: options([.musixmatch, .netEase, .qqMusic]))
+        XCTAssertEqual(report.candidates.first?.source, .netEase)
+        XCTAssertTrue(report.states[.musixmatch]?.contains("timed to another recording (1.8 s later than the others)") == true,
+                      report.states[.musixmatch] ?? "")
     }
 }
