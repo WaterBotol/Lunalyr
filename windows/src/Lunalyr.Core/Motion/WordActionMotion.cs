@@ -28,6 +28,25 @@ public readonly record struct WordActionPose(double Dx, double Dy, double TurnSc
     public double GlowRadius(double size) => Math.Max(1, 0.22 * size * Glow);
 }
 
+/// <summary>
+/// How far a stronger word presence takes the in, hold and out of a word (Mac queue item 5). <c>p</c> = 1 is today's
+/// look, exactly; each part scales its departure from rest by its own share of the extra.
+/// </summary>
+public readonly record struct WordPresence(double In, double Hold, double Glow, double Out)
+{
+    public static WordPresence Today => new(1, 1, 1, 1);
+
+    /// <summary>At strength <paramref name="p"/>: the entrance travels 0.8 more per unit of extra, the hold swells
+    /// 0.7 more, the glow 0.35 more and the exit drifts 0.8 more.</summary>
+    public static WordPresence At(double p)
+    {
+        var extra = double.IsFinite(p) ? Math.Clamp(p, 1, 2) - 1 : 0;
+        return new(1 + 0.8 * extra, 1 + 0.7 * extra, 1 + 0.35 * extra, 1 + 0.8 * extra);
+    }
+
+    public bool IsToday => In == 1 && Hold == 1 && Glow == 1 && Out == 1;
+}
+
 public static class WordActionMotion
 {
     /// <summary>How long each action runs, in seconds.</summary>

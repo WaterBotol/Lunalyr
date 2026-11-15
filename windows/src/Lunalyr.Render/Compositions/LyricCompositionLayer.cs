@@ -968,6 +968,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
         var energy = OrganicMotion.VocalIntensity(plan.Words, time);
         var highlighted = plan.Segments is not null;
         var reduce = ReduceMotion;
+        // How present the in, hold and out are (1: today's look, exactly).
+        var presence = WordPresence.At(StyleShown.WordPresence);
         for (var i = 0; i < tokens.Count; i++)
         {
             var eligible = i > 0 ? tokens[i - 1].Source.Start : previewSince;
@@ -1016,17 +1018,33 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
             // The calm layouts land without overshoot (their spring held at its rest); Echo keeps its small one.
             var arrival = plan.Settles ? Math.Min(1, presentation.Arrival) : presentation.Arrival;
             var transform = EntranceTransform.Make(presentation.Progress, arrival, motion, size, direction, reduce);
+            if (!presence.IsToday && !reduce)
+            {
+                // Further in: the travel, turn and pop scale; a soft entrance (no travel of its own) gains a rise and a
+                // grow of its own, so it arrives rather than only fading up.
+                var soft = transform.OffsetX == 0 && transform.OffsetY == 0;
+                var remaining = 1 - transform.Eased;
+                var extra = presence.In - 1;
+                transform = transform with
+                {
+                    OffsetX = transform.OffsetX * presence.In,
+                    OffsetY = transform.OffsetY * presence.In + (soft ? remaining * size * 0.32 * extra : 0),
+                    Turn = transform.Turn * presence.In,
+                    Scale = (1 - (1 - transform.Scale) * presence.In) * (soft ? 1 - 0.12 * extra * remaining : 1),
+                };
+            }
             // Settled words hold still while they are read: the flow layouts no longer float idle words about.
             var drift = WordPose.Rest;
             var lateral = LyricMotion.Jitter(run.Seed, 12) * 0.10;
             // A word with a symbol swells about itself and by its own width, so the room kept for the symbol never
             // pushes it into the gap before it.
             var swellCap = EditorialRunFrame.CappedSwell(
-                EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce), run.Inset.Width,
+                presence.IsToday ? EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce)
+                    : 1 + (EditorialRunFrame.Swell(frame.Heat, frame.Glow, frame.DriftScale, reduce) - 1) * presence.Hold, run.Inset.Width,
                 ink.Symbol is null ? ink.Unit.Width : ink.Label.Box.X);
             // A held word's letters swell only with motion (the Mac's HeldGlyphRenderer takes no sustain under Reduce Motion).
             var holding = !reduce && run.Sustain > 0.02 ? run.Sustain * Easing.Smoothstep(frame.Fill) : 0;
-            var floatScale = drift.Scale * (1 - 0.04 * travel);
+            var floatScale = drift.Scale * (1 - 0.04 * travel * presence.Out);
             // An action word's motion (the Mac's cba108f), inside the word's slot so its anchor doesn't drift.
             var action = ink.Action is { } act
                 ? WordActionMotion.Pose(act, time - tokens[run.TokenStart].Source.Start, reduce)
@@ -1036,18 +1054,18 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                 * Matrix3x2.CreateRotation(Radians(run.Metrics.Rotation))
                 * (ink.Symbol is null ? Matrix3x2.CreateScale((float)swellCap)
                     : Matrix3x2.CreateScale((float)swellCap, new Vector2(ink.LabelOffset.X, 0)))
-                * Matrix3x2.CreateRotation(Radians(reduce ? 0 : frame.DriftAngle))
-                * Matrix3x2.CreateTranslation((float)(reduce ? 0 : frame.DriftX * size), (float)(reduce ? 0 : frame.DriftY * size))
+                * Matrix3x2.CreateRotation(Radians(reduce ? 0 : frame.DriftAngle * presence.Hold))
+                * Matrix3x2.CreateTranslation((float)(reduce ? 0 : frame.DriftX * size * presence.Hold), (float)(reduce ? 0 : frame.DriftY * size * presence.Hold))
                 * Entrance(transform)
                 * Matrix3x2.CreateScale((float)floatScale)
-                * Matrix3x2.CreateRotation(Radians(drift.Angle + LyricMotion.Jitter(run.Seed, 13) * 3 * travel))
-                * Matrix3x2.CreateTranslation((float)((drift.X + lateral * travel) * size), (float)((drift.Y - 0.26 * travel) * size))
+                * Matrix3x2.CreateRotation(Radians(drift.Angle + LyricMotion.Jitter(run.Seed, 13) * 3 * travel * presence.Out))
+                * Matrix3x2.CreateTranslation((float)((drift.X + lateral * travel * presence.Out) * size), (float)((drift.Y - 0.26 * travel * presence.Out) * size))
                 * Matrix3x2.CreateTranslation((float)(origin.X + ink.Centre.X), (float)(origin.Y + ink.Centre.Y + run.Metrics.WaveOffset))
                 * block;
             var heldUp = 1 + plan.HeldY[r] * holding;
             var scale = contentScale * swell * swellCap * heldUp * transform.Scale * floatScale * action.Scale;
             visibility *= action.Opacity;
-            var blur = Combine(Points(motion.Blur(presentation.Progress, reduce)), Points(2.4 * travel)) * (float)scale;
+            var blur = Combine(Points(motion.Blur(presentation.Progress, reduce) * presence.In), Points(2.4 * travel * presence.Out)) * (float)scale;
             // "Cutout · Highlight": the tiles behind this run's sung words, and how strong the strongest is.
             var tiled = 0.0;
             var segments = highlighted && plan.Chosen[r].HighlightsSungWords() ? plan.Segments![r] : null;
@@ -1056,8 +1074,8 @@ internal abstract partial class LyricCompositionLayer : IRenderLayer
                     tiled = Math.Max(tiled, LyricHighlightTiming.Pose(time, segment.Onset, segment.Release, reduce).Opacity);
             var glowStrength = frame.Glow * (1 - tiled);
             var glow = glowStrength > 0.002
-                ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)(0.6 * glowStrength * frame.Fill)),
-                               Points(10 + 22 * frame.Glow) * (float)scale)
+                ? new GlowSpec(new Vector4(ink.Glow.X, ink.Glow.Y, ink.Glow.Z, (float)Math.Min(1, 0.6 * glowStrength * frame.Fill * presence.Glow)),
+                               Points(10 + 22 * frame.Glow * presence.Glow) * (float)scale)
                 : GlowSpec.None;
             // An action's glow: a shadow in the word's own glow colour (the stronger of the two shows).
             if (action.Glow > 0.002 && action.GlowOpacity > glow.Colour.W)
