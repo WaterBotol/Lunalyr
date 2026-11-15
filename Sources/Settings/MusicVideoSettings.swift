@@ -104,6 +104,7 @@ private struct PastedVideoLink: View {
             HStack(spacing: LunalyrDesign.Spacing.small) {
                 TextField("Paste a link for this song", text: $text)
                     .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 140)
                     .onSubmit(use)
                     .accessibilityLabel("YouTube link for this song")
                 Button("Use", action: use)
