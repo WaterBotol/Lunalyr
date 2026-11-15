@@ -311,7 +311,7 @@ enum SettingsCatalogue {
               keywords: ["floating", "backdrop", "shadow", "readable", "over apps"]),
         .init(.typography, "Readability", "Fade when the pointer is over them", .toggle,
               keys: ["custom.floating.fadeUnderPointer"], keywords: ["floating", "mouse", "cursor", "hover"]),
-        .init(.typography, "Shown with the lyrics", "Show the song title at the start", .toggle, keys: ["custom.openingTitle"],
+        .init(.typography, "Shown with the lyrics", "Show the song title at the start", .toggle, keys: ["custom.openingTitle", "custom.openingTitleAlways"],
               keywords: ["opening title", "artist", "intro"]),
         .init(.typography, "Shown with the lyrics", "Show the album cover", .toggle, keys: ["custom.openingTitleCover"],
               keywords: ["opening title", "artwork", "cover"]),

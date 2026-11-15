@@ -444,7 +444,7 @@ struct LyricLayer: View {
                                  staying: Bool = true) -> OpeningTitle.Schedule? {
         guard OpeningTitle.isOn, !content.title.isEmpty, key.kind != .idle else { return nil }
         if staying, let stay = opening.currentStay(track: key.track) {
-            let card = OpeningTitle.staying(joined: content.joined, found: stay.found)
+            let card = OpeningTitle.staying(joined: content.joined, found: stay.found, always: OpeningTitle.always && backdropOverride == nil)
             return stay.lyricsAt.map { OpeningTitle.leaving(card, at: $0) } ?? card
         }
         let words: OpeningTitle.Words
@@ -454,7 +454,8 @@ struct LyricLayer: View {
         case .plain: words = .showing
         case .synced: words = .timed(firstLine: OpeningTitle.firstSung(content.lines))
         }
-        let card = OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead)
+        let card = OpeningTitle.schedule(words: words, joined: content.joined, previewLead: settings.nextWordPreviewLead,
+                                         always: OpeningTitle.always && backdropOverride == nil)
         if staying, let hold = opening.currentHold(track: key.track) {
             return OpeningTitle.carried(hold.card, into: card, at: hold.arrival)
         }

@@ -395,4 +395,33 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertNil(memory.currentHold(track: 1))
         XCTAssertNil(memory.hold(track: 3, kind: .synced, card: nil, at: 1))
     }
+
+    // MARK: Shown in full mid-song too
+
+    func testAlwaysShowsTheFullCardWhenJoinedPartWay() throws {
+        let normal = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60))
+        XCTAssertEqual(normal.size, .compact)
+        let always = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60, always: true))
+        XCTAssertEqual(always.size, .full)
+        XCTAssertEqual(always.start, 60 + OpeningTitle.joinLead, accuracy: 1e-9)
+        XCTAssertEqual(always.leave - always.settled, OpeningTitle.lyricHold, accuracy: 1e-9)
+        XCTAssertEqual(OpeningTitle.schedule(words: .showing, joined: 60, always: true)?.size, .full)
+    }
+
+    func testAlwaysShowsItWhenTheSingingStartsAtOnce() throws {
+        XCTAssertNil(OpeningTitle.schedule(words: .timed(firstLine: 1)))
+        let always = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 1), always: true))
+        XCTAssertEqual(always.size, .full)
+        XCTAssertEqual(always.start, OpeningTitle.lead, accuracy: 1e-9)
+    }
+
+    func testAlwaysLeavesALongIntroAsBefore() {
+        for first in [6.0, 9.0, 20.0, 40.0] {
+            XCTAssertEqual(OpeningTitle.schedule(words: .timed(firstLine: first), always: true),
+                           OpeningTitle.schedule(words: .timed(firstLine: first)), "first line at \(first)")
+        }
+        XCTAssertEqual(OpeningTitle.schedule(words: .none, always: true), OpeningTitle.schedule(words: .none))
+        XCTAssertEqual(OpeningTitle.staying(joined: 60, always: true).size, .full)
+        XCTAssertEqual(OpeningTitle.staying(joined: 60).size, .compact)
+    }
 }

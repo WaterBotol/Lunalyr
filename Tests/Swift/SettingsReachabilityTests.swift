@@ -286,6 +286,7 @@ private enum SourceKeys {
         "custom.nextWordPreviewByStyle",
         "custom.nextWordPreviewLead",
         "custom.openingTitle",
+        "custom.openingTitleAlways",
         "custom.openingTitleCover",
         "custom.pauseWhenCovered",
         "custom.player",

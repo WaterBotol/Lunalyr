@@ -17,6 +17,14 @@ enum OpeningTitle {
 
     static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
 
+    /// The full card every time, not only at a song's start: also a song
+    /// joined part-way (opening Lunalyr mid-song, skipping ahead), and a song
+    /// whose singing starts too soon for it. It then shows beside the lyrics,
+    /// low on the left where it always sits. Testers asked for it (Nov 2026).
+    static let alwaysKey = "custom.openingTitleAlways"
+
+    static var always: Bool { UserDefaults.standard.bool(forKey: alwaysKey) }
+
     /// The album cover beside the title.
     static let coverKey = "custom.openingTitleCover"
 
@@ -110,7 +118,8 @@ enum OpeningTitle {
 
     /// The card's timing for a song first seen at `joined` seconds in, or
     /// nil when there is no room for it.
-    static func schedule(words: Words, joined: Double = 0, previewLead: Double = 0.45) -> Schedule? {
+    static func schedule(words: Words, joined: Double = 0, previewLead: Double = 0.45,
+                         always: Bool = false) -> Schedule? {
         let partWay = joined > midSong
         let start = partWay ? joined + joinLead : lead
         func card(_ size: Size, leave: Double) -> Schedule {
@@ -119,6 +128,19 @@ enum OpeningTitle {
             return Schedule(start: start, settled: start + entrance, leave: leave, end: leave + exit, size: size)
         }
         let brief = card(.compact, leave: start + compactEntrance + briefHold)
+        if always {
+            // The full card, held as through a long intro (`always`); where
+            // the words leave it room, it still goes before they start.
+            if case .timed(firstLine: let first?) = words, !partWay {
+                let gone = deadline(firstLine: first, previewLead: previewLead)
+                if gone - start >= fullEntrance + fullMinimumHold + fullExit {
+                    return card(.full, leave: min(gone - fullExit, start + fullEntrance + lyricHold))
+                }
+            }
+            if case .none = words, !partWay { return card(.full, leave: start + fullEntrance + wordlessHold) }
+            if case .timed(firstLine: nil) = words, !partWay { return card(.full, leave: start + fullEntrance + wordlessHold) }
+            return card(.full, leave: start + fullEntrance + lyricHold)
+        }
         switch words {
         case .showing:
             return brief
@@ -143,11 +165,11 @@ enum OpeningTitle {
     /// `found`: it enters as usual (full, or compact for a song joined
     /// part-way) and stays for the rest of the song. When the lookup ran on
     /// after the card it held had begun to leave, it enters afresh.
-    static func staying(joined: Double = 0, found: Double = 0) -> Schedule {
+    static func staying(joined: Double = 0, found: Double = 0, always: Bool = false) -> Schedule {
         let partWay = joined > midSong
         var start = partWay ? joined + joinLead : lead
-        if let held = schedule(words: .none, joined: joined), found > held.leave { start = found + joinLead }
-        let size: Size = partWay ? .compact : .full
+        if let held = schedule(words: .none, joined: joined, always: always), found > held.leave { start = found + joinLead }
+        let size: Size = partWay && !always ? .compact : .full
         let entrance = size == .full ? fullEntrance : compactEntrance
         return Schedule(start: start, settled: start + entrance, leave: .infinity, end: .infinity, size: size, stays: true)
     }
