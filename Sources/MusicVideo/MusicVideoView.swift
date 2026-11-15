@@ -27,6 +27,8 @@ struct MusicVideoBackground: View {
     var libraryFraming: MusicVideoFraming = .fill
     /// The album cover, for the backdrop around a video shown whole.
     var artwork: NSImage?
+    /// The glow around a video shown whole with an ambient glow.
+    @State private var ambience = MusicVideoAmbience()
 
     /// The framing for this source.
     var framing: MusicVideoFraming {
@@ -43,6 +45,9 @@ struct MusicVideoBackground: View {
             if framing.showsBackdrop {
                 MusicVideoBackdropView(artwork: artwork, videoID: youTubeID, large: !preview)
             }
+            if framing.followsVideo {
+                MusicVideoAmbientGlow(ambience: ambience)
+            }
             // Never a real player inside the unit-test host: no file, no
             // network, nothing that could make a sound.
             if !AppRuntime.isUnitTesting {
@@ -52,7 +57,21 @@ struct MusicVideoBackground: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
+        .onAppear { updateAmbience() }
+        .onChange(of: ambienceActive) { updateAmbience() }
+        .onChange(of: source) { ambience.reset() }
+        .onDisappear { ambience.stop() }
     }
+
+    /// The glow samples the picture only while it shows and the video moves.
+    private var ambienceActive: Bool {
+        framing.followsVideo && !paused && !still && !preview && !AppRuntime.isUnitTesting
+    }
+
+    private func updateAmbience() { ambience.setActive(ambienceActive) }
+
+    /// The surface that samples for the glow, when it shows.
+    private var glow: MusicVideoAmbience? { framing.followsVideo ? ambience : nil }
 
     private var youTubeID: String? {
         if case .youTube(let id) = source { return id }
@@ -63,14 +82,14 @@ struct MusicVideoBackground: View {
             Group {
                 switch source {
                 case .local(let url):
-                    LocalMusicVideoView(url: url, paused: paused || still, framing: libraryFraming)
+                    LocalMusicVideoView(url: url, paused: paused || still, framing: libraryFraming, ambience: glow)
                         // Softened like the animated covers; the overscan
                         // keeps the blur from showing the frame's edge.
                         .blur(radius: blur)
                         .scaleEffect((blur > 0 ? 1.04 : 1) * libraryFraming.bleedScale)
-                case .youTube(let id) where youTubeFraming == .whole:
+                case .youTube(let id) where youTubeFraming.isWhole:
                     WholeYouTubeVideo(videoID: id, paused: paused, blur: blur, playing: !(preview || still),
-                                      large: !preview)
+                                      large: !preview, framing: youTubeFraming, ambience: glow)
                 case .youTube(let id):
                     if preview || still {
                         // The preview does not start a second YouTube
@@ -99,6 +118,8 @@ struct WholeYouTubeVideo: View {
     /// False for the Settings preview and Reduce Motion: the still only.
     let playing: Bool
     var large = true
+    var framing: MusicVideoFraming = .whole
+    var ambience: MusicVideoAmbience?
     @State private var still: NSImage?
     @State private var aspect: CGFloat = MusicVideoFraming.youTubeAspect
 
@@ -119,8 +140,8 @@ struct WholeYouTubeVideo: View {
                 if playing {
                     // Never larger than the screen: the page draws the player
                     // at `box` inside it, so YouTube's own bars fall outside.
-                    YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: .whole,
-                                          box: layout.box)
+                    YouTubeMusicVideoView(videoID: videoID, paused: paused, blur: blur, framing: framing,
+                                          box: layout.box, ambience: ambience)
                         .frame(width: layout.visible.width, height: layout.visible.height)
                 }
             }
@@ -468,10 +489,12 @@ struct LocalMusicVideoView: NSViewRepresentable {
     let url: URL
     let paused: Bool
     var framing: MusicVideoFraming = .fill
+    var ambience: MusicVideoAmbience?
 
     func makeNSView(context: Context) -> LocalMusicVideoNSView {
         let view = LocalMusicVideoNSView()
         view.setFraming(framing)
+        view.setAmbience(ambience)
         view.load(url)
         view.loop.setSurfacePaused(paused)
         view.loop.start()
@@ -480,6 +503,7 @@ struct LocalMusicVideoView: NSViewRepresentable {
 
     func updateNSView(_ view: LocalMusicVideoNSView, context: Context) {
         view.setFraming(framing)
+        view.setAmbience(ambience)
         view.load(url)
         view.loop.setSurfacePaused(paused)
     }
@@ -547,6 +571,32 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
 
     private var framing: MusicVideoFraming = .fill
     private var sizeObservation: NSKeyValueObservation?
+    /// Small frames for the ambient glow, read about once a second.
+    private let ambientOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+    ])
+    private weak var ambience: MusicVideoAmbience?
+
+    func setAmbience(_ value: MusicVideoAmbience?) {
+        guard value !== ambience else { return }
+        ambience?.capture = nil
+        ambience = value
+        value?.capture = { [weak self] done in done(self?.ambientFrame()) }
+    }
+
+    /// The picture now showing, as a small image (nil before the first).
+    private func ambientFrame() -> CGImage? {
+        guard let item = player.currentItem, item.outputs.contains(ambientOutput) else { return nil }
+        let time = ambientOutput.itemTime(forHostTime: CACurrentMediaTime())
+        guard let buffer = ambientOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else { return nil }
+        let picture = CIImage(cvPixelBuffer: buffer)
+        let scale = min(1, MusicVideoAmbience.sampleWidth * 2 / max(1, picture.extent.width))
+        let small = picture.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        return Self.ambientContext.createCGImage(small, from: small.extent)
+    }
+
+    private static let ambientContext = CIContext(options: [.useSoftwareRenderer: false, .allowLowPower: true])
+
 
     /// The picture's shape, once the item knows it.
     private var contentAspect: CGFloat? {
@@ -567,6 +617,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         guard self.url != url else { return }
         self.url = url
         let item = AVPlayerItem(url: url)
+        item.add(ambientOutput)
         sizeObservation = item.observe(\.presentationSize, options: [.new]) { _, _ in
             DispatchQueue.main.async { [weak self] in self?.updateGravity() }
         }
@@ -581,6 +632,7 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
         playerLayer.removeAnimation(forKey: "reveal")
         playerLayer.opacity = 0
         CATransaction.commit()
+        player.currentItem?.remove(ambientOutput)
         player.replaceCurrentItem(with: item)
         loop.isCurrent = { MusicVideoController.shared.isShowing(.local(url)) }
         loop.onDuration = { MusicVideoController.shared.noteVideoDuration($0, of: .local(url)) }
@@ -637,7 +689,9 @@ final class LocalMusicVideoNSView: NSView, MusicVideoPlaybackSurface {
     func tearDown() {
         loop.stop()
         player.pause()
+        player.currentItem?.remove(ambientOutput)
         player.replaceCurrentItem(with: nil)
+        ambience?.capture = nil
         statusObservation = nil
         readyObservation = nil
         sizeObservation = nil
@@ -657,6 +711,8 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
     var framing: MusicVideoFraming = .fill
     /// Shown whole: the player's size within the view (`YouTubeEmbed.Box`).
     var box: YouTubeEmbed.Box?
+    /// The ambient glow, sampled from this player.
+    var ambience: MusicVideoAmbience?
 
     func makeCoordinator() -> YouTubeMusicVideoCoordinator { YouTubeMusicVideoCoordinator() }
 
@@ -666,6 +722,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         coordinator.host = host
         coordinator.setFraming(framing)
         coordinator.setBox(box)
+        coordinator.setAmbience(ambience)
         coordinator.attach(videoID: videoID)
         coordinator.loop.setSurfacePaused(paused)
         coordinator.loop.start()
@@ -677,6 +734,7 @@ struct YouTubeMusicVideoView: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.setFraming(framing)
         coordinator.setBox(box)
+        coordinator.setAmbience(ambience)
         if coordinator.videoID != videoID { coordinator.attach(videoID: videoID) }
         coordinator.loop.setSurfacePaused(paused)
         coordinator.setBlur(blur)
@@ -1341,6 +1399,7 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
         loop.stop()
         session.stop()
         freeze.reset()
+        ambience?.capture = nil
         run("window.lunalyrPause && window.lunalyrPause()")
         closeWebView()
     }
@@ -1360,6 +1419,36 @@ final class YouTubeMusicVideoCoordinator: NSObject, WKNavigationDelegate, WKScri
                 let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
                 done(picture.flatMap { MusicVideoFrozenFrame.looksBlank($0) ? nil : $0 })
             }
+        }
+    }
+
+    /// A small copy of the picture for the ambient glow: only while the
+    /// player shows, so YouTube's overlays and a blank page never tint it.
+    func captureAmbient(_ done: @escaping @MainActor (CGImage?) -> Void) {
+        guard playerVisible, let view, view.alphaValue > 0.5, view.bounds.width > 0, view.bounds.height > 0 else {
+            done(nil)
+            return
+        }
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: Double(MusicVideoAmbience.sampleWidth))
+        configuration.afterScreenUpdates = false
+        view.takeSnapshot(with: configuration) { image, _ in
+            MainActor.assumeIsolated {
+                let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                done(picture.flatMap { MusicVideoFrozenFrame.looksBlank($0) ? nil : $0 })
+            }
+        }
+    }
+
+    private weak var ambience: MusicVideoAmbience?
+
+    func setAmbience(_ value: MusicVideoAmbience?) {
+        guard value !== ambience else { return }
+        ambience?.capture = nil
+        ambience = value
+        value?.capture = { [weak self] done in
+            guard let self else { done(nil); return }
+            self.captureAmbient(done)
         }
     }
 

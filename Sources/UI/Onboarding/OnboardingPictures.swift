@@ -27,7 +27,7 @@ struct VideoFramingPicture: View {
             switch framing {
             case .fill:
                 VideoStill().frame(width: filled.width, height: filled.height)
-            case .whole:
+            case .whole, .ambient:
                 VideoStill()
                     .frame(width: filled.width, height: filled.height)
                     .blur(radius: 8)

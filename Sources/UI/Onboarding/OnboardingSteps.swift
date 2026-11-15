@@ -168,7 +168,8 @@ struct VideosStep: View {
         OnboardingPage(step: .videos, title: OnboardingCopy.videosTitle, message: OnboardingCopy.videos,
                        focus: focus) {
             HStack(spacing: LunalyrDesign.Spacing.xLarge) {
-                ForEach(MusicVideoFraming.allCases) { framing in
+                // The ambient glow looks like "whole" in a still drawing.
+                ForEach([MusicVideoFraming.fill, .whole]) { framing in
                     VStack(spacing: LunalyrDesign.Spacing.small) {
                         VideoFramingPicture(framing: framing)
                         Text(framing.title).onboardingCaption()

@@ -260,7 +260,7 @@ final class WelcomeTests: XCTestCase {
         XCTAssertTrue(OnboardingCopy.discordPrivacy.contains("only to the Discord app on this Mac"))
         XCTAssertTrue(OnboardingCopy.discordPrivacy.contains("clears when playback stops"))
         XCTAssertTrue(OnboardingCopy.discordPrivacy.contains("Apple"), "the cover lookup is named")
-        XCTAssertEqual(MusicVideoFraming.allCases.map(\.title), ["Fill the screen", "Show the whole video"])
+        XCTAssertEqual(MusicVideoFraming.allCases.map(\.title), ["Fill the screen", "Show the whole video", "Whole video, ambient glow"])
         XCTAssertEqual(OnboardingCopy.layoutCaption(nil), "Automatic picks a layout to suit each song.")
         XCTAssertEqual(OnboardingCopy.layoutCaption(.hinge), LyricComposition.hinge.detail)
         // Sentence case, no periods in titles.

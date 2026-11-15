@@ -17,6 +17,10 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
     /// for its first `titleOverlayHold` of play, behind the still, while
     /// YouTube's title overlay fades.
     case whole
+    /// Shown whole, with a glow around it that follows the picture: a
+    /// blurred copy of the playing video, sampled about once a second
+    /// (`MusicVideoAmbience`), like YouTube's ambient mode.
+    case ambient
 
     var id: String { rawValue }
 
@@ -24,8 +28,15 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .fill: return "Fill the screen"
         case .whole: return "Show the whole video"
+        case .ambient: return "Whole video, ambient glow"
         }
     }
+
+    /// The whole picture is shown (its width matched), not cropped to fill.
+    var isWhole: Bool { self != .fill }
+
+    /// The glow around the picture follows the video.
+    var followsVideo: Bool { self == .ambient }
 
     static let youTubeKey = "custom.musicVideoFraming"
     static let libraryKey = "custom.libraryVideoFraming"
@@ -53,24 +64,24 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
     var youTubeOverscan: Double { self == .fill ? Self.fillOverscan : 1 }
 
     /// How long a YouTube player that starts playing stays hidden.
-    var revealHold: TimeInterval { self == .whole ? Self.titleOverlayHold : 0 }
+    var revealHold: TimeInterval { isWhole ? Self.titleOverlayHold : 0 }
 
     /// How a library video's AVPlayerLayer draws a picture of
     /// `contentAspect` (nil until known) in `container`: whole matches the
     /// width, which is AVFoundation's fit for a wider picture and its fill
     /// for a taller one.
     func videoGravity(contentAspect: CGFloat?, in container: CGSize) -> AVLayerVideoGravity {
-        guard self == .whole else { return .resizeAspectFill }
+        guard isWhole else { return .resizeAspectFill }
         guard let contentAspect, contentAspect > 0, contentAspect.isFinite,
               container.width > 0, container.height > 0 else { return .resizeAspect }
         return contentAspect >= container.width / container.height ? .resizeAspect : .resizeAspectFill
     }
 
     /// The extra scale of a fitted picture (none when filled).
-    var bleedScale: CGFloat { self == .whole ? Self.wholeBleed : 1 }
+    var bleedScale: CGFloat { isWhole ? Self.wholeBleed : 1 }
 
     /// Whether a blurred backdrop shows around the picture.
-    var showsBackdrop: Bool { self == .whole }
+    var showsBackdrop: Bool { isWhole }
 
     /// Where a video of `aspect` (width / height) is drawn in `container`
     /// (centred; may run past the container's edges, which clip it).
@@ -84,9 +95,9 @@ enum MusicVideoFraming: String, CaseIterable, Identifiable, Sendable {
         var size: CGSize
         switch self {
         case .fill: size = fits ? byHeight : byWidth
-        case .whole: size = byWidth
+        case .whole, .ambient: size = byWidth
         }
-        let grow = self == .whole ? Self.wholeBleed : 1
+        let grow = isWhole ? Self.wholeBleed : 1
         size = CGSize(width: size.width * grow, height: size.height * grow)
         return CGRect(x: (container.width - size.width) / 2, y: (container.height - size.height) / 2,
                       width: size.width, height: size.height)

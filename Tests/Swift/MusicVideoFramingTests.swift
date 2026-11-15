@@ -56,7 +56,7 @@ final class MusicVideoFramingTests: XCTestCase {
     func testTitles() {
         XCTAssertEqual(MusicVideoFraming.fill.title, "Fill the screen")
         XCTAssertEqual(MusicVideoFraming.whole.title, "Show the whole video")
-        XCTAssertEqual(MusicVideoFraming.allCases, [.fill, .whole])
+        XCTAssertEqual(MusicVideoFraming.allCases, [.fill, .whole, .ambient])
     }
 
     // MARK: Layout maths
@@ -148,6 +148,32 @@ final class MusicVideoFramingTests: XCTestCase {
         XCTAssertEqual(MusicVideoFraming.fill.bleedScale, 1)
         XCTAssertTrue(MusicVideoFraming.whole.showsBackdrop)
         XCTAssertFalse(MusicVideoFraming.fill.showsBackdrop)
+    }
+
+    func testAmbientIsWholeWithAGlow() {
+        let ambient = MusicVideoFraming.ambient, whole = MusicVideoFraming.whole
+        XCTAssertEqual(MusicVideoFraming(stored: "ambient"), .ambient)
+        XCTAssertTrue(ambient.isWhole && ambient.showsBackdrop && ambient.followsVideo)
+        XCTAssertFalse(whole.followsVideo)
+        XCTAssertFalse(MusicVideoFraming.fill.isWhole)
+        XCTAssertEqual(ambient.rect(aspect: hd, in: laptop), whole.rect(aspect: hd, in: laptop))
+        XCTAssertEqual(ambient.revealHold, whole.revealHold)
+        XCTAssertEqual(ambient.youTubeOverscan, 1)
+        XCTAssertEqual(ambient.videoGravity(contentAspect: hd, in: laptop), whole.videoGravity(contentAspect: hd, in: laptop))
+    }
+
+    func testAmbientGlowIsSmallAndBlurred() throws {
+        let side = 640
+        let context = try XCTUnwrap(CGContext(data: nil, width: side, height: side / 2, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: side / 2, height: side / 2))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: side / 2, y: 0, width: side / 2, height: side / 2))
+        let glow = try XCTUnwrap(MusicVideoAmbience.glow(from: try XCTUnwrap(context.makeImage())))
+        XCTAssertLessThanOrEqual(CGFloat(glow.width), MusicVideoAmbience.sampleWidth + 1)
+        XCTAssertGreaterThan(glow.width, 0)
     }
 
     // MARK: YouTube page and reveal
