@@ -200,23 +200,129 @@ final class OpeningTitlePreviewTests: XCTestCase {
         }
     }
 
-    /// The floating lyrics window over a dark app, at its default size.
+    /// "Keep the song title on screen": the desktop card well into the song
+    /// with the lyrics singing, from the start and joined part-way, and the
+    /// floating window's row above its lyrics (default and small sizes,
+    /// over a dark and a light app). Renders go to `<dir>/kept/`.
+    func testRenderKeptTitlePreviews() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["LUNALYR_OPENING_PREVIEWS"] ?? environment["TEST_RUNNER_LUNALYR_OPENING_PREVIEWS"],
+              !path.isEmpty else {
+            throw XCTSkip("Set TEST_RUNNER_LUNALYR_OPENING_PREVIEWS=<dir> to render the kept title previews")
+        }
+        let folder = URL(fileURLWithPath: path).appendingPathComponent("kept")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let model = LyricsViewModel.shared, settings = VersoCustom.Settings.shared
+        let extras = LunalyrExtras.shared, readings = RomanizationOptions.shared
+        let saved = (lines: model.lines, plain: model.plainLines, notFound: model.notFound, loading: model.isLoading,
+                     composition: settings.lyricComposition, hidden: extras.lyricsHidden, display: readings.display)
+        let keepSetting = UserDefaults.standard.object(forKey: OpeningTitle.alwaysKey)
+        defer {
+            model.lines = saved.lines
+            model.plainLines = saved.plain
+            model.notFound = saved.notFound
+            model.isLoading = saved.loading
+            settings.lyricComposition = saved.composition
+            extras.lyricsHidden = saved.hidden
+            if readings.display != saved.display { readings.display = saved.display }
+            if let keepSetting { UserDefaults.standard.set(keepSetting, forKey: OpeningTitle.alwaysKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.alwaysKey) }
+        }
+        UserDefaults.standard.set(true, forKey: OpeningTitle.alwaysKey)
+        model.plainLines = []
+        model.notFound = false
+        model.isLoading = false
+        settings.lyricComposition = .portal
+        extras.lyricsHidden = false
+        let lines = (0..<40).map { index in
+            Self.spaced(index % 2 == 0 ? "Always felt like you were gonna stick around"
+                                       : "Now the summer's over and I'm watching you go", start: 11 + Double(index) * 4)
+        }
+        model.lines = lines
+        let music = FakeMusicApp()
+        music.queue = [FakeMusicApp.Song(id: "00000000000000A2", name: "Human Nature", artist: "Yot Club", album: "Rare Hymns",
+                                         artwork: Self.coverPNG((Color(red: 0.95, green: 0.5, blue: 0.35),
+                                                                 Color(red: 0.25, green: 0.15, blue: 0.45))))]
+        music.position = 0
+        let harness = PlayerHarness(music: music)
+        harness.start()
+        let artDeadline = Date().addingTimeInterval(3)
+        while harness.monitor.currentTrackArtwork == nil, Date() < artDeadline {
+            harness.scheduler.drain()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        let song = Self.songs[0]
+        // Seen from the start (seen at 0.1), or first seen at 90 s; drawn at `time`.
+        let shots: [(String, first: Double, time: Double)] = [("from-start-entering-lyrics", 0.1, 13.5),
+                                                              ("from-start-mid-song", 0.1, 96),
+                                                              ("joined-mid-song-entering", 90, 90.9),
+                                                              ("joined-mid-song-settled", 90, 99)]
+        for scene in [Backdrop.dark, .bright] {
+            for shot in shots {
+                var wall = Date().timeIntervalSinceReferenceDate + 60
+                let renderer = ImageRenderer(content: Frame(scene: scene, song: song, time: shot.first, wall: wall,
+                                                            monitor: harness.monitor))
+                renderer.scale = 1
+                renderer.render { _, _ in }
+                var now = max(shot.first, shot.time - 1.6)
+                while now < shot.time {
+                    now = min(shot.time, now + 1.0 / 30)
+                    wall += 1.0 / 30
+                    renderer.content = Frame(scene: scene, song: song, time: now, wall: wall, monitor: harness.monitor)
+                    renderer.render { _, _ in }
+                }
+                let image = try XCTUnwrap(renderer.cgImage)
+                try DesktopPlayerPreviewTests.write(image, to: folder.appendingPathComponent(
+                    "desktop-\(shot.0)-\(scene.rawValue).png"))
+            }
+        }
+        for preset in [FloatingLyricsOptions.SizePreset.medium, .small] {
+            let textSize = CGFloat(preset.rawValue)
+            let window = FloatingFrame.defaultSize(textSize: textSize,
+                in: CGRect(origin: .zero, size: Self.screen).insetBy(dx: 0, dy: 60))
+            for light in [false, true] {
+                for shot in [("entering", 0.1, 1.2), ("mid-song", 0.1, 96.0)] {
+                    var wall = Date().timeIntervalSinceReferenceDate + 60
+                    let renderer = ImageRenderer(content: FloatingFrameShot(size: window, textSize: textSize, time: shot.1,
+                                                                            wall: wall, monitor: harness.monitor, light: light))
+                    renderer.scale = 2
+                    renderer.render { _, _ in }
+                    var now = max(shot.1, shot.2 - 1.6)
+                    while now < shot.2 {
+                        now = min(shot.2, now + 1.0 / 30)
+                        wall += 1.0 / 30
+                        renderer.content = FloatingFrameShot(size: window, textSize: textSize, time: now, wall: wall,
+                                                             monitor: harness.monitor, light: light)
+                        renderer.render { _, _ in }
+                    }
+                    let image = try XCTUnwrap(renderer.cgImage)
+                    try DesktopPlayerPreviewTests.write(image, to: folder.appendingPathComponent(
+                        "floating-\(preset.title.lowercased())-\(light ? "light" : "dark")-\(shot.0).png"))
+                }
+            }
+        }
+    }
+
+    /// The floating lyrics window over a dark app (or a light one), at its default size.
     struct FloatingFrameShot: View {
         let size: CGSize
         let textSize: CGFloat
         let time: Double
         let wall: Double
         let monitor: NowPlayingMonitor
+        var light = false
 
         var body: some View {
-            let metrics = LyricViewportMetrics(size: size, textSize: textSize)
+            let metrics = LyricViewportMetrics(size: size, textSize: textSize,
+                                               titleRow: OpeningTitle.isOn && OpeningTitle.keeps)
             ZStack {
-                Color(white: 0.16)
+                Color(white: light ? 0.93 : 0.16)
                 FloatingLyricsFrame(backdrop: FloatingLyricsOptions.defaultBackdrop, reduceTransparency: false,
                                     albumAccent: SIMD3(0.05, 0.6, 0.9)) {
                     LyricLayer(time: time, baseSize: metrics.baseSize, maxWidth: metrics.stageSize.width,
                                maxHeight: metrics.stageSize.height, mood: .neutral,
-                               accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42), trackSeed: 4242, wall: wall)
+                               accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42), trackSeed: 4242, wall: wall,
+                               titleBand: metrics.titleBand)
                         .frame(width: size.width, height: size.height)
                         .environmentObject(monitor)
                 }

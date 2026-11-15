@@ -607,9 +607,11 @@ struct NowPlayingServices {
                 await MotionArtworkProvider.shared.motion(album: track.album, artist: track.artist, title: track.title)
             },
             allowsMotionLookup: { track in
-                // Animated covers only ever play in Custom Mix.
+                // Animated covers play as the wallpaper only in Custom Mix;
+                // the opening title's cover plays one whatever the switch.
                 let settings = Settings.shared
-                return settings.motionArtworkEnabled && settings.backgroundMode == .auto
+                let wallpaper = settings.motionArtworkEnabled && settings.backgroundMode == .auto
+                return (wallpaper || OpeningTitle.wantsMotionCover)
                     && !settings.excludesMotion(artist: track.artist, album: track.album)
             },
             motionSettingsChanged: Settings.shared.objectWillChange

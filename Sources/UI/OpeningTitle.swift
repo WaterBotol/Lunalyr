@@ -17,13 +17,16 @@ enum OpeningTitle {
 
     static var isOn: Bool { UserDefaults.standard.object(forKey: settingKey) as? Bool ?? true }
 
-    /// The full card every time, not only at a song's start: also a song
-    /// joined part-way (opening Lunalyr mid-song, skipping ahead), and a song
-    /// whose singing starts too soon for it. It then shows beside the lyrics,
-    /// low on the left where it always sits. Testers asked for it (Nov 2026).
+    /// Keep the song title on screen: the card enters as usual (at the
+    /// song's start, or when Lunalyr joins it part-way) and stays for the
+    /// whole song, settling to `restOpacity` once it would have left, so
+    /// there is always a name for what is playing. Low on the left beside
+    /// the lyrics on the desktop; a compact row above them in the floating
+    /// window. Testers asked for it (Nov 2026). The key predates the
+    /// setting's present meaning ("show it in full mid-song too").
     static let alwaysKey = "custom.openingTitleAlways"
 
-    static var always: Bool { UserDefaults.standard.bool(forKey: alwaysKey) }
+    static var keeps: Bool { UserDefaults.standard.bool(forKey: alwaysKey) }
 
     /// The album cover beside the title.
     static let coverKey = "custom.openingTitleCover"
@@ -37,6 +40,97 @@ enum OpeningTitle {
         return artwork
     }
 
+    // MARK: Where it sits
+
+    /// Where the card sits on the desktop and how large, as set by dragging
+    /// it on the Settings picture: its lower-left corner as shares of the
+    /// screen (so it lands in the same place on every display), and a
+    /// scale. Nil `corner`: the default place, low on the left.
+    struct Placement: Equatable {
+        /// The corner's two shares, stored apart (`@AppStorage` reads them).
+        static let leftKey = "custom.openingTitleLeft"
+        static let liftKey = "custom.openingTitleLift"
+        static let scaleKey = "custom.openingTitleScale"
+        static let scales: ClosedRange<Double> = 0.6...1.6
+
+        /// Left edge and distance up from the bottom, as shares of the screen.
+        var corner: CGPoint?
+        var scale = 1.0
+
+        static let standard = Placement()
+        var isStandard: Bool { corner == nil && abs(scale - 1) < 0.001 }
+
+        static func stored(_ defaults: UserDefaults = .standard) -> Placement {
+            var placement = Placement()
+            if let left = defaults.object(forKey: leftKey) as? Double, let lift = defaults.object(forKey: liftKey) as? Double,
+               left.isFinite, lift.isFinite {
+                placement.corner = CGPoint(x: left, y: lift)
+            }
+            if let scale = defaults.object(forKey: scaleKey) as? Double, scale.isFinite {
+                placement.scale = min(scales.upperBound, max(scales.lowerBound, scale))
+            }
+            return placement
+        }
+
+        func store(_ defaults: UserDefaults = .standard) {
+            if let corner {
+                defaults.set(Double(corner.x), forKey: Self.leftKey)
+                defaults.set(Double(corner.y), forKey: Self.liftKey)
+            } else {
+                defaults.removeObject(forKey: Self.leftKey)
+                defaults.removeObject(forKey: Self.liftKey)
+            }
+            if abs(scale - 1) < 0.001 { defaults.removeObject(forKey: Self.scaleKey) }
+            else { defaults.set(min(Self.scales.upperBound, max(Self.scales.lowerBound, scale)), forKey: Self.scaleKey) }
+        }
+
+        static func reset(_ defaults: UserDefaults = .standard) {
+            defaults.removeObject(forKey: leftKey)
+            defaults.removeObject(forKey: liftKey)
+            defaults.removeObject(forKey: scaleKey)
+        }
+    }
+
+    /// Kept clear of the screen's edges (and the menu bar, at the top).
+    static let edgeMargin: CGFloat = 16
+    static let topMargin: CGFloat = 40
+
+    /// The card's box on a desktop of `size` (origin top left): as wide as
+    /// a title may run, and as tall as a full card with a cover, at its
+    /// scale; its lower-left corner where the user put it, kept on screen.
+    static func box(in size: CGSize, baseSize: CGFloat, placement: Placement) -> CGRect {
+        let scale = CGFloat(min(Placement.scales.upperBound, max(Placement.scales.lowerBound, placement.scale)))
+        let width = min(size.width * 0.46 * scale, max(1, size.width - 2 * edgeMargin))
+        let height = min(baseSize * scale * 2.3, max(1, size.height - edgeMargin - topMargin))
+        let leading = placement.corner.map { $0.x * size.width } ?? max(40, size.width * 0.058)
+        let bottom = placement.corner.map { $0.y * size.height } ?? max(96, size.height * 0.13)
+        let x = min(max(edgeMargin, leading), max(edgeMargin, size.width - width - edgeMargin))
+        let lift = min(max(edgeMargin, bottom), max(edgeMargin, size.height - height - topMargin))
+        return CGRect(x: x, y: size.height - lift - height, width: width, height: height)
+    }
+
+    /// The placement that puts the card's box at `box` on a desktop of `size`.
+    static func placement(for box: CGRect, in size: CGSize, scale: Double) -> Placement {
+        Placement(corner: CGPoint(x: box.minX / max(1, size.width), y: (size.height - box.maxY) / max(1, size.height)),
+                  scale: min(Placement.scales.upperBound, max(Placement.scales.lowerBound, scale)))
+    }
+
+    /// The animated cover the card plays for `track`: the album's own,
+    /// whatever the Animated covers switch says (testers asked for it, Nov
+    /// 2026), unless the album is one the user left out of animated covers.
+    @MainActor
+    static func motionCover(_ motion: MotionArtworkProvider.Motion?, track: NowPlayingMonitor.Track?,
+                            settings: Settings) -> URL? {
+        guard let motion, isOn, showsCover, !settings.excludesMotion(artist: track?.artist, album: track?.album) else {
+            return nil
+        }
+        return motion.square
+    }
+
+    /// Whether the card wants the album's animated cover looked up, apart
+    /// from the wallpaper's own Animated covers.
+    static var wantsMotionCover: Bool { isOn && showsCover }
+
     // Type sizes, as shares of the title's own size (before a long title is
     // set smaller), so the hierarchy holds at every size.
     static let artistShare: CGFloat = 0.32
@@ -46,6 +140,20 @@ enum OpeningTitle {
     static func glowStrength(dark: Bool) -> Double { dark ? 0.35 : 1 }
     static let readingShare: CGFloat = 0.32
     static let albumShare: CGFloat = 0.26
+    /// The title face's cap height, as a share of its size, for lining the
+    /// cover up with the title's capitals.
+    static let capHeightShare: CGFloat = 0.7
+
+    /// The card's spacing, one scale in steps of the title's nominal size:
+    /// `line` between lines that belong together (the artist and album),
+    /// `reading` under the title, `group` between the title and the
+    /// details, and between the cover and the words.
+    struct Spacing {
+        let nominal: CGFloat
+        var line: CGFloat { nominal * 0.08 }
+        var reading: CGFloat { nominal * 0.12 }
+        var group: CGFloat { nominal * 0.24 }
+    }
 
     /// How much of the card is drawn.
     enum Size: Equatable {
@@ -78,6 +186,20 @@ enum OpeningTitle {
         /// No lyrics were found: the card stays, resting after `restAfter`.
         /// Its leave and end are infinite until lyrics arrive (`leaving`).
         var stays = false
+        /// Kept on screen for the whole song (`keeps`): it stays, and only
+        /// a new song ends it.
+        var kept = false
+        /// A kept card: where the ordinary card would have left and been
+        /// gone (`start` when there would have been none). It rests from
+        /// `ordinaryLeave`, and what waits for the card (the credits)
+        /// waits for `ordinaryEnd` instead of for ever.
+        var ordinaryLeave: Double? = nil
+        var ordinaryEnd: Double? = nil
+
+        /// When what waits for the card to go may start.
+        var clears: Double { ordinaryEnd ?? end }
+        /// When a staying card starts to ease to rest.
+        var restsFrom: Double { ordinaryLeave ?? settled + OpeningTitle.restAfter }
     }
 
     // Timing (seconds of song time).
@@ -119,28 +241,23 @@ enum OpeningTitle {
     /// The card's timing for a song first seen at `joined` seconds in, or
     /// nil when there is no room for it.
     static func schedule(words: Words, joined: Double = 0, previewLead: Double = 0.45,
-                         always: Bool = false) -> Schedule? {
+                         keep: Bool = false) -> Schedule? {
         let partWay = joined > midSong
         let start = partWay ? joined + joinLead : lead
+        if keep {
+            // The full card, from the usual moment, for the whole song.
+            let ordinary = schedule(words: words, joined: joined, previewLead: previewLead)
+            let settled = start + fullEntrance
+            return Schedule(start: start, settled: settled, leave: .infinity, end: .infinity, size: .full, stays: true,
+                            kept: true, ordinaryLeave: max(settled, ordinary?.leave ?? settled),
+                            ordinaryEnd: ordinary?.end ?? start)
+        }
         func card(_ size: Size, leave: Double) -> Schedule {
             let entrance = size == .full ? fullEntrance : compactEntrance
             let exit = size == .full ? fullExit : compactExit
             return Schedule(start: start, settled: start + entrance, leave: leave, end: leave + exit, size: size)
         }
         let brief = card(.compact, leave: start + compactEntrance + briefHold)
-        if always {
-            // The full card, held as through a long intro (`always`); where
-            // the words leave it room, it still goes before they start.
-            if case .timed(firstLine: let first?) = words, !partWay {
-                let gone = deadline(firstLine: first, previewLead: previewLead)
-                if gone - start >= fullEntrance + fullMinimumHold + fullExit {
-                    return card(.full, leave: min(gone - fullExit, start + fullEntrance + lyricHold))
-                }
-            }
-            if case .none = words, !partWay { return card(.full, leave: start + fullEntrance + wordlessHold) }
-            if case .timed(firstLine: nil) = words, !partWay { return card(.full, leave: start + fullEntrance + wordlessHold) }
-            return card(.full, leave: start + fullEntrance + lyricHold)
-        }
         switch words {
         case .showing:
             return brief
@@ -165,11 +282,11 @@ enum OpeningTitle {
     /// `found`: it enters as usual (full, or compact for a song joined
     /// part-way) and stays for the rest of the song. When the lookup ran on
     /// after the card it held had begun to leave, it enters afresh.
-    static func staying(joined: Double = 0, found: Double = 0, always: Bool = false) -> Schedule {
+    static func staying(joined: Double = 0, found: Double = 0) -> Schedule {
         let partWay = joined > midSong
         var start = partWay ? joined + joinLead : lead
-        if let held = schedule(words: .none, joined: joined, always: always), found > held.leave { start = found + joinLead }
-        let size: Size = partWay && !always ? .compact : .full
+        if let held = schedule(words: .none, joined: joined), found > held.leave { start = found + joinLead }
+        let size: Size = partWay ? .compact : .full
         let entrance = size == .full ? fullEntrance : compactEntrance
         return Schedule(start: start, settled: start + entrance, leave: .infinity, end: .infinity, size: size, stays: true)
     }
@@ -177,7 +294,7 @@ enum OpeningTitle {
     /// A staying card once lyrics arrive at song time `arrival`: it leaves
     /// from then, or once it has settled, with its ordinary exit.
     static func leaving(_ schedule: Schedule, at arrival: Double) -> Schedule {
-        guard schedule.leave == .infinity else { return schedule }
+        guard schedule.leave == .infinity, !schedule.kept else { return schedule }
         var card = schedule
         card.leave = max(arrival, schedule.settled)
         card.end = card.leave + (schedule.size == .full ? fullExit : compactExit)
@@ -209,7 +326,7 @@ enum OpeningTitle {
     /// How far a staying card has eased to rest at `time`, 0...1.
     static func rest(_ schedule: Schedule, at time: Double) -> Double {
         guard schedule.stays else { return 0 }
-        return Easing.smoothstep((time - schedule.settled - restAfter) / restEase)
+        return Easing.smoothstep((time - schedule.restsFrom) / restEase)
     }
 
     /// The start of the first line that is sung (credits and breaks are not).
@@ -231,6 +348,8 @@ enum OpeningTitle {
         var rest: Double = 0
         /// Staying with no leave due: only an input (lyrics arriving) ends it.
         var stays = false
+        /// Kept for the whole song (`Schedule.kept`).
+        var kept = false
 
         /// The card's strength before its exit.
         var opacity: Double { 1 - (1 - OpeningTitle.restOpacity) * rest }
@@ -239,11 +358,11 @@ enum OpeningTitle {
     static func phase(_ schedule: Schedule?, at time: Double) -> Phase? {
         guard let schedule, time >= schedule.start, time < schedule.end else { return nil }
         let exit = time <= schedule.leave ? 0 : (time - schedule.leave) / (schedule.end - schedule.leave)
-        let restStart = schedule.settled + restAfter
+        let restStart = schedule.restsFrom
         let resting = schedule.stays && time >= restStart && time <= restStart + restEase
         return Phase(age: time - schedule.start, exit: min(1, max(0, exit)), size: schedule.size,
                      moving: time < schedule.settled || time > schedule.leave || resting,
-                     rest: rest(schedule, at: time), stays: schedule.leave == .infinity)
+                     rest: rest(schedule, at: time), stays: schedule.leave == .infinity, kept: schedule.kept)
     }
 
     /// 0...1: how much of something else naming the song (the loading
@@ -302,6 +421,17 @@ enum OpeningTitle {
                           artist: part(0.45, 1.1), album: part(0.75, 0.85))
         }
     }
+
+    // The floating window's kept title: one row above the lyrics.
+    /// Its margin from the window's top, the cover's side and its type, as
+    /// shares of the lyric size.
+    static let rowMargin: CGFloat = 0.18
+    static let rowCover: CGFloat = 0.62
+    static let rowTitle: CGFloat = 0.38
+    static let rowArtist: CGFloat = 0.3
+    /// The height kept clear for the row: its margin, the cover, and a gap
+    /// before the lyrics.
+    static func rowBand(baseSize: CGFloat) -> CGFloat { baseSize * (rowMargin + rowCover + 0.16) }
 
     /// 1 for a title of up to 24 characters, down to 0.7 for a long one.
     static func lengthScale(_ title: String) -> CGFloat {
@@ -408,12 +538,15 @@ final class OpeningTitleMemory: ObservableObject {
     }
 
     /// The song time at which `track` was first seen: 0 for a song seen from
-    /// its start, or once playback is back at its start.
+    /// its start, or once playback is back at its start. Playback sought
+    /// back before that moment joins the song there instead, so a card
+    /// (a kept one above all) is not missing until the old moment returns.
     func joined(track: Int, at time: Double) -> Double {
         if track != self.track {
             self.track = track
             joinedAt = time
         }
+        if time < joinedAt { joinedAt = time }
         if time < OpeningTitle.midSong { joinedAt = 0 }
         return joinedAt
     }
@@ -450,12 +583,21 @@ struct OpeningTitleCard: View {
     let reading: String?
     /// The album cover, or nil for none.
     var cover: NSImage? = nil
+    /// The album's animated cover (`NowPlayingMonitor.motionArtwork`), played
+    /// in the cover's place whatever the Animated covers switch says; the
+    /// still shows while it loads. Nil for none.
+    var motionCover: URL? = nil
+    /// The stage is paused: so is the animated cover.
+    var paused = false
     /// The lyric's base size on this screen.
     let baseSize: CGFloat
     let accent: Color
     let mood: TrackMood
     /// The floating lyrics: centred in the window, compact, no scrim of its own.
     var floating = false
+    /// A kept title in the floating window: one compact row at the top,
+    /// above the lyrics (`OpeningTitle.rowBand`), instead of the card.
+    var row = false
     @ObservedObject private var settings = Settings.shared
     @Environment(\.lyricReduceMotion) private var reduceMotion
     @Environment(\.lyricInk) private var ink
@@ -466,10 +608,18 @@ struct OpeningTitleCard: View {
             let compact = floating || phase.size == .compact
             let reveal = OpeningTitle.Reveal.at(phase.age, size: compact ? .compact : .full, reduceMotion: reduceMotion)
             let leaving = Easing.smoothstep(phase.exit)
-            let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize)
+            // Where the user put it on the desktop, and how large
+            // (Settings › Look, Text: `OpeningTitle.Placement`).
+            let place = OpeningTitle.Placement.stored()
+            let box = OpeningTitle.box(in: size, baseSize: baseSize, placement: place)
+            let unit = floating ? baseSize * 0.95 : (compact ? baseSize * 0.8 : baseSize) * CGFloat(place.scale)
             let dark = Self.isDark(ink.base.rest)
+            if row {
+                titleRow(reveal: reveal, leaving: leaving, dark: dark, width: size.width * 0.9)
+                    .frame(width: size.width, height: size.height, alignment: .top)
+            } else {
             let block = card(unit: unit, compact: compact, reveal: reveal, dark: dark,
-                             width: floating ? size.width * 0.9 : size.width * 0.46)
+                             width: floating ? size.width * 0.9 : box.width)
                 .opacity((1 - leaving) * phase.opacity)
                 .blur(radius: reduceMotion ? 0 : leaving * unit * 0.06)
                 .offset(y: reduceMotion ? 0 : -leaving * unit * 0.14)
@@ -485,13 +635,16 @@ struct OpeningTitleCard: View {
                                                .init(color: shade.opacity(0.28), location: 0.3),
                                                .init(color: shade.opacity(0.1), location: 0.65),
                                                .init(color: shade.opacity(0), location: 1)],
-                                       center: UnitPoint(x: 0.2, y: 0.8), startRadiusFraction: 0, endRadiusFraction: 0.5)
+                                       center: UnitPoint(x: (box.minX + box.width * 0.3) / max(1, size.width),
+                                                         y: (box.maxY - box.height * 0.4) / max(1, size.height)),
+                                       startRadiusFraction: 0, endRadiusFraction: 0.5)
                         .opacity(max(reveal.title, reveal.rule) * (1 - leaving) * phase.opacity)
                     block
-                        .padding(.leading, max(40, size.width * 0.058))
-                        .padding(.bottom, max(96, size.height * 0.13))
+                        .padding(.leading, box.minX)
+                        .padding(.bottom, size.height - box.maxY)
                 }
                 .frame(width: size.width, height: size.height, alignment: .bottomLeading)
+            }
             }
         }
         .allowsHitTesting(false)
@@ -519,83 +672,125 @@ struct OpeningTitleCard: View {
         // The card glows in the album's own colour: a tight halo and a wide,
         // soft bloom, arriving with the words and leaving with them.
         let glow = OpeningTitle.glowStrength(dark: dark)
-        let readingTop = nominal * 0.1, artistTop = nominal * (compact ? 0.2 : 0.26)
-        // The cover is as tall as the title block: the title, its reading
-        // and the artist.
-        let titleLines: CGFloat = OpeningTitle.lengthScale(title) < 1 ? 2 : 1
-        let side = titleLines * titleSize * 1.2 + (showsReading ? readingTop + readingSize * 1.25 : 0)
-            + artistTop + artistSize * 1.2
-        let gap = side * 0.16
-        let columnWidth = cover == nil ? width : max(width * 0.4, width - side - gap)
+        // One spacing scale (`OpeningTitle.Spacing`): the reading close
+        // under its title, the artist a clear step down, the album tight
+        // under the artist; the cover the same step away from the words.
+        let step = OpeningTitle.Spacing(nominal: nominal)
         // Centred in the floating window without a cover; beside one, the
         // words line up against it.
         let centred = floating && cover == nil
         let rise = reduceMotion ? 0 : unit * 0.32
-        HStack(alignment: .top, spacing: gap) {
-            if let cover {
-                Image(nsImage: cover)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: side, height: side)
-                    .clipShape(RoundedRectangle(cornerRadius: side * 0.07, style: .continuous))
-                    .shadow(color: .black.opacity(0.45), radius: side * 0.08, y: side * 0.03)
-                    .shadow(color: accent.opacity(0.55 * glow), radius: side * 0.22)
+        let words = VStack(alignment: centred ? .center : .leading, spacing: 0) {
+            Group {
+                Text(title)
+                    .font(settings.lyricFont(size: titleSize, hero: true, mood: mood))
+                    .foregroundStyle(type)
+                    .multilineTextAlignment(centred ? .center : .leading)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.55)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .mask { wipe(reveal.wipe) }
+                    .opacity(min(1, reveal.title * 1.6))
+                    .offset(y: (1 - reveal.title) * rise)
+                if let reading, showsReading {
+                    Text(reading)
+                        .font(settings.uiFont(size: readingSize, mood: mood))
+                        .foregroundStyle(type.opacity(0.78))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.top, step.reading)
+                        .opacity(reveal.reading)
+                        .offset(y: (1 - reveal.reading) * rise * 0.5)
+                }
+                if !artist.isEmpty {
+                    // In the artist's own case, as the menu bar and player show it.
+                    Text(artist)
+                        .font(settings.uiFont(size: artistSize, mood: mood))
+                        .foregroundStyle(type.opacity(0.92))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.top, step.group)
+                        .opacity(reveal.artist)
+                }
+                if let album, !compact {
+                    Text(album)
+                        .font(settings.uiFont(size: albumSize, mood: mood))
+                        .kerning(albumSize * 0.02)
+                        .foregroundStyle(type.opacity(0.7))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.top, step.line)
+                        .opacity(reveal.album)
+                }
+            }
+            .compositingGroup()
+            // A soft shadow under the type, as the lyrics have, then the glow.
+            .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
+            .shadow(color: accent.opacity(0.7 * glow), radius: unit * 0.18)
+            .shadow(color: accent.opacity(0.45 * glow), radius: unit * 0.6)
+        }
+        if let cover {
+            // The cover spans the words exactly: its top on the title's
+            // cap height, its bottom on the last line's baseline.
+            CoverBesideWords(gap: step.group, capHeight: titleSize * OpeningTitle.capHeightShare, maximum: width) {
+                TitleCover(still: cover, motion: animatedCover)
+                    .clipShape(RoundedRectangle(cornerRadius: nominal * 0.1, style: .continuous))
+                    .shadow(color: .black.opacity(0.45), radius: nominal * 0.12, y: nominal * 0.04)
+                    .shadow(color: accent.opacity(0.55 * glow), radius: nominal * 0.32)
                     .scaleEffect(reduceMotion ? 1 : 0.9 + 0.1 * reveal.cover, anchor: .bottomLeading)
                     .opacity(reveal.cover)
+                words
             }
-            CappedWidth(maximum: columnWidth) {
-            VStack(alignment: centred ? .center : .leading, spacing: 0) {
-                Group {
-                    Text(title)
-                        .font(settings.lyricFont(size: titleSize, hero: true, mood: mood))
-                        .foregroundStyle(type)
-                        .multilineTextAlignment(centred ? .center : .leading)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.55)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .mask { wipe(reveal.wipe) }
-                        .opacity(min(1, reveal.title * 1.6))
-                        .offset(y: (1 - reveal.title) * rise)
-                    if let reading, showsReading {
-                        Text(reading)
-                            .font(settings.uiFont(size: readingSize, mood: mood))
-                            .foregroundStyle(type.opacity(0.78))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                                .padding(.top, readingTop)
-                            .opacity(reveal.reading)
-                            .offset(y: (1 - reveal.reading) * rise * 0.5)
-                    }
-                    if !artist.isEmpty {
-                        // In the artist's own case, as the menu bar and player show it.
-                        Text(artist)
-                            .font(settings.uiFont(size: artistSize, mood: mood))
-                            .foregroundStyle(type.opacity(0.92))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                                .padding(.top, artistTop)
-                            .opacity(reveal.artist)
-                    }
-                    if let album, !compact {
-                        Text(album)
-                            .font(settings.uiFont(size: albumSize, mood: mood))
-                            .kerning(albumSize * 0.02)
-                            .foregroundStyle(type.opacity(0.7))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                                .padding(.top, nominal * 0.1)
-                            .opacity(reveal.album)
-                    }
-                }
-                .compositingGroup()
-                // A soft shadow under the type, as the lyrics have, then the glow.
-                .shadow(color: (dark ? Color.white : .black).opacity(0.45), radius: unit * 0.12, y: unit * 0.015)
-                .shadow(color: accent.opacity(0.7 * glow), radius: unit * 0.18)
-                .shadow(color: accent.opacity(0.45 * glow), radius: unit * 0.6)
-            }
-            }
+        } else {
+            CappedWidth(maximum: width) { words }
         }
+    }
+
+    /// The floating window's kept title: the cover, the title and the
+    /// artist on one centred line, settling down from above as it enters
+    /// and lifting away as it leaves.
+    private func titleRow(reveal: OpeningTitle.Reveal, leaving: Double, dark: Bool, width: CGFloat) -> some View {
+        let type: Color = dark ? Color(white: 0.08) : .white
+        let side = baseSize * OpeningTitle.rowCover
+        let glow = OpeningTitle.glowStrength(dark: dark)
+        let arrival = reduceMotion ? reveal.title : Easing.smoothstep(reveal.title)
+        return HStack(spacing: baseSize * 0.2) {
+            if let cover {
+                TitleCover(still: cover, motion: animatedCover)
+                    .frame(width: side, height: side)
+                    .clipShape(RoundedRectangle(cornerRadius: side * 0.14, style: .continuous))
+                    .shadow(color: .black.opacity(0.4), radius: side * 0.08, y: side * 0.03)
+                    .opacity(reveal.cover)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: baseSize * 0.16) {
+                Text(title)
+                    .font(settings.lyricFont(size: baseSize * OpeningTitle.rowTitle, hero: true, mood: mood))
+                    .foregroundStyle(type)
+                    .layoutPriority(1)
+                if !artist.isEmpty {
+                    Text(artist)
+                        .font(settings.uiFont(size: baseSize * OpeningTitle.rowArtist, mood: mood))
+                        .foregroundStyle(type.opacity(0.78))
+                        .opacity(reveal.artist)
+                }
+            }
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .compositingGroup()
+            .shadow(color: (dark ? Color.white : .black).opacity(0.5), radius: baseSize * 0.1, y: baseSize * 0.015)
+            .shadow(color: accent.opacity(0.45 * glow), radius: baseSize * 0.3)
+        }
+        .frame(maxWidth: width)
+        .opacity(min(1, arrival * 1.4) * (1 - leaving) * phase.opacity)
+        .offset(y: reduceMotion ? 0 : -(1 - arrival + leaving) * baseSize * 0.18)
+        .padding(.top, baseSize * OpeningTitle.rowMargin)
+    }
+
+    /// The animated cover to play: none under Reduce Motion, where the
+    /// still stays (a looping picture is motion like any other).
+    private var animatedCover: (url: URL, paused: Bool)? {
+        guard let motionCover, !reduceMotion else { return nil }
+        return (motionCover, paused)
     }
 
     /// A soft left-to-right wipe: `progress` 0 hides everything, 1 shows it all.
@@ -606,6 +801,81 @@ struct OpeningTitleCard: View {
         return LinearGradient(stops: [.init(color: .black, location: max(0, edge)),
                                       .init(color: .clear, location: min(1, max(0.0001, edge + soft)))],
                               startPoint: .leading, endPoint: .trailing)
+    }
+}
+
+/// The card's cover: the still, filling its square, and over it the
+/// animated cover when there is one, looping silently on the shared player
+/// the wallpaper uses (`MotionArtworkView`), which fades in once it has a
+/// frame, so the still shows until then.
+struct TitleCover: View {
+    let still: NSImage
+    var motion: (url: URL, paused: Bool)?
+
+    var body: some View {
+        Color.clear
+            .overlay {
+                Image(nsImage: still)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+            }
+            .overlay {
+                if let motion {
+                    MotionArtworkView(url: motion.url, placement: .fill, isPaused: motion.paused)
+                }
+            }
+            .clipped()
+    }
+}
+
+/// The title card's grid: a square cover in the first column and the
+/// words in the second, a `gap` apart, together at most `maximum` wide. The
+/// cover is as tall as the words' type, from the first line's cap height
+/// (`capHeight` above its baseline) to the last line's baseline, and set
+/// level with it, so its edges line up with the text block rather than
+/// with the lines' leading.
+struct CoverBesideWords: Layout {
+    let gap: CGFloat
+    let capHeight: CGFloat
+    let maximum: CGFloat
+
+    private struct Fit {
+        var side: CGFloat
+        var coverTop: CGFloat
+        var words: CGSize
+    }
+
+    private func fit(_ proposal: ProposedViewSize, subviews: Subviews) -> Fit {
+        guard subviews.count == 2 else { return Fit(side: 0, coverTop: 0, words: .zero) }
+        let width = min(proposal.width ?? maximum, maximum)
+        // The cover's side depends on how the words wrap beside it, and
+        // they on its side: a few rounds settle it.
+        var side = width * 0.18
+        var top: CGFloat = 0
+        var size = CGSize.zero
+        for _ in 0..<4 {
+            let column = max(width * 0.4, width - side - gap)
+            let words = subviews[1].dimensions(in: ProposedViewSize(width: column, height: nil))
+            top = max(0, words[.firstTextBaseline] - capHeight)
+            size = CGSize(width: words.width, height: words.height)
+            side = max(capHeight, words[.lastTextBaseline] - top)
+        }
+        return Fit(side: side, coverTop: top, words: size)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let fit = fit(proposal, subviews: subviews)
+        return CGSize(width: fit.side + gap + fit.words.width, height: max(fit.words.height, fit.coverTop + fit.side))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let fit = fit(proposal, subviews: subviews)
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY + fit.coverTop),
+                          proposal: ProposedViewSize(width: fit.side, height: fit.side))
+        subviews[1].place(at: CGPoint(x: bounds.minX + fit.side + gap, y: bounds.minY),
+                          proposal: ProposedViewSize(width: fit.words.width, height: nil))
     }
 }
 

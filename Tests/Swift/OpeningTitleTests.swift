@@ -396,32 +396,196 @@ final class OpeningTitleTests: XCTestCase {
         XCTAssertNil(memory.hold(track: 3, kind: .synced, card: nil, at: 1))
     }
 
-    // MARK: Shown in full mid-song too
+    // MARK: Kept on screen for the whole song
 
-    func testAlwaysShowsTheFullCardWhenJoinedPartWay() throws {
-        let normal = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60))
-        XCTAssertEqual(normal.size, .compact)
-        let always = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60, always: true))
-        XCTAssertEqual(always.size, .full)
-        XCTAssertEqual(always.start, 60 + OpeningTitle.joinLead, accuracy: 1e-9)
-        XCTAssertEqual(always.leave - always.settled, OpeningTitle.lyricHold, accuracy: 1e-9)
-        XCTAssertEqual(OpeningTitle.schedule(words: .showing, joined: 60, always: true)?.size, .full)
-    }
-
-    func testAlwaysShowsItWhenTheSingingStartsAtOnce() throws {
-        XCTAssertNil(OpeningTitle.schedule(words: .timed(firstLine: 1)))
-        let always = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 1), always: true))
-        XCTAssertEqual(always.size, .full)
-        XCTAssertEqual(always.start, OpeningTitle.lead, accuracy: 1e-9)
-    }
-
-    func testAlwaysLeavesALongIntroAsBefore() {
-        for first in [6.0, 9.0, 20.0, 40.0] {
-            XCTAssertEqual(OpeningTitle.schedule(words: .timed(firstLine: first), always: true),
-                           OpeningTitle.schedule(words: .timed(firstLine: first)), "first line at \(first)")
+    func testAKeptCardEntersAsUsualAndNeverLeaves() throws {
+        let ordinary = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14)))
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        XCTAssertEqual(kept.start, ordinary.start, accuracy: 1e-9)
+        XCTAssertEqual(kept.size, .full)
+        XCTAssertTrue(kept.kept)
+        XCTAssertTrue(kept.stays)
+        XCTAssertEqual(kept.leave, .infinity)
+        XCTAssertEqual(kept.end, .infinity)
+        for time in [3.0, 30.0, 200.0, 1_000.0] {
+            XCTAssertNotNil(OpeningTitle.phase(kept, at: time), "on screen at \(time) s")
         }
-        XCTAssertEqual(OpeningTitle.schedule(words: .none, always: true), OpeningTitle.schedule(words: .none))
-        XCTAssertEqual(OpeningTitle.staying(joined: 60, always: true).size, .full)
+        // Lyrics arriving after a lookup found none do not end it.
+        XCTAssertEqual(OpeningTitle.leaving(kept, at: 40), kept)
+    }
+
+    func testAKeptCardRestsWhenTheOrdinaryOneWouldHaveLeft() throws {
+        let ordinary = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14)))
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        XCTAssertEqual(kept.restsFrom, ordinary.leave, accuracy: 1e-9)
+        XCTAssertEqual(OpeningTitle.rest(kept, at: ordinary.leave - 0.1), 0, accuracy: 1e-9)
+        XCTAssertEqual(OpeningTitle.rest(kept, at: ordinary.leave + OpeningTitle.restEase), 1, accuracy: 1e-9)
+        let phase = try XCTUnwrap(OpeningTitle.phase(kept, at: 60))
+        XCTAssertEqual(phase.opacity, OpeningTitle.restOpacity, accuracy: 1e-9)
+        XCTAssertFalse(phase.moving, "held at rest, nothing on it changes")
+        XCTAssertTrue(phase.kept)
+    }
+
+    func testWhatWaitsForAKeptCardWaitsOnlyForTheOrdinaryOne() throws {
+        let ordinary = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14)))
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14), keep: true))
+        XCTAssertEqual(kept.clears, ordinary.end, accuracy: 1e-9, "credits start where they always did")
+        XCTAssertEqual(ordinary.clears, ordinary.end)
+        // Singing at once: no ordinary card, so nothing is held up.
+        let soon = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 1), keep: true))
+        XCTAssertEqual(soon.clears, soon.start, accuracy: 1e-9)
+        XCTAssertEqual(soon.restsFrom, soon.settled, accuracy: 1e-9, "quiet as soon as it has arrived")
+    }
+
+    @MainActor func testAKeptCardShowsWhenLunalyrOpensMidSong() throws {
+        let memory = OpeningTitleMemory()
+        let joined = memory.joined(track: 7, at: 120)
+        XCTAssertEqual(joined, 120)
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: joined, keep: true))
+        XCTAssertEqual(kept.start, 120 + OpeningTitle.joinLead, accuracy: 1e-9)
+        XCTAssertEqual(kept.size, .full)
+        XCTAssertNotNil(OpeningTitle.phase(kept, at: 125))
+        XCTAssertNotNil(OpeningTitle.phase(kept, at: 200))
+        // Even when the song was first seen before its position was known.
+        let unknown = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 0, keep: true))
+        XCTAssertNotNil(OpeningTitle.phase(unknown, at: 120))
+    }
+
+    @MainActor
+    func testSeekingBackBeforeTheJoinJoinsThere() throws {
+        let memory = OpeningTitleMemory()
+        XCTAssertEqual(memory.joined(track: 7, at: 120), 120)
+        XCTAssertEqual(memory.joined(track: 7, at: 130), 120, "playing on")
+        XCTAssertEqual(memory.joined(track: 7, at: 60), 60, "sought back")
+        let kept = try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 12), joined: 60, keep: true))
+        XCTAssertNotNil(OpeningTitle.phase(kept, at: 61), "not missing until 120 s comes round again")
+        XCTAssertEqual(memory.joined(track: 7, at: 1), 0, "back at the start")
+    }
+
+    func testAKeptCardIsNotKeptWithoutTheSetting() throws {
+        XCTAssertFalse(try XCTUnwrap(OpeningTitle.schedule(words: .timed(firstLine: 14))).kept)
+        XCTAssertNil(OpeningTitle.schedule(words: .timed(firstLine: 1)))
         XCTAssertEqual(OpeningTitle.staying(joined: 60).size, .compact)
+    }
+
+    func testTheFloatingRowHasRoomAboveTheLyrics() {
+        let size = CGSize(width: 836, height: 202)
+        let plain = LyricViewportMetrics(size: size, textSize: 44)
+        let row = LyricViewportMetrics(size: size, textSize: 44, titleRow: true)
+        XCTAssertEqual(plain.titleBand, 0)
+        XCTAssertEqual(row.titleBand, OpeningTitle.rowBand(baseSize: 44))
+        XCTAssertEqual(row.stageSize.height, plain.stageSize.height - row.titleBand, accuracy: 0.001)
+        // The lyrics' top (centred under the band) stays below the row.
+        let lyricsTop = row.titleBand + (size.height - row.titleBand - row.stageSize.height) / 2
+        let rowBottom = 44 * (OpeningTitle.rowMargin + OpeningTitle.rowCover)
+        XCTAssertGreaterThan(lyricsTop, rowBottom)
+        XCTAssertEqual(LyricViewportMetrics(size: CGSize(width: 1512, height: 982), titleRow: true).titleBand, 0,
+                       "the desktop card sits beside the lyrics")
+    }
+
+    // MARK: The animated cover
+
+    @MainActor
+    func testTheCardPlaysTheAnimatedCoverWhateverTheSwitch() throws {
+        let name = "OpeningTitleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = VersoCustom.Settings(defaults: defaults, notifications: NotificationCenter())
+        settings.useMotionArtwork = false
+        let saved = (UserDefaults.standard.object(forKey: OpeningTitle.settingKey),
+                     UserDefaults.standard.object(forKey: OpeningTitle.coverKey))
+        defer {
+            if let on = saved.0 { UserDefaults.standard.set(on, forKey: OpeningTitle.settingKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.settingKey) }
+            if let cover = saved.1 { UserDefaults.standard.set(cover, forKey: OpeningTitle.coverKey) }
+            else { UserDefaults.standard.removeObject(forKey: OpeningTitle.coverKey) }
+        }
+        UserDefaults.standard.set(true, forKey: OpeningTitle.settingKey)
+        UserDefaults.standard.set(true, forKey: OpeningTitle.coverKey)
+        let motion = MotionArtworkProvider.Motion(square: URL(string: "https://example.invalid/square.m3u8")!, tall: nil)
+        XCTAssertEqual(OpeningTitle.motionCover(motion, track: nil, settings: settings), motion.square,
+                       "Animated covers off: the card still plays it")
+        XCTAssertTrue(OpeningTitle.wantsMotionCover)
+        XCTAssertNil(OpeningTitle.motionCover(nil, track: nil, settings: settings))
+        UserDefaults.standard.set(false, forKey: OpeningTitle.coverKey)
+        XCTAssertNil(OpeningTitle.motionCover(motion, track: nil, settings: settings), "no cover, no animated cover")
+        XCTAssertFalse(OpeningTitle.wantsMotionCover)
+    }
+
+    // MARK: Moved and resized on the Settings picture
+
+    func testTheDefaultPlaceIsUnchanged() {
+        for size in [CGSize(width: 1512, height: 982), CGSize(width: 1280, height: 800), CGSize(width: 2560, height: 1440)] {
+            let base = LyricViewportMetrics(size: size).baseSize
+            let box = OpeningTitle.box(in: size, baseSize: base, placement: .standard)
+            XCTAssertEqual(box.minX, max(40, size.width * 0.058), accuracy: 0.001)
+            XCTAssertEqual(size.height - box.maxY, max(96, size.height * 0.13), accuracy: 0.001)
+            XCTAssertEqual(box.width, size.width * 0.46, accuracy: 0.001)
+        }
+    }
+
+    func testAPlacedCardStaysOnEveryScreen() {
+        let corners = [CGPoint(x: -1, y: -1), CGPoint(x: 0.99, y: 0.99), CGPoint(x: 0.5, y: 2), CGPoint(x: 3, y: 0.1)]
+        for size in [CGSize(width: 1512, height: 982), CGSize(width: 1024, height: 640), CGSize(width: 900, height: 1600),
+                     CGSize(width: 5120, height: 1440)] {
+            let base = LyricViewportMetrics(size: size).baseSize
+            for corner in corners {
+                for scale in [0.6, 1, 1.6, 9] {
+                    let box = OpeningTitle.box(in: size, baseSize: base,
+                                               placement: .init(corner: corner, scale: scale))
+                    XCTAssertGreaterThanOrEqual(box.minX, 0, "\(size) \(corner) \(scale)")
+                    XCTAssertGreaterThanOrEqual(box.minY, 0, "\(size) \(corner) \(scale)")
+                    XCTAssertLessThanOrEqual(box.maxX, size.width, "\(size) \(corner) \(scale)")
+                    XCTAssertLessThanOrEqual(box.maxY, size.height, "\(size) \(corner) \(scale)")
+                }
+            }
+        }
+    }
+
+    func testThePlacementIsSavedAsSharesOfTheScreen() throws {
+        let name = "OpeningTitlePlacement-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertTrue(OpeningTitle.Placement.stored(defaults).isStandard)
+        let placed = OpeningTitle.Placement(corner: CGPoint(x: 0.6, y: 0.5), scale: 1.3)
+        placed.store(defaults)
+        XCTAssertEqual(OpeningTitle.Placement.stored(defaults), placed)
+        // The same share of a different screen.
+        let small = OpeningTitle.box(in: CGSize(width: 1000, height: 600), baseSize: 40,
+                                     placement: .init(corner: CGPoint(x: 0.3, y: 0.5), scale: 1))
+        XCTAssertEqual(small.minX, 300, accuracy: 0.001)
+        XCTAssertEqual(600 - small.maxY, 300, accuracy: 0.001)
+        defaults.set(40.0, forKey: OpeningTitle.Placement.scaleKey)
+        XCTAssertEqual(OpeningTitle.Placement.stored(defaults).scale, OpeningTitle.Placement.scales.upperBound)
+        OpeningTitle.Placement.reset(defaults)
+        XCTAssertTrue(OpeningTitle.Placement.stored(defaults).isStandard)
+    }
+
+    @MainActor
+    func testDraggingTheBoxMovesAndResizesTheCard() {
+        let desktop = CGSize(width: 1512, height: 982)
+        let base = LyricViewportMetrics(size: desktop).baseSize
+        let box = OpeningTitle.box(in: desktop, baseSize: base, placement: .standard)
+        let moved = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: 300, height: -200),
+                                             resizing: false, desktop: desktop, baseSize: base)
+        let after = OpeningTitle.box(in: desktop, baseSize: base, placement: moved)
+        XCTAssertEqual(after.minX, box.minX + 300, accuracy: 0.5)
+        XCTAssertEqual(after.minY, box.minY - 200, accuracy: 0.5)
+        // Far off the screen: kept on it.
+        let flung = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: 9_000, height: 9_000),
+                                             resizing: false, desktop: desktop, baseSize: base)
+        let kept = OpeningTitle.box(in: desktop, baseSize: base, placement: flung)
+        XCTAssertLessThanOrEqual(kept.maxX, desktop.width)
+        XCTAssertLessThanOrEqual(kept.maxY, desktop.height)
+        // The top-right corner out and up: larger, from the same lower-left corner.
+        let grown = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: 100, height: -40),
+                                             resizing: true, desktop: desktop, baseSize: base)
+        XCTAssertGreaterThan(grown.scale, 1)
+        let grownBox = OpeningTitle.box(in: desktop, baseSize: base, placement: grown)
+        XCTAssertEqual(grownBox.minX, box.minX, accuracy: 0.5)
+        XCTAssertEqual(grownBox.maxY, box.maxY, accuracy: 0.5)
+        let shrunk = TitleCardHandles.dragged(box, placement: .standard, by: CGSize(width: -2_000, height: 2_000),
+                                              resizing: true, desktop: desktop, baseSize: base)
+        XCTAssertEqual(shrunk.scale, OpeningTitle.Placement.scales.lowerBound)
     }
 }

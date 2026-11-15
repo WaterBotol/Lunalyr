@@ -596,6 +596,11 @@ final class LyricInkDirector {
         /// Whether this director's tone is the one the wallpaper's backing
         /// follows (`LyricTone`): the desktop lyrics, not floating ones.
         var publishesTone = false
+        /// Colours eased towards pastel (`LyricInk.pastel`) before they
+        /// are made readable; false keeps the chosen colours' own
+        /// lightness and chroma (`LyricColourOptions.pastelApplies`). The
+        /// contrast floors hold either way.
+        var pastel = true
     }
     typealias Stops = (OKLab, OKLab, OKLab, OKLab)
 
@@ -626,6 +631,8 @@ final class LyricInkDirector {
         OKLab(l: 0.84, chroma: 0.14, hue: 1.25), OKLab(l: 0.84, chroma: 0.15, hue: 3.12),
         OKLab(l: 0.80, chroma: 0.16, hue: 4.85), OKLab(l: 0.82, chroma: 0.16, hue: 5.82))
     private var albumStops: Stops = LyricInkDirector.fallbackPastels
+    /// The cover's own colours, unpastelled, for `Inputs.pastel` off.
+    private var albumRawStops: Stops = LyricInkDirector.fallbackPastels
     private var vivid = LyricInkDirector.fallbackPastels.2
     private var reactiveAccent = LyricInkDirector.fallbackPastels.3
     /// The cover's colours in OKLab, for "Album accent".
@@ -933,6 +940,7 @@ final class LyricInkDirector {
             vivid = Self.fallbackPastels.2
             reactiveAccent = Self.fallbackPastels.3
             albumStops = Self.fallbackPastels
+            albumRawStops = Self.fallbackPastels
             return
         }
         let backdropHue = backgroundHue ?? strongest.hue
@@ -965,6 +973,7 @@ final class LyricInkDirector {
         }
         lyric.sort { $0.hue < $1.hue }
         albumStops = Self.stops(lyric)
+        albumRawStops = Self.stops(picks.sorted { $0.hue < $1.hue })
     }
 
     private static func stops(_ colours: [OKLab]) -> Stops {
@@ -980,19 +989,21 @@ final class LyricInkDirector {
         case .albumDrift:
             // Keep the gradient phase in the same slot when a new cover
             // has a different number of colours.
-            return (albumStops, 4)
+            return (inputs.pastel ? albumStops : albumRawStops, 4)
         case .sungSweep:
             // The cover's colours, or the custom colours when set, each
             // made as strong as the single sung colour used to be.
             func strong(_ colour: OKLab) -> OKLab {
-                LyricInk.applyingStrength(1.35, to: LyricInk.pastel(colour, fallbackHue: vivid.hue))
+                guard inputs.pastel else { return colour }
+                return LyricInk.applyingStrength(1.35, to: LyricInk.pastel(colour, fallbackHue: vivid.hue))
             }
             if !inputs.custom.isEmpty {
                 let count = min(4, inputs.custom.count)
                 func at(_ index: Int) -> OKLab { strong(inputs.custom[index % count]) }
                 return ((at(0), at(1), at(2), at(3)), count)
             }
-            return ((strong(albumStops.0), strong(albumStops.1), strong(albumStops.2), strong(albumStops.3)), 4)
+            let album = inputs.pastel ? albumStops : albumRawStops
+            return ((strong(album.0), strong(album.1), strong(album.2), strong(album.3)), 4)
         case .musicReactive:
             let calm = inputs.reduceMotion
             let loud = inputs.audio.map { min(1, $0.rms * 2.4 + $0.bass * 0.6) } ?? inputs.vocal
@@ -1005,9 +1016,11 @@ final class LyricInkDirector {
             let second = OKLab(l: lightness, chroma: chroma * 0.9 + emphasis, hue: reactiveAccent.hue)
             return ((first, second, first, second), 2)
         case .customGradient:
-            guard !inputs.custom.isEmpty else { return (albumStops, 4) }
+            guard !inputs.custom.isEmpty else { return (inputs.pastel ? albumStops : albumRawStops, 4) }
             let count = min(4, inputs.custom.count)
-            func at(_ index: Int) -> OKLab { LyricInk.pastel(inputs.custom[index % count]) }
+            func at(_ index: Int) -> OKLab {
+                inputs.pastel ? LyricInk.pastel(inputs.custom[index % count]) : inputs.custom[index % count]
+            }
             return ((at(0), at(1), at(2), at(3)), count)
         }
     }

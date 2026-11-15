@@ -70,9 +70,13 @@ struct LyricColourSection: View {
                         .help("Add a fourth colour to the gradient")
                 }
             } label: {
-                CustomGradientSwatch(colours: options.customColours, strength: options.strength)
+                CustomGradientSwatch(colours: options.customColours, strength: options.strength,
+                                     pastel: options.pastel)
                     .frame(maxWidth: 180)
             }
+            Toggle("Make the colours pastel", isOn: $options.pastel)
+                .toggleStyle(StudioCheckboxStyle())
+                .help("Eases your colours to soft pastels. Off keeps them as you picked them, lightened only as far as they need to stay readable.")
         }
     }
 }
@@ -82,12 +86,14 @@ struct LyricColourSection: View {
 private struct CustomGradientSwatch: View {
     let colours: [OKLab]
     let strength: Double
+    /// `LyricColourOptions.pastel`.
+    var pastel = true
 
     var body: some View {
         let ink = LyricInk(mode: .customGradient, stops: stops, stopCount: max(1, min(4, colours.count)))
         let samples = (0...24).map { (step: Int) -> Color in
             let slot: Double = Double(step) / 24 / 0.42 * 0.999
-            return Perceptual.color(Perceptual.readable(ink.gradient(slot: slot), background: 0.08))
+            return Perceptual.color(Perceptual.readable(ink.gradient(slot: slot), background: 0.08, keepingColour: true))
         }
         LinearGradient(colors: samples, startPoint: .leading, endPoint: .trailing)
             .frame(height: 18)
@@ -101,8 +107,9 @@ private struct CustomGradientSwatch: View {
     private var stops: LyricInkDirector.Stops {
         func at(_ index: Int) -> OKLab {
             guard !colours.isEmpty else { return .white }
+            let colour = colours[index % colours.count]
             return LyricInk.applyingStrength(LyricColourOptions.clampedStrength(strength),
-                to: LyricInk.pastel(colours[index % colours.count]))
+                to: pastel ? LyricInk.pastel(colour) : colour)
         }
         return (at(0), at(1), at(2), at(3))
     }

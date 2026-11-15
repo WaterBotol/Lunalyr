@@ -29,6 +29,8 @@ struct LookPicture: View {
     private var desktop: CGSize { previewDisplay.size }
     private var nothingPlaying: Bool { playing.current == nil }
     private var showsFloating: Bool { floating.isFloating && object != .covers }
+    @AppStorage(OpeningTitle.settingKey) private var showsOpeningTitle = true
+    @AppStorage(OpeningTitle.alwaysKey) private var keepsOpeningTitle = false
 
     var body: some View {
         PreviewStage(desktop: desktop, cornerRadius: 8, showsMenuBar: true) {
@@ -77,6 +79,10 @@ struct LookPicture: View {
                         SelectionHandles(size: box.size)
                             .offset(x: box.minX, y: box.minY)
                         cornerGrips(box: box)
+                        if object == .lyrics, showsOpeningTitle {
+                            TitleCardHandles(desktop: desktop, picture: size,
+                                             showsSample: nothingPlaying || !keepsOpeningTitle)
+                        }
                     }
                 }
                 if nothingPlaying && !showsFloating {
@@ -317,6 +323,114 @@ struct FloatingScene: View {
     }
 
     private static let bars: [CGFloat] = [0.7, 0.55, 0.62, 0.4, 0.66, 0.5]
+}
+
+/// The song's title card on the picture, on the Text object: a box with
+/// handles where the card sits. Dragging the box moves the card; dragging
+/// its top-right corner scales it from its lower-left corner. Saved as it
+/// moves (`OpeningTitle.Placement`), so the live picture follows, and kept
+/// on screen. With nothing playing (or when the card is not kept on
+/// screen, so it may not be up), a settled sample card shows where it sits.
+@MainActor
+struct TitleCardHandles: View {
+    let desktop: CGSize
+    let picture: CGSize
+    var showsSample = true
+    @Model(\.nowPlaying) private var playing
+    // Read so the box redraws when the placement changes (a Reset).
+    @AppStorage(OpeningTitle.Placement.leftKey) private var left: Double?
+    @AppStorage(OpeningTitle.Placement.liftKey) private var lift: Double?
+    @AppStorage(OpeningTitle.Placement.scaleKey) private var scale: Double = 1
+    @State private var start: (box: CGRect, placement: OpeningTitle.Placement)?
+
+    private var baseSize: CGFloat { LyricViewportMetrics(size: desktop).baseSize }
+    private var unit: CGFloat { LyricViewportMetrics.previewScale(desktop: desktop, inside: picture) }
+
+    var body: some View {
+        let placement = OpeningTitle.Placement(corner: left.flatMap { x in lift.map { CGPoint(x: x, y: $0) } },
+                                               scale: scale)
+        let frame = OpeningTitle.box(in: desktop, baseSize: baseSize, placement: placement)
+        let box = CGRect(x: frame.minX * unit, y: frame.minY * unit, width: frame.width * unit, height: frame.height * unit)
+        ZStack(alignment: .topLeading) {
+            if showsSample { sample }
+            Color.clear
+                .frame(width: box.width, height: box.height)
+                .contentShape(Rectangle())
+                .offset(x: box.minX, y: box.minY)
+                .help("Drag to move the song title; drag its top-right corner to resize it")
+                .gesture(drag(resizing: false))
+            SelectionHandles(size: box.size)
+                .offset(x: box.minX, y: box.minY)
+            Text("Song title")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .shadow(color: .black.opacity(0.4), radius: 2)
+                .offset(x: box.minX + 2, y: max(4, box.minY - 18))
+                .allowsHitTesting(false)
+            Color.clear
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+                .position(x: box.maxX, y: box.minY)
+                .gesture(drag(resizing: true))
+        }
+        .frame(width: picture.width, height: picture.height, alignment: .topLeading)
+        .accessibilityHidden(true)
+    }
+
+    /// The card as it settles, at the desktop's size, scaled down.
+    private var sample: some View {
+        let track = playing.current
+        return OpeningTitleCard(phase: OpeningTitle.Phase(age: 10, exit: 0, size: .full, moving: false),
+                                title: track?.title ?? "Song Title", artist: track?.artist ?? "Artist",
+                                album: track.flatMap { OpeningTitle.albumLine(album: $0.album ?? "", title: $0.title) },
+                                reading: nil,
+                                cover: OpeningTitle.cover(playing.currentTrackArtwork, enabled: OpeningTitle.showsCover),
+                                baseSize: baseSize, accent: Color(.sRGB, red: 0.95, green: 0.55, blue: 0.42),
+                                mood: .neutral)
+            .frame(width: desktop.width, height: desktop.height)
+            .scaleEffect(unit, anchor: .topLeading)
+            .frame(width: picture.width, height: picture.height, alignment: .topLeading)
+            .environment(\.colorScheme, .dark)
+            .allowsHitTesting(false)
+    }
+
+    private func drag(resizing: Bool) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                let origin = start ?? {
+                    let placement = OpeningTitle.Placement.stored()
+                    return (OpeningTitle.box(in: desktop, baseSize: baseSize, placement: placement), placement)
+                }()
+                if start == nil { start = origin }
+                let delta = CGSize(width: value.translation.width / max(0.01, unit),
+                                   height: value.translation.height / max(0.01, unit))
+                Self.dragged(origin.box, placement: origin.placement, by: delta, resizing: resizing,
+                             desktop: desktop, baseSize: baseSize).store()
+            }
+            .onEnded { _ in start = nil }
+    }
+
+    /// The placement after the box `box` (desktop points, origin top left)
+    /// has been dragged by `delta`: moved, or scaled from its lower-left
+    /// corner along its diagonal; kept on screen.
+    static func dragged(_ box: CGRect, placement: OpeningTitle.Placement, by delta: CGSize, resizing: Bool,
+                        desktop: CGSize, baseSize: CGFloat) -> OpeningTitle.Placement {
+        if resizing {
+            let diagonal = CGPoint(x: box.width, y: -box.height)
+            let length = diagonal.x * diagonal.x + diagonal.y * diagonal.y
+            guard length > 1 else { return placement }
+            let along = ((diagonal.x + delta.width) * diagonal.x + (diagonal.y + delta.height) * diagonal.y) / length
+            var scaled = OpeningTitle.placement(for: box, in: desktop, scale: placement.scale * Double(max(0.1, along)))
+            // The lower-left corner stays put.
+            scaled.corner = OpeningTitle.placement(for: box, in: desktop, scale: 1).corner
+            return scaled
+        }
+        let moved = box.offsetBy(dx: delta.width, dy: delta.height)
+        let wanted = OpeningTitle.placement(for: moved, in: desktop, scale: placement.scale)
+        // Kept on screen, as the card itself is.
+        let kept = OpeningTitle.box(in: desktop, baseSize: baseSize, placement: wanted)
+        return OpeningTitle.placement(for: kept, in: desktop, scale: placement.scale)
+    }
 }
 
 /// Handles round the floating lyrics' window: dragging it moves it (Place:

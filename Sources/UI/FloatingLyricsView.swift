@@ -40,7 +40,10 @@ struct FloatingLyricsView: View {
                                           wordsPerSecond: lyricsVM.wordsPerSecond)
             ZStack {
                 FloatingLyricsFrame(backdrop: options.backdrop, reduceTransparency: reduceTransparency,
-                                    albumAccent: look.albumAccent) {
+                                    albumAccent: look.albumAccent,
+                                    behind: FloatingBackdrop.behind(mode: settings.effectiveBackgroundMode,
+                                                                    scrim: settings.scrimStrength,
+                                                                    videoDim: settings.musicVideoDim)) {
                     LyricStage(size: geometry.size, mood: look.mood, accent: look.accent, trackSeed: look.seed,
                                palette: look.cover.artworkStops, interval: settings.effectiveAnimationRate.interval,
                                paused: !state.active, textSize: CGFloat(options.textSize))
@@ -65,6 +68,8 @@ struct FloatingLyricsFrame<Stage: View>: View {
     let backdrop: Double
     let reduceTransparency: Bool
     let albumAccent: SIMD3<Double>
+    /// What the shade lies over (`FloatingBackdrop.behind`).
+    var behind = LyricLegibility.unknownBackdropLuminance
     @ViewBuilder let stage: () -> Stage
 
     var body: some View {
@@ -73,7 +78,8 @@ struct FloatingLyricsFrame<Stage: View>: View {
             stage()
                 .environment(\.lyricSwipePalette, LyricSwipePalette(hue: albumAccent.x, saturation: albumAccent.y))
                 .environment(\.lyricBackdropOverride,
-                             FloatingBackdrop.luminance(strength: backdrop, reduceTransparency: reduceTransparency))
+                             FloatingBackdrop.luminance(strength: backdrop, reduceTransparency: reduceTransparency,
+                                                        behind: behind))
                 .compositingGroup()
                 .shadow(color: .black.opacity(0.35 + 0.35 * backdrop), radius: 6, y: 1)
                 .accessibilityHidden(true)
