@@ -147,6 +147,7 @@ final class FloatingLyricsController {
         if !state.active { state.active = true }
         if !shown {
             shown = true
+            SongStartLog.note("floating lyrics window shown")
             panel.alphaValue = 0
             targetAlpha = 0
             panel.orderFrontRegardless()
@@ -163,6 +164,7 @@ final class FloatingLyricsController {
         hoverTimer = nil
         guard shown, let panel else { return }
         shown = false
+        SongStartLog.note("floating lyrics window hidden")
         fade(panel, to: 0) { [weak self] in
             guard let self, !self.shown else { return }
             panel.orderOut(nil)

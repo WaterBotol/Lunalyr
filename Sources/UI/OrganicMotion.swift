@@ -187,6 +187,25 @@ final class LyricSceneMemory: ObservableObject {
     private var arriving: (wall: Double, fade: Fade)?
     private var nextID = 0
 
+    /// Tells lyric layers apart in `SongStartLog`: one memory per layer.
+    private static var instances = 0
+    let instance: Int
+
+    init() {
+        Self.instances &+= 1
+        instance = Self.instances
+        SongStartLog.note("layer #\(instance) created")
+    }
+
+    deinit {
+        SongStartLog.note("layer #\(instance) let go")
+    }
+
+    /// A key as `SongStartLog` names it.
+    private static func trace(_ key: LyricSceneKey) -> String {
+        "\(key.kind) \(String(UInt16(truncatingIfNeeded: key.track), radix: 16))/\(String(UInt16(truncatingIfNeeded: key.fingerprint), radix: 16))"
+    }
+
     struct Transition {
         struct Leaving {
             let scene: Outgoing
@@ -219,6 +238,9 @@ final class LyricSceneMemory: ObservableObject {
               let faintest = leaving.indices.min(by: { leaving[$0].presence(at: now) < leaving[$1].presence(at: now) }) {
             leaving.remove(at: faintest)
         }
+        SongStartLog.note("layer #\(instance) push \(fade) \(Self.trace(key)) at \(String(format: "%.2f", time)) s, "
+            + "presence \(String(format: "%.2f", presence)), lines \(Self.drawn(content.lines, at: time).count), "
+            + "leaving \(leaving.count)")
     }
 
     /// Whether two sheets of the same song show different lines at `time`,
@@ -243,21 +265,31 @@ final class LyricSceneMemory: ObservableObject {
     }
 
     /// The lines a stage has on screen at `time`, as text: the line under
-    /// way and its neighbours, while each is entering (from 1.5 s before
-    /// it, the longest lead a layout shows a word with) until a second
-    /// after it ends (its exit).
+    /// way, the one after it and the three before it (as many as a stage
+    /// keeps leaving after very short lines), while each is entering (from
+    /// 1.5 s before it, the longest lead a layout shows a word with) until
+    /// its exit has run (`drawnAfterEnd` past its last word or its end).
     static func drawn(_ lines: [LyricsFetcher.Line], at time: Double) -> Set<String> {
         guard !lines.isEmpty else { return [] }
         let row = LyricLineIndex(lines: lines).line(at: time) ?? 0
         var texts = Set<String>()
-        for index in row - 1...row + 1 where lines.indices.contains(index) {
+        for index in row - 3...row + 1 where lines.indices.contains(index) {
             let line = lines[index]
             let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 .folding(options: [.caseInsensitive], locale: nil)
-            if !text.isEmpty, time >= line.start - 1.5, time <= line.end + 1 { texts.insert(text) }
+            let end = max(line.end, line.words.map(\.end).max() ?? line.end)
+            if !text.isEmpty, time >= line.start - 1.5, time <= end + drawnAfterEnd { texts.insert(text) }
         }
         return texts
     }
+
+    /// How long after its end a line can still be drawn: its exit starts up
+    /// to 0.12 s after it (`LyricPhraseTiming.exitStart`) and runs for up to
+    /// 1 s (Hinge's book closing, `exitSpan(for:)`), and a rolling stage's
+    /// word fades until 1.45 s after it (`LyricLayer.wordActiveTail`). A
+    /// second, as this was, missed the last of Hinge's exit: a jump landing
+    /// then cross-faded a copy of the line still entering over it closing.
+    static let drawnAfterEnd = 1.5
 
     /// How long `fade` takes to bring an arriving scene to `presence`.
     private static func age(reaching presence: Double, with fade: Fade) -> Double {
@@ -289,6 +321,8 @@ final class LyricSceneMemory: ObservableObject {
         // displacing the old lyrics that are still visibly leaving.
         let shown = incomingPresence(at: wall)
         if let last, last.key != key {
+            SongStartLog.note("layer #\(instance) scene \(Self.trace(last.key)) → \(Self.trace(key)) at "
+                + "\(String(format: "%.2f", time)) s, incoming was \(String(format: "%.2f", shown)), leaving \(leaving.count)")
             if last.key.track == key.track && last.key.kind == .synced && key.kind == .synced {
                 // A better timing source for the current recording takes
                 // over the stage in place: both sheets usually show this
@@ -315,6 +349,8 @@ final class LyricSceneMemory: ObservableObject {
                     let presence = leaving[back].presence(at: wall)
                     leaving.remove(at: back)
                     arriving = (wall - Self.age(reaching: presence, with: .song), .song)
+                    SongStartLog.note("layer #\(instance) took back leaving \(Self.trace(key)) at "
+                        + "presence \(String(format: "%.2f", presence))")
                 }
             }
         } else if let jump, jump.wall > lastJumpWall, key.kind == .synced, let last {
@@ -327,7 +363,11 @@ final class LyricSceneMemory: ObservableObject {
             // where a new song really is, a song offset, a nudge) re-times
             // them in place: overlaid at the old time, they read as doubled.
             let inFlight = arriving != nil && !leaving.isEmpty
-            if !inFlight, Self.showsOtherLines(last.content, at: jump.from, content(), at: jump.to) {
+            let crossFades = !inFlight && Self.showsOtherLines(last.content, at: jump.from, content(), at: jump.to)
+            SongStartLog.note("layer #\(instance) jump \(String(format: "%.2f", jump.from)) → "
+                + "\(String(format: "%.2f", jump.to)) s: " + (crossFades ? "cross-fades" : inFlight ? "joins the fade in flight"
+                    : "re-timed in place") + ", leaving \(leaving.count)")
+            if crossFades {
                 if shown > Self.dropBelow {
                     push(key, last.content, time: jump.from, wall: jump.wall, fade: .seek, presence: shown, now: wall)
                 }

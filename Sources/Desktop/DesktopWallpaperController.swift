@@ -130,6 +130,7 @@ final class DesktopWallpaperController {
             surface.window.orderOut(nil)
             surface.window.contentView = nil
             surface.window.close()
+            SongStartLog.note("display \(id): wallpaper window closed")
         }
 
         for screen in screens {
@@ -178,6 +179,7 @@ final class DesktopWallpaperController {
             window.orderFrontRegardless()
             activity.start(window: window, displayID: displayID)
             surfaces[displayID] = (window, activity)
+            SongStartLog.note("display \(displayID): wallpaper window created")
         }
         DesktopCoverageMonitor.shared.setNeedsUpdate()
     }

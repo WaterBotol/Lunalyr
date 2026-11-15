@@ -53,6 +53,9 @@ final class NowPlayingMonitor: ObservableObject {
             } else {
                 idleSince = nil
             }
+            if let current, oldValue.map({ !$0.isSameTrack(as: current) }) ?? true {
+                SongStartLog.songChanged(title: current.title)
+            }
         }
     }
     /// When the wallpaper's idle notice (`idleTitle`) went up -- playback

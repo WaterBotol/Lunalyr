@@ -65,3 +65,59 @@ enum QueueLog {
         logger.notice("queue #\(click, privacy: .public) finished: \(what, privacy: .public)")
     }
 }
+
+/// What builds the wallpaper in the first seconds of each song, in the same
+/// system log (subsystem `local.verso.custom`, category `songstart`), to
+/// trace a lyric line seen doubled as a song begins: every lyric layer
+/// created or let go, each scene its memory starts fading out or in (and
+/// how many are leaving), each time jump it takes in place, the cover's
+/// colours landing, each background cross-fade starting (with when it
+/// ends) or waiting for a first frame, and the wallpaper and floating
+/// windows being made, shown or hidden. Clock jumps and lyric swaps are in
+/// `sync`. Events only, never a line per frame, and only for `window`
+/// seconds after the playing song changes, so it costs nothing the rest of
+/// the time. Nothing is logged in tests.
+///
+/// Read it with
+/// `/usr/bin/log show --last 30m --style compact --predicate 'subsystem == "local.verso.custom"'`
+/// (both categories together): each line starts `+s.ss` (seconds since the
+/// song changed). `layer #n` is one lyric layer (one per display, and one
+/// in the Settings preview); `push` is a scene starting to fade out under
+/// the one arriving, with `leaving` the count after it.
+enum SongStartLog {
+    private static let logger = Logger(subsystem: "local.verso.custom", category: "songstart")
+
+    /// How long after a song change events are logged.
+    static let window: TimeInterval = 10
+
+    /// System uptime when the playing song last changed; written on the
+    /// main thread, read anywhere (a stale read only skips or adds a line).
+    nonisolated(unsafe) private static var songChangedAt: TimeInterval = -.infinity
+    private static let enabled = !AppRuntime.isUnitTesting
+
+    /// Whether `now` is within `window` of a song change at `changedAt`.
+    static func isOpen(changedAt: TimeInterval, now: TimeInterval) -> Bool {
+        now >= changedAt && now - changedAt < window
+    }
+
+    /// Seconds since the song changed, while the window is open.
+    private static var age: TimeInterval? {
+        guard enabled else { return nil }
+        let now = ProcessInfo.processInfo.systemUptime
+        return isOpen(changedAt: songChangedAt, now: now) ? now - songChangedAt : nil
+    }
+
+    /// The playing song changed: opens the window.
+    static func songChanged(title: String?) {
+        guard enabled else { return }
+        songChangedAt = ProcessInfo.processInfo.systemUptime
+        logger.notice("+0.00 song \(title ?? "(none)", privacy: .public)")
+    }
+
+    /// Logs `message` if the window is open.
+    static func note(_ message: @autoclosure () -> String) {
+        guard let age else { return }
+        let text = message()
+        logger.notice("\(String(format: "%+.2f", age), privacy: .public) \(text, privacy: .public)")
+    }
+}

@@ -135,6 +135,21 @@ struct NowPlayingView: View {
         /// layer is drawn over its own black), so a crossfade between two of
         /// them leaves the outgoing one fully drawn under the incoming one.
         var isOpaque: Bool { self != .desktop }
+
+        /// The kind of layer, for `SongStartLog` (no paths or URLs).
+        var traceName: String {
+            switch self {
+            case .desktop: return "your wallpaper"
+            case .motion(_, let still, _): return still ? "motion cover (still)" : "motion cover"
+            case .custom: return "imported picture"
+            case .musicVideo: return "music video"
+            case .musicVideoPending: return "music video stand-in"
+            case .shader(let style, let epoch): return "effect \(style.rawValue) #\(epoch)"
+            case .visualizer(let style, _): return "visualiser \(style.rawValue)"
+            case .albumGradient: return "album gradient"
+            case .generated(let pattern, let seed): return "generated \(pattern.map { "\($0.rawValue)" } ?? "colour") \(seed)"
+            }
+        }
     }
 
     /// What a song's background is chosen from (see `BackgroundChoiceHold`).
@@ -492,6 +507,9 @@ struct NowPlayingView: View {
             // fade carries on from the one that is on screen.
             prepareEffect(for: next)
             crossfade.change(to: next, ready: canDraw(next), at: fadeStart, duration: Self.backgroundFadeDuration)
+            SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): background → \(next.traceName), "
+                + (crossfade.isReady ? "fading \(Self.backgroundFadeDuration) s" : "held for its first frame")
+                + ", \(crossfade.entries.count) layers")
             let kept = Set(crossfade.entries.map(\.layer))
             if !drawnLayers.isSubset(of: kept) { drawnLayers.formIntersection(kept) }
             if let overdue = firstFrameOverdue, !kept.contains(overdue) { firstFrameOverdue = nil }
@@ -500,7 +518,11 @@ struct NowPlayingView: View {
             // The effect is ready: start the fade into it now. Once shown, it
             // stays shown -- its surface keeps drawing it on the GPU it has
             // while the display's new GPU compiles it.
-            if ready { crossfade.becameReady(at: fadeStart) }
+            if ready {
+                crossfade.becameReady(at: fadeStart)
+                SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): background "
+                    + "\(currentLayer.traceName) ready, fading \(Self.backgroundFadeDuration) s")
+            }
         }
         // A layer that never reports a first frame is shown anyway.
         .task(id: crossfade.isHeld ? currentLayer : nil) {
@@ -553,6 +575,8 @@ struct NowPlayingView: View {
             // preview shows at once.
             crossfade = isSettingsPreview ? BackgroundCrossfade(layer, ready: canDraw(layer))
                 : BackgroundCrossfade(layer, ready: canDraw(layer), fadingInAt: fadeStart)
+            SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): wallpaper view appeared, "
+                + "background \(layer.traceName)")
         }
     }
 
@@ -918,6 +942,7 @@ struct NowPlayingView: View {
         paletteChangedAt = start
         hasAlbumPalette = hasArtwork
         palette = extracted
+        SongStartLog.note("display \(displayID)\(isSettingsPreview ? " preview" : ""): palette applied (\(hasArtwork ? "cover" : "fallback"))")
         if let request = paletteRequest {
             paletteRequest = (request.image, request.track, false)
             paletteTrack = request.track
