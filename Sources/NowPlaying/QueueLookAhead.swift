@@ -15,13 +15,20 @@ struct LookAheadConditions: Equatable, Sendable {
     var videos = false
 }
 
-/// One upcoming song and what to look up for it.
+/// What has been looked up for a song.
+struct LookAheadParts: Equatable, Sendable {
+    var lyrics = false
+    var video = false
+    /// The catalogue cover.
+    var cover = false
+}
+
+/// One upcoming song and what is still to look up for it.
 struct LookAheadItem: Equatable, Sendable {
     var track: QueuedTrack
     var lyrics = true
     var video = false
-    /// The catalogue cover, and the video's still.
-    var pictures = false
+    var cover = false
 }
 
 /// Which upcoming songs to look up ahead, and what for each. Pure, so the
@@ -37,10 +44,11 @@ enum LookAheadPlanner {
     /// Nothing in Low Power Mode, offline, with the setting off or while
     /// another player is followed. Otherwise the first `songs` lookable
     /// songs after the playing one (`songsOnBattery` on battery, without
-    /// pictures), skipping the playing song, repeats, and songs already
-    /// done.
+    /// covers), skipping the playing song and repeats; the first
+    /// `videoSongs` with their video. Of each, only what `done` lacks:
+    /// a song moving up the queue gets the parts its new place adds.
     static func plan(upcoming: [QueuedTrack], current: NowPlayingMonitor.Track?, conditions: LookAheadConditions,
-                     done: Set<String>) -> [LookAheadItem] {
+                     done: [String: LookAheadParts]) -> [LookAheadItem] {
         guard conditions.enabled, conditions.followsMusic, conditions.online, !conditions.lowPowerMode,
               current != nil else { return [] }
         let limit = conditions.onBattery ? songsOnBattery : songs
@@ -53,9 +61,11 @@ enum LookAheadPlanner {
             chosen.append(track)
         }
         return chosen.enumerated().compactMap { index, track in
-            guard !done.contains(track.recordingKey) else { return nil }
-            return LookAheadItem(track: track, lyrics: true, video: conditions.videos && index < videoSongs,
-                                 pictures: !conditions.onBattery)
+            let had = done[track.recordingKey] ?? LookAheadParts()
+            let item = LookAheadItem(track: track, lyrics: !had.lyrics,
+                                     video: conditions.videos && index < videoSongs && !had.video,
+                                     cover: !conditions.onBattery && !had.cover)
+            return item.lyrics || item.video || item.cover ? item : nil
         }
     }
 }
@@ -66,7 +76,8 @@ enum LookAheadPlanner {
 /// `MusicVideoController.lookAhead`, `ArtworkProvider`), one song at a time
 /// at background priority, after the playing song's own lookups have had
 /// `settleDelay` to go first. A change of queue plans again: work for songs
-/// no longer next is cancelled. Songs done are not looked up again.
+/// no longer planned is cancelled. What was done is not looked up again; a
+/// video the rate limit had no room for is tried again on a later plan.
 ///
 /// MediaRemote's details for a queued song can differ slightly from what
 /// the player reports once it plays (its duration by a second or two), so
@@ -78,13 +89,14 @@ final class QueueLookAhead {
     /// The lookups made for one song. Tests pass their own.
     struct Work {
         var lyrics: @MainActor (QueuedTrack) async -> Void
-        var video: @MainActor (QueuedTrack, _ pictures: Bool) async -> Void
-        var artwork: @MainActor (QueuedTrack) async -> Void
+        /// True once the video's answer is known; false: try again later.
+        var video: @MainActor (QueuedTrack) async -> Bool
+        var cover: @MainActor (QueuedTrack) async -> Void
 
         static var live: Work {
             Work(lyrics: { track in _ = await LyricsFetcher.shared.lookup(track.query) },
-                 video: { track, pictures in await MusicVideoController.shared.lookAhead(track.videoSong, pictures: pictures) },
-                 artwork: { track in
+                 video: { track in await MusicVideoController.shared.lookAhead(track.videoSong) },
+                 cover: { track in
                      _ = await ArtworkProvider.shared.artworkData(title: track.title, artist: track.artist,
                                                                   album: track.album.isEmpty ? nil : track.album,
                                                                   duration: track.duration)
@@ -101,12 +113,15 @@ final class QueueLookAhead {
     private var current: NowPlayingMonitor.Track?
     private var conditions = LookAheadConditions()
     private var songChangedAt: TimeInterval = -.infinity
-    /// Songs whose lookups finished, oldest first.
-    private(set) var done: [QueuedTrack] = []
+    /// Songs with something looked up, oldest first, and what was.
+    private(set) var songs: [QueuedTrack] = []
+    private(set) var done: [String: LookAheadParts] = [:]
     static let remembered = 50
     private var running: Task<Void, Never>?
+    /// Which run is current: a cancelled one never touches state after.
+    private var runToken = 0
     private(set) var plan: [LookAheadItem] = []
-    /// The song being looked up now, for tests and the log.
+    /// The song being looked up now.
     private(set) var working: QueuedTrack?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -118,15 +133,16 @@ final class QueueLookAhead {
     /// The song looked up ahead (or being looked up) that `track` is, if any.
     func lookedUp(_ track: NowPlayingMonitor.Track) -> QueuedTrack? {
         if let working, working.matches(track) { return working }
-        return done.last { $0.matches(track) }
+        return songs.last { $0.matches(track) }
     }
 
     /// New facts: plans again, cancelling work no longer wanted.
     func update(upcoming: [QueuedTrack], current: NowPlayingMonitor.Track?, conditions: LookAheadConditions) {
         if let current, !(self.current.map { $0.isSameTrack(as: current) } ?? false) {
             songChangedAt = uptime()
-            let ahead = lookedUp(current) != nil
-            LookAheadLog.note("song started: \(ahead ? "looked up ahead" : "not looked up ahead")")
+            let ahead = lookedUp(current).flatMap { done[$0.recordingKey] }
+            LookAheadLog.note("song started: " + (ahead.map { "looked up ahead (lyrics \($0.lyrics), video \($0.video))" }
+                                                   ?? "not looked up ahead"))
         }
         self.upcoming = upcoming
         self.current = current
@@ -135,42 +151,74 @@ final class QueueLookAhead {
     }
 
     private func replan() {
-        let next = LookAheadPlanner.plan(upcoming: upcoming, current: current, conditions: conditions,
-                                         done: Set(done.map(\.recordingKey)))
-        guard next != plan || (running == nil && !next.isEmpty) else { return }
-        // The song under way stays under way if it is still planned first.
-        if let working, next.first?.track == working, plan.first?.track == working, running != nil {
-            plan = next
-            return
-        }
+        let next = LookAheadPlanner.plan(upcoming: upcoming, current: current, conditions: conditions, done: done)
+        // A run under way carries on while its song is still planned (or
+        // while it is still waiting out `settleDelay`): it reads `plan`
+        // afresh for each song.
+        let keep = running != nil && !next.isEmpty
+            && (working.map { song in next.contains { $0.track == song } } ?? true)
+        plan = next
+        if keep { return }
         running?.cancel()
         running = nil
         working = nil
-        plan = next
         guard !next.isEmpty else { return }
-        LookAheadLog.note("planned \(next.count) songs (video \(next.filter(\.video).count), pictures \(next.first?.pictures == true))")
+        LookAheadLog.note("planned \(next.count) songs (video \(next.filter(\.video).count), covers \(next.filter(\.cover).count))")
+        runToken += 1
+        let token = runToken
         let wait = max(0, settleDelay - (uptime() - songChangedAt))
         running = Task(priority: .background) { [weak self] in
             if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
-            await self?.run()
+            await self?.run(token)
         }
     }
 
-    /// Works through `plan`, one song at a time, while not cancelled.
-    private func run() async {
-        while !Task.isCancelled, let item = plan.first(where: { item in !done.contains { $0 == item.track } }) {
+    /// The first planned song with something still to do, and what;
+    /// videos already tried in this run (`tried`) wait for a later run.
+    private func nextItem(tried: Set<String>) -> LookAheadItem? {
+        for item in plan {
+            let key = item.track.recordingKey
+            let had = done[key] ?? LookAheadParts()
+            let left = LookAheadItem(track: item.track, lyrics: item.lyrics && !had.lyrics,
+                                     video: item.video && !had.video && !tried.contains(key), cover: item.cover && !had.cover)
+            if left.lyrics || left.video || left.cover { return left }
+        }
+        return nil
+    }
+
+    /// Works through `plan`, one song at a time, while it is the current run.
+    private func run(_ token: Int) async {
+        var tried: Set<String> = []
+        while !Task.isCancelled, token == runToken, let item = nextItem(tried: tried) {
             working = item.track
             let began = uptime()
-            if item.lyrics { await work.lyrics(item.track) }
-            if item.video, !Task.isCancelled { await work.video(item.track, item.pictures) }
-            if item.pictures, !Task.isCancelled { await work.artwork(item.track) }
-            guard !Task.isCancelled else { return }
-            done.append(item.track)
-            if done.count > Self.remembered { done.removeFirst(done.count - Self.remembered) }
-            LookAheadLog.note("looked up a song ahead in \(String(format: "%.1f", uptime() - began)) s")
+            var parts = done[item.track.recordingKey] ?? LookAheadParts()
+            if item.lyrics { await work.lyrics(item.track); parts.lyrics = !Task.isCancelled }
+            if item.video, !Task.isCancelled {
+                tried.insert(item.track.recordingKey)
+                parts.video = await work.video(item.track) && !Task.isCancelled
+            }
+            if item.cover, !Task.isCancelled { await work.cover(item.track); parts.cover = !Task.isCancelled }
+            record(parts, for: item.track)
+            guard !Task.isCancelled, token == runToken else { return }
+            LookAheadLog.note("looked up a song ahead in \(String(format: "%.1f", uptime() - began)) s "
+                              + "(lyrics \(parts.lyrics), video \(parts.video), cover \(parts.cover))")
         }
+        guard token == runToken else { return }
         working = nil
         running = nil
+    }
+
+    private func record(_ parts: LookAheadParts, for track: QueuedTrack) {
+        let key = track.recordingKey
+        guard parts != LookAheadParts() || done[key] != nil else { return }
+        done[key] = parts
+        songs.removeAll { $0.recordingKey == key }
+        songs.append(track)
+        if songs.count > Self.remembered {
+            for old in songs.prefix(songs.count - Self.remembered) { done[old.recordingKey] = nil }
+            songs.removeFirst(songs.count - Self.remembered)
+        }
     }
 
     // MARK: Live

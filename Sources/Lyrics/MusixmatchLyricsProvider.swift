@@ -192,7 +192,56 @@ enum MusixmatchLyricsProvider {
                 return try await ask(query, key: key, session: session, state: state)
             }
         }
-        return try await request.value
+        return try await answer(of: request)
+    }
+
+    /// The shared request's answer; a cancelled lookup stops waiting at
+    /// once (as a cancelled request used to), while the request finishes
+    /// and is remembered for the next lookup.
+    static func answer(of request: Task<LyricCandidate?, Error>) async throws -> LyricCandidate? {
+        let once = ResumeOnce()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<LyricCandidate?, Error>) in
+                once.set(continuation)
+                Task {
+                    do { once.resume(.success(try await request.value)) } catch { once.resume(.failure(error)) }
+                }
+            }
+        } onCancel: {
+            once.resume(.failure(CancellationError()))
+        }
+    }
+
+    /// Resumes a continuation exactly once, whichever comes first.
+    private final class ResumeOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<LyricCandidate?, Error>?
+        private var pending: Result<LyricCandidate?, Error>?
+        private var done = false
+
+        func set(_ continuation: CheckedContinuation<LyricCandidate?, Error>) {
+            let early: Result<LyricCandidate?, Error>? = lock.withLock {
+                guard !done else { return nil }
+                if let pending { done = true; return pending }
+                self.continuation = continuation
+                return nil
+            }
+            if let early { continuation.resume(with: early) }
+        }
+
+        func resume(_ result: Result<LyricCandidate?, Error>) {
+            let waiting: CheckedContinuation<LyricCandidate?, Error>? = lock.withLock {
+                guard !done else { return nil }
+                guard let continuation else {
+                    if pending == nil { pending = result }
+                    return nil
+                }
+                done = true
+                self.continuation = nil
+                return continuation
+            }
+            waiting?.resume(with: result)
+        }
     }
 
     /// The song's one `macro.subtitles.get` (and a token first, if needed).

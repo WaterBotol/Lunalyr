@@ -26,7 +26,6 @@
 
 #import <Foundation/Foundation.h>
 #include <dlfcn.h>
-#include <objc/message.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -93,18 +92,20 @@ static BOOL LQLoad(void) {
         && NSClassFromString(@"MRClient") && NSClassFromString(@"MRPlayerPath");
 }
 
+// MediaRemote's classes, declared for ARC; each is checked before use.
+@interface NSObject (LunalyrQueueMediaRemote)
+- (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier;
+- (instancetype)initWithOrigin:(id)origin client:(id)client player:(id)player;
+@end
+
 /// Music's player on this Mac.
 static id LQMusicPath(void) {
     id origin = (__bridge id)LQ.localOrigin();
-    if (!origin) return nil;
-    SEL initClient = NSSelectorFromString(@"initWithBundleIdentifier:");
-    Class clientClass = NSClassFromString(@"MRClient");
-    if (![clientClass instancesRespondToSelector:initClient]) return nil;
-    id client = ((id (*)(id, SEL, id))objc_msgSend)([clientClass alloc], initClient, @"com.apple.Music");
-    Class pathClass = NSClassFromString(@"MRPlayerPath");
-    SEL initPath = NSSelectorFromString(@"initWithOrigin:client:player:");
-    if (!client || ![pathClass instancesRespondToSelector:initPath]) return nil;
-    return ((id (*)(id, SEL, id, id, id))objc_msgSend)([pathClass alloc], initPath, origin, client, nil);
+    Class clientClass = NSClassFromString(@"MRClient"), pathClass = NSClassFromString(@"MRPlayerPath");
+    if (!origin || ![clientClass instancesRespondToSelector:@selector(initWithBundleIdentifier:)]
+        || ![pathClass instancesRespondToSelector:@selector(initWithOrigin:client:player:)]) return nil;
+    id client = [[clientClass alloc] initWithBundleIdentifier:@"com.apple.Music"];
+    return client ? [[pathClass alloc] initWithOrigin:origin client:client player:nil] : nil;
 }
 
 static NSString *LQString(CFStringRef value) {
@@ -143,7 +144,8 @@ static NSDictionary *LQItem(void *item) {
 /// (nil when MediaRemote did not answer or answered with an error).
 static void LQAsk(void (^done)(NSArray *items, NSString *failure)) {
     id path = LQMusicPath();
-    void *request = LQ.requestWithRange(0, LQRange);
+    // Created here (+1); released once the answer, or the timeout, is in.
+    id request = CFBridgingRelease(LQ.requestWithRange(0, LQRange));
     if (!path || !request) {
         done(nil, @"request");
         return;
@@ -154,7 +156,8 @@ static void LQAsk(void (^done)(NSArray *items, NSString *failure)) {
         answered = YES;
         done(items, failure);
     };
-    LQ.requestForPlayer(request, path, dispatch_get_main_queue(), ^(void *queue, CFErrorRef error) {
+    LQ.requestForPlayer((__bridge void *)request, path, dispatch_get_main_queue(), ^(void *queue, CFErrorRef error) {
+        (void)request;
         if (!queue || error) {
             finish(nil, error ? @"answer" : @"empty");
             return;

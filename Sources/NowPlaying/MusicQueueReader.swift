@@ -149,25 +149,39 @@ private final class LineReader: @unchecked Sendable {
 /// else depends on it. Nothing here plays, pauses or skips anything.
 @MainActor
 final class MusicQueueReader: ObservableObject {
-    static let shared = MusicQueueReader()
+    static let shared = MusicQueueReader(command: .perl)
 
     /// The songs after the playing one, at most `upcomingLimit`.
     @Published private(set) var upcoming: [QueuedTrack] = []
     static let upcomingLimit = 5
 
     /// The library perl loads, in the app's Frameworks folder.
-    static var helperURL: URL? {
+    nonisolated static var helperURL: URL? {
         Bundle.main.privateFrameworksURL?.appendingPathComponent("LunalyrQueue.dylib")
     }
 
     /// Installs the library's entry point as a Perl sub and calls it.
-    static let loader = """
+    nonisolated static let loader = """
     use DynaLoader; my $l = DynaLoader::dl_load_file($ARGV[0], 0) or exit 3; \
     my $s = DynaLoader::dl_find_symbol($l, $ARGV[1]) or exit 4; \
     DynaLoader::dl_install_xsub("main::lunalyr_queue", $s); lunalyr_queue(); exit 0;
     """
 
-    enum Mode: Equatable { case watch, once }
+    enum Mode: Equatable, Sendable { case watch, once }
+
+    /// What runs the helper: perl with the library in the app, or, in
+    /// tests, a stand-in. Nil arguments: there is nothing to run.
+    struct Command: Sendable {
+        var executable: URL
+        var arguments: @Sendable (Mode) -> [String]?
+
+        static let perl = Command(executable: URL(fileURLWithPath: "/usr/bin/perl")) { mode in
+            guard let helper = MusicQueueReader.helperURL, FileManager.default.fileExists(atPath: helper.path) else {
+                return nil
+            }
+            return ["-e", MusicQueueReader.loader, helper.path, mode == .watch ? "lunalyr_queue_watch" : "lunalyr_queue_once"]
+        }
+    }
 
     /// Pauses after a failure: doubling from `firstPause` to `longestPause`.
     static let firstPause: TimeInterval = 5
@@ -175,9 +189,11 @@ final class MusicQueueReader: ObservableObject {
     /// Watch mode gives way to one-shot runs after this many failures in a row.
     static let watchFailuresAllowed = 3
     /// A watcher that has said nothing useful by now is stopped.
-    static let answerTimeout: TimeInterval = 12
+    var answerTimeout: TimeInterval = 12
     /// A one-shot run that takes longer than this is stopped.
-    static let onceTimeout: TimeInterval = 10
+    var onceTimeout: TimeInterval = 10
+    /// The first pause after a failure (tests shorten it).
+    var firstPause: TimeInterval = MusicQueueReader.firstPause
 
     private var snapshot: [QueuedTrack] = []
     private var current: NowPlayingMonitor.Track?
@@ -192,23 +208,33 @@ final class MusicQueueReader: ObservableObject {
     private var heard = false
     private var quitObserver: NSObjectProtocol?
 
+    private let command: Command
+    /// Whether it may run inside the test host (only with a stand-in command).
+    private let runsInTests: Bool
+
     /// The pause before the next try after `failures` failures in a row.
-    nonisolated static func pause(after failures: Int) -> TimeInterval {
+    nonisolated static func pause(after failures: Int, first: TimeInterval = firstPause) -> TimeInterval {
         guard failures > 0 else { return 0 }
-        return min(longestPause, firstPause * pow(2, Double(min(failures - 1, 16))))
+        return min(longestPause, first * pow(2, Double(min(failures - 1, 16))))
     }
 
-    private init() {
+    /// Failures in a row so far, and the mode, for tests.
+    var failureCount: Int { failures }
+    var isRunning: Bool { process != nil }
+
+    init(command: Command, runsInTests: Bool = false) {
+        self.command = command
+        self.runsInTests = runsInTests
         quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
-                                                              object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { MusicQueueReader.shared.stopProcess() }
+                                                              object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopProcess() }
         }
     }
 
     /// Reads the queue while `active` (Music is the player followed and
     /// the look-ahead wants it); stops the helper otherwise.
     func setActive(_ active: Bool) {
-        guard !AppRuntime.isUnitTesting, active != self.active else { return }
+        guard !AppRuntime.isUnitTesting || runsInTests, active != self.active else { return }
         self.active = active
         if active {
             failures = 0
@@ -246,17 +272,17 @@ final class MusicQueueReader: ObservableObject {
     private func launch() {
         restart = nil
         guard active, process == nil else { return }
-        guard let helper = Self.helperURL, FileManager.default.fileExists(atPath: helper.path),
-              FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") else {
+        let mode = self.mode
+        guard FileManager.default.isExecutableFile(atPath: command.executable.path),
+              let arguments = command.arguments(mode) else {
             LookAheadLog.failure("queue helper missing; look-ahead off")
             return
         }
         generation += 1
         let ticket = generation
-        let mode = self.mode
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        process.arguments = ["-e", Self.loader, helper.path, mode == .watch ? "lunalyr_queue_watch" : "lunalyr_queue_once"]
+        process.executableURL = command.executable
+        process.arguments = arguments
         // Nothing from Lunalyr's environment (PERL5LIB and the like) reaches perl.
         process.environment = ["PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8"]
         let output = Pipe(), input = Pipe()
@@ -264,7 +290,7 @@ final class MusicQueueReader: ObservableObject {
         process.standardInput = input
         process.standardError = FileHandle.nullDevice
         let reader = LineReader()
-        output.fileHandleForReading.readabilityHandler = { handle in
+        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
@@ -272,14 +298,15 @@ final class MusicQueueReader: ObservableObject {
             }
             let messages = reader.append(data).compactMap(MusicQueueMessage.parse)
             guard !messages.isEmpty else { return }
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { MusicQueueReader.shared.receive(messages, ticket: ticket) }
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.receive(messages, ticket: ticket) }
             }
         }
-        process.terminationHandler = { finished in
+        process.terminationHandler = { [weak self] finished in
             let status = finished.terminationStatus
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { MusicQueueReader.shared.ended(ticket: ticket, status: status) }
+            // After its last lines, which arrive on another queue.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                MainActor.assumeIsolated { self?.ended(ticket: ticket, status: status) }
             }
         }
         self.process = process
@@ -288,18 +315,18 @@ final class MusicQueueReader: ObservableObject {
         self.input = input.fileHandleForWriting
         heard = false
         // Starting a process can take a moment; never on the main thread.
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
             do {
                 try process.run()
             } catch {
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { MusicQueueReader.shared.ended(ticket: ticket, status: -1) }
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated { self?.ended(ticket: ticket, status: -1) }
                 }
             }
         }
         LookAheadLog.note("queue helper started (\(mode == .watch ? "watch" : "once"))")
         watchdog?.cancel()
-        let timeout = mode == .watch ? Self.answerTimeout : Self.onceTimeout
+        let timeout = mode == .watch ? answerTimeout : onceTimeout
         watchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(timeout))
             guard let self, !Task.isCancelled, self.generation == ticket, self.process != nil else { return }
@@ -353,7 +380,7 @@ final class MusicQueueReader: ObservableObject {
             mode = .once
             LookAheadLog.failure("queue watcher failed \(failures) times (status \(status)); reading once per song instead")
         }
-        let pause = Self.pause(after: failures)
+        let pause = Self.pause(after: failures, first: firstPause)
         LookAheadLog.failure("queue helper ended (status \(status)); trying again in \(Int(pause)) s")
         snapshot = []
         publish()

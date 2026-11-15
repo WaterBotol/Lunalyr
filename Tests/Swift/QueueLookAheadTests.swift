@@ -89,6 +89,74 @@ final class MusicQueueMessageTests: XCTestCase {
         let reader = MusicQueueReader.shared
         reader.setActive(true)
         reader.songChanged(to: playing("Now"))
+        XCTAssertFalse(reader.isRunning, "the test host never starts perl")
+        XCTAssertEqual(reader.upcoming, [])
+        reader.setActive(false)
+    }
+}
+
+/// The reader's process handling, with /bin/sh standing in for perl.
+@MainActor
+final class MusicQueueReaderProcessTests: XCTestCase {
+    private func reader(_ script: String) -> MusicQueueReader {
+        let command = MusicQueueReader.Command(executable: URL(fileURLWithPath: "/bin/sh")) { mode in
+            ["-c", script, "sh", mode == .watch ? "watch" : "once"]
+        }
+        let reader = MusicQueueReader(command: command, runsInTests: true)
+        reader.answerTimeout = 0.5
+        reader.onceTimeout = 0.5
+        reader.firstPause = 0.1
+        return reader
+    }
+
+    private func until(_ condition: () -> Bool, seconds: Double = 5, file: StaticString = #filePath, line: UInt = #line) async {
+        for _ in 0..<Int(seconds * 50) where !condition() { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertTrue(condition(), "timed out", file: file, line: line)
+    }
+
+    private static let queueLine = #"{"type":"queue","v":1,"items":[{"title":"Now","artist":"Our Artist","album":"Album","duration":201.5,"current":true},{"title":"Next","artist":"Our Artist","album":"Album","duration":180}]}"#
+
+    func testAWatcherThatAnswersFillsUpcomingAndStopsWithIt() async {
+        // Prints the queue, then waits on stdin as the helper does.
+        let reader = reader("printf '%s\\n' '\(Self.queueLine)'; cat >/dev/null")
+        reader.songChanged(to: playing("Now", duration: 200))
+        reader.setActive(true)
+        await until { reader.upcoming.map(\.title) == ["Next"] }
+        XCTAssertTrue(reader.isRunning)
+        XCTAssertEqual(reader.mode, .watch)
+        XCTAssertEqual(reader.failureCount, 0)
+        reader.songChanged(to: playing("Next", duration: 180))
+        XCTAssertEqual(reader.upcoming, [], "another song's queue is not used until it is read again")
+        reader.setActive(false)
+        XCTAssertFalse(reader.isRunning)
+    }
+
+    func testAHelperThatKeepsFailingFallsBackAndLeavesUpcomingEmpty() async {
+        let reader = reader("exit 3")
+        reader.songChanged(to: playing("Now"))
+        reader.setActive(true)
+        await until { reader.mode == .once }
+        XCTAssertGreaterThanOrEqual(reader.failureCount, MusicQueueReader.watchFailuresAllowed)
+        XCTAssertEqual(reader.upcoming, [])
+        reader.setActive(false)
+        XCTAssertFalse(reader.isRunning)
+    }
+
+    func testASilentHelperIsStoppedAndRetried() async {
+        let reader = reader("cat >/dev/null")
+        reader.setActive(true)
+        await until { reader.failureCount >= 1 }
+        XCTAssertEqual(reader.upcoming, [])
+        reader.setActive(false)
+    }
+
+    func testAHelperThatSaysTheQueueIsEmptyIsNotAFailure() async {
+        let reader = reader(#"printf '%s\n' '{"type":"error","code":"empty"}'; cat >/dev/null"#)
+        reader.songChanged(to: playing("Now"))
+        reader.setActive(true)
+        try? await Task.sleep(for: .milliseconds(900))
+        XCTAssertEqual(reader.failureCount, 0)
+        XCTAssertTrue(reader.isRunning)
         XCTAssertEqual(reader.upcoming, [])
         reader.setActive(false)
     }
@@ -99,29 +167,40 @@ final class LookAheadPlannerTests: XCTestCase {
     private let queue = [queued("A"), queued("B"), queued("C"), queued("D")]
 
     func testFirstThreeSongsAfterThePlayingOne() {
-        let plan = LookAheadPlanner.plan(upcoming: queue, current: current, conditions: .init(videos: true), done: [])
+        let plan = LookAheadPlanner.plan(upcoming: queue, current: current, conditions: .init(videos: true), done: [:])
         XCTAssertEqual(plan.map(\.track.title), ["A", "B", "C"])
         XCTAssertEqual(plan.map(\.video), [true, true, false], "videos for the first two only")
-        XCTAssertTrue(plan.allSatisfy { $0.lyrics && $0.pictures })
+        XCTAssertTrue(plan.allSatisfy { $0.lyrics && $0.cover })
     }
 
     func testSkipsThePlayingSongRepeatsUnlookablesAndDone() {
         let upcoming = [queued("Now", duration: 201), queued("A"), queued("A"), queued("", duration: 100),
                         queued("Stream", duration: 0), queued("B"), queued("C")]
-        let plan = LookAheadPlanner.plan(upcoming: upcoming, current: current, conditions: .init(), done: [queued("B").recordingKey])
+        let plan = LookAheadPlanner.plan(upcoming: upcoming, current: current, conditions: .init(),
+                                         done: [queued("B").recordingKey: LookAheadParts(lyrics: true, video: true, cover: true)])
         XCTAssertEqual(plan.map(\.track.title), ["A", "C"], "B is done; the window does not slide past it")
         XCTAssertTrue(plan.allSatisfy { !$0.video }, "no videos unless the music-video wallpaper searches online")
     }
 
     func testEasesOffOrStops() {
-        let battery = LookAheadPlanner.plan(upcoming: queue, current: current, conditions: .init(onBattery: true, videos: true), done: [])
+        let battery = LookAheadPlanner.plan(upcoming: queue, current: current, conditions: .init(onBattery: true, videos: true), done: [:])
         XCTAssertEqual(battery.map(\.track.title), ["A"])
-        XCTAssertEqual(battery.first?.pictures, false)
+        XCTAssertEqual(battery.first?.cover, false)
         for conditions in [LookAheadConditions(enabled: false), .init(followsMusic: false), .init(online: false),
                            .init(lowPowerMode: true)] {
-            XCTAssertEqual(LookAheadPlanner.plan(upcoming: queue, current: current, conditions: conditions, done: []), [])
+            XCTAssertEqual(LookAheadPlanner.plan(upcoming: queue, current: current, conditions: conditions, done: [:]), [])
         }
-        XCTAssertEqual(LookAheadPlanner.plan(upcoming: queue, current: nil, conditions: .init(), done: []), [])
+        XCTAssertEqual(LookAheadPlanner.plan(upcoming: queue, current: nil, conditions: .init(), done: [:]), [])
+    }
+
+    func testASongMovingUpGetsWhatItsNewPlaceAdds() {
+        // C was third (no video); the queue moves on and it is second.
+        let done = [queued("B").recordingKey: LookAheadParts(lyrics: true, video: true, cover: true),
+                    queued("C").recordingKey: LookAheadParts(lyrics: true, video: false, cover: true)]
+        let plan = LookAheadPlanner.plan(upcoming: [queued("B"), queued("C"), queued("D")], current: playing("A"),
+                                         conditions: .init(videos: true), done: done)
+        XCTAssertEqual(plan, [LookAheadItem(track: queued("C"), lyrics: false, video: true, cover: false),
+                              LookAheadItem(track: queued("D"), lyrics: true, video: false, cover: true)])
     }
 }
 
@@ -133,6 +212,8 @@ final class QueueLookAheadTests: XCTestCase {
         var finished: [String] = []
         var videos: [String] = []
         var covers: [String] = []
+        /// Whether the video lookup finds room in the rate limit.
+        var videoAnswers = true
     }
 
     private func until(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
@@ -147,8 +228,8 @@ final class QueueLookAheadTests: XCTestCase {
                 if lyricsTake > .zero { try? await Task.sleep(for: lyricsTake) }
                 if Task.isCancelled { log.cancelled.append(track.title) } else { log.finished.append(track.title) }
             },
-            video: { track, _ in log.videos.append(track.title) },
-            artwork: { track in log.covers.append(track.title) })
+            video: { track in log.videos.append(track.title); return log.videoAnswers },
+            cover: { track in log.covers.append(track.title) })
         let ahead = QueueLookAhead(work: work)
         ahead.settleDelay = 0
         return ahead
@@ -194,6 +275,51 @@ final class QueueLookAheadTests: XCTestCase {
         await until { log.finished.contains("C") }
         XCTAssertEqual(log.cancelled, [])
         XCTAssertEqual(log.started, ["A", "C"])
+    }
+
+    func testTheQueueMovingOnLooksUpTheNewSecondSongsVideo() async {
+        let log = Log(), ahead = lookAhead(log)
+        ahead.update(upcoming: [queued("A"), queued("B"), queued("C")], current: playing("Now"), conditions: .init(videos: true))
+        await until { log.finished.count == 3 }
+        XCTAssertEqual(log.videos, ["A", "B"])
+        ahead.update(upcoming: [queued("B"), queued("C"), queued("D")], current: playing("A"), conditions: .init(videos: true))
+        await until { log.finished.contains("D") && log.videos.contains("C") }
+        XCTAssertEqual(log.videos, ["A", "B", "C"])
+        XCTAssertEqual(log.started, ["A", "B", "C", "D"], "lyrics are not looked up twice")
+    }
+
+    func testAVideoWithoutRoomIsTriedAgainLaterWithoutHoldingUpTheRest() async {
+        let log = Log(), ahead = lookAhead(log)
+        log.videoAnswers = false
+        let queue = [queued("A"), queued("B")]
+        ahead.update(upcoming: queue, current: playing("Now"), conditions: .init(videos: true))
+        await until { log.finished == ["A", "B"] && log.videos == ["A", "B"] }
+        log.videoAnswers = true
+        ahead.update(upcoming: queue, current: playing("Now"), conditions: .init(videos: true))
+        await until { log.videos == ["A", "B", "A", "B"] }
+        try? await Task.sleep(for: .milliseconds(50))
+        ahead.update(upcoming: queue, current: playing("Now"), conditions: .init(videos: true))
+        try? await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(log.videos.count, 4, "found videos are not looked up again")
+        XCTAssertEqual(log.started, ["A", "B"])
+    }
+
+    func testPlansChangingDuringTheSettleStartEachSongOnce() async {
+        let log = Log(), ahead = lookAhead(log)
+        ahead.settleDelay = 0.3
+        ahead.update(upcoming: [queued("A"), queued("B")], current: playing("Now"), conditions: .init())
+        ahead.update(upcoming: [queued("C"), queued("A")], current: playing("Now"), conditions: .init())
+        ahead.update(upcoming: [queued("C"), queued("A"), queued("B")], current: playing("Now"), conditions: .init())
+        await until { log.finished.count == 3 }
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(log.started, ["C", "A", "B"])
+        // And a run cancelled while waiting leaves its successor in charge.
+        ahead.update(upcoming: [queued("D")], current: playing("C"), conditions: .init())
+        ahead.update(upcoming: [], current: playing("C"), conditions: .init())
+        ahead.update(upcoming: [queued("E")], current: playing("C"), conditions: .init())
+        await until { log.finished.contains("E") }
+        try? await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(log.started, ["C", "A", "B", "E"])
     }
 
     func testWaitsForThePlayingSongsOwnLookups() async {
@@ -294,13 +420,13 @@ final class LookAheadWarmTests: XCTestCase {
         library.video = URL(fileURLWithPath: "/Music/Video.m4v")
         let song = MusicVideoSong(title: "Blinding Lights", artist: "The Weeknd", album: nil, duration: 200)
         let withLibrary = await resolver(http, library: library).lookAhead(song)
-        XCTAssertNil(withLibrary)
+        XCTAssertEqual(withLibrary, .found(.local(URL(fileURLWithPath: "/Music/Video.m4v"))))
         XCTAssertTrue(http.urls.isEmpty, "a video in the library needs no search")
         let busy = MusicVideoResolver(library: AheadLibrary(), playability: AheadPlayable(), http: http,
                                       cache: MusicVideoCache(defaults: defaults), links: MusicVideoLinks(defaults: defaults),
                                       rateLimit: {
                                           var limit = MusicVideoRateLimit(minimumGap: 0)
-                                          for t in 0..<5 { limit.record(at: 995 + Double(t)) }
+                                          limit.record(at: 995)
                                           return limit
                                       }(), uptime: { 1000 })
         XCTAssertFalse(busy.hasLookAheadHeadroom)

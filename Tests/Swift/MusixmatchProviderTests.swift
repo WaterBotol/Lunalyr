@@ -285,9 +285,26 @@ final class MusixmatchProviderTests: XCTestCase {
         while MusixmatchFixtureProtocol.actions.isEmpty { await Task.yield() }
         ahead.cancel()
         _ = try? await ahead.value
+        // The lookup stopped waiting at once; its request carries on and is remembered.
+        for _ in 0..<200 where state.answered(query.recordingKey) == nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNotNil(state.answered(query.recordingKey))
         XCTAssertEqual(macroRequests, 1)
         _ = try await MusixmatchLyricsProvider.lookup(query, session: session, state: state)
         XCTAssertEqual(macroRequests, 1, "the song start reuses the look-ahead's answer")
+    }
+
+    func testAStoppedLookupStopsWaitingAtOnce() async throws {
+        let slow = Task<LyricCandidate?, Error> { try? await Task.sleep(for: .seconds(5)); return nil }
+        let waiting = Task { try await MusixmatchLyricsProvider.answer(of: slow) }
+        try await Task.sleep(for: .milliseconds(20))
+        let began = Date()
+        waiting.cancel()
+        do {
+            _ = try await waiting.value
+            XCTFail("a stopped lookup throws")
+        } catch is CancellationError {}
+        XCTAssertLessThan(Date().timeIntervalSince(began), 1, "the source stops promptly, as before")
+        slow.cancel()
     }
 
     func testSongLookedUpAheadUnderOtherDetailsIsNotAskedAgain() async throws {
