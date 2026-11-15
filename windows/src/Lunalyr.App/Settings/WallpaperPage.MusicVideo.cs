@@ -83,7 +83,7 @@ internal static partial class WallpaperPage
         var fileButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         fileButtons.Children.Add(choose);
         fileButtons.Children.Add(clearFile);
-        var fileCard = Card("Video file", "A music video on this PC for the playing song; tried first, and nothing is sent anywhere.", "", fileButtons);
+        var fileCard = Card("Video file", "A music video on this PC for the playing song; tried first, and nothing is sent anywhere.", "\uE91B", fileButtons);
         sections.Children.Add(Advanced(fileCard));
         sections.Children.Add(Advanced(fileName));
 
@@ -119,7 +119,7 @@ internal static partial class WallpaperPage
         linkRow.Children.Add(use);
         linkRow.Children.Add(searchVideo);
         linkRow.Children.Add(clearLink);
-        sections.Children.Add(Card("YouTube link", null, "", linkRow));
+        sections.Children.Add(Card("YouTube link", null, "\uE71B", linkRow));
         sections.Children.Add(linkNote);
 
         // ---- Video timing ----
@@ -145,7 +145,7 @@ internal static partial class WallpaperPage
         var timing = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Right };
         timing.Children.Add(nudges);
         timing.Children.Add(originRow);
-        sections.Children.Add(Advanced(Card("Video timing", "For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.", "", timing)));
+        sections.Children.Add(Advanced(Card("Video timing", "For this song: how far into the video the song begins. Set it with Tap to sync, Align or the nudges.", "\uE916", timing)));
         var tapNote = Caption("");
         AutomationProperties.SetLiveSetting(tapNote, AutomationLiveSetting.Polite);
         sections.Children.Add(Advanced(tapNote));
@@ -154,26 +154,26 @@ internal static partial class WallpaperPage
         // ---- Look: dimming, then fill or whole (the Mac's framingChoice) and blur ----
         Section(sections, "Look");
         var framings = MusicVideoFramings.All.Select(f => new SettingsChoice(f.Value(), f.Title())).ToList();
-        sections.Children.Add(Card("Video dimming", null, "",
+        sections.Children.Add(Card("Video dimming", null, "\uE793",
             Slider(ctx, 0, AppSettings.MusicVideoDimMax, 0.01, SettingsCopy.Percent, s => s.MusicVideoDim, (s, v) => s with { MusicVideoDim = v })));
         // One menu for both sources (the Settings reorganisation): it shows the YouTube setting and sets both. Nothing is
         // written until it is changed, so different values kept from before stay as they are.
-        sections.Children.Add(Advanced(Card("Video framing", "YouTube videos and your own video files.", "",
+        sections.Children.Add(Advanced(Card("Video framing", "YouTube videos and your own video files.", "\uE740",
             Combo(ctx, framings, s => s.MusicVideoFraming, (s, v) => s with { MusicVideoFraming = v, LibraryVideoFraming = v }, width: 220))));
         sections.Children.Add(Advanced(Caption(FramingCaption)));
         sections.Children.Add(Advanced(Caption(FramingDetail)));
-        sections.Children.Add(Advanced(Card("Video blur", null, "",
+        sections.Children.Add(Advanced(Card("Video blur", null, "\uE7B3",
             Slider(ctx, 0, AppSettings.MusicVideoBlurMax, 0.5, v => v.ToString("0", CultureInfo.InvariantCulture) + " pt",
                 s => s.MusicVideoBlur, (s, v) => s with { MusicVideoBlur = v }))));
         sections.Children.Add(Advanced(Caption("Video files play on every display; a YouTube video on the main display only, the others show the album’s colours.")));
 
         // ---- Finding videos: Search YouTube, its key, and what shows without a video ----
         Section(sections, "Finding videos");
-        var online = Card("Search YouTube for videos", PrivacyCaption, "",
+        var online = Card("Search YouTube for videos", PrivacyCaption, "\uE721",
             Toggle(ctx, s => s.MusicVideoOnline, (s, v) => s with { MusicVideoOnline = v }));
         sections.Children.Add(online);
         sections.Children.Add(Advanced(Caption(PrivacyDetail)));
-        sections.Children.Add(Advanced(Card("Search YouTube with", null, "",
+        sections.Children.Add(Advanced(Card("Search YouTube with", null, "\uE8CB",
             Combo(ctx, [new SettingsChoice("site", SiteChoice), new SettingsChoice("apiKey", KeyChoice)],
                 s => s.MusicVideoSearch, (s, v) => s with { MusicVideoSearch = v }, width: 240))));
         sections.Children.Add(Advanced(Caption(SearchWithDetail)));
@@ -184,7 +184,7 @@ internal static partial class WallpaperPage
         // ---- Without a video ----
         var fallbacks = AppSettings.MusicVideoFallbacks
             .Select(v => new SettingsChoice(v, SettingsCopy.WallpaperTypes.First(t => t.Value == v).Title)).ToList();
-        sections.Children.Add(Advanced(Card("Without a video", "What the wallpaper shows while the song has no video.", "",
+        sections.Children.Add(Advanced(Card("Without a video", "What the wallpaper shows while the song has no video.", "\uE7F4",
             Combo(ctx, fallbacks, s => s.MusicVideoFallback, (s, v) => s with { MusicVideoFallback = v }, width: 220))));
 
         Button Nudge(string text, double delta, string name, string help)
