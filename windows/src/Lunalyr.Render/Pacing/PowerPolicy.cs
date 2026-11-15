@@ -21,7 +21,7 @@ public readonly record struct PowerConstraint(PowerConstraintKind Kind, PowerFal
     /// <summary>Why, phrased to open a sentence (for diagnostics and the app's notice).</summary>
     public string Reason => Kind switch
     {
-        PowerConstraintKind.LowPowerVisuals => "Low power visuals is on",
+        PowerConstraintKind.LowPowerVisuals => "Lighter wallpaper is on",
         PowerConstraintKind.EnergySaver => "Energy saver is on",
         _ => "This PC is on battery power",
     };

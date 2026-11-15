@@ -191,7 +191,7 @@ internal sealed partial class AppHost
             Performance = PerformanceFrom(_settings.Current),
             WindowSwapChains = _settings.Current.ReduceFlicker,
         }, Log);
-        if (_settings.Current.ReduceFlicker) _log.Info("Reduce flicker (compatibility) is on: wallpapers use plain window swap chains.");
+        if (_settings.Current.ReduceFlicker) _log.Info("Simpler drawing (Reduce flicker) is on: wallpapers use plain window swap chains.");
         // Every background and composition, as the settings preview has them (WallpaperLayers); the backgroundMode
         // setting and "Custom Mix" pick the background (AppController.Wallpaper.cs).
         foreach (var factory in WallpaperLayers.Factories(readings.WordBreaker, Log)) engine.RegisterLayer(factory);

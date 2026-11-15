@@ -71,6 +71,7 @@ internal static class ExtrasSections
             Slider(ctx, 0, DiscordPresence.LeadMax, 0.5, ExtrasCopy.Lead, s => s.DiscordLyricLead, (s, v) => s with { DiscordLyricLead = Math.Round(v * 2) / 2 },
                 minimumLabel: "With the music", maximumLabel: "Earlier")));
         // Set in under the switch they belong to, as Lyric style's dependent rows are.
-        page.Children.Add(SettingsGroups.Advanced(Indented(options).ShowWhen(ctx, s => s.DiscordPresence)));
+        // In Advanced Discord, which already sets them apart.
+        page.Children.Add(SettingsGroups.Advanced(options.ShowWhen(ctx, s => s.DiscordPresence)));
     }
 }

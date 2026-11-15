@@ -276,7 +276,7 @@ public static class AudioCaptureGate
     {
         if (!visualiserChosen || visualiserShown) return null;
         var shown = shownTitle.ToLowerInvariant();
-        var cause = lowPowerVisuals ? $"“Low power visuals” is showing {shown}"
+        var cause = lowPowerVisuals ? $"“Lighter wallpaper” is showing {shown}"
             : energySaver ? $"Energy saver is showing {shown}"
             : onBattery ? $"on battery, Lunalyr is showing {shown}"
             : $"power settings are showing {shown}";

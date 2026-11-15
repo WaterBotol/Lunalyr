@@ -88,7 +88,7 @@ public class AudioCaptureGateTests
         Assert.Null(AudioCaptureGate.PowerPause(false, false, "Line patterns", true, false, false));
         Assert.Equal("Paused: Energy saver is showing line patterns. System audio resumes with the visualiser.",
             AudioCaptureGate.PowerPause(true, false, "Line patterns", false, true, false));
-        Assert.Contains("Low power visuals", AudioCaptureGate.PowerPause(true, false, "Line patterns", true, true, true));
+        Assert.Contains("Lighter wallpaper", AudioCaptureGate.PowerPause(true, false, "Line patterns", true, true, true));
         var battery = AudioCaptureGate.PowerPause(true, false, "Colour only", false, false, true);
         Assert.Equal("Paused: on battery, Lunalyr is showing colour only. System audio resumes with the visualiser.", battery);
         Assert.Equal(battery, PauseReason.Power(battery!).Message);

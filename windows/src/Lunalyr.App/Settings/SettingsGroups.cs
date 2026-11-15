@@ -122,7 +122,7 @@ internal static class SettingsGroups
         var header = (Card)expander.Header;
         void Follow()
         {
-            var shown = rows.Count(r => Shown(r) && Counts(r));
+            var shown = rows.Where(Shown).Sum(Settings);
             var any = rows.Any(Shown);
             expander.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
             header.Description = shown == 1 ? $"1{more} setting" : shown > 1 ? $"{shown}{more} settings" : "";
@@ -146,6 +146,13 @@ internal static class SettingsGroups
 
     private static bool Shown(UIElement row) => row.Visibility == Visibility.Visible;
 
-    /// <summary>A setting (a card, an expander, a list in a card), not a caption or a notice.</summary>
-    private static bool Counts(UIElement row) => row is Card or Expander or Border or StackPanel or Grid;
+    /// <summary>How many settings a row holds: one for a card, an expander or a list in a card; a panel of rows (Discord's
+    /// options) counts its own; a caption or a notice none.</summary>
+    private static int Settings(UIElement row) => row switch
+    {
+        Card or Expander or Border or Grid => 1,
+        StackPanel { Orientation: Orientation.Vertical } panel => panel.Children.Where(Shown).Sum(Settings),
+        StackPanel => 1,
+        _ => 0,
+    };
 }
